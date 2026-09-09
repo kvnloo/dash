@@ -11,11 +11,19 @@ parallel and with the coding agents on your own computer over Tailscale.
 
 ## Ownership while several agents work at once
 
-Several agents build this repo concurrently. To avoid clobbering each other:
+Parallel work happens in git worktrees under `.worktrees/`. Full map: `docs/orchestration.md`.
 
-- `app/src/**`, `app/App.tsx`, `app/app.json`, `app/metro.config.js`: owned by the UI session (the one that wrote this file).
-- `bridge/**`, `shared/protocol.ts`: owned by the bridge session. The UI session only reads them.
-- Anyone adding an app dependency: run `bunx expo install <pkg>` from `app/`, never edit `package.json` by hand, and keep the app runnable in Expo Go (no native modules outside the Expo SDK).
+- Integration owner: this checkout, branch `integrate/device-layer`. Only this tree runs Metro and `dash-pair`.
+- `svc/pair`: pairing HTTP + Pair screen.
+- `svc/bridge-core`: WebSocket, token, harness spawn, STT.
+- `svc/roster`: tailnet hosts + Bots pane.
+- `svc/voice`: Voice screen + `voice_*` events.
+- `svc/nav`: AppNav + CSS probe.
+- `svc/chat-core`: Chat, Composer, turn store.
+- `svc/hermes-session`: Dash → Hermes gateway/peer (missing). Do not replace the bridge.
+- `shared/protocol.ts`: tiny backward-compatible changes only; land before consumers.
+
+Anyone adding an app dependency: run `bunx expo install <pkg>` from `app/`, never edit `package.json` by hand, and keep the app runnable in Expo Go (no native modules outside the Expo SDK).
 
 If you need a protocol change, add it to `shared/protocol.ts` with a parser update and keep old fields working.
 

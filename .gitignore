@@ -5,3 +5,4 @@ dist/
 .DS_Store
 .tools/
 expo-qr.png
+.worktrees/
