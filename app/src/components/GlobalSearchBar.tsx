@@ -8,6 +8,7 @@ import {
   parseSearchQuery,
   SLASH_SCOPES,
 } from "../lib/global-search";
+import { GlassSurface } from "./GlassSurface";
 import { colors, radius, space, type } from "../theme";
 
 interface Props {
@@ -27,7 +28,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, 
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.field}>
+      <GlassSurface borderRadius={radius.lg} style={styles.field}>
         <Ionicons name="search" size={18} color={colors.textMuted} style={styles.icon} />
         <TextInput
           value={value}
@@ -51,7 +52,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, 
             <Ionicons name="close-circle" size={18} color={colors.textMuted} />
           </Pressable>
         ) : null}
-      </View>
+      </GlassSurface>
 
       {suggestions.length > 0 ? (
         <View style={styles.suggestions} accessibilityRole="list">
@@ -59,10 +60,12 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, 
             <Pressable
               key={label}
               onPress={() => onScope(label)}
-              style={({ pressed }) => [styles.suggestion, pressed && styles.pressed]}
+              style={({ pressed }) => [pressed && styles.pressed]}
               accessibilityRole="button"
             >
-              <Text style={styles.suggestionText}>{label}</Text>
+              <GlassSurface variant="raised" blur={false} borderRadius={radius.lg} style={styles.suggestion}>
+                <Text style={styles.suggestionText}>{label}</Text>
+              </GlassSurface>
             </Pressable>
           ))}
         </View>
@@ -77,10 +80,17 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, 
               <Pressable
                 key={scope}
                 onPress={() => onScope(label)}
-                style={({ pressed }) => [styles.chip, on && styles.chipOn, pressed && styles.pressed]}
+                style={({ pressed }) => [pressed && styles.pressed]}
                 accessibilityRole="button"
               >
-                <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
+                <GlassSurface
+                  variant={on ? "chipOn" : "chip"}
+                  blur={false}
+                  borderRadius={radius.pill}
+                  style={styles.chip}
+                >
+                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
+                </GlassSurface>
               </Pressable>
             );
           })}
@@ -96,10 +106,17 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, 
               <Pressable
                 key={scope}
                 onPress={() => onScope(label)}
-                style={({ pressed }) => [styles.chip, on && styles.chipOn, pressed && styles.pressed]}
+                style={({ pressed }) => [pressed && styles.pressed]}
                 accessibilityRole="button"
               >
-                <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
+                <GlassSurface
+                  variant={on ? "chipOn" : "chip"}
+                  blur={false}
+                  borderRadius={radius.pill}
+                  style={styles.chip}
+                >
+                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
+                </GlassSurface>
               </Pressable>
             );
           })}
@@ -118,10 +135,6 @@ const styles = StyleSheet.create({
   field: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
     paddingHorizontal: space.md,
     minHeight: 44,
   },
@@ -129,14 +142,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: colors.text, ...type.body, paddingVertical: space.sm },
   clear: { padding: space.xs },
   suggestions: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  suggestion: {
-    paddingHorizontal: space.md,
-    paddingVertical: 8,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.textMuted,
-  },
+  suggestion: { paddingHorizontal: space.md, paddingVertical: 8 },
   suggestionText: { color: colors.text, ...type.small, textTransform: "none", letterSpacing: 0, fontWeight: "600" },
   chipSection: { gap: 6 },
   chipHeading: {
@@ -147,15 +153,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  chip: {
-    paddingHorizontal: space.md,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  chipOn: { backgroundColor: colors.surfaceRaised, borderColor: colors.textMuted },
+  chip: { paddingHorizontal: space.md, paddingVertical: 6 },
   chipText: { color: colors.textMuted, ...type.small, textTransform: "none", letterSpacing: 0 },
   chipTextOn: { color: colors.text },
   pressed: { opacity: 0.85 },

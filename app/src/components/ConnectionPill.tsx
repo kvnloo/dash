@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text } from "react-native";
 import { bridge } from "../net/bridge";
 import { store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
+import { GlassSurface } from "./GlassSurface";
 
 /** Shows only when the bridge isn't online. Tap retries immediately. */
 export function ConnectionPill() {
@@ -11,29 +12,21 @@ export function ConnectionPill() {
   return (
     <Pressable
       onPress={() => bridge.retry()}
-      style={({ pressed }) => [styles.pill, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.wrap, pressed && styles.pressed]}
       accessibilityRole="button"
     >
-      <Text style={styles.text} numberOfLines={1}>
-        {connecting ? "Connecting to bridge…" : `${connection.error ?? "Offline"} · tap to retry`}
-      </Text>
+      <GlassSurface borderRadius={radius.pill} style={styles.pill}>
+        <Text style={styles.text} numberOfLines={1}>
+          {connecting ? "Connecting to bridge…" : `${connection.error ?? "Offline"} · tap to retry`}
+        </Text>
+      </GlassSurface>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  pill: {
-    alignSelf: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    marginTop: space.xs,
-    marginBottom: space.sm,
-    maxWidth: "90%",
-  },
+  wrap: { alignSelf: "center", marginTop: space.xs, marginBottom: space.sm, maxWidth: "90%" },
+  pill: { paddingHorizontal: 14, paddingVertical: 6 },
   pressed: { opacity: 0.7 },
   text: { color: colors.textMuted, ...type.small },
 });
