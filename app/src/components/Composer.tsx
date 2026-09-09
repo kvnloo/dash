@@ -7,12 +7,13 @@ interface Props {
   disabled: boolean;
   streaming: boolean;
   placeholder: string;
+  initialText?: string;
   onSend(text: string): void;
   onStop(): void;
 }
 
-export const Composer = memo(function Composer({ disabled, streaming, placeholder, onSend, onStop }: Props) {
-  const [text, setText] = useState("");
+export const Composer = memo(function Composer({ disabled, streaming, placeholder, initialText, onSend, onStop }: Props) {
+  const [text, setText] = useState(initialText ?? "");
   const canSend = text.trim().length > 0 && !disabled;
 
   const submit = useCallback(() => {

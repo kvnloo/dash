@@ -40,7 +40,8 @@ function renderItem({ item }: ListRenderItemInfo<Message>) {
   return <MessageRow message={item} />;
 }
 
-export function ChatScreen({ navigation }: ScreenProps<"Chat">) {
+export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
+  const composerDraft = route.params?.draft;
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<Message>>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -203,8 +204,10 @@ export function ChatScreen({ navigation }: ScreenProps<"Chat">) {
         />
         <View style={{ paddingBottom: Math.max(insets.bottom, space.sm) }}>
           <Composer
+            key={composerDraft ?? "composer"}
             disabled={!online}
             streaming={streamingMessage !== undefined}
+            initialText={composerDraft}
             placeholder={
               online
                 ? streamingMessage
