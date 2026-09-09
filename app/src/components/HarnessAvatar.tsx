@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { StyleSheet, Text } from "react-native";
-import { type } from "../theme";
+import { colors, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 
 /** Circle badge with the harness initial — matches preview.html conversation rows. */

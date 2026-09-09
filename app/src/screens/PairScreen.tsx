@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassSurface } from "../components/GlassSurface";
+import { haptic } from "../haptics";
 import { newClaimKey } from "../lib/pair-crypto";
 import { claimPairCode, settingsFromClaim, startSonicPair } from "../lib/pair-api";
 import { decodePairCodeFromWav } from "../lib/sonic-pair";
