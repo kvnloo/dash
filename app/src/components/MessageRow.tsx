@@ -2,6 +2,7 @@ import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import type { AssistantMessage, Message } from "../model";
 import { colors, radius, space, type } from "../theme";
+import { GlassSurface } from "./GlassSurface";
 import { Markdown } from "./Markdown";
 import { PulseDot } from "./PulseDot";
 
@@ -9,11 +10,11 @@ export const MessageRow = memo(function MessageRow({ message }: { message: Messa
   if (message.role === "user") {
     return (
       <View style={styles.userRow}>
-        <View style={styles.bubble}>
+        <GlassSurface variant="raised" borderRadius={radius.lg} blur={false} style={styles.bubble}>
           <Text selectable style={styles.userText}>
             {message.text}
           </Text>
-        </View>
+        </GlassSurface>
       </View>
     );
   }
@@ -84,8 +85,6 @@ const styles = StyleSheet.create({
   },
   bubble: {
     maxWidth: "82%",
-    backgroundColor: colors.bubble,
-    borderRadius: radius.lg,
     borderBottomRightRadius: 6,
     paddingHorizontal: 14,
     paddingVertical: 10,

@@ -1,6 +1,7 @@
 import { memo } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { colors, type } from "../theme";
+import { StyleSheet, Text } from "react-native";
+import { type } from "../theme";
+import { GlassSurface } from "./GlassSurface";
 
 /** Circle badge with the harness initial — matches preview.html conversation rows. */
 export const HarnessAvatar = memo(function HarnessAvatar({
@@ -12,15 +13,14 @@ export const HarnessAvatar = memo(function HarnessAvatar({
 }) {
   const letter = (name.trim()[0] ?? "?").toUpperCase();
   return (
-    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}>
+    <GlassSurface variant="chip" blur={false} borderRadius={size / 2} style={[styles.avatar, { width: size, height: size }]}>
       <Text style={[styles.letter, { fontSize: size * 0.42 }]}>{letter}</Text>
-    </View>
+    </GlassSurface>
   );
 });
 
 const styles = StyleSheet.create({
   avatar: {
-    backgroundColor: colors.surfaceRaised,
     alignItems: "center",
     justifyContent: "center",
   },
