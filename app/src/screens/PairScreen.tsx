@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { haptic } from "../haptics";
+import { GlassSurface } from "../components/GlassSurface";
 import { newClaimKey } from "../lib/pair-crypto";
 import { claimPairCode, settingsFromClaim, startSonicPair } from "../lib/pair-api";
 import { decodePairCodeFromWav } from "../lib/sonic-pair";
@@ -146,16 +146,17 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
           someone nearby who only hears the tones cannot pair. The bridge token never crosses the air.
         </Text>
 
-        <Text style={styles.label}>Computer name</Text>
-        <TextInput
-          value={computer}
-          onChangeText={setComputer}
-          placeholder="mbp"
-          placeholderTextColor={colors.textFaint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={styles.input}
-        />
+        <GlassSurface variant="raised" borderRadius={radius.md} style={styles.inputWrap}>
+          <TextInput
+            value={computer}
+            onChangeText={setComputer}
+            placeholder="mbp"
+            placeholderTextColor={colors.textFaint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={styles.inputInner}
+          />
+        </GlassSurface>
         <Text style={styles.hint}>Tailscale MagicDNS name (same tailnet as this phone).</Text>
 
         <Pressable
@@ -169,16 +170,17 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
         {status ? <Text style={styles.status}>{status}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Text style={styles.label}>Or enter the 6-character code</Text>
-        <TextInput
-          value={manualCode}
-          onChangeText={(t) => setManualCode(t.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
-          placeholder="ABC123"
-          placeholderTextColor={colors.textFaint}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          style={[styles.input, styles.codeInput]}
-        />
+        <GlassSurface variant="raised" borderRadius={radius.md} style={styles.inputWrap}>
+          <TextInput
+            value={manualCode}
+            onChangeText={(t) => setManualCode(t.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
+            placeholder="ABC123"
+            placeholderTextColor={colors.textFaint}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            style={[styles.inputInner, styles.codeInput]}
+          />
+        </GlassSurface>
         <Pressable
           onPress={() => void pairWithCode()}
           disabled={busy || manualCode.length !== 6}
@@ -219,16 +221,12 @@ const styles = StyleSheet.create({
   intro: { color: colors.textMuted, ...type.body, marginBottom: space.xl },
   label: { color: colors.textMuted, ...type.label, marginBottom: space.sm, marginLeft: space.xs },
   hint: { color: colors.textFaint, ...type.small, marginTop: space.xs, marginBottom: space.lg },
-  input: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+  inputWrap: { marginBottom: space.sm },
+  inputInner: {
     color: colors.text,
     ...type.body,
     paddingHorizontal: space.lg,
     paddingVertical: 14,
-    marginBottom: space.sm,
     ...(Platform.OS === "web" ? { outlineStyle: "none" as never } : null),
   },
   codeInput: { ...type.mono, letterSpacing: 4, textAlign: "center" },

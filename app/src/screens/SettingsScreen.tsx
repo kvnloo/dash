@@ -3,6 +3,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fr
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Header, HeaderTitle, IconButton } from "../components/Header";
+import { GlassSurface } from "../components/GlassSurface";
 import { haptic } from "../haptics";
 import { normalizeAddress } from "../model";
 import type { ScreenProps } from "../navigation";
@@ -97,7 +98,7 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
           ) : null}
 
           <Text style={styles.label}>Bridge</Text>
-          <View style={styles.card}>
+          <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
             <Field
               label="Address"
               value={address}
@@ -126,7 +127,7 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
               autoCapitalize="none"
               autoComplete="off"
             />
-          </View>
+          </GlassSurface>
           <View style={styles.statusRow}>
             <View style={[styles.statusDot, { backgroundColor: statusLine.color }]} />
             <Text style={styles.statusText} numberOfLines={2}>
@@ -148,7 +149,7 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
           {connection.harnesses.length > 0 ? (
             <>
               <Text style={styles.label}>Harnesses on {connection.host}</Text>
-              <View style={styles.card}>
+              <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
                 {connection.harnesses.map((h, i) => (
                   <View key={h.id}>
                     {i > 0 ? <View style={styles.divider} /> : null}
@@ -160,14 +161,14 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
                     </View>
                   </View>
                 ))}
-              </View>
+              </GlassSurface>
             </>
           ) : null}
 
           <Text style={styles.label}>On your computer</Text>
-          <View style={styles.card}>
+          <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
             <Text style={styles.mono}>cd dash/server && bun run start</Text>
-          </View>
+          </GlassSurface>
           <Text style={styles.help}>
             The bridge prints its Tailscale address and token. Both devices need to be on the same tailnet.
           </Text>
@@ -221,10 +222,6 @@ const styles = StyleSheet.create({
   intro: { color: colors.textMuted, ...type.body, marginBottom: space.xl },
   label: { color: colors.textMuted, ...type.label, marginTop: space.xl, marginBottom: space.sm, marginLeft: space.xs },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
     overflow: "hidden",
   },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: space.lg },
