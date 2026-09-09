@@ -63,7 +63,7 @@ export function GlassSurface({
 
 const styles = StyleSheet.create({
   outer: { overflow: "hidden", position: "relative" },
-  tint: { ...StyleSheet.absoluteFillObject },
-  edge: { ...StyleSheet.absoluteFillObject, borderWidth: StyleSheet.hairlineWidth },
+  tint: { ...StyleSheet.absoluteFill },
+  edge: { ...StyleSheet.absoluteFill, borderWidth: StyleSheet.hairlineWidth },
   content: { position: "relative" },
 });

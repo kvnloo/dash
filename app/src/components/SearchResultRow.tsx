@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { SearchResult } from "../lib/global-search";
 import { colors, space, type } from "../theme";
 import { timeAgo } from "../util";
+import { GlassSurface } from "./GlassSurface";
 import { HarnessAvatar } from "./HarnessAvatar";
 
 const KIND_LABEL: Record<SearchResult["kind"], string> = {
@@ -95,13 +96,13 @@ export const SearchResultRow = memo(function SearchResultRow({
       accessibilityRole="button"
     >
       {showFileIcon ? (
-        <View style={styles.iconWrap}>
+        <GlassSurface variant="chip" blur={false} borderRadius={24} style={styles.iconWrap}>
           <Ionicons
             name={item.kind === "file" ? "document-text-outline" : "construct-outline"}
             size={22}
             color={colors.textMuted}
           />
-        </View>
+        </GlassSurface>
       ) : (
         <HarnessAvatar name={avatarName(item)} />
       )}
@@ -133,14 +134,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   pressed: { opacity: 0.85 },
-  iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  iconWrap: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   main: { flex: 1, minWidth: 0 },
   top: { flexDirection: "row", alignItems: "center", gap: space.sm },
   title: { color: colors.text, ...type.heading, flex: 1 },

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback, useState } from "react";
 import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { colors, radius, space, type } from "../theme";
+import { GlassSurface } from "./GlassSurface";
 
 interface Props {
   disabled: boolean;
@@ -25,7 +26,7 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.field}>
+      <GlassSurface borderRadius={radius.lg + 4} style={styles.field}>
         <TextInput
           style={styles.input}
           value={text}
@@ -76,7 +77,7 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
             <Ionicons name="arrow-up" size={20} color={canSend ? colors.onAccent : colors.textFaint} />
           </Pressable>
         )}
-      </View>
+      </GlassSurface>
     </View>
   );
 });
@@ -86,10 +87,6 @@ const styles = StyleSheet.create({
   field: {
     flexDirection: "row",
     alignItems: "flex-end",
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg + 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
     paddingLeft: 16,
     paddingRight: 6,
     paddingVertical: 6,
