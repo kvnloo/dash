@@ -1,15 +1,37 @@
-/** Liquid-glass overlays — dark Grok palette, Zero-style refraction edge. */
+/** HomeForge / zerOS `base.css` + `tokens.css` (dev-integ). Expo cannot run CSS saturate/brightness. */
 export const glass = {
   fill: "rgba(18, 18, 18, 0.68)",
   fillRaised: "rgba(28, 28, 28, 0.78)",
   fillChip: "rgba(18, 18, 18, 0.55)",
   fillChipOn: "rgba(38, 38, 38, 0.72)",
+  /** --glass / --z-glass */
+  fillNav: "rgba(24, 26, 23, 0.46)",
+  /** --glass-strong */
+  fillNavStrong: "rgba(20, 22, 19, 0.66)",
   border: "rgba(255, 255, 255, 0.07)",
   borderBright: "rgba(255, 255, 255, 0.12)",
-  highlight: "rgba(255, 255, 255, 0.04)",
+  /** --hair */
+  hair: "rgba(236, 232, 223, 0.10)",
+  /** --hair-2 */
+  hair2: "rgba(236, 232, 223, 0.16)",
+  /** --glass-sheen */
+  sheen: "rgba(255, 255, 255, 0.10)",
+  /** --glass-spec / --z-glass-specular */
+  spec: "rgba(255, 255, 255, 0.34)",
+  /** --glass-rim */
+  rim: "rgba(255, 255, 255, 0.30)",
+  /** --glass-edge */
+  edge: "rgba(0, 0, 0, 0.18)",
+  highlight: "rgba(255, 255, 255, 0.34)",
+  sat: 1.7,
+  bright: 1.08,
   blurIos: 32,
   blurAndroid: 22,
   blurWeb: 16,
+  /** .glass backdrop-filter blur(24px) */
+  blurNav: 24,
+  /** .dev-control-circle / collapsed pager */
+  blurCircle: 18,
 } as const;
 
 export const colors = {
@@ -26,6 +48,28 @@ export const colors = {
   danger: "#ff6b6b",
   ok: "#34c759",
   warn: "#ffb020",
+  /** mobile.jsx pager gold */
+  gold: "#e6cd96",
+  goldHi: "rgba(240, 212, 150, 0.95)",
+  goldLo: "rgba(206, 168, 96, 0.9)",
+  goldGlow: "rgba(220, 190, 120, 0.7)",
+  /** color-mix(in srgb, var(--gold) 72%, transparent) */
+  goldGlass: "rgba(230, 205, 150, 0.72)",
+  /** collapsed indicator: color-mix(gold 68%, transparent) */
+  gold68: "rgba(230, 205, 150, 0.68)",
+  /** color-mix(in srgb, white 36%, var(--gold)) */
+  goldRim: "rgba(239, 223, 188, 0.95)",
+  ink: "#ECE8DF",
+  ink2: "#B4AFA3",
+  ink3: "#837F74",
+  inkDark: "#211B10",
+  /** --dev-nav */
+  devNav: "rgba(12, 13, 11, 0.91)",
+  /** color-mix(dev-nav 96%, transparent) */
+  devNav96: "rgba(12, 13, 11, 0.874)",
+  navGlass: "rgba(24, 26, 23, 0.46)",
+  hair: "rgba(236, 232, 223, 0.10)",
+  hair2: "rgba(236, 232, 223, 0.16)",
 } as const;
 
 export const space = {

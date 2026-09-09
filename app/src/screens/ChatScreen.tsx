@@ -1,13 +1,12 @@
-import { Ionicons } from "@expo/vector-icons";
 import { FlashList, type FlashListRef, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { HarnessPicker } from "../components/HarnessPicker";
-import { Header, IconButton } from "../components/Header";
+import { AppNav } from "../components/AppNav";
 import { MessageRow } from "../components/MessageRow";
 import { isDebugActive } from "../debug/expose";
 import { debugUi } from "../debug/ui-store";
@@ -160,37 +159,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     [settings, conversation],
   );
 
-  const newChat = useCallback(() => {
-    haptic.select();
-    setActive(null);
-  }, []);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <Header
-        left={<IconButton icon="chevron-back" label="Back" onPress={() => navigation.navigate("Main")} />}
-        center={
-          <Pressable
-            onPress={() => setPickerVisible(true)}
-            style={({ pressed }) => [pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel={`Harness: ${harnessName}. Change`}
-          >
-            <View style={styles.titleButton}>
-              <Text style={styles.title} numberOfLines={1}>
-                {harnessName}
-              </Text>
-              <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
-            </View>
-          </Pressable>
-        }
-        right={
-          <View style={styles.headerActions}>
-            <IconButton icon="options-outline" label="Settings" onPress={() => navigation.navigate("Settings")} />
-            <IconButton icon="create-outline" label="New chat" onPress={newChat} />
-          </View>
-        }
-      />
+      <AppNav navigation={navigation} tab={1} />
       <ConnectionPill />
       <KeyboardAvoidingView style={styles.body} behavior="padding" keyboardVerticalOffset={insets.bottom}>
         <FlashList
@@ -229,6 +201,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             }
             onSend={onSend}
             onStop={onStop}
+            onVoice={() => navigation.navigate("Voice")}
           />
         </View>
       </KeyboardAvoidingView>
@@ -247,18 +220,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   body: { flex: 1 },
   listContent: { paddingVertical: space.sm },
-  titleButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    maxWidth: "100%",
-  },
-  pressed: { opacity: 0.85 },
-  title: { color: colors.text, ...type.heading },
-  headerActions: { flexDirection: "row", alignItems: "center" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: "45%" },
-  emptyTitle: { color: colors.text, ...type.title, fontSize: 28 },
+  emptyTitle: { color: colors.text, ...type.title },
   emptySubtitle: { color: colors.textMuted, ...type.body, marginTop: 6 },
 });

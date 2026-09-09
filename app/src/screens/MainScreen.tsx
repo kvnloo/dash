@@ -1,13 +1,12 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
-import { Header, IconButton } from "../components/Header";
+import { AppNav } from "../components/AppNav";
 import { SearchResultRow } from "../components/SearchResultRow";
-import { TopTabs } from "../components/TopTabs";
 import { isDebugActive } from "../debug/expose";
 import { debugUi } from "../debug/ui-store";
 import { haptic } from "../haptics";
@@ -17,6 +16,7 @@ import {
   runGlobalSearch,
   type SearchResult,
 } from "../lib/global-search";
+import { profilesFromHosts } from "../lib/roster";
 import type { BotProfile } from "../mock/bots";
 import type { ScreenProps } from "../navigation";
 import { createConversation, saveSettings, setActive, store } from "../store/app";
@@ -40,10 +40,11 @@ function chatDraftForResult(item: SearchResult): string | undefined {
   }
 }
 
-export function MainScreen({ navigation }: ScreenProps<"Main">) {
+export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const pagerRef = useRef<MainPagerRef>(null);
+  const routeTab = route.params?.tab;
 
   const debugSearch = debugUi.use((s) => s.mainSearchQuery);
   const debugTab = debugUi.use((s) => s.mainTabIndex);
@@ -72,13 +73,11 @@ export function MainScreen({ navigation }: ScreenProps<"Main">) {
     [],
   );
 
-  const onTab = useCallback(
-    (next: number) => {
-      setIndex(next);
-      pagerRef.current?.setPage(next);
-    },
-    [setIndex],
-  );
+  useEffect(() => {
+    if (typeof routeTab !== "number") return;
+    setIndex(routeTab);
+    pagerRef.current?.setPage(routeTab);
+  }, [routeTab, setIndex]);
 
   const onPage = useCallback(
     (e: { nativeEvent: { position: number } }) => {
@@ -89,14 +88,16 @@ export function MainScreen({ navigation }: ScreenProps<"Main">) {
 
   const conversations = store.use((s) => s.conversations);
   const harnesses = store.use((s) => s.connection.harnesses);
+  const hosts = store.use((s) => s.connection.hosts);
   const settings = store.use((s) => s.settings);
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
   const searchActive = query.trim().length > 0 || parsed.mode !== "discover";
+  const botProfiles = useMemo(() => (hosts.length > 0 ? profilesFromHosts(hosts) : undefined), [hosts]);
 
   const results = useMemo(
-    () => runGlobalSearch({ query, conversations, harnesses }),
-    [query, conversations, harnesses],
+    () => runGlobalSearch({ query, conversations, harnesses, botProfiles }),
+    [query, conversations, harnesses, botProfiles],
   );
 
   const hint = formatSearchHint(parsed);
@@ -189,20 +190,13 @@ export function MainScreen({ navigation }: ScreenProps<"Main">) {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <Header
-        left={
-          <IconButton
-            icon="create-outline"
-            label="New chat"
-            onPress={() => {
-              haptic.tap();
-              setActive(null);
-              navigation.navigate("Chat");
-            }}
-          />
-        }
-        center={<TopTabs index={index} onChange={onTab} />}
-        right={<IconButton icon="options-outline" label="Settings" onPress={() => navigation.navigate("Settings")} />}
+      <AppNav
+        navigation={navigation}
+        tab={index}
+        onTab={(next) => {
+          setIndex(next);
+          pagerRef.current?.setPage(next);
+        }}
       />
       <ConnectionPill />
 

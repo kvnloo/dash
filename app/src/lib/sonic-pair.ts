@@ -14,11 +14,12 @@ function goertzelPower(samples: Float32Array, sampleRate: number, targetHz: numb
   const w = (2 * Math.PI * k) / samples.length;
   const cosine = Math.cos(w);
   const sine = Math.sin(w);
+  const coeff = 2 * cosine;
   let q0 = 0;
   let q1 = 0;
   let q2 = 0;
   for (let i = 0; i < samples.length; i++) {
-    q0 = cosine * q1 - sine * q2 + (samples[i] ?? 0);
+    q0 = coeff * q1 - q2 + (samples[i] ?? 0);
     q2 = q1;
     q1 = q0;
   }

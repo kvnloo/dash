@@ -52,7 +52,7 @@ function writeWav(path: string, samples: Int16Array): void {
 }
 
 export function playPairCode(code: string): void {
-  const chunks: Int16Array[] = [];
+  const chunks: Int16Array[] = [pcmSilence(300)];
   for (const ch of code) {
     const hz = charHz(ch);
     if (hz === null) continue;

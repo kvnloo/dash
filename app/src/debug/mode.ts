@@ -18,10 +18,18 @@ export function debugShowBanner(): boolean {
 
 /** Web-only: read ?debug=1&scenario=… from the page URL. */
 export function readWebDebugParams(): { enabled: boolean; scenario?: string; autoNav: boolean } {
-  if (typeof window === "undefined") {
+  let search: string | undefined;
+  try {
+    const loc = typeof window === "undefined" ? undefined : window.location;
+    search = loc && typeof loc === "object" ? String(loc.search ?? "") : undefined;
+    if (search === "") search = undefined;
+  } catch {
     return { enabled: false, autoNav: true };
   }
-  const params = new URLSearchParams(window.location.search);
+  if (typeof search !== "string") {
+    return { enabled: false, autoNav: true };
+  }
+  const params = new URLSearchParams(search);
   const enabled = isDebugMode() || params.get("debug") === "1";
   const scenario = params.get("scenario")?.trim() || undefined;
   const autoNav = params.get("autonav") !== "0";

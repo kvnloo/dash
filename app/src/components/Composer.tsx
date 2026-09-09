@@ -11,9 +11,18 @@ interface Props {
   initialText?: string;
   onSend(text: string): void;
   onStop(): void;
+  onVoice(): void;
 }
 
-export const Composer = memo(function Composer({ disabled, streaming, placeholder, initialText, onSend, onStop }: Props) {
+export const Composer = memo(function Composer({
+  disabled,
+  streaming,
+  placeholder,
+  initialText,
+  onSend,
+  onStop,
+  onVoice,
+}: Props) {
   const [text, setText] = useState(initialText ?? "");
   const canSend = text.trim().length > 0 && !disabled;
 
@@ -27,14 +36,6 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
   return (
     <View style={styles.wrap}>
       <GlassSurface borderRadius={radius.lg + 4} style={styles.field}>
-        <Pressable
-          style={({ pressed }) => [styles.sideIcon, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Attach"
-          hitSlop={8}
-        >
-          <Ionicons name="attach" size={22} color={colors.textMuted} />
-        </Pressable>
         <TextInput
           style={styles.input}
           value={text}
@@ -89,6 +90,7 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
             accessibilityRole="button"
             accessibilityLabel="Voice input"
             hitSlop={8}
+            onPress={onVoice}
           >
             <Ionicons name="mic-outline" size={22} color={colors.textMuted} />
           </Pressable>
@@ -99,7 +101,7 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
 });
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: space.md, paddingTop: space.sm, backgroundColor: colors.bg },
+  wrap: { paddingHorizontal: space.lg, paddingTop: space.sm, backgroundColor: colors.bg },
   field: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -122,6 +124,7 @@ const styles = StyleSheet.create({
     maxHeight: 6 * 24,
     paddingTop: Platform.OS === "ios" ? 6 : 4,
     paddingBottom: Platform.OS === "ios" ? 6 : 4,
+    paddingLeft: 10,
     paddingRight: 8,
     ...(Platform.OS === "web" ? { outlineStyle: "none" as never } : null),
   },

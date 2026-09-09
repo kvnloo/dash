@@ -6,6 +6,8 @@ export interface BotProfile {
   role: string;
   description: string;
   online: boolean;
+  /** Working directory on the host when this row is a live OMP tab. */
+  cwd?: string;
 }
 
 export const DEMO_BOT_PROFILES: BotProfile[] = [

@@ -24,7 +24,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, 
   const [focused, setFocused] = useState(false);
   const parsed = useMemo(() => parseSearchQuery(value), [value]);
   const suggestions = useMemo(() => filterScopeSuggestions(value), [value]);
-  const showScopes = focused || value.trim().length > 0;
+  const showScopes = focused;
 
   const activeMention =
     parsed.mode === "mention" && parsed.scope !== "unknown" ? parsed.scope : null;

@@ -1,9 +1,11 @@
 import { AppState as RNAppState, type AppStateStatus } from "react-native";
 import { parseServerMessage, type ClientMessage } from "../../../shared/protocol";
 import { isDebugMode } from "../debug/mode";
+import { fetchRoster } from "../lib/roster";
 import type { Settings } from "../model";
 import {
   applyDeltas,
+  applyTranscript,
   applyTurnEvent,
   markTurnLost,
   setConnection,
@@ -45,6 +47,7 @@ class Bridge {
       this.clearTimers();
       this.teardownSocket();
       const harnesses = store.get().connection.harnesses;
+      const hosts = store.get().connection.hosts;
       setConnection({
         status: "online",
         host: "debug-mbp",
@@ -59,6 +62,7 @@ class Bridge {
                 { id: "grok", name: "Grok", available: true },
                 { id: "hermes", name: "Hermes", available: true },
               ],
+        hosts: hosts.length > 0 ? hosts : [],
       });
       return;
     }
@@ -151,8 +155,14 @@ class Bridge {
           host: message.host,
           cwd: message.cwd,
           harnesses: message.harnesses,
+          hosts: message.hosts ?? [],
           error: undefined,
         });
+        if (this.settings) {
+          void fetchRoster(this.settings).then((hosts) => {
+            if (hosts) setConnection({ hosts });
+          });
+        }
         const turns = streamingTurns();
         if (turns.length) this.send({ type: "attach", turns });
         return;
@@ -169,6 +179,10 @@ class Bridge {
         this.flushTimer ??= setTimeout(() => this.flushDeltas(), DELTA_FLUSH_MS);
         return;
       }
+      case "transcript":
+        this.flushDeltas();
+        applyTranscript(message.id, message.text);
+        return;
       case "session":
       case "status":
       case "done":
@@ -247,4 +261,31 @@ export function sendChat(input: {
     sessionId: input.sessionId,
     cwd,
   });
+}
+
+/** Open a spoken turn; the utterance follows as `sendVoiceChunk` calls. */
+export function sendVoiceBegin(input: {
+  turnId: string;
+  harness: string;
+  mime: string;
+  sessionId?: string;
+}): boolean {
+  const cwd = store.get().settings?.cwd;
+  return bridge.send({
+    type: "voice_begin",
+    id: input.turnId,
+    harness: input.harness,
+    mime: input.mime,
+    sessionId: input.sessionId,
+    cwd,
+  });
+}
+
+export function sendVoiceChunk(turnId: string, data: string): boolean {
+  return bridge.send({ type: "voice_chunk", id: turnId, data });
+}
+
+/** End of utterance: the bridge transcribes and runs the turn. */
+export function sendVoiceCommit(turnId: string): boolean {
+  return bridge.send({ type: "voice_commit", id: turnId });
 }

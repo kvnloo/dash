@@ -21,6 +21,8 @@ import {
 } from "../shared/protocol";
 import { CLAIM_KEY_BYTES, claimSession, currentOrCreateSession, startBoundSession } from "./pair";
 import { playPairCode } from "./pair-audio";
+import { decodePairAudio } from "./pair-decode";
+import { collectRoster } from "./src/roster";
 import { speechAvailable, transcribe, warmup } from "./speech";
 
 // ---------------------------------------------------------------------------
@@ -655,6 +657,11 @@ function decodeClaimKey(raw: string): Uint8Array {
   return new Uint8Array(bytes);
 }
 
+let pairPlay: Promise<void> = Promise.resolve();
+function queuePairPlayback(code: string): void {
+  pairPlay = pairPlay.then(() => Promise.resolve(playPairCode(code))).catch(() => {});
+}
+
 const tailscaleIp = tailscaleIPv4();
 const HOST = process.env.DASH_HOST ?? tailscaleIp ?? "0.0.0.0";
 const TOKEN = loadToken();
@@ -709,16 +716,48 @@ async function handleHttp(request: Request, url: URL): Promise<Response | null> 
       return Response.json({ error: "invalid claim key" }, { status: 400 });
     }
     const session = startBoundSession(claimKey);
-    playPairCode(session.code);
+    queuePairPlayback(session.code);
     log("pair.intent", { session: session.id });
     return Response.json({ ok: true, expiresAt: session.expiresAt, host: HOST_NAME, address });
   }
 
   if (url.pathname === "/pair/beep" && request.method === "POST") {
     const session = currentOrCreateSession();
-    playPairCode(session.code);
+    queuePairPlayback(session.code);
     log("pair.beep", { session: session.id });
     return Response.json({ ok: true, expiresAt: session.expiresAt, host: HOST_NAME, address });
+  }
+
+
+  if (url.pathname === "/pair/hear" && request.method === "POST") {
+    const body = parseJson(await request.text());
+    const rec = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+    let claimKey: Uint8Array;
+    try {
+      claimKey = decodeClaimKey(typeof rec.claimKey === "string" ? rec.claimKey : "");
+    } catch {
+      return Response.json({ error: "invalid claim key" }, { status: 400 });
+    }
+    const audioB64 = typeof rec.audio === "string" ? rec.audio : "";
+    if (!audioB64) return Response.json({ error: "missing audio" }, { status: 400 });
+    let bytes: Uint8Array;
+    try {
+      bytes = Uint8Array.from(Buffer.from(audioB64, "base64"));
+    } catch {
+      return Response.json({ error: "invalid audio" }, { status: 400 });
+    }
+    const heard = await decodePairAudio(bytes);
+    if (!heard) return Response.json({ error: "could not hear pairing tones" }, { status: 422 });
+    const session = claimSession(heard, claimKey);
+    if (!session) return Response.json({ error: "invalid or expired code" }, { status: 401 });
+    log("pair.hear", { session: session.id, code: heard });
+    return Response.json({
+      address,
+      token: TOKEN,
+      host: HOST_NAME,
+      cwd: DEFAULT_CWD,
+      harnesses: harnessList(),
+    });
   }
 
   if (url.pathname === "/pair/claim" && request.method === "POST") {
@@ -749,6 +788,16 @@ async function handleHttp(request: Request, url: URL): Promise<Response | null> 
     });
   }
 
+  if (url.pathname === "/roster" && request.method === "GET") {
+    const token = url.searchParams.get("token") ?? request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    if (token !== TOKEN) return new Response("unauthorized", { status: 401 });
+    const harnesses = harnessList();
+    return Response.json({
+      host: HOST_NAME,
+      hosts: collectRoster(harnesses, { hostname: HOST_NAME, address: address.split(":")[0] }),
+    });
+  }
+
   if (url.pathname === "/") {
     return Response.json({ ok: true, host: HOST_NAME, cwd: DEFAULT_CWD, harnesses: harnessList(), pair: "/pair" });
   }
@@ -775,12 +824,14 @@ const server = Bun.serve<SocketData>({
     idleTimeout: 0,
     open(ws) {
       log("ws.open", { remote: ws.remoteAddress });
+      const harnesses = harnessList();
       sendTo(ws, {
         type: "hello",
         version: PROTOCOL_VERSION,
         host: HOST_NAME,
         cwd: DEFAULT_CWD,
-        harnesses: harnessList(),
+        harnesses,
+        hosts: collectRoster(harnesses, { hostname: HOST_NAME, address: tailscaleIp ?? undefined }),
       });
     },
     message(ws, raw) {

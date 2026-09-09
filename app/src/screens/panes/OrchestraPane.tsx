@@ -39,10 +39,10 @@ const Card = memo(function Card({
             {item.subtitle}
           </Text>
         </View>
-        <View style={styles.statusWrap}>
-          <View style={[styles.statusDot, { backgroundColor: STATUS_COLOR[item.status] }]} />
-          <Text style={styles.statusText}>{item.status}</Text>
-        </View>
+        <View
+          style={[styles.statusDot, { backgroundColor: STATUS_COLOR[item.status] }]}
+          accessibilityLabel={item.status}
+        />
       </View>
       <View style={styles.agents}>
         {harnessNames.slice(0, 4).map((name) => (
@@ -99,9 +99,6 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
       renderItem={renderItem}
       keyExtractor={(p) => p.id}
       contentContainerStyle={styles.list}
-      ListHeaderComponent={
-        <Text style={styles.intro}>Combine bots, chats, and products into one orchestration view.</Text>
-      }
       ListEmptyComponent={
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No orchestras</Text>
@@ -114,12 +111,9 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
 
 const styles = StyleSheet.create({
   list: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: 120 },
-  intro: { color: colors.textMuted, ...type.body, marginBottom: space.lg },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: space.lg,
     marginBottom: space.md,
   },
@@ -128,9 +122,7 @@ const styles = StyleSheet.create({
   cardTitles: { flex: 1, minWidth: 0 },
   name: { color: colors.text, ...type.heading },
   sub: { color: colors.textMuted, ...type.small, marginTop: 2, textTransform: "none", letterSpacing: 0 },
-  statusWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusText: { color: colors.textMuted, fontSize: 12, textTransform: "capitalize" },
+  statusDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
   agents: { flexDirection: "row", gap: space.sm, marginTop: space.lg },
   more: {
     width: 36,

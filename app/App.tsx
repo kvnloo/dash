@@ -2,7 +2,7 @@ import { DarkTheme, NavigationContainer, type Theme } from "@react-navigation/na
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { Linking, Platform, StyleSheet, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import type { RootStackParamList } from "./src/navigation";
@@ -16,6 +16,7 @@ import { MainScreen } from "./src/screens/MainScreen";
 import { OrchestraDetailScreen } from "./src/screens/OrchestraDetailScreen";
 import { PairScreen } from "./src/screens/PairScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { VoiceScreen } from "./src/screens/VoiceScreen";
 import { DebugHost } from "./src/debug/DebugHost";
 import { isDebugActive } from "./src/debug/expose";
 import { debugNavigationRef, flushPendingDebugNavigation } from "./src/debug/nav";
@@ -90,7 +91,7 @@ export default function App() {
         <NavigationContainer
           ref={debugNavigationRef}
           theme={theme}
-          linking={linking}
+          linking={Platform.OS === "web" ? linking : undefined}
           onReady={() => flushPendingDebugNavigation()}
         >
           <Stack.Navigator
@@ -101,6 +102,7 @@ export default function App() {
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="OrchestraDetail" component={OrchestraDetailScreen} />
             <Stack.Screen name="Conversations" component={ConversationsScreen} options={{ presentation: "modal" }} />
+            <Stack.Screen name="Voice" component={VoiceScreen} options={{ presentation: "fullScreenModal" }} />
             <Stack.Screen name="Pair" component={PairScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: "modal" }} />
           </Stack.Navigator>

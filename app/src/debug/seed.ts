@@ -10,6 +10,34 @@ const DEBUG_SETTINGS: Settings = {
   cwd: "~/workspace/dash",
 };
 
+const DEBUG_HOSTS = [
+  {
+    id: "mbp",
+    name: "mbp",
+    hostname: "mbp",
+    online: true,
+    self: true,
+    address: "100.78.215.21",
+    agents: [
+      { id: "omp:dash", name: "OMP 1", kind: "omp", status: "running" as const, detail: "/home/kvn/workspace/dash", cwd: "/home/kvn/workspace/dash" },
+      { id: "omp:keyconf", name: "OMP 2", kind: "omp", status: "running" as const, detail: "/home/kvn/workspace/keyconf.gen", cwd: "/home/kvn/workspace/keyconf.gen" },
+      { id: "harness:codex", name: "Codex", kind: "codex", status: "available" as const, detail: "Installed" },
+      { id: "harness:grok", name: "Grok", kind: "grok", status: "available" as const, detail: "Installed" },
+      { id: "harness:hermes", name: "Hermes", kind: "hermes", status: "available" as const, detail: "Installed" },
+      { id: "harness:claude", name: "Claude Code", kind: "claude", status: "offline" as const, detail: "Not installed" },
+    ],
+  },
+  {
+    id: "0",
+    name: "0",
+    hostname: "groot",
+    online: true,
+    self: false,
+    address: "100.113.138.100",
+    agents: [{ id: "hermes", name: "Hermes", kind: "hermes", status: "running" as const, detail: "Mesh node" }],
+  },
+];
+
 const ONLINE_CONNECTION: Partial<Connection> = {
   status: "online",
   host: "mbp",
@@ -22,6 +50,7 @@ const ONLINE_CONNECTION: Partial<Connection> = {
     { id: "claude", name: "Claude Code", available: false },
     { id: "hermes", name: "Hermes", available: true },
   ],
+  hosts: DEBUG_HOSTS,
 };
 
 export type DebugSeedVariant = "paired" | "unpaired" | "offline" | "connecting";
@@ -38,7 +67,7 @@ export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
     store.set((s) => ({
       ...s,
       settings: null,
-      connection: { status: "idle", harnesses: [] },
+      connection: { status: "idle", harnesses: [], hosts: [] },
       conversations: [],
       activeId: null,
     }));
@@ -54,6 +83,7 @@ export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
       cwd: "~/workspace/dash",
       error: "Debug: bridge unreachable",
       harnesses: ONLINE_CONNECTION.harnesses ?? [],
+      hosts: DEBUG_HOSTS,
     });
   } else if (variant === "connecting") {
     setConnection({
@@ -62,6 +92,7 @@ export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
       cwd: undefined,
       error: undefined,
       harnesses: ONLINE_CONNECTION.harnesses ?? [],
+      hosts: DEBUG_HOSTS,
     });
   } else {
     setConnection(ONLINE_CONNECTION);

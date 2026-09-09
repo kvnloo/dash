@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { store } from "../store/app";
 import { bootstrapDebugScenario, runDebugCommand, runScenario, type DebugCommand } from "./controller";
 import { debugScenarioFromEnv, isDebugMode, readWebDebugParams } from "./mode";
@@ -50,6 +51,7 @@ export function exposeDebugApi(): DashDebugApi {
 
 export function isDebugActive(): boolean {
   if (isDebugMode()) return true;
+  if (Platform.OS !== "web") return false;
   return readWebDebugParams().enabled;
 }
 

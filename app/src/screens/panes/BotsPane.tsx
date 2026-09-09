@@ -3,27 +3,32 @@ import { memo, useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
 import { haptic } from "../../haptics";
+import { profileFromAgent } from "../../lib/roster";
 import { DEMO_BOT_PROFILES, type BotProfile } from "../../mock/bots";
 import type { ScreenProps } from "../../navigation";
 import { createConversation, saveSettings, setActive, store } from "../../store/app";
 import { colors, space, type } from "../../theme";
 
 type BotsListItem =
-  | { kind: "section"; id: string; title: string; online: boolean }
-  | { kind: "profile"; id: string; profile: BotProfile };
+  | { kind: "section"; id: string; title: string; subtitle?: string; online: boolean }
+  | { kind: "profile"; id: string; profile: BotProfile; chat: boolean };
 
 const ProfileRow = memo(function ProfileRow({
   profile,
+  chat,
   onPress,
 }: {
   profile: BotProfile;
+  chat: boolean;
   onPress(profile: BotProfile): void;
 }) {
+  const canOpen = profile.online && chat;
   return (
     <Pressable
-      onPress={() => onPress(profile)}
-      style={({ pressed }) => [styles.profileCard, pressed && styles.pressed]}
+      onPress={() => canOpen && onPress(profile)}
+      style={({ pressed }) => [styles.profileCard, !profile.online && styles.offline, pressed && canOpen && styles.pressed]}
       accessibilityRole="button"
+      accessibilityState={{ disabled: !canOpen }}
     >
       <HarnessAvatar name={profile.name} size={44} />
       <View style={styles.main}>
@@ -36,7 +41,7 @@ const ProfileRow = memo(function ProfileRow({
         <Text style={styles.role} numberOfLines={1}>
           {profile.role}
         </Text>
-        <Text style={styles.desc} numberOfLines={2}>
+        <Text style={styles.desc} numberOfLines={1}>
           {profile.description}
         </Text>
       </View>
@@ -44,10 +49,25 @@ const ProfileRow = memo(function ProfileRow({
   );
 });
 
-const SectionHeader = memo(function SectionHeader({ title, online }: { title: string; online: boolean }) {
+const SectionHeader = memo(function SectionHeader({
+  title,
+  subtitle,
+  online,
+}: {
+  title: string;
+  subtitle?: string;
+  online: boolean;
+}) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionText}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {subtitle ? (
+          <Text style={styles.sectionSub} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
       <View style={[styles.statusDot, online ? styles.statusOn : styles.statusOff]} />
     </View>
   );
@@ -55,34 +75,72 @@ const SectionHeader = memo(function SectionHeader({ title, online }: { title: st
 
 export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
   const harnesses = store.use((s) => s.connection.harnesses);
+  const hosts = store.use((s) => s.connection.hosts);
   const conversations = store.use((s) => s.conversations);
   const settings = store.use((s) => s.settings);
+  const chatKinds = useMemo(() => new Set(harnesses.filter((h) => h.available).map((h) => h.id)), [harnesses]);
 
   const items = useMemo((): BotsListItem[] => {
     const out: BotsListItem[] = [];
+    if (hosts.length > 0) {
+      for (const host of hosts) {
+        const subtitle = [host.hostname !== host.name ? host.hostname : undefined, host.address].filter(Boolean).join(" · ");
+        out.push({ kind: "section", id: `sec-${host.id}`, title: host.name, subtitle, online: host.online });
+        if (host.agents.length === 0) {
+          out.push({
+            kind: "profile",
+            id: `host:${host.id}`,
+            chat: false,
+            profile: {
+              id: `host:${host.id}`,
+              harness: "host",
+              name: host.online ? "Online" : "Offline",
+              role: "No Dash agents listed",
+              description: host.self ? "This computer" : "On the tailnet",
+              online: host.online,
+            },
+          });
+          continue;
+        }
+        for (const agent of host.agents) {
+          const profile = profileFromAgent(host, agent);
+          out.push({
+            kind: "profile",
+            id: profile.id,
+            profile,
+            chat: host.self && chatKinds.has(agent.kind),
+          });
+        }
+      }
+      return out;
+    }
     for (const h of harnesses) {
       const profiles = DEMO_BOT_PROFILES.filter((p) => p.harness === h.id);
       if (profiles.length === 0) continue;
       out.push({ kind: "section", id: `sec-${h.id}`, title: h.name, online: h.available });
       for (const profile of profiles) {
-        out.push({ kind: "profile", id: profile.id, profile });
+        out.push({ kind: "profile", id: profile.id, profile, chat: h.available });
       }
     }
     return out;
-  }, [harnesses]);
+  }, [chatKinds, harnesses, hosts]);
 
   const openProfile = useCallback(
     (profile: BotProfile) => {
-      if (!profile.online) return;
       haptic.select();
       const harnessId = profile.harness;
-      if (settings) saveSettings({ ...settings, harness: harnessId });
-      const existing = conversations.find((c) => c.harness === harnessId);
-      if (existing) {
-        setActive(existing.id);
-      } else {
-        createConversation(harnessId);
+      if (settings) {
+        saveSettings({
+          ...settings,
+          harness: harnessId,
+          cwd: profile.cwd ?? settings.cwd,
+        });
       }
+      const existing = conversations.find(
+        (c) => c.harness === harnessId && (!profile.cwd || settings?.cwd === profile.cwd),
+      );
+      if (existing) setActive(existing.id);
+      else createConversation(harnessId);
       navigation.navigate("Chat");
     },
     [conversations, navigation, settings],
@@ -91,9 +149,9 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<BotsListItem>) => {
       if (item.kind === "section") {
-        return <SectionHeader title={item.title} online={item.online} />;
+        return <SectionHeader title={item.title} subtitle={item.subtitle} online={item.online} />;
       }
-      return <ProfileRow profile={item.profile} onPress={openProfile} />;
+      return <ProfileRow profile={item.profile} chat={item.chat} onPress={openProfile} />;
     },
     [openProfile],
   );
@@ -109,8 +167,8 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
       contentContainerStyle={styles.list}
       ListEmptyComponent={
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No bots yet</Text>
-          <Text style={styles.emptySub}>Connect to your bridge to load Hermes profiles and harness agents.</Text>
+          <Text style={styles.emptyTitle}>No hosts yet</Text>
+          <Text style={styles.emptySub}>Pair with a computer on Tailscale to see hosts and live agents.</Text>
         </View>
       }
     />
@@ -125,8 +183,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingTop: space.lg,
     paddingBottom: space.sm,
+    gap: space.md,
   },
+  sectionText: { flex: 1, minWidth: 0 },
   sectionTitle: { color: colors.textMuted, ...type.small, textTransform: "uppercase", letterSpacing: 0.8 },
+  sectionSub: { color: colors.textFaint, fontSize: 12, marginTop: 2 },
   profileCard: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -136,6 +197,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   pressed: { opacity: 0.85 },
+  offline: { opacity: 0.42 },
   main: { flex: 1, minWidth: 0 },
   top: { flexDirection: "row", alignItems: "center", gap: space.sm },
   title: { color: colors.text, ...type.heading, flex: 1 },

@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HarnessAvatar } from "../components/HarnessAvatar";
-import { Header, HeaderTitle, IconButton } from "../components/Header";
+import { AppNav } from "../components/AppNav";
 import { haptic } from "../haptics";
 import { DEMO_ORCHESTRAS } from "../mock/orchestra";
 import type { ScreenProps } from "../navigation";
@@ -34,10 +34,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
   if (!project) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
-        <Header
-          left={<IconButton icon="chevron-back" label="Back" onPress={() => navigation.goBack()} />}
-          center={<HeaderTitle>Orchestra</HeaderTitle>}
-        />
+        <AppNav navigation={navigation} tab={2} />
         <View style={styles.empty}>
           <Text style={styles.emptyText}>Project not found</Text>
         </View>
@@ -59,15 +56,18 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <Header
-        left={<IconButton icon="chevron-back" label="Back" onPress={() => navigation.goBack()} />}
-        center={<HeaderTitle>{project.name}</HeaderTitle>}
-      />
+      <AppNav navigation={navigation} tab={2} />
       <View style={styles.hero}>
         <Text style={styles.subtitle}>{project.subtitle}</Text>
-        <Text style={styles.meta}>
-          {project.agents.length} agents · {linkedChats.length} chats · {project.status}
-        </Text>
+        <View style={styles.metaRow}>
+          <View
+            style={[styles.statusDot, { backgroundColor: project.status === "active" ? colors.ok : project.status === "paused" ? colors.warn : colors.textFaint }]}
+            accessibilityLabel={project.status}
+          />
+          <Text style={styles.meta}>
+            {project.agents.length} agents · {linkedChats.length} chats
+          </Text>
+        </View>
       </View>
 
       <Text style={styles.section}>Agents</Text>
@@ -115,7 +115,9 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   hero: { paddingHorizontal: space.lg, paddingBottom: space.lg },
   subtitle: { color: colors.textMuted, ...type.body, marginTop: 4 },
-  meta: { color: colors.textFaint, fontSize: 12, marginTop: 8, textTransform: "capitalize" },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  meta: { color: colors.textFaint, fontSize: 12 },
   section: {
     color: colors.textMuted,
     ...type.small,

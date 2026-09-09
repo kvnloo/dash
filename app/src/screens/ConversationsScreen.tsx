@@ -3,7 +3,7 @@ import { memo, useCallback } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HarnessAvatar } from "../components/HarnessAvatar";
-import { Header, HeaderTitle, IconButton } from "../components/Header";
+import { AppNav } from "../components/AppNav";
 import { haptic } from "../haptics";
 import type { Conversation } from "../model";
 import type { ScreenProps } from "../navigation";
@@ -103,11 +103,7 @@ export function ConversationsScreen({ navigation }: ScreenProps<"Conversations">
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <Header
-        left={<IconButton icon="chevron-down" label="Close" onPress={() => navigation.goBack()} />}
-        center={<HeaderTitle>Chats</HeaderTitle>}
-        right={<IconButton icon="options-outline" label="Settings" onPress={() => navigation.navigate("Settings")} />}
-      />
+      <AppNav navigation={navigation} tab={1} />
       <FlashList
         data={conversations}
         renderItem={renderItem}

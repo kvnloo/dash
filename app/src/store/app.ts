@@ -32,7 +32,7 @@ const KEYS = {
 export const store = createStore<AppState>({
   hydrated: false,
   settings: null,
-  connection: { status: "idle", harnesses: [] },
+  connection: { status: "idle", harnesses: [], hosts: [] },
   conversations: [],
   activeId: null,
 });
@@ -101,7 +101,7 @@ export async function forgetEverything(): Promise<void> {
     settings: null,
     conversations: [],
     activeId: null,
-    connection: { status: "idle", harnesses: [] },
+    connection: { status: "idle", harnesses: [], hosts: [] },
   }));
 }
 
@@ -240,7 +240,31 @@ export function applyDeltas(batch: Map<string, { text: string; seq: number }>): 
   }
 }
 
-export function applyTurnEvent(event: Exclude<TurnEvent, { type: "delta" }>): void {
+
+/** Fill the user bubble with what the laptop heard for a spoken turn. */
+export function applyTranscript(turnId: string, text: string): void {
+  const where = locateTurn(turnId);
+  if (!where) return;
+  updateConversation(where.conversationId, (c) => {
+    const index = c.messages.findIndex((m) => m.id === where.messageId);
+    const assistant = c.messages[index];
+    const user = index > 0 ? c.messages[index - 1] : undefined;
+    if (!assistant || assistant.role !== "assistant" || user?.role !== "user") return c;
+    const messages = c.messages.slice();
+    messages[index - 1] = { ...user, text };
+    const userTurns = c.messages.filter((m) => m.role === "user").length;
+    return {
+      ...c,
+      title: userTurns <= 1 ? titleFrom(text) : c.title,
+      messages,
+      updatedAt: Date.now(),
+    };
+  });
+}
+
+export function applyTurnEvent(
+  event: Exclude<TurnEvent, { type: "delta" } | { type: "transcript" }>,
+): void {
   const where = locateTurn(event.id);
   if (!where) return;
   switch (event.type) {

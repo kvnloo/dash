@@ -1,4 +1,4 @@
-import type { HarnessInfo } from "../../shared/protocol";
+import type { HarnessInfo, HostInfo } from "../../shared/protocol";
 
 export interface Settings {
   /** `host:port` of the bridge, no scheme. */
@@ -55,6 +55,7 @@ export interface Connection {
   host?: string;
   cwd?: string;
   harnesses: HarnessInfo[];
+  hosts: HostInfo[];
   /** Human-readable reason for the last failure. */
   error?: string;
 }

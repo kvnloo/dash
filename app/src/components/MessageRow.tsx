@@ -37,11 +37,7 @@ function AssistantBody({ message }: { message: AssistantMessage }) {
     case "streaming":
       return (
         <>
-          {message.text ? (
-            <Text selectable style={styles.assistantText}>
-              {message.text}
-            </Text>
-          ) : null}
+          {message.text ? <Markdown text={message.text} /> : null}
           <View style={styles.statusRow}>
             <PulseDot />
             <Text style={styles.statusText} numberOfLines={1}>

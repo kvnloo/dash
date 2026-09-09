@@ -21,10 +21,8 @@ export const TopTabs = memo(function TopTabs({
           <Pressable
             key={label}
             onPress={() => {
-              if (i !== index) {
-                haptic.select();
-                onChange(i);
-              }
+              haptic.select();
+              onChange(i);
             }}
             style={styles.tab}
             accessibilityRole="tab"
@@ -65,10 +63,10 @@ const styles = StyleSheet.create({
   labelActive: { color: colors.text },
   indicator: {
     marginTop: 6,
-    width: 22,
-    height: 2,
-    borderRadius: 1,
+    width: 5,
+    height: 5,
+    borderRadius: 3,
     backgroundColor: colors.text,
   },
-  indicatorSpacer: { marginTop: 6, height: 2 },
+  indicatorSpacer: { marginTop: 6, height: 5 },
 });

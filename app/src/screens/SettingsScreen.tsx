@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Header, HeaderTitle, IconButton } from "../components/Header";
+import { AppNav } from "../components/AppNav";
 import { GlassSurface } from "../components/GlassSurface";
 import { haptic } from "../haptics";
 import { normalizeAddress } from "../model";
@@ -33,7 +33,7 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
   useEffect(() => {
     if (firstRun && submitted && connection.status === "online") {
       haptic.success();
-      navigation.replace("Chat");
+      navigation.replace("Main");
     }
   }, [firstRun, submitted, connection.status, navigation]);
 
@@ -76,10 +76,7 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <Header
-        left={firstRun ? null : <IconButton icon="chevron-down" label="Close" onPress={() => navigation.goBack()} />}
-        center={<HeaderTitle>{firstRun ? "Dash" : "Settings"}</HeaderTitle>}
-      />
+      <AppNav navigation={navigation} tab={1} />
       <KeyboardAvoidingView style={styles.body} behavior="padding">
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.xxl }]}
@@ -155,9 +152,10 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
                     {i > 0 ? <View style={styles.divider} /> : null}
                     <View style={styles.harnessRow}>
                       <Text style={styles.harnessName}>{h.name}</Text>
-                      <Text style={[styles.harnessState, h.available ? styles.ok : styles.missing]}>
-                        {h.available ? "Installed" : "Not found"}
-                      </Text>
+                      <View
+                        style={[styles.statusDot, { backgroundColor: h.available ? colors.ok : colors.textFaint }]}
+                        accessibilityLabel={h.available ? "Installed" : "Not found"}
+                      />
                     </View>
                   </View>
                 ))}
@@ -257,11 +255,8 @@ const styles = StyleSheet.create({
   primaryText: { color: colors.onAccent, ...type.heading },
   primaryTextDisabled: { color: colors.textFaint },
   pressed: { opacity: 0.75 },
-  harnessRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: space.lg, paddingVertical: 14 },
+  harnessRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.lg, paddingVertical: 14 },
   harnessName: { color: colors.text, ...type.body },
-  harnessState: { ...type.small, alignSelf: "center" },
-  ok: { color: colors.textMuted },
-  missing: { color: colors.textFaint },
   mono: { color: colors.text, ...type.mono, padding: space.lg },
   help: { color: colors.textMuted, ...type.small, marginTop: space.sm, marginLeft: space.xs },
   danger: { marginTop: space.xxl, alignItems: "center", paddingVertical: 14 },

@@ -1,4 +1,9 @@
-import { Audio } from "expo-av";
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from "expo-audio";
 import { File } from "expo-file-system";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -12,21 +17,22 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppNav } from "../components/AppNav";
 import { GlassSurface } from "../components/GlassSurface";
 import { haptic } from "../haptics";
 import { newClaimKey } from "../lib/pair-crypto";
-import { claimPairCode, settingsFromClaim, startSonicPair } from "../lib/pair-api";
-import { decodePairCodeFromWav } from "../lib/sonic-pair";
+import { claimLivePair, claimPairCode, hearPairTones, settingsFromClaim, startSonicPair } from "../lib/pair-api";
 import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
 import { saveSettings, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 
-const RECORD_MS = 4500;
+const RECORD_MS = 6500;
 
 export function PairScreen({ navigation }: ScreenProps<"Pair">) {
   const insets = useSafeAreaInsets();
-  const [computer, setComputer] = useState("mbp");
+  const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
+  const [computer, setComputer] = useState("100.78.215.21");
   const [manualCode, setManualCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -43,6 +49,13 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setError(null);
       setStatus("Finishing secure pairing…");
       const claim = await claimPairCode(computer, code, claimKey);
+      await connectClaim(claim);
+    },
+    [computer, navigation],
+  );
+
+  const connectClaim = useCallback(
+    async (claim: Awaited<ReturnType<typeof claimPairCode>>) => {
       const settings = settingsFromClaim(claim);
       saveSettings(settings);
       bridge.start(settings);
@@ -50,66 +63,63 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       if (!online) throw new Error("Paired but bridge WebSocket did not connect");
       haptic.success();
       claimKeyRef.current = null;
-      navigation.replace("Chat");
+      navigation.replace("Main");
     },
-    [computer, navigation],
+    [navigation],
   );
 
   const pairWithSound = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     setError(null);
-    setStatus("Requesting mic…");
+    setStatus("Requesting microphone…");
     try {
-      const perm = await Audio.requestPermissionsAsync();
-      if (!perm.granted) throw new Error("Microphone permission is required for sonic pairing");
+      const perm = await requestRecordingPermissionsAsync();
+      if (!perm.granted) throw new Error("Microphone permission is required to hear the pairing tones");
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
-
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       const claimKey = ensureClaimKey();
-      setStatus("Starting secure pairing…");
-      await startSonicPair(computer, claimKey);
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      for (let i = 0; i < 25 && !recorder.getStatus().isRecording; i++) await sleep(40);
+      if (!recorder.getStatus().isRecording) throw new Error("Microphone did not start recording");
 
-      setStatus("Hold your phone near the laptop speakers…");
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync({
-        isMeteringEnabled: false,
-        android: {
-          extension: ".wav",
-          outputFormat: Audio.AndroidOutputFormat.DEFAULT,
-          audioEncoder: Audio.AndroidAudioEncoder.DEFAULT,
-          sampleRate: 44100,
-          numberOfChannels: 1,
-        },
-        ios: {
-          extension: ".wav",
-          audioQuality: Audio.IOSAudioQuality.HIGH,
-          sampleRate: 44100,
-          numberOfChannels: 1,
-          linearPCMBitDepth: 16,
-          linearPCMIsBigEndian: false,
-          linearPCMIsFloat: false,
-          bitRate: 128000,
-        },
-        web: {},
-      });
-      await recording.startAsync();
+      setStatus("Listening… hold the phone by the laptop speakers");
+      const playing = startSonicPair(computer, claimKey);
       await sleep(RECORD_MS);
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      if (!uri) throw new Error("Recording failed");
+      await recorder.stop();
+      await playing;
 
+      const uri = recorder.uri;
+      if (!uri) throw new Error("Recording failed");
       setStatus("Decoding pairing tones…");
-      const file = new File(uri);
-      const bytes = await file.bytes();
-      const code = decodePairCodeFromWav(bytes);
-      if (!code) throw new Error("Could not hear the pairing code — try again closer to the speakers");
-      await finishClaim(code, claimKey);
+      const bytes = new Uint8Array(await new File(uri).arrayBuffer());
+      const mime = uri.toLowerCase().endsWith(".wav") ? "audio/wav" : "audio/m4a";
+      const claim = await hearPairTones(computer, claimKey, bytes, mime);
+      await connectClaim(claim);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setError(message);
+      haptic.error();
+      try {
+        if (recorder.getStatus().isRecording) await recorder.stop();
+      } catch {
+        /* already stopped */
+      }
+    } finally {
+      setBusy(false);
+      setStatus(null);
+    }
+  }, [busy, computer, connectClaim, ensureClaimKey, recorder]);
+
+  const pairOverTailscale = useCallback(async () => {
+    if (busy || computer.trim().length === 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setStatus(`Connecting to ${computer.trim()}…`);
+      const claim = await claimLivePair(computer);
+      await connectClaim(claim);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
@@ -118,16 +128,14 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setBusy(false);
       setStatus(null);
     }
-  }, [busy, computer, ensureClaimKey, finishClaim]);
+  }, [busy, computer, connectClaim]);
 
   const pairWithCode = useCallback(async () => {
     if (busy || manualCode.trim().length !== 6) return;
     setBusy(true);
     setError(null);
     try {
-      const claimKey = ensureClaimKey();
-      await startSonicPair(computer, claimKey);
-      await finishClaim(manualCode.trim(), claimKey);
+      await finishClaim(manualCode.trim());
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);
@@ -136,36 +144,45 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setBusy(false);
       setStatus(null);
     }
-  }, [busy, computer, ensureClaimKey, finishClaim, manualCode]);
+  }, [busy, finishClaim, manualCode]);
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top + space.lg, paddingBottom: insets.bottom + space.lg }]}>
+    <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
+      <AppNav navigation={navigation} tab={1} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Pair with your laptop</Text>
         <Text style={styles.intro}>
-          The laptop plays a short audible code. Your phone sends a secret over Tailscale first, then listens — so
-          someone nearby who only hears the tones cannot pair. The bridge token never crosses the air.
+          Same Tailscale tailnet as this phone. Computer is the MagicDNS name or Tailscale IP (port 4747).
         </Text>
 
         <GlassSurface variant="raised" borderRadius={radius.md} style={styles.inputWrap}>
           <TextInput
             value={computer}
             onChangeText={setComputer}
-            placeholder="mbp"
+            placeholder="100.78.215.21"
             placeholderTextColor={colors.textFaint}
             autoCapitalize="none"
             autoCorrect={false}
+            autoComplete="off"
             style={styles.inputInner}
           />
         </GlassSurface>
-        <Text style={styles.hint}>Tailscale MagicDNS name (same tailnet as this phone).</Text>
+        <Text style={styles.hint}>This laptop is 100.78.215.21 — Pair over Tailscale skips the speaker tones.</Text>
+
+        <Pressable
+          onPress={() => void pairOverTailscale()}
+          disabled={busy || computer.trim().length === 0}
+          style={({ pressed }) => [styles.primary, (busy || computer.trim().length === 0) && styles.primaryDisabled, pressed && styles.pressed]}
+        >
+          {busy ? <ActivityIndicator color={colors.onAccent} /> : <Text style={styles.primaryText}>Pair over Tailscale</Text>}
+        </Pressable>
 
         <Pressable
           onPress={() => void pairWithSound()}
           disabled={busy || computer.trim().length === 0}
-          style={({ pressed }) => [styles.primary, (busy || computer.trim().length === 0) && styles.primaryDisabled, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.secondary, (busy || computer.trim().length === 0) && styles.secondaryDisabled, pressed && styles.pressed]}
         >
-          {busy ? <ActivityIndicator color={colors.onAccent} /> : <Text style={styles.primaryText}>Listen for pairing sound</Text>}
+          <Text style={styles.secondaryText}>Listen for pairing sound</Text>
         </Pressable>
 
         {status ? <Text style={styles.status}>{status}</Text> : null}
@@ -220,7 +237,6 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: space.lg },
   title: { color: colors.text, ...type.title, marginBottom: space.sm },
   intro: { color: colors.textMuted, ...type.body, marginBottom: space.xl },
-  label: { color: colors.textMuted, ...type.label, marginBottom: space.sm, marginLeft: space.xs },
   hint: { color: colors.textFaint, ...type.small, marginTop: space.xs, marginBottom: space.lg },
   inputWrap: { marginBottom: space.sm },
   inputInner: {

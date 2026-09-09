@@ -10,6 +10,28 @@ export interface HarnessInfo {
   available: boolean;
 }
 
+/** One live or installed agent on a host. `kind` is a harness id when Dash can chat with it. */
+export interface AgentInfo {
+  id: string;
+  name: string;
+  kind: string;
+  /** running = live process; available = installed; offline = known but down. */
+  status: "running" | "available" | "offline";
+  detail?: string;
+  cwd?: string;
+}
+
+/** A machine on the tailnet (this laptop, groot/0, …). */
+export interface HostInfo {
+  id: string;
+  name: string;
+  hostname: string;
+  online: boolean;
+  self: boolean;
+  address?: string;
+  agents: AgentInfo[];
+}
+
 export type ClientMessage =
   | {
       type: "chat";
@@ -65,6 +87,8 @@ export type ServerMessage =
       host: string;
       cwd: string;
       harnesses: HarnessInfo[];
+      /** Optional; old bridges omit this. */
+      hosts?: HostInfo[];
     }
   /** Reply to `attach` for a turn the bridge no longer knows about. */
   | { type: "lost"; id: string }
@@ -147,6 +171,40 @@ function isHarnessInfo(value: unknown): value is HarnessInfo {
   );
 }
 
+const AGENT_STATUSES = ["running", "available", "offline"] as const;
+
+function isAgentStatus(value: unknown): value is AgentInfo["status"] {
+  return typeof value === "string" && AGENT_STATUSES.some((s) => s === value);
+}
+
+function isAgentInfo(value: unknown): value is AgentInfo {
+  if (!isRecord(value) || !str(value.id) || !str(value.name) || !str(value.kind) || !isAgentStatus(value.status)) {
+    return false;
+  }
+  if (value.detail !== undefined && !str(value.detail)) return false;
+  if (value.cwd !== undefined && !str(value.cwd)) return false;
+  return true;
+}
+
+export function parseHosts(raw: unknown): HostInfo[] | undefined {
+  if (!Array.isArray(raw) || !raw.every(isHostInfo)) return undefined;
+  return raw;
+}
+
+function isHostInfo(value: unknown): value is HostInfo {
+  return (
+    isRecord(value) &&
+    str(value.id) &&
+    str(value.name) &&
+    str(value.hostname) &&
+    typeof value.online === "boolean" &&
+    typeof value.self === "boolean" &&
+    (value.address === undefined || str(value.address)) &&
+    Array.isArray(value.agents) &&
+    value.agents.every(isAgentInfo)
+  );
+}
+
 export function parseServerMessage(raw: unknown): ServerMessage | null {
   if (!isRecord(raw)) return null;
   switch (raw.type) {
@@ -164,6 +222,7 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
           host: raw.host,
           cwd: raw.cwd,
           harnesses: raw.harnesses,
+          hosts: parseHosts(raw.hosts),
         };
       }
       return null;
