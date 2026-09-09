@@ -16,6 +16,10 @@ import { MainScreen } from "./src/screens/MainScreen";
 import { OrchestraDetailScreen } from "./src/screens/OrchestraDetailScreen";
 import { PairScreen } from "./src/screens/PairScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { DebugHost } from "./src/debug/DebugHost";
+import { isDebugActive } from "./src/debug/expose";
+import { debugNavigationRef, flushPendingDebugNavigation } from "./src/debug/nav";
+import { clearDebugPersistence, applyDebugSeed } from "./src/debug/seed";
 import { applyDemoSeed } from "./src/mock/seed";
 import { hydrate, saveSettings, store } from "./src/store/app";
 import { colors } from "./src/theme";
@@ -56,7 +60,12 @@ export default function App() {
   const hasSettings = store.use((s) => s.settings !== null);
 
   useEffect(() => {
-    void hydrate().then(() => {
+    void hydrate().then(async () => {
+      if (isDebugActive()) {
+        await clearDebugPersistence();
+        applyDebugSeed("paired");
+        return;
+      }
       applyDemoSeed();
       const settings = store.get().settings;
       if (settings && process.env.EXPO_PUBLIC_DEMO !== "1") bridge.start(settings);
@@ -78,9 +87,14 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <KeyboardProvider>
-        <NavigationContainer theme={theme} linking={linking}>
+        <NavigationContainer
+          ref={debugNavigationRef}
+          theme={theme}
+          linking={linking}
+          onReady={() => flushPendingDebugNavigation()}
+        >
           <Stack.Navigator
-            initialRouteName={hasSettings ? "Main" : "Pair"}
+            initialRouteName={isDebugActive() || hasSettings ? "Main" : "Pair"}
             screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "default" }}
           >
             <Stack.Screen name="Main" component={MainScreen} />
@@ -91,6 +105,7 @@ export default function App() {
             <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: "modal" }} />
           </Stack.Navigator>
         </NavigationContainer>
+        <DebugHost />
         <StatusBar style="light" />
       </KeyboardProvider>
     </SafeAreaProvider>

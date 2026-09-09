@@ -1,5 +1,6 @@
 import { AppState as RNAppState, type AppStateStatus } from "react-native";
 import { parseServerMessage, type ClientMessage } from "../../../shared/protocol";
+import { isDebugMode } from "../debug/mode";
 import type { Settings } from "../model";
 import {
   applyDeltas,
@@ -40,6 +41,27 @@ class Bridge {
   /** Start (or restart) with new settings. */
   start(settings: Settings): void {
     this.settings = settings;
+    if (isDebugMode()) {
+      this.clearTimers();
+      this.teardownSocket();
+      const harnesses = store.get().connection.harnesses;
+      setConnection({
+        status: "online",
+        host: "debug-mbp",
+        cwd: settings.cwd ?? "~/workspace/dash",
+        error: undefined,
+        harnesses:
+          harnesses.length > 0
+            ? harnesses
+            : [
+                { id: "omp", name: "OMP", available: true },
+                { id: "codex", name: "Codex", available: true },
+                { id: "grok", name: "Grok", available: true },
+                { id: "hermes", name: "Hermes", available: true },
+              ],
+      });
+      return;
+    }
     this.attempt = 0;
     this.teardownSocket();
     this.connectNow();
@@ -59,10 +81,12 @@ class Bridge {
   }
 
   isOpen(): boolean {
+    if (isDebugMode()) return true;
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
   send(message: ClientMessage): boolean {
+    if (isDebugMode()) return true;
     if (!this.isOpen() || !this.ws) return false;
     this.ws.send(JSON.stringify(message));
     return true;

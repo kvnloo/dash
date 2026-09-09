@@ -15,6 +15,8 @@ import {
 } from "../lib/global-search";
 import type { BotProfile } from "../mock/bots";
 import type { ScreenProps } from "../navigation";
+import { isDebugActive } from "../debug/expose";
+import { debugUi } from "../debug/ui-store";
 import { createConversation, saveSettings, setActive, store } from "../store/app";
 import { colors, space, type } from "../theme";
 
@@ -35,7 +37,17 @@ function chatDraftForResult(item: SearchResult): string | undefined {
 
 export function MainScreen({ navigation }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
-  const [query, setQuery] = useState("");
+  const debugSearch = debugUi.use((s) => s.mainSearchQuery);
+  const [localQuery, setLocalQuery] = useState("");
+  const query = debugSearch !== null ? debugSearch : localQuery;
+  const setQuery = useCallback((next: string | ((prev: string) => string)) => {
+    setLocalQuery((localPrev) => {
+      const current = debugSearch !== null ? debugSearch : localPrev;
+      const value = typeof next === "function" ? next(current) : next;
+      if (isDebugActive()) debugUi.set((s) => ({ ...s, mainSearchQuery: value }));
+      return value;
+    });
+  }, [debugSearch]);
   const conversations = store.use((s) => s.conversations);
   const harnesses = store.use((s) => s.connection.harnesses);
   const settings = store.use((s) => s.settings);

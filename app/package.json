@@ -37,11 +37,15 @@
   "devDependencies": {
     "@types/punycode": "^2.1.4",
     "@types/react": "~19.2.2",
+    "playwright": "^1.63.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
     "demo": "EXPO_PUBLIC_DEMO=1 expo start",
+    "debug": "EXPO_PUBLIC_DEBUG=1 EXPO_PUBLIC_DEBUG_AUTONAV=0 expo start",
+    "debug:web": "EXPO_PUBLIC_DEBUG=1 EXPO_PUBLIC_DEBUG_AUTONAV=0 expo start --web --port 8099",
+    "debug:shots": "bun ../scripts/debug-screenshots.mjs",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"

@@ -10,6 +10,8 @@ import { HarnessPicker } from "../components/HarnessPicker";
 import { Header, IconButton } from "../components/Header";
 import { GlassSurface } from "../components/GlassSurface";
 import { MessageRow } from "../components/MessageRow";
+import { isDebugActive } from "../debug/expose";
+import { debugUi } from "../debug/ui-store";
 import { haptic } from "../haptics";
 import type { Message } from "../model";
 import type { ScreenProps } from "../navigation";
@@ -45,7 +47,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const composerDraft = route.params?.draft;
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<Message>>(null);
+  const debugPicker = debugUi.use((s) => s.chatHarnessPickerOpen);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerVisible = debugPicker ?? pickerOpen;
+  const setPickerVisible = useCallback((open: boolean) => {
+    setPickerOpen(open);
+    if (isDebugActive()) debugUi.set((s) => ({ ...s, chatHarnessPickerOpen: open }));
+  }, []);
 
   const settings = store.use((s) => s.settings);
   const connection = store.use((s) => s.connection);
@@ -164,7 +172,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         left={<IconButton icon="chevron-back" label="Back" onPress={() => navigation.navigate("Main")} />}
         center={
           <Pressable
-            onPress={() => setPickerOpen(true)}
+            onPress={() => setPickerVisible(true)}
             style={({ pressed }) => [pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel={`Harness: ${harnessName}. Change`}
@@ -226,11 +234,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         </View>
       </KeyboardAvoidingView>
       <HarnessPicker
-        visible={pickerOpen}
+        visible={pickerVisible}
         harnesses={connection.harnesses}
         selected={harnessId}
         onSelect={onSelectHarness}
-        onClose={() => setPickerOpen(false)}
+        onClose={() => setPickerVisible(false)}
       />
     </View>
   );

@@ -39,6 +39,14 @@ bunx expo start
 
 **UI mock (no bridge):** `cd app && EXPO_PUBLIC_DEMO=1 bunx expo start`
 
+**Debug mode (programmatic UI, no bridge):** `cd app && bun run debug` — or web + screenshots:
+
+```bash
+cd app && bun run debug:shots   # writes PNGs to screenshots/debug/
+```
+
+In debug mode, `window.__DASH_DEBUG__` exposes `scenario(id)`, `run({ action })`, and `state()`. Deep links: `dash://debug/scenario/chat-omp`.
+
 **Static previews:** open `preview.html` in a browser.
 
 ## Layout
