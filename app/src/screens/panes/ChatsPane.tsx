@@ -1,14 +1,17 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
 import { haptic } from "../../haptics";
 import type { Conversation } from "../../model";
 import type { ScreenProps } from "../../navigation";
 import { deleteConversation, setActive, store } from "../../store/app";
 import { colors, space, type } from "../../theme";
-import { confirmDestructive, timeAgo } from "../../util";
+import { confirmDestructive, dateGroupLabel, timeAgo } from "../../util";
+
+type ChatsListItem =
+  | { kind: "section"; id: string; title: string }
+  | { kind: "conversation"; id: string; conversation: Conversation };
 
 function preview(c: Conversation): string {
   const last = c.messages[c.messages.length - 1];
@@ -59,11 +62,33 @@ const Row = memo(function Row({
   );
 });
 
+const SectionHeader = memo(function SectionHeader({ title }: { title: string }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+  );
+});
+
 export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
-  const insets = useSafeAreaInsets();
   const conversations = store.use((s) => s.conversations);
   const activeId = store.use((s) => s.activeId);
   const harnesses = store.use((s) => s.connection.harnesses);
+
+  const items = useMemo((): ChatsListItem[] => {
+    const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
+    const out: ChatsListItem[] = [];
+    let lastGroup = "";
+    for (const c of sorted) {
+      const group = dateGroupLabel(c.updatedAt);
+      if (group !== lastGroup) {
+        out.push({ kind: "section", id: `sec-${group}`, title: group });
+        lastGroup = group;
+      }
+      out.push({ kind: "conversation", id: c.id, conversation: c });
+    }
+    return out;
+  }, [conversations]);
 
   const open = useCallback(
     (id: string) => {
@@ -80,31 +105,32 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
     });
   }, []);
 
-  const newChat = useCallback(() => {
-    haptic.tap();
-    setActive(null);
-    navigation.navigate("Chat");
-  }, [navigation]);
-
   const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<Conversation>) => (
-      <Row
-        item={item}
-        active={item.id === activeId}
-        harnessName={harnesses.find((h) => h.id === item.harness)?.name ?? item.harness}
-        onPress={open}
-        onDelete={remove}
-      />
-    ),
+    ({ item }: ListRenderItemInfo<ChatsListItem>) => {
+      if (item.kind === "section") return <SectionHeader title={item.title} />;
+      const c = item.conversation;
+      return (
+        <Row
+          item={c}
+          active={c.id === activeId}
+          harnessName={harnesses.find((h) => h.id === c.harness)?.name ?? c.harness}
+          onPress={open}
+          onDelete={remove}
+        />
+      );
+    },
     [activeId, harnesses, open, remove],
   );
+
+  const getItemType = useCallback((item: ChatsListItem) => item.kind, []);
 
   return (
     <View style={styles.wrap}>
       <FlashList
-        data={conversations}
+        data={items}
         renderItem={renderItem}
-        keyExtractor={(c) => c.id}
+        getItemType={getItemType}
+        keyExtractor={(item) => item.id}
         extraData={activeId}
         contentContainerStyle={{ paddingBottom: 120 }}
         ListEmptyComponent={
@@ -113,21 +139,18 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
           </View>
         }
       />
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, space.lg) }]} pointerEvents="box-none">
-        <Pressable
-          onPress={newChat}
-          style={({ pressed }) => [styles.newButton, pressed && styles.newPressed]}
-          accessibilityRole="button"
-        >
-          <Text style={styles.newText}>New chat</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
+  section: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.sm,
+  },
+  sectionTitle: { color: colors.textMuted, ...type.small, textTransform: "none", letterSpacing: 0, fontWeight: "600" },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -147,21 +170,4 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.text, opacity: 0.7 },
   empty: { paddingTop: "40%", alignItems: "center" },
   emptyText: { color: colors.textMuted, ...type.body },
-  footer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: space.lg,
-    paddingTop: space.md,
-  },
-  newButton: {
-    height: 48,
-    borderRadius: 999,
-    backgroundColor: colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  newPressed: { opacity: 0.9 },
-  newText: { color: colors.onAccent, ...type.heading },
 });

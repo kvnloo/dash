@@ -6,66 +6,208 @@
 <title>Dash preview</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#111;min-height:100vh;display:flex;gap:24px;justify-content:center;padding:24px;font-family:system-ui,-apple-system,sans-serif}
+body{background:#111;min-height:100vh;display:flex;gap:24px;justify-content:center;flex-wrap:wrap;padding:24px;font-family:system-ui,-apple-system,sans-serif}
 .phone{width:390px;height:844px;background:#000;border-radius:40px;border:1px solid rgba(255,255,255,.08);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.55)}
-.glass{background:rgba(18,18,18,.68);backdrop-filter:blur(22px) saturate(120%);-webkit-backdrop-filter:blur(22px) saturate(120%);border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
-.glass-raised{background:rgba(28,28,28,.78);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.glass{background:rgba(18,18,18,.68);backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,.07)}
 .label{color:#5a5a5a;font-size:11px;text-align:center;margin-top:8px}
 .header{height:52px;display:flex;align-items:center;padding:0 8px}
 .side{width:88px;display:flex;align-items:center}
 .side.right{justify-content:flex-end}
 .center{flex:1;display:flex;justify-content:center}
 .icon{width:40px;height:40px;border-radius:20px;display:flex;align-items:center;justify-content:center;color:#f2f2f2;font-size:18px}
-.title-pill{display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:999px;color:#f2f2f2;font-size:17px;font-weight:600}
-.header-title{color:#f2f2f2;font-size:17px;font-weight:600}
-.body{flex:1;display:flex;flex-direction:column}
-.chat-area{flex:1;padding:8px 0;overflow:hidden}
+.tabs{display:flex;align-items:flex-end;gap:24px}
+.tab{color:#8b8b8b;font-size:15px;font-weight:600;padding:4px 0 8px;min-width:72px;text-align:center}
+.tab.on{color:#f2f2f2}
+.tab.on::after{content:"";display:block;width:22px;height:2px;background:#f2f2f2;border-radius:1px;margin:6px auto 0}
+.tab:not(.on)::after{content:"";display:block;height:2px;margin:6px auto 0}
+.body{flex:1;display:flex;flex-direction:column;min-height:0}
+.section{color:#8b8b8b;font-size:13px;font-weight:600;padding:16px 16px 8px}
+.row-item{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #262626}
+.avatar{width:44px;height:44px;border-radius:22px;background:#1c1c1c;display:flex;align-items:center;justify-content:center;color:#f2f2f2;font-size:18px;font-weight:600}
+.row-main{flex:1;min-width:0}
+.row-top{display:flex;align-items:center;gap:8px}
+.row-title{color:#f2f2f2;font-size:17px;font-weight:600;flex:1}
+.row-sub{color:#8b8b8b;font-size:13px;margin-top:2px}
+.row-meta{color:#8b8b8b;font-size:13px}
+.dot{width:8px;height:8px;border-radius:4px;background:#34c759}
+.dot.off{background:#5a5a5a}
+.search-dock{border-top:1px solid #262626;padding:8px 16px 24px}
+.search{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:16px;color:#5a5a5a;font-size:16px}
+.chat-area{flex:1;padding:8px 0}
 .user-row{display:flex;justify-content:flex-end;padding:8px 16px}
-.bubble{max-width:82%;border-radius:22px;border-bottom-right-radius:6px;padding:10px 14px;color:#f2f2f2;font-size:16px;line-height:24px}
-.bubble.glass{background:rgba(28,28,28,.78);border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.bubble{max-width:82%;background:#1f1f1f;border-radius:22px;border-bottom-right-radius:6px;padding:10px 14px;color:#f2f2f2;font-size:16px;line-height:24px}
 .assistant-row{padding:8px 16px;color:#f2f2f2;font-size:16px;line-height:24px}
 .status{display:flex;align-items:center;gap:8px;margin-top:6px;color:#8b8b8b;font-size:13px}
-.dot{width:6px;height:6px;border-radius:3px;background:#f2f2f2;opacity:.6}
+.status-dot{width:6px;height:6px;border-radius:3px;background:#f2f2f2;opacity:.6}
 .composer-wrap{padding:8px 12px 24px;background:#000}
-.composer{display:flex;align-items:flex-end;border-radius:20px;padding:6px 6px 6px 16px;min-height:48px}
-.composer.glass{border-radius:20px}
+.composer{display:flex;align-items:flex-end;border-radius:26px;padding:6px 6px 6px 4px;min-height:48px}
+.composer .side{width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:#8b8b8b;font-size:18px}
 .composer span{flex:1;color:#5a5a5a;font-size:16px;padding:8px 0}
 .send{width:36px;height:36px;border-radius:18px;background:#fff;display:flex;align-items:center;justify-content:center;color:#000;font-size:18px}
-.scroll{flex:1;overflow:hidden;padding:16px}
-.intro{color:#8b8b8b;font-size:16px;line-height:24px;margin-bottom:20px}
-.section-label{color:#8b8b8b;font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;margin-bottom:8px}
-.card{border-radius:22px;margin-bottom:16px}
+.title-plain{display:flex;align-items:center;gap:4px;color:#f2f2f2;font-size:17px;font-weight:600}
+.scroll{flex:1;overflow:hidden}
+.intro{color:#8b8b8b;font-size:16px;line-height:24px;margin:16px 16px 20px}
+.section-label{color:#8b8b8b;font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;margin:0 16px 8px}
+.card{border-radius:22px;margin:0 16px 16px}
 .field{padding:14px 16px}
 .field-label{color:#8b8b8b;font-size:13px;margin-bottom:6px}
 .field-value{color:#f2f2f2;font-size:15px;font-family:monospace}
 .divider{height:1px;background:#262626}
-.status-line{display:flex;align-items:center;gap:8px;color:#34c759;font-size:14px;margin-bottom:16px}
-.status-dot{width:8px;height:8px;border-radius:4px;background:#34c759}
-.btn{width:100%;height:48px;border-radius:999px;border:none;background:#fff;color:#000;font-size:16px;font-weight:600}
-.row-item{display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid #262626}
-.avatar{width:48px;height:48px;border-radius:24px;background:#1c1c1c;display:flex;align-items:center;justify-content:center;color:#f2f2f2;font-size:20px;font-weight:600}
-.row-title{color:#f2f2f2;font-size:17px;font-weight:600}
-.row-sub{color:#8b8b8b;font-size:15px;margin-top:2px}
-.row-meta{margin-left:auto;color:#8b8b8b;font-size:13px}
+.status-line{display:flex;align-items:center;gap:8px;color:#34c759;font-size:14px;margin:0 16px 16px}
+.btn{width:calc(100% - 32px);height:48px;border-radius:999px;border:none;background:#fff;color:#000;font-size:16px;font-weight:600;margin:0 16px}
 .wrap{display:flex;flex-direction:column;align-items:center}
-.search{margin:0 16px 8px;padding:10px 14px;border-radius:16px;color:#5a5a5a;font-size:15px}
-.chip-row{display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 8px}
-.chip{padding:6px 12px;border-radius:999px;color:#8b8b8b;font-size:12px;font-weight:600}
-.chip.on{color:#f2f2f2}
-.chip-head{width:100%;color:#5a5a5a;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px}
-.hint{color:#8b8b8b;font-size:13px;padding:0 16px 8px}
-.kind{font-size:11px;font-weight:600;color:#5a5a5a;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
-.pill-conn{margin:0 16px 8px;padding:6px 12px;border-radius:999px;color:#34c759;font-size:12px;text-align:center}
-.bot-card{display:flex;gap:12px;border-radius:22px;padding:16px;margin:0 16px 12px}
-.badge{font-size:11px;font-weight:600;color:#34c759;background:rgba(52,199,89,.15);padding:3px 8px;border-radius:999px}
-
+.role{color:#8b8b8b;font-size:13px;margin-top:4px}
+.desc{color:#5a5a5a;font-size:13px;margin-top:6px;line-height:18px}
 </style>
 </head>
 <body>
-<div class="wrap"><div class="phone"><div class="header"><div class="side"><div class="icon">✎</div></div><div class="center"><div class="header-title">Dash</div></div><div class="side right"><div class="icon">⚙</div></div></div><div class="pill-conn glass">● Connected to mbp</div><div class="search glass">Search · @bots /file …</div><div class="chip-row"><span class="chip-head">On phone</span><span class="chip glass">@bots</span><span class="chip glass-raised on">@conversation</span><span class="chip glass">@product</span></div><div class="chip-row"><span class="chip-head">On laptop</span><span class="chip glass">/harness</span><span class="chip glass">/skill</span><span class="chip glass">/plugin</span><span class="chip glass">/tool</span><span class="chip glass">/file</span></div><p class="hint">@conversation · all conversations</p><div class="body scroll" style="padding:0;flex:1"><div class="row-item"><div class="avatar">O</div><div><div class="row-title">fix the auth bug in login.ts</div><div class="row-sub">I'll read login.ts and trace…</div><div class="kind">Chat</div></div><div class="row-meta">2m</div></div><div class="row-item"><div class="avatar">O</div><div><div class="row-title">OMP</div><div class="row-sub">Primary agent</div><div class="kind">Bot</div></div></div><div class="row-item"><div class="avatar">📄</div><div><div class="row-title">app/src/lib/global-search.ts</div><div class="row-sub">Query parser and scoped result ranking</div><div class="kind">File</div></div></div></div></div><div class="label">Main (global search)</div></div>
+<div class="wrap">
+  <div class="phone">
+    <div class="header">
+      <div class="side"><div class="icon">✎</div></div>
+      <div class="center">
+        <div class="tabs">
+          <div class="tab">Bots</div>
+          <div class="tab on">Chats</div>
+          <div class="tab">Orchestra</div>
+        </div>
+      </div>
+      <div class="side right"><div class="icon">⚙</div></div>
+    </div>
+    <div class="body">
+      <div class="section">Today</div>
+      <div class="row-item">
+        <div class="avatar">O</div>
+        <div class="row-main">
+          <div class="row-top"><div class="row-title">OMP</div><div class="row-meta">2m</div></div>
+          <div class="row-sub">fix the auth bug in login.ts</div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="avatar">G</div>
+        <div class="row-main">
+          <div class="row-top"><div class="row-title">Grok</div><div class="row-meta">18m</div></div>
+          <div class="row-sub">sketch the orchestra mesh</div>
+        </div>
+      </div>
+      <div class="section">Yesterday</div>
+      <div class="row-item">
+        <div class="avatar">C</div>
+        <div class="row-main">
+          <div class="row-top"><div class="row-title">Codex</div><div class="row-meta">1d</div></div>
+          <div class="row-sub">refactor websocket reconnect</div>
+        </div>
+      </div>
+    </div>
+    <div class="search-dock">
+      <div class="search glass">@  Search bots, chats, files…</div>
+    </div>
+  </div>
+  <div class="label">Main · Chats</div>
+</div>
 
-<div class="wrap"><div class="phone"><div class="header"><div class="side"><div class="icon">☰</div></div><div class="center"><div class="title-pill glass">OMP <span style="color:#8b8b8b;font-size:14px">▾</span></div></div><div class="side right"><div class="icon" style="font-size:16px;margin-right:2px">⚙</div><div class="icon">✎</div></div></div><div class="body"><div class="chat-area"><div class="user-row"><div class="bubble glass">fix the auth bug in login.ts</div></div><div class="assistant-row">I'll read login.ts and trace the 401 path.<div class="status"><span class="dot"></span> Reading file</div></div></div><div class="composer-wrap"><div class="composer glass"><span>Message OMP</span><div class="send">↑</div></div></div></div></div><div class="label">Chat</div></div>
-<div class="wrap"><div class="phone"><div class="header"><div class="side"></div><div class="center"><div class="header-title">Dash</div></div><div class="side right"></div></div><div class="body scroll"><p class="intro">Chat with the coding agents on your own computer.</p><div class="section-label">Bridge</div><div class="card glass"><div class="field"><div class="field-label">Address</div><div class="field-value">100.78.215.21:4747</div></div><div class="divider"></div><div class="field"><div class="field-label">Token</div><div class="field-value">••••••••••••••••</div></div></div><div class="status-line"><span class="status-dot"></span> Connected to mbp</div><button class="btn">Save</button></div></div><div class="label">Settings</div></div>
-<div class="wrap"><div class="phone"><div class="header"><div class="side"><div class="icon">↓</div></div><div class="center"><div class="header-title">Chats</div></div><div class="side right"><div class="icon">⚙</div></div></div><div class="body scroll" style="padding:0"><div class="row-item"><div class="avatar">O</div><div><div class="row-title">OMP</div><div class="row-sub">fix the auth bug…</div></div><div class="row-meta">2m</div></div><div class="row-item"><div class="avatar">C</div><div><div class="row-title">Codex</div><div class="row-sub">refactor websocket…</div></div><div class="row-meta">1h</div></div></div></div><div class="label">Chats</div></div>
-<div class="wrap"><div class="phone"><div class="header"><div class="side"></div><div class="center"><div class="header-title">Pair</div></div><div class="side right"></div></div><div class="body scroll"><p class="intro">Your phone sends a secret over Tailscale, then listens for a short audible code from your laptop.</p><div class="section-label">Computer name</div><div class="card glass"><div class="field"><div class="field-value">mbp</div></div></div><button class="btn" style="margin-top:16px">Listen for pairing sound</button><p style="color:#5a5a5a;font-size:13px;text-align:center;margin-top:12px">Hold your phone near the speakers</p><p style="color:#8b8b8b;font-size:15px;text-align:center;margin-top:32px;text-decoration:underline">Enter address and token manually</p></div></div><div class="label">Pair (sonic)</div></div>
-</body></html>
+<div class="wrap">
+  <div class="phone">
+    <div class="header">
+      <div class="side"><div class="icon">✎</div></div>
+      <div class="center">
+        <div class="tabs">
+          <div class="tab on">Bots</div>
+          <div class="tab">Chats</div>
+          <div class="tab">Orchestra</div>
+        </div>
+      </div>
+      <div class="side right"><div class="icon">⚙</div></div>
+    </div>
+    <div class="body">
+      <div class="section" style="display:flex;justify-content:space-between;text-transform:uppercase;letter-spacing:.8px;font-size:12px">OMP <span class="dot"></span></div>
+      <div class="row-item">
+        <div class="avatar">O</div>
+        <div class="row-main">
+          <div class="row-top"><div class="row-title">OMP</div><span class="dot"></span></div>
+          <div class="role">Coding harness</div>
+          <div class="desc">Laptop-side agent. Streams JSON turns over the bridge.</div>
+        </div>
+      </div>
+      <div class="section" style="display:flex;justify-content:space-between;text-transform:uppercase;letter-spacing:.8px;font-size:12px">Grok <span class="dot"></span></div>
+      <div class="row-item">
+        <div class="avatar">G</div>
+        <div class="row-main">
+          <div class="row-top"><div class="row-title">Grok</div><span class="dot"></span></div>
+          <div class="role">xAI CLI</div>
+          <div class="desc">Fast replies. Same thread style as Grok Bot.</div>
+        </div>
+      </div>
+    </div>
+    <div class="search-dock">
+      <div class="search glass">@  Search bots, chats, files…</div>
+    </div>
+  </div>
+  <div class="label">Main · Bots</div>
+</div>
+
+<div class="wrap">
+  <div class="phone">
+    <div class="header">
+      <div class="side"><div class="icon">‹</div></div>
+      <div class="center"><div class="title-plain">OMP <span style="color:#8b8b8b;font-size:14px">▾</span></div></div>
+      <div class="side right"><div class="icon" style="font-size:16px;margin-right:2px">⚙</div><div class="icon">✎</div></div>
+    </div>
+    <div class="body">
+      <div class="chat-area">
+        <div class="user-row"><div class="bubble">fix the auth bug in login.ts</div></div>
+        <div class="assistant-row">I'll read login.ts and trace the 401 path.<div class="status"><span class="status-dot"></span> Reading file</div></div>
+      </div>
+      <div class="composer-wrap">
+        <div class="composer glass">
+          <div class="side">📎</div>
+          <span>Message OMP</span>
+          <div class="side">🎤</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="label">Chat</div>
+</div>
+
+<div class="wrap">
+  <div class="phone">
+    <div class="header">
+      <div class="side"><div class="icon">⌄</div></div>
+      <div class="center"><div class="title-plain">Settings</div></div>
+      <div class="side right"></div>
+    </div>
+    <div class="scroll">
+      <p class="intro">Chat with the coding agents on your own computer.</p>
+      <div class="section-label">Bridge</div>
+      <div class="card glass">
+        <div class="field"><div class="field-label">Address</div><div class="field-value">100.78.215.21:4747</div></div>
+        <div class="divider"></div>
+        <div class="field"><div class="field-label">Token</div><div class="field-value">••••••••••••••••</div></div>
+      </div>
+      <div class="status-line"><span class="dot"></span> Connected to mbp</div>
+      <button class="btn">Save</button>
+    </div>
+  </div>
+  <div class="label">Settings</div>
+</div>
+
+<div class="wrap">
+  <div class="phone">
+    <div class="header">
+      <div class="side"></div>
+      <div class="center"><div class="title-plain">Pair</div></div>
+      <div class="side right"></div>
+    </div>
+    <div class="scroll">
+      <p class="intro">Your phone sends a secret over Tailscale, then listens for a short audible code from your laptop.</p>
+      <div class="section-label">Computer name</div>
+      <div class="card glass"><div class="field"><div class="field-value">mbp</div></div></div>
+      <button class="btn" style="margin-top:16px">Listen for pairing sound</button>
+      <p style="color:#5a5a5a;font-size:13px;text-align:center;margin-top:12px">Hold your phone near the speakers</p>
+    </div>
+  </div>
+  <div class="label">Pair</div>
+</div>
+</body>
+</html>

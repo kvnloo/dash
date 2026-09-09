@@ -8,7 +8,6 @@ import { Composer } from "../components/Composer";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { HarnessPicker } from "../components/HarnessPicker";
 import { Header, IconButton } from "../components/Header";
-import { GlassSurface } from "../components/GlassSurface";
 import { MessageRow } from "../components/MessageRow";
 import { isDebugActive } from "../debug/expose";
 import { debugUi } from "../debug/ui-store";
@@ -27,7 +26,7 @@ import {
   store,
 } from "../store/app";
 import { dequeue, enqueue, notifyTurnSettled, onTurnSettled, queueLength } from "../store/queue";
-import { colors, radius, space, type } from "../theme";
+import { colors, space, type } from "../theme";
 
 const EMPTY: Message[] = [];
 
@@ -177,12 +176,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             accessibilityRole="button"
             accessibilityLabel={`Harness: ${harnessName}. Change`}
           >
-            <GlassSurface variant="chip" blur={false} borderRadius={radius.pill} style={styles.titleButton}>
+            <View style={styles.titleButton}>
               <Text style={styles.title} numberOfLines={1}>
                 {harnessName}
               </Text>
               <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
-            </GlassSurface>
+            </View>
           </Pressable>
         }
         right={

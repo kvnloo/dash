@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { haptic } from "../haptics";
-import { colors, radius, space, type } from "../theme";
+import { colors, space } from "../theme";
 
 export const MAIN_TABS = ["Bots", "Chats", "Orchestra"] as const;
 export type MainTab = (typeof MAIN_TABS)[number];
@@ -26,13 +26,14 @@ export const TopTabs = memo(function TopTabs({
                 onChange(i);
               }
             }}
-            style={[styles.tab, active && styles.tabActive]}
+            style={styles.tab}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
           >
             <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
               {label}
             </Text>
+            {active ? <View style={styles.indicator} /> : <View style={styles.indicatorSpacer} />}
           </Pressable>
         );
       })}
@@ -43,21 +44,31 @@ export const TopTabs = memo(function TopTabs({
 const styles = StyleSheet.create({
   track: {
     flexDirection: "row",
-    backgroundColor: colors.surface,
-    borderRadius: radius.pill,
-    padding: 3,
-    gap: 2,
-    maxWidth: 280,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: space.lg,
+    maxWidth: 300,
   },
   tab: {
-    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 7,
-    paddingHorizontal: space.sm,
-    borderRadius: radius.pill,
+    paddingTop: 4,
+    paddingBottom: 2,
+    minWidth: 72,
   },
-  tabActive: { backgroundColor: colors.surfaceRaised },
-  label: { color: colors.textMuted, ...type.small, textTransform: "none", letterSpacing: 0, fontWeight: "600" },
+  label: {
+    color: colors.textMuted,
+    fontSize: 15,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+  },
   labelActive: { color: colors.text },
+  indicator: {
+    marginTop: 6,
+    width: 22,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: colors.text,
+  },
+  indicatorSpacer: { marginTop: 6, height: 2 },
 });

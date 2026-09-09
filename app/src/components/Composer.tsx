@@ -27,6 +27,14 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
   return (
     <View style={styles.wrap}>
       <GlassSurface borderRadius={radius.lg + 4} style={styles.field}>
+        <Pressable
+          style={({ pressed }) => [styles.sideIcon, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Attach"
+          hitSlop={8}
+        >
+          <Ionicons name="attach" size={22} color={colors.textMuted} />
+        </Pressable>
         <TextInput
           style={styles.input}
           value={text}
@@ -65,16 +73,24 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
               <Ionicons name="arrow-up" size={20} color={canSend ? colors.onAccent : colors.textFaint} />
             </Pressable>
           </View>
-        ) : (
+        ) : canSend ? (
           <Pressable
             onPress={submit}
-            disabled={!canSend}
-            style={({ pressed }) => [styles.button, !canSend && styles.buttonDisabled, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.button, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel="Send"
             hitSlop={8}
           >
-            <Ionicons name="arrow-up" size={20} color={canSend ? colors.onAccent : colors.textFaint} />
+            <Ionicons name="arrow-up" size={20} color={colors.onAccent} />
+          </Pressable>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [styles.sideIcon, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Voice input"
+            hitSlop={8}
+          >
+            <Ionicons name="mic-outline" size={22} color={colors.textMuted} />
           </Pressable>
         )}
       </GlassSurface>
@@ -87,10 +103,17 @@ const styles = StyleSheet.create({
   field: {
     flexDirection: "row",
     alignItems: "flex-end",
-    paddingLeft: 16,
+    paddingLeft: 4,
     paddingRight: 6,
     paddingVertical: 6,
     minHeight: 48,
+  },
+  sideIcon: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 0,
   },
   input: {
     flex: 1,

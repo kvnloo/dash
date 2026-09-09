@@ -6,7 +6,7 @@ import { haptic } from "../../haptics";
 import { DEMO_BOT_PROFILES, type BotProfile } from "../../mock/bots";
 import type { ScreenProps } from "../../navigation";
 import { createConversation, saveSettings, setActive, store } from "../../store/app";
-import { colors, radius, space, type } from "../../theme";
+import { colors, space, type } from "../../theme";
 
 type BotsListItem =
   | { kind: "section"; id: string; title: string; online: boolean }
@@ -31,11 +31,7 @@ const ProfileRow = memo(function ProfileRow({
           <Text style={styles.title} numberOfLines={1}>
             {profile.name}
           </Text>
-          <View style={[styles.badge, !profile.online && styles.badgeOff]}>
-            <Text style={[styles.badgeText, !profile.online && styles.badgeTextOff]}>
-              {profile.online ? "Online" : "Offline"}
-            </Text>
-          </View>
+          <View style={[styles.statusDot, profile.online ? styles.statusOn : styles.statusOff]} />
         </View>
         <Text style={styles.role} numberOfLines={1}>
           {profile.role}
@@ -52,7 +48,7 @@ const SectionHeader = memo(function SectionHeader({ title, online }: { title: st
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      <Text style={[styles.sectionMeta, !online && styles.sectionMetaOff]}>{online ? "Online" : "Offline"}</Text>
+      <View style={[styles.statusDot, online ? styles.statusOn : styles.statusOff]} />
     </View>
   );
 });
@@ -122,7 +118,7 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
 }
 
 const styles = StyleSheet.create({
-  list: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: 120 },
+  list: { paddingHorizontal: space.lg, paddingTop: space.xs, paddingBottom: 120 },
   section: {
     flexDirection: "row",
     alignItems: "center",
@@ -131,32 +127,21 @@ const styles = StyleSheet.create({
     paddingBottom: space.sm,
   },
   sectionTitle: { color: colors.textMuted, ...type.small, textTransform: "uppercase", letterSpacing: 0.8 },
-  sectionMeta: { color: colors.ok, fontSize: 11, fontWeight: "600" },
-  sectionMetaOff: { color: colors.textMuted },
   profileCard: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: space.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: space.lg,
-    marginBottom: space.sm,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   pressed: { opacity: 0.85 },
   main: { flex: 1, minWidth: 0 },
   top: { flexDirection: "row", alignItems: "center", gap: space.sm },
   title: { color: colors.text, ...type.heading, flex: 1 },
-  badge: {
-    backgroundColor: "rgba(52,199,89,0.15)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-  },
-  badgeOff: { backgroundColor: colors.surfaceRaised },
-  badgeText: { color: colors.ok, fontSize: 11, fontWeight: "600" },
-  badgeTextOff: { color: colors.textMuted },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusOn: { backgroundColor: colors.ok },
+  statusOff: { backgroundColor: colors.textFaint },
   role: { color: colors.textMuted, ...type.small, marginTop: 4, textTransform: "none", letterSpacing: 0 },
   desc: { color: colors.textFaint, fontSize: 13, marginTop: 6, lineHeight: 18 },
   empty: { paddingTop: "40%", paddingHorizontal: space.xl, alignItems: "center" },

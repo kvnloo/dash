@@ -47,7 +47,7 @@ cd app && bun run debug:shots   # writes PNGs to screenshots/debug/
 
 In debug mode, `window.__DASH_DEBUG__` exposes `scenario(id)`, `run({ action })`, and `state()`. Deep links: `dash://debug/scenario/chat-omp`.
 
-**Static previews:** open `preview.html` in a browser.
+**Static previews:** open `preview.html` in a browser. Pixel refs + storyboard: `docs/design/`.
 
 ## Layout
 

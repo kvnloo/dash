@@ -1,5 +1,21 @@
 import { Alert, Platform } from "react-native";
 
+export function dateGroupLabel(at: number, now = Date.now()): string {
+  const dayMs = 86_400_000;
+  const startOf = (t: number) => {
+    const d = new Date(t);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+  const today = startOf(now);
+  const then = startOf(at);
+  const diff = today - then;
+  if (diff === 0) return "Today";
+  if (diff === dayMs) return "Yesterday";
+  if (diff < 7 * dayMs) return "This week";
+  return new Date(at).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
 export function timeAgo(at: number, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - at) / 1000));
   if (s < 60) return "now";

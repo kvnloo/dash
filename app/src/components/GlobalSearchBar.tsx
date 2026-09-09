@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   applyScopePrefix,
@@ -21,8 +21,10 @@ interface Props {
 }
 
 export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, onScope, onClear, dock = "top" }: Props) {
+  const [focused, setFocused] = useState(false);
   const parsed = useMemo(() => parseSearchQuery(value), [value]);
   const suggestions = useMemo(() => filterScopeSuggestions(value), [value]);
+  const showScopes = focused || value.trim().length > 0;
 
   const activeMention =
     parsed.mode === "mention" && parsed.scope !== "unknown" ? parsed.scope : null;
@@ -31,11 +33,13 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, 
   return (
     <View style={[styles.wrap, dock === "bottom" && styles.wrapBottom]}>
       <GlassSurface borderRadius={radius.lg} style={styles.field}>
-        <Ionicons name="search" size={18} color={colors.textMuted} style={styles.icon} />
+        <Ionicons name="at" size={18} color={colors.textMuted} style={styles.icon} />
         <TextInput
           value={value}
           onChangeText={onChange}
-          placeholder="Search · @bots /file …"
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder="@bots, @conversation, /file…"
           placeholderTextColor={colors.textFaint}
           style={styles.input}
           autoCapitalize="none"
@@ -56,7 +60,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, 
         ) : null}
       </GlassSurface>
 
-      {suggestions.length > 0 ? (
+      {showScopes && suggestions.length > 0 ? (
         <View style={styles.suggestions} accessibilityRole="list">
           {suggestions.map(({ label }) => (
             <Pressable
@@ -73,57 +77,61 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, 
         </View>
       ) : null}
 
-      <View style={styles.chipSection}>
-        <Text style={styles.chipHeading}>On phone</Text>
-        <View style={styles.chips}>
-          {MENTION_SCOPES.map(({ scope, label }) => {
-            const on = activeMention === scope;
-            return (
-              <Pressable
-                key={scope}
-                onPress={() => onScope(label)}
-                style={({ pressed }) => [pressed && styles.pressed]}
-                accessibilityRole="button"
-              >
-                <GlassSurface
-                  variant={on ? "chipOn" : "chip"}
-                  blur={false}
-                  borderRadius={radius.pill}
-                  style={styles.chip}
-                >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
-                </GlassSurface>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
+      {showScopes ? (
+        <>
+          <View style={styles.chipSection}>
+            <Text style={styles.chipHeading}>On phone</Text>
+            <View style={styles.chips}>
+              {MENTION_SCOPES.map(({ scope, label }) => {
+                const on = activeMention === scope;
+                return (
+                  <Pressable
+                    key={scope}
+                    onPress={() => onScope(label)}
+                    style={({ pressed }) => [pressed && styles.pressed]}
+                    accessibilityRole="button"
+                  >
+                    <GlassSurface
+                      variant={on ? "chipOn" : "chip"}
+                      blur={false}
+                      borderRadius={radius.pill}
+                      style={styles.chip}
+                    >
+                      <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
+                    </GlassSurface>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
 
-      <View style={styles.chipSection}>
-        <Text style={styles.chipHeading}>On laptop</Text>
-        <View style={styles.chips}>
-          {SLASH_SCOPES.map(({ scope, label }) => {
-            const on = activeSlash === scope;
-            return (
-              <Pressable
-                key={scope}
-                onPress={() => onScope(label)}
-                style={({ pressed }) => [pressed && styles.pressed]}
-                accessibilityRole="button"
-              >
-                <GlassSurface
-                  variant={on ? "chipOn" : "chip"}
-                  blur={false}
-                  borderRadius={radius.pill}
-                  style={styles.chip}
-                >
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
-                </GlassSurface>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
+          <View style={styles.chipSection}>
+            <Text style={styles.chipHeading}>On laptop</Text>
+            <View style={styles.chips}>
+              {SLASH_SCOPES.map(({ scope, label }) => {
+                const on = activeSlash === scope;
+                return (
+                  <Pressable
+                    key={scope}
+                    onPress={() => onScope(label)}
+                    style={({ pressed }) => [pressed && styles.pressed]}
+                    accessibilityRole="button"
+                  >
+                    <GlassSurface
+                      variant={on ? "chipOn" : "chip"}
+                      blur={false}
+                      borderRadius={radius.pill}
+                      style={styles.chip}
+                    >
+                      <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
+                    </GlassSurface>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </>
+      ) : null}
     </View>
   );
 });
@@ -134,7 +142,7 @@ export function applyScopeMention(current: string, label: string): string {
 
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: space.lg, paddingBottom: space.sm, gap: space.sm },
-  wrapBottom: { paddingTop: space.sm, paddingBottom: 0 },
+  wrapBottom: { paddingTop: space.xs, paddingBottom: 0 },
   field: {
     flexDirection: "row",
     alignItems: "center",

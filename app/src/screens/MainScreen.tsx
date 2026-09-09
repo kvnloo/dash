@@ -190,7 +190,17 @@ export function MainScreen({ navigation }: ScreenProps<"Main">) {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <Header
-        left={<View style={styles.sideSpacer} />}
+        left={
+          <IconButton
+            icon="create-outline"
+            label="New chat"
+            onPress={() => {
+              haptic.tap();
+              setActive(null);
+              navigation.navigate("Chat");
+            }}
+          />
+        }
         center={<TopTabs index={index} onChange={onTab} />}
         right={<IconButton icon="options-outline" label="Settings" onPress={() => navigation.navigate("Settings")} />}
       />
@@ -241,7 +251,6 @@ export function MainScreen({ navigation }: ScreenProps<"Main">) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  sideSpacer: { width: 40 },
   body: { flex: 1 },
   pager: { flex: 1 },
   searchDock: {
