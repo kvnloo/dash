@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Dash — Grok / Zero language</title>
+<style>
+:root{
+  --bg:#000000;--surface:#121212;--elevated:#1c1c1c;--bubble:#1f1f1f;--border:#262626;
+  --text:#f2f2f2;--muted:#8b8b8b;--faint:#5a5a5a;
+  --accent:#ffffff;--on:#000000;--ok:#34c759;--warn:#ffb020;--danger:#ff6b6b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#000;color:var(--text);font-family:-apple-system,system-ui,sans-serif;padding:32px 24px 64px}
+h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
+.lede{color:var(--muted);font-size:15px;line-height:22px;max-width:760px;margin-bottom:28px}
+.swatches{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:36px}
+.swatch{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);font-family:ui-monospace,monospace}
+.chip{width:18px;height:18px;border-radius:4px;border:1px solid var(--border)}
+.gallery{display:flex;flex-wrap:wrap;gap:28px;justify-content:center}
+.wrap{display:flex;flex-direction:column;align-items:center;gap:10px}
+.label{font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+.phone{width:390px;height:844px;background:var(--bg);border-radius:40px;border:1px solid #1a1a1a;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.7)}
+.sb{height:47px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 28px 8px;font-size:15px;font-weight:600}
+.header{height:52px;display:flex;align-items:center;padding:0 8px}
+.side{width:88px;display:flex;align-items:center}
+.side.r{justify-content:flex-end}
+.center{flex:1;display:flex;justify-content:center}
+.ico{width:40px;height:40px;border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--text)}
+.tabs{display:flex;align-items:flex-end;gap:20px}
+.tab{color:var(--muted);font-size:16px;font-weight:600;min-width:70px;text-align:center;padding-bottom:2px}
+.tab.on{color:var(--text)}
+.tab.on::after{content:"";display:block;width:28px;height:2px;background:var(--accent);border-radius:1px;margin:7px auto 0}
+.tab:not(.on)::after{content:"";display:block;height:2px;margin:7px auto 0}
+.body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.sec{color:var(--muted);font-size:13px;font-weight:500;padding:18px 16px 8px}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px}
+.row + .row{border-top:1px solid var(--border)}
+.av{width:48px;height:48px;border-radius:24px;background:var(--elevated);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:var(--text);flex-shrink:0}
+.main{flex:1;min-width:0}
+.top{display:flex;align-items:center;gap:8px}
+.title{font-size:17px;font-weight:600;flex:1}
+.meta{color:var(--muted);font-size:13px}
+.sub{color:var(--muted);font-size:14px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role{color:var(--muted);font-size:13px;margin-top:2px}
+.desc{color:var(--faint);font-size:13px;margin-top:3px;line-height:18px}
+.dot{width:8px;height:8px;border-radius:4px;background:var(--ok);flex-shrink:0}
+.dot.off{background:var(--faint)}
+.dot.warn{background:var(--warn)}
+.dot.stream{width:7px;height:7px;background:var(--text)}
+.dock{padding:8px 16px 6px;background:var(--bg)}
+.search{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:22px;background:var(--surface);color:var(--faint);font-size:16px}
+.search.at{color:var(--muted);font-weight:600}
+.search.on{background:var(--elevated);color:var(--text)}
+.chips{display:flex;gap:8px;padding:0 16px 8px}
+.schip{padding:6px 12px;border-radius:999px;background:var(--elevated);color:var(--muted);font-size:13px;font-weight:600}
+.hi{height:28px;display:flex;align-items:flex-start;justify-content:center;padding-top:8px}
+.hi i{width:128px;height:5px;border-radius:3px;background:#2a2a2a;display:block}
+.card{margin:0 16px 12px;padding:16px;border-radius:22px;background:var(--surface)}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.status{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.agents{display:flex;gap:8px;margin-top:12px}
+.av.sm{width:36px;height:36px;border-radius:18px;font-size:14px}
+.foot{display:flex;justify-content:space-between;margin-top:12px;color:var(--muted);font-size:13px}
+.user{display:flex;justify-content:flex-end;padding:10px 16px}
+.bubble{max-width:82%;background:var(--bubble);border-radius:22px;border-bottom-right-radius:8px;padding:11px 15px;font-size:16px;line-height:24px}
+.asst{padding:8px 20px 12px;font-size:16px;line-height:24px;color:var(--text)}
+.st{display:flex;align-items:center;gap:8px;margin-top:8px;color:var(--muted);font-size:13px}
+.pulse{width:6px;height:6px;border-radius:3px;background:var(--text);animation:p 1.1s ease-in-out infinite}
+@keyframes p{0%,100%{opacity:.3}50%{opacity:1}}
+.composer{margin:8px 12px 0;display:flex;align-items:center;gap:4px;padding:6px 8px 6px 6px;min-height:48px;border-radius:26px;background:var(--surface)}
+.cico{width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px}
+.composer span{flex:1;color:var(--faint);font-size:16px;padding:8px 4px}
+.send{width:34px;height:34px;border-radius:17px;background:var(--accent);color:var(--on);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700}
+.stop{width:34px;height:34px;border-radius:17px;background:var(--text);color:var(--on);display:flex;align-items:center;justify-content:center}
+.stop i{width:11px;height:11px;border-radius:2px;background:var(--on);display:block}
+.plain-title{font-size:17px;font-weight:600}
+.intro{color:var(--muted);font-size:16px;line-height:24px;margin:8px 16px 20px}
+.sl{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;margin:0 16px 8px}
+.field{padding:14px 16px}
+.fl{color:var(--muted);font-size:13px;margin-bottom:4px}
+.fv{font-size:15px;font-family:ui-monospace,monospace}
+.div{height:1px;background:var(--border)}
+.btn{display:block;width:calc(100% - 32px);height:48px;margin:0 16px;border:0;border-radius:999px;background:var(--accent);color:var(--on);font-size:16px;font-weight:600}
+.hint{color:var(--faint);font-size:13px;text-align:center;margin-top:12px}
+.voice{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px}
+.orb{width:168px;height:168px;border-radius:84px;background:radial-gradient(circle at 38% 32%, #ffffff 0%, #d8d8d8 28%, #8a8a8a 62%, #2a2a2a 100%);box-shadow:0 0 60px rgba(255,255,255,.18)}
+.say{color:var(--muted);font-size:20px;font-weight:500}
+.hsec{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;padding:16px 16px 8px}
+.chev{color:var(--faint);font-size:18px}
+.srow{display:flex;align-items:center;justify-content:space-between;padding:16px;background:var(--surface)}
+.srow + .srow{border-top:1px solid var(--border)}
+.sgroup{margin:0 16px 16px;border-radius:16px;overflow:hidden}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:8px 16px 12px}
+.tile{background:var(--surface);border-radius:18px;padding:14px;min-height:118px;display:flex;flex-direction:column}
+.tile .title{font-size:15px}
+.tile .sub{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+</style>
+</head>
+<body>
+<h1>Dash</h1>
+<p class="lede">Original brief + Grok/Zero refs. Pure black. Top tabs Bots · Chats · Orchestra. Bottom @ search. Assistant is plain text. User bubble #1f1f1f. White underline, not cyan.</p>
+<div class="swatches">
+  <div class="swatch"><i class="chip" style="background:#000"></i>--bg</div>
+  <div class="swatch"><i class="chip" style="background:#121212"></i>--surface</div>
+  <div class="swatch"><i class="chip" style="background:#1f1f1f"></i>--bubble</div>
+  <div class="swatch"><i class="chip" style="background:#ffffff;border-color:#333"></i>--accent</div>
+  <div class="swatch"><i class="chip" style="background:#34c759"></i>--ok</div>
+  <div class="swatch"><i class="chip" style="background:#ffb020"></i>--warn</div>
+  <div class="swatch"><i class="chip" style="background:#ff6b6b"></i>--danger</div>
+</div>
+<div class="gallery">
+
+<div class="wrap">
+<div class="phone" data-frame="main-chats">
+  <div class="sb"><span>9:41</span><span>▲●</span></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab on">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⚙</div></div></div>
+  <div class="body">
+    <div class="sec">Today</div>
+    <div class="row"><div class="av">O</div><div class="main"><div class="top"><div class="title">OMP</div><div class="meta">2m</div></div><div class="sub">fix the auth bug in login.ts</div></div><span class="dot stream"></span></div>
+    <div class="row"><div class="av">G</div><div class="main"><div class="top"><div class="title">Grok</div><div class="meta">18m</div></div><div class="sub">sketch the orchestra mesh</div></div></div>
+    <div class="sec">Yesterday</div>
+    <div class="row"><div class="av">C</div><div class="main"><div class="top"><div class="title">Codex</div><div class="meta">1d</div></div><div class="sub">refactor websocket reconnect</div></div></div>
+    <div class="row"><div class="av">H</div><div class="main"><div class="top"><div class="title">Hermes</div><div class="meta">1d</div></div><div class="sub">groot is online on node 0</div></div></div>
+  </div>
+  <div class="dock"><div class="search"><span class="at">@</span> Search bots, chats, files…</div></div>
+  <div class="hi"><i></i></div>
+</div>
+<div class="label">main-chats</div>
+</div>
+
+<div class="wrap">
+<div class="phone" data-frame="main-chats-search">
+  <div class="sb"><span>9:41</span><span>▲●</span></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab on">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⚙</div></div></div>
+  <div class="body">
+    <div class="sec">Today</div>
+    <div class="row"><div class="av">O</div><div class="main"><div class="top"><div class="title">OMP</div><div class="meta">2m</div></div><div class="sub">fix the auth bug in login.ts</div></div></div>
+    <div class="row"><div class="av">G</div><div class="main"><div class="top"><div class="title">Grok</div><div class="meta">18m</div></div><div class="sub">sketch the orchestra mesh</div></div></div>
+  </div>
+  <div class="chips"><span class="schip">@bot</span><span class="schip">@chat</span><span class="schip">@file</span></div>
+  <div class="dock"><div class="search on"><span class="at">@</span> omp</div></div>
+  <div class="hi"><i></i></div>
+</div>
+<div class="label">main-chats-search</div>
+</div>
+
+<div class="wrap">
+<div class="phone" data-frame="main-bots">
+  <div class="sb"><span>9:41</span><span>▲●</span></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab on">Bots</div><div class="tab">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⚙</div></div></div>
+  <div class="body">
+    <div class="hsec">OMP <span class="dot"></span></div>
+    <div class="row"><div class="av">O</div><div class="main"><div class="top"><div class="title">OMP</div><span class="dot"></span></div><div class="role">Primary agent</div><div class="desc">Full-capability coding agent on your laptop</div></div></div>
+    <div class="row"><div class="av">S</div><div class="main"><div class="top"><div class="title">Scout</div><span class="dot"></span></div><div class="role">Explore subagent</div><div class="desc">Read-only codebase search and context gathering</div></div></div>
+    <div class="hsec">Grok <span class="dot"></span></div>
+    <div class="row"><div class="av">G</div><div class="main"><div class="top"><div class="title">Grok</div><span class="dot"></span></div><div class="role">xAI agent</div><div class="desc">Fast reasoning and tool use via Grok CLI</div></div></div>
+    <div class="hsec">Codex <span class="dot off"></span></div>
+    <div class="row"><div class="av">C</div><div class="main"><div class="top"><div class="title">Codex</div><span class="dot off"></span></div><div class="role">OpenAI CLI</div><div class="desc">Long-running exec. Cold start 30–120s.</div></div></div>
+  </div>
+  <div class="dock"><div class="search"><span class="at">@</span> Search bots, chats, files…</div></div>
+  <div class="hi"><i></i></div>
+</div>
+<div class="label">main-bots</div>
+</div>
+
+<div class="wrap">
+<div class="phone" data-frame="main-orchestra">
+  <div class="sb"><span>9:41</span><span>▲●</span></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab">Chats</div><div class="tab on">Orchestra</div></div></div><div class="side r"><div class="ico">⚙</div></div></div>
+  <div class="body" style="padding-top:8px">
+    <div class="card">
+      <div class="card-top"><div><div class="title">Dash</div><div class="sub">Phone ↔ laptop agent bridge</div></div><div class="status"><span class="dot"></span> active</div></div>
+      <div class="agents"><div class="av sm">O</div><div class="av sm">C</div><div class="av sm">H</div></div>
+      <div class="foot"><span>3 agents · 2 chats</span><span>2m</span></div>
+    </div>
+    <div class="grid">
+      <div class="tile"><div class="top"><div class="title">Hermes mesh</div><span class="dot off"></span></div><div class="sub">groot · chiefstaff node 0</div><div class="foot" style="margin-top:auto"><span>idle</span></div></div>
+      <div class="tile"><div class="top"><div class="title">Auth refactor</div><span class="dot"></span></div><div class="sub">login.ts · 401 path</div><div class="foot" style="margin-top:auto"><span>active</span></div></div>
+    </div>
+  </div>
+  <div class="dock"><div class="search"><span class="at">@</span> Search bots, chats, files…</div></div>
+  <div class="hi"><i></i></div>
+</div>
+<div class="label">main-orchestra</div>
+</div>
+
+<div class="wrap">
+<div class="phone" data-frame="chat">
+  <div class="sb"><span>9:41</span><span>▲●</span></div>
+  <div class="header"><div class="side"><div class="ico">‹</div></div><div class="center"><div class="plain-title">OMP ▾</div></div><div class="side r"><div class="ico">⚙</div><div class="ico">✎</div></div></div>
+  <div class="body">
+    <div class="user"><div class="bubble">fix the auth bug in login.ts</div></div>
+    <div class="asst">I'll read login.ts and trace the 401 path. The handler returns early when the token store is empty.</div>
+  </div>
+  <div class="composer"><div class="cico">+</div><span>Message OMP</span><div class="cico">🎤</div></div>
+  <div class="hi"><i></i></div>
+</div>
+<div class="label">chat</div>
+</div>
+
+<div class="wrap">
+<div class="phone" data-frame="chat-streaming">
+  <div class="sb"><span>9:41</span><span>▲●</span></div>
+  <div class="header"><div class="side"><div class="ico">‹</div></div><div class="center"><div class="plain-title">OMP ▾</div></div><div class="side r"><div class="ico">⚙</div><div class="ico">✎</div></div></div>
+  <div class="body">
+    <div class="user"><div class="bubble">fix the auth bug in login.ts</div></div>
+    <div class="asst">I'll read login.ts and trace the 401 path.<div class="st"><span class="pulse"></span> Reading file</div></div>
+  </div>
+  <div class="composer"><div class="cico">+</div><span>Queue next message…</span><div class="stop"><i></i></div></div>
+  <div class="hi"><i></i></div>
+</div>
+<div class="label">chat-streaming</div>
+</div>
+
+<div class="wrap">
+<div class="phone" data-frame="pair">
+  <div class="sb"><span>9:41</span><span>▲●</span></div>
+  <div class="header"><div class="side"></div><div class="center"><div class="plain-title">Pair</div></div><div class="side r"></div></div>
+  <div class="body">
+    <p class="intro">Your phone sends a secret over Tailscale, then listens for a short audible code from your laptop.</p>
+    <div class="sl">Computer name</div>
+    <div class="sgroup"><div class="field"><div class="fv">mbp</div></div></div>
+    <button class="btn" style="margin-top:16px">Listen for pairing sound</button>
+    <p class="hint">Hold your phone near the speakers</p>
+  </div>
+  <div class="hi"><i></i></div>
+</div>
+<div class="label">pair</div>
+</div>
+
+<div class="wrap">
+<div class="phone" data-frame="settings">
+  <div class="sb"><span>9:41</span><span>▲●</span></div>
+  <div class="header"><div class="side"><div class="ico">‹</div></div><div class="center"><div class="plain-title">Settings</div></div><div class="side r"></div></div>
+  <div class="body">
+    <p class="intro">Chat with the coding agents on your own computer.</p>
+    <div class="sl">Bridge</div>
+    <div class="sgroup">
+      <div class="srow"><div><div class="fl" style="margin:0">Address</div><div class="fv">100.78.215.21:4747</div></div><span class="chev">›</span></div>
+      <div class="srow"><div><div class="fl" style="margin:0">Token</div><div class="fv">••••••••••••••••</div></div><span class="chev">›</span></div>
+    </div>
+    <div class="row" style="padding:4px 16px 16px"><span class="dot"></span><span class="sub" style="margin:0">Connected to mbp</span></div>
+    <div class="sl">Appearance</div>
+    <div class="sgroup">
+      <div class="srow"><div class="title" style="flex:none">Pure black</div><span class="dot"></span></div>
+    </div>
+  </div>
+  <div class="hi"><i></i></div>
+</div>
+<div class="label">settings</div>
+</div>
+
+<div class="wrap">
+<div class="phone" data-frame="voice">
+  <div class="sb"><span>9:41</span><span>▲●</span></div>
+  <div class="header"><div class="side"><div class="ico">✕</div></div><div class="center"><div class="plain-title">OMP</div></div><div class="side r"><div class="ico">↗</div></div></div>
+  <div class="voice">
+    <div class="orb"></div>
+    <div class="say">Say something…</div>
+  </div>
+  <div class="hi"><i></i></div>
+</div>
+<div class="label">voice</div>
+</div>
+
+</div>
+</body>
+</html>

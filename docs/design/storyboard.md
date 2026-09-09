@@ -1,6 +1,6 @@
 # Dash UI storyboard
 
-Source refs: `docs/design/references/` (OMP session `2026-09-09T04-57-13-317Z` + Zero video frames).
+Source refs: `docs/design/references/` (OMP session Grok screenshots + Zero Android video frames).
 
 ## Main layout
 
@@ -12,20 +12,39 @@ Three swipe panes, top tabs **Bots | Chats | Orchestra**, bottom `@` search dock
 | Chats | All conversations (Grok History density) |
 | Orchestra | Product/project orchestration |
 
-Default tab: **Chats**.
+Default tab: **Chats**. Compose in header.
 
 ## Reference map
 
-See filenames in `docs/design/references/` — `REF-grok-*` for chat/history/settings/voice, `REF-zero-*` for Zero Android home/chat grids.
+- `REF-grok-history-01/02` → Chats list (date groups, circular avatars, hairlines)
+- `REF-grok-chat-01/02/03` → thread (assistant plain, user bubble, + / mic composer)
+- `REF-grok-voice` → voice overlay (silver orb, “Say something…”)
+- `REF-grok-settings` → grouped settings rows
+- `REF-grok-drawer` → side density only; Dash uses top tabs, not a Grok drawer
+- `REF-zero-home` / `REF-zero-chizi-grid` / `REF-zero-kit-grid` → Orchestra tile density
+- `REF-zero-chat` → Zero thread chrome (black, no cartoon)
+
+## Official designs
+
+Language: [`language.md`](language.md) — pure black `#000`, white accent, user bubble `#1f1f1f`. Matches `app/src/theme.ts`. **Not** graphite/cyan.
+
+| Track | Path | Status |
+|-------|------|--------|
+| In-repo frames | [`official.html`](official.html) | 9 phones from original brief + refs |
+| Paper.design | [`paper/`](paper/) | HTML import; MCP not live |
+| Pencil / pen.dev | [`pencil/`](pencil/) | `.pen` 2.17 tokens synced; CLI not logged in |
+| Captured frames | [`frames/`](frames/) | PNG crops of each phone |
 
 ## Visual rules
 
-- Background `#000`
+- Background `#000000`
+- Accent `#ffffff` (underline, send, listen CTA)
 - Assistant: plain text, no bubble
-- User: dark bubble `#1f1f1f`
+- User: solid bubble `#1f1f1f`
 - Tabs: underline, not pill fill
 - Search: compact; chips on focus only
 - Lists: date sections + hairline rows
+- Status: dots, not “Online” pills
 
 ## Debug acceptance
 

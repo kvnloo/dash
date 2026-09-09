@@ -1,0 +1,822 @@
+{
+  "version": "2.17",
+  "name": "Dash official",
+  "variables": [
+    {
+      "id": "color.bg",
+      "type": "color",
+      "value": "#000000"
+    },
+    {
+      "id": "color.surface",
+      "type": "color",
+      "value": "#121212"
+    },
+    {
+      "id": "color.elevated",
+      "type": "color",
+      "value": "#1f1f1f"
+    },
+    {
+      "id": "color.border",
+      "type": "color",
+      "value": "#262626"
+    },
+    {
+      "id": "color.text",
+      "type": "color",
+      "value": "#f2f2f2"
+    },
+    {
+      "id": "color.muted",
+      "type": "color",
+      "value": "#8b8b8b"
+    },
+    {
+      "id": "color.faint",
+      "type": "color",
+      "value": "#5a5a5a"
+    },
+    {
+      "id": "color.cyan",
+      "type": "color",
+      "value": "#ffffff"
+    },
+    {
+      "id": "color.violet",
+      "type": "color",
+      "value": "#8b8b8b"
+    },
+    {
+      "id": "color.ok",
+      "type": "color",
+      "value": "#34c759"
+    },
+    {
+      "id": "color.warn",
+      "type": "color",
+      "value": "#ffb020"
+    },
+    {
+      "id": "color.danger",
+      "type": "color",
+      "value": "#ff6b6b"
+    }
+  ],
+  "children": [
+    {
+      "id": "main-chats",
+      "type": "frame",
+      "name": "main-chats",
+      "reusable": true,
+      "width": 390,
+      "height": 844,
+      "clip": true,
+      "layout": "vertical",
+      "fill": "$color.bg",
+      "children": [
+        {
+          "id": "mc-header",
+          "type": "frame",
+          "name": "mc-header",
+          "layout": "horizontal",
+          "width": 390,
+          "fill": "transparent",
+          "children": [
+            {
+              "id": "mc-compose",
+              "type": "text",
+              "name": "mc-compose",
+              "content": "New",
+              "fontSize": 15,
+              "fontWeight": 600,
+              "fill": "$color.text"
+            },
+            {
+              "id": "mc-tabs",
+              "type": "text",
+              "name": "mc-tabs",
+              "content": "Bots   Chats   Orchestra",
+              "fontSize": 15,
+              "fontWeight": 600,
+              "fill": "$color.text"
+            },
+            {
+              "id": "mc-gear",
+              "type": "text",
+              "name": "mc-gear",
+              "content": "Settings",
+              "fontSize": 13,
+              "fontWeight": 400,
+              "fill": "$color.muted"
+            }
+          ]
+        },
+        {
+          "id": "mc-underline",
+          "type": "rectangle",
+          "name": "mc-underline",
+          "width": 22,
+          "height": 2,
+          "fill": "$color.cyan",
+          "cornerRadius": 1
+        },
+        {
+          "id": "mc-today",
+          "type": "text",
+          "name": "mc-today",
+          "content": "Today",
+          "fontSize": 13,
+          "fontWeight": 600,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "mc-omp",
+          "type": "frame",
+          "name": "mc-omp",
+          "layout": "horizontal",
+          "width": 390,
+          "fill": "transparent",
+          "children": [
+            {
+              "id": "mc-omp-av",
+              "type": "ellipse",
+              "name": "mc-omp-av",
+              "width": 44,
+              "height": 44,
+              "fill": "$color.elevated"
+            },
+            {
+              "id": "mc-omp-t",
+              "type": "text",
+              "name": "mc-omp-t",
+              "content": "OMP  \u00b7  fix the auth bug in login.ts",
+              "fontSize": 16,
+              "fontWeight": 400,
+              "fill": "$color.text"
+            }
+          ]
+        },
+        {
+          "id": "mc-grok",
+          "type": "frame",
+          "name": "mc-grok",
+          "layout": "horizontal",
+          "width": 390,
+          "fill": "transparent",
+          "children": [
+            {
+              "id": "mc-grok-av",
+              "type": "ellipse",
+              "name": "mc-grok-av",
+              "width": 44,
+              "height": 44,
+              "fill": "$color.elevated"
+            },
+            {
+              "id": "mc-grok-t",
+              "type": "text",
+              "name": "mc-grok-t",
+              "content": "Grok  \u00b7  sketch the orchestra mesh",
+              "fontSize": 16,
+              "fontWeight": 400,
+              "fill": "$color.text"
+            }
+          ]
+        },
+        {
+          "id": "mc-yday",
+          "type": "text",
+          "name": "mc-yday",
+          "content": "Yesterday",
+          "fontSize": 13,
+          "fontWeight": 600,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "mc-codex",
+          "type": "frame",
+          "name": "mc-codex",
+          "layout": "horizontal",
+          "width": 390,
+          "fill": "transparent",
+          "children": [
+            {
+              "id": "mc-codex-av",
+              "type": "ellipse",
+              "name": "mc-codex-av",
+              "width": 44,
+              "height": 44,
+              "fill": "$color.elevated"
+            },
+            {
+              "id": "mc-codex-t",
+              "type": "text",
+              "name": "mc-codex-t",
+              "content": "Codex  \u00b7  refactor websocket reconnect",
+              "fontSize": 16,
+              "fontWeight": 400,
+              "fill": "$color.text"
+            }
+          ]
+        },
+        {
+          "id": "mc-search",
+          "type": "rectangle",
+          "name": "mc-search",
+          "width": 358,
+          "height": 44,
+          "fill": "$color.surface",
+          "cornerRadius": 16
+        },
+        {
+          "id": "mc-search-t",
+          "type": "text",
+          "name": "mc-search-t",
+          "content": "@  Search bots, chats, files\u2026",
+          "fontSize": 16,
+          "fontWeight": 400,
+          "fill": "$color.faint"
+        }
+      ]
+    },
+    {
+      "id": "main-bots",
+      "type": "frame",
+      "name": "main-bots",
+      "reusable": true,
+      "width": 390,
+      "height": 844,
+      "clip": true,
+      "layout": "vertical",
+      "fill": "$color.bg",
+      "children": [
+        {
+          "id": "mb-tabs",
+          "type": "text",
+          "name": "mb-tabs",
+          "content": "Bots   Chats   Orchestra",
+          "fontSize": 15,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "mb-underline",
+          "type": "rectangle",
+          "name": "mb-underline",
+          "width": 22,
+          "height": 2,
+          "fill": "$color.cyan",
+          "cornerRadius": 1
+        },
+        {
+          "id": "mb-omp-sec",
+          "type": "text",
+          "name": "mb-omp-sec",
+          "content": "OMP",
+          "fontSize": 12,
+          "fontWeight": 600,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "mb-omp-dot",
+          "type": "ellipse",
+          "name": "mb-omp-dot",
+          "width": 8,
+          "height": 8,
+          "fill": "$color.cyan"
+        },
+        {
+          "id": "mb-omp",
+          "type": "text",
+          "name": "mb-omp",
+          "content": "OMP \u2014 Coding harness",
+          "fontSize": 17,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "mb-grok-sec",
+          "type": "text",
+          "name": "mb-grok-sec",
+          "content": "GROK",
+          "fontSize": 12,
+          "fontWeight": 600,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "mb-grok-dot",
+          "type": "ellipse",
+          "name": "mb-grok-dot",
+          "width": 8,
+          "height": 8,
+          "fill": "$color.cyan"
+        },
+        {
+          "id": "mb-grok",
+          "type": "text",
+          "name": "mb-grok",
+          "content": "Grok \u2014 xAI CLI",
+          "fontSize": 17,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "mb-codex-sec",
+          "type": "text",
+          "name": "mb-codex-sec",
+          "content": "CODEX",
+          "fontSize": 12,
+          "fontWeight": 600,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "mb-codex-dot",
+          "type": "ellipse",
+          "name": "mb-codex-dot",
+          "width": 8,
+          "height": 8,
+          "fill": "$color.faint"
+        },
+        {
+          "id": "mb-codex",
+          "type": "text",
+          "name": "mb-codex",
+          "content": "Codex \u2014 OpenAI CLI",
+          "fontSize": 17,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "mb-search",
+          "type": "rectangle",
+          "name": "mb-search",
+          "width": 358,
+          "height": 44,
+          "fill": "$color.surface",
+          "cornerRadius": 16
+        }
+      ]
+    },
+    {
+      "id": "main-orchestra",
+      "type": "frame",
+      "name": "main-orchestra",
+      "reusable": true,
+      "width": 390,
+      "height": 844,
+      "clip": true,
+      "layout": "vertical",
+      "fill": "$color.bg",
+      "children": [
+        {
+          "id": "mo-tabs",
+          "type": "text",
+          "name": "mo-tabs",
+          "content": "Bots   Chats   Orchestra",
+          "fontSize": 15,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "mo-underline",
+          "type": "rectangle",
+          "name": "mo-underline",
+          "width": 22,
+          "height": 2,
+          "fill": "$color.cyan",
+          "cornerRadius": 1
+        },
+        {
+          "id": "mo-card1",
+          "type": "rectangle",
+          "name": "mo-card1",
+          "width": 358,
+          "height": 140,
+          "fill": "$color.surface",
+          "cornerRadius": 22
+        },
+        {
+          "id": "mo-dash",
+          "type": "text",
+          "name": "mo-dash",
+          "content": "Dash",
+          "fontSize": 17,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "mo-active",
+          "type": "ellipse",
+          "name": "mo-active",
+          "width": 8,
+          "height": 8,
+          "fill": "$color.cyan"
+        },
+        {
+          "id": "mo-active-t",
+          "type": "text",
+          "name": "mo-active-t",
+          "content": "active",
+          "fontSize": 12,
+          "fontWeight": 400,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "mo-card2",
+          "type": "rectangle",
+          "name": "mo-card2",
+          "width": 358,
+          "height": 140,
+          "fill": "$color.surface",
+          "cornerRadius": 22
+        },
+        {
+          "id": "mo-key",
+          "type": "text",
+          "name": "mo-key",
+          "content": "keyconf.gen",
+          "fontSize": 17,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "mo-idle",
+          "type": "ellipse",
+          "name": "mo-idle",
+          "width": 8,
+          "height": 8,
+          "fill": "$color.violet"
+        },
+        {
+          "id": "mo-idle-t",
+          "type": "text",
+          "name": "mo-idle-t",
+          "content": "idle",
+          "fontSize": 12,
+          "fontWeight": 400,
+          "fill": "$color.violet"
+        }
+      ]
+    },
+    {
+      "id": "chat",
+      "type": "frame",
+      "name": "chat",
+      "reusable": true,
+      "width": 390,
+      "height": 844,
+      "clip": true,
+      "layout": "vertical",
+      "fill": "$color.bg",
+      "children": [
+        {
+          "id": "ch-title",
+          "type": "text",
+          "name": "ch-title",
+          "content": "OMP",
+          "fontSize": 17,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "ch-bubble",
+          "type": "rectangle",
+          "name": "ch-bubble",
+          "width": 260,
+          "height": 64,
+          "fill": "$color.elevated",
+          "cornerRadius": 22
+        },
+        {
+          "id": "ch-user",
+          "type": "text",
+          "name": "ch-user",
+          "content": "fix the auth bug in login.ts",
+          "fontSize": 16,
+          "fontWeight": 400,
+          "fill": "$color.text"
+        },
+        {
+          "id": "ch-asst",
+          "type": "text",
+          "name": "ch-asst",
+          "content": "I'll read login.ts and trace the 401 path.",
+          "fontSize": 16,
+          "fontWeight": 400,
+          "fill": "$color.text"
+        },
+        {
+          "id": "ch-composer",
+          "type": "rectangle",
+          "name": "ch-composer",
+          "width": 366,
+          "height": 48,
+          "fill": "$color.surface",
+          "cornerRadius": 26
+        },
+        {
+          "id": "ch-ph",
+          "type": "text",
+          "name": "ch-ph",
+          "content": "Message OMP",
+          "fontSize": 16,
+          "fontWeight": 400,
+          "fill": "$color.faint"
+        }
+      ]
+    },
+    {
+      "id": "chat-streaming",
+      "type": "frame",
+      "name": "chat-streaming",
+      "reusable": true,
+      "width": 390,
+      "height": 844,
+      "clip": true,
+      "layout": "vertical",
+      "fill": "$color.bg",
+      "children": [
+        {
+          "id": "cs-title",
+          "type": "text",
+          "name": "cs-title",
+          "content": "OMP",
+          "fontSize": 17,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "cs-bubble",
+          "type": "rectangle",
+          "name": "cs-bubble",
+          "width": 260,
+          "height": 64,
+          "fill": "$color.elevated",
+          "cornerRadius": 22
+        },
+        {
+          "id": "cs-user",
+          "type": "text",
+          "name": "cs-user",
+          "content": "fix the auth bug in login.ts",
+          "fontSize": 16,
+          "fontWeight": 400,
+          "fill": "$color.text"
+        },
+        {
+          "id": "cs-asst",
+          "type": "text",
+          "name": "cs-asst",
+          "content": "I'll read login.ts and trace the 401 path.",
+          "fontSize": 16,
+          "fontWeight": 400,
+          "fill": "$color.text"
+        },
+        {
+          "id": "cs-pulse",
+          "type": "ellipse",
+          "name": "cs-pulse",
+          "width": 6,
+          "height": 6,
+          "fill": "$color.cyan"
+        },
+        {
+          "id": "cs-st",
+          "type": "text",
+          "name": "cs-st",
+          "content": "Reading file",
+          "fontSize": 13,
+          "fontWeight": 400,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "cs-stop",
+          "type": "rectangle",
+          "name": "cs-stop",
+          "width": 36,
+          "height": 36,
+          "fill": "$color.text",
+          "cornerRadius": 18
+        },
+        {
+          "id": "cs-send",
+          "type": "rectangle",
+          "name": "cs-send",
+          "width": 36,
+          "height": 36,
+          "fill": "$color.cyan",
+          "cornerRadius": 18
+        }
+      ]
+    },
+    {
+      "id": "pair",
+      "type": "frame",
+      "name": "pair",
+      "reusable": true,
+      "width": 390,
+      "height": 844,
+      "clip": true,
+      "layout": "vertical",
+      "fill": "$color.bg",
+      "children": [
+        {
+          "id": "p-title",
+          "type": "text",
+          "name": "p-title",
+          "content": "Pair",
+          "fontSize": 17,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "p-intro",
+          "type": "text",
+          "name": "p-intro",
+          "content": "Your phone sends a secret over Tailscale, then listens for a short audible code from your laptop.",
+          "fontSize": 16,
+          "fontWeight": 400,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "p-label",
+          "type": "text",
+          "name": "p-label",
+          "content": "COMPUTER NAME",
+          "fontSize": 12,
+          "fontWeight": 600,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "p-field",
+          "type": "rectangle",
+          "name": "p-field",
+          "width": 358,
+          "height": 52,
+          "fill": "$color.surface",
+          "cornerRadius": 22
+        },
+        {
+          "id": "p-mbp",
+          "type": "text",
+          "name": "p-mbp",
+          "content": "mbp",
+          "fontSize": 15,
+          "fontWeight": 400,
+          "fill": "$color.text"
+        },
+        {
+          "id": "p-btn",
+          "type": "rectangle",
+          "name": "p-btn",
+          "width": 358,
+          "height": 48,
+          "fill": "$color.cyan",
+          "cornerRadius": 999
+        },
+        {
+          "id": "p-cta",
+          "type": "text",
+          "name": "p-cta",
+          "content": "Listen for pairing sound",
+          "fontSize": 16,
+          "fontWeight": 600,
+          "fill": "$color.bg"
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "type": "frame",
+      "name": "settings",
+      "reusable": true,
+      "width": 390,
+      "height": 844,
+      "clip": true,
+      "layout": "vertical",
+      "fill": "$color.bg",
+      "children": [
+        {
+          "id": "s-title",
+          "type": "text",
+          "name": "s-title",
+          "content": "Settings",
+          "fontSize": 17,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "s-intro",
+          "type": "text",
+          "name": "s-intro",
+          "content": "Chat with the coding agents on your own computer.",
+          "fontSize": 16,
+          "fontWeight": 400,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "s-label",
+          "type": "text",
+          "name": "s-label",
+          "content": "BRIDGE",
+          "fontSize": 12,
+          "fontWeight": 600,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "s-card",
+          "type": "rectangle",
+          "name": "s-card",
+          "width": 358,
+          "height": 120,
+          "fill": "$color.surface",
+          "cornerRadius": 22
+        },
+        {
+          "id": "s-addr",
+          "type": "text",
+          "name": "s-addr",
+          "content": "100.78.215.21:4747",
+          "fontSize": 15,
+          "fontWeight": 400,
+          "fill": "$color.text"
+        },
+        {
+          "id": "s-dot",
+          "type": "ellipse",
+          "name": "s-dot",
+          "width": 8,
+          "height": 8,
+          "fill": "$color.cyan"
+        },
+        {
+          "id": "s-conn",
+          "type": "text",
+          "name": "s-conn",
+          "content": "Connected to mbp",
+          "fontSize": 13,
+          "fontWeight": 400,
+          "fill": "$color.muted"
+        },
+        {
+          "id": "s-btn",
+          "type": "rectangle",
+          "name": "s-btn",
+          "width": 358,
+          "height": 48,
+          "fill": "$color.cyan",
+          "cornerRadius": 999
+        },
+        {
+          "id": "s-save",
+          "type": "text",
+          "name": "s-save",
+          "content": "Save",
+          "fontSize": 16,
+          "fontWeight": 600,
+          "fill": "$color.bg"
+        }
+      ]
+    },
+    {
+      "id": "voice",
+      "type": "frame",
+      "name": "voice",
+      "reusable": true,
+      "width": 390,
+      "height": 844,
+      "clip": true,
+      "layout": "vertical",
+      "fill": "$color.bg",
+      "children": [
+        {
+          "id": "v-title",
+          "type": "text",
+          "name": "v-title",
+          "content": "OMP",
+          "fontSize": 17,
+          "fontWeight": 600,
+          "fill": "$color.text"
+        },
+        {
+          "id": "v-orb",
+          "type": "ellipse",
+          "name": "v-orb",
+          "width": 120,
+          "height": 120,
+          "fill": "$color.cyan"
+        },
+        {
+          "id": "v-say",
+          "type": "text",
+          "name": "v-say",
+          "content": "Say something\u2026",
+          "fontSize": 17,
+          "fontWeight": 400,
+          "fill": "$color.muted"
+        }
+      ]
+    }
+  ]
+}
