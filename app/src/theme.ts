@@ -1,3 +1,17 @@
+/** Liquid-glass overlays — dark Grok palette, Zero-style refraction edge. */
+export const glass = {
+  fill: "rgba(18, 18, 18, 0.68)",
+  fillRaised: "rgba(28, 28, 28, 0.78)",
+  fillChip: "rgba(18, 18, 18, 0.55)",
+  fillChipOn: "rgba(38, 38, 38, 0.72)",
+  border: "rgba(255, 255, 255, 0.07)",
+  borderBright: "rgba(255, 255, 255, 0.12)",
+  highlight: "rgba(255, 255, 255, 0.04)",
+  blurIos: 32,
+  blurAndroid: 22,
+  blurWeb: 16,
+} as const;
+
 export const colors = {
   bg: "#000000",
   surface: "#121212",

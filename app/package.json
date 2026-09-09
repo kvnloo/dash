@@ -12,6 +12,7 @@
     "@shopify/flash-list": "2.0.2",
     "expo": "~57.0.21",
     "expo-av": "^16.0.8",
+    "expo-blur": "^57.0.2",
     "expo-camera": "~57.0.4",
     "expo-clipboard": "~57.0.1",
     "expo-constants": "~57.0.17",
