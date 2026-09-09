@@ -4,7 +4,7 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import type { NavigationProp } from "@react-navigation/native";
 import { haptic } from "../haptics";
 import type { RootStackParamList } from "../navigation";
-import { goldenNavHtml } from "./golden-nav";
+import { goldenNavHtml, navSetTabScript, parseNavMessage } from "./golden-nav";
 
 /**
  * Native AppNav renders the same CSS as the Chrome probe, inside a WebView.
@@ -20,10 +20,12 @@ export function AppNav({
   onTab?(next: number): void;
 }) {
   const web = useRef<WebView>(null);
-  const html = useMemo(() => goldenNavHtml(1), []);
+  const initialTab = useRef(tab).current;
+  const html = useMemo(() => goldenNavHtml(initialTab), [initialTab]);
+  const source = useMemo(() => ({ html, baseUrl: "https://localhost/" }), [html]);
 
   const syncTab = (next: number) => {
-    web.current?.injectJavaScript(`window.setTab && window.setTab(${next}); true;`);
+    web.current?.injectJavaScript(navSetTabScript(next));
   };
 
   useEffect(() => {
@@ -31,12 +33,8 @@ export function AppNav({
   }, [tab]);
 
   const onMessage = (event: WebViewMessageEvent) => {
-    let msg: { type?: string; index?: number };
-    try {
-      msg = JSON.parse(event.nativeEvent.data) as { type?: string; index?: number };
-    } catch {
-      return;
-    }
+    const msg = parseNavMessage(event.nativeEvent.data);
+    if (!msg) return;
     haptic.tap();
     if (msg.type === "expand") {
       navigation.navigate("Voice");
@@ -46,10 +44,8 @@ export function AppNav({
       navigation.navigate("Settings");
       return;
     }
-    if (msg.type === "tab" && typeof msg.index === "number") {
-      if (onTab) onTab(msg.index);
-      else navigation.navigate("Main", { tab: msg.index });
-    }
+    if (onTab) onTab(msg.index);
+    else navigation.navigate("Main", { tab: msg.index });
   };
 
   return (
@@ -57,16 +53,17 @@ export function AppNav({
       <WebView
         ref={web}
         originWhitelist={["*"]}
-        source={{ html }}
+        source={source}
         onLoadEnd={() => syncTab(tab)}
         onMessage={onMessage}
+        injectedJavaScript={navSetTabScript(tab)}
         scrollEnabled={false}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
         overScrollMode="never"
         bounces={false}
         javaScriptEnabled
-        opaque={false}
+        androidLayerType="hardware"
         containerStyle={styles.web}
         style={styles.web}
       />

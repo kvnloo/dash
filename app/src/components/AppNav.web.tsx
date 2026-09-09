@@ -1,9 +1,7 @@
 import type { NavigationProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../navigation";
 import { haptic } from "../haptics";
-import { EXPAND_PATH, GOLDEN_NAV_CSS } from "./golden-nav";
-
-const TABS = ["Bots", "Chats", "Orchestra"] as const;
+import { EXPAND_PATH, GOLDEN_NAV_CSS, TAB_LABELS, indicatorLeft } from "./golden-nav";
 
 export function AppNav({
   navigation,
@@ -49,9 +47,9 @@ export function AppNav({
           <span
             className="dev-mobile-pager-indicator"
             aria-hidden="true"
-            style={{ left: `calc(3px + ${tab} * (100% - 6px) / 3)` }}
+            style={{ left: indicatorLeft(tab) }}
           />
-          {TABS.map((label, i) => (
+          {TAB_LABELS.map((label, i) => (
             <button
               key={label}
               type="button"

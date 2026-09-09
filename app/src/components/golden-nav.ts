@@ -1,11 +1,22 @@
-/** Exact CSS from golden-nav-relay / nav-probe.html. Used by web AppNav and native WebView. */
+/** Collapsed zerOS pager CSS. oklch/color-mix kept for web; sRGB listed first so Android WebView still paints. */
+
+export const GOLD_SRGB = "#d7b986";
+export const GOLD_68 = "rgba(215, 185, 134, 0.68)";
+export const GOLD_RIM = "rgb(230, 210, 178)";
+export const GOLD_GLOW = "rgba(215, 185, 134, 0.25)";
+export const DEV_NAV_96 = "rgba(12, 13, 11, 0.874)";
 
 export const GOLDEN_NAV_CSS = `:root {
   --ink-2: #B4AFA3;
   --ink-3: #837F74;
+  --gold: ${GOLD_SRGB};
   --gold: oklch(0.80 0.075 80);
+  --gold-68: ${GOLD_68};
+  --gold-rim: ${GOLD_RIM};
+  --gold-glow: ${GOLD_GLOW};
   --hair-2: rgba(236,232,223,0.16);
   --dev-nav: rgba(12, 13, 11, 0.91);
+  --dev-nav-96: ${DEV_NAV_96};
 }
 .dash-appnav, .dash-appnav * { box-sizing: border-box; }
 .dash-appnav {
@@ -27,11 +38,12 @@ export const GOLDEN_NAV_CSS = `:root {
   padding: 0;
   border: 1px solid var(--hair-2);
   border-radius: 50%;
+  background: var(--dev-nav-96);
   background: color-mix(in srgb, var(--dev-nav) 96%, transparent);
   color: var(--ink-2);
   backdrop-filter: blur(18px) saturate(1.3);
   -webkit-backdrop-filter: blur(18px) saturate(1.3);
-  box-shadow: 0 8px 22px color-mix(in srgb, #000 22%, transparent);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
   cursor: pointer;
 }
 .dev-mobile-immersive-toggle svg { width: 17px; height: 17px; }
@@ -45,8 +57,9 @@ export const GOLDEN_NAV_CSS = `:root {
   padding: 3px;
   border: 1px solid var(--hair-2);
   border-radius: 23px;
+  background: var(--dev-nav-96);
   background: color-mix(in srgb, var(--dev-nav) 96%, transparent);
-  box-shadow: 0 9px 28px color-mix(in srgb, #000 28%, transparent);
+  box-shadow: 0 9px 28px rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(18px) saturate(1.3);
   -webkit-backdrop-filter: blur(18px) saturate(1.3);
 }
@@ -57,13 +70,15 @@ export const GOLDEN_NAV_CSS = `:root {
   bottom: 3px;
   left: 3px;
   width: calc((100% - 6px) / 3);
+  border: 1px solid ${GOLD_RIM};
   border: 1px solid color-mix(in srgb, white 36%, var(--gold));
   border-radius: 16px;
+  background: ${GOLD_68};
   background: color-mix(in srgb, var(--gold) 68%, transparent);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 54%, transparent),
-    inset 0 -3px 8px color-mix(in srgb, #6f5524 25%, transparent),
-    0 8px 18px color-mix(in srgb, var(--gold) 25%, transparent);
+    inset 0 1px 0 rgba(255, 255, 255, 0.54),
+    inset 0 -3px 8px rgba(111, 85, 36, 0.25),
+    0 8px 18px ${GOLD_GLOW};
   backdrop-filter: blur(12px) saturate(1.35);
   -webkit-backdrop-filter: blur(12px) saturate(1.35);
   pointer-events: none;
@@ -96,9 +111,51 @@ export const GOLDEN_NAV_CSS = `:root {
 const EXPAND_D =
   "M9 3H3v6M15 3h6v6M9 21H3v-6M21 15v6h-6M3 3l7 7M21 3l-7 7M3 21l7-7M21 21l-7-7";
 
+export const TAB_LABELS = ["Bots", "Chats", "Orchestra"] as const;
+
+export function clampTab(tab: number): 0 | 1 | 2 {
+  const n = Math.round(tab);
+  if (n <= 0) return 0;
+  if (n >= 2) return 2;
+  return 1;
+}
+
+export function indicatorLeft(tab: number): string {
+  return `calc(3px + ${clampTab(tab)} * (100% - 6px) / 3)`;
+}
+
+export type NavMessage = { type: "tab"; index: 0 | 1 | 2 } | { type: "expand" } | { type: "menu" };
+
+export function parseNavMessage(raw: string): NavMessage | null {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (typeof value !== "object" || value === null || !("type" in value)) return null;
+    const type = (value as { type: unknown }).type;
+    if (type === "expand" || type === "menu") return { type };
+    if (type === "tab" && "index" in value && typeof (value as { index: unknown }).index === "number") {
+      const index = (value as { index: number }).index;
+      if (index === 0 || index === 1 || index === 2) return { type: "tab", index };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Injected on every pager change. Mutates the DOM directly so it does not need a prior bind. */
+export function navSetTabScript(tab: number): string {
+  const i = clampTab(tab);
+  const left = indicatorLeft(i);
+  return `(function(){var i=${i};var tabs=document.querySelectorAll('[role="tab"]');var ind=document.getElementById('indicator');if(!ind)return true;for(var n=0;n<tabs.length;n++)tabs[n].classList.toggle('is-active',n===i);ind.style.left='${left}';window.__dashTab=i;})(); true;`;
+}
+
 /** Standalone HTML document for a native WebView. `tab` is 0/1/2. */
 export function goldenNavHtml(tab: number): string {
-  const t = tab === 0 || tab === 2 ? tab : 1;
+  const t = clampTab(tab);
+  const buttons = TAB_LABELS.map(
+    (label, i) =>
+      `<button type="button" role="tab" aria-label="${label}"${i === t ? ' class="is-active"' : ""}></button>`,
+  ).join("");
   return `<!doctype html>
 <html lang="en">
 <meta charset="utf-8" />
@@ -115,10 +172,8 @@ export function goldenNavHtml(tab: number): string {
       </svg>
     </button>
     <nav class="dev-mobile-pager" aria-label="Primary mobile workspace">
-      <span class="dev-mobile-pager-indicator" id="indicator" aria-hidden="true"></span>
-      <button type="button" role="tab" aria-label="Bots"></button>
-      <button type="button" role="tab" aria-label="Chats"></button>
-      <button type="button" role="tab" aria-label="Orchestra"></button>
+      <span class="dev-mobile-pager-indicator" id="indicator" aria-hidden="true" style="left:${indicatorLeft(t)}"></span>
+      ${buttons}
     </nav>
     <button type="button" class="dev-mobile-pager-toggle" aria-label="Menu" id="menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -133,9 +188,11 @@ export function goldenNavHtml(tab: number): string {
       if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(msg));
     }
     function setTab(i, fromNative) {
-      tabs.forEach((el, n) => el.classList.toggle('is-active', n === i));
-      indicator.style.left = 'calc(3px + ' + i + ' * (100% - 6px) / 3)';
-      if (!fromNative) post({ type: 'tab', index: i });
+      var n = i < 0 ? 0 : i > 2 ? 2 : Math.round(i);
+      tabs.forEach((el, idx) => el.classList.toggle('is-active', idx === n));
+      indicator.style.left = 'calc(3px + ' + n + ' * (100% - 6px) / 3)';
+      window.__dashTab = n;
+      if (!fromNative) post({ type: 'tab', index: n });
     }
     window.setTab = (i) => setTab(i, true);
     setTab(${t}, true);
