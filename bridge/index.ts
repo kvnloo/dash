@@ -21,6 +21,7 @@ import {
 } from "../shared/protocol";
 import { CLAIM_KEY_BYTES, claimSession, currentOrCreateSession, startBoundSession } from "./pair";
 import { playPairCode } from "./pair-audio";
+import { speechAvailable, transcribe, warmup } from "./speech";
 
 // ---------------------------------------------------------------------------
 // Harness adapters
@@ -354,6 +355,9 @@ class Turn implements Sink {
   ) {}
 
   start(input: TurnInput): void {
+    // A spoken turn is transcribed before it starts, so a cancel can arrive
+    // while there is no process to kill yet.
+    if (this.cancelled || this.finished) return;
     const parser = this.harness.parser(this);
     const proc = Bun.spawn([this.harness.bin, ...this.harness.argv(input)], {
       cwd: input.cwd,
@@ -401,8 +405,12 @@ class Turn implements Sink {
   }
 
   cancel(): void {
-    if (this.cancelled || this.finished || !this.proc) return;
+    if (this.cancelled || this.finished) return;
     this.cancelled = true;
+    if (!this.proc) {
+      this.finish(CANCELLED_EXIT_CODE);
+      return;
+    }
     const proc = this.proc;
     proc.kill("SIGTERM");
     setTimeout(() => {
@@ -422,6 +430,18 @@ class Turn implements Sink {
   session(sessionId: string): void {
     this.flush();
     this.emit({ type: "session", id: this.id, seq: 0, sessionId });
+  }
+
+  /** What we heard, for a turn the user spoke rather than typed. */
+  transcript(text: string): void {
+    this.emit({ type: "transcript", id: this.id, seq: 0, text });
+  }
+
+  /** End a turn that never spawned: transcription failed, or heard nothing. */
+  endWithout(message?: string): void {
+    if (this.finished) return;
+    if (message) this.error(message);
+    this.finish(message ? 1 : 0);
   }
 
   delta(text: string): void {
@@ -576,6 +596,54 @@ function sendTo(ws: Socket, message: ServerMessage): void {
 function rejectTurn(ws: Socket, id: string, message: string): void {
   sendTo(ws, { type: "error", id, seq: 1, message });
   sendTo(ws, { type: "done", id, seq: 2, exitCode: 1 });
+}
+
+// ---------------------------------------------------------------------------
+// Spoken turns
+// ---------------------------------------------------------------------------
+
+/** Audio for a turn the phone is still streaming, before it has been transcribed. */
+interface Utterance {
+  chunks: Uint8Array[];
+  bytes: number;
+  cwd: string;
+  sessionId?: string;
+  startedAt: number;
+}
+
+/** Utterances are seconds long; this only catches a runaway recorder. */
+const MAX_UTTERANCE_BYTES = 4 * 1024 * 1024;
+
+const utterances = new Map<string, Utterance>();
+
+async function runVoiceTurn(turn: Turn, utterance: Utterance): Promise<void> {
+  const audio = Buffer.concat(utterance.chunks);
+  const uploadMs = Date.now() - utterance.startedAt;
+  turn.status("Transcribing…");
+  try {
+    const heard = await transcribe(new Uint8Array(audio), turn.id);
+    log("voice.heard", {
+      id: turn.id,
+      bytes: audio.byteLength,
+      uploadMs,
+      audioSec: Number(heard.audioSeconds.toFixed(2)),
+      transcodeMs: heard.transcodeMs,
+      sttMs: heard.sttMs,
+      rtf: Number((heard.sttMs / 1000 / Math.max(heard.audioSeconds, 0.01)).toFixed(2)),
+      chars: heard.text.length,
+    });
+    if (!heard.text) {
+      // Silence or background noise. End quietly instead of showing an error;
+      // in hands-free use this happens all the time.
+      turn.endWithout();
+      return;
+    }
+    turn.transcript(heard.text);
+    turn.start({ text: heard.text, cwd: utterance.cwd, sessionId: utterance.sessionId });
+  } catch (error) {
+    log("voice.failed", { id: turn.id, error: String(error) });
+    turn.endWithout(error instanceof Error ? error.message : String(error));
+  }
 }
 
 
@@ -743,9 +811,63 @@ const server = Bun.serve<SocketData>({
           turn.start({ text: message.text, cwd, sessionId: message.sessionId });
           break;
         }
-        case "cancel":
+        case "voice_begin": {
+          if (turns.has(message.id) || utterances.has(message.id)) return;
+          const ready = speechAvailable();
+          if (!ready.ok) {
+            return rejectTurn(ws, message.id, ready.reason ?? "Speech isn't set up on this computer.");
+          }
+          const harness = HARNESSES.find((h) => h.id === message.harness);
+          if (!harness) return rejectTurn(ws, message.id, `Unknown agent "${message.harness}".`);
+          if (Bun.which(harness.bin) === null) {
+            return rejectTurn(
+              ws,
+              message.id,
+              `${harness.name} isn't installed on ${HOST_NAME} ("${harness.bin}" not on PATH).`,
+            );
+          }
+          const cwd = message.cwd?.trim() || DEFAULT_CWD;
+          if (!isDirectory(cwd)) return rejectTurn(ws, message.id, `Not a directory on ${HOST_NAME}: ${cwd}`);
+
+          const turn = new Turn(message.id, harness);
+          turn.listeners.add(ws);
+          ws.data.turns.add(message.id);
+          turns.set(message.id, turn);
+          utterances.set(message.id, {
+            chunks: [],
+            bytes: 0,
+            cwd,
+            sessionId: message.sessionId,
+            startedAt: Date.now(),
+          });
+          break;
+        }
+        case "voice_chunk": {
+          const utterance = utterances.get(message.id);
+          if (!utterance) return;
+          const slice = Buffer.from(message.data, "base64");
+          utterance.bytes += slice.byteLength;
+          if (utterance.bytes > MAX_UTTERANCE_BYTES) {
+            utterances.delete(message.id);
+            turns.get(message.id)?.endWithout("That recording was too long.");
+            return;
+          }
+          utterance.chunks.push(new Uint8Array(slice));
+          break;
+        }
+        case "voice_commit": {
+          const pending = utterances.get(message.id);
+          if (!pending) return;
+          utterances.delete(message.id);
+          const voiceTurn = turns.get(message.id);
+          if (voiceTurn) void runVoiceTurn(voiceTurn, pending);
+          break;
+        }
+        case "cancel": {
+          utterances.delete(message.id);
           turns.get(message.id)?.cancel();
           break;
+        }
         case "attach":
           for (const { id, seq } of message.turns) {
             const turn = turns.get(id);
@@ -762,7 +884,11 @@ const server = Bun.serve<SocketData>({
       }
     },
     close(ws) {
-      for (const id of ws.data.turns) turns.get(id)?.listeners.delete(ws);
+      for (const id of ws.data.turns) {
+        turns.get(id)?.listeners.delete(ws);
+        // A half-uploaded utterance can't be resumed on another socket.
+        utterances.delete(id);
+      }
       log("ws.close", { remote: ws.remoteAddress, subscribed: ws.data.turns.size });
       ws.data.turns.clear();
     },
@@ -773,6 +899,15 @@ const agents = harnessList()
   .map((h) => `${h.id} ${h.available ? "✓" : "✗"}`)
   .join("  ");
 
+const speech = speechAvailable();
+if (speech.ok) {
+  // Loading the model costs ~13s. Pay it now so the first spoken turn isn't the slow one.
+  void warmup().then(
+    () => log("speech.ready", {}),
+    (error: unknown) => log("speech.load_failed", { error: String(error) }),
+  );
+}
+
 const pairSession = currentOrCreateSession();
 process.stderr.write(
   [
@@ -781,6 +916,7 @@ process.stderr.write(
     `  computer      ${HOST_NAME}`,
     `  cwd           ${DEFAULT_CWD}`,
     `  agents        ${agents}`,
+    `  voice         ${speech.ok ? "loading model…" : `unavailable — ${speech.reason ?? "not set up"}`}`,
     "",
     `  pair code     ${pairSession.code}  (terminal fallback — use Dash sonic pair when possible)`,
     "",

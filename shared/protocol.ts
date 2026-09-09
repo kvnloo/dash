@@ -22,6 +22,24 @@ export type ClientMessage =
       /** Working directory on the laptop. Falls back to the bridge default. */
       cwd?: string;
     }
+  /**
+   * Start a spoken turn. The phone streams the recorded utterance as
+   * `voice_chunk`s and closes it with `voice_commit`; the bridge transcribes on
+   * this machine and then runs the turn exactly as if the text had been typed.
+   */
+  | {
+      type: "voice_begin";
+      id: string;
+      harness: string;
+      sessionId?: string;
+      cwd?: string;
+      /** Container the phone recorded, e.g. "audio/m4a". */
+      mime: string;
+    }
+  /** One base64 slice of the utterance, in order. */
+  | { type: "voice_chunk"; id: string; data: string }
+  /** End of utterance: transcribe what arrived and start the turn. */
+  | { type: "voice_commit"; id: string }
   | { type: "cancel"; id: string }
   /**
    * Re-subscribe to turns that were in flight when the socket dropped.
@@ -33,6 +51,8 @@ export type ClientMessage =
 /** Events that belong to a turn. `seq` is per-turn and strictly increasing from 1. */
 export type TurnEvent =
   | { type: "session"; id: string; seq: number; sessionId: string }
+  /** What the bridge heard for a spoken turn. Precedes the reply's deltas. */
+  | { type: "transcript"; id: string; seq: number; text: string }
   | { type: "delta"; id: string; seq: number; text: string }
   | { type: "status"; id: string; seq: number; text: string }
   | { type: "done"; id: string; seq: number; exitCode: number }
@@ -91,6 +111,22 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
         };
       }
       return null;
+    case "voice_begin":
+      if (str(raw.id) && str(raw.harness) && str(raw.mime) && optStr(raw.sessionId) && optStr(raw.cwd)) {
+        return {
+          type: "voice_begin",
+          id: raw.id,
+          harness: raw.harness,
+          mime: raw.mime,
+          sessionId: raw.sessionId,
+          cwd: raw.cwd,
+        };
+      }
+      return null;
+    case "voice_chunk":
+      return str(raw.id) && str(raw.data) ? { type: "voice_chunk", id: raw.id, data: raw.data } : null;
+    case "voice_commit":
+      return str(raw.id) ? { type: "voice_commit", id: raw.id } : null;
     case "cancel":
       return str(raw.id) ? { type: "cancel", id: raw.id } : null;
     case "attach":
@@ -136,6 +172,10 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     case "session":
       return str(raw.id) && num(raw.seq) && str(raw.sessionId)
         ? { type: "session", id: raw.id, seq: raw.seq, sessionId: raw.sessionId }
+        : null;
+    case "transcript":
+      return str(raw.id) && num(raw.seq) && str(raw.text)
+        ? { type: "transcript", id: raw.id, seq: raw.seq, text: raw.text }
         : null;
     case "delta":
       return str(raw.id) && num(raw.seq) && str(raw.text)
