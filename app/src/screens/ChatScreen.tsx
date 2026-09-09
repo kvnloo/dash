@@ -8,6 +8,7 @@ import { Composer } from "../components/Composer";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { HarnessPicker } from "../components/HarnessPicker";
 import { Header, IconButton } from "../components/Header";
+import { GlassSurface } from "../components/GlassSurface";
 import { MessageRow } from "../components/MessageRow";
 import { haptic } from "../haptics";
 import type { Message } from "../model";
@@ -23,8 +24,7 @@ import {
   setActive,
   store,
 } from "../store/app";
-import { dequeue, enqueue, notifyTurnSettled, onTurnSettled, queueLength } from "../store/queue";
-import { colors, space, type } from "../theme";
+import { colors, radius, space, type } from "../theme";
 
 const EMPTY: Message[] = [];
 
@@ -164,14 +164,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         center={
           <Pressable
             onPress={() => setPickerOpen(true)}
-            style={({ pressed }) => [styles.titleButton, pressed && styles.pressed]}
+            style={({ pressed }) => [pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel={`Harness: ${harnessName}. Change`}
           >
-            <Text style={styles.title} numberOfLines={1}>
-              {harnessName}
-            </Text>
-            <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
+            <GlassSurface variant="chip" blur={false} borderRadius={radius.pill} style={styles.titleButton}>
+              <Text style={styles.title} numberOfLines={1}>
+                {harnessName}
+              </Text>
+              <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
+            </GlassSurface>
           </Pressable>
         }
         right={
@@ -243,10 +245,9 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 999,
     maxWidth: "100%",
   },
-  pressed: { backgroundColor: colors.surfaceRaised },
+  pressed: { opacity: 0.85 },
   title: { color: colors.text, ...type.heading },
   headerActions: { flexDirection: "row", alignItems: "center" },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: "45%" },
