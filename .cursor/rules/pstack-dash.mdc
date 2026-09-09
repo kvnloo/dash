@@ -1,0 +1,23 @@
+---
+description: Dash nano-service pstack workflow
+alwaysApply: true
+---
+# Dash pstack
+
+Use `/poteto-mode` for any non-trivial Dash change. Nano-services are isolated worktrees. Integration stays on `integrate/device-layer`.
+
+## Playbooks
+
+- New behavior in one service: Feature or TDD.
+- Broken pairing, WS, voice, or nav: Bug fix. Repro on the real surface first.
+- Nav pixels vs zerOS: Visual parity.
+- The whole device-layer program: Orchestrate (`docs/orchestration.md`, store `orchestrate/dash`).
+- Stacked PRs the human lands: Autopilot-stack. Do not merge to `main` from a worker.
+
+## Verify
+
+Reach for `.cursor/skills/verify-dash`. Drive with `bun scripts/verify-dash/control-dash.ts`. Never start a second `dash-pair` or Metro on 8097. Phone bundler is `dash-metro-8097`. UI proofs use debug web on 8099.
+
+## Ownership
+
+One writer per worktree. `bridge/index.ts` is wiring only. Protocol changes land first in `shared/protocol.ts`. Hermes mesh is the agent fabric, not a replacement for the phone bridge.

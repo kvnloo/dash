@@ -1,0 +1,8 @@
+id	track	state	branch	pr	sha	brief
+pair	pair	pending	svc/pair			briefs/pair.md
+bridge-core	bridge-core	pending	svc/bridge-core			briefs/bridge-core.md
+roster	roster	pending	svc/roster			briefs/roster.md
+voice	voice	pending	svc/voice			briefs/voice.md
+chat-core	chat-core	pending	svc/chat-core			briefs/chat-core.md
+hermes-session	hermes-session	pending	svc/hermes-session			briefs/hermes-session.md
+nav	nav	done	svc/nav		1ef1323	briefs/nav.md

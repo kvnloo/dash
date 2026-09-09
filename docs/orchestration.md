@@ -69,6 +69,28 @@ These are not extra ports. They are modules inside `dash-pair` with hard edges:
 
 Grok Bot and Muse install Hermes locally and join as **peers/profiles**. They do not speak Dash's WebSocket.
 
+## pstack workflow
+
+This program is a pstack **Orchestrate** (standing coordinator) with an **Autopilot-stack** landing rule: workers build and verify, the operator lands `integrate/device-layer` → `main`.
+
+| Piece | Path |
+|-------|------|
+| Model roles | `~/.cursor/rules/pstack-models.mdc` |
+| Repo rule | `.cursor/rules/pstack-dash.mdc` |
+| Verify skill | `.cursor/skills/verify-dash/` |
+| Control CLI | `bun scripts/verify-dash/control-dash.ts` |
+| Store | `orchestrate/dash/` (`ORCH_STORE=orchestrate/dash`) |
+| Bookkeeping | `bun scripts/pstack/orch.ts --store orchestrate/dash status` |
+| Playbook | `/poteto-mode` → Orchestrate; workers are `poteto-agent` |
+
+Entry:
+
+```text
+/poteto-mode own the Dash nano-service program in orchestrate/dash until integrate/device-layer is merge-ready. do not merge to main.
+```
+
+One writer per worktree. Completions are queue events. Verify with `verify-dash` before a unit is `done`. Nav is already `done` at `1ef1323`.
+
 ## Integration order before `main`
 
 1. Protocol (if any) — tiny, old fields still parse.

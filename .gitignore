@@ -6,3 +6,7 @@ dist/
 .tools/
 expo-qr.png
 .worktrees/
+artifacts/verify-dash/
+orchestrate/dash/inbox/
+orchestrate/dash/.orch.lock
+orchestrate/dash/status.md

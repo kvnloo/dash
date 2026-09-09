@@ -23,6 +23,8 @@ Parallel work happens in git worktrees under `.worktrees/`. Full map: `docs/orch
 - `svc/hermes-session`: Dash → Hermes gateway/peer (missing). Do not replace the bridge.
 - `shared/protocol.ts`: tiny backward-compatible changes only; land before consumers.
 
+Non-trivial work uses `/poteto-mode`. Prove it with `.cursor/skills/verify-dash` (`bun scripts/verify-dash/control-dash.ts`). The nano-service queue lives in `orchestrate/dash/`.
+
 Anyone adding an app dependency: run `bunx expo install <pkg>` from `app/`, never edit `package.json` by hand, and keep the app runnable in Expo Go (no native modules outside the Expo SDK).
 
 If you need a protocol change, add it to `shared/protocol.ts` with a parser update and keep old fields working.
