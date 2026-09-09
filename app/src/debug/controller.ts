@@ -15,6 +15,7 @@ export type DebugCommand =
   | { action: "navigate"; screen: keyof RootStackParamList; params?: RootStackParamList[keyof RootStackParamList] }
   | { action: "reset"; seed?: DebugSeedVariant }
   | { action: "setSearch"; query: string }
+  | { action: "setMainTab"; index: number }
   | { action: "setHarnessPicker"; open: boolean }
   | { action: "setActiveChat"; conversationId: string | null }
   | { action: "setConnection"; status: "online" | "offline" | "connecting" | "idle" }
@@ -29,6 +30,7 @@ function applyScenarioUi(spec: (typeof DEBUG_SCENARIOS)[DebugScenarioId]): void 
   debugUi.set((s) => ({
     ...s,
     mainSearchQuery: spec.ui?.mainSearchQuery ?? null,
+    mainTabIndex: spec.ui?.mainTabIndex ?? null,
     chatHarnessPickerOpen: spec.ui?.chatHarnessPickerOpen ?? null,
   }));
   if (spec.ui?.activeConversationId) {
@@ -64,6 +66,9 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
       return { ok: true };
     case "setSearch":
       debugUi.set((s) => ({ ...s, mainSearchQuery: cmd.query }));
+      return { ok: true };
+    case "setMainTab":
+      debugUi.set((s) => ({ ...s, mainTabIndex: cmd.index }));
       return { ok: true };
     case "setHarnessPicker":
       debugUi.set((s) => ({ ...s, chatHarnessPickerOpen: cmd.open }));

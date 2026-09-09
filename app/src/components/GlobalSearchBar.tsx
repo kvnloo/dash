@@ -16,9 +16,11 @@ interface Props {
   onChange(value: string): void;
   onScope(label: string): void;
   onClear?(): void;
+  /** Bottom dock on main screen — chips expand upward. */
+  dock?: "top" | "bottom";
 }
 
-export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, onScope, onClear }: Props) {
+export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, onScope, onClear, dock = "top" }: Props) {
   const parsed = useMemo(() => parseSearchQuery(value), [value]);
   const suggestions = useMemo(() => filterScopeSuggestions(value), [value]);
 
@@ -27,7 +29,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({ value, onChange, 
   const activeSlash = parsed.mode === "slash" && parsed.scope !== "unknown" ? parsed.scope : null;
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, dock === "bottom" && styles.wrapBottom]}>
       <GlassSurface borderRadius={radius.lg} style={styles.field}>
         <Ionicons name="search" size={18} color={colors.textMuted} style={styles.icon} />
         <TextInput
@@ -132,6 +134,7 @@ export function applyScopeMention(current: string, label: string): string {
 
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: space.lg, paddingBottom: space.sm, gap: space.sm },
+  wrapBottom: { paddingTop: space.sm, paddingBottom: 0 },
   field: {
     flexDirection: "row",
     alignItems: "center",

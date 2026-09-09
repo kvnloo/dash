@@ -1,11 +1,15 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
-import { useCallback, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MainPager, type MainPagerRef } from "../components/MainPager";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
-import { Header, HeaderTitle, IconButton } from "../components/Header";
+import { Header, IconButton } from "../components/Header";
 import { SearchResultRow } from "../components/SearchResultRow";
+import { TopTabs } from "../components/TopTabs";
+import { isDebugActive } from "../debug/expose";
+import { debugUi } from "../debug/ui-store";
 import { haptic } from "../haptics";
 import {
   formatSearchHint,
@@ -15,10 +19,11 @@ import {
 } from "../lib/global-search";
 import type { BotProfile } from "../mock/bots";
 import type { ScreenProps } from "../navigation";
-import { isDebugActive } from "../debug/expose";
-import { debugUi } from "../debug/ui-store";
 import { createConversation, saveSettings, setActive, store } from "../store/app";
 import { colors, space, type } from "../theme";
+import { BotsPane } from "./panes/BotsPane";
+import { ChatsPane } from "./panes/ChatsPane";
+import { OrchestraPane } from "./panes/OrchestraPane";
 
 function chatDraftForResult(item: SearchResult): string | undefined {
   switch (item.kind) {
@@ -37,22 +42,57 @@ function chatDraftForResult(item: SearchResult): string | undefined {
 
 export function MainScreen({ navigation }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const pagerRef = useRef<MainPagerRef>(null);
+
   const debugSearch = debugUi.use((s) => s.mainSearchQuery);
+  const debugTab = debugUi.use((s) => s.mainTabIndex);
   const [localQuery, setLocalQuery] = useState("");
+  const [localTab, setLocalTab] = useState(1);
   const query = debugSearch !== null ? debugSearch : localQuery;
-  const setQuery = useCallback((next: string | ((prev: string) => string)) => {
-    setLocalQuery((localPrev) => {
-      const current = debugSearch !== null ? debugSearch : localPrev;
-      const value = typeof next === "function" ? next(current) : next;
-      if (isDebugActive()) debugUi.set((s) => ({ ...s, mainSearchQuery: value }));
-      return value;
-    });
-  }, [debugSearch]);
+  const index = debugTab !== null ? debugTab : localTab;
+
+  const setQuery = useCallback(
+    (next: string | ((prev: string) => string)) => {
+      setLocalQuery((localPrev) => {
+        const current = debugSearch !== null ? debugSearch : localPrev;
+        const value = typeof next === "function" ? next(current) : next;
+        if (isDebugActive()) debugUi.set((s) => ({ ...s, mainSearchQuery: value }));
+        return value;
+      });
+    },
+    [debugSearch],
+  );
+
+  const setIndex = useCallback(
+    (next: number) => {
+      setLocalTab(next);
+      if (isDebugActive()) debugUi.set((s) => ({ ...s, mainTabIndex: next }));
+    },
+    [],
+  );
+
+  const onTab = useCallback(
+    (next: number) => {
+      setIndex(next);
+      pagerRef.current?.setPage(next);
+    },
+    [setIndex],
+  );
+
+  const onPage = useCallback(
+    (e: { nativeEvent: { position: number } }) => {
+      setIndex(e.nativeEvent.position);
+    },
+    [setIndex],
+  );
+
   const conversations = store.use((s) => s.conversations);
   const harnesses = store.use((s) => s.connection.harnesses);
   const settings = store.use((s) => s.settings);
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
+  const searchActive = query.trim().length > 0 || parsed.mode !== "discover";
 
   const results = useMemo(
     () => runGlobalSearch({ query, conversations, harnesses }),
@@ -125,16 +165,13 @@ export function MainScreen({ navigation }: ScreenProps<"Main">) {
     [openBot, openConversation, openHarness, openProduct],
   );
 
-  const onScope = useCallback((label: string) => {
-    haptic.tap();
-    setQuery((q) => applyScopeMention(q, label));
-  }, []);
-
-  const newChat = useCallback(() => {
-    haptic.tap();
-    setActive(null);
-    navigation.navigate("Chat");
-  }, [navigation]);
+  const onScope = useCallback(
+    (label: string) => {
+      haptic.tap();
+      setQuery((q) => applyScopeMention(q, label));
+    },
+    [setQuery],
+  );
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<SearchResult>) => <SearchResultRow item={item} onPress={onResult} />,
@@ -153,44 +190,75 @@ export function MainScreen({ navigation }: ScreenProps<"Main">) {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <Header
-        left={<IconButton icon="create-outline" label="New chat" onPress={newChat} />}
-        center={<HeaderTitle>Dash</HeaderTitle>}
+        left={<View style={styles.sideSpacer} />}
+        center={<TopTabs index={index} onChange={onTab} />}
         right={<IconButton icon="options-outline" label="Settings" onPress={() => navigation.navigate("Settings")} />}
       />
       <ConnectionPill />
-      <GlobalSearchBar value={query} onChange={setQuery} onScope={onScope} />
-      {hint ? (
-        <Text style={styles.hint} accessibilityRole="text">
-          {hint}
-        </Text>
-      ) : null}
-      <FlashList
-        data={results}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.key}
-        contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No matches</Text>
-            <Text style={styles.emptySub}>{emptyMessage}</Text>
-          </View>
-        }
-      />
+
+      <View style={styles.body}>
+        {searchActive ? (
+          <>
+            {hint ? (
+              <Text style={styles.hint} accessibilityRole="text">
+                {hint}
+              </Text>
+            ) : null}
+            <FlashList
+              data={results}
+              renderItem={renderItem}
+              keyExtractor={(item) => item.key}
+              contentContainerStyle={{ paddingBottom: space.md }}
+              ListEmptyComponent={
+                <View style={styles.empty}>
+                  <Text style={styles.emptyTitle}>No matches</Text>
+                  <Text style={styles.emptySub}>{emptyMessage}</Text>
+                </View>
+              }
+            />
+          </>
+        ) : (
+          <MainPager ref={pagerRef} style={styles.pager} page={index} initialPage={index} onPageSelected={onPage} overdrag>
+            <View key="bots" style={{ width }}>
+              <BotsPane navigation={navigation} />
+            </View>
+            <View key="chats" style={{ width }}>
+              <ChatsPane navigation={navigation} />
+            </View>
+            <View key="orchestra" style={{ width }}>
+              <OrchestraPane navigation={navigation} />
+            </View>
+          </MainPager>
+        )}
+      </View>
+
+      <View style={[styles.searchDock, { paddingBottom: Math.max(insets.bottom, space.sm) }]}>
+        <GlobalSearchBar value={query} onChange={setQuery} onScope={onScope} dock="bottom" />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  sideSpacer: { width: 40 },
+  body: { flex: 1 },
+  pager: { flex: 1 },
+  searchDock: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
+  },
   hint: {
     color: colors.textMuted,
     ...type.small,
     paddingHorizontal: space.lg,
-    paddingBottom: space.sm,
+    paddingTop: space.sm,
+    paddingBottom: space.xs,
     textTransform: "none",
     letterSpacing: 0,
   },
-  empty: { paddingTop: "36%", alignItems: "center", paddingHorizontal: space.xl },
+  empty: { paddingTop: "28%", alignItems: "center", paddingHorizontal: space.xl },
   emptyTitle: { color: colors.text, ...type.heading, marginBottom: space.sm },
   emptySub: { color: colors.textMuted, ...type.body, textAlign: "center" },
 });

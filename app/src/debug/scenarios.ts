@@ -21,6 +21,7 @@ export interface DebugScenario {
   route: { name: keyof RootStackParamList; params?: RootStackParamList[keyof RootStackParamList] };
   ui?: {
     mainSearchQuery?: string;
+    mainTabIndex?: number;
     chatHarnessPickerOpen?: boolean;
     activeConversationId?: string;
   };
@@ -29,31 +30,31 @@ export interface DebugScenario {
 export const DEBUG_SCENARIOS: Record<DebugScenarioId, DebugScenario> = {
   main: {
     id: "main",
-    label: "Main — discover",
+    label: "Main — Chats tab",
     seed: "paired",
     route: { name: "Main" },
-    ui: { mainSearchQuery: "" },
+    ui: { mainSearchQuery: "", mainTabIndex: 1 },
   },
   "main-bots": {
     id: "main-bots",
-    label: "Main — @bots",
+    label: "Main — Bots tab",
     seed: "paired",
     route: { name: "Main" },
-    ui: { mainSearchQuery: "@bots" },
+    ui: { mainSearchQuery: "", mainTabIndex: 0 },
   },
   "main-chats": {
     id: "main-chats",
-    label: "Main — @conversation",
+    label: "Main — Chats tab",
     seed: "paired",
     route: { name: "Main" },
-    ui: { mainSearchQuery: "@conversation" },
+    ui: { mainSearchQuery: "", mainTabIndex: 1 },
   },
   "main-products": {
     id: "main-products",
-    label: "Main — @product",
+    label: "Main — Orchestra tab",
     seed: "paired",
     route: { name: "Main" },
-    ui: { mainSearchQuery: "@product" },
+    ui: { mainSearchQuery: "", mainTabIndex: 2 },
   },
   "main-files": {
     id: "main-files",
