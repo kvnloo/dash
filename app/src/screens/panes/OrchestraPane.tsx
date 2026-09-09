@@ -5,7 +5,7 @@ import { HarnessAvatar } from "../../components/HarnessAvatar";
 import { haptic } from "../../haptics";
 import { DEMO_ORCHESTRAS, type OrchestraProject } from "../../mock/orchestra";
 import type { ScreenProps } from "../../navigation";
-import { setActive, store } from "../../store/app";
+import { store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
 import { timeAgo } from "../../util";
 
@@ -80,14 +80,9 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
   const open = useCallback(
     (id: string) => {
       haptic.select();
-      const project = projects.find((p) => p.id === id);
-      const chatId = project?.chatIds[0];
-      if (chatId) {
-        setActive(chatId);
-        navigation.navigate("Chat");
-      }
+      navigation.navigate("OrchestraDetail", { orchestraId: id });
     },
-    [navigation, projects],
+    [navigation],
   );
 
   const renderItem = useCallback(
