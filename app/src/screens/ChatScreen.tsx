@@ -159,7 +159,7 @@ export function ChatScreen({ navigation }: ScreenProps<"Chat">) {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <Header
-        left={<IconButton icon="time-outline" label="Chats" onPress={() => navigation.navigate("Conversations")} />}
+        left={<IconButton icon="chevron-back" label="Back" onPress={() => navigation.navigate("Main")} />}
         center={
           <Pressable
             onPress={() => setPickerOpen(true)}

@@ -12,6 +12,7 @@ import { haptic } from "./src/haptics";
 import { bridge } from "./src/net/bridge";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { ConversationsScreen } from "./src/screens/ConversationsScreen";
+import { MainScreen } from "./src/screens/MainScreen";
 import { PairScreen } from "./src/screens/PairScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { applyDemoSeed } from "./src/mock/seed";
@@ -78,9 +79,10 @@ export default function App() {
       <KeyboardProvider>
         <NavigationContainer theme={theme} linking={linking}>
           <Stack.Navigator
-            initialRouteName={hasSettings ? "Chat" : "Pair"}
+            initialRouteName={hasSettings ? "Main" : "Pair"}
             screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "default" }}
           >
+            <Stack.Screen name="Main" component={MainScreen} />
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="Conversations" component={ConversationsScreen} options={{ presentation: "modal" }} />
             <Stack.Screen name="Pair" component={PairScreen} />
