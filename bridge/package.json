@@ -1,0 +1,19 @@
+{
+  "name": "dash-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "DASH_CWD=.. DASH_HOST=$(tailscale ip -4 2>/dev/null | head -1) bun run index.ts",
+    "dev": "bun --watch run index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/qrcode-terminal": "^0.12.2",
+    "typescript": "^5.9.0"
+  }
+}

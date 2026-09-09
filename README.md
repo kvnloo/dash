@@ -1,0 +1,62 @@
+# Dash
+
+Phone app (Expo) that talks to the coding agents on your laptop over Tailscale.
+
+Black UI, one chat thread per harness (OMP, Codex, Grok, Hermes, Claude Code when installed). Streams replies live; reconnects after the screen locks.
+
+## Quick start (laptop)
+
+```bash
+# 1. Bridge — runs agent CLIs, listens on your tailnet
+cd bridge && bun install && bun run index.ts
+```
+
+On first run the bridge prints:
+
+- **Address** — your Tailscale IPv4, port `4747` (override with `DASH_PORT`)
+- **Token** — stored in `~/.dash/token`; pass as `?token=` on the WebSocket URL
+
+Optional env:
+
+| Var | Default |
+|-----|---------|
+| `DASH_PORT` | `4747` |
+| `DASH_HOST` | Tailscale IPv4 |
+| `DASH_CWD` | directory you launched from |
+
+```bash
+# 2. App — scan QR with Expo Go (Android/iOS)
+cd app && bun install && bunx expo install   # sync native deps
+bunx expo start
+```
+
+## Pair the phone
+
+1. Install **Expo Go** and join the same Tailscale tailnet.
+2. Open Dash → **Pair with your laptop** (first launch) or **Chats → ⚙ Settings → Pair nearby (sonic)**.
+3. Set **Computer name** to your laptop's Tailscale name (e.g. `mbp`), tap **Listen for pairing sound**.
+4. Or enter **Address** + **Token** manually (Settings): `<tailscale-ip>:4747` and `~/.dash/token`.
+
+**UI mock (no bridge):** `cd app && EXPO_PUBLIC_DEMO=1 bunx expo start`
+
+**Static previews:** open `preview.html` in a browser.
+
+## Layout
+
+| Path | Role |
+|------|------|
+| `app/` | Expo UI |
+| `bridge/` | Bun WebSocket server + harness adapters |
+| `shared/protocol.ts` | Wire format (both sides import this) |
+
+See `AGENTS.md` for multi-agent ownership rules.
+
+## Harness notes
+
+- **OMP** — `omp -p --mode json`
+- **Codex** — `codex exec --json` (~30–120s cold start)
+- **Grok** — `grok --output-format streaming-json`
+- **Hermes** — `hermes chat -q` (slow; may warn on toolsets)
+- **Claude Code** — shown unavailable until `claude` is on `PATH`
+
+Each harness keeps its own session id for multi-turn threads.
