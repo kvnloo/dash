@@ -27,7 +27,11 @@ For manual triage:
 - **needs-discussion** (#d876e3) — Requires design/architecture discussion before work
 - **work-in-progress** (#fbca04) — Long-term active work (exempted from stale bot)
 - **pinned** (#0e8a16) — Persistent reference (roadmap, FAQ, exempted from stale bot)
+- **claimable** (#0e8a16) — Ready for autodevelop; no active lease
+- **claimed** (#fbca04) — An agent or human holds a 24h lease
+- **needs-review** (#1d76db) — PR or issue waiting on independent review
 - **stale** (#eeeeee) — Auto-applied by stale workflow (60d issues, 30d PRs)
+
 
 ## Mode Labels
 

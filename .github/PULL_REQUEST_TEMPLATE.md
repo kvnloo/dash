@@ -22,6 +22,16 @@
 
 <!-- How was this tested? Manual steps, expected output, harness/platform tested -->
 
+## Evidence
+
+- Issue:
+- Base SHA:
+- Head SHA:
+- Red (failing command / repro):
+- Green (passing command):
+- Not verified:
+
+
 ## Related Issues
 
 <!-- Link related issues: Fixes #123, Relates to #456 -->

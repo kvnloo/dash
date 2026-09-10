@@ -3,6 +3,12 @@
 Dash is a phone app (Expo, Android + iOS) that chats with free-tier models in
 parallel and with the coding agents on your own computer over Tailscale.
 
+## Autodevelop
+
+If you are an agent told to autodevelop, donate a coding pass, or pick the
+next issue: read `.cursor/skills/autodevelop/SKILL.md` and run that loop.
+Do not invent a parallel process. Workers open PRs; they never merge `main`.
+
 ## Layout
 
 - `app/` Expo app. All UI lives in `app/src`.

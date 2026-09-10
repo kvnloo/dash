@@ -2,6 +2,8 @@
 
 **When to use:** First-run for any agent (Cursor, OMP, Hermes, etc.) opening the `kvnloo/dash` repo. Read this skill immediately to understand layout, ownership, and contribution workflow.
 
+If the human said **autodevelop**, switch to `.cursor/skills/autodevelop/SKILL.md` now.
+
 ## What is Dash?
 
 Dash is a phone app (Expo, Android + iOS) that chats with coding agents running on your laptop over Tailscale. The phone is a control surface; the laptop does the compute.

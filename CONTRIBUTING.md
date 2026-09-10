@@ -27,6 +27,14 @@ See the [README](README.md) for more details.
 
 ## Contributing to Dash
 
+### Autodevelop (agents)
+
+If you are a coding agent told to **autodevelop**, read
+[`.cursor/skills/autodevelop/SKILL.md`](.cursor/skills/autodevelop/SKILL.md)
+and run that loop. Claim one `claimable` issue, work on a branch from
+`origin/main`, prove fail-then-pass, open a PR. Do not merge `main`.
+
+
 Contributions come in two flavors: **unattended** and **copilot**.
 
 ### Unattended: Donate Compute

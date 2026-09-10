@@ -30,6 +30,10 @@ gh label create "needs-discussion" --color d876e3 --description "Needs design/ar
 gh label create "work-in-progress" --color fbca04 --description "Active long-term work" --force || true
 gh label create "pinned" --color 0e8a16 --description "Persistent reference" --force || true
 gh label create "stale" --color eeeeee --description "Inactive issue/PR" --force || true
+gh label create "claimable" --color 0e8a16 --description "Ready for autodevelop" --force || true
+gh label create "claimed" --color fbca04 --description "24h autodevelop lease" --force || true
+gh label create "needs-review" --color 1d76db --description "Waiting on independent review" --force || true
+
 
 # Mode labels
 echo "⚙️  Creating mode labels..."

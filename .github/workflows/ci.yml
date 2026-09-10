@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, integrate/device-layer]
   push:
-    branches: [main]
+    branches: [main, integrate/device-layer]
 
 jobs:
   typecheck-and-lint:
@@ -58,3 +58,16 @@ jobs:
             echo "✗ shared/protocol.ts missing"
             exit 1
           fi
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install app and bridge
+        run: bun install --cwd app && bun install --cwd bridge
+      - name: Unit tests
+        run: bun test app/src bridge/src
+
