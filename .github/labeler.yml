@@ -1,0 +1,23 @@
+area:app:
+  - changed-files:
+    - any-glob-to-any-file: 'app/**/*'
+
+area:bridge:
+  - changed-files:
+    - any-glob-to-any-file: 'bridge/**/*'
+
+area:shared:
+  - changed-files:
+    - any-glob-to-any-file: 'shared/**/*'
+
+area:docs:
+  - changed-files:
+    - any-glob-to-any-file: 
+      - 'docs/**/*'
+      - '*.md'
+      - 'AGENTS.md'
+      - 'README.md'
+
+area:loop:
+  - changed-files:
+    - any-glob-to-any-file: '.github/**/*'
