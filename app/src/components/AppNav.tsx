@@ -52,9 +52,12 @@ export const AppNav = forwardRef<
     progress.value = clampProgress(tab);
   }, [progress, tab]);
 
-  const pillStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: indicatorTranslateX(progress.value) }],
-  }));
+  const pillStyle = useAnimatedStyle(() => {
+    const p = progress.value;
+    const n = p < 0 ? 0 : p > 2 ? 2 : p;
+    return { transform: [{ translateX: n * NAV_SLOT_WIDTH }] };
+  });
+  void indicatorTranslateX;
 
   const goTab = (next: number) => {
     haptic.tap();
