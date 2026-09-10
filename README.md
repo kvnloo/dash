@@ -82,3 +82,11 @@ See `AGENTS.md` for multi-agent ownership rules.
 - **Claude Code** — shown unavailable until `claude` is on `PATH`
 
 Each harness keeps its own session id for multi-turn threads.
+
+Canonical ids: [kvnloo/aodl `harnesses/catalog.json`](https://github.com/kvnloo/aodl/blob/main/harnesses/catalog.json). `pi` and `fx` are cataloged but not wired here yet. `o8` is a control room; firstmate is a distro.
+
+## Related
+
+- IR: [kvnloo/aodl](https://github.com/kvnloo/aodl)
+- Research: [kvnloo/frontier-kb](https://github.com/kvnloo/frontier-kb)
+- Hermes governance: [kvnloo/hermes-keel](https://github.com/kvnloo/hermes-keel)
