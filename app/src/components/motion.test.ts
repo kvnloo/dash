@@ -5,12 +5,21 @@ import { GEL, MOTION_MS, PRESS_SCALE, SNAP } from "../motion";
 
 describe("motion springs", () => {
   test("press SNAP is snappier than the nav gel", () => {
+    expect(GEL.mass).toBe(0.4);
+    expect(GEL.stiffness).toBe(240);
+    expect(GEL.damping).toBe(13);
+    expect(SNAP.mass).toBe(0.32);
+    expect(SNAP.stiffness).toBe(420);
+    expect(SNAP.damping).toBe(22);
     expect(SNAP.stiffness).toBeGreaterThan(GEL.stiffness);
     expect(SNAP.damping).toBeGreaterThan(GEL.damping);
     expect(SNAP.mass).toBeLessThan(GEL.mass);
   });
 
   test("press scales stay on transform, not layout", () => {
+    expect(PRESS_SCALE.row).toBe(0.985);
+    expect(PRESS_SCALE.control).toBe(0.92);
+    expect(PRESS_SCALE.nav).toBe(0.9);
     expect(PRESS_SCALE.row).toBeGreaterThan(0.97);
     expect(PRESS_SCALE.row).toBeLessThan(1);
     expect(PRESS_SCALE.control).toBeLessThan(PRESS_SCALE.row);
@@ -19,6 +28,9 @@ describe("motion springs", () => {
   });
 
   test("enter/exit stay under 300ms", () => {
+    expect(MOTION_MS.enter).toBe(240);
+    expect(MOTION_MS.exit).toBe(140);
+    expect(MOTION_MS.stagger).toBe(36);
     expect(MOTION_MS.enter).toBeLessThanOrEqual(300);
     expect(MOTION_MS.exit).toBeLessThanOrEqual(180);
     expect(MOTION_MS.stagger).toBeLessThanOrEqual(50);

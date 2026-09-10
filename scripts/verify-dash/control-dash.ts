@@ -6,6 +6,7 @@
  *   bun scripts/verify-dash/control-dash.ts pair
  *   bun scripts/verify-dash/control-dash.ts roster
  *   bun scripts/verify-dash/control-dash.ts test
+ *   bun scripts/verify-dash/control-dash.ts mutate
  *   bun scripts/verify-dash/control-dash.ts screenshot --scenario main-chats
  *
  * Never claims a pair code. Never starts a second bridge. Never binds Metro 8097.
@@ -127,16 +128,34 @@ async function roster(): Promise<number> {
 }
 
 async function tests(): Promise<number> {
-  const nav = Bun.spawnSync(["bun", "test", "app/src/components/golden-nav.test.ts"], { cwd: ROOT, stdout: "pipe", stderr: "pipe" });
-  const roster = Bun.spawnSync(["bun", "test", "src/roster.test.ts"], { cwd: join(ROOT, "bridge"), stdout: "pipe", stderr: "pipe" });
+  const unit = Bun.spawnSync(["bun", "test", "app/src", "bridge/src", "shared", "scripts/mutate.test.ts"], {
+    cwd: ROOT,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const proof = {
-    nav: { code: nav.exitCode, stdout: nav.stdout.toString(), stderr: nav.stderr.toString() },
-    roster: { code: roster.exitCode, stdout: roster.stdout.toString(), stderr: roster.stderr.toString() },
+    unit: { code: unit.exitCode, stdout: unit.stdout.toString(), stderr: unit.stderr.toString() },
   };
   const path = evidencePath("tests.json");
   writeFileSync(path, `${JSON.stringify(proof, null, 2)}\n`);
-  console.log(JSON.stringify({ evidence: path, nav: nav.exitCode, roster: roster.exitCode }, null, 2));
-  return nav.exitCode === 0 && roster.exitCode === 0 ? 0 : 1;
+  console.log(JSON.stringify({ evidence: path, unit: unit.exitCode }, null, 2));
+  return unit.exitCode === 0 ? 0 : 1;
+}
+
+async function mutate(): Promise<number> {
+  const result = Bun.spawnSync(["bun", join(ROOT, "scripts/mutate.ts"), "--threshold", "80", "--max", "200"], {
+    cwd: ROOT,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const path = evidencePath("mutation.json");
+  writeFileSync(
+    path,
+    `${JSON.stringify({ code: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() }, null, 2)}\n`,
+  );
+  console.log(result.stdout.toString());
+  if (result.stderr.length) console.error(result.stderr.toString());
+  return result.exitCode ?? 1;
 }
 
 async function screenshot(scenario: string): Promise<number> {
@@ -172,10 +191,12 @@ const code = await (async () => {
       return roster();
     case "test":
       return tests();
+    case "mutate":
+      return mutate();
     case "screenshot":
       return screenshot(scenario);
     default:
-      console.error("usage: control-dash.ts doctor|pair|roster|test|screenshot [--scenario id]");
+      console.error("usage: control-dash.ts doctor|pair|roster|test|mutate|screenshot [--scenario id]");
       return 1;
   }
 })();

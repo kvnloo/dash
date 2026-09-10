@@ -48,7 +48,8 @@ If doctor fails, stop. Do not invent a skip-pair screen. Do not claim a pair cod
 ```bash
 bun scripts/verify-dash/control-dash.ts pair      # GET /pair, write artifacts/verify-dash/pair.json
 bun scripts/verify-dash/control-dash.ts roster    # GET /roster, write roster.json
-bun scripts/verify-dash/control-dash.ts test       # golden-nav + roster unit tests
+bun scripts/verify-dash/control-dash.ts test       # bun test app/src bridge/src shared
+bun scripts/verify-dash/control-dash.ts mutate    # bun scripts/mutate.ts (score ≥ 80)
 ```
 
 Phone reload after app changes: Expo Go shake → **Reload**. Pair computer field is the laptop Tailscale IPv4, not MagicDNS `mbp`.
@@ -74,7 +75,8 @@ Proof standards:
 
 - Pairing: HTTP `codeLength === 6` plus host/address. Never a claimed token in the artifact.
 - Roster: host names from `/roster`, not a mocked store.
-- Nav: `bun test app/src/components/golden-nav.test.ts` plus, if you have a phone screenshot, gold pill left on the selected tab.
+- Nav: `bun test app/src/components/golden-nav.test.ts` plus, if you have a phone screenshot, gold pill left on the selected tab. Geometry pins (`NAV_CHROME_HEIGHT === 60`, dots centered in `NAV_PILL_HEIGHT` slots) are mutation canaries — do not delete them to make a mutant survive.
+- Mutation: `bun scripts/mutate.ts` score ≥ 80 on the contract files. A surviving mutant means the suite would miss that edit.
 - Chat: a live `ws` `hello` or a debug scenario `chat-omp` screenshot. Do not POST a real agent turn unless the unit asks for it.
 
 Mocks only at the debug seed boundary (`EXPO_PUBLIC_DEBUG=1`). Live bridge proofs do not go through debug seed.
@@ -86,7 +88,7 @@ Kill only processes this run started (debug web 8099, playwright). Never `pkill`
 ## Helpers
 
 ```bash
-bun scripts/verify-dash/control-dash.ts doctor|pair|roster|test|screenshot [--scenario main-chats]
+bun scripts/verify-dash/control-dash.ts doctor|pair|roster|test|mutate|screenshot [--scenario main-chats]
 ```
 
 Screenshot helper reuses `scripts/debug-screenshots.mjs` on port 8099.

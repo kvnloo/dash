@@ -69,5 +69,19 @@ jobs:
       - name: Install app and bridge
         run: bun install --cwd app && bun install --cwd bridge
       - name: Unit tests
-        run: bun test app/src bridge/src
+        run: bun test app/src bridge/src shared scripts/mutate.test.ts
+
+  mutation:
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install app and bridge
+        run: bun install --cwd app && bun install --cwd bridge
+      - name: Mutation tests
+        run: bun scripts/mutate.ts --threshold 80 --max 200
 

@@ -21,3 +21,11 @@ area:docs:
 area:loop:
   - changed-files:
     - any-glob-to-any-file: '.github/**/*'
+
+area:verify:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.test.ts'
+      - 'scripts/mutate.ts'
+      - 'scripts/mutate.test.ts'
+      - '.cursor/skills/tdd/**/*'

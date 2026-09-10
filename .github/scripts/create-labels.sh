@@ -15,6 +15,7 @@ gh label create "area:bridge" --color 0366d6 --description "Bridge server + harn
 gh label create "area:shared" --color 0366d6 --description "Wire protocol" --force || true
 gh label create "area:docs" --color 0366d6 --description "Documentation" --force || true
 gh label create "area:loop" --color 0366d6 --description "GitHub automation" --force || true
+gh label create "area:verify" --color 5319e7 --description "TDD, unit, mutation" --force || true
 
 # Priority labels
 echo "🎯 Creating priority labels..."

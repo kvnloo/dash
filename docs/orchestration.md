@@ -78,7 +78,9 @@ This program is a pstack **Orchestrate** (standing coordinator) with an **Autopi
 | Model roles | `~/.cursor/rules/pstack-models.mdc` |
 | Repo rule | `.cursor/rules/pstack-dash.mdc` |
 | Verify skill | `.cursor/skills/verify-dash/` |
+| TDD skill | `.cursor/skills/tdd/` |
 | Control CLI | `bun scripts/verify-dash/control-dash.ts` |
+| Mutation | `bun scripts/mutate.ts` (score ≥ 80) |
 | Store | `orchestrate/dash/` (`ORCH_STORE=orchestrate/dash`) |
 | Bookkeeping | `bun scripts/pstack/orch.ts --store orchestrate/dash status` |
 | Playbook | `/poteto-mode` → Orchestrate; workers are `poteto-agent` |

@@ -76,8 +76,9 @@ Contribute code, docs, or skills by pairing with an agent on a focused branch. T
 
 **Preferred proof style:**
 
-- **Fail-then-pass**: Show the bug/gap with a failing test, then fix it and show the test passing.
+- **Fail-then-pass**: Show the bug/gap with a failing test, then fix it and show the test passing. Skill: `.cursor/skills/tdd/SKILL.md`.
 - Include before/after examples when changing behavior.
+- For contract files (`golden-nav.ts`, `bridge-pull.ts`, `motion.ts`, `shared/protocol.ts`, `bridge/src/roster.ts`), run `bun scripts/mutate.ts --file <path>` and keep the mutation score ≥ 80.
 - For new features, include usage examples or integration tests.
 
 ### Working with Agents

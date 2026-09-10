@@ -11,6 +11,7 @@ Applied automatically by `.github/workflows/labeler.yml`:
 - **area:shared** (#0366d6) — Wire protocol (shared/protocol.ts)
 - **area:docs** (#0366d6) — Documentation (docs/**, *.md, AGENTS.md, README.md)
 - **area:loop** (#0366d6) — GitHub automation (.github/**)
+- **area:verify** (#5319e7) — TDD, unit tests, mutation (`scripts/mutate.ts`, `*.test.ts`)
 
 ## Priority Labels
 
@@ -69,6 +70,7 @@ gh label create "area:bridge" --color 0366d6 --description "Bridge server + harn
 gh label create "area:shared" --color 0366d6 --description "Wire protocol" || true
 gh label create "area:docs" --color 0366d6 --description "Documentation" || true
 gh label create "area:loop" --color 0366d6 --description "GitHub automation" || true
+gh label create "area:verify" --color 5319e7 --description "TDD, unit, mutation" || true
 
 gh label create "priority:P0" --color d73a4a --description "Critical" || true
 gh label create "priority:P1" --color e99695 --description "High priority" || true

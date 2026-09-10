@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   GOLDEN_NAV_CSS,
+  NAV_CHROME_HEIGHT,
   NAV_PAGER_HEIGHT,
   NAV_PAGER_PAD,
   NAV_PAGER_RADIUS,
@@ -11,9 +12,20 @@ import {
   NAV_PILL_RADIUS,
   NAV_SLOT_WIDTH,
   OVERSCROLL,
+  PAGE_DAMPING,
+  PAGE_LAG_PX,
   PAGE_MASS,
+  PAGE_STIFFNESS,
+  PAGE_STRETCH,
+  PAGE_STRETCH_CAP,
+  PAGE_VOLUME,
+  PILL_DAMPING,
   PILL_MASS,
+  PILL_STIFFNESS,
+  PILL_STRETCH,
+  PILL_STRETCH_CAP,
   PILL_TRAVEL,
+  PILL_VOLUME,
   clampProgress,
   clampSettled,
   clampTab,
@@ -267,6 +279,58 @@ describe("GOLDEN_NAV_CSS colors and clip", () => {
     expect(GOLDEN_NAV_CSS).toContain(".dev-mobile-pager-dot");
     expect(GOLDEN_NAV_CSS).toContain("width: 4px");
     expect(GOLDEN_NAV_CSS).toContain("height: 4px");
+  });
+});
+
+
+describe("pinned geometry (mutation canaries)", () => {
+  test("collapsed chrome is 60px with a 144x50 squircle pager", () => {
+    expect(NAV_CHROME_HEIGHT).toBe(60);
+    expect(NAV_PAGER_WIDTH).toBe(144);
+    expect(NAV_PAGER_HEIGHT).toBe(50);
+    expect(NAV_PAGER_PAD).toBe(3);
+    expect(NAV_PAGER_RADIUS).toBe(16);
+    expect(NAV_PILL_RADIUS).toBe(16);
+    expect(NAV_PILL_HEIGHT).toBe(44);
+    expect(NAV_SLOT_WIDTH).toBe(46);
+    expect(NAV_SLOT_WIDTH * 3).toBe(NAV_PAGER_WIDTH - NAV_PAGER_PAD * 2);
+  });
+
+  test("pill gel is lighter than the page gel", () => {
+    expect(PILL_MASS).toBe(0.4);
+    expect(PILL_STIFFNESS).toBe(240);
+    expect(PILL_DAMPING).toBe(13);
+    expect(PILL_STRETCH).toBe(0.28);
+    expect(PILL_STRETCH_CAP).toBe(1.34);
+    expect(PILL_VOLUME).toBe(0.38);
+    expect(PAGE_MASS).toBe(1.15);
+    expect(PAGE_STIFFNESS).toBe(150);
+    expect(PAGE_DAMPING).toBe(17);
+    expect(PAGE_STRETCH).toBe(0.1);
+    expect(PAGE_STRETCH_CAP).toBe(1.12);
+    expect(PAGE_VOLUME).toBe(0.38);
+    expect(PAGE_LAG_PX).toBe(26);
+    expect(OVERSCROLL).toBe(1);
+    expect(PAGE_MASS).toBeGreaterThan(PILL_MASS);
+    expect(PILL_TRAVEL).toBe(0.55);
+  });
+
+  test("dots sit in the pill center: three equal slots, not stuck to the top", () => {
+    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+    const tabs = src.match(/tabs: \{[\s\S]*?\n  \},/)?.[0] ?? "";
+    const tab = src.match(/tab: \{[\s\S]*?\n  \},/)?.[0] ?? "";
+    expect(tabs).toContain("top: NAV_PAGER_PAD");
+    expect(tabs).toContain("height: NAV_PILL_HEIGHT");
+    expect(tabs).toContain("width: NAV_SLOT_WIDTH * 3");
+    expect(tabs).toContain('flexDirection: "row"');
+    expect(tab).toContain("width: NAV_SLOT_WIDTH");
+    expect(tab).toContain("height: NAV_PILL_HEIGHT");
+    expect(tab).toContain('alignItems: "center"');
+    expect(tab).toContain('justifyContent: "center"');
+    expect(src).toContain("width: 4");
+    expect(src).toContain("height: 4");
+    expect(src).toContain("borderRadius: 2");
+    expect(tabs).not.toContain("top: 0");
   });
 });
 

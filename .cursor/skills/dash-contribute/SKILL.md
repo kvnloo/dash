@@ -86,10 +86,14 @@ Suggested labels:
 - For protocol changes: Test with the phone app (Expo Go) and multiple harnesses.
 - For harness adapters: Test with the actual CLI (check `Bun.which(bin)`).
 
-**Automated testing (future):**
+**Automated testing:**
 
-- Not yet implemented; contributions welcome.
-- Proposed: Mock `Bun.spawn`, inject fake stdout, assert event sequences.
+- Unit: `bun test app/src bridge/src shared` (or `bun test` at the repo root).
+- Mutation: `bun scripts/mutate.ts` — score ≥ 80. Surviving mutants are missing assertions, not a reason to skip.
+- Runtime: `bun scripts/verify-dash/control-dash.ts doctor`.
+- Device: Maestro flows in `.maestro/` (phone required).
+
+TDD skill: `.cursor/skills/tdd/SKILL.md`. Fail, then pass. Pin UI geometry; do not test mocks of Reanimated.
 
 ## Working with Agents
 

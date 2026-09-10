@@ -29,6 +29,7 @@
 - Head SHA:
 - Red (failing command / repro):
 - Green (passing command):
+- Mutation (`bun scripts/mutate.ts`, score ≥ 80, or n/a):
 - Not verified:
 
 

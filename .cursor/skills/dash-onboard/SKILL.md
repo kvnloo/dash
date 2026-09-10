@@ -53,7 +53,7 @@ Read [CONTRIBUTING.md](../../../CONTRIBUTING.md) for the full guide. Quick summa
 2. **Open a discussion** for large changes (new harnesses, protocol changes).
 3. **Respect ownership**: Don't edit `app/` files unless assigned.
 4. **Branch and PR**: Fork or branch from `main`, work in focused commits, open a PR early (draft is fine).
-5. **Fail-then-pass proof**: Show the bug/gap, then fix it. Include tests or examples.
+5. **Fail-then-pass proof**: Show the bug/gap, then fix it. Include tests or examples. Read `.cursor/skills/tdd/SKILL.md`. Run `bun scripts/mutate.ts` if you touched a mutate target.
 
 ## What NOT to Do
 

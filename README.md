@@ -66,6 +66,7 @@ See `AGENTS.md` for multi-agent ownership rules.
 - **Issue priorities:** [docs/loop/ISSUE_PRIORITY.md](docs/loop/ISSUE_PRIORITY.md) — impact/effort rubric toward the mesh vision.
 - **Agent skills:** `.cursor/skills/` — short `SKILL.md` files for agents working on this repo:
   - `autodevelop` — the whole contribution loop. Any harness: read this and start.
+  - `tdd` — fail-then-pass + mutation. Use this for every behavior change.
   - `dash-onboard` — first-run for any agent (layout, ownership, conventions).
   - `dash-bridge` — bridge architecture and harness adapter patterns (read-only guidance).
   - `dash-contribute` — PR hygiene, fail-then-pass proofs, community norms.

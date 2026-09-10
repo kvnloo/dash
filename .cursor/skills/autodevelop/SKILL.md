@@ -55,12 +55,20 @@ Ownership (`AGENTS.md`):
 
 ## Fail, then pass
 
-Show the gap, then the fix.
+Show the gap, then the fix. Read `.cursor/skills/tdd/SKILL.md`.
 
 ```bash
 bun install --cwd app && bun install --cwd bridge
-bun test app/src bridge/src
+bun test app/src bridge/src shared
 ```
+
+If you touched `golden-nav.ts`, `bridge-pull.ts`, `motion.ts`, `shared/protocol.ts`, or `bridge/src/roster.ts`:
+
+```bash
+bun scripts/mutate.ts --file <path>
+```
+
+Score must stay ≥ 80. A surviving mutant is a missing assertion.
 
 Phone / pairing proofs use `.cursor/skills/verify-dash` and `bun scripts/verify-dash/control-dash.ts`. Never start a second `dash-pair` or Metro on 8097.
 

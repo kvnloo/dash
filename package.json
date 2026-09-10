@@ -1,4 +1,12 @@
 {
+  "name": "dash",
+  "private": true,
+  "scripts": {
+    "test": "bun test app/src bridge/src shared scripts/mutate.test.ts",
+    "test:unit": "bun test app/src bridge/src shared",
+    "test:mutate": "bun scripts/mutate.ts",
+    "verify": "bun scripts/verify-dash/control-dash.ts test"
+  },
   "dependencies": {},
   "devDependencies": {
     "qrcode": "^1.5.4"

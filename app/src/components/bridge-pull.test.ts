@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { GEL } from "../motion";
 import {
   SHEET_DIM,
+  SHEET_RUBBER,
   SHEET_SNAP,
+  SHEET_VEL,
   backdropOpacity,
   clampPull,
   pullFromDrag,
@@ -47,6 +49,10 @@ describe("bridge pull physics", () => {
   });
 
   test("backdrop fades with progress and caps at SHEET_DIM", () => {
+    expect(SHEET_RUBBER).toBe(0.34);
+    expect(SHEET_SNAP).toBe(0.36);
+    expect(SHEET_VEL).toBe(0.2);
+    expect(SHEET_DIM).toBe(0.46);
     expect(backdropOpacity(0)).toBe(0);
     expect(backdropOpacity(1)).toBe(SHEET_DIM);
     expect(backdropOpacity(2)).toBe(SHEET_DIM);

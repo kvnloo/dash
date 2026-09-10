@@ -9,6 +9,18 @@ If you are an agent told to autodevelop, donate a coding pass, or pick the
 next issue: read `.cursor/skills/autodevelop/SKILL.md` and run that loop.
 Do not invent a parallel process. Workers open PRs; they never merge `main`.
 
+## Verification
+
+AI-native work is untrusted until it is proven. Pyramid:
+
+1. **Unit** — `bun test app/src bridge/src shared` (or `bun test` at the repo root).
+2. **TDD** — `.cursor/skills/tdd/SKILL.md`. Fail, then pass. Pin numbers that lock UI geometry.
+3. **Mutation** — `bun scripts/mutate.ts` on `golden-nav.ts`, `bridge-pull.ts`, `motion.ts`, `shared/protocol.ts`, `bridge/src/roster.ts`. Score must stay ≥ 80. This is how an accidental `NAV_CHROME_HEIGHT = 80` dies in CI instead of shipping.
+4. **Runtime** — `.cursor/skills/verify-dash` against live `dash-pair`.
+5. **Device** — Maestro in `.maestro/` for pixels the unit suite cannot see.
+
+Do not skip mutation because the unit tests are green. Surviving mutants are missing assertions.
+
 ## Layout
 
 - `app/` Expo app. All UI lives in `app/src`.
