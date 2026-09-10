@@ -1,8 +1,9 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSharedValue } from "react-native-reanimated";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MainPager, type MainPagerRef, type PageScrollEvent } from "../components/MainPager";
+import { MainPager, type MainPagerRef } from "../components/MainPager";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { AppNav, type AppNavHandle } from "../components/AppNav";
@@ -45,6 +46,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const { width } = useWindowDimensions();
   const pagerRef = useRef<MainPagerRef>(null);
   const navRef = useRef<AppNavHandle>(null);
+  const pagerProgress = useSharedValue(1);
   const routeTab = route.params?.tab;
 
   const debugSearch = debugUi.use((s) => s.mainSearchQuery);
@@ -86,10 +88,6 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
     },
     [setIndex],
   );
-
-  const onPageScroll = useCallback((e: PageScrollEvent) => {
-    navRef.current?.setProgress(e.nativeEvent.position + e.nativeEvent.offset);
-  }, []);
 
   const conversations = store.use((s) => s.conversations);
   const harnesses = store.use((s) => s.connection.harnesses);
@@ -199,6 +197,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
         ref={navRef}
         navigation={navigation}
         tab={index}
+        progress={pagerProgress}
         onTab={(next) => {
           pagerRef.current?.setPage(next);
         }}
@@ -227,7 +226,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             />
           </>
         ) : (
-          <MainPager ref={pagerRef} style={styles.pager} page={index} initialPage={index} onPageSelected={onPage} onPageScroll={onPageScroll} overdrag>
+          <MainPager ref={pagerRef} style={styles.pager} page={index} initialPage={index} onPageSelected={onPage} progress={pagerProgress} overdrag>
             <View key="bots" style={{ width }}>
               <BotsPane navigation={navigation} />
             </View>

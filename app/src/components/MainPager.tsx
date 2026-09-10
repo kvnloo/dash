@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
+import type { SharedValue } from "react-native-reanimated";
 
 /** Cross-platform pager ref — native swipe + web tab sync. */
 export interface MainPagerRef {
@@ -17,6 +18,8 @@ export interface MainPagerProps {
   initialPage?: number;
   onPageSelected?: (e: { nativeEvent: { position: number } }) => void;
   onPageScroll?: (e: PageScrollEvent) => void;
+  /** UI-thread pager offset. Written by Animated PagerView on every settle frame. */
+  progress?: SharedValue<number>;
   overdrag?: boolean;
   children: ReactNode;
 }
