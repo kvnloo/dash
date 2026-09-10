@@ -6,6 +6,7 @@ export const GOLD_RIM = "rgb(230, 210, 178)";
 export const GOLD_GLOW = "rgba(215, 185, 134, 0.25)";
 export const DEV_NAV_96 = "rgba(12, 13, 11, 0.874)";
 
+export const NAV_CHROME_HEIGHT = 60;
 export const NAV_PAGER_WIDTH = 144;
 export const NAV_PAGER_HEIGHT = 50;
 export const NAV_PAGER_PAD = 3;

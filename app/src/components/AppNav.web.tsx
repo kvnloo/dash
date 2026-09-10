@@ -28,7 +28,7 @@ export const AppNav = forwardRef<
   return (
     <>
       <style>{`${GOLDEN_NAV_CSS}
-.dash-appnav { height: 80px; }
+.dash-appnav { height: 60px; }
 .dev-mobile-pager-indicator { transition: transform 220ms cubic-bezier(.2,.75,.2,1); }
 `}</style>
       <div className="dash-appnav">

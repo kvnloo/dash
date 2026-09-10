@@ -56,6 +56,8 @@ export const MainPager = forwardRef<MainPagerRef, MainPagerProps>(function MainP
       ref={inner}
       style={style}
       initialPage={initialPage ?? page}
+      offscreenPageLimit={1}
+      overScrollMode="never"
       onPageSelected={(e) => {
         fromPager.current = e.nativeEvent.position;
         onPageSelected?.(e);

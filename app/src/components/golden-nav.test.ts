@@ -235,6 +235,17 @@ describe("native AppNav wiring", () => {
     expect(pagerStyle).not.toContain("borderWidth");
     expect(src).toContain("styles.hair");
   });
+
+  test("chrome is the 60px collapsed bar with gold glow and inset, not an 80px spacer", () => {
+    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+    expect(src).toContain("NAV_CHROME_HEIGHT");
+    expect(src).toContain("GOLD_GLOW");
+    expect(src).toContain("styles.glow");
+    expect(src).toContain("styles.spec");
+    expect(src).toContain("styles.shade");
+    expect(src).not.toContain("height: 80");
+    expect(src).not.toContain("react-native-webview");
+  });
 });
 
 describe("MainPager scroll wiring", () => {
@@ -256,5 +267,10 @@ describe("MainPager scroll wiring", () => {
   test("does not call setPage again when onPageSelected reports the flick target", () => {
     const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
     expect(native).toContain("fromPager");
+  });
+
+  test("does not keep all three panes in the GPU layer during a fling", () => {
+    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
+    expect(native).toContain("offscreenPageLimit={1}");
   });
 });
