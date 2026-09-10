@@ -21,7 +21,7 @@ Optional env:
 | Var | Default |
 |-----|---------|
 | `DASH_PORT` | `4747` |
-| `DASH_HOST` | Tailscale IPv4 |
+| `DASH_HOST` | `0.0.0.0` (LAN + Tailscale) |
 | `DASH_CWD` | directory you launched from |
 
 ```bash
