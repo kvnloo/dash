@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { profileFromAgent, profilesFromHosts } from "./roster";
+import { canChatWithAgent, chatKind, emptyHostProfile, profileFromAgent, profilesFromHosts } from "./roster";
 import type { HostInfo } from "../../../shared/protocol";
 
 const mbp: HostInfo = {
@@ -39,6 +39,16 @@ const groot: HostInfo = {
   agents: [{ id: "hermes", name: "Hermes", kind: "hermes", status: "running", detail: "Mesh node" }],
 };
 
+const cursor: HostInfo = {
+  id: "cursor",
+  name: "cursor",
+  hostname: "cursor",
+  online: true,
+  self: false,
+  address: "100.64.0.4",
+  agents: [],
+};
+
 describe("profilesFromHosts", () => {
   test("keeps both live OMP tabs and the MagicDNS 0 host", () => {
     const profiles = profilesFromHosts([mbp, groot]);
@@ -59,5 +69,45 @@ describe("profilesFromHosts", () => {
       online: true,
       cwd: "/home/you/workspace/dash",
     });
+  });
+
+  test("empty cursor host is a host row, not a fake omp or hermes bot", () => {
+    const profiles = profilesFromHosts([cursor]);
+    expect(profiles).toEqual([
+      {
+        id: "host:cursor",
+        harness: "host",
+        name: "Online",
+        role: "No Dash agents listed",
+        description: "On the tailnet",
+        online: true,
+      },
+    ]);
+    expect(emptyHostProfile(cursor).harness).toBe("host");
+  });
+
+  test("maps A2A rows onto hermes or grok for chat", () => {
+    expect(chatKind({ id: "a2a:hermes", kind: "a2a" })).toBe("hermes");
+    expect(chatKind({ id: "a2a:connect-all", kind: "a2a" })).toBe("hermes");
+    expect(chatKind({ id: "a2a:grok-bot", kind: "a2a" })).toBe("grok");
+    expect(chatKind({ id: "hermes:default", kind: "hermes" })).toBe("hermes");
+    expect(chatKind({ id: "grok-bot", kind: "grok" })).toBe("grok");
+    const kinds = new Set(["hermes", "grok", "omp"]);
+    expect(canChatWithAgent({ id: "a2a:hermes", kind: "a2a" }, { self: true, availableKinds: kinds })).toBe(true);
+    expect(canChatWithAgent({ id: "a2a:grok-bot", kind: "a2a" }, { self: true, availableKinds: kinds })).toBe(true);
+    expect(canChatWithAgent({ id: "hermes:default", kind: "hermes" }, { self: true, availableKinds: kinds })).toBe(true);
+    expect(canChatWithAgent({ id: "a2a:hermes", kind: "a2a" }, { self: false, availableKinds: kinds })).toBe(false);
+    expect(canChatWithAgent({ id: "a2a:hermes", kind: "a2a" }, { self: true, availableKinds: new Set(["omp"]) })).toBe(false);
+  });
+
+  test("profileFromAgent uses the chat harness, not a2a", () => {
+    const profile = profileFromAgent(mbp, {
+      id: "a2a:hermes",
+      name: "Hermes",
+      kind: "a2a",
+      status: "running",
+      detail: "A2A",
+    });
+    expect(profile.harness).toBe("hermes");
   });
 });

@@ -3,18 +3,34 @@ import { parseHosts } from "../../../shared/protocol";
 import type { BotProfile } from "../mock/bots";
 import type { Settings } from "../model";
 
+export function chatKind(agent: { id: string; kind: string }): string {
+  if (agent.kind !== "a2a") return agent.kind;
+  return /grok/i.test(agent.id) ? "grok" : "hermes";
+}
+
+export function canChatWithAgent(
+  agent: { id: string; kind: string },
+  opts: { self: boolean; availableKinds: Set<string> },
+): boolean {
+  return opts.self && opts.availableKinds.has(chatKind(agent));
+}
+
+export function emptyHostProfile(host: HostInfo): BotProfile {
+  return {
+    id: `host:${host.id}`,
+    harness: "host",
+    name: host.online ? "Online" : "Offline",
+    role: "No Dash agents listed",
+    description: host.self ? "This computer" : "On the tailnet",
+    online: host.online,
+  };
+}
+
 export function profilesFromHosts(hosts: HostInfo[]): BotProfile[] {
   const out: BotProfile[] = [];
   for (const host of hosts) {
     if (host.agents.length === 0) {
-      out.push({
-        id: `host:${host.id}`,
-        harness: host.self ? "omp" : "hermes",
-        name: host.name,
-        role: host.hostname === host.name ? "Host" : host.hostname,
-        description: host.online ? "Online on tailnet" : "Offline",
-        online: host.online,
-      });
+      out.push(emptyHostProfile(host));
       continue;
     }
     for (const agent of host.agents) {
@@ -28,7 +44,7 @@ export function profileFromAgent(host: HostInfo, agent: AgentInfo): BotProfile {
   const hostLabel = host.name === host.hostname ? host.name : `${host.name} · ${host.hostname}`;
   return {
     id: `${host.id}:${agent.id}`,
-    harness: agent.kind,
+    harness: chatKind(agent),
     name: agent.name,
     role: hostLabel,
     description: agent.detail ?? agent.status,

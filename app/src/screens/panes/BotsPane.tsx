@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
-import { profileFromAgent } from "../../lib/roster";
+import { canChatWithAgent, emptyHostProfile, profileFromAgent } from "../../lib/roster";
 import { DEMO_BOT_PROFILES, type BotProfile } from "../../mock/bots";
 import type { ScreenProps } from "../../navigation";
 import { createConversation, saveSettings, setActive, store } from "../../store/app";
@@ -93,14 +93,7 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
             kind: "profile",
             id: `host:${host.id}`,
             chat: false,
-            profile: {
-              id: `host:${host.id}`,
-              harness: "host",
-              name: host.online ? "Online" : "Offline",
-              role: "No Dash agents listed",
-              description: host.self ? "This computer" : "On the tailnet",
-              online: host.online,
-            },
+            profile: emptyHostProfile(host),
           });
           continue;
         }
@@ -110,7 +103,7 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
             kind: "profile",
             id: profile.id,
             profile,
-            chat: host.self && chatKinds.has(agent.kind),
+            chat: canChatWithAgent(agent, { self: host.self, availableKinds: chatKinds }),
           });
         }
       }
