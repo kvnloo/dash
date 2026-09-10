@@ -67,6 +67,25 @@ describe("parseClientMessage", () => {
     expect(parseClientMessage("chat")).toBeNull();
     expect(parseClientMessage({ type: "hello" })).toBeNull();
   });
+
+  test("rejects chat when harness or id is the wrong type", () => {
+    expect(parseClientMessage({ type: "chat", id: "t1", harness: 1, text: "hi" })).toBeNull();
+    expect(parseClientMessage({ type: "chat", id: 1, harness: "omp", text: "hi" })).toBeNull();
+    expect(parseClientMessage({ type: "chat", id: "t1", harness: "omp", text: "" })).toEqual({
+      type: "chat",
+      id: "t1",
+      harness: "omp",
+      text: "",
+      sessionId: undefined,
+      cwd: undefined,
+    });
+  });
+
+  test("attach requires seq on every entry; empty turns is still attach", () => {
+    expect(parseClientMessage({ type: "attach", turns: [] })).toEqual({ type: "attach", turns: [] });
+    expect(parseClientMessage({ type: "attach", turns: [{ id: "t1", seq: "3" }] })).toBeNull();
+    expect(parseClientMessage({ type: "attach" })).toBeNull();
+  });
 });
 
 describe("parseServerMessage", () => {
@@ -96,7 +115,7 @@ describe("parseServerMessage", () => {
         hostname: "mbp",
         online: true,
         self: true,
-        agents: [{ id: "a2a:hermes", name: "Hermes", kind: "hermes", status: "running" }],
+        agents: [{ id: "a2a:hermes", name: "Hermes", kind: "hermes", status: "running" as const }],
       },
     ];
     const hello = parseServerMessage({

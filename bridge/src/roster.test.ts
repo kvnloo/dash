@@ -47,8 +47,23 @@ const status = {
 describe("roster", () => {
   test("dns label prefers MagicDNS 0 over hostname groot", () => {
     expect(dnsLabel("0.example.ts.net.", "groot")).toBe("0");
+    expect(dnsLabel("", "mbp")).toBe("mbp");
+    expect(dnsLabel(".", "mbp")).toBe("mbp");
     expect(isPhoneOs("android")).toBe(true);
     expect(isPhoneOs("linux")).toBe(false);
+  });
+
+  test("parseTailscaleStatus ignores non-objects and a missing or junk Peer", () => {
+    expect(parseTailscaleStatus(null)).toEqual([]);
+    expect(parseTailscaleStatus("nope")).toEqual([]);
+    expect(parseTailscaleStatus(1)).toEqual([]);
+    expect(parseTailscaleStatus({ Self: status.Self }).map((n) => n.hostName)).toEqual(["mbp"]);
+    expect(parseTailscaleStatus({ Self: status.Self, Peer: "nope" }).map((n) => n.hostName)).toEqual(["mbp"]);
+    expect(
+      parseTailscaleStatus({
+        Self: { DNSName: "x.example.ts.net.", Online: true, OS: "linux", TailscaleIPs: ["100.64.0.1"] },
+      }),
+    ).toEqual([]);
   });
 
   test("lists mbp, 0, cursor and skips the phone", () => {
@@ -242,4 +257,6 @@ describe("timed probes", () => {
     const src = readFileSync(join(import.meta.dir, "../index.ts"), "utf8");
     expect(src).toContain('const HOST = process.env.DASH_HOST ?? "0.0.0.0";');
     expect(src).not.toContain("process.env.DASH_HOST ?? tailscaleIp");
+    const start = JSON.parse(readFileSync(join(import.meta.dir, "../package.json"), "utf8")).scripts.start as string;
+    expect(start).not.toContain("DASH_HOST=");
   });
