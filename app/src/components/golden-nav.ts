@@ -7,9 +7,11 @@ export const GOLD_GLOW = "rgba(215, 185, 134, 0.25)";
 export const DEV_NAV_96 = "rgba(12, 13, 11, 0.874)";
 
 export const NAV_PAGER_WIDTH = 144;
+export const NAV_PAGER_HEIGHT = 50;
 export const NAV_PAGER_PAD = 3;
 /** Inner slot: (144 − 6) / 3. Native translateX uses this, not CSS %. */
 export const NAV_SLOT_WIDTH = (NAV_PAGER_WIDTH - NAV_PAGER_PAD * 2) / 3;
+export const NAV_PILL_HEIGHT = NAV_PAGER_HEIGHT - NAV_PAGER_PAD * 2;
 
 export const GOLDEN_NAV_CSS = `:root {
   --ink-2: #B4AFA3;
@@ -155,6 +157,15 @@ export function indicatorTransform(progress: number): string {
 export function indicatorTranslateX(progress: number): number {
   "worklet";
   return clampProgress(progress) * NAV_SLOT_WIDTH;
+}
+
+/** Pager settle samples: translateX at from→to inclusive, `steps` intervals. */
+export function indicatorFrames(from: number, to: number, steps: number): number[] {
+  const frames: number[] = [];
+  for (let i = 0; i <= steps; i++) {
+    frames.push(indicatorTranslateX(from + ((to - from) * i) / steps));
+  }
+  return frames;
 }
 
 export function indicatorLeft(tab: number): string {

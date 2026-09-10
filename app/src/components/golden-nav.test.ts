@@ -227,12 +227,13 @@ describe("native AppNav wiring", () => {
 
   test("stadium layout does not eat 2px of slot width with a Yoga border", () => {
     const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("width: 144");
-    expect(src).toContain("width: 46");
-    expect(src).toContain("height: 44");
-    const pagerBlock = src.slice(src.indexOf("pager:"));
-    const pagerStyle = pagerBlock.slice(0, pagerBlock.indexOf("},") + 1);
+    expect(src).toContain("NAV_PAGER_WIDTH");
+    expect(src).toContain("NAV_SLOT_WIDTH");
+    expect(src).toContain("NAV_PILL_HEIGHT");
+    const pagerStyle = src.match(/pager: \{[\s\S]*?\n  \},/)?.[0] ?? "";
+    expect(pagerStyle).toContain("width: NAV_PAGER_WIDTH");
     expect(pagerStyle).not.toContain("borderWidth");
+    expect(src).toContain("styles.hair");
   });
 });
 
