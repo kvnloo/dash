@@ -120,8 +120,8 @@ describe("roster", () => {
       id: "hermes:connect-all",
       name: "connect-all",
       kind: "hermes",
-      status: "available",
-      detail: "Profile",
+      status: "offline",
+      detail: "Gateway stopped",
     });
   });
 
@@ -148,50 +148,50 @@ describe("roster", () => {
     expect(running[0]!.agents.find((a) => a.kind === "hermes")?.detail).toBe("http://100.64.0.1:9900");
   });
 
-  test("lists grok-bot only when a live process signal exists", () => {
-    const without = assembleRoster({
+  test("does not list grok-bot while connect-all is stopped", () => {
+    const stopped = assembleRoster({
       nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
       ompTabs: [],
       harnesses: [{ id: "grok", name: "Grok", available: true }],
       selfFallback: { hostname: "mbp" },
+      signals: {
+        grokBot: true,
+        hermesProfiles: [{ id: "connect-all", gateway: "stopped" }],
+      },
     });
-    const withBot = assembleRoster({
+    const running = assembleRoster({
       nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
       ompTabs: [],
       harnesses: [{ id: "grok", name: "Grok", available: true }],
       selfFallback: { hostname: "mbp" },
-      signals: { grokBot: true },
+      signals: {
+        grokBot: true,
+        hermesProfiles: [{ id: "connect-all", gateway: "running" }],
+      },
     });
-    expect(without[0]!.agents.some((a) => a.id === "grok-bot" || a.id === "a2a:grok-bot")).toBe(false);
-    expect(without[0]!.agents.find((a) => a.id === "harness:grok")?.status).toBe("available");
-    expect(withBot[0]!.agents.find((a) => a.id === "grok-bot")).toEqual({
+    expect(stopped[0]!.agents.some((a) => a.id === "grok-bot" || a.id === "a2a:grok-bot")).toBe(false);
+    expect(stopped[0]!.agents.find((a) => a.id === "harness:grok")?.status).toBe("available");
+    expect(running[0]!.agents.find((a) => a.id === "grok-bot")).toEqual({
       id: "grok-bot",
       name: "grok-bot",
       kind: "grok",
       status: "running",
       detail: "Desktop app",
     });
-    expect(withBot[0]!.agents.find((a) => a.id === "harness:grok")).toBeUndefined();
+    expect(running[0]!.agents.find((a) => a.id === "harness:grok")).toBeUndefined();
   });
 
-  test("cursor stays empty unless a peer A2A probe succeeds", () => {
+  test("cursor stays empty; Cursor agents do not join via Hermes", () => {
     const nodes = parseTailscaleStatus(status);
-    const dark = assembleRoster({
+    const hosts = assembleRoster({
       nodes,
       ompTabs: [],
       harnesses: [],
       selfFallback: { hostname: "mbp" },
     });
-    const lit = assembleRoster({
-      nodes,
-      ompTabs: [],
-      harnesses: [],
-      selfFallback: { hostname: "mbp" },
-      signals: { peerA2A: { cursor: { ok: true, name: "cos" } } },
-    });
-    expect(dark.find((h) => h.id === "cursor")?.agents).toEqual([]);
-    expect(lit.find((h) => h.id === "cursor")?.agents).toEqual([
-      { id: "hermes", name: "Hermes", kind: "hermes", status: "running", detail: "A2A" },
+    expect(hosts.find((h) => h.id === "cursor")?.agents).toEqual([]);
+    expect(hosts.find((h) => h.id === "0")?.agents).toEqual([
+      { id: "hermes", name: "Hermes", kind: "hermes", status: "running", detail: "Mesh node" },
     ]);
   });
 

@@ -22,16 +22,10 @@ export type HermesProfileInfo = {
   gateway: "running" | "stopped";
 };
 
-export type PeerA2A = {
-  ok: boolean;
-  name?: string;
-};
-
 export type RosterSignals = {
   hermesProfiles?: HermesProfileInfo[];
   hermesA2A?: { ok: boolean; url: string };
   grokBot?: boolean;
-  peerA2A?: Record<string, PeerA2A>;
 };
 
 const PHONE_OS = new Set(["android", "ios", "ipados", "tvos"]);
@@ -158,7 +152,7 @@ function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster
   const v4 = firstV4(node.ips);
   const agents = node.self
     ? selfAgents(input.ompTabs, input.harnesses, input.signals)
-    : peerAgents(name, node.hostName, input.signals?.peerA2A);
+    : peerAgents(name, node.hostName);
   return {
     id: name,
     name,
@@ -174,13 +168,9 @@ function isGroot(id: string, hostname: string): boolean {
   return id === "0" || hostname.toLowerCase() === "groot";
 }
 
-function peerAgents(id: string, hostname: string, peerA2A?: Record<string, PeerA2A>): AgentInfo[] {
+function peerAgents(id: string, hostname: string): AgentInfo[] {
   if (isGroot(id, hostname)) {
     return [{ id: "hermes", name: "Hermes", kind: "hermes", status: "running", detail: "Mesh node" }];
-  }
-  const probe = peerA2A?.[id] ?? peerA2A?.[hostname];
-  if (probe?.ok) {
-    return [{ id: "hermes", name: "Hermes", kind: "hermes", status: "running", detail: "A2A" }];
   }
   return [];
 }
@@ -205,8 +195,8 @@ function selfHost(
 
 function hermesProfileAgent(profile: HermesProfileInfo, a2a?: { ok: boolean; url: string }): AgentInfo {
   const overlay = profile.id === "default" ? a2a : undefined;
-  let status: AgentInfo["status"] = profile.gateway === "running" ? "running" : "available";
-  let detail = profile.gateway === "running" ? "Gateway" : "Profile";
+  let status: AgentInfo["status"] = profile.gateway === "running" ? "running" : "offline";
+  let detail = profile.gateway === "running" ? "Gateway" : "Gateway stopped";
   if (overlay) {
     status = overlay.ok ? "running" : "offline";
     detail = overlay.url;
@@ -244,11 +234,12 @@ function selfAgents(tabs: OmpTab[], harnesses: HarnessInfo[], signals?: RosterSi
   }
   const profiles = signals?.hermesProfiles ?? [];
   const skipHermesHarness = profiles.length > 0 || signals?.hermesA2A !== undefined;
-  const skipGrokHarness = signals?.grokBot === true;
+  const grokReachable =
+    signals?.grokBot === true && profiles.some((p) => p.id === "connect-all" && p.gateway === "running");
   for (const h of harnesses) {
     if (h.id === "omp") continue;
     if (h.id === "hermes" && skipHermesHarness) continue;
-    if (h.id === "grok" && skipGrokHarness) continue;
+    if (h.id === "grok" && grokReachable) continue;
     agents.push({
       id: `harness:${h.id}`,
       name: h.name,
@@ -269,7 +260,7 @@ function selfAgents(tabs: OmpTab[], harnesses: HarnessInfo[], signals?: RosterSi
       detail: signals.hermesA2A.url,
     });
   }
-  if (signals?.grokBot) {
+  if (grokReachable) {
     agents.push({
       id: "grok-bot",
       name: "grok-bot",
@@ -331,19 +322,6 @@ function listedHermesProfiles(profiles: HermesProfileInfo[]): HermesProfileInfo[
   return profiles.filter((p) => p.gateway === "running" || p.id === "default" || p.id === "connect-all");
 }
 
-function peerA2AFromNodes(nodes: TailscaleNode[]): Record<string, PeerA2A> {
-  const out: Record<string, PeerA2A> = {};
-  for (const node of nodes) {
-    if (node.self || !node.online || isPhoneOs(node.os)) continue;
-    const id = dnsLabel(node.dnsName, node.hostName);
-    if (isGroot(id, node.hostName)) continue;
-    const addr = firstV4(node.ips);
-    if (!addr) continue;
-    if (probeAgentCard(hermesA2AUrl({}, addr))) out[id] = { ok: true };
-  }
-  return out;
-}
-
 export function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }): HostInfo[] {
   const nodes = parseTailscaleStatus(readTailscaleStatus());
   const ompTabs = liveOmpFromDaemonRoot(join(homedir(), ".omp", "run", "daemons"), pidAlive);
@@ -360,7 +338,6 @@ export function collectRoster(harnesses: HarnessInfo[], self: { hostname: string
       hermesProfiles,
       hermesA2A: { ok: probeAgentCard(a2aUrl), url: a2aUrl },
       grokBot: grokBotAlive(),
-      peerA2A: peerA2AFromNodes(nodes),
     },
   });
 }
