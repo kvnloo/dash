@@ -234,6 +234,7 @@ describe("timed probes", () => {
     const src = readFileSync(join(import.meta.dir, "roster.ts"), "utf8");
     expect(src).toContain("refreshHermesList");
     expect(src).toContain("ROSTER_TTL_MS");
+    expect(src).toContain('Bun.which("hermes")');
     expect(src).not.toContain('spawnText(["hermes", "gateway", "list"])');
   });
 });
