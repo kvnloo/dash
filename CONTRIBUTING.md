@@ -107,6 +107,15 @@ Dash is building a **personalized compute mesh**: your phone + laptop + edge ins
 - Native modules outside the Expo SDK (must run in Expo Go).
 - UI polish (Kevin is actively iterating on the app UI).
 
+## Naming / Glossary
+
+To avoid confusion between similar terms:
+
+- **Dash phone pair/pairing**: The Expo app connecting to your laptop bridge over Tailscale (port 4747, token or sonic pairing). This is Dash-specific: your phone as a control surface for agents running on your laptop.
+- **NVIDIA PAIR** (Personal-AI-Router): A separate, first-class mesh routing product for home inference across devices. Not related to Dash phone pairing. NVIDIA PAIR is a mesh compute library alongside Tailscale, part of the broader mesh primitives vision.
+
+Use lowercase "pair" or "pairing" when referring to the phone+laptop workflow. Use "NVIDIA PAIR" (uppercase) for the Personal-AI-Router mesh product.
+
 ## Architecture Recap
 
 - **`app/`**: Expo app (React Native). All UI in `app/src/`. Runs in Expo Go.

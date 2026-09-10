@@ -72,6 +72,8 @@ Read [CONTRIBUTING.md](../../../CONTRIBUTING.md) for the full guide. Quick summa
 
 Dash is building a **personalized compute mesh**: phone + laptop + edge as unified compute, with Tailscale as the fabric and agents as the intelligence layer.
 
+**Naming note:** Dash phone pair/pairing = Expo ↔ laptop (Tailscale port 4747). NVIDIA PAIR = Personal-AI-Router (separate mesh product, not phone pairing).
+
 **Current priorities:**
 
 1. Bridge stability (reliable WebSocket across network changes, screen locks).

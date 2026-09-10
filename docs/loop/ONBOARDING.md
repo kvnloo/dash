@@ -91,6 +91,15 @@ Are you planning to write code, docs, or skills?
     └─ I have a specific feature/fix/doc to contribute → Copilot (fork, branch, PR)
 ```
 
+## Naming / Glossary
+
+To avoid confusion:
+
+- **Dash phone pair/pairing**: The Expo app connecting to your laptop bridge over Tailscale (port 4747, token or sonic pairing). This is Dash-specific: your phone as a control surface for agents on your laptop.
+- **NVIDIA PAIR** (Personal-AI-Router): A separate mesh routing product for home inference across devices. Not related to Dash phone pairing. NVIDIA PAIR is a first-class mesh compute library alongside Tailscale.
+
+Use lowercase "pair" or "pairing" for phone+laptop workflows. Use "NVIDIA PAIR" (uppercase) for the Personal-AI-Router mesh product.
+
 ## Next Steps
 
 - **For users:** See the [README](../../README.md) and [AGENTS.md](../../AGENTS.md) (layout and conventions).
