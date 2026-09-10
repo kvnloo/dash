@@ -6,12 +6,17 @@ export interface MainPagerRef {
   setPage(index: number): void;
 }
 
+export interface PageScrollEvent {
+  nativeEvent: { position: number; offset: number };
+}
+
 export interface MainPagerProps {
   style?: StyleProp<ViewStyle>;
   /** Active page (controlled). */
   page: number;
   initialPage?: number;
   onPageSelected?: (e: { nativeEvent: { position: number } }) => void;
+  onPageScroll?: (e: PageScrollEvent) => void;
   overdrag?: boolean;
   children: ReactNode;
 }

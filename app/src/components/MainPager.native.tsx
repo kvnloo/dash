@@ -3,7 +3,7 @@ import PagerView from "react-native-pager-view";
 import type { MainPagerProps, MainPagerRef } from "./MainPager";
 
 export const MainPager = forwardRef<MainPagerRef, MainPagerProps>(function MainPager(
-  { style, page, initialPage, onPageSelected, overdrag, children },
+  { style, page, initialPage, onPageSelected, onPageScroll, overdrag, children },
   ref,
 ) {
   const inner = useRef<PagerView>(null);
@@ -24,6 +24,7 @@ export const MainPager = forwardRef<MainPagerRef, MainPagerProps>(function MainP
       style={style}
       initialPage={initialPage ?? page}
       onPageSelected={onPageSelected}
+      onPageScroll={onPageScroll}
       overdrag={overdrag}
     >
       {children}

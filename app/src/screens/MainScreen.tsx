@@ -2,10 +2,10 @@ import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MainPager, type MainPagerRef } from "../components/MainPager";
+import { MainPager, type MainPagerRef, type PageScrollEvent } from "../components/MainPager";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
-import { AppNav } from "../components/AppNav";
+import { AppNav, type AppNavHandle } from "../components/AppNav";
 import { SearchResultRow } from "../components/SearchResultRow";
 import { isDebugActive } from "../debug/expose";
 import { debugUi } from "../debug/ui-store";
@@ -44,6 +44,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const pagerRef = useRef<MainPagerRef>(null);
+  const navRef = useRef<AppNavHandle>(null);
   const routeTab = route.params?.tab;
 
   const debugSearch = debugUi.use((s) => s.mainSearchQuery);
@@ -85,6 +86,10 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
     },
     [setIndex],
   );
+
+  const onPageScroll = useCallback((e: PageScrollEvent) => {
+    navRef.current?.setProgress(e.nativeEvent.position + e.nativeEvent.offset);
+  }, []);
 
   const conversations = store.use((s) => s.conversations);
   const harnesses = store.use((s) => s.connection.harnesses);
@@ -191,10 +196,10 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <AppNav
+        ref={navRef}
         navigation={navigation}
         tab={index}
         onTab={(next) => {
-          setIndex(next);
           pagerRef.current?.setPage(next);
         }}
       />
@@ -222,7 +227,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             />
           </>
         ) : (
-          <MainPager ref={pagerRef} style={styles.pager} page={index} initialPage={index} onPageSelected={onPage} overdrag>
+          <MainPager ref={pagerRef} style={styles.pager} page={index} initialPage={index} onPageSelected={onPage} onPageScroll={onPageScroll} overdrag>
             <View key="bots" style={{ width }}>
               <BotsPane navigation={navigation} />
             </View>

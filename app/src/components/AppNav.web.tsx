@@ -1,17 +1,23 @@
+import { forwardRef, useImperativeHandle } from "react";
 import type { NavigationProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../navigation";
 import { haptic } from "../haptics";
-import { EXPAND_PATH, GOLDEN_NAV_CSS, TAB_LABELS, indicatorLeft } from "./golden-nav";
+import { EXPAND_PATH, GOLDEN_NAV_CSS, TAB_LABELS, indicatorTransform } from "./golden-nav";
 
-export function AppNav({
-  navigation,
-  tab,
-  onTab,
-}: {
-  navigation: NavigationProp<RootStackParamList>;
-  tab: number;
-  onTab?(next: number): void;
-}) {
+export type AppNavHandle = {
+  setProgress(progress: number): void;
+};
+
+export const AppNav = forwardRef<
+  AppNavHandle,
+  {
+    navigation: NavigationProp<RootStackParamList>;
+    tab: number;
+    onTab?(next: number): void;
+  }
+>(function AppNav({ navigation, tab, onTab }, ref) {
+  useImperativeHandle(ref, () => ({ setProgress() {} }), []);
+
   const goTab = (next: number) => {
     haptic.tap();
     if (onTab) onTab(next);
@@ -20,7 +26,10 @@ export function AppNav({
 
   return (
     <>
-      <style>{GOLDEN_NAV_CSS}</style>
+      <style>{`${GOLDEN_NAV_CSS}
+.dash-appnav { height: 80px; }
+.dev-mobile-pager-indicator { transition: transform 220ms cubic-bezier(.2,.75,.2,1); }
+`}</style>
       <div className="dash-appnav">
         <button
           type="button"
@@ -47,7 +56,7 @@ export function AppNav({
           <span
             className="dev-mobile-pager-indicator"
             aria-hidden="true"
-            style={{ left: indicatorLeft(tab) }}
+            style={{ transform: indicatorTransform(tab) }}
           />
           {TAB_LABELS.map((label, i) => (
             <button
@@ -85,4 +94,4 @@ export function AppNav({
       </div>
     </>
   );
-}
+});
