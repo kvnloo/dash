@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   assembleRoster,
+  attachOmpSessions,
   dnsLabel,
   hermesA2AUrl,
   isPhoneOs,
+  liveOmpFromDaemonRoot,
+  ompSessionDirName,
   parseHermesGatewayList,
   parseTailscaleStatus,
   timedArgv,
@@ -77,6 +81,7 @@ describe("roster", () => {
       "/home/you/workspace/dash",
       "/home/you/workspace/keyconf.gen",
     ]);
+    expect(mbp.agents.filter((a) => a.kind === "omp").map((a) => a.sessionId)).toEqual(["aaa", "bbb"]);
     expect(mbp.agents.some((a) => a.id === "harness:omp")).toBe(false);
     expect(mbp.agents.find((a) => a.kind === "codex")?.status).toBe("available");
     expect(mbp.agents.find((a) => a.kind === "claude")?.status).toBe("offline");
@@ -234,12 +239,74 @@ describe("timed probes", () => {
     const src = readFileSync(join(import.meta.dir, "roster.ts"), "utf8");
     expect(src).toContain("refreshHermesList");
     expect(src).toContain("ROSTER_TTL_MS");
+    expect(src).toContain("attachOmpSessions");
     expect(src).not.toContain('spawnText(["hermes", "gateway", "list"])');
   });
-});
 
   test("bridge listens on all interfaces so LAN pair works", () => {
     const src = readFileSync(join(import.meta.dir, "../index.ts"), "utf8");
     expect(src).toContain('const HOST = process.env.DASH_HOST ?? "0.0.0.0";');
     expect(src).not.toContain("process.env.DASH_HOST ?? tailscaleIp");
   });
+});
+
+describe("live OMP sessions", () => {
+  test("prefers an explicit tab sessionId over the daemon id", () => {
+    const hosts = assembleRoster({
+      nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
+      ompTabs: [{ id: "aaa", cwd: "/home/you/workspace/dash", sessionId: "01liveomp", title: "dash" }],
+      harnesses: [{ id: "omp", name: "OMP", available: true }],
+      selfFallback: { hostname: "mbp" },
+    });
+    const omp = hosts[0]!.agents.find((a) => a.kind === "omp");
+    expect(omp?.sessionId).toBe("01liveomp");
+    expect(omp?.kind).toBe("omp");
+  });
+
+  test("encodes cwd the way OMP session folders do", () => {
+    expect(ompSessionDirName("/home/you/workspace/dash", "/home/you")).toBe("-workspace-dash");
+    expect(ompSessionDirName("/home/you/.treehouse/dash-fecad0/2/dash", "/home/you")).toBe(
+      "-.treehouse-dash-fecad0-2-dash",
+    );
+  });
+
+  test("attaches the latest OMP session id for a live tab cwd", () => {
+    const root = mkdtempSync(join(tmpdir(), "dash-omp-"));
+    const home = join(root, "home");
+    const cwd = join(home, "workspace", "dash");
+    const sessionDir = join(root, "sessions", ompSessionDirName(cwd, home));
+    mkdirSync(sessionDir, { recursive: true });
+    writeFileSync(
+      join(sessionDir, "2026-09-10T20-00-00-000Z_01oldsession.jsonl"),
+      `${JSON.stringify({ type: "session", version: 3, id: "01oldsession" })}\n`,
+    );
+    writeFileSync(
+      join(sessionDir, "2026-09-10T23-30-36-633Z_01liveomp.jsonl"),
+      `${JSON.stringify({ type: "title", v: 1, title: "Ship chats" })}\n${JSON.stringify({ type: "session", version: 3, id: "01liveomp" })}\n`,
+    );
+    const attached = attachOmpSessions([{ id: "aaa", cwd }], join(root, "sessions"), home);
+    expect(attached).toEqual([{ id: "aaa", cwd, sessionId: "01liveomp", title: "Ship chats" }]);
+  });
+
+  test("keeps a live tab when the session store has no transcript yet", () => {
+    const root = mkdtempSync(join(tmpdir(), "dash-omp-"));
+    const attached = attachOmpSessions(
+      [{ id: "aaa", cwd: join(root, "project") }],
+      join(root, "sessions"),
+      root,
+    );
+    expect(attached).toEqual([{ id: "aaa", cwd: join(root, "project"), sessionId: "aaa" }]);
+  });
+
+  test("discovers a live daemon tab from broker pid and sock", () => {
+    const root = mkdtempSync(join(tmpdir(), "dash-omp-"));
+    const tab = join(root, "38a3f3a952f042e1");
+    mkdirSync(tab, { recursive: true });
+    writeFileSync(join(tab, "broker.sock"), "");
+    writeFileSync(join(tab, "broker.pid"), JSON.stringify({ pid: 4242 }));
+    writeFileSync(join(tab, "scope.json"), JSON.stringify({ projectDir: "/home/you/workspace/dash" }));
+    expect(liveOmpFromDaemonRoot(root, (pid) => pid === 4242)).toEqual([
+      { id: "38a3f3a952f042e1", cwd: "/home/you/workspace/dash" },
+    ]);
+  });
+});

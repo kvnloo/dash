@@ -11,6 +11,7 @@ import {
   type Message,
   type Settings,
 } from "../model";
+import { mergeLiveConversations } from "../lib/live-sessions";
 import { createStore } from "./createStore";
 import { notifyTurnSettled } from "./queue";
 
@@ -91,7 +92,13 @@ export function saveSettings(settings: Settings): void {
 }
 
 export function setConnection(patch: Partial<Connection>): void {
-  store.set((s) => ({ ...s, connection: { ...s.connection, ...patch } }));
+  store.set((s) => {
+    const connection = { ...s.connection, ...patch };
+    if (patch.hosts === undefined) return { ...s, connection };
+    const conversations = mergeLiveConversations(s.conversations, connection.hosts, Date.now());
+    return conversations === s.conversations ? { ...s, connection } : { ...s, connection, conversations };
+  });
+  if (patch.hosts !== undefined) scheduleSave();
 }
 
 export async function forgetEverything(): Promise<void> {

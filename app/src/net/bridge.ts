@@ -251,8 +251,9 @@ export function sendChat(input: {
   harness: string;
   text: string;
   sessionId?: string;
+  cwd?: string;
 }): boolean {
-  const cwd = store.get().settings?.cwd;
+  const cwd = input.cwd ?? store.get().settings?.cwd;
   return bridge.send({
     type: "chat",
     id: input.turnId,
@@ -269,8 +270,9 @@ export function sendVoiceBegin(input: {
   harness: string;
   mime: string;
   sessionId?: string;
+  cwd?: string;
 }): boolean {
-  const cwd = store.get().settings?.cwd;
+  const cwd = input.cwd ?? store.get().settings?.cwd;
   return bridge.send({
     type: "voice_begin",
     id: input.turnId,
