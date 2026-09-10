@@ -384,8 +384,12 @@ describe("native AppNav wiring", () => {
     expect(src).toContain("height: NAV_PILL_HEIGHT");
     expect(src).toContain("width: NAV_SLOT_WIDTH");
     const tabStyle = src.match(/tab: \{[\s\S]*?\n  \},/)?.[0] ?? "";
+    expect(tabStyle).toContain("width: NAV_SLOT_WIDTH");
     expect(tabStyle).toContain("height: NAV_PILL_HEIGHT");
+    expect(tabStyle).toContain('alignItems: "center"');
+    expect(tabStyle).toContain('justifyContent: "center"');
     expect(tabStyle).not.toContain("flex: 1");
+    expect(tabStyle).not.toContain("transform");
   });
 
   test("gold pill is a UI-thread gel: spring follow, stretch X, squash Y", () => {

@@ -43,7 +43,18 @@ describe("PressScale wiring", () => {
     expect(src).toContain("withSpring");
     expect(src).toContain("transform");
     expect(src).toContain("ReduceMotion.System");
+    expect(src).toContain("SNAP");
     expect(src).not.toContain("width:");
+  });
+
+  test("Pressable owns layout; inner Animated.View owns scale", () => {
+    const src = readFileSync(join(import.meta.dir, "PressScale.tsx"), "utf8");
+    expect(src).not.toContain("createAnimatedComponent");
+    expect(src).not.toContain("AnimatedPressable");
+    expect(src).toContain("Animated.View");
+    expect(src).toContain("flex: 1");
+    expect(src).toContain('alignItems: "center"');
+    expect(src).toContain('justifyContent: "center"');
   });
 
   test("composer and search send pop in without FlashList entering", () => {
