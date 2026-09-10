@@ -62,7 +62,7 @@ These are not extra ports. They are modules inside `dash-pair` with hard edges:
 
 1. **pair** — HTTP only. Returns immediately; playback is queued.
 2. **session** — WebSocket, token, `attach` replay.
-3. **spawn** — omp / grok / codex / claude / hermes-CLI.
+3. **spawn** — omp / grok / codex / claude / hermes-CLI / pi / fx.
 4. **roster** — Tailscale + live OMP tabs to `HostInfo[]`.
 5. **speech** — sherpa STT, already in the spoken-turns commit.
 6. **hermes-session** (missing) — `harness: "hermes"` goes to gateway/peer, not `hermes chat -q`.

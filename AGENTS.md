@@ -24,7 +24,7 @@ Do not skip mutation because the unit tests are green. Surviving mutants are mis
 ## Layout
 
 - `app/` Expo app. All UI lives in `app/src`.
-- `bridge/` Bun WebSocket server that runs agent CLIs (omp, codex, grok, claude, hermes) on the computer. Entry: `bridge/index.ts`, adapters in `bridge/src/harnesses.ts`.
+- `bridge/` Bun WebSocket server that runs agent CLIs (omp, codex, grok, claude, hermes, pi, fx) on the computer. Entry: `bridge/index.ts`, adapters in `bridge/src/harnesses.ts`.
 - `shared/protocol.ts` wire protocol between the two. Dependency-free; both sides import it.
 
 ## Ownership while several agents work at once

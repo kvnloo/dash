@@ -25,6 +25,8 @@ const DEBUG_HOSTS = [
       { id: "harness:grok", name: "Grok", kind: "grok", status: "available" as const, detail: "Installed" },
       { id: "harness:hermes", name: "Hermes", kind: "hermes", status: "available" as const, detail: "Installed" },
       { id: "harness:claude", name: "Claude Code", kind: "claude", status: "offline" as const, detail: "Not installed" },
+      { id: "harness:pi", name: "Pi", kind: "pi", status: "offline" as const, detail: "Not installed" },
+      { id: "harness:fx", name: "fx", kind: "fx", status: "offline" as const, detail: "Not installed" },
     ],
   },
   {
@@ -49,6 +51,8 @@ const ONLINE_CONNECTION: Partial<Connection> = {
     { id: "grok", name: "Grok", available: true },
     { id: "claude", name: "Claude Code", available: false },
     { id: "hermes", name: "Hermes", available: true },
+    { id: "pi", name: "Pi", available: false },
+    { id: "fx", name: "fx", available: false },
   ],
   hosts: DEBUG_HOSTS,
 };

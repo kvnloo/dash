@@ -8,14 +8,14 @@ The bridge is a Bun WebSocket server that:
 
 1. Listens on your Tailscale network at port `4747` (override with `DASH_PORT`).
 2. Accepts connections from the Dash phone app.
-3. Spawns agent CLIs (omp, codex, grok, claude, hermes) as subprocesses.
+3. Spawns agent CLIs (omp, codex, grok, claude, hermes, pi, fx) as subprocesses.
 4. Parses their stdout (JSON, NDJSON, or plain text) and streams events to the phone.
 5. Manages multi-turn sessions (each harness has its own session ID for resuming conversations).
 6. Handles reconnects (phone locks screen → WebSocket drops → phone unlocks → reattach with last seen event sequence).
 
 **Entry point:** `bridge/index.ts`
 
-**Harness adapters:** `bridge/src/harnesses.ts` (not yet extracted; see `bridge/index.ts` for inline harness definitions)
+**Harness adapters:** `bridge/src/harnesses.ts`. `bridge/index.ts` imports `HARNESSES` from there.
 
 **Protocol:** `shared/protocol.ts` (dependency-free; imported by both bridge and app)
 
@@ -63,8 +63,8 @@ Each harness implements:
 
 ```typescript
 interface Harness {
-  id: string;           // "omp", "codex", "grok", "claude", "hermes"
-  name: string;         // "OMP", "Codex", "Grok", "Claude Code", "Hermes"
+  id: string;           // "omp", "codex", "grok", "claude", "hermes", "pi", "fx"
+  name: string;         // "OMP", "Codex", "Grok", "Claude Code", "Hermes", "Pi", "fx"
   bin: string;          // CLI command (checked with Bun.which)
   argv(input: TurnInput): string[];  // Build CLI args (includes resume, cwd, text)
   parser(sink: Sink): LineParser;     // Parse stdout and call sink methods
@@ -101,10 +101,20 @@ interface LineParser {
 - Output: Anthropic Messages API format over NDJSON.
 - Parser: Shared `anthropicStreamParser` (handles `content_block_delta`, `tool_use`, etc.).
 
-**Adding a new harness:**
+**Example (Pi):**
+
+- CLI: `pi --mode json --approve [--session <id>] -- <text>`
+- Output: Same NDJSON session/text_delta stream as OMP.
+- Parser: Shared `sessionNdjsonParser`.
+
+**Example (fx):**
+
+- CLI: `fx ask --json --full-access [--resume-id <id>] -- <text>`
+- Output: One JSON object (`session_id`, `output`, `final_output`).
+- Parser: Buffer stdout and emit on `end()`.
 
 1. Define a `Harness` object with `id`, `name`, `bin`, `argv`, and `parser`.
-2. Add it to the `HARNESSES` array in `bridge/index.ts`.
+2. Add it to the `HARNESSES` array in `bridge/src/harnesses.ts` (live `dash-pair` imports that list).
 3. Test with a real agent CLI (check `Bun.which(bin)` to see if it's installed).
 4. Open a PR with an example conversation log and a note about session resume support.
 
@@ -135,7 +145,7 @@ interface LineParser {
 
 - Parsers call `sink.status(text)` when a tool starts (e.g., "Editing files", "$ npm install").
 - Call `sink.status("")` (empty string) to clear the status when the tool finishes.
-- Status is extracted from tool names and arguments (see `describeTool` in `bridge/index.ts`).
+- Status is extracted from tool names and arguments (see `describeTool` in `bridge/src/harnesses.ts`).
 
 **Error handling:**
 
@@ -163,11 +173,7 @@ See [AGENTS.md](../../AGENTS.md) for ownership: `bridge/**` and `shared/protocol
 3. Send: `{"type":"chat","id":"test-1","harness":"omp","text":"list files"}`
 4. Observe: `hello`, `session`, `status`, `delta`, `done` events.
 
-**Automated test (future):**
-
-- Mock `Bun.spawn` and inject fake stdout.
-- Assert event sequence and content.
-- Not yet implemented (contributions welcome).
+**Automated tests:** `bridge/src/harnesses.test.ts` pins argv and stdout parsers. Run `bun test app/src bridge/src shared`.
 
 ## Questions?
 

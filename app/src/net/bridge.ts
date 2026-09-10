@@ -61,6 +61,8 @@ class Bridge {
                 { id: "codex", name: "Codex", available: true },
                 { id: "grok", name: "Grok", available: true },
                 { id: "hermes", name: "Hermes", available: true },
+                { id: "pi", name: "Pi", available: false },
+                { id: "fx", name: "fx", available: false },
               ],
         hosts: hosts.length > 0 ? hosts : [],
       });
