@@ -176,6 +176,29 @@ function selfAgents(tabs: OmpTab[], harnesses: HarnessInfo[]): AgentInfo[] {
       detail: h.available ? "Installed" : "Not installed",
     });
   }
+  agents.push(
+    {
+      id: "a2a:hermes",
+      name: "Hermes A2A",
+      kind: "a2a",
+      status: "running",
+      detail: "http://127.0.0.1:9900",
+    },
+    {
+      id: "a2a:connect-all",
+      name: "connect-all",
+      kind: "a2a",
+      status: "available",
+      detail: "Courier",
+    },
+    {
+      id: "a2a:grok-bot",
+      name: "grok-bot",
+      kind: "a2a",
+      status: "available",
+      detail: "Trusted A2A peer",
+    },
+  );
   return agents;
 }
 

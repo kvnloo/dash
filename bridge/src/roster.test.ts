@@ -7,39 +7,39 @@ import { assembleRoster, dnsLabel, isPhoneOs, liveOmpFromDaemonRoot, parseTailsc
 const status = {
   Self: {
     HostName: "mbp",
-    DNSName: "mbp.taila30dc.ts.net.",
+    DNSName: "mbp.example.ts.net.",
     Online: true,
     OS: "linux",
-    TailscaleIPs: ["100.78.215.21"],
+    TailscaleIPs: ["100.64.0.1"],
   },
   Peer: {
     a: {
       HostName: "groot",
-      DNSName: "0.taila30dc.ts.net.",
+      DNSName: "0.example.ts.net.",
       Online: true,
       OS: "linux",
-      TailscaleIPs: ["100.113.138.100"],
+      TailscaleIPs: ["100.64.0.2"],
     },
     b: {
-      HostName: "Kevin's S25 Ultra",
-      DNSName: "kevins-s25-ultra.taila30dc.ts.net.",
+      HostName: "Pixel",
+      DNSName: "phone.example.ts.net.",
       Online: true,
       OS: "android",
-      TailscaleIPs: ["100.117.226.39"],
+      TailscaleIPs: ["100.64.0.3"],
     },
     c: {
       HostName: "cursor",
-      DNSName: "cursor.taila30dc.ts.net.",
+      DNSName: "cursor.example.ts.net.",
       Online: true,
       OS: "linux",
-      TailscaleIPs: ["100.118.33.15"],
+      TailscaleIPs: ["100.64.0.4"],
     },
   },
 };
 
 describe("roster", () => {
   test("dns label prefers MagicDNS 0 over hostname groot", () => {
-    expect(dnsLabel("0.taila30dc.ts.net.", "groot")).toBe("0");
+    expect(dnsLabel("0.example.ts.net.", "groot")).toBe("0");
     expect(isPhoneOs("android")).toBe(true);
     expect(isPhoneOs("linux")).toBe(false);
   });
@@ -49,15 +49,15 @@ describe("roster", () => {
     const hosts = assembleRoster({
       nodes,
       ompTabs: [
-        { id: "aaa", cwd: "/home/kvn/workspace/dash" },
-        { id: "bbb", cwd: "/home/kvn/workspace/keyconf.gen" },
+        { id: "aaa", cwd: "/home/you/workspace/dash" },
+        { id: "bbb", cwd: "/home/you/workspace/keyconf.gen" },
       ],
       harnesses: [
         { id: "omp", name: "OMP", available: true },
         { id: "codex", name: "Codex", available: true },
         { id: "claude", name: "Claude Code", available: false },
       ],
-      selfFallback: { hostname: "mbp", address: "100.78.215.21" },
+      selfFallback: { hostname: "mbp", address: "100.64.0.1" },
     });
     expect(hosts.map((h) => h.id)).toEqual(["mbp", "0", "cursor"]);
     expect(hosts.find((h) => h.id === "0")?.hostname).toBe("groot");
@@ -66,12 +66,19 @@ describe("roster", () => {
     const mbp = hosts[0]!;
     expect(mbp.self).toBe(true);
     expect(mbp.agents.filter((a) => a.kind === "omp").map((a) => a.detail)).toEqual([
-      "/home/kvn/workspace/dash",
-      "/home/kvn/workspace/keyconf.gen",
+      "/home/you/workspace/dash",
+      "/home/you/workspace/keyconf.gen",
     ]);
     expect(mbp.agents.some((a) => a.id === "harness:omp")).toBe(false);
     expect(mbp.agents.find((a) => a.kind === "codex")?.status).toBe("available");
     expect(mbp.agents.find((a) => a.kind === "claude")?.status).toBe("offline");
+    expect(mbp.agents.filter((a) => a.id.startsWith("a2a:")).map((a) => a.id)).toEqual([
+      "a2a:hermes",
+      "a2a:connect-all",
+      "a2a:grok-bot",
+    ]);
+    expect(mbp.agents.find((a) => a.id === "a2a:hermes")?.status).toBe("running");
+    expect(mbp.agents.find((a) => a.id === "a2a:grok-bot")?.detail).toBe("Trusted A2A peer");
   });
 
   test("falls back to installed OMP when no tabs are live", () => {
@@ -83,6 +90,9 @@ describe("roster", () => {
     });
     expect(hosts[0]!.agents).toEqual([
       { id: "harness:omp", name: "OMP", kind: "omp", status: "available", detail: "Installed" },
+      { id: "a2a:hermes", name: "Hermes A2A", kind: "a2a", status: "running", detail: "http://127.0.0.1:9900" },
+      { id: "a2a:connect-all", name: "connect-all", kind: "a2a", status: "available", detail: "Courier" },
+      { id: "a2a:grok-bot", name: "grok-bot", kind: "a2a", status: "available", detail: "Trusted A2A peer" },
     ]);
   });
 });
