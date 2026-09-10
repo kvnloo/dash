@@ -6,6 +6,11 @@ export const GOLD_RIM = "rgb(230, 210, 178)";
 export const GOLD_GLOW = "rgba(215, 185, 134, 0.25)";
 export const DEV_NAV_96 = "rgba(12, 13, 11, 0.874)";
 
+export const NAV_PAGER_WIDTH = 144;
+export const NAV_PAGER_PAD = 3;
+/** Inner slot: (144 − 6) / 3. Native translateX uses this, not CSS %. */
+export const NAV_SLOT_WIDTH = (NAV_PAGER_WIDTH - NAV_PAGER_PAD * 2) / 3;
+
 export const GOLDEN_NAV_CSS = `:root {
   --ink-2: #B4AFA3;
   --ink-3: #837F74;
@@ -57,11 +62,11 @@ html, body {
 .dev-mobile-pager-toggle svg { width: 15px; height: 15px; }
 .dev-mobile-pager {
   position: relative;
-  width: 144px;
+  width: ${NAV_PAGER_WIDTH}px;
   height: 50px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 3px;
+  padding: ${NAV_PAGER_PAD}px;
   border: 1px solid var(--hair-2);
   border-radius: 23px;
   overflow: visible;
@@ -74,10 +79,10 @@ html, body {
 .dev-mobile-pager-indicator {
   position: absolute;
   z-index: 0;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc((100% - 6px) / 3);
+  top: ${NAV_PAGER_PAD}px;
+  bottom: ${NAV_PAGER_PAD}px;
+  left: ${NAV_PAGER_PAD}px;
+  width: calc((100% - ${NAV_PAGER_PAD * 2}px) / 3);
   border: 1px solid ${GOLD_RIM};
   border: 1px solid color-mix(in srgb, white 36%, var(--gold));
   border-radius: 16px;
@@ -106,14 +111,16 @@ html, body {
   color: transparent;
   cursor: pointer;
 }
-.dev-mobile-pager > button[role="tab"]::after {
+.dev-mobile-pager-dot {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--ink-3);
-  content: "";
+  background: #837F74;
+  pointer-events: none;
 }
-.dev-mobile-pager > button[role="tab"].is-active::after { background: #211b10; }
+.dev-mobile-pager > button[role="tab"].is-active .dev-mobile-pager-dot {
+  background: #211b10;
+}
 `;
 
 const EXPAND_D =
@@ -129,6 +136,7 @@ export function clampTab(tab: number): 0 | 1 | 2 {
 }
 
 export function clampProgress(progress: number): number {
+  "worklet";
   if (!Number.isFinite(progress)) return 0;
   if (progress <= 0) return 0;
   if (progress >= 2) return 2;
@@ -142,6 +150,11 @@ export function pageProgress(position: number, offset: number): number {
 
 export function indicatorTransform(progress: number): string {
   return `translate3d(calc(${clampProgress(progress)} * 100%), 0, 0)`;
+}
+
+export function indicatorTranslateX(progress: number): number {
+  "worklet";
+  return clampProgress(progress) * NAV_SLOT_WIDTH;
 }
 
 export function indicatorLeft(tab: number): string {
@@ -173,7 +186,7 @@ function applyProgressJs(progress: number): string {
   return `var p=${p};var i=${i};var tabs=document.querySelectorAll('[role="tab"]');var ind=document.getElementById('indicator');if(!ind)return true;ind.style.transition='none';ind.style.transform='${transform}';for(var n=0;n<tabs.length;n++)tabs[n].classList.toggle('is-active',n===i);window.__dashProgress=p;`;
 }
 
-/** Injected on every pager scroll frame. Mutates transform directly; no prior bind needed. */
+/** Web / probe helper. Native no longer injects this on swipe. */
 export function navSetProgressScript(progress: number): string {
   return `(function(){${applyProgressJs(progress)}})(); true;`;
 }
@@ -183,12 +196,12 @@ export function navSetTabScript(tab: number): string {
   return navSetProgressScript(clampTab(tab));
 }
 
-/** Standalone HTML document for a native WebView. `tab` is 0/1/2. */
+/** Standalone HTML document for the CSS probe. `tab` is 0/1/2. */
 export function goldenNavHtml(tab: number): string {
   const t = clampTab(tab);
   const buttons = TAB_LABELS.map(
     (label, i) =>
-      `<button type="button" role="tab" aria-label="${label}"${i === t ? ' class="is-active"' : ""}></button>`,
+      `<button type="button" role="tab" aria-label="${label}"${i === t ? ' class="is-active"' : ""}><span class="dev-mobile-pager-dot" aria-hidden="true"></span></button>`,
   ).join("");
   return `<!doctype html>
 <html lang="en">
