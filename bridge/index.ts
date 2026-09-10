@@ -3,7 +3,7 @@
 //
 //   bun bridge/index.ts
 //
-// Env: DASH_PORT (4747), DASH_HOST (defaults to your Tailscale IPv4), DASH_CWD (launch dir).
+// Env: DASH_PORT (4747), DASH_HOST (defaults to all interfaces so LAN + Tailscale both work), DASH_CWD (launch dir).
 //
 // Turns outlive sockets. A phone that locks its screen drops the WebSocket; on
 // reconnect it sends `attach` with the last seq it saw and the bridge replays
@@ -715,7 +715,7 @@ function queuePairPlayback(code: string): void {
 }
 
 const tailscaleIp = tailscaleIPv4();
-const HOST = process.env.DASH_HOST ?? tailscaleIp ?? "0.0.0.0";
+const HOST = process.env.DASH_HOST ?? "0.0.0.0";
 const TOKEN = loadToken();
 
 function bridgeAddress(): string {

@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
-import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import { KeyboardStickyView } from "react-native-keyboard-controller";
+import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { space } from "../theme";
 
 /**
  * Bottom composer/search dock that rides the IME.
- * Android 15 edge-to-edge does not resize the window, so a static
- * paddingBottom is not enough — stick to KeyboardController's height.
+ * Android 15 / Expo Go do not resize the window, so paddingBottom is not enough.
+ * Translate with KeyboardController's UI-thread keyboard height (negative when open).
  */
 export function KeyboardDock({
   children,
@@ -17,11 +18,16 @@ export function KeyboardDock({
   style?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
-  return (
-    <KeyboardStickyView offset={{ closed: 0, opened: 0 }} style={styles.stick}>
-      <View style={[{ paddingBottom: Math.max(insets.bottom, space.sm) }, style]}>{children}</View>
-    </KeyboardStickyView>
-  );
+  const { height, progress } = useReanimatedKeyboardAnimation();
+  const lift = useAnimatedStyle(() => {
+    const closedPad = Math.max(insets.bottom, space.sm);
+    return {
+      transform: [{ translateY: height.value }],
+      paddingBottom: closedPad * (1 - progress.value),
+    };
+  });
+
+  return <Animated.View style={[styles.stick, style, lift]}>{children}</Animated.View>;
 }
 
 const styles = StyleSheet.create({

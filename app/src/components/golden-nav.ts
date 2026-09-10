@@ -16,6 +16,10 @@ export const NAV_PILL_RADIUS = 16;
 /** Inner slot: (144 − 6) / 3. Native translateX uses this, not CSS %. */
 export const NAV_SLOT_WIDTH = (NAV_PAGER_WIDTH - NAV_PAGER_PAD * 2) / 3;
 export const NAV_PILL_HEIGHT = NAV_PAGER_HEIGHT - NAV_PAGER_PAD * 2;
+/** Pixel-pinned so Android cannot collapse 4px dots to the top of the pager. */
+export const NAV_DOT_SIZE = 4;
+export const NAV_DOT_TOP = (NAV_PILL_HEIGHT - NAV_DOT_SIZE) / 2;
+export const NAV_DOT_LEFT = (NAV_SLOT_WIDTH - NAV_DOT_SIZE) / 2;
 export const PAGE_LAST = 2;
 /** Dummy-page extent past 0 and PAGE_LAST. Pill can travel a fraction of a slot past the stadium. */
 export const OVERSCROLL = 1;

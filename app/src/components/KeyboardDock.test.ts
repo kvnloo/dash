@@ -5,8 +5,10 @@ import { join } from "node:path";
 describe("KeyboardDock", () => {
   test("sticks the dock to KeyboardController instead of a static bottom inset", () => {
     const src = readFileSync(join(import.meta.dir, "KeyboardDock.tsx"), "utf8");
-    expect(src).toContain("KeyboardStickyView");
+    expect(src).toContain("useReanimatedKeyboardAnimation");
     expect(src).toContain("react-native-keyboard-controller");
+    expect(src).toContain("translateY: height.value");
+    expect(src).not.toContain("KeyboardAvoidingView");
   });
 
   test("Main and Chat both mount KeyboardDock so the IME does not cover the input", () => {

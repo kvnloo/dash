@@ -280,15 +280,36 @@ function pidAlive(pid: number): boolean {
   }
 }
 
-function spawnText(argv: string[]): string {
+export function timedArgv(argv: readonly string[], seconds = 1): string[] {
+  return ["timeout", "--signal=KILL", String(seconds), ...argv];
+}
+
+function spawnText(argv: string[], seconds = 1): string {
   try {
-    const result = Bun.spawnSync(argv, { stdout: "pipe", stderr: "ignore" });
+    const result = Bun.spawnSync(timedArgv(argv, seconds), { stdout: "pipe", stderr: "ignore" });
     if (result.exitCode !== 0) return "";
     return result.stdout.toString();
   } catch {
     return "";
   }
 }
+
+let hermesListCache = "";
+function refreshHermesList(): void {
+  const proc = Bun.spawn(["hermes", "gateway", "list"], { stdout: "pipe", stderr: "ignore" });
+  const timer = setTimeout(() => proc.kill(), 2500);
+  void proc.exited.then(async () => {
+    clearTimeout(timer);
+    if (proc.exitCode !== 0) return;
+    const text = await new Response(proc.stdout).text();
+    if (text.trim()) hermesListCache = text;
+  }).catch(() => {
+    clearTimeout(timer);
+  });
+}
+
+let rosterCache: { at: number; key: string; hosts: HostInfo[] } | null = null;
+const ROSTER_TTL_MS = 4000;
 
 export function readTailscaleStatus(): unknown {
   try {
@@ -321,14 +342,20 @@ function listedHermesProfiles(profiles: HermesProfileInfo[]): HermesProfileInfo[
   return profiles.filter((p) => p.gateway === "running" || p.id === "default" || p.id === "connect-all");
 }
 
+refreshHermesList();
+
 export function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }): HostInfo[] {
+  const key = `${self.hostname}:${self.address ?? ""}:${harnesses.map((h) => `${h.id}:${h.available}`).join(",")}`;
+  const now = Date.now();
+  if (rosterCache && rosterCache.key === key && now - rosterCache.at < ROSTER_TTL_MS) return rosterCache.hosts;
+  refreshHermesList();
   const nodes = parseTailscaleStatus(readTailscaleStatus());
   const ompTabs = liveOmpFromDaemonRoot(join(homedir(), ".omp", "run", "daemons"), pidAlive);
   const selfNode = nodes.find((n) => n.self);
   const selfAddress = self.address ?? firstV4(selfNode?.ips ?? []);
-  const hermesProfiles = listedHermesProfiles(parseHermesGatewayList(spawnText(["hermes", "gateway", "list"])));
+  const hermesProfiles = listedHermesProfiles(parseHermesGatewayList(hermesListCache));
   const a2aUrl = hermesA2AUrl(process.env, selfAddress);
-  return assembleRoster({
+  const hosts = assembleRoster({
     nodes,
     ompTabs,
     harnesses,
@@ -339,4 +366,6 @@ export function collectRoster(harnesses: HarnessInfo[], self: { hostname: string
       grokBot: grokBotAlive(),
     },
   });
+  rosterCache = { at: now, key, hosts };
+  return hosts;
 }

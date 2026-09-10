@@ -1,5 +1,5 @@
 import { forwardRef, memo, useImperativeHandle } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   type SharedValue,
@@ -25,6 +25,9 @@ import {
   NAV_PILL_HEIGHT,
   NAV_PILL_RADIUS,
   NAV_SLOT_WIDTH,
+  NAV_DOT_SIZE,
+  NAV_DOT_TOP,
+  NAV_DOT_LEFT,
   TAB_LABELS,
   clampProgress,
   clampTab,
@@ -144,18 +147,20 @@ export const AppNav = memo(
             </Animated.View>
             <View style={styles.tabs}>
               {TAB_LABELS.map((label, i) => (
-                <PressScale
+                <Pressable
                   key={label}
                   accessibilityRole="tab"
                   accessibilityLabel={label}
                   accessibilityState={{ selected: i === active }}
                   android_ripple={RIPPLE}
-                  scaleTo={PRESS_SCALE.nav}
                   onPress={() => goTab(i)}
                   style={styles.tab}
                 >
-                  <View style={[styles.dot, i === active ? styles.dotOn : styles.dotOff]} />
-                </PressScale>
+                  <View
+                    pointerEvents="none"
+                    style={[styles.dot, i === active ? styles.dotOn : styles.dotOff]}
+                  />
+                </Pressable>
               ))}
             </View>
             <View pointerEvents="none" style={styles.hair} />
@@ -280,7 +285,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  dot: { width: 4, height: 4, borderRadius: 2, overflow: "hidden" },
+  dot: {
+    position: "absolute",
+    top: NAV_DOT_TOP,
+    left: NAV_DOT_LEFT,
+    width: NAV_DOT_SIZE,
+    height: NAV_DOT_SIZE,
+    borderRadius: NAV_DOT_SIZE / 2,
+    overflow: "hidden",
+  },
   dotOn: { backgroundColor: "#211b10" },
   dotOff: { backgroundColor: "#837F74" },
 });

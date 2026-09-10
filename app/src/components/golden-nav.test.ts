@@ -11,6 +11,9 @@ import {
   NAV_PILL_HEIGHT,
   NAV_PILL_RADIUS,
   NAV_SLOT_WIDTH,
+  NAV_DOT_SIZE,
+  NAV_DOT_TOP,
+  NAV_DOT_LEFT,
   OVERSCROLL,
   PAGE_DAMPING,
   PAGE_LAG_PX,
@@ -294,6 +297,9 @@ describe("pinned geometry (mutation canaries)", () => {
     expect(NAV_PILL_HEIGHT).toBe(44);
     expect(NAV_SLOT_WIDTH).toBe(46);
     expect(NAV_SLOT_WIDTH * 3).toBe(NAV_PAGER_WIDTH - NAV_PAGER_PAD * 2);
+    expect(NAV_DOT_SIZE).toBe(4);
+    expect(NAV_DOT_TOP).toBe(20);
+    expect(NAV_DOT_LEFT).toBe(21);
   });
 
   test("pill gel is lighter than the page gel", () => {
@@ -327,9 +333,13 @@ describe("pinned geometry (mutation canaries)", () => {
     expect(tab).toContain("height: NAV_PILL_HEIGHT");
     expect(tab).toContain('alignItems: "center"');
     expect(tab).toContain('justifyContent: "center"');
-    expect(src).toContain("width: 4");
-    expect(src).toContain("height: 4");
-    expect(src).toContain("borderRadius: 2");
+    const dot = src.match(/dot: \{[\s\S]*?\n  \},/)?.[0] ?? "";
+    expect(dot).toContain('position: "absolute"');
+    expect(dot).toContain("top: NAV_DOT_TOP");
+    expect(dot).toContain("left: NAV_DOT_LEFT");
+    expect(dot).toContain("width: NAV_DOT_SIZE");
+    expect(dot).toContain("height: NAV_DOT_SIZE");
+    expect(src).toContain("borderRadius: NAV_DOT_SIZE / 2");
     expect(tabs).not.toContain("top: 0");
   });
 });
@@ -347,10 +357,12 @@ describe("native AppNav wiring", () => {
 
   test("paints three 4dp dots as native views above the gold pill", () => {
     const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("width: 4");
-    expect(src).toContain("height: 4");
+    expect(src).toContain("NAV_DOT_SIZE");
     expect(src).toContain("#211b10");
     expect(src).toContain("#837F74");
+    const tabsBlock = src.slice(src.indexOf("TAB_LABELS.map"), src.indexOf("styles.hair"));
+    expect(tabsBlock).toContain("<Pressable");
+    expect(tabsBlock).not.toContain("PressScale");
   });
 
   test("does not snap the pill to the integer tab when a flick settles", () => {
@@ -360,7 +372,7 @@ describe("native AppNav wiring", () => {
 
   test("dots are circular and the gold pill is not a hardware-texture square", () => {
     const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("borderRadius: 2");
+    expect(src).toContain("borderRadius: NAV_DOT_SIZE / 2");
     expect(src).toContain("overflow: \"hidden\"");
     expect(src).not.toContain("renderToHardwareTextureAndroid");
     expect(src).not.toContain("elevation:");

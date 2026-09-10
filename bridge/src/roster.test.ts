@@ -8,6 +8,7 @@ import {
   isPhoneOs,
   parseHermesGatewayList,
   parseTailscaleStatus,
+  timedArgv,
 } from "./roster";
 
 const status = {
@@ -219,3 +220,26 @@ describe("roster", () => {
     expect(src).not.toMatch(/100\.\d{1,3}\.\d{1,3}\.\d{1,3}/);
   });
 });
+
+describe("timed probes", () => {
+  test("timedArgv wraps probes so /roster cannot hang on hermes gateway list", () => {
+    expect(timedArgv(["hermes", "gateway", "list"])).toEqual([
+      "timeout",
+      "--signal=KILL",
+      "1",
+      "hermes",
+      "gateway",
+      "list",
+    ]);
+    const src = readFileSync(join(import.meta.dir, "roster.ts"), "utf8");
+    expect(src).toContain("refreshHermesList");
+    expect(src).toContain("ROSTER_TTL_MS");
+    expect(src).not.toContain('spawnText(["hermes", "gateway", "list"])');
+  });
+});
+
+  test("bridge listens on all interfaces so LAN pair works", () => {
+    const src = readFileSync(join(import.meta.dir, "../index.ts"), "utf8");
+    expect(src).toContain('const HOST = process.env.DASH_HOST ?? "0.0.0.0";');
+    expect(src).not.toContain("process.env.DASH_HOST ?? tailscaleIp");
+  });
