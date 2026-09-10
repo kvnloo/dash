@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
-const BRIDGE = (process.env.DASH_BRIDGE ?? "http://100.78.215.21:4747").replace(/\/$/, "");
+const BRIDGE = (process.env.DASH_BRIDGE ?? "http://127.0.0.1:4747").replace(/\/$/, "");
 const METRO = (process.env.DASH_METRO ?? "http://127.0.0.1:8097").replace(/\/$/, "");
 const DEBUG_WEB = (process.env.DASH_DEBUG_WEB ?? "http://127.0.0.1:8099").replace(/\/$/, "");
 const EVIDENCE = process.env.DASH_EVIDENCE ?? join(ROOT, "artifacts/verify-dash");

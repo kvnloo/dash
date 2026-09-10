@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-PHONE="${1:-kevins-s25-ultra}"
+PHONE="${1:-phone}"
 PORT="${ADB_PORT:-5555}"
 if ! command -v adb >/dev/null; then
   echo "Install android-tools (adb) first." >&2

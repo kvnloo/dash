@@ -17,7 +17,7 @@ AppImage originals (optional): `/tmp/dash-design/Pen-linux-x86_64.AppImage`, Pap
 Pencil is on Hyprland workspace **4** (`class:pen`). Super+4, then File → Open (do not pass a file argv from this TTY — GTK portal lands on ws 1):
 
 ```
-/home/kvn/workspace/dash/docs/design/pencil/dash.pen
+/home/you/workspace/dash/docs/design/pencil/dash.pen
 ```
 
 ## Login (required for the Pencil AI agent)

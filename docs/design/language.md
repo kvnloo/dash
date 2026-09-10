@@ -28,7 +28,7 @@ Chat: Grok/Zero rules. Pair: sonic + Tailscale. Settings: grouped rows.
 | `--text` | `#f2f2f2` | primary |
 | `--muted` | `#8b8b8b` | meta, inactive tabs |
 | `--faint` | `#5a5a5a` | placeholders |
-| `--accent` | `#ffffff` | active underline, send |
+| `--accent` | `#ffffff` | active tab dot, send |
 | `--on-accent` | `#000000` | text on white buttons |
 | `--ok` | `#34c759` | online / active |
 | `--warn` | `#ffb020` | paused |
@@ -47,7 +47,7 @@ Typography: system sans. Display 22/700. Heading 17/600. Body 16/24. Small 13/18
 - Background is **pure black** `#000`. One accent: white.
 - Assistant: **no bubble** — left-aligned plain text (Grok).
 - User: solid `#1f1f1f` bubble, ~22px radius, tighter bottom-right.
-- Tabs: text + **2px white underline**, not pill fill, not cyan.
+- Tabs: text + **white dot**, not underline dash, not pill fill, not cyan.
 - Search: compact `@` bar at the **bottom**. Scope chips **only when focused**.
 - Bots: status **dot** (`--ok` / `--faint`).
 - Lists: **Today / Yesterday** sections + hairline rows (Grok History).
@@ -67,7 +67,7 @@ Typography: system sans. Display 22/700. Heading 17/600. Body 16/24. Small 13/18
 8. `settings` — grouped rows
 9. `voice` — orb + “Say something…”
 
-Sample content: OMP / Grok / Codex / Hermes, “fix the auth bug in login.ts”, host `mbp`, address `100.78.215.21:4747`.
+Sample content: OMP / Grok / Codex / Hermes, “fix the auth bug in login.ts”, host `mbp`, address `100.64.0.1:4747`.
 
 ## Non-goals
 

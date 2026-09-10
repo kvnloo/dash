@@ -18,6 +18,10 @@ Use `/poteto-mode` for any non-trivial Dash change. Nano-services are isolated w
 
 Reach for `.cursor/skills/verify-dash`. Drive with `bun scripts/verify-dash/control-dash.ts`. Never start a second `dash-pair` or Metro on 8097. Phone bundler is `dash-metro-8097`. UI proofs use debug web on 8099.
 
+Android IME: the S25 is edge-to-edge. `softwareKeyboardLayoutMode: resize` does **not** lift the UI. Bottom composers (`KeyboardDock` / `KeyboardStickyView` from `react-native-keyboard-controller`) must stick to the keyboard. Do not ship a `paddingBottom: insets.bottom` dock and assume the window will resize.
+
+Motion: Reanimated 4 only. `PressScale` + springs in `app/src/motion.ts`. Transforms and opacity, never width/height. No `GOLD_GLOW` on native AppNav. No `entering=` on FlashList rows.
+
 ## Ownership
 
 One writer per worktree. `bridge/index.ts` is wiring only. Protocol changes land first in `shared/protocol.ts`. Hermes mesh is the agent fabric, not a replacement for the phone bridge.

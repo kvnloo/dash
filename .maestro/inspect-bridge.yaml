@@ -1,0 +1,6 @@
+appId: host.exp.exponent
+---
+# Opens the bridge-details overlay. Do not launchApp/stopApp: that kills Metro.
+- tapOn: "Bridge details"
+- waitForAnimationToEnd
+- takeScreenshot: artifacts/verify-dash/maestro-bridge-pull

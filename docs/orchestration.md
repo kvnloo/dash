@@ -21,7 +21,7 @@ governance                       <- stay off the phone
   Linear, Keel, oss-factory, Maintainer Review
 ```
 
-The phone talks to **one** Bun process on the laptop: `dash-pair` at `100.78.215.21:4747`. Hermes gateway (`:9900`) and `hermes peer` are a different universe until `svc/hermes-session` wires them.
+The phone talks to **one** Bun process on the laptop: `dash-pair` at `100.64.0.1:4747`. Hermes gateway (`:9900`) and `hermes peer` are a different universe until `svc/hermes-session` wires them.
 
 ## Live processes (do not duplicate)
 
@@ -29,8 +29,8 @@ Only the integration checkout may run these:
 
 | Name | Bind | Role |
 |------|------|------|
-| `dash-pair` | `100.78.215.21:4747` | pairing HTTP + `/ws` + `/roster` |
-| `dash-metro-8097` | `exp://100.78.215.21:8097` | Expo bundler |
+| `dash-pair` | `100.64.0.1:4747` | pairing HTTP + `/ws` + `/roster` |
+| `dash-metro-8097` | `exp://100.64.0.1:8097` | Expo bundler |
 | `dash-bridge :7331` | ignore | leftover probe |
 | Hermes gateway | `:9900` | not Dash |
 
@@ -38,7 +38,7 @@ Feature worktrees **never** start a second bridge or Metro.
 
 ## Worktrees
 
-Root checkout: `/home/kvn/workspace/dash` on `integrate/device-layer` (integration owner).
+Root checkout: `/home/you/workspace/dash` on `integrate/device-layer` (integration owner).
 
 Feature checkouts live under `.worktrees/` (gitignored). Each has its own branch from the checkpoint:
 
@@ -110,10 +110,10 @@ Merge each into `integrate/device-layer`. Integration owner runs Expo + `dash-pa
 - Skip formatters, `tsc`, and Metro in feature worktrees. Integration owner runs them once.
 - Protocol change: keep `hosts?` and old `hello` working.
 - Native Expo Go cannot run CSS `oklch` / `color-mix` 1:1. Nav web copy is `AppNav.web.tsx`; native stays WebView/CSS or StyleSheet.
-- MagicDNS `mbp` is broken on this laptop. Phone and docs use `100.78.215.21`.
+- MagicDNS `mbp` is broken on this laptop. Phone and docs use `100.64.0.1`.
 
 ## Checkpoint that made this split legal
 
 - Branch `integrate/device-layer`
-- Phone `100.117.226.39` opened `ws` on `dash-pair`
+- Phone `100.64.0.3` opened `ws` on `dash-pair`
 - Design frames / nav-probe PNGs remain uncommitted on the integration tree

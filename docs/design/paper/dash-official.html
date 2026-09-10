@@ -22,16 +22,16 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
 .label{font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
 .phone{width:390px;height:844px;background:var(--bg);border-radius:40px;border:1px solid #1a1a1a;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.7)}
 .sb{height:47px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 28px 8px;font-size:15px;font-weight:600}
-.header{height:52px;display:flex;align-items:center;padding:0 8px}
-.side{width:88px;display:flex;align-items:center}
+.header{height:52px;display:flex;align-items:center;padding:0 16px}
+.side{min-width:44px;display:flex;align-items:center}
 .side.r{justify-content:flex-end}
 .center{flex:1;display:flex;justify-content:center}
 .ico{width:40px;height:40px;border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--text)}
 .tabs{display:flex;align-items:flex-end;gap:20px}
 .tab{color:var(--muted);font-size:16px;font-weight:600;min-width:70px;text-align:center;padding-bottom:2px}
 .tab.on{color:var(--text)}
-.tab.on::after{content:"";display:block;width:28px;height:2px;background:var(--accent);border-radius:1px;margin:7px auto 0}
-.tab:not(.on)::after{content:"";display:block;height:2px;margin:7px auto 0}
+.tab.on::after{content:"";display:block;width:5px;height:5px;background:var(--accent);border-radius:50%;margin:7px auto 0}
+.tab:not(.on)::after{content:"";display:block;height:5px;margin:7px auto 0}
 .body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .sec{color:var(--muted);font-size:13px;font-weight:500;padding:18px 16px 8px}
 .row{display:flex;align-items:center;gap:12px;padding:12px 16px}
@@ -99,7 +99,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
 </head>
 <body>
 <h1>Dash</h1>
-<p class="lede">Original brief + Grok/Zero refs. Pure black. Top tabs Bots · Chats · Orchestra. Bottom @ search. Assistant is plain text. User bubble #1f1f1f. White underline, not cyan.</p>
+<p class="lede">Original brief + Grok/Zero refs. Pure black. Top tabs Bots · Chats · Orchestra. Bottom @ search. Assistant is plain text. User bubble #1f1f1f. White tab dot, not underline, not cyan.</p>
 <div class="swatches">
   <div class="swatch"><i class="chip" style="background:#000"></i>--bg</div>
   <div class="swatch"><i class="chip" style="background:#121212"></i>--surface</div>
@@ -114,7 +114,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
 <div class="wrap">
 <div class="phone" data-frame="main-chats">
   <div class="sb"><span>9:41</span><span>▲●</span></div>
-  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab on">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⚙</div></div></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab on">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⋯</div></div></div>
   <div class="body">
     <div class="sec">Today</div>
     <div class="row"><div class="av">O</div><div class="main"><div class="top"><div class="title">OMP</div><div class="meta">2m</div></div><div class="sub">fix the auth bug in login.ts</div></div><span class="dot stream"></span></div>
@@ -132,7 +132,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
 <div class="wrap">
 <div class="phone" data-frame="main-chats-search">
   <div class="sb"><span>9:41</span><span>▲●</span></div>
-  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab on">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⚙</div></div></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab on">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⋯</div></div></div>
   <div class="body">
     <div class="sec">Today</div>
     <div class="row"><div class="av">O</div><div class="main"><div class="top"><div class="title">OMP</div><div class="meta">2m</div></div><div class="sub">fix the auth bug in login.ts</div></div></div>
@@ -148,7 +148,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
 <div class="wrap">
 <div class="phone" data-frame="main-bots">
   <div class="sb"><span>9:41</span><span>▲●</span></div>
-  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab on">Bots</div><div class="tab">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⚙</div></div></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab on">Bots</div><div class="tab">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⋯</div></div></div>
   <div class="body">
     <div class="hsec">OMP <span class="dot"></span></div>
     <div class="row"><div class="av">O</div><div class="main"><div class="top"><div class="title">OMP</div><span class="dot"></span></div><div class="role">Primary agent</div><div class="desc">Full-capability coding agent on your laptop</div></div></div>
@@ -167,16 +167,16 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
 <div class="wrap">
 <div class="phone" data-frame="main-orchestra">
   <div class="sb"><span>9:41</span><span>▲●</span></div>
-  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab">Chats</div><div class="tab on">Orchestra</div></div></div><div class="side r"><div class="ico">⚙</div></div></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab">Chats</div><div class="tab on">Orchestra</div></div></div><div class="side r"><div class="ico">⋯</div></div></div>
   <div class="body" style="padding-top:8px">
     <div class="card">
-      <div class="card-top"><div><div class="title">Dash</div><div class="sub">Phone ↔ laptop agent bridge</div></div><div class="status"><span class="dot"></span> active</div></div>
+      <div class="card-top"><div><div class="title">Dash</div><div class="sub">Phone ↔ laptop agent bridge</div></div><div class="status"><span class="dot"></span></div></div>
       <div class="agents"><div class="av sm">O</div><div class="av sm">C</div><div class="av sm">H</div></div>
       <div class="foot"><span>3 agents · 2 chats</span><span>2m</span></div>
     </div>
     <div class="grid">
-      <div class="tile"><div class="top"><div class="title">Hermes mesh</div><span class="dot off"></span></div><div class="sub">groot · chiefstaff node 0</div><div class="foot" style="margin-top:auto"><span>idle</span></div></div>
-      <div class="tile"><div class="top"><div class="title">Auth refactor</div><span class="dot"></span></div><div class="sub">login.ts · 401 path</div><div class="foot" style="margin-top:auto"><span>active</span></div></div>
+      <div class="tile"><div class="top"><div class="title">Hermes mesh</div><span class="dot off"></span></div><div class="sub">groot · chiefstaff node 0</div></div>
+      <div class="tile"><div class="top"><div class="title">Auth refactor</div><span class="dot"></span></div><div class="sub">login.ts · 401 path</div></div>
     </div>
   </div>
   <div class="dock"><div class="search"><span class="at">@</span> Search bots, chats, files…</div></div>
@@ -188,12 +188,12 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
 <div class="wrap">
 <div class="phone" data-frame="chat">
   <div class="sb"><span>9:41</span><span>▲●</span></div>
-  <div class="header"><div class="side"><div class="ico">‹</div></div><div class="center"><div class="plain-title">OMP ▾</div></div><div class="side r"><div class="ico">⚙</div><div class="ico">✎</div></div></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab on">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⋯</div></div></div>
   <div class="body">
     <div class="user"><div class="bubble">fix the auth bug in login.ts</div></div>
     <div class="asst">I'll read login.ts and trace the 401 path. The handler returns early when the token store is empty.</div>
   </div>
-  <div class="composer"><div class="cico">+</div><span>Message OMP</span><div class="cico">🎤</div></div>
+  <div class="composer"><span>Message OMP</span><div class="cico">🎤</div></div>
   <div class="hi"><i></i></div>
 </div>
 <div class="label">chat</div>
@@ -202,12 +202,12 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
 <div class="wrap">
 <div class="phone" data-frame="chat-streaming">
   <div class="sb"><span>9:41</span><span>▲●</span></div>
-  <div class="header"><div class="side"><div class="ico">‹</div></div><div class="center"><div class="plain-title">OMP ▾</div></div><div class="side r"><div class="ico">⚙</div><div class="ico">✎</div></div></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab on">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⋯</div></div></div>
   <div class="body">
     <div class="user"><div class="bubble">fix the auth bug in login.ts</div></div>
     <div class="asst">I'll read login.ts and trace the 401 path.<div class="st"><span class="pulse"></span> Reading file</div></div>
   </div>
-  <div class="composer"><div class="cico">+</div><span>Queue next message…</span><div class="stop"><i></i></div></div>
+  <div class="composer"><span>Queue next message…</span><div class="stop"><i></i></div></div>
   <div class="hi"><i></i></div>
 </div>
 <div class="label">chat-streaming</div>
@@ -216,7 +216,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
 <div class="wrap">
 <div class="phone" data-frame="pair">
   <div class="sb"><span>9:41</span><span>▲●</span></div>
-  <div class="header"><div class="side"></div><div class="center"><div class="plain-title">Pair</div></div><div class="side r"></div></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab on">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⋯</div></div></div>
   <div class="body">
     <p class="intro">Your phone sends a secret over Tailscale, then listens for a short audible code from your laptop.</p>
     <div class="sl">Computer name</div>
@@ -232,12 +232,12 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
 <div class="wrap">
 <div class="phone" data-frame="settings">
   <div class="sb"><span>9:41</span><span>▲●</span></div>
-  <div class="header"><div class="side"><div class="ico">‹</div></div><div class="center"><div class="plain-title">Settings</div></div><div class="side r"></div></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab on">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⋯</div></div></div>
   <div class="body">
     <p class="intro">Chat with the coding agents on your own computer.</p>
     <div class="sl">Bridge</div>
     <div class="sgroup">
-      <div class="srow"><div><div class="fl" style="margin:0">Address</div><div class="fv">100.78.215.21:4747</div></div><span class="chev">›</span></div>
+      <div class="srow"><div><div class="fl" style="margin:0">Address</div><div class="fv">100.64.0.1:4747</div></div><span class="chev">›</span></div>
       <div class="srow"><div><div class="fl" style="margin:0">Token</div><div class="fv">••••••••••••••••</div></div><span class="chev">›</span></div>
     </div>
     <div class="row" style="padding:4px 16px 16px"><span class="dot"></span><span class="sub" style="margin:0">Connected to mbp</span></div>
@@ -254,7 +254,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:8px}
 <div class="wrap">
 <div class="phone" data-frame="voice">
   <div class="sb"><span>9:41</span><span>▲●</span></div>
-  <div class="header"><div class="side"><div class="ico">✕</div></div><div class="center"><div class="plain-title">OMP</div></div><div class="side r"><div class="ico">↗</div></div></div>
+  <div class="header"><div class="side"><div class="ico">✎</div></div><div class="center"><div class="tabs"><div class="tab">Bots</div><div class="tab on">Chats</div><div class="tab">Orchestra</div></div></div><div class="side r"><div class="ico">⋯</div></div></div>
   <div class="voice">
     <div class="orb"></div>
     <div class="say">Say something…</div>

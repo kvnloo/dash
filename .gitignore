@@ -10,3 +10,13 @@ artifacts/verify-dash/
 orchestrate/dash/inbox/
 orchestrate/dash/.orch.lock
 orchestrate/dash/status.md
+
+# local secrets / machine paths — never commit
+.env
+.env.*
+!.env.example
+.cursor/mcp.json
+*.pem
+*.p12
+*.jks
+*.keystore

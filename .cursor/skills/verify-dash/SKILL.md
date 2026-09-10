@@ -13,8 +13,8 @@ Live processes (integration checkout only):
 
 | Name | Bind | Role |
 |------|------|------|
-| `dash-pair` | `100.78.215.21:4747` | pairing HTTP + `/ws` + `/roster` |
-| `dash-metro-8097` | `exp://100.78.215.21:8097` | Expo Go bundler |
+| `dash-pair` | `127.0.0.1:4747` (`DASH_BRIDGE`) | pairing HTTP + `/ws` + `/roster` |
+| `dash-metro-8097` | `exp://127.0.0.1:8097` | Expo Go bundler |
 
 Doctor against those. Do not `hub start` a second bridge. Do not bind another Metro on 8097.
 
@@ -36,7 +36,7 @@ bun scripts/verify-dash/control-dash.ts doctor
 
 Require:
 
-- `GET http://100.78.215.21:4747/` returns `{ ok: true }`
+- `GET http://127.0.0.1:4747/` returns `{ ok: true }`
 - `GET /pair` returns a 6-character `code`
 - `GET /roster?token=$HOME/.dash/token` is 200 with `hosts[]`
 - Metro 8097 may be up; absence is not a doctor fail if this unit is bridge-only
@@ -51,7 +51,11 @@ bun scripts/verify-dash/control-dash.ts roster    # GET /roster, write roster.js
 bun scripts/verify-dash/control-dash.ts test       # golden-nav + roster unit tests
 ```
 
-Phone reload after app changes: Expo Go shake → **Reload**. Pair computer field is `100.78.215.21`, not MagicDNS `mbp`.
+Phone reload after app changes: Expo Go shake → **Reload**. Pair computer field is the laptop Tailscale IPv4, not MagicDNS `mbp`.
+
+The Main and Chat input docks are `KeyboardDock` (`KeyboardStickyView`). On the S25, focusing the bar must lift it with the IME. A screenshot with the keyboard covering "Message Dash" is a fail.
+
+Phone UI is **Maestro**, not hand-rolled `adb`. CLI: `maestro` with JDK 21. MCP server: `maestro mcp` in `~/.cursor/mcp.json`. Flows live in `.maestro/`. Prefer `inspect_screen` / `run` / `take_screenshot` over `adb exec-out screencap` and uiautomator dumps.
 
 Debug web (optional, port 8099 only):
 
@@ -60,7 +64,7 @@ Debug web (optional, port 8099 only):
 3. `await window.__DASH_DEBUG__.scenario("main-chats")` or `run({ action: "setMainTab", index: 0 })`
 4. Screenshot + `state()`
 
-Stable handles: Pair screen button **Pair over Tailscale**, pager tabs `Bots` / `Chats` / `Orchestra`, expand → Voice, menu → Settings.
+Stable handles: Pair screen button **Pair over Tailscale**, pager tabs `Bots` / `Chats` / `Orchestra`, expand → Voice, down chevron → Bridge details overlay, Edit on the overlay → Settings.
 
 ## Evidence
 

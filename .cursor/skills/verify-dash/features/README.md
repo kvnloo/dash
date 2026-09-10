@@ -4,9 +4,9 @@ This directory is the maintained source for verifying user-facing Dash behavior.
 
 ## Baseline preconditions
 
-- Live bridge at `http://100.78.215.21:4747` (`dash-pair`).
+- Live bridge at `http://127.0.0.1:4747` (`dash-pair`, override with `DASH_BRIDGE`).
 - Token at `~/.dash/token` for `/roster` only. Never claim a new token during verify.
-- Phone, if used: Expo Go on `kevins-s25-ultra` (`100.117.226.39`), computer field `100.78.215.21`.
+- Phone, if used: Expo Go on the paired device; computer field is the laptop Tailscale IPv4.
 - `control-dash doctor` reports `{ ok: true }` and a 6-char pair code.
 - Never start a second bridge. Never bind Metro 8097. Debug web is 8099.
 

@@ -1,0 +1,5 @@
+appId: host.exp.exponent
+---
+# Expo Go on the paired S25. Drive with Maestro MCP (`inspect_screen`, `run`)
+# instead of hand-rolled adb. Do not launchApp with stopApp: that kills the
+# live Metro session.

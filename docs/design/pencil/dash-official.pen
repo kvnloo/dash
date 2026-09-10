@@ -737,7 +737,7 @@
           "id": "s-addr",
           "type": "text",
           "name": "s-addr",
-          "content": "100.78.215.21:4747",
+          "content": "100.64.0.1:4747",
           "fontSize": 15,
           "fontWeight": 400,
           "fill": "$color.text"

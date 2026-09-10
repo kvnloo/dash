@@ -38,10 +38,10 @@ Language: [`language.md`](language.md) — pure black `#000`, white accent, user
 ## Visual rules
 
 - Background `#000000`
-- Accent `#ffffff` (underline, send, listen CTA)
+- Accent `#ffffff` (tab dot, send, listen CTA)
 - Assistant: plain text, no bubble
 - User: solid bubble `#1f1f1f`
-- Tabs: underline, not pill fill
+- Tabs: dot, not underline dash or pill fill
 - Search: compact; chips on focus only
 - Lists: date sections + hairline rows
 - Status: dots, not “Online” pills

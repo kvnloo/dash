@@ -1,0 +1,7 @@
+appId: host.exp.exponent
+---
+# Opens the Main composer so the IME can be checked against KeyboardDock.
+# Do not launchApp/stopApp: that kills the live Metro session.
+- tapOn: "Message Dash"
+- waitForAnimationToEnd
+- takeScreenshot: maestro-keyboard

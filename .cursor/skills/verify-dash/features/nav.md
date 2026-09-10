@@ -20,7 +20,8 @@ Preconditions:
 - Doctor optional. Nav unit tests do not need the bridge.
 
 - **Unit tests.** Run `bun scripts/verify-dash/control-dash.ts test`. `nav` exit 0. This is the default proof.
-- **Phone.** Shake → Reload. Swipe Bots / Chats / Orchestra. Gold tracks the page.
+- **Phone.** Shake → Reload. Swipe Bots / Chats / Orchestra. Gold tracks the page with a gel stretch (scaleX up, scaleY down) and a slight settle overshoot.
+- **Maestro.** `.maestro/inspect-nav.yaml` or MCP `inspect_screen` / `take_screenshot`. Do not dump uiautomator by hand.
 - **Debug web (8099).** `run({ action: "setMainTab", index: 2 })`. Screenshot the pager, not the whole phone chrome only.
 - **Proof.** `artifacts/verify-dash/tests.json` `nav.code === 0`. Pixel claims need a screenshot against `docs/design/frames/golden-nav-probe.png`.
 
