@@ -3,10 +3,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   GOLDEN_NAV_CSS,
+  NAV_PAGER_HEIGHT,
+  NAV_PAGER_PAD,
+  NAV_PAGER_WIDTH,
+  NAV_PILL_HEIGHT,
   NAV_SLOT_WIDTH,
   clampProgress,
   clampTab,
   goldenNavHtml,
+  indicatorFrames,
   indicatorTransform,
   indicatorTranslateX,
   navSetProgressScript,
@@ -68,11 +73,34 @@ describe("indicatorTransform", () => {
 
 describe("indicatorTranslateX", () => {
   test("is one 46px slot per page so native translateX matches the stadium", () => {
+    expect(NAV_PAGER_WIDTH).toBe(144);
+    expect(NAV_PAGER_HEIGHT).toBe(50);
+    expect(NAV_PAGER_PAD).toBe(3);
     expect(NAV_SLOT_WIDTH).toBe(46);
+    expect(NAV_PILL_HEIGHT).toBe(44);
     expect(indicatorTranslateX(0)).toBe(0);
     expect(indicatorTranslateX(1)).toBe(46);
     expect(indicatorTranslateX(1.5)).toBe(69);
     expect(indicatorTranslateX(2)).toBe(92);
+  });
+});
+
+describe("indicatorFrames", () => {
+  test("samples every settle frame so the pill matches pager offset linearly", () => {
+    const frames = indicatorFrames(1, 2, 10);
+    expect(frames).toHaveLength(11);
+    for (let i = 0; i < frames.length; i++) {
+      const progress = 1 + i / 10;
+      expect(frames[i]).toBeCloseTo(progress * NAV_SLOT_WIDTH, 8);
+    }
+  });
+
+  test("does not jump to the destination on the first settle frame", () => {
+    const frames = indicatorFrames(0, 1, 8);
+    expect(frames[0]).toBe(0);
+    expect(frames[1]).toBeCloseTo(NAV_SLOT_WIDTH / 8, 8);
+    expect(frames[frames.length - 1]).toBe(NAV_SLOT_WIDTH);
+    expect(frames[1]).not.toBe(NAV_SLOT_WIDTH);
   });
 });
 
@@ -181,6 +209,31 @@ describe("native AppNav wiring", () => {
     expect(src).toContain("#211b10");
     expect(src).toContain("#837F74");
   });
+
+  test("does not snap the pill to the integer tab when a flick settles", () => {
+    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+    expect(src).not.toContain("progress.value = clampProgress(tab)");
+  });
+
+  test("dots are circular and the gold pill is not a hardware-texture square", () => {
+    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+    expect(src).toContain("borderRadius: 2");
+    expect(src).toContain("overflow: \"hidden\"");
+    expect(src).not.toContain("renderToHardwareTextureAndroid");
+    expect(src).not.toContain("elevation:");
+    expect(src).toContain("android_ripple");
+    expect(src).toContain("transparent");
+  });
+
+  test("stadium layout does not eat 2px of slot width with a Yoga border", () => {
+    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+    expect(src).toContain("width: 144");
+    expect(src).toContain("width: 46");
+    expect(src).toContain("height: 44");
+    const pagerBlock = src.slice(src.indexOf("pager:"));
+    const pagerStyle = pagerBlock.slice(0, pagerBlock.indexOf("},") + 1);
+    expect(pagerStyle).not.toContain("borderWidth");
+  });
 });
 
 describe("MainPager scroll wiring", () => {
@@ -189,5 +242,18 @@ describe("MainPager scroll wiring", () => {
     const types = readFileSync(join(import.meta.dir, "MainPager.tsx"), "utf8");
     expect(types).toContain("onPageScroll");
     expect(native).toContain("onPageScroll");
+  });
+
+  test("writes pager offset on the UI thread so a fling is not JS-bridged", () => {
+    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
+    expect(native).toContain("createAnimatedComponent");
+    expect(native).toContain("useEvent");
+    expect(native).toContain("onPageScroll");
+    expect(native).toContain("worklet");
+  });
+
+  test("does not call setPage again when onPageSelected reports the flick target", () => {
+    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
+    expect(native).toContain("fromPager");
   });
 });
