@@ -67,7 +67,9 @@ export const AppNav = forwardRef<
               aria-selected={i === tab}
               className={i === tab ? "is-active" : undefined}
               onClick={() => goTab(i)}
-            />
+            >
+              <span className="dev-mobile-pager-dot" aria-hidden="true" />
+            </button>
           ))}
         </nav>
         <button
