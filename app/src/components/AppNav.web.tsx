@@ -14,6 +14,7 @@ export const AppNav = forwardRef<
     navigation: NavigationProp<RootStackParamList>;
     tab: number;
     onTab?(next: number): void;
+    progress?: unknown;
   }
 >(function AppNav({ navigation, tab, onTab }, ref) {
   useImperativeHandle(ref, () => ({ setProgress() {} }), []);
