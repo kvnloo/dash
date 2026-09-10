@@ -18,14 +18,21 @@ export const GOLDEN_NAV_CSS = `:root {
   --dev-nav: rgba(12, 13, 11, 0.91);
   --dev-nav-96: ${DEV_NAV_96};
 }
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: visible;
+}
 .dash-appnav, .dash-appnav * { box-sizing: border-box; }
 .dash-appnav {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 60px;
+  height: 100%;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 15px 16px;
+  overflow: visible;
 }
 .dev-mobile-immersive-toggle,
 .dev-mobile-pager-toggle {
@@ -57,6 +64,7 @@ export const GOLDEN_NAV_CSS = `:root {
   padding: 3px;
   border: 1px solid var(--hair-2);
   border-radius: 23px;
+  overflow: visible;
   background: var(--dev-nav-96);
   background: color-mix(in srgb, var(--dev-nav) 96%, transparent);
   box-shadow: 0 9px 28px rgba(0, 0, 0, 0.28);
@@ -78,11 +86,11 @@ export const GOLDEN_NAV_CSS = `:root {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.54),
     inset 0 -3px 8px rgba(111, 85, 36, 0.25),
-    0 8px 18px ${GOLD_GLOW};
-  backdrop-filter: blur(12px) saturate(1.35);
-  -webkit-backdrop-filter: blur(12px) saturate(1.35);
+    0 4px 10px ${GOLD_GLOW};
   pointer-events: none;
-  transition: left 220ms cubic-bezier(.2,.75,.2,1);
+  transform: translate3d(0, 0, 0);
+  transition: none;
+  will-change: transform;
 }
 .dev-mobile-pager > button[role="tab"] {
   position: relative;
@@ -120,8 +128,24 @@ export function clampTab(tab: number): 0 | 1 | 2 {
   return 1;
 }
 
+export function clampProgress(progress: number): number {
+  if (!Number.isFinite(progress)) return 0;
+  if (progress <= 0) return 0;
+  if (progress >= 2) return 2;
+  return progress;
+}
+
+/** PagerView onPageScroll: progress is position + offset (may overdrag). */
+export function pageProgress(position: number, offset: number): number {
+  return clampProgress(position + offset);
+}
+
+export function indicatorTransform(progress: number): string {
+  return `translate3d(calc(${clampProgress(progress)} * 100%), 0, 0)`;
+}
+
 export function indicatorLeft(tab: number): string {
-  return `calc(3px + ${clampTab(tab)} * (100% - 6px) / 3)`;
+  return `calc(3px + ${clampProgress(tab)} * (100% - 6px) / 3)`;
 }
 
 export type NavMessage = { type: "tab"; index: 0 | 1 | 2 } | { type: "expand" } | { type: "menu" };
@@ -142,11 +166,21 @@ export function parseNavMessage(raw: string): NavMessage | null {
   }
 }
 
-/** Injected on every pager change. Mutates the DOM directly so it does not need a prior bind. */
+function applyProgressJs(progress: number): string {
+  const p = clampProgress(progress);
+  const i = clampTab(p);
+  const transform = indicatorTransform(p);
+  return `var p=${p};var i=${i};var tabs=document.querySelectorAll('[role="tab"]');var ind=document.getElementById('indicator');if(!ind)return true;ind.style.transition='none';ind.style.transform='${transform}';for(var n=0;n<tabs.length;n++)tabs[n].classList.toggle('is-active',n===i);window.__dashProgress=p;`;
+}
+
+/** Injected on every pager scroll frame. Mutates transform directly; no prior bind needed. */
+export function navSetProgressScript(progress: number): string {
+  return `(function(){${applyProgressJs(progress)}})(); true;`;
+}
+
+/** Settled-page helper — same transform path as scroll so tap and swipe cannot diverge. */
 export function navSetTabScript(tab: number): string {
-  const i = clampTab(tab);
-  const left = indicatorLeft(i);
-  return `(function(){var i=${i};var tabs=document.querySelectorAll('[role="tab"]');var ind=document.getElementById('indicator');if(!ind)return true;for(var n=0;n<tabs.length;n++)tabs[n].classList.toggle('is-active',n===i);ind.style.left='${left}';window.__dashTab=i;})(); true;`;
+  return navSetProgressScript(clampTab(tab));
 }
 
 /** Standalone HTML document for a native WebView. `tab` is 0/1/2. */
@@ -161,7 +195,6 @@ export function goldenNavHtml(tab: number): string {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <style>
-  html, body { margin: 0; height: 100%; background: transparent; }
   ${GOLDEN_NAV_CSS}
 </style>
 <body>
@@ -172,7 +205,7 @@ export function goldenNavHtml(tab: number): string {
       </svg>
     </button>
     <nav class="dev-mobile-pager" aria-label="Primary mobile workspace">
-      <span class="dev-mobile-pager-indicator" id="indicator" aria-hidden="true" style="left:${indicatorLeft(t)}"></span>
+      <span class="dev-mobile-pager-indicator" id="indicator" aria-hidden="true" style="transform:${indicatorTransform(t)}"></span>
       ${buttons}
     </nav>
     <button type="button" class="dev-mobile-pager-toggle" aria-label="Menu" id="menu">
@@ -187,16 +220,21 @@ export function goldenNavHtml(tab: number): string {
     function post(msg) {
       if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(msg));
     }
-    function setTab(i, fromNative) {
-      var n = i < 0 ? 0 : i > 2 ? 2 : Math.round(i);
-      tabs.forEach((el, idx) => el.classList.toggle('is-active', idx === n));
-      indicator.style.left = 'calc(3px + ' + n + ' * (100% - 6px) / 3)';
-      window.__dashTab = n;
-      if (!fromNative) post({ type: 'tab', index: n });
+    function setProgress(p, fromNative) {
+      var n = p < 0 ? 0 : p > 2 ? 2 : p;
+      indicator.style.transition = 'none';
+      indicator.style.transform = 'translate3d(calc(' + n + ' * 100%), 0, 0)';
+      var i = Math.round(n);
+      if (i < 0) i = 0;
+      if (i > 2) i = 2;
+      tabs.forEach((el, idx) => el.classList.toggle('is-active', idx === i));
+      window.__dashProgress = n;
+      if (!fromNative) post({ type: 'tab', index: i });
     }
-    window.setTab = (i) => setTab(i, true);
-    setTab(${t}, true);
-    tabs.forEach((el, i) => el.addEventListener('click', () => setTab(i, false)));
+    window.setProgress = (p) => setProgress(p, true);
+    window.setTab = (i) => setProgress(i, true);
+    setProgress(${t}, true);
+    tabs.forEach((el, i) => el.addEventListener('click', () => post({ type: 'tab', index: i })));
     document.getElementById('expand').addEventListener('click', () => post({ type: 'expand' }));
     document.getElementById('menu').addEventListener('click', () => post({ type: 'menu' }));
   </script>
