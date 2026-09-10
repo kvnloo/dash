@@ -21,6 +21,8 @@ export interface MainPagerProps {
   /** UI-thread pager offset. Written by Animated PagerView on every settle frame. */
   progress?: SharedValue<number>;
   overdrag?: boolean;
+  /** Same width as real pages. Bounce sentinels without it collapse and page 0 cannot overscroll. */
+  pageWidth?: number;
   children: ReactNode;
 }
 

@@ -19,6 +19,7 @@ export type DebugCommand =
   | { action: "setHarnessPicker"; open: boolean }
   | { action: "setActiveChat"; conversationId: string | null }
   | { action: "setConnection"; status: "online" | "offline" | "connecting" | "idle" }
+  | { action: "setBridgePull"; open: boolean }
   | { action: "wait"; ms: number }
   | { action: "listScenarios" };
 
@@ -79,6 +80,11 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
     case "setConnection":
       store.set((s) => ({ ...s, connection: { ...s.connection, status: cmd.status } }));
       return { ok: true };
+    case "setBridgePull": {
+      const { debugSetBridgePull } = await import("../components/BridgePull");
+      debugSetBridgePull(cmd.open);
+      return { ok: true };
+    }
     case "wait":
       await sleep(cmd.ms);
       return { ok: true };

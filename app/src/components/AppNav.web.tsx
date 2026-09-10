@@ -2,6 +2,7 @@ import { forwardRef, useImperativeHandle } from "react";
 import type { NavigationProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../navigation";
 import { haptic } from "../haptics";
+import { useBridgePullOptional } from "./BridgePull";
 import { EXPAND_PATH, GOLDEN_NAV_CSS, TAB_LABELS, indicatorTransform } from "./golden-nav";
 
 export type AppNavHandle = {
@@ -18,6 +19,7 @@ export const AppNav = forwardRef<
   }
 >(function AppNav({ navigation, tab, onTab }, ref) {
   useImperativeHandle(ref, () => ({ setProgress() {} }), []);
+  const pull = useBridgePullOptional();
 
   const goTab = (next: number) => {
     haptic.tap();
@@ -29,7 +31,7 @@ export const AppNav = forwardRef<
     <>
       <style>{`${GOLDEN_NAV_CSS}
 .dash-appnav { height: 60px; }
-.dev-mobile-pager-indicator { transition: transform 220ms cubic-bezier(.2,.75,.2,1); }
+.dev-mobile-pager-indicator { transform-origin: 50% 50%; transition: transform 480ms cubic-bezier(0.22, 1.45, 0.36, 1); }
 `}</style>
       <div className="dash-appnav">
         <button
@@ -76,10 +78,11 @@ export const AppNav = forwardRef<
         <button
           type="button"
           className="dev-mobile-pager-toggle"
-          aria-label="Menu"
+          aria-label="Bridge details"
           onClick={() => {
             haptic.tap();
-            navigation.navigate("Settings");
+            if (pull) pull.toggle();
+            else navigation.navigate("Settings");
           }}
         >
           <svg

@@ -1,7 +1,8 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
+import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import type { Conversation } from "../../model";
 import type { ScreenProps } from "../../navigation";
@@ -38,11 +39,11 @@ const Row = memo(function Row({
 }) {
   const streaming = item.messages.some((m) => m.role === "assistant" && m.state === "streaming");
   return (
-    <Pressable
+    <PressScale
       onPress={() => onPress(item.id)}
       onLongPress={() => onDelete(item.id)}
       delayLongPress={350}
-      style={({ pressed }) => [styles.row, active && styles.rowActive, pressed && styles.pressed]}
+      style={[styles.row, active && styles.rowActive]}
       accessibilityRole="button"
     >
       <HarnessAvatar name={harnessName} />
@@ -58,7 +59,7 @@ const Row = memo(function Row({
         </Text>
       </View>
       {streaming ? <View style={styles.dot} /> : null}
-    </Pressable>
+    </PressScale>
   );
 });
 
@@ -161,7 +162,6 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   rowActive: { backgroundColor: colors.surface },
-  pressed: { opacity: 0.85 },
   rowMain: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
   rowTitle: { color: colors.text, ...type.heading, flex: 1 },

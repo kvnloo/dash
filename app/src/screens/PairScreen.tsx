@@ -32,7 +32,7 @@ const RECORD_MS = 6500;
 export function PairScreen({ navigation }: ScreenProps<"Pair">) {
   const insets = useSafeAreaInsets();
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
-  const [computer, setComputer] = useState("100.78.215.21");
+  const [computer, setComputer] = useState("");
   const [manualCode, setManualCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -159,7 +159,7 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
           <TextInput
             value={computer}
             onChangeText={setComputer}
-            placeholder="100.78.215.21"
+            placeholder="100.64.0.1"
             placeholderTextColor={colors.textFaint}
             autoCapitalize="none"
             autoCorrect={false}
@@ -167,7 +167,7 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
             style={styles.inputInner}
           />
         </GlassSurface>
-        <Text style={styles.hint}>This laptop is 100.78.215.21 — Pair over Tailscale skips the speaker tones.</Text>
+        <Text style={styles.hint}>Use the Tailscale IPv4 the bridge prints if MagicDNS does not resolve.</Text>
 
         <Pressable
           onPress={() => void pairOverTailscale()}

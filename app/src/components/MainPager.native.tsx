@@ -1,20 +1,24 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { Children, forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { View } from "react-native";
 import PagerView from "react-native-pager-view";
-import Animated, { useEvent, useHandler, type SharedValue } from "react-native-reanimated";
+import Animated, { useEvent, useHandler, useSharedValue, type SharedValue } from "react-native-reanimated";
 import type { MainPagerProps, MainPagerRef } from "./MainPager";
 
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
 
-function usePagerProgressHandler(progress: SharedValue<number> | undefined) {
+/** Empty sentinel pages on each side so Android can actually scroll past 0 and last. */
+const BOUNCE = 1;
+
+function usePagerProgressHandler(progress: SharedValue<number> | undefined, armed: SharedValue<number>) {
   const handlers = {
     onPageScroll: (e: { position: number; offset: number }) => {
       "worklet";
       if (progress == null) return;
-      const n = e.position + e.offset;
-      progress.value = n < 0 ? 0 : n > 2 ? 2 : n;
+      if (armed.value === 0) return;
+      progress.value = e.position + e.offset - BOUNCE;
     },
   };
-  const { context, doDependenciesDiffer } = useHandler(handlers, [progress]);
+  const { context, doDependenciesDiffer } = useHandler(handlers, [progress, armed]);
   return useEvent(
     (event) => {
       "worklet";
@@ -29,17 +33,24 @@ function usePagerProgressHandler(progress: SharedValue<number> | undefined) {
 }
 
 export const MainPager = forwardRef<MainPagerRef, MainPagerProps>(function MainPager(
-  { style, page, initialPage, onPageSelected, onPageScroll, progress, overdrag, children },
+  { style, page, initialPage, onPageSelected, onPageScroll, progress, overdrag, pageWidth, children },
   ref,
 ) {
   const inner = useRef<PagerView>(null);
   const fromPager = useRef<number | null>(null);
-  const onPageScrollWorklet = usePagerProgressHandler(progress);
+  const armed = useSharedValue(0);
+  const onPageScrollWorklet = usePagerProgressHandler(progress, armed);
+  const realCount = Children.count(children);
+  const bounceEnd = realCount + BOUNCE;
+
+  const setInternalPage = (real: number) => {
+    inner.current?.setPage(real + BOUNCE);
+  };
 
   useImperativeHandle(ref, () => ({
     setPage(index: number) {
       fromPager.current = null;
-      inner.current?.setPage(index);
+      setInternalPage(index);
     },
   }));
 
@@ -48,24 +59,44 @@ export const MainPager = forwardRef<MainPagerRef, MainPagerProps>(function MainP
       fromPager.current = null;
       return;
     }
-    inner.current?.setPage(page);
+    setInternalPage(page);
   }, [page]);
 
   return (
     <AnimatedPagerView
       ref={inner}
       style={style}
-      initialPage={initialPage ?? page}
+      initialPage={(initialPage ?? page) + BOUNCE}
       offscreenPageLimit={1}
-      overScrollMode="never"
+      overScrollMode="always"
       onPageSelected={(e) => {
-        fromPager.current = e.nativeEvent.position;
-        onPageSelected?.(e);
+        const internal = e.nativeEvent.position;
+        if (internal <= 0) {
+          inner.current?.setPage(BOUNCE);
+          armed.value = 1;
+          fromPager.current = 0;
+          onPageSelected?.({ nativeEvent: { position: 0 } });
+          return;
+        }
+        if (internal >= bounceEnd) {
+          inner.current?.setPage(realCount);
+          armed.value = 1;
+          fromPager.current = realCount - 1;
+          onPageSelected?.({ nativeEvent: { position: realCount - 1 } });
+          return;
+        }
+        const real = internal - BOUNCE;
+        fromPager.current = real;
+        armed.value = 1;
+        if (progress) progress.value = real;
+        onPageSelected?.({ nativeEvent: { position: real } });
       }}
       onPageScroll={progress ? onPageScrollWorklet : onPageScroll}
       overdrag={overdrag}
     >
+      <View key="bounce-start" collapsable={false} style={{ width: pageWidth, flex: 1 }} />
       {children}
+      <View key="bounce-end" collapsable={false} style={{ width: pageWidth, flex: 1 }} />
     </AnimatedPagerView>
   );
 });

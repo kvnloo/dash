@@ -1,7 +1,8 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
+import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { DEMO_ORCHESTRAS, type OrchestraProject } from "../../mock/orchestra";
 import type { ScreenProps } from "../../navigation";
@@ -25,11 +26,7 @@ const Card = memo(function Card({
   onPress(id: string): void;
 }) {
   return (
-    <Pressable
-      onPress={() => onPress(item.id)}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-      accessibilityRole="button"
-    >
+    <PressScale onPress={() => onPress(item.id)} style={styles.card} accessibilityRole="button">
       <View style={styles.cardTop}>
         <View style={styles.cardTitles}>
           <Text style={styles.name} numberOfLines={1}>
@@ -61,7 +58,7 @@ const Card = memo(function Card({
         </Text>
         <Text style={styles.time}>{timeAgo(item.updatedAt)}</Text>
       </View>
-    </Pressable>
+    </PressScale>
   );
 });
 
@@ -117,7 +114,6 @@ const styles = StyleSheet.create({
     padding: space.lg,
     marginBottom: space.md,
   },
-  pressed: { opacity: 0.85 },
   cardTop: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
   cardTitles: { flex: 1, minWidth: 0 },
   name: { color: colors.text, ...type.heading },

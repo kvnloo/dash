@@ -1,12 +1,14 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useFrameCallback, useSharedValue } from "react-native-reanimated";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
+import { KeyboardDock } from "../components/KeyboardDock";
 import { AppNav, type AppNavHandle } from "../components/AppNav";
+import { PAGE_LAG_PX, pageStep, pageStretch } from "../components/golden-nav";
 import { SearchResultRow } from "../components/SearchResultRow";
 import { isDebugActive } from "../debug/expose";
 import { debugUi } from "../debug/ui-store";
@@ -47,7 +49,30 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const pagerRef = useRef<MainPagerRef>(null);
   const navRef = useRef<AppNavHandle>(null);
   const pagerProgress = useSharedValue(1);
+  const pageFollow = useSharedValue(1);
+  const pageVel = useSharedValue(0);
   const routeTab = route.params?.tab;
+
+  useFrameCallback((info) => {
+    const raw = info.timeSincePreviousFrame;
+    if (raw == null) return;
+    const dt = Math.min(0.033, raw / 1000);
+    if (dt <= 0) return;
+    const next = pageStep(pageFollow.value, pageVel.value, pagerProgress.value, dt);
+    pageFollow.value = next.pos;
+    pageVel.value = next.vel;
+  });
+
+  const pageGelStyle = useAnimatedStyle(() => {
+    const { scaleX, scaleY } = pageStretch(pageFollow.value, pagerProgress.value, pageVel.value);
+    return {
+      transform: [
+        { translateX: (pageFollow.value - pagerProgress.value) * PAGE_LAG_PX },
+        { scaleX },
+        { scaleY },
+      ],
+    };
+  });
 
   const debugSearch = debugUi.use((s) => s.mainSearchQuery);
   const debugTab = debugUi.use((s) => s.mainTabIndex);
@@ -95,7 +120,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const settings = store.use((s) => s.settings);
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
-  const searchActive = query.trim().length > 0 || parsed.mode !== "discover";
+  const searchActive = parsed.mode !== "discover";
   const botProfiles = useMemo(() => (hosts.length > 0 ? profilesFromHosts(hosts) : undefined), [hosts]);
 
   const results = useMemo(
@@ -226,34 +251,56 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             />
           </>
         ) : (
-          <MainPager ref={pagerRef} style={styles.pager} page={index} initialPage={index} onPageSelected={onPage} progress={pagerProgress} overdrag>
-            <View key="bots" style={{ width }}>
-              <BotsPane navigation={navigation} />
-            </View>
-            <View key="chats" style={{ width }}>
-              <ChatsPane navigation={navigation} />
-            </View>
-            <View key="orchestra" style={{ width }}>
-              <OrchestraPane navigation={navigation} />
-            </View>
-          </MainPager>
+          <Animated.View style={[styles.pager, pageGelStyle]} collapsable={false}>
+            <MainPager
+              ref={pagerRef}
+              style={styles.pager}
+              page={index}
+              initialPage={index}
+              onPageSelected={onPage}
+              progress={pagerProgress}
+              pageWidth={width}
+              overdrag
+            >
+              <View key="bots" style={{ width }}>
+                <BotsPane navigation={navigation} />
+              </View>
+              <View key="chats" style={{ width }}>
+                <ChatsPane navigation={navigation} />
+              </View>
+              <View key="orchestra" style={{ width }}>
+                <OrchestraPane navigation={navigation} />
+              </View>
+            </MainPager>
+          </Animated.View>
         )}
       </View>
 
-      <View style={[styles.searchDock, { paddingBottom: Math.max(insets.bottom, space.sm) }]}>
-        <GlobalSearchBar value={query} onChange={setQuery} onScope={onScope} dock="bottom" />
-      </View>
+      <KeyboardDock style={styles.searchDock}>
+        <GlobalSearchBar
+          value={query}
+          onChange={setQuery}
+          onScope={onScope}
+          dock="bottom"
+          placeholder="Message Dash"
+          onVoice={() => navigation.navigate("Voice")}
+          onSend={(text) => {
+            const harness = settings?.harness ?? harnesses[0]?.id;
+            if (!harness) return;
+            openHarness(harness, text);
+            setQuery("");
+          }}
+        />
+      </KeyboardDock>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  body: { flex: 1 },
-  pager: { flex: 1 },
+  body: { flex: 1, overflow: "visible" },
+  pager: { flex: 1, overflow: "visible" },
   searchDock: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
     backgroundColor: colors.bg,
   },
   hint: {

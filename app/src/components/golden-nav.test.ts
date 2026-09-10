@@ -5,10 +5,17 @@ import {
   GOLDEN_NAV_CSS,
   NAV_PAGER_HEIGHT,
   NAV_PAGER_PAD,
+  NAV_PAGER_RADIUS,
   NAV_PAGER_WIDTH,
   NAV_PILL_HEIGHT,
+  NAV_PILL_RADIUS,
   NAV_SLOT_WIDTH,
+  OVERSCROLL,
+  PAGE_MASS,
+  PILL_MASS,
+  PILL_TRAVEL,
   clampProgress,
+  clampSettled,
   clampTab,
   goldenNavHtml,
   indicatorFrames,
@@ -17,7 +24,11 @@ import {
   navSetProgressScript,
   navSetTabScript,
   pageProgress,
+  pageStep,
+  pageStretch,
   parseNavMessage,
+  pillStep,
+  pillStretch,
 } from "./golden-nav";
 
 /** sRGB of oklch(0.80 0.075 80) — Android WebView must paint this when oklch is dropped. */
@@ -49,9 +60,11 @@ describe("pageProgress", () => {
     expect(pageProgress(1, 1)).toBe(2);
   });
 
-  test("clamps overdrag so the pill stays in the stadium", () => {
-    expect(pageProgress(0, -0.4)).toBe(0);
-    expect(pageProgress(2, 0.3)).toBe(2);
+  test("keeps overscroll so the pill can leave slot 0 then bounce", () => {
+    expect(pageProgress(0, -0.4)).toBeCloseTo(-0.4);
+    expect(pageProgress(2, 0.3)).toBeCloseTo(2.3);
+    expect(pageProgress(0, -2)).toBe(-OVERSCROLL);
+    expect(pageProgress(2, 2)).toBe(2 + OVERSCROLL);
   });
 });
 
@@ -59,6 +72,21 @@ describe("clampProgress", () => {
   test("keeps fractional offsets", () => {
     expect(clampProgress(0.25)).toBe(0.25);
     expect(clampProgress(1.99)).toBe(1.99);
+  });
+
+  test("allows a full dummy-page pull past 0 and 2", () => {
+    expect(clampProgress(-0.8)).toBe(-0.8);
+    expect(clampProgress(2.8)).toBe(2.8);
+    expect(clampProgress(-4)).toBe(-OVERSCROLL);
+    expect(clampProgress(9)).toBe(2 + OVERSCROLL);
+  });
+});
+
+describe("clampSettled", () => {
+  test("snaps overscroll back onto a real tab", () => {
+    expect(clampSettled(-0.7)).toBe(0);
+    expect(clampSettled(2.4)).toBe(2);
+    expect(clampSettled(1.2)).toBe(1.2);
   });
 });
 
@@ -82,6 +110,57 @@ describe("indicatorTranslateX", () => {
     expect(indicatorTranslateX(1)).toBe(46);
     expect(indicatorTranslateX(1.5)).toBe(69);
     expect(indicatorTranslateX(2)).toBe(92);
+  });
+});
+
+describe("pill gel", () => {
+  test("at rest the pill is unstretched", () => {
+    const rest = pillStretch(1, 1, 0);
+    expect(rest.scaleX).toBe(1);
+    expect(rest.scaleY).toBe(1);
+  });
+
+  test("mid-swipe and lag both grow X and squash Y so it keeps volume", () => {
+    const mid = pillStretch(0.5, 0.5, 0);
+    expect(mid.scaleX).toBeGreaterThan(1);
+    expect(mid.scaleY).toBeLessThan(1);
+
+    const pull = pillStretch(0, 1, 0);
+    expect(pull.scaleX).toBeGreaterThan(mid.scaleX);
+    expect(pull.scaleY).toBeLessThan(mid.scaleY);
+  });
+
+  test("one physics step moves toward the pager target instead of snapping", () => {
+    const next = pillStep(0, 0, 1, 1 / 60);
+    expect(next.pos).toBeGreaterThan(0);
+    expect(next.pos).toBeLessThan(0.4);
+    expect(next.vel).toBeGreaterThan(0);
+  });
+
+  test("can travel past page 0 toward -1 instead of sticking at the edge", () => {
+    const next = pillStep(0, -1.8, -1, 1 / 60);
+    expect(next.pos).toBeLessThan(0);
+    expect(next.pos).toBeGreaterThanOrEqual(-PILL_TRAVEL);
+  });
+});
+
+describe("page gel", () => {
+  test("is the same family as the pill but heavier so one step accelerates less", () => {
+    expect(PAGE_MASS).toBeGreaterThan(PILL_MASS);
+    const pill = pillStep(0, 0, 1, 1 / 60);
+    const page = pageStep(0, 0, 1, 1 / 60);
+    expect(page.pos).toBeGreaterThan(0);
+    expect(page.pos).toBeLessThan(pill.pos);
+    expect(page.vel).toBeLessThan(pill.vel);
+  });
+
+  test("stretches less than the pill because the page is larger", () => {
+    const pill = pillStretch(0, 1, 0);
+    const page = pageStretch(0, 1, 0);
+    expect(page.scaleX).toBeGreaterThan(1);
+    expect(page.scaleX).toBeLessThan(pill.scaleX);
+    expect(page.scaleY).toBeLessThan(1);
+    expect(page.scaleY).toBeGreaterThan(pill.scaleY);
   });
 });
 
@@ -236,13 +315,46 @@ describe("native AppNav wiring", () => {
     expect(src).toContain("styles.hair");
   });
 
-  test("chrome is the 60px collapsed bar with gold glow and inset, not an 80px spacer", () => {
+  test("tab hit targets fill the 44px slot so the 4px dots sit in the pill center", () => {
+    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+    expect(src).toContain("height: NAV_PILL_HEIGHT");
+    expect(src).toContain("width: NAV_SLOT_WIDTH");
+    const tabStyle = src.match(/tab: \{[\s\S]*?\n  \},/)?.[0] ?? "";
+    expect(tabStyle).toContain("height: NAV_PILL_HEIGHT");
+    expect(tabStyle).not.toContain("flex: 1");
+  });
+
+  test("gold pill is a UI-thread gel: spring follow, stretch X, squash Y", () => {
+    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+    expect(src).toContain("useFrameCallback");
+    expect(src).toContain("pillStep");
+    expect(src).toContain("pillStretch");
+    expect(src).toContain("scaleX");
+    expect(src).toContain("scaleY");
+  });
+
+  test("follows overscroll past page 0 instead of clamping the gel to the first slot", () => {
+    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+    expect(src).not.toContain("progress.value < 0 ? 0");
+    expect(src).toContain("pillStep(follow.value, vel.value, progress.value");
+  });
+
+  test("pager outline uses the same squircle radius as the gold pill", () => {
+    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+    expect(src).toContain("NAV_PAGER_RADIUS");
+    expect(src).toContain("NAV_PILL_RADIUS");
+    expect(NAV_PAGER_RADIUS).toBe(NAV_PILL_RADIUS);
+    expect(GOLDEN_NAV_CSS).toContain(`border-radius: ${NAV_PAGER_RADIUS}px`);
+    expect(src).not.toContain("borderRadius: 23");
+  });
+
+  test("chrome is the 60px collapsed bar with inset pill, not an 80px spacer", () => {
     const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
     expect(src).toContain("NAV_CHROME_HEIGHT");
-    expect(src).toContain("GOLD_GLOW");
-    expect(src).toContain("styles.glow");
+    expect(src).toContain("GOLD_68");
     expect(src).toContain("styles.spec");
     expect(src).toContain("styles.shade");
+    expect(src).not.toContain("styles.glow");
     expect(src).not.toContain("height: 80");
     expect(src).not.toContain("react-native-webview");
   });
@@ -272,5 +384,33 @@ describe("MainPager scroll wiring", () => {
   test("does not keep all three panes in the GPU layer during a fling", () => {
     const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
     expect(native).toContain("offscreenPageLimit={1}");
+  });
+
+  test("snaps pill progress on onPageSelected so Android's dummy page-0 scroll cannot stick", () => {
+    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
+    expect(native).toContain("armed.value === 0");
+    expect(native).toContain("progress.value = real");
+  });
+
+  test("wraps real pages in bounce sentinels so page 0 can overscroll to -1 then snap back", () => {
+    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
+    expect(native).toContain("bounce-start");
+    expect(native).toContain("bounce-end");
+    expect(native).toContain("e.position + e.offset - BOUNCE");
+    expect(native).toContain("inner.current?.setPage(BOUNCE)");
+    expect(native).toContain('overScrollMode="always"');
+    expect(native).toContain("pageWidth");
+    expect(native).toContain("width: pageWidth");
+    expect(native).not.toContain('overScrollMode="never"');
+  });
+
+  test("main page body follows the pager with heavier gel, not a layout height anim", () => {
+    const src = readFileSync(join(import.meta.dir, "../screens/MainScreen.tsx"), "utf8");
+    expect(src).toContain("pageStep");
+    expect(src).toContain("pageStretch");
+    expect(src).toContain("PAGE_LAG_PX");
+    expect(src).toContain("useFrameCallback");
+    expect(src).toContain("pageWidth={width}");
+    expect(src).not.toContain("height: pagerProgress");
   });
 });

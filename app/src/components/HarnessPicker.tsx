@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { HarnessInfo } from "../../../shared/protocol";
 import { colors, radius, space, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
+import { PressScale } from "./PressScale";
 
 interface Props {
   visible: boolean;
@@ -24,14 +25,14 @@ export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose 
             {harnesses.map((h) => {
               const active = h.id === selected;
               return (
-                <Pressable
+                <PressScale
                   key={h.id}
                   disabled={!h.available}
                   onPress={() => {
                     onSelect(h.id);
                     onClose();
                   }}
-                  style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+                  style={styles.row}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active, disabled: !h.available }}
                 >
@@ -40,7 +41,7 @@ export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose 
                     {!h.available ? <Text style={styles.hint}>Not installed on the bridge machine</Text> : null}
                   </View>
                   {active ? <Ionicons name="checkmark" size={20} color={colors.text} /> : null}
-                </Pressable>
+                </PressScale>
               );
             })}
             {harnesses.length === 0 ? <Text style={styles.hint}>Connect to the bridge to see harnesses.</Text> : null}
@@ -72,5 +73,4 @@ const styles = StyleSheet.create({
   name: { color: colors.text, ...type.heading },
   unavailable: { color: colors.textFaint },
   hint: { color: colors.textMuted, ...type.small, marginTop: 2 },
-  pressed: { backgroundColor: colors.surfaceRaised },
 });

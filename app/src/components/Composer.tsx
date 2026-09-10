@@ -1,8 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback, useState } from "react";
-import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Platform, StyleSheet, TextInput, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { PRESS_SCALE } from "../motion";
 import { colors, radius, space, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
+import { popIn, popOut } from "./motion-enter";
+import { PressScale } from "./PressScale";
 
 interface Props {
   disabled: boolean;
@@ -35,7 +39,16 @@ export const Composer = memo(function Composer({
 
   return (
     <View style={styles.wrap}>
-      <GlassSurface borderRadius={radius.lg + 4} style={styles.field}>
+      <GlassSurface borderRadius={radius.pill} style={styles.shell} contentStyle={styles.field}>
+        <PressScale
+          scaleTo={PRESS_SCALE.control}
+          style={styles.sideIcon}
+          accessibilityRole="button"
+          accessibilityLabel="Attach"
+          hitSlop={8}
+        >
+          <Ionicons name="add" size={22} color={colors.textMuted} />
+        </PressScale>
         <TextInput
           style={styles.input}
           value={text}
@@ -54,46 +67,52 @@ export const Composer = memo(function Composer({
         />
         {streaming ? (
           <View style={styles.streamingActions}>
-            <Pressable
+            <PressScale
               onPress={onStop}
-              style={({ pressed }) => [styles.button, styles.stop, pressed && styles.pressed]}
+              scaleTo={PRESS_SCALE.control}
+              style={[styles.button, styles.stop]}
               accessibilityRole="button"
               accessibilityLabel="Stop"
               hitSlop={8}
             >
               <View style={styles.stopSquare} />
-            </Pressable>
-            <Pressable
+            </PressScale>
+            <PressScale
               onPress={submit}
               disabled={!canSend}
-              style={({ pressed }) => [styles.button, !canSend && styles.buttonDisabled, pressed && styles.pressed]}
+              scaleTo={PRESS_SCALE.control}
+              style={[styles.button, !canSend && styles.buttonDisabled]}
               accessibilityRole="button"
               accessibilityLabel={canSend ? "Queue message" : "Send"}
               hitSlop={8}
             >
               <Ionicons name="arrow-up" size={20} color={canSend ? colors.onAccent : colors.textFaint} />
-            </Pressable>
+            </PressScale>
           </View>
         ) : canSend ? (
-          <Pressable
-            onPress={submit}
-            style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Send"
-            hitSlop={8}
-          >
-            <Ionicons name="arrow-up" size={20} color={colors.onAccent} />
-          </Pressable>
+          <Animated.View entering={popIn} exiting={popOut}>
+            <PressScale
+              onPress={submit}
+              scaleTo={PRESS_SCALE.control}
+              style={styles.button}
+              accessibilityRole="button"
+              accessibilityLabel="Send"
+              hitSlop={8}
+            >
+              <Ionicons name="arrow-up" size={20} color={colors.onAccent} />
+            </PressScale>
+          </Animated.View>
         ) : (
-          <Pressable
-            style={({ pressed }) => [styles.sideIcon, pressed && styles.pressed]}
+          <PressScale
+            scaleTo={PRESS_SCALE.control}
+            style={styles.sideIcon}
             accessibilityRole="button"
             accessibilityLabel="Voice input"
             hitSlop={8}
             onPress={onVoice}
           >
             <Ionicons name="mic-outline" size={22} color={colors.textMuted} />
-          </Pressable>
+          </PressScale>
         )}
       </GlassSurface>
     </View>
@@ -101,11 +120,12 @@ export const Composer = memo(function Composer({
 });
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: space.lg, paddingTop: space.sm, backgroundColor: colors.bg },
+  wrap: { paddingHorizontal: space.md, paddingTop: space.sm, backgroundColor: colors.bg },
+  shell: { minHeight: 48 },
   field: {
     flexDirection: "row",
     alignItems: "flex-end",
-    paddingLeft: 4,
+    paddingLeft: 6,
     paddingRight: 6,
     paddingVertical: 6,
     minHeight: 48,
@@ -129,17 +149,16 @@ const styles = StyleSheet.create({
     ...(Platform.OS === "web" ? { outlineStyle: "none" as never } : null),
   },
   button: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: colors.accent,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 0,
+    marginBottom: 1,
   },
   buttonDisabled: { backgroundColor: colors.surfaceRaised },
   streamingActions: { flexDirection: "row", alignItems: "center", gap: 6 },
   stop: { backgroundColor: colors.accent },
   stopSquare: { width: 12, height: 12, borderRadius: 2, backgroundColor: colors.onAccent },
-  pressed: { opacity: 0.7 },
 });

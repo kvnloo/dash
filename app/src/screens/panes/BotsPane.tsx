@@ -1,7 +1,8 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
+import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { profileFromAgent } from "../../lib/roster";
 import { DEMO_BOT_PROFILES, type BotProfile } from "../../mock/bots";
@@ -24,9 +25,10 @@ const ProfileRow = memo(function ProfileRow({
 }) {
   const canOpen = profile.online && chat;
   return (
-    <Pressable
+    <PressScale
       onPress={() => canOpen && onPress(profile)}
-      style={({ pressed }) => [styles.profileCard, !profile.online && styles.offline, pressed && canOpen && styles.pressed]}
+      disabled={!canOpen}
+      style={[styles.profileCard, !profile.online && styles.offline]}
       accessibilityRole="button"
       accessibilityState={{ disabled: !canOpen }}
     >
@@ -45,7 +47,7 @@ const ProfileRow = memo(function ProfileRow({
           {profile.description}
         </Text>
       </View>
-    </Pressable>
+    </PressScale>
   );
 });
 
@@ -196,7 +198,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  pressed: { opacity: 0.85 },
   offline: { opacity: 0.42 },
   main: { flex: 1, minWidth: 0 },
   top: { flexDirection: "row", alignItems: "center", gap: space.sm },

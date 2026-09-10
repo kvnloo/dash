@@ -3,8 +3,10 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { Linking, Platform, StyleSheet, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { BridgePullOverlay, BridgePullProvider } from "./src/components/BridgePull";
 import type { RootStackParamList } from "./src/navigation";
 import { claimPairAt, settingsFromClaim } from "./src/lib/pair-api";
 import { parseDashConnectUrl } from "./src/lib/pair-url";
@@ -86,34 +88,42 @@ export default function App() {
   if (!hydrated) return <View style={styles.splash} />;
 
   return (
-    <SafeAreaProvider>
-      <KeyboardProvider>
-        <NavigationContainer
-          ref={debugNavigationRef}
-          theme={theme}
-          linking={Platform.OS === "web" ? linking : undefined}
-          onReady={() => flushPendingDebugNavigation()}
-        >
-          <Stack.Navigator
-            initialRouteName={isDebugActive() || hasSettings ? "Main" : "Pair"}
-            screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "default" }}
-          >
-            <Stack.Screen name="Main" component={MainScreen} />
-            <Stack.Screen name="Chat" component={ChatScreen} />
-            <Stack.Screen name="OrchestraDetail" component={OrchestraDetailScreen} />
-            <Stack.Screen name="Conversations" component={ConversationsScreen} options={{ presentation: "modal" }} />
-            <Stack.Screen name="Voice" component={VoiceScreen} options={{ presentation: "fullScreenModal" }} />
-            <Stack.Screen name="Pair" component={PairScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: "modal" }} />
-          </Stack.Navigator>
-        </NavigationContainer>
-        <DebugHost />
-        <StatusBar style="light" />
-      </KeyboardProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
+          <BridgePullProvider>
+            <NavigationContainer
+              ref={debugNavigationRef}
+              theme={theme}
+              linking={Platform.OS === "web" ? linking : undefined}
+              onReady={() => flushPendingDebugNavigation()}
+            >
+            <View style={styles.root}>
+              <Stack.Navigator
+                initialRouteName={isDebugActive() || hasSettings ? "Main" : "Pair"}
+                screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "default" }}
+              >
+                <Stack.Screen name="Main" component={MainScreen} />
+                <Stack.Screen name="Chat" component={ChatScreen} />
+                <Stack.Screen name="OrchestraDetail" component={OrchestraDetailScreen} />
+                <Stack.Screen name="Conversations" component={ConversationsScreen} options={{ presentation: "modal" }} />
+                <Stack.Screen name="Voice" component={VoiceScreen} options={{ presentation: "fullScreenModal" }} />
+                <Stack.Screen name="Pair" component={PairScreen} />
+                <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: "modal" }} />
+              </Stack.Navigator>
+              <BridgePullOverlay />
+            </View>
+            </NavigationContainer>
+          </BridgePullProvider>
+          <DebugHost />
+          <StatusBar style="light" />
+        </KeyboardProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
   splash: { flex: 1, backgroundColor: colors.bg },
 });

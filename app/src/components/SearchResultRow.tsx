@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { memo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import type { SearchResult } from "../lib/global-search";
 import { colors, space, type } from "../theme";
+import { PressScale } from "./PressScale";
 import { timeAgo } from "../util";
 import { GlassSurface } from "./GlassSurface";
 import { HarnessAvatar } from "./HarnessAvatar";
@@ -90,9 +91,9 @@ export const SearchResultRow = memo(function SearchResultRow({
   const showFileIcon = item.kind === "file" || item.kind === "tool";
 
   return (
-    <Pressable
+    <PressScale
       onPress={() => onPress(item)}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      style={styles.row}
       accessibilityRole="button"
     >
       {showFileIcon ? (
@@ -119,7 +120,7 @@ export const SearchResultRow = memo(function SearchResultRow({
         <Text style={styles.kind}>{KIND_LABEL[item.kind]}</Text>
       </View>
       {streaming ? <View style={styles.dot} /> : null}
-    </Pressable>
+    </PressScale>
   );
 });
 
@@ -133,7 +134,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  pressed: { opacity: 0.85 },
   iconWrap: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   main: { flex: 1, minWidth: 0 },
   top: { flexDirection: "row", alignItems: "center", gap: space.sm },

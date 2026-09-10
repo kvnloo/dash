@@ -1,24 +1,36 @@
 import { forwardRef, memo, useImperativeHandle } from "react";
-import { Image, Pressable, StyleSheet, View } from "react-native";
-import Animated, { type SharedValue, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { Image, StyleSheet, View } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  type SharedValue,
+  useAnimatedStyle,
+  useFrameCallback,
+  useSharedValue,
+} from "react-native-reanimated";
 import type { NavigationProp } from "@react-navigation/native";
 import { haptic } from "../haptics";
+import { PRESS_SCALE } from "../motion";
 import type { RootStackParamList } from "../navigation";
+import { useBridgePullOptional, useBridgePullPan } from "./BridgePull";
+import { PressScale } from "./PressScale";
 import {
   DEV_NAV_96,
   GOLD_68,
-  GOLD_GLOW,
   GOLD_RIM,
   NAV_CHROME_HEIGHT,
   NAV_PAGER_HEIGHT,
   NAV_PAGER_PAD,
+  NAV_PAGER_RADIUS,
   NAV_PAGER_WIDTH,
   NAV_PILL_HEIGHT,
+  NAV_PILL_RADIUS,
   NAV_SLOT_WIDTH,
   TAB_LABELS,
   clampProgress,
   clampTab,
   indicatorTranslateX,
+  pillStep,
+  pillStretch,
 } from "./golden-nav";
 
 const expandSrc = require("../../assets/nav-expand.png");
@@ -34,7 +46,8 @@ export type AppNavHandle = {
 /**
  * Native AppNav is a Reanimated view, not a WebView.
  * The pill tracks a shared value written on the UI thread by PagerView.
- * Chrome matches the collapsed 60px CSS bar: frost fill, cream hair, gold glow + inset.
+ * Chrome matches the collapsed 60px CSS bar: frost fill, cream hair, inset spec/shade.
+ * The gold pill is a gel: UI-thread spring follow, stretch on travel, squash on Y.
  */
 export const AppNav = memo(
   forwardRef<
@@ -59,10 +72,33 @@ export const AppNav = memo(
       [progress],
     );
 
+    const follow = useSharedValue(clampProgress(tab));
+    const vel = useSharedValue(0);
+
+    useFrameCallback((info) => {
+      const raw = info.timeSincePreviousFrame;
+      if (raw == null) return;
+      const dt = Math.min(0.033, raw / 1000);
+      if (dt <= 0) return;
+      const next = pillStep(follow.value, vel.value, progress.value, dt);
+      follow.value = next.pos;
+      vel.value = next.vel;
+    });
+
     const pillStyle = useAnimatedStyle(() => {
       const p = progress.value;
-      const n = p < 0 ? 0 : p > 2 ? 2 : p;
-      return { transform: [{ translateX: n * NAV_SLOT_WIDTH }] };
+      const n = follow.value;
+      const { scaleX, scaleY } = pillStretch(n, p, vel.value);
+      const slot = NAV_SLOT_WIDTH;
+      return {
+        transform: [
+          { translateX: n * slot },
+          { translateX: slot / 2 },
+          { scaleX },
+          { scaleY },
+          { translateX: -slot / 2 },
+        ],
+      };
     });
     void indicatorTranslateX;
 
@@ -73,14 +109,23 @@ export const AppNav = memo(
     };
 
     const active = clampTab(tab);
+    const pull = useBridgePullOptional();
+    const pullPan = useBridgePullPan();
+    const chevronStyle = useAnimatedStyle(() => {
+      const p = pull ? pull.progress.value : 0;
+      const n = p < 0 ? 0 : p > 1 ? 1 : p;
+      return { transform: [{ rotateZ: `${n * 180}deg` }] };
+    });
 
     return (
-      <View style={styles.wrap} pointerEvents="box-none">
+      <GestureDetector gesture={pullPan}>
+      <View style={styles.wrap} pointerEvents="box-none" collapsable={false}>
         <View style={styles.row}>
-          <Pressable
+          <PressScale
             accessibilityRole="button"
             accessibilityLabel="Expand"
             android_ripple={RIPPLE}
+            scaleTo={PRESS_SCALE.nav}
             onPress={() => {
               haptic.tap();
               navigation.navigate("Voice");
@@ -89,10 +134,9 @@ export const AppNav = memo(
           >
             <Image source={expandSrc} style={styles.expandIcon} />
             <View pointerEvents="none" style={styles.circleHair} />
-          </Pressable>
+          </PressScale>
           <View style={styles.pager} accessibilityLabel="Primary mobile workspace">
             <Animated.View pointerEvents="none" style={[styles.pillTrack, pillStyle]}>
-              <View style={styles.glow} />
               <View style={styles.pill}>
                 <View style={styles.spec} />
                 <View style={styles.shade} />
@@ -100,36 +144,42 @@ export const AppNav = memo(
             </Animated.View>
             <View style={styles.tabs}>
               {TAB_LABELS.map((label, i) => (
-                <Pressable
+                <PressScale
                   key={label}
                   accessibilityRole="tab"
                   accessibilityLabel={label}
                   accessibilityState={{ selected: i === active }}
                   android_ripple={RIPPLE}
+                  scaleTo={PRESS_SCALE.nav}
                   onPress={() => goTab(i)}
                   style={styles.tab}
                 >
                   <View style={[styles.dot, i === active ? styles.dotOn : styles.dotOff]} />
-                </Pressable>
+                </PressScale>
               ))}
             </View>
             <View pointerEvents="none" style={styles.hair} />
           </View>
-          <Pressable
+          <PressScale
             accessibilityRole="button"
-            accessibilityLabel="Menu"
+            accessibilityLabel="Bridge details"
             android_ripple={RIPPLE}
+            scaleTo={PRESS_SCALE.nav}
             onPress={() => {
               haptic.tap();
-              navigation.navigate("Settings");
+              if (pull) pull.toggle();
+              else navigation.navigate("Settings");
             }}
             style={styles.circle}
           >
-            <Image source={chevronSrc} style={styles.chevronIcon} />
+            <Animated.View style={chevronStyle}>
+              <Image source={chevronSrc} style={styles.chevronIcon} />
+            </Animated.View>
             <View pointerEvents="none" style={styles.circleHair} />
-          </Pressable>
+          </PressScale>
         </View>
       </View>
+      </GestureDetector>
     );
   }),
 );
@@ -169,7 +219,7 @@ const styles = StyleSheet.create({
   pager: {
     width: NAV_PAGER_WIDTH,
     height: NAV_PAGER_HEIGHT,
-    borderRadius: 23,
+    borderRadius: NAV_PAGER_RADIUS,
     backgroundColor: DEV_NAV_96,
     overflow: "visible",
     shadowColor: "#000",
@@ -179,7 +229,7 @@ const styles = StyleSheet.create({
   },
   hair: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 23,
+    borderRadius: NAV_PAGER_RADIUS,
     borderWidth: 1,
     borderColor: "rgba(236,232,223,0.16)",
   },
@@ -191,18 +241,9 @@ const styles = StyleSheet.create({
     height: NAV_PILL_HEIGHT,
     overflow: "visible",
   },
-  glow: {
-    position: "absolute",
-    top: 4,
-    left: 2,
-    right: 2,
-    bottom: -2,
-    borderRadius: 16,
-    backgroundColor: GOLD_GLOW,
-  },
   pill: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: NAV_PILL_RADIUS,
     backgroundColor: GOLD_68,
     borderWidth: 1,
     borderColor: GOLD_RIM,
@@ -225,12 +266,20 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(111, 85, 36, 0.25)",
   },
   tabs: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: NAV_PAGER_PAD,
+    left: NAV_PAGER_PAD,
+    width: NAV_SLOT_WIDTH * 3,
+    height: NAV_PILL_HEIGHT,
     flexDirection: "row",
-    padding: NAV_PAGER_PAD,
     zIndex: 1,
   },
-  tab: { flex: 1, alignItems: "center", justifyContent: "center" },
+  tab: {
+    width: NAV_SLOT_WIDTH,
+    height: NAV_PILL_HEIGHT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   dot: { width: 4, height: 4, borderRadius: 2, overflow: "hidden" },
   dotOn: { backgroundColor: "#211b10" },
   dotOff: { backgroundColor: "#837F74" },

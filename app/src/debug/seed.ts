@@ -4,7 +4,7 @@ import { DEMO_CONVERSATIONS } from "../mock/seed";
 import { saveSettings, setConnection, store } from "../store/app";
 
 const DEBUG_SETTINGS: Settings = {
-  address: "100.78.215.21:4747",
+  address: "100.64.0.1:4747",
   token: "debug-token-not-real",
   harness: "omp",
   cwd: "~/workspace/dash",
@@ -17,10 +17,10 @@ const DEBUG_HOSTS = [
     hostname: "mbp",
     online: true,
     self: true,
-    address: "100.78.215.21",
+    address: "100.64.0.1",
     agents: [
-      { id: "omp:dash", name: "OMP 1", kind: "omp", status: "running" as const, detail: "/home/kvn/workspace/dash", cwd: "/home/kvn/workspace/dash" },
-      { id: "omp:keyconf", name: "OMP 2", kind: "omp", status: "running" as const, detail: "/home/kvn/workspace/keyconf.gen", cwd: "/home/kvn/workspace/keyconf.gen" },
+      { id: "omp:dash", name: "OMP 1", kind: "omp", status: "running" as const, detail: "/home/you/workspace/dash", cwd: "/home/you/workspace/dash" },
+      { id: "omp:keyconf", name: "OMP 2", kind: "omp", status: "running" as const, detail: "/home/you/workspace/keyconf.gen", cwd: "/home/you/workspace/keyconf.gen" },
       { id: "harness:codex", name: "Codex", kind: "codex", status: "available" as const, detail: "Installed" },
       { id: "harness:grok", name: "Grok", kind: "grok", status: "available" as const, detail: "Installed" },
       { id: "harness:hermes", name: "Hermes", kind: "hermes", status: "available" as const, detail: "Installed" },
@@ -33,7 +33,7 @@ const DEBUG_HOSTS = [
     hostname: "groot",
     online: true,
     self: false,
-    address: "100.113.138.100",
+    address: "100.64.0.2",
     agents: [{ id: "hermes", name: "Hermes", kind: "hermes", status: "running" as const, detail: "Mesh node" }],
   },
 ];

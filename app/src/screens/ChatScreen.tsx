@@ -1,9 +1,9 @@
 import { FlashList, type FlashListRef, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
+import { KeyboardDock } from "../components/KeyboardDock";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { HarnessPicker } from "../components/HarnessPicker";
 import { AppNav } from "../components/AppNav";
@@ -164,7 +164,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <AppNav navigation={navigation} tab={1} />
       <ConnectionPill />
-      <KeyboardAvoidingView style={styles.body} behavior="padding" keyboardVerticalOffset={insets.bottom}>
+      <View style={styles.body}>
         <FlashList
           ref={listRef}
           data={messages}
@@ -184,27 +184,27 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             </View>
           }
         />
-        <View style={{ paddingBottom: Math.max(insets.bottom, space.sm) }}>
-          <Composer
-            key={composerDraft ?? "composer"}
-            disabled={!online}
-            streaming={streamingMessage !== undefined}
-            initialText={composerDraft}
-            placeholder={
-              online
-                ? streamingMessage
-                  ? conversation && queueLength(conversation.id) > 0
-                    ? `Queue another (${queueLength(conversation.id)} waiting)…`
-                    : `Queue next message for ${harnessName}…`
-                  : `Message ${harnessName}`
-                : "Waiting for the bridge…"
-            }
-            onSend={onSend}
-            onStop={onStop}
-            onVoice={() => navigation.navigate("Voice")}
-          />
-        </View>
-      </KeyboardAvoidingView>
+      </View>
+      <KeyboardDock>
+        <Composer
+          key={composerDraft ?? "composer"}
+          disabled={!online}
+          streaming={streamingMessage !== undefined}
+          initialText={composerDraft}
+          placeholder={
+            online
+              ? streamingMessage
+                ? conversation && queueLength(conversation.id) > 0
+                  ? `Queue another (${queueLength(conversation.id)} waiting)…`
+                  : `Queue next message for ${harnessName}…`
+                : `Message ${harnessName}`
+              : "Waiting for the bridge…"
+          }
+          onSend={onSend}
+          onStop={onStop}
+          onVoice={() => navigation.navigate("Voice")}
+        />
+      </KeyboardDock>
       <HarnessPicker
         visible={pickerVisible}
         harnesses={connection.harnesses}

@@ -100,7 +100,7 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
               label="Address"
               value={address}
               onChangeText={setAddress}
-              placeholder="100.78.215.21:4747"
+              placeholder="100.64.0.1:4747"
               autoCapitalize="none"
               keyboardType={Platform.OS === "ios" ? "url" : "default"}
               autoComplete="off"
