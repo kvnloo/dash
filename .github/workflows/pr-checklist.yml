@@ -1,0 +1,43 @@
+name: PR Checklist Reminder
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  checklist-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR body for checklist
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            
+            // Check for key checklist items
+            const hasOwnership = body.includes('Ownership respected');
+            const hasMode = body.includes('Mode:') || body.includes('Unattended') || body.includes('Copilot');
+            const hasChecklist = body.includes('- [');
+            
+            if (!hasChecklist || !hasOwnership || !hasMode) {
+              const message = `👋 Thanks for the PR!
+
+              It looks like the PR description might be missing some checklist items from the template. Please ensure you've addressed:
+
+              - **Ownership respected**: Changes follow \`AGENTS.md\` ownership boundaries
+              - **Mode**: Contribution mode (unattended vs copilot)
+              - **No secrets**: No tokens or credentials committed
+
+              See the [PR template](.github/PULL_REQUEST_TEMPLATE.md) for the full checklist.`;
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: message
+              });
+            }

@@ -1,0 +1,56 @@
+name: Feature Request
+description: Propose a new feature or enhancement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please describe what you'd like to see.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem does this solve? What use case?
+      placeholder: |
+        Example: When the bridge reconnects, the app loses chat history.
+        I'd like to see session persistence so chats survive restarts.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How would you like this to work?
+      placeholder: |
+        Example: Store chat history in AsyncStorage (app) and SQLite (bridge).
+        On reconnect, sync the last N messages.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any other approaches you thought about?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: relevance
+    attributes:
+      label: Mesh-vision relevance
+      description: Does this relate to the broader mesh-agent vision?
+      options:
+        - label: This feature aligns with multi-agent pairing over Tailscale
+        - label: This enables new harness types or protocols
+        - label: This is app-specific polish (scoped to Dash UI/UX)
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Screenshots, references, related work
+    validations:
+      required: false

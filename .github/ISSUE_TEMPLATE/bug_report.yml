@@ -1,0 +1,78 @@
+name: Bug Report
+description: Report a bug in the app, bridge, or pairing flow
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the sections below.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the system is affected?
+      options:
+        - App (Expo UI)
+        - Bridge (WebSocket server)
+        - Pairing (connection/auth)
+        - Harness adapter (omp, codex, grok, claude, hermes)
+        - Protocol (wire format)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+      placeholder: |
+        Example: Bridge crashes when harness CLI returns invalid JSON.
+        Expected: Bridge should log the error and continue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Start bridge with `bun run index.ts`
+        2. Pair app with valid token
+        3. Send message to hermes harness
+        4. Observe crash in bridge logs
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Platform, versions, relevant setup
+      placeholder: |
+        - Platform: iOS 18.1 / Android 14 / macOS Sonoma
+        - Expo Go version: 51.0.0
+        - Bridge: Bun 1.1.34
+        - Tailscale: 1.76.1
+        - Affected harness: hermes v0.3.2
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste relevant logs (bridge console, app console, harness output)
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Screenshots, videos, related issues/PRs
+    validations:
+      required: false

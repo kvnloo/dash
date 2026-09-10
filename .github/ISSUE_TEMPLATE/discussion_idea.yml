@@ -1,0 +1,50 @@
+name: Discussion / Idea
+description: Brainstorm ideas, setup help, or open-ended questions
+labels: ["discussion"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for ideas, questions, or discussions that don't fit bug/feature.
+        For setup help, please include your environment and what you've tried.
+
+  - type: textarea
+    id: topic
+    attributes:
+      label: Topic
+      description: What would you like to discuss?
+      placeholder: |
+        Example: How should the bridge handle harness CLI timeouts?
+        Example: Getting "auth failed" when pairing — tried token from ~/.dash/token
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: What kind of discussion?
+      options:
+        - Setup / Pairing help
+        - Architecture / Design
+        - New harness idea
+        - Community / Contribution
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Background, environment, what you've tried (if applicable)
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Notes
+      description: Links, screenshots, references
+    validations:
+      required: false

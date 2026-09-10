@@ -59,6 +59,16 @@ In debug mode, `window.__DASH_DEBUG__` exposes `scenario(id)`, `run({ action })`
 
 See `AGENTS.md` for multi-agent ownership rules.
 
+## Contributing / AI Agents
+
+- **Contributing guide:** See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute (unattended compute donation vs copilot paired PR workflow).
+- **Onboarding:** [docs/loop/ONBOARDING.md](docs/loop/ONBOARDING.md) — use vs contribute decision tree.
+- **Issue priorities:** [docs/loop/ISSUE_PRIORITY.md](docs/loop/ISSUE_PRIORITY.md) — impact/effort rubric toward the mesh vision.
+- **Agent skills:** `.cursor/skills/` — short `SKILL.md` files for agents working on this repo:
+  - `dash-onboard` — first-run for any agent (layout, ownership, conventions).
+  - `dash-bridge` — bridge architecture and harness adapter patterns (read-only guidance).
+  - `dash-contribute` — PR hygiene, fail-then-pass proofs, community norms.
+
 ## Harness notes
 
 - **OMP** — `omp -p --mode json`
