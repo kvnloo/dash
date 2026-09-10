@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   GOLDEN_NAV_CSS,
+  NAV_SLOT_WIDTH,
   clampProgress,
   clampTab,
   goldenNavHtml,
   indicatorTransform,
+  indicatorTranslateX,
   navSetProgressScript,
   navSetTabScript,
   pageProgress,
@@ -64,6 +66,16 @@ describe("indicatorTransform", () => {
   });
 });
 
+describe("indicatorTranslateX", () => {
+  test("is one 46px slot per page so native translateX matches the stadium", () => {
+    expect(NAV_SLOT_WIDTH).toBe(46);
+    expect(indicatorTranslateX(0)).toBe(0);
+    expect(indicatorTranslateX(1)).toBe(46);
+    expect(indicatorTranslateX(1.5)).toBe(69);
+    expect(indicatorTranslateX(2)).toBe(92);
+  });
+});
+
 describe("goldenNavHtml", () => {
   test("bakes the requested tab into markup so the first paint is not stuck on Chats", () => {
     const bots = goldenNavHtml(0);
@@ -76,10 +88,10 @@ describe("goldenNavHtml", () => {
     expect(orch).not.toContain('aria-label="Bots" class="is-active"');
   });
 
-  test("defines window.setProgress for native injectJavaScript", () => {
+  test("paints real 4px dots, not empty buttons hoping ::after survives Android WebView", () => {
     const html = goldenNavHtml(1);
-    expect(html).toContain("window.setProgress");
-    expect(html).toContain(indicatorTransform(1));
+    expect(html).toContain('class="dev-mobile-pager-dot"');
+    expect(html.split("dev-mobile-pager-dot").length - 1).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -136,7 +148,7 @@ describe("GOLDEN_NAV_CSS colors and clip", () => {
     expect(pager.slice(0, 400)).toContain("overflow: visible");
   });
 
-  test("native indicator is compositor-driven with no left transition", () => {
+  test("web/CSS indicator is compositor-driven with no left transition", () => {
     const block = GOLDEN_NAV_CSS.slice(GOLDEN_NAV_CSS.indexOf(".dev-mobile-pager-indicator"));
     expect(block).toContain("transition: none");
     expect(block).not.toContain("transition: left 220ms");
@@ -144,25 +156,30 @@ describe("GOLDEN_NAV_CSS colors and clip", () => {
     expect(block).toContain("will-change: transform");
   });
 
-  test("chrome pads the 50px pager so the gold glow is inside the WebView", () => {
-    expect(GOLDEN_NAV_CSS).toContain("padding: 15px 16px");
-    expect(GOLDEN_NAV_CSS).not.toMatch(/\.dash-appnav \{[^}]*height: 60px/);
+  test("dots are real 4px elements, not a ::after that Android software WebView drops", () => {
+    expect(GOLDEN_NAV_CSS).toContain(".dev-mobile-pager-dot");
+    expect(GOLDEN_NAV_CSS).toContain("width: 4px");
+    expect(GOLDEN_NAV_CSS).toContain("height: 4px");
   });
 });
 
 describe("native AppNav wiring", () => {
-  test("does not freeze the WebView HTML on tab 1", () => {
+  test("does not drive the pill through a WebView JS bridge", () => {
     const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).not.toContain("goldenNavHtml(1)");
-    expect(src).toContain("navSetProgressScript");
-    expect(src).toContain("goldenNavHtml(");
+    expect(src).not.toContain("react-native-webview");
+    expect(src).not.toContain("injectJavaScript");
+    expect(src).not.toContain("androidLayerType");
+    expect(src).toContain("react-native-reanimated");
+    expect(src).toContain("indicatorTranslateX");
     expect(src).toContain("setProgress");
   });
 
-  test("WebView wrap is tall enough that the 18px gold glow is not squared off", () => {
+  test("paints three 4dp dots as native views above the gold pill", () => {
     const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("height: 80");
-    expect(src).not.toMatch(/wrap: \{ height: 60/);
+    expect(src).toContain("width: 4");
+    expect(src).toContain("height: 4");
+    expect(src).toContain("#211b10");
+    expect(src).toContain("#837F74");
   });
 });
 
