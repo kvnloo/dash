@@ -8,6 +8,7 @@ import {
   type FileResource,
   type NamedResource,
 } from "../mock/resources";
+import { conversationPreview } from "./live-sessions";
 import type { Conversation } from "../model";
 
 export type MentionScope = "bots" | "conversation" | "product";
@@ -146,15 +147,7 @@ function matches(text: string, haystack: string): boolean {
   return haystack.toLowerCase().includes(text);
 }
 
-export function conversationPreview(c: Conversation): string {
-  const last = c.messages[c.messages.length - 1];
-  if (!last) return "Empty chat";
-  if (last.role === "assistant") {
-    const t = last.text.replace(/\s+/g, " ").trim();
-    return last.status ? last.status : t || "Thinking…";
-  }
-  return last.text.replace(/\s+/g, " ").trim();
-}
+export { conversationPreview } from "./live-sessions";
 
 export function enrichProducts(conversations: Conversation[], orchestras: OrchestraProject[]): OrchestraProject[] {
   if (conversations.length === 0) return orchestras;

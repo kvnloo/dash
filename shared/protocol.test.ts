@@ -156,4 +156,42 @@ describe("parseServerMessage", () => {
       ]),
     ).toBeUndefined();
   });
+
+  test("accepts optional harness sessionId on an agent", () => {
+    const hosts = parseHosts([
+      {
+        id: "mbp",
+        name: "mbp",
+        hostname: "mbp",
+        online: true,
+        self: true,
+        agents: [
+          {
+            id: "omp:aaa",
+            name: "OMP",
+            kind: "omp",
+            status: "running",
+            cwd: "/home/you/workspace/dash",
+            sessionId: "01liveomp",
+          },
+        ],
+      },
+    ]);
+    expect(hosts?.[0]?.agents[0]?.sessionId).toBe("01liveomp");
+  });
+
+  test("rejects a host when sessionId is not a string", () => {
+    expect(
+      parseHosts([
+        {
+          id: "mbp",
+          name: "mbp",
+          hostname: "mbp",
+          online: true,
+          self: true,
+          agents: [{ id: "omp:aaa", name: "OMP", kind: "omp", status: "running", sessionId: 1 }],
+        },
+      ]),
+    ).toBeUndefined();
+  });
 });

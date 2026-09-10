@@ -1,6 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { isCatalogHarness } from "../../shared/catalog";
 import type { AgentInfo, HarnessInfo, HostInfo } from "../../shared/protocol";
 
 export type TailscaleNode = {
@@ -15,6 +16,8 @@ export type TailscaleNode = {
 export type OmpTab = {
   id: string;
   cwd: string;
+  sessionId?: string;
+  title?: string;
 };
 
 export type HermesProfileInfo = {
@@ -103,6 +106,72 @@ export function liveOmpFromDaemonRoot(root: string, alive: (pid: number) => bool
     tabs.push({ id: name, cwd });
   }
   return tabs.sort((a, b) => a.cwd.localeCompare(b.cwd) || a.id.localeCompare(b.id));
+}
+
+/** OMP stores sessions under `~/.omp/agent/sessions/<cwd with / → ->`. */
+export function ompSessionDirName(cwd: string, home: string): string {
+  const homeDir = home.endsWith("/") ? home.slice(0, -1) : home;
+  const rel = cwd === homeDir || cwd.startsWith(`${homeDir}/`) ? cwd.slice(homeDir.length) : cwd;
+  return rel.replaceAll("/", "-") || "-";
+}
+
+function latestJsonl(dir: string): string | undefined {
+  if (!existsSync(dir)) return undefined;
+  let latest: string | undefined;
+  let latestMtime = -1;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".jsonl")) continue;
+    const path = join(dir, name);
+    let mtime = 0;
+    try {
+      mtime = statSync(path).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (mtime >= latestMtime) {
+      latestMtime = mtime;
+      latest = name;
+    }
+  }
+  return latest;
+}
+
+function readOmpSessionFile(path: string, fallbackId: string | undefined): { sessionId: string; title?: string } | null {
+  let sessionId = fallbackId;
+  let title: string | undefined;
+  try {
+    const text = readFileSync(path, "utf8").slice(0, 8192);
+    for (const line of text.split("\n")) {
+      if (line.charCodeAt(0) !== 123) continue;
+      let rec: Record<string, unknown>;
+      try {
+        const value: unknown = JSON.parse(line);
+        if (typeof value !== "object" || value === null) continue;
+        rec = value as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (rec.type === "title" && typeof rec.title === "string" && rec.title.trim()) title = rec.title.trim();
+      if (rec.type === "session" && typeof rec.id === "string" && rec.id.length > 0) sessionId = rec.id;
+    }
+  } catch {
+    // filename id is enough to list the live tab
+  }
+  if (!sessionId) return null;
+  return title ? { sessionId, title } : { sessionId };
+}
+
+/** Overlay harness-native session ids from OMP's session store. Never hide a live tab. */
+export function attachOmpSessions(tabs: OmpTab[], sessionRoot: string, home: string): OmpTab[] {
+  return tabs.map((tab) => {
+    if (tab.sessionId) return tab;
+    const file = latestJsonl(join(sessionRoot, ompSessionDirName(tab.cwd, home)));
+    if (!file) return { ...tab, sessionId: tab.id };
+    const fromName = /_([^_/]+)\.jsonl$/.exec(file)?.[1];
+    const found = readOmpSessionFile(join(sessionRoot, ompSessionDirName(tab.cwd, home), file), fromName);
+    if (!found) return { ...tab, sessionId: tab.id };
+    return { ...tab, sessionId: found.sessionId, title: found.title ?? tab.title };
+  });
 }
 
 export function parseHermesGatewayList(text: string): HermesProfileInfo[] {
@@ -211,14 +280,18 @@ function hermesProfileAgent(profile: HermesProfileInfo, a2a?: { ok: boolean; url
 }
 
 function selfAgents(tabs: OmpTab[], harnesses: HarnessInfo[], signals?: RosterSignals): AgentInfo[] {
-  const agents: AgentInfo[] = tabs.map((tab, index) => ({
-    id: `omp:${tab.id}`,
-    name: tabs.length > 1 ? `OMP ${index + 1}` : "OMP",
-    kind: "omp",
-    status: "running",
-    detail: tab.cwd || "OMP tab",
-    cwd: tab.cwd || undefined,
-  }));
+  const agents: AgentInfo[] = tabs.map((tab, index) => {
+    const agent: AgentInfo = {
+      id: `omp:${tab.id}`,
+      name: tabs.length > 1 ? `OMP ${index + 1}` : "OMP",
+      kind: "omp",
+      status: "running",
+      detail: tab.cwd || "OMP tab",
+      cwd: tab.cwd || undefined,
+    };
+    if (isCatalogHarness("omp")) agent.sessionId = tab.sessionId ?? tab.id;
+    return agent;
+  });
   const listed = new Set(agents.map((a) => a.kind));
   if (!listed.has("omp")) {
     const omp = harnesses.find((h) => h.id === "omp");
@@ -355,7 +428,12 @@ export function collectRoster(harnesses: HarnessInfo[], self: { hostname: string
   if (rosterCache && rosterCache.key === key && now - rosterCache.at < ROSTER_TTL_MS) return rosterCache.hosts;
   refreshHermesList();
   const nodes = parseTailscaleStatus(readTailscaleStatus());
-  const ompTabs = liveOmpFromDaemonRoot(join(homedir(), ".omp", "run", "daemons"), pidAlive);
+  const home = homedir();
+  const ompTabs = attachOmpSessions(
+    liveOmpFromDaemonRoot(join(home, ".omp", "run", "daemons"), pidAlive),
+    join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions"),
+    home,
+  );
   const selfNode = nodes.find((n) => n.self);
   const selfAddress = self.address ?? firstV4(selfNode?.ips ?? []);
   const hermesProfiles = listedHermesProfiles(parseHermesGatewayList(hermesListCache));

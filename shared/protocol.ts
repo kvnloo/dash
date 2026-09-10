@@ -19,6 +19,8 @@ export interface AgentInfo {
   status: "running" | "available" | "offline";
   detail?: string;
   cwd?: string;
+  /** Harness-native session id when this row is a live conversation we can resume. */
+  sessionId?: string;
 }
 
 /** A machine on the tailnet (this laptop, groot/0, …). */
@@ -183,6 +185,7 @@ function isAgentInfo(value: unknown): value is AgentInfo {
   }
   if (value.detail !== undefined && !str(value.detail)) return false;
   if (value.cwd !== undefined && !str(value.cwd)) return false;
+  if (value.sessionId !== undefined && !str(value.sessionId)) return false;
   return true;
 }
 
