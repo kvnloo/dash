@@ -2,7 +2,7 @@ import type { Conversation, Settings } from "../model";
 import { saveSettings, setConnection, store } from "../store/app";
 
 const DEMO_SETTINGS: Settings = {
-  address: "100.78.215.21:4747",
+  address: "100.64.0.1:4747",
   token: "demo-token-not-real",
   harness: "omp",
 };

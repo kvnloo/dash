@@ -4,7 +4,7 @@ import { DEMO_CONVERSATIONS } from "../mock/seed";
 import { saveSettings, setConnection, store } from "../store/app";
 
 const DEBUG_SETTINGS: Settings = {
-  address: "100.78.215.21:4747",
+  address: "100.64.0.1:4747",
   token: "debug-token-not-real",
   harness: "omp",
   cwd: "~/workspace/dash",

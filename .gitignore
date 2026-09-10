@@ -5,3 +5,13 @@ dist/
 .DS_Store
 .tools/
 expo-qr.png
+
+# local secrets / machine paths — never commit
+.env
+.env.*
+!.env.example
+.cursor/mcp.json
+*.pem
+*.p12
+*.jks
+*.keystore
