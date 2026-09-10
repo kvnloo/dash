@@ -234,8 +234,7 @@ function selfAgents(tabs: OmpTab[], harnesses: HarnessInfo[], signals?: RosterSi
   }
   const profiles = signals?.hermesProfiles ?? [];
   const skipHermesHarness = profiles.length > 0 || signals?.hermesA2A !== undefined;
-  const grokReachable =
-    signals?.grokBot === true && profiles.some((p) => p.id === "connect-all" && p.gateway === "running");
+  const grokReachable = signals?.grokBot === true;
   for (const h of harnesses) {
     if (h.id === "omp") continue;
     if (h.id === "hermes" && skipHermesHarness) continue;

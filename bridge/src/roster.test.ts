@@ -148,8 +148,8 @@ describe("roster", () => {
     expect(running[0]!.agents.find((a) => a.kind === "hermes")?.detail).toBe("http://100.64.0.1:9900");
   });
 
-  test("does not list grok-bot while connect-all is stopped", () => {
-    const stopped = assembleRoster({
+  test("lists grok-bot when the desktop app is alive, even if connect-all is stopped", () => {
+    const alive = assembleRoster({
       nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
       ompTabs: [],
       harnesses: [{ id: "grok", name: "Grok", available: true }],
@@ -159,26 +159,27 @@ describe("roster", () => {
         hermesProfiles: [{ id: "connect-all", gateway: "stopped" }],
       },
     });
-    const running = assembleRoster({
+    const dead = assembleRoster({
       nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
       ompTabs: [],
       harnesses: [{ id: "grok", name: "Grok", available: true }],
       selfFallback: { hostname: "mbp" },
       signals: {
-        grokBot: true,
+        grokBot: false,
         hermesProfiles: [{ id: "connect-all", gateway: "running" }],
       },
     });
-    expect(stopped[0]!.agents.some((a) => a.id === "grok-bot" || a.id === "a2a:grok-bot")).toBe(false);
-    expect(stopped[0]!.agents.find((a) => a.id === "harness:grok")?.status).toBe("available");
-    expect(running[0]!.agents.find((a) => a.id === "grok-bot")).toEqual({
+    expect(alive[0]!.agents.find((a) => a.id === "grok-bot")).toEqual({
       id: "grok-bot",
       name: "grok-bot",
       kind: "grok",
       status: "running",
       detail: "Desktop app",
     });
-    expect(running[0]!.agents.find((a) => a.id === "harness:grok")).toBeUndefined();
+    expect(alive[0]!.agents.find((a) => a.id === "harness:grok")).toBeUndefined();
+    expect(alive[0]!.agents.find((a) => a.id === "hermes:connect-all")?.status).toBe("offline");
+    expect(dead[0]!.agents.some((a) => a.id === "grok-bot")).toBe(false);
+    expect(dead[0]!.agents.find((a) => a.id === "harness:grok")?.status).toBe("available");
   });
 
   test("cursor stays empty; Cursor agents do not join via Hermes", () => {
