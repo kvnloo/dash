@@ -23,6 +23,7 @@ import { CLAIM_KEY_BYTES, claimSession, currentOrCreateSession, startBoundSessio
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
 import { collectRoster } from "./src/roster";
+import { hermesCliArgv, runHermesSession } from "./src/hermes-session";
 import { speechAvailable, transcribe, warmup } from "./speech";
 
 // ---------------------------------------------------------------------------
@@ -294,9 +295,7 @@ const hermes: Harness = {
   id: "hermes",
   name: "Hermes",
   bin: "hermes",
-  argv({ text, cwd, sessionId }) {
-    return ["chat", "-q", text, "-Q", "--in", cwd, ...(sessionId ? ["--resume", sessionId] : [])];
-  },
+  argv: hermesCliArgv,
   parser(sink) {
     const lines: string[] = [];
     return {
@@ -347,6 +346,7 @@ class Turn implements Sink {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private cancelled = false;
   private proc: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
+  private abort: AbortController | null = null;
   /** Last two characters of text sent so far; used to separate prose around tool calls. */
   private textTail = "";
   private breakPending = false;
@@ -359,6 +359,57 @@ class Turn implements Sink {
   start(input: TurnInput): void {
     // A spoken turn is transcribed before it starts, so a cancel can arrive
     // while there is no process to kill yet.
+    if (this.cancelled || this.finished) return;
+    if (this.harness.id === "hermes") {
+      this.startHermes(input);
+      return;
+    }
+    this.spawnCli(input);
+  }
+
+  private startHermes(input: TurnInput): void {
+    const abort = new AbortController();
+    this.abort = abort;
+    log("turn.start", {
+      id: this.id,
+      harness: "hermes",
+      cwd: input.cwd,
+      resume: Boolean(input.sessionId),
+    });
+    void (async () => {
+      try {
+        const result = await runHermesSession({
+          input,
+          env: process.env,
+          log,
+          signal: abort.signal,
+        });
+        if (this.cancelled) {
+          if (!this.finished) this.finish(CANCELLED_EXIT_CODE);
+          return;
+        }
+        if (this.finished) return;
+        if (result.path === "cli") {
+          this.spawnCli(input);
+          return;
+        }
+        if (result.sessionId) this.session(result.sessionId);
+        if (result.text) this.delta(result.text);
+        this.finish(0);
+        log("turn.end", { id: this.id, harness: "hermes", exitCode: 0, path: result.path });
+      } catch (error) {
+        if (this.cancelled) {
+          if (!this.finished) this.finish(CANCELLED_EXIT_CODE);
+          return;
+        }
+        if (this.finished) return;
+        this.error(String(error));
+        this.finish(1);
+      }
+    })();
+  }
+
+  private spawnCli(input: TurnInput): void {
     if (this.cancelled || this.finished) return;
     const parser = this.harness.parser(this);
     const proc = Bun.spawn([this.harness.bin, ...this.harness.argv(input)], {
@@ -409,6 +460,7 @@ class Turn implements Sink {
   cancel(): void {
     if (this.cancelled || this.finished) return;
     this.cancelled = true;
+    this.abort?.abort();
     if (!this.proc) {
       this.finish(CANCELLED_EXIT_CODE);
       return;
@@ -845,7 +897,7 @@ const server = Bun.serve<SocketData>({
           if (turns.has(message.id)) return;
           const harness = HARNESSES.find((h) => h.id === message.harness);
           if (!harness) return rejectTurn(ws, message.id, `Unknown agent "${message.harness}".`);
-          if (Bun.which(harness.bin) === null) {
+          if (harness.id !== "hermes" && Bun.which(harness.bin) === null) {
             return rejectTurn(
               ws,
               message.id,
@@ -870,7 +922,7 @@ const server = Bun.serve<SocketData>({
           }
           const harness = HARNESSES.find((h) => h.id === message.harness);
           if (!harness) return rejectTurn(ws, message.id, `Unknown agent "${message.harness}".`);
-          if (Bun.which(harness.bin) === null) {
+          if (harness.id !== "hermes" && Bun.which(harness.bin) === null) {
             return rejectTurn(
               ws,
               message.id,
