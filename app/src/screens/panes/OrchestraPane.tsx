@@ -1,59 +1,63 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { HarnessAvatar } from "../../components/HarnessAvatar";
+import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../../catalog/runtime-state";
+import { loadAodlOrchestras, type OrchestraProject } from "../../catalog/orchestra";
+import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../../catalog/visual";
+import { EffortOrbs } from "../../components/EffortOrbs";
+import { OrchestraCore, TopologyBadge } from "../../components/TopologyBadge";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
-import { DEMO_ORCHESTRAS, type OrchestraProject } from "../../mock/orchestra";
+import { inAppFeedbackEnabled } from "../../lib/feedback";
+import { submitInAppFeedback } from "../../lib/feedback-submit";
+import { enrichProducts } from "../../lib/global-search";
+import { threadTargetForOrchestra } from "../../lib/orchestra-thread";
 import type { ScreenProps } from "../../navigation";
-import { store } from "../../store/app";
+import { setActive, store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
 import { timeAgo } from "../../util";
 
-const STATUS_COLOR = {
-  active: colors.ok,
-  idle: colors.textMuted,
-  paused: colors.warn,
-} as const;
-
 const Card = memo(function Card({
   item,
-  harnessNames,
+  streaming,
   onPress,
+  onLongPress,
 }: {
   item: OrchestraProject;
-  harnessNames: string[];
-  onPress(id: string): void;
+  streaming: boolean;
+  onPress(item: OrchestraProject): void;
+  onLongPress?(item: OrchestraProject): void;
 }) {
+  const visual = loadVisualCatalog();
+  const topology = resolveTopology(visual, item.topologyId);
+  const provider = resolveProvider(visual, item.providerId);
+  const state = resolveRuntimeState(visual, runtimeStateFromOrchestra({ status: item.status, streaming }));
+  const effort = resolveEffort(visual, effortIdForTurn({ turnState: streaming ? "streaming" : undefined }));
   return (
-    <PressScale onPress={() => onPress(item.id)} style={styles.card} accessibilityRole="button">
+    <PressScale
+      onPress={() => onPress(item)}
+      onLongPress={onLongPress ? () => onLongPress(item) : undefined}
+      delayLongPress={350}
+      style={styles.card}
+      accessibilityRole="button"
+    >
       <View style={styles.cardTop}>
         <View style={styles.cardTitles}>
           <Text style={styles.name} numberOfLines={1}>
             {item.name}
           </Text>
-          <Text style={styles.sub} numberOfLines={1}>
+          <Text style={styles.sub} numberOfLines={2}>
             {item.subtitle}
           </Text>
         </View>
-        <View
-          style={[styles.statusDot, { backgroundColor: STATUS_COLOR[item.status] }]}
-          accessibilityLabel={item.status}
-        />
+        <EffortOrbs hue={provider.hue} size={36} effort={effort} state={state} accessibilityLabel={`${item.name} · ${state.label}`}>
+          <OrchestraCore hue={provider.hue} size={36} />
+        </EffortOrbs>
       </View>
-      <View style={styles.agents}>
-        {harnessNames.slice(0, 4).map((name) => (
-          <HarnessAvatar key={name} name={name} size={36} />
-        ))}
-        {harnessNames.length > 4 ? (
-          <View style={styles.more}>
-            <Text style={styles.moreText}>+{harnessNames.length - 4}</Text>
-          </View>
-        ) : null}
-      </View>
+      <TopologyBadge topologyId={item.topologyId} providerId={item.providerId} width={220} />
       <View style={styles.footer}>
         <Text style={styles.meta}>
-          {item.agents.length} agent{item.agents.length === 1 ? "" : "s"} · {item.chatIds.length} chat
+          {topology.label} · {item.agents.length} agent{item.agents.length === 1 ? "" : "s"} · {item.chatIds.length} chat
           {item.chatIds.length === 1 ? "" : "s"}
         </Text>
         <Text style={styles.time}>{timeAgo(item.updatedAt)}</Text>
@@ -63,31 +67,55 @@ const Card = memo(function Card({
 });
 
 export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
-  const harnesses = store.use((s) => s.connection.harnesses);
   const conversations = store.use((s) => s.conversations);
-
+  const settings = store.use((s) => s.settings);
   const projects = useMemo(() => {
-    if (conversations.length === 0) return DEMO_ORCHESTRAS;
-    return DEMO_ORCHESTRAS.map((p) => ({
-      ...p,
-      chatIds: conversations.filter((c) => p.agents.includes(c.harness)).map((c) => c.id),
-    }));
+    return enrichProducts(conversations, loadAodlOrchestras());
+  }, [conversations]);
+  const streamingIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const conversation of conversations) {
+      if (conversationStreaming(conversation.messages)) ids.add(conversation.id);
+    }
+    return ids;
   }, [conversations]);
 
   const open = useCallback(
-    (id: string) => {
+    (item: OrchestraProject) => {
       haptic.select();
-      navigation.navigate("OrchestraDetail", { orchestraId: id });
+      const target = threadTargetForOrchestra(item, store.get().conversations);
+      if (target.kind === "chat") {
+        setActive(target.conversationId);
+        navigation.navigate("Chat");
+        return;
+      }
+      navigation.navigate("OrchestraDetail", { orchestraId: target.orchestraId });
     },
     [navigation],
   );
 
+  const onFeedback = useCallback(
+    (item: OrchestraProject) => {
+      if (!inAppFeedbackEnabled(store.get().settings)) return;
+      haptic.select();
+      submitInAppFeedback({
+        kind: "select",
+        text: `Selected orchestra ${item.name}`,
+        selection: { kind: "orchestra", id: item.id, label: item.name },
+      });
+      navigation.navigate("Chat");
+    },
+    [navigation],
+  );
+
+  const feedbackOn = inAppFeedbackEnabled(settings);
+
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<OrchestraProject>) => {
-      const harnessNames = item.agents.map((id) => harnesses.find((h) => h.id === id)?.name ?? id);
-      return <Card item={item} harnessNames={harnessNames} onPress={open} />;
+      const streaming = item.chatIds.some((id) => streamingIds.has(id));
+      return <Card item={item} streaming={streaming} onPress={open} onLongPress={feedbackOn ? onFeedback : undefined} />;
     },
-    [harnesses, open],
+    [feedbackOn, onFeedback, open, streamingIds],
   );
 
   return (
@@ -118,19 +146,8 @@ const styles = StyleSheet.create({
   cardTitles: { flex: 1, minWidth: 0 },
   name: { color: colors.text, ...type.heading },
   sub: { color: colors.textMuted, ...type.small, marginTop: 2, textTransform: "none", letterSpacing: 0 },
-  statusDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
-  agents: { flexDirection: "row", gap: space.sm, marginTop: space.lg },
-  more: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surfaceRaised,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  moreText: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
   footer: { flexDirection: "row", justifyContent: "space-between", marginTop: space.md },
-  meta: { color: colors.textFaint, fontSize: 12 },
+  meta: { color: colors.textFaint, fontSize: 12, flex: 1, marginRight: space.sm },
   time: { color: colors.textFaint, fontSize: 12 },
   empty: { paddingTop: "35%", paddingHorizontal: space.xl, alignItems: "center" },
   emptyTitle: { color: colors.text, ...type.heading, marginBottom: space.sm },

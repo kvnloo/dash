@@ -21,7 +21,7 @@ Optional env:
 | Var | Default |
 |-----|---------|
 | `DASH_PORT` | `4747` |
-| `DASH_HOST` | Tailscale IPv4 |
+| `DASH_HOST` | `0.0.0.0` (LAN + Tailscale) |
 | `DASH_CWD` | directory you launched from |
 
 ```bash
@@ -86,3 +86,9 @@ See `AGENTS.md` for multi-agent ownership rules.
 Each harness keeps its own session id for multi-turn threads.
 
 Canonical ids: [kvnloo/aodl `harnesses/catalog.json`](https://github.com/kvnloo/aodl/blob/main/harnesses/catalog.json). `o8` is a control room; firstmate is a distro — neither is a Dash spawn target.
+
+## Related
+
+- IR: [kvnloo/aodl](https://github.com/kvnloo/aodl)
+- Research: [kvnloo/frontier-kb](https://github.com/kvnloo/frontier-kb)
+- Hermes governance: [kvnloo/hermes-keel](https://github.com/kvnloo/hermes-keel)
