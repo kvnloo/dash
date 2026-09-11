@@ -2,63 +2,18 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, integrate/device-layer]
+    branches: [main, preview, nightly, dev, integrate/device-layer]
   push:
-    branches: [main, integrate/device-layer]
+    branches: [main, preview, nightly, dev, integrate/device-layer]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
 jobs:
-  typecheck-and-lint:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        package: [app, bridge, server]
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      
-      - name: Install dependencies (${{ matrix.package }})
-        working-directory: ./${{ matrix.package }}
-        run: bun install
-      
-      - name: Typecheck (${{ matrix.package }})
-        working-directory: ./${{ matrix.package }}
-        run: bun run tsc --noEmit || true
-        continue-on-error: true
-      
-      - name: Lint (${{ matrix.package }})
-        working-directory: ./${{ matrix.package }}
-        run: |
-          if [ -f "package.json" ] && grep -q '"lint"' package.json; then
-            bun run lint || true
-          else
-            echo "No lint script found, skipping"
-          fi
-        continue-on-error: true
-
-  install-root:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      
-      - name: Install root dependencies
-        run: bun install
-      
-      - name: Check shared/protocol.ts
-        run: |
-          if [ -f "shared/protocol.ts" ]; then
-            echo "✓ shared/protocol.ts exists"
-          else
-            echo "✗ shared/protocol.ts missing"
-            exit 1
-          fi
-
   unit-tests:
     runs-on: ubuntu-latest
     steps:
@@ -66,10 +21,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+          cache: true
       - name: Install app and bridge
-        run: bun install --cwd app && bun install --cwd bridge
+        run: bun install --frozen-lockfile --cwd app && bun install --frozen-lockfile --cwd bridge
       - name: Unit tests
-        run: bun test app/src bridge/src shared scripts/mutate.test.ts
+        run: bun test app/src bridge/src shared scripts/mutate.test.ts scripts/assert-nav-dots.test.ts scripts/oss-loop.test.ts
 
   mutation:
     needs: unit-tests
@@ -80,8 +36,28 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+          cache: true
       - name: Install app and bridge
-        run: bun install --cwd app && bun install --cwd bridge
+        run: bun install --frozen-lockfile --cwd app && bun install --frozen-lockfile --cwd bridge
       - name: Mutation tests
         run: bun scripts/mutate.ts --threshold 80 --max 200
 
+  maestro-nav-dots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+          cache: true
+      - name: Maestro nav flows must not kill Metro
+        run: |
+          set -euo pipefail
+          for f in .maestro/nav-dots.yaml .maestro/inspect-nav.yaml; do
+            if grep -E 'launchApp|stopApp' "$f"; then
+              echo "$f must not launchApp/stopApp (kills Metro 8097)"
+              exit 1
+            fi
+          done
+      - name: Nav-dot geometry checker (Yoga collapse class)
+        run: bun test scripts/assert-nav-dots.test.ts

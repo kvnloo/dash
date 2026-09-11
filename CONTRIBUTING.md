@@ -31,8 +31,10 @@ See the [README](README.md) for more details.
 
 If you are a coding agent told to **autodevelop**, read
 [`.cursor/skills/autodevelop/SKILL.md`](.cursor/skills/autodevelop/SKILL.md)
-and run that loop. Claim one `claimable` issue, work on a branch from
-`origin/main`, prove fail-then-pass, open a PR. Do not merge `main`.
+and run that loop. Dash follows the [Verified OSS Loop](https://github.com/kvnloo/verified-oss-loop)
+with scheme **rolling**. Claim one `claimable` issue, `python3 .verified-oss-loop/rollout.py show`,
+branch from `origin/nightly`, prove fail-then-pass, open a PR at `preview`
+(day) or `nightly` (overnight). Do not merge `main` or `dev`.
 
 
 Contributions come in two flavors: **unattended** and **copilot**.
@@ -67,10 +69,10 @@ Contribute code, docs, or skills by pairing with an agent on a focused branch. T
 
 **PR workflow:**
 
-1. Fork or branch from `main`.
+1. Fork or branch from `nightly` (`worker_base`). Day-pass PRs target `preview`. Overnight PRs target `nightly`. Do not pile PRs onto `main`.
 2. Work in small, focused commits.
-3. Write or update tests if applicable.
-4. Open a PR early (draft is fine) with a clear title and description.
+3. Write or update tests if applicable. Fill the evidence receipt in `.github/PULL_REQUEST_TEMPLATE.md`.
+4. Open a PR early (draft is fine) with a clear title and description. Automerge into `preview`/`nightly` waits for checks; it never merges `main`/`dev`.
 5. Request review from maintainers or relevant domain owners.
 6. Iterate based on feedback.
 
@@ -85,7 +87,7 @@ Contribute code, docs, or skills by pairing with an agent on a focused branch. T
 
 Dash is designed for human+agent collaboration. When contributing:
 
-- **Agent skills live in `.cursor/skills/`** (see [skills directory](.cursor/skills/)). Each skill is a short `SKILL.md` with a "when to use" description and a recipe. Agents read these to learn the repo.
+- **Agent skills live in `.cursor/skills/`** (see [skills directory](.cursor/skills/)). Each skill is a short `SKILL.md` with a "when to use" description and a recipe. Agents read these to learn the repo. Pairing, roster, and attach failures: `.cursor/skills/dash-debug/SKILL.md`.
 - **Agent-friendly commits**: Clear commit messages, one logical change per commit, and references to issues/discussions.
 - **Harness patterns**: Each harness (omp, codex, grok, claude, hermes) has its own CLI and output format. When adding harness support, see [`bridge/src/harnesses.ts`](bridge/src/harnesses.ts) for examples.
 
@@ -97,6 +99,7 @@ Dash is designed for human+agent collaboration. When contributing:
 - **Do not** unlock `keel` for production use. Keel is internal scaffolding and not ready for deployment.
 - **Do not** commit secrets (tokens, API keys, credentials) in code or chat logs. Use `~/.dash/token` or environment variables.
 - **Do not** force-push to `main` or rewrite shared history.
+- **Do not** merge `main` or `dev`. Channel automerge is only for `preview`/`nightly`.
 - **Do not** change `app/src/**`, `app/App.tsx`, `app/app.json`, or `app/metro.config.js` unless explicitly assigned. These files are owned by the UI session (Kevin) and are mid-flight.
 
 ## Priorities and Vision
