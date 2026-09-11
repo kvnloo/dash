@@ -38,6 +38,14 @@ const Row = memo(function Row({
   onDelete(id: string): void;
 }) {
   const streaming = item.messages.some((m) => m.role === "assistant" && m.state === "streaming");
+  let assistantState: string | undefined;
+  for (let i = item.messages.length - 1; i >= 0; i--) {
+    const message = item.messages[i];
+    if (message && message.role === "assistant") {
+      assistantState = message.state;
+      break;
+    }
+  }
   return (
     <PressScale
       onPress={() => onPress(item.id)}
@@ -46,7 +54,7 @@ const Row = memo(function Row({
       style={[styles.row, active && styles.rowActive]}
       accessibilityRole="button"
     >
-      <HarnessAvatar name={harnessName} />
+      <HarnessAvatar harnessId={item.harness} assistantState={assistantState} />
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
           <Text style={styles.rowTitle} numberOfLines={1}>

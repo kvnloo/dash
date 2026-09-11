@@ -26,6 +26,43 @@ export interface VisualProvider {
   hue: string;
 }
 
+export interface VisualModel {
+  id: string;
+  label: string;
+  core: string;
+  accent: string;
+}
+
+export interface VisualEffort {
+  id: string;
+  label: string;
+  orbits: number;
+  energy: number;
+  accent: string;
+}
+
+export interface VisualOperatingMode {
+  id: string;
+  label: string;
+  marker: string;
+  accent: string;
+  motion: string;
+}
+
+export interface VisualRuntimeState {
+  id: string;
+  label: string;
+  marker: string;
+  accent: string;
+}
+
+export interface OwnerRule {
+  prefix: string;
+  provider: string;
+  model: string;
+  effort: string;
+}
+
 export interface TopologyGraph {
   nodes: Array<[number, number, number]>;
   edges: Array<[number, number]>;
@@ -40,9 +77,20 @@ export interface CompiledTopology {
   status: "expressible";
 }
 
+export interface HarnessLook {
+  provider: VisualProvider;
+  model: VisualModel;
+  effort: VisualEffort;
+}
+
 export interface VisualCatalog {
   topologies: Map<string, VisualTopology>;
   providers: Map<string, VisualProvider>;
+  models: Map<string, VisualModel>;
+  efforts: Map<string, VisualEffort>;
+  operatingModes: Map<string, VisualOperatingMode>;
+  runtimeStates: Map<string, VisualRuntimeState>;
+  ownerRules: OwnerRule[];
   graphs: Map<string, TopologyGraph>;
   ir: Map<string, IrTopologyStatus>;
   irStatus(id: string): IrTopologyStatus;
@@ -133,6 +181,87 @@ function parseProviders(raw: unknown): Map<string, VisualProvider> {
   return out;
 }
 
+function parseModels(raw: unknown): Map<string, VisualModel> {
+  if (!isRecord(raw)) fail("Unknown visual.models");
+  const out = new Map<string, VisualModel>();
+  for (const id of Object.keys(raw)) {
+    const row = raw[id];
+    if (!isRecord(row)) fail(`Unknown model ${id}`);
+    out.set(id, {
+      id,
+      label: readString(row, "label", `models.${id}`),
+      core: readString(row, "core", `models.${id}`),
+      accent: readString(row, "accent", `models.${id}`),
+    });
+  }
+  return out;
+}
+
+function parseEfforts(raw: unknown): Map<string, VisualEffort> {
+  if (!isRecord(raw)) fail("Unknown visual.efforts");
+  const out = new Map<string, VisualEffort>();
+  for (const id of Object.keys(raw)) {
+    const row = raw[id];
+    if (!isRecord(row)) fail(`Unknown effort ${id}`);
+    out.set(id, {
+      id,
+      label: readString(row, "label", `efforts.${id}`),
+      orbits: readNumber(row, "orbits", `efforts.${id}`),
+      energy: readNumber(row, "energy", `efforts.${id}`),
+      accent: readString(row, "accent", `efforts.${id}`),
+    });
+  }
+  return out;
+}
+
+function parseOperatingModes(raw: unknown): Map<string, VisualOperatingMode> {
+  if (!isRecord(raw)) fail("Unknown visual.operatingModes");
+  const out = new Map<string, VisualOperatingMode>();
+  for (const id of Object.keys(raw)) {
+    const row = raw[id];
+    if (!isRecord(row)) fail(`Unknown operatingMode ${id}`);
+    out.set(id, {
+      id,
+      label: readString(row, "label", `operatingModes.${id}`),
+      marker: readString(row, "marker", `operatingModes.${id}`),
+      accent: readString(row, "accent", `operatingModes.${id}`),
+      motion: readString(row, "motion", `operatingModes.${id}`),
+    });
+  }
+  return out;
+}
+
+function parseRuntimeStates(raw: unknown): Map<string, VisualRuntimeState> {
+  if (!isRecord(raw)) fail("Unknown visual.runtimeStates");
+  const out = new Map<string, VisualRuntimeState>();
+  for (const id of Object.keys(raw)) {
+    const row = raw[id];
+    if (!isRecord(row)) fail(`Unknown runtimeState ${id}`);
+    out.set(id, {
+      id,
+      label: readString(row, "label", `runtimeStates.${id}`),
+      marker: readString(row, "marker", `runtimeStates.${id}`),
+      accent: readString(row, "accent", `runtimeStates.${id}`),
+    });
+  }
+  return out;
+}
+
+function parseOwnerRules(raw: unknown): OwnerRule[] {
+  if (!Array.isArray(raw)) fail("Unknown visual.ownerRules");
+  const out: OwnerRule[] = [];
+  for (const [index, row] of raw.entries()) {
+    if (!isRecord(row)) fail(`Unknown ownerRule ${index}`);
+    out.push({
+      prefix: readString(row, "prefix", `ownerRules.${index}`),
+      provider: readString(row, "provider", `ownerRules.${index}`),
+      model: readString(row, "model", `ownerRules.${index}`),
+      effort: readString(row, "effort", `ownerRules.${index}`),
+    });
+  }
+  return out;
+}
+
 function parseGraphs(raw: unknown): Map<string, TopologyGraph> {
   if (!isRecord(raw)) fail("Unknown topology-graphs");
   const out = new Map<string, TopologyGraph>();
@@ -170,6 +299,11 @@ export function parseVisualCatalog(visualRaw: unknown, irRaw: unknown, graphsRaw
   if (!isRecord(visualRaw)) fail("Unknown visual catalog");
   const topologies = parseTopologies(visualRaw.topologies);
   const providers = parseProviders(visualRaw.providers);
+  const models = parseModels(visualRaw.models);
+  const efforts = parseEfforts(visualRaw.efforts);
+  const operatingModes = parseOperatingModes(visualRaw.operatingModes);
+  const runtimeStates = parseRuntimeStates(visualRaw.runtimeStates);
+  const ownerRules = parseOwnerRules(visualRaw.ownerRules);
   const graphs = parseGraphs(graphsRaw);
   const ir = parseIr(irRaw);
   for (const id of topologies.keys()) {
@@ -178,9 +312,19 @@ export function parseVisualCatalog(visualRaw: unknown, irRaw: unknown, graphsRaw
     if (!topology) fail(`Unknown topology ${id}`);
     if (!graphs.has(topology.pattern)) fail(`Unknown topology graph ${topology.pattern}`);
   }
+  for (const rule of ownerRules) {
+    if (!providers.has(rule.provider)) fail(`Unknown ownerRule provider ${rule.provider}`);
+    if (!models.has(rule.model)) fail(`Unknown ownerRule model ${rule.model}`);
+    if (!efforts.has(rule.effort)) fail(`Unknown ownerRule effort ${rule.effort}`);
+  }
   return {
     topologies,
     providers,
+    models,
+    efforts,
+    operatingModes,
+    runtimeStates,
+    ownerRules,
     graphs,
     ir,
     irStatus(id: string): IrTopologyStatus {
@@ -223,6 +367,30 @@ export function resolveProvider(catalog: VisualCatalog, id: string): VisualProvi
   return provider;
 }
 
+export function resolveModel(catalog: VisualCatalog, id: string): VisualModel {
+  const model = catalog.models.get(id);
+  if (!model) fail(`Unknown model id: ${id}`);
+  return model;
+}
+
+export function resolveEffort(catalog: VisualCatalog, id: string): VisualEffort {
+  const effort = catalog.efforts.get(id);
+  if (!effort) fail(`Unknown effort id: ${id}`);
+  return effort;
+}
+
+export function resolveOperatingMode(catalog: VisualCatalog, id: string): VisualOperatingMode {
+  const mode = catalog.operatingModes.get(id);
+  if (!mode) fail(`Unknown operatingMode id: ${id}`);
+  return mode;
+}
+
+export function resolveRuntimeState(catalog: VisualCatalog, id: string): VisualRuntimeState {
+  const state = catalog.runtimeStates.get(id);
+  if (!state) fail(`Unknown runtimeState id: ${id}`);
+  return state;
+}
+
 export function compileTopology(catalog: VisualCatalog, id: string): CompiledTopology {
   const topology = resolveTopology(catalog, id);
   const status = catalog.irStatus(id);
@@ -230,4 +398,50 @@ export function compileTopology(catalog: VisualCatalog, id: string): CompiledTop
     fail(`Fail closed: topology ${id} is ${status}`);
   }
   return { id: topology.id, status };
+}
+
+export function matchOwnerRule(catalog: VisualCatalog, owner: string): OwnerRule {
+  let best: OwnerRule | undefined;
+  for (const rule of catalog.ownerRules) {
+    if (owner === rule.prefix || owner.startsWith(`${rule.prefix}-`) || owner.startsWith(rule.prefix)) {
+      if (!best || rule.prefix.length > best.prefix.length) best = rule;
+    }
+  }
+  if (!best) fail(`Unknown owner prefix: ${owner}`);
+  return best;
+}
+
+export function harnessLook(catalog: VisualCatalog, owner: string): HarnessLook {
+  const rule = matchOwnerRule(catalog, owner);
+  return {
+    provider: resolveProvider(catalog, rule.provider),
+    model: resolveModel(catalog, rule.model),
+    effort: resolveEffort(catalog, rule.effort),
+  };
+}
+
+export function harnessLookOrUnspecified(catalog: VisualCatalog, owner: string): HarnessLook {
+  try {
+    return harnessLook(catalog, owner);
+  } catch {
+    return {
+      provider: resolveProvider(catalog, "unknown"),
+      model: resolveModel(catalog, "unknown"),
+      effort: resolveEffort(catalog, "unknown"),
+    };
+  }
+}
+
+export function runtimeStateFromLive(input: { assistantState?: string; online?: boolean }): string {
+  if (input.assistantState !== undefined) {
+    if (input.assistantState === "pending") return "claimed";
+    if (input.assistantState === "streaming") return "running";
+    if (input.assistantState === "done") return "unknown";
+    if (input.assistantState === "error") return "blocked";
+    if (input.assistantState === "interrupted") return "paused";
+    fail(`Unknown assistant state: ${input.assistantState}`);
+  }
+  if (input.online === false) return "paused";
+  if (input.online === true) return "running";
+  return "unknown";
 }

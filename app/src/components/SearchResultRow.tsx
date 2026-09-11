@@ -7,6 +7,7 @@ import { PressScale } from "./PressScale";
 import { timeAgo } from "../util";
 import { GlassSurface } from "./GlassSurface";
 import { HarnessAvatar } from "./HarnessAvatar";
+import { TopologyBadge } from "./TopologyBadge";
 
 const KIND_LABEL: Record<SearchResult["kind"], string> = {
   bot: "Bot",
@@ -40,24 +41,23 @@ function resultTitle(item: SearchResult): string {
   }
 }
 
-function avatarName(item: SearchResult): string {
+function visualHarnessId(item: SearchResult): string {
   switch (item.kind) {
     case "bot":
-      return item.profile.name;
+      return item.profile.harness;
     case "conversation":
-      return item.harnessName;
-    case "product":
-      return item.project.name;
+      return item.conversation.harness;
     case "harness":
-      return item.name;
+      return item.id;
     case "skill":
-      return item.skill.name;
+      return item.skill.harness ?? "unknown";
     case "plugin":
-      return item.plugin.name;
+      return item.plugin.harness ?? "unknown";
+    case "product":
+      return item.project.providerId;
     case "tool":
-      return item.tool.name;
     case "file":
-      return item.file.path.split("/").pop() ?? item.file.path;
+      return "unknown";
   }
 }
 
@@ -89,6 +89,12 @@ export const SearchResultRow = memo(function SearchResultRow({
     item.conversation.messages.some((m) => m.role === "assistant" && m.state === "streaming");
 
   const showFileIcon = item.kind === "file" || item.kind === "tool";
+  const conversationState =
+    item.kind === "conversation"
+      ? item.conversation.messages.reduce<string | undefined>((found, message) => {
+          return message.role === "assistant" ? message.state : found;
+        }, undefined)
+      : undefined;
 
   return (
     <PressScale
@@ -104,8 +110,14 @@ export const SearchResultRow = memo(function SearchResultRow({
             color={colors.textMuted}
           />
         </GlassSurface>
+      ) : item.kind === "product" ? (
+        <TopologyBadge topologyId={item.project.topologyId} providerId={item.project.providerId} width={72} />
       ) : (
-        <HarnessAvatar name={avatarName(item)} />
+        <HarnessAvatar
+          harnessId={visualHarnessId(item)}
+          assistantState={conversationState}
+          online={item.kind === "bot" ? item.profile.online : item.kind === "harness" ? item.available : undefined}
+        />
       )}
       <View style={styles.main}>
         <View style={styles.top}>

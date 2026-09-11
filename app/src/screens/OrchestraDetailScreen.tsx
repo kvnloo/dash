@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { loadAodlOrchestras } from "../catalog/orchestra";
 import { loadVisualCatalog, resolveProvider, resolveTopology } from "../catalog/visual";
 import { AppNav } from "../components/AppNav";
+import { HarnessAvatar } from "../components/HarnessAvatar";
 import { OrchestraCore, TopologyBadge } from "../components/TopologyBadge";
 import { haptic } from "../haptics";
 import { enrichProducts } from "../lib/global-search";
@@ -96,6 +97,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
               onPress={() => openAgent(harnessId)}
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             >
+              <HarnessAvatar harnessId={harnessId} size={36} />
               <Text style={styles.rowTitle}>{name}</Text>
               <Text style={styles.rowId}>{harnessId}</Text>
             </Pressable>
@@ -114,6 +116,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
             onPress={() => openChat(item.id)}
             style={({ pressed }) => [styles.chatRow, pressed && styles.pressed]}
           >
+            <HarnessAvatar harnessId={item.harness} size={36} />
             <Text style={styles.chatTitle} numberOfLines={1}>
               {item.title}
             </Text>
@@ -157,6 +160,7 @@ const styles = StyleSheet.create({
   chatRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: space.md,
     justifyContent: "space-between",
     paddingHorizontal: space.lg,
     paddingVertical: 14,

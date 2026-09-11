@@ -1,10 +1,12 @@
 /** Silhouettes from pinned encodings/topology-graphs.json. Topology is declared, never inferred. */
 import { useMemo } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, type ViewStyle } from "react-native";
 import {
   loadVisualCatalog,
   resolveProvider,
+  resolveRuntimeState,
   resolveTopology,
+  type HarnessLook,
   type TopologyGraph,
 } from "../catalog/visual";
 
@@ -242,9 +244,185 @@ export function OrchestraCore({
   );
 }
 
+export function VisualCore({
+  look,
+  size = 48,
+  stateId = "unknown",
+  measured = false,
+}: {
+  look: HarnessLook;
+  size?: number;
+  stateId?: string;
+  measured?: boolean;
+}) {
+  const catalog = loadVisualCatalog();
+  const state = resolveRuntimeState(catalog, stateId);
+  const orbits = Math.max(1, Math.min(4, look.effort.orbits));
+  const heart = size * 0.28;
+  const paused = stateId === "paused" || stateId === "stale";
+  return (
+    <View
+      accessibilityRole="image"
+      accessibilityLabel={`${look.provider.label} ${look.model.label} ${state.label}`}
+      style={{
+        width: size,
+        height: size,
+        alignItems: "center",
+        justifyContent: "center",
+        opacity: paused ? 0.55 : 1,
+      }}
+    >
+      <View
+        style={{
+          position: "absolute",
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: look.provider.hue,
+          borderStyle: measured ? "solid" : "dashed",
+          opacity: 0.45,
+        }}
+      />
+      {Array.from({ length: orbits }, (_, index) => {
+        const ring = size * (0.82 - index * 0.14);
+        return (
+          <View
+            key={index}
+            style={{
+              position: "absolute",
+              width: ring,
+              height: ring,
+              borderRadius: ring / 2,
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: look.effort.accent,
+              opacity: 0.28 + look.effort.energy * 0.25,
+            }}
+          />
+        );
+      })}
+      <CoreHeart core={look.model.core} accent={look.model.accent} size={heart} />
+      <View
+        style={[
+          styles.stateMark,
+          stateMarkStyle(state.marker, state.accent, Math.max(4, size * 0.12)),
+        ]}
+      />
+    </View>
+  );
+}
+
+function CoreHeart({ core, accent, size }: { core: string; accent: string; size: number }) {
+  if (core === "bracket") {
+    return (
+      <View style={{ width: size, height: size, flexDirection: "row", justifyContent: "space-between" }}>
+        <View style={{ width: size * 0.22, height: size, backgroundColor: accent, borderRadius: 1 }} />
+        <View style={{ width: size * 0.22, height: size, backgroundColor: accent, borderRadius: 1 }} />
+      </View>
+    );
+  }
+  if (core === "linked") {
+    return (
+      <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            width: size * 0.62,
+            height: size * 0.62,
+            borderRadius: size,
+            backgroundColor: accent,
+          }}
+        />
+        <View
+          style={{
+            position: "absolute",
+            right: 0,
+            width: size * 0.62,
+            height: size * 0.62,
+            borderRadius: size,
+            backgroundColor: accent,
+            opacity: 0.85,
+          }}
+        />
+      </View>
+    );
+  }
+  if (core === "crescent") {
+    return (
+      <View style={{ width: size, height: size }}>
+        <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: accent }} />
+        <View
+          style={{
+            position: "absolute",
+            right: -size * 0.18,
+            top: 0,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: "#000000",
+          }}
+        />
+      </View>
+    );
+  }
+  const shape: ViewStyle =
+    core === "lattice"
+      ? { borderRadius: size * 0.3 }
+      : core === "facet"
+        ? { borderRadius: size * 0.18, transform: [{ rotate: "45deg" }] }
+        : core === "flare"
+          ? { width: size * 0.72, height: size, borderRadius: size / 2, transform: [{ rotate: "-18deg" }] }
+          : core === "prism"
+            ? { borderRadius: size * 0.2, transform: [{ rotate: "30deg" }] }
+            : { borderRadius: size / 2 };
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: accent,
+        ...shape,
+      }}
+    />
+  );
+}
+
+function stateMarkStyle(marker: string, accent: string, size: number): ViewStyle {
+  if (marker === "hollow") {
+    return {
+      width: size,
+      height: size,
+      borderRadius: size / 2,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: accent,
+      backgroundColor: "transparent",
+    };
+  }
+  if (marker === "pause") {
+    return { width: size, height: size * 0.7, borderRadius: 1, backgroundColor: accent };
+  }
+  if (marker === "contain") {
+    return { width: size, height: size, borderRadius: 1, backgroundColor: accent, transform: [{ rotate: "45deg" }] };
+  }
+  if (marker === "expired") {
+    return {
+      width: size,
+      height: size,
+      borderRadius: size / 2,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: accent,
+      borderStyle: "dashed",
+      backgroundColor: "transparent",
+    };
+  }
+  return { width: size, height: size, borderRadius: size / 2, backgroundColor: accent };
+}
+
 const styles = StyleSheet.create({
   frame: { position: "relative" },
   board: { position: "absolute", borderWidth: StyleSheet.hairlineWidth, backgroundColor: "transparent" },
   market: { position: "absolute", borderWidth: StyleSheet.hairlineWidth, backgroundColor: "transparent" },
   unknown: { position: "absolute", borderWidth: StyleSheet.hairlineWidth, backgroundColor: "transparent", opacity: 0.7 },
+  stateMark: { position: "absolute", right: 1, bottom: 2 },
 });
