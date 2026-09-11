@@ -7,7 +7,43 @@ parallel and with the coding agents on your own computer over Tailscale.
 
 If you are an agent told to autodevelop, donate a coding pass, or pick the
 next issue: read `.cursor/skills/autodevelop/SKILL.md` and run that loop.
-Do not invent a parallel process. Workers open PRs; they never merge `main`.
+Do not invent a parallel process. Workers open PRs; they never merge `main`
+or `dev`.
+
+## Verified OSS Loop
+
+Dash is onboarded to [Verified OSS Loop](https://github.com/kvnloo/verified-oss-loop)
+(`SPEC.md` v0.1, kit revision in `.verified-oss-loop/inventory.yml`). Scheme:
+**rolling**. This is the contribution contract, not a second product loop.
+
+```bash
+python3 .verified-oss-loop/rollout.py show
+```
+
+| Channel | Role |
+|---|---|
+| `preview` | Day-pass feature PR target. Automerge after required checks. |
+| `nightly` | Overnight AI and OMP fast-forward. `overnight/critical-path-*` lands here. |
+| `dev` | Gated integration. Workers never merge. |
+| `main` | Production. Maintainer merge only. Never force-push. |
+
+Workers branch from `origin/nightly` (`worker_base`). Day-pass PRs target
+`preview` (`feature_target`). Unattended overnight PRs target `nightly`. Do not
+open a pile of PRs at `main` unless a human named that base.
+
+Claims are 24h leases (`claimed` / `claimable`). Every PR binds an evidence
+receipt (`head_revision` must be this PR's SHA). Receipt CI runs on
+`preview` and `nightly` only so existing `main` PRs are not retroactively failed.
+
+| Layer | Command |
+|---|---|
+| Unit | `bun test app/src bridge/src shared` |
+| Mutation | `bun scripts/mutate.ts` (score ≥ 80). Not Stryker. |
+| Runtime | `.cursor/skills/verify-dash` (`bun scripts/verify-dash/control-dash.ts`) |
+
+Kit skills live in `skills/`. Dash-owned skills stay in `.cursor/skills/`
+(autodevelop, tdd, verify-dash, dash-*). Prefer `.cursor/skills/` when both
+exist. Re-running `oss-onboard` must not overwrite `source: local` skills.
 
 ## Verification
 
