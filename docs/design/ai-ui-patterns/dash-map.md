@@ -65,6 +65,10 @@ These patterns fit the thin-UI ethos and the existing language.
 
 If a private Reality mock exists in Kevin's design refs, it is not in this repo's `docs/design/references/` and is not catalogued here.
 
+## Decision tree
+
+Do not argue chrome in a PR without walking [`decisions.json`](ai-ui-patterns/decisions.json). Kind is derived (`lock` / `fork` / `claimed` / `gap`). Case study: [`synergy.md`](ai-ui-patterns/synergy.md). Inventory of every control: [`inventory.md`](ai-ui-patterns/inventory.md).
+
 ## Frontier-kb connections
 
 | Frontier node | Dash use |

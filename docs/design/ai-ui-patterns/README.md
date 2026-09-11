@@ -7,11 +7,39 @@ This is the Dash-side consumer of two other repos:
 - [kvnloo/aodl](https://github.com/kvnloo/aodl) owns harness ids, visual encodings, topologies, efforts, and runtime states. Unknown ids fail closed.
 - [kvnloo/frontier-kb](https://github.com/kvnloo/frontier-kb) owns harness notes, discipline MOCs, and the inbox ingest path. Frontier owns origin writes. This tree only exports notes for `inbox/cursor/`.
 
-Machine source of truth: [`catalog.json`](catalog.json). Dash relevance: [`dash-map.md`](dash-map.md). Frontier ingest copies: [`frontier-export/`](frontier-export/).
+## Start here
 
-## Why this exists
+1. [`synergy.md`](synergy.md) — case study. Attention, synergy loop, compression, gestures, micro-interactions.
+2. [`decisions.json`](decisions.json) — inspectable tree. Walk `walk` in order. Do not skip.
+3. [`tree.ts`](tree.ts) — derives `lock` / `fork` / `claimed` / `gap`. Adding a node without classifying it fails the suite.
+4. [`inventory.md`](inventory.md) — every screen, control, gesture, dead affordance.
+5. [`attention.md`](attention.md) — axioms.
+6. [`catalog.json`](catalog.json) — competitor + AODL pattern database.
+7. [`dash-map.md`](dash-map.md) — what to take, reject, or leave to claimed PRs.
 
-OMP on the laptop is driving TDD through the phone. App P0s (#20, #26, #27, #28, #29) are already claimed. This atlas is the research/triage lane: what every nearby product actually ships, which of those patterns Dash already encoded in `docs/design/language.md`, and which ones would fight the thin-UI ethos (#15).
+## How to use the tree (deterministic)
+
+```
+for id in walk:
+  read the node
+  kind = lock | fork | claimed | gap   # derived, not a vibe
+  if lock:  chrome is frozen until you edit the node, then the code
+  if fork:  two written sources disagree. Do not silently pick.
+  if claimed: GitHub issue already owned. Do not implement from this catalog.
+  if gap:  proposedIssues[] is the ticket. Do not invent a fourth option.
+```
+
+`adopted` is what ships on `main`. `target` is what the tree says is right. They match, or the gap is named.
+
+Phone pixels still follow `docs/design/language.md` first. Two forks are named there (default tab Chats vs issue #29, pencil vs dock).
+
+## Verify
+
+```bash
+bun test docs/design/ai-ui-patterns
+```
+
+Unknown AODL ids fail. A decision node whose wiring file is missing fails. A silent new chrome (bottom tabs, dead +, list entering, Expand→Voice, debug-only picker) fails the source contracts. The lock/fork/claimed/gap partition is an exact set.
 
 ## Surfaces
 
@@ -26,18 +54,3 @@ OMP on the laptop is driving TDD through the phone. App P0s (#20, #26, #27, #28,
 | `voice-overlay` | Full-screen spoken turn | Grok Voice, ChatGPT AVM, Gemini Live, Dash Voice |
 
 AODL `o8` is a control room, not a Dash spawn target. `firstmate` is a distro. Both stay out of `hello.harnesses`.
-
-## How to use it
-
-1. Look up a pattern id in `catalog.json`.
-2. Read `dash.status`: `shipped`, `in-flight`, `gap`, or `reject`.
-3. If you change phone UI, match `docs/design/language.md` first. Do not import ChatGPT emerald, T3 three-pane desktop chrome, or Conductor worktree boards onto the S25 unless a claimed issue assigns that work.
-4. Copy `frontier-export/*.md` into frontier-kb `inbox/cursor/` when promoting research. Do not origin-write frontier-kb from this repo.
-
-## Verify
-
-```bash
-bun test docs/design/ai-ui-patterns
-```
-
-Unknown AODL ids fail the suite.

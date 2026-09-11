@@ -71,7 +71,7 @@ Sample content: OMP / Grok / Codex / Hermes, “fix the auth bug in login.ts”,
 
 ## Pattern atlas
 
-Competitor surfaces (T3 Code, ChatGPT, Grok, Claude, Conductor, Cursor 3, harness TUIs) plus AODL encodings and frontier-kb links live in [`ai-ui-patterns/`](ai-ui-patterns/README.md). Phone UI still follows this language file first. Unknown AODL ids fail closed.
+Competitor surfaces (T3 Code, ChatGPT, Grok, Claude, Conductor, Cursor 3, harness TUIs) plus AODL encodings and frontier-kb links live in [`ai-ui-patterns/`](ai-ui-patterns/README.md). Attention case study and inspectable tree: [`ai-ui-patterns/synergy.md`](ai-ui-patterns/synergy.md). Phone UI still follows this language file first. Unknown AODL ids fail closed.
 
 ## Non-goals
 
