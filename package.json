@@ -2,7 +2,7 @@
   "name": "dash",
   "private": true,
   "scripts": {
-    "test": "bun test app/src bridge/src shared scripts/mutate.test.ts scripts/assert-nav-dots.test.ts",
+    "test": "bun test app/src bridge/src shared scripts/mutate.test.ts scripts/assert-nav-dots.test.ts scripts/oss-loop.test.ts scripts/phone-install.test.ts",
     "test:unit": "bun test app/src bridge/src shared",
     "test:mutate": "bun scripts/mutate.ts",
     "verify": "bun scripts/verify-dash/control-dash.ts test"
