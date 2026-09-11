@@ -61,6 +61,20 @@ function avatarName(item: SearchResult): string {
   }
 }
 
+
+function avatarHarnessId(item: SearchResult): string | undefined {
+  switch (item.kind) {
+    case "bot":
+      return item.profile.harness;
+    case "conversation":
+      return item.conversation.harness;
+    case "harness":
+      return item.id;
+    default:
+      return undefined;
+  }
+}
+
 export const SearchResultRow = memo(function SearchResultRow({
   item,
   onPress,
@@ -105,7 +119,7 @@ export const SearchResultRow = memo(function SearchResultRow({
           />
         </GlassSurface>
       ) : (
-        <HarnessAvatar name={avatarName(item)} />
+        <HarnessAvatar name={avatarName(item)} harnessId={avatarHarnessId(item)} />
       )}
       <View style={styles.main}>
         <View style={styles.top}>
