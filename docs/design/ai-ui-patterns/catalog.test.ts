@@ -61,7 +61,7 @@ describe("AI UI pattern catalog", () => {
     expect(productIds.has("dash")).toBe(true);
     expect(productIds.has("t3-code")).toBe(true);
     expect(productIds.has("chatgpt")).toBe(true);
-    expect(patterns.length).toBeGreaterThanOrEqual(20);
+    expect(patterns.length).toBeGreaterThanOrEqual(40);
   });
 
   test("AODL executor list matches the spawn contract", () => {
@@ -115,6 +115,21 @@ describe("AI UI pattern catalog", () => {
     expect(seen.has("docked-composer")).toBe(true);
     expect(seen.has("worktree-per-thread-board")).toBe(true);
     expect(seen.has("control-plane-not-executor")).toBe(true);
+    expect(seen.has("dead-attach-control")).toBe(true);
+    expect(seen.has("fleet-attention-marks")).toBe(true);
+    expect(seen.has("mislabeled-expand")).toBe(true);
+    expect(seen.has("glyph-collision")).toBe(true);
+    expect(seen.has("debug-only-harness-picker")).toBe(true);
+    expect(seen.has("live-region")).toBe(true);
+    const decisions: unknown = JSON.parse(readFileSync(join(import.meta.dir, "decisions.json"), "utf8"));
+    if (!isRecord(decisions) || !Array.isArray(decisions.nodes)) {
+      throw new Error("decisions.json missing nodes");
+    }
+    const patternIds = seen;
+    for (const node of decisions.nodes) {
+      if (!isRecord(node) || !str(node.pattern)) continue;
+      expect(patternIds.has(node.pattern)).toBe(true);
+    }
   });
 
   test("shipped Dash patterns name a file that exists in this repo", () => {

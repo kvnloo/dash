@@ -401,9 +401,9 @@ Mention `+` on Main (same glyph, live):
 
 ---
 
-## 7. Proposed decision-tree nodes (not just re-stating the walk)
+## 7. Decision-tree nodes this inventory required
 
-Walk already has `chrome.destinations`, `composer.attach`, `press.language`, `motion.reduce`, etc. These are **additional splits** the inventory requires.
+These splits are now in `decisions.json` `walk` (kind `gap` unless noted). Ticket bodies: `proposedIssues`. Do not invent a fourth option. Walk already had `chrome.destinations`, `composer.attach`, `press.language`, `motion.reduce`. These are the additional splits.
 
 ### `chrome.expand-affordance`
 

@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "updated": "2026-09-11",
+  "caseStudy": "docs/design/ai-ui-patterns/synergy.md",
   "purpose": "Fail-closed AI UI pattern catalog. AODL ids are canonical. Unknown ids must not appear.",
   "links": {
     "aodlCatalog": "https://github.com/kvnloo/aodl/blob/main/harnesses/catalog.json",
@@ -626,7 +627,295 @@
         "note": "o8 is a control room. firstmate is a distro. Neither is a Dash spawn target."
       },
       "summary": "AODL kind split: executor vs control-room vs distro. Fail closed on unknown ids.",
-      "sources": ["https://github.com/kvnloo/aodl/blob/main/harnesses/catalog.json"]
+      "sources": ["https://github.com/kvnloo/aodl/blob/main/encodings/visual.json", "https://github.com/kvnloo/aodl/blob/main/harnesses/catalog.json"]
+    },
+    {
+      "id": "dead-attach-control",
+      "name": "Dead attach affordance",
+      "category": "composer",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "Composer.tsx plus icon",
+        "note": "No onPress. Target is hide until protocol attach exists."
+      },
+      "summary": "A visible + that does nothing trains distrust. Hide it.",
+      "sources": ["app/src/components/Composer.tsx"]
+    },
+    {
+      "id": "press-scale-squash",
+      "name": "PressScale squash, not opacity",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "PressScale vs Header IconButton",
+        "note": "Rows use SNAP squash. Header still uses pressed background."
+      },
+      "summary": "One press language. Transform only. Haptic at the action, not inside PressScale.",
+      "sources": [".cursor/skills/dash-motion/SKILL.md"]
+    },
+    {
+      "id": "gel-nav-pill",
+      "name": "Gel nav pill without glow overlay",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "shipped",
+        "where": "AppNav + golden-nav.ts",
+        "note": "UI-thread follow, stretch X squash Y. No GOLD_GLOW on native."
+      },
+      "summary": "Peripheral destination marker. Motion is gel, not a second highlight.",
+      "sources": ["app/src/components/golden-nav.ts"]
+    },
+    {
+      "id": "no-list-entering",
+      "name": "No entering animations on FlashList rows",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "shipped",
+        "where": "ChatsPane BotsPane ChatScreen OrchestraPane",
+        "note": "Recycle remounts would replay enter hitch."
+      },
+      "summary": "Rest phase of the synergy loop. Scroll is not a stage.",
+      "sources": [".cursor/skills/dash-motion/SKILL.md"]
+    },
+    {
+      "id": "reduce-motion-idle",
+      "name": "Idle loops honor Reduce Motion",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent", "voice-overlay"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": ["running"] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "PulseDot.tsx VoiceScreen.tsx",
+        "note": "Springs honor ReduceMotion.System. Idle withTiming loops do not."
+      },
+      "summary": "The rest gate is an OS setting. Idle motion must obey it.",
+      "sources": ["app/src/components/PulseDot.tsx"]
+    },
+    {
+      "id": "connection-pill-when-offline",
+      "name": "Connection chrome only when broken",
+      "category": "errors",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": ["stale"] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "shipped",
+        "where": "ConnectionPill.tsx",
+        "note": "Hidden when online or idle. Tap retries."
+      },
+      "summary": "Prune unused chrome. Healthy bridge is silence.",
+      "sources": ["app/src/components/ConnectionPill.tsx"]
+    },
+    {
+      "id": "fleet-attention-marks",
+      "name": "Peripheral marks for other live agents",
+      "category": "roster",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash", "t3-code", "conductor"],
+      "aodl": { "topologies": ["parallel", "mesh"], "operatingModes": ["overnight"], "runtimeStates": ["running", "blocked"] },
+      "frontierDomains": ["tool-use"],
+      "dash": {
+        "status": "gap",
+        "where": "ChatsPane streaming dot only",
+        "note": "One open thread. Other live harnesses need AODL runtimeState on Bots/Orchestra."
+      },
+      "summary": "One fovea. Other agents compress to peripheral marks, never a split view.",
+      "sources": ["docs/design/ai-ui-patterns/attention.md"]
+    },
+    {
+      "id": "mislabeled-expand",
+      "name": "Expand control that opens Voice",
+      "category": "identity",
+      "surfaces": ["mobile-remote-agent", "voice-overlay"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "AppNav left circle",
+        "note": "accessibilityLabel Expand navigates to Voice. Target is a Voice label."
+      },
+      "summary": "A lying label spends a tap and trains distrust.",
+      "sources": ["app/src/components/AppNav.tsx"]
+    },
+    {
+      "id": "unreachable-conversations",
+      "name": "Stack route with no navigator",
+      "category": "layout",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "ConversationsScreen + App.tsx",
+        "note": "Registered modal. Zero navigate callers. Duplicate of ChatsPane."
+      },
+      "summary": "Chrome the human cannot retrieve is unused chrome. Prune or wire.",
+      "sources": ["app/App.tsx"]
+    },
+    {
+      "id": "unused-header",
+      "name": "Unused Header and TopTabs",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "Header.tsx TopTabs.tsx",
+        "note": "Zero screen imports. Still teach opacity press and labeled tabs."
+      },
+      "summary": "Dead components keep a second chrome language alive.",
+      "sources": ["app/src/components/Header.tsx"]
+    },
+    {
+      "id": "glyph-collision",
+      "name": "Same + glyph, two verbs",
+      "category": "composer",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "GlobalSearchBar Mention vs Composer Attach",
+        "note": "Main inserts @. Chat claims Attach and does nothing."
+      },
+      "summary": "One glyph must mean one verb. Hide Chat + until attach is real.",
+      "sources": ["app/src/components/Composer.tsx", "app/src/components/GlobalSearchBar.tsx"]
+    },
+    {
+      "id": "send-haptic-weight",
+      "name": "Weighted send haptic",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "ChatScreen sendTurn / onSend",
+        "note": "tap is used for send, queue, and voice utterance."
+      },
+      "summary": "success tags a completed encode. tap is chrome. error is offline.",
+      "sources": ["app/src/screens/ChatScreen.tsx"]
+    },
+    {
+      "id": "voice-hands-only",
+      "name": "Voice stage with no End control",
+      "category": "voice",
+      "surfaces": ["voice-overlay"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "VoiceScreen",
+        "note": "VAD barge-in works. Escape is AppNav. Unused Pressable import."
+      },
+      "summary": "Hands-free is the job. A labeled leave control is still required.",
+      "sources": ["app/src/screens/VoiceScreen.tsx"]
+    },
+    {
+      "id": "longpress-delete",
+      "name": "Long-press delete without hint",
+      "category": "layout",
+      "surfaces": ["mobile-chat", "mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["learning-acceleration"],
+      "dash": {
+        "status": "gap",
+        "where": "ChatsPane",
+        "note": "350ms confirm. No accessibilityHint. Do not add swipe until this is gone."
+      },
+      "summary": "An expert gesture is not an encode path unless it is hinted.",
+      "sources": ["app/src/screens/panes/ChatsPane.tsx"]
+    },
+    {
+      "id": "pull-to-refresh-roster",
+      "name": "Pull-to-refresh hosts",
+      "category": "roster",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash", "t3-code"],
+      "aodl": { "topologies": ["mesh"], "operatingModes": [], "runtimeStates": ["stale"] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "BotsPane",
+        "note": "No RefreshControl. Pill retry only when already broken."
+      },
+      "summary": "A healthy-looking stale roster has no encode path.",
+      "sources": ["app/src/screens/panes/BotsPane.tsx"]
+    },
+    {
+      "id": "debug-only-harness-picker",
+      "name": "Harness picker opened only from debug",
+      "category": "identity",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": ["solo"], "operatingModes": ["copilot"], "runtimeStates": [] },
+      "frontierDomains": ["frameworks"],
+      "dash": {
+        "status": "gap",
+        "where": "ChatScreen HarnessPicker",
+        "note": "Mounted. Visible via debugUi.chatHarnessPickerOpen only."
+      },
+      "summary": "Identity must be retrievable. Debug is not a UI.",
+      "sources": ["app/src/screens/ChatScreen.tsx"]
+    },
+    {
+      "id": "silent-tappable",
+      "name": "Tappable row that no-ops",
+      "category": "orchestra",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "OrchestraDetailScreen openAgent",
+        "note": "haptic.select then return when no linked chat."
+      },
+      "summary": "Haptic without navigation is a lie. Disable or mint.",
+      "sources": ["app/src/screens/OrchestraDetailScreen.tsx"]
+    },
+    {
+      "id": "live-region",
+      "name": "Announce streaming and connection",
+      "category": "errors",
+      "surfaces": ["mobile-remote-agent", "voice-overlay"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": ["running", "stale"] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "MessageRow ConnectionPill",
+        "note": "No accessibilityLiveRegion. Pill has no accessibilityLabel."
+      },
+      "summary": "Motion-only cues fail TalkBack. Status is a live region.",
+      "sources": ["app/src/components/ConnectionPill.tsx"]
     }
   ]
 }
