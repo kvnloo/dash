@@ -22,7 +22,7 @@ import {
 import { profilesFromHosts } from "../lib/roster";
 import type { BotProfile } from "../mock/bots";
 import type { ScreenProps } from "../navigation";
-import { createConversation, saveSettings, setActive, store } from "../store/app";
+import { createConversation, saveSettings, setActive, setConnection, store } from "../store/app";
 import { colors, space, type } from "../theme";
 import { BotsPane } from "./panes/BotsPane";
 import { ChatsPane } from "./panes/ChatsPane";
@@ -124,8 +124,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const botProfiles = useMemo(() => (hosts.length > 0 ? profilesFromHosts(hosts) : undefined), [hosts]);
 
   const results = useMemo(
-    () => runGlobalSearch({ query, conversations, harnesses, botProfiles }),
-    [query, conversations, harnesses, botProfiles],
+    () => runGlobalSearch({ query, conversations, harnesses, botProfiles, hosts }),
+    [query, conversations, harnesses, botProfiles, hosts],
   );
 
   const hint = formatSearchHint(parsed);
@@ -154,10 +154,13 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const openConversation = useCallback(
     (id: string) => {
       haptic.select();
+      if (!conversations.some((c) => c.id === id)) {
+        setConnection({ hosts });
+      }
       setActive(id);
       navigation.navigate("Chat");
     },
-    [navigation],
+    [conversations, hosts, navigation],
   );
 
   const openProduct = useCallback(
@@ -209,7 +212,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
   const emptyMessage =
     parsed.mode === "slash" && parsed.scope === "unknown"
-      ? `Unknown /${parsed.rawScope}. Pick /harness, /skill, /plugin, /tool, or /file.`
+      ? `Unknown /${parsed.rawScope}. Pick /live, /harness, /skill, /plugin, /tool, or /file.`
       : parsed.mode === "mention" && parsed.scope === "unknown"
         ? `Unknown @${parsed.rawScope}. Pick @bots, @conversation, or @product.`
         : parsed.mode === "slash"
