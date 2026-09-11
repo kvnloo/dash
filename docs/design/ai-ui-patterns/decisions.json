@@ -224,7 +224,7 @@
     {
       "id": "chrome.default-tab",
       "question": "What is on screen at cold open?",
-      "attention": "Retrieve last chat vs encode the self-dev loop. Two written sources disagree. That is the fork. Do not silently pick.",
+      "attention": "Encode the self-dev loop at cold open. Overnight #29 landed Orchestra (DEFAULT_MAIN_TAB = 2).",
       "options": [
         {
           "id": "remember-last",
@@ -240,8 +240,8 @@
             "dash",
             "grok"
           ],
-          "verdict": "adopted",
-          "because": "language.md and MainScreen useState(1). Retrieval of last thread."
+          "verdict": "reject",
+          "because": "Overnight #29 landed. Retrieval of last thread is not the cold-open job."
         },
         {
           "id": "orchestra",
@@ -249,15 +249,16 @@
           "seenIn": [
             "dash"
           ],
-          "verdict": "claimed",
-          "because": "Issue #29 / PR #33. Self-dev loop as the default encode surface."
+          "verdict": "adopted",
+          "because": "Overnight #29 / PR #33. DEFAULT_MAIN_TAB = 2. language.md matches."
         }
       ],
-      "adopted": "chats",
-      "target": "chats",
-      "fork": "Issue #29 wants Orchestra. language.md still says Chats. Until language.md changes, the tree keeps Chats. Do not implement Orchestra default from this catalog.",
+      "adopted": "orchestra",
+      "target": "orchestra",
+      "claimedIssue": "#29",
       "wiring": [
         "docs/design/language.md",
+        "app/src/lib/home.ts",
         "app/src/screens/MainScreen.tsx"
       ],
       "pattern": "history-date-groups"
@@ -632,8 +633,8 @@
           "seenIn": [
             "dash"
           ],
-          "verdict": "adopted",
-          "because": "Shipped on main. dash-motion still names it."
+          "verdict": "reject",
+          "because": "Overnight #27 deleted PulseDot.tsx."
         },
         {
           "id": "effort-orbs",
@@ -641,14 +642,14 @@
           "seenIn": [
             "dash"
           ],
-          "verdict": "claimed",
-          "because": "Issue #27 / PR #31. visual.json fail-closed."
+          "verdict": "adopted",
+          "because": "Issue #27 / PR #31 landed on overnight. visual.json fail-closed."
         }
       ],
-      "adopted": "pulse-dot",
+      "adopted": "effort-orbs",
       "target": "effort-orbs",
       "wiring": [
-        "app/src/components/PulseDot.tsx",
+        "app/src/components/EffortOrbs.tsx",
         "app/src/components/MessageRow.tsx"
       ],
       "pattern": "effort-orbs",
@@ -916,7 +917,7 @@
     {
       "id": "motion.reduce",
       "question": "Does idle motion honor Reduce Motion?",
-      "attention": "Springs already pass ReduceMotion.System. PulseDot and the Voice orb loop withTiming forever. That is a vestibular tax.",
+      "attention": "Springs and EffortOrbs pass ReduceMotion.System. The Voice orb still loops withTiming forever. That is a vestibular tax.",
       "options": [
         {
           "id": "ignore",
@@ -939,7 +940,7 @@
       "adopted": "ignore",
       "target": "honor",
       "wiring": [
-        "app/src/components/PulseDot.tsx",
+        "app/src/components/EffortOrbs.tsx",
         "app/src/screens/VoiceScreen.tsx",
         "app/src/components/PressScale.tsx"
       ],

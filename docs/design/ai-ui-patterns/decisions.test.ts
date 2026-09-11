@@ -14,6 +14,7 @@ const LOCKS = [
   "identity.unit",
   "chrome.destinations",
   "chrome.height",
+  "chrome.default-tab",
   "search.placement",
   "search.chips",
   "composer.dock",
@@ -24,6 +25,7 @@ const LOCKS = [
   "thread.assistant",
   "thread.user",
   "stream.status",
+  "stream.indicator",
   "stream.store",
   "list.entering",
   "haptic.pairing",
@@ -41,9 +43,9 @@ const LOCKS = [
   "gesture.bridge-vs-list",
 ] as const;
 
-const FORKS = ["chrome.default-tab", "chrome.compose-entry"] as const;
+const FORKS = ["chrome.compose-entry"] as const;
 
-const CLAIMED = ["stream.indicator", "orchestra.source", "live.session"] as const;
+const CLAIMED = ["orchestra.source", "live.session"] as const;
 
 const GAPS = [
   "chrome.expand-affordance",
@@ -136,6 +138,7 @@ describe("Dash UX decision tree", () => {
     expect(byId.get("stream.indicator")?.claimedIssue).toBe("#27");
     expect(byId.get("orchestra.source")?.claimedIssue).toBe("#19");
     expect(byId.get("live.session")?.claimedIssue).toBe("#20");
+    expect(byId.get("chrome.default-tab")?.claimedIssue).toBe("#29");
   });
 
   test("converged nodes match current source contracts", () => {
@@ -192,18 +195,22 @@ describe("Dash UX decision tree", () => {
     const reduce = byId.get("motion.reduce");
     expect(reduce?.adopted).toBe("ignore");
     expect(reduce?.target).toBe("honor");
-    const pulse = read("app/src/components/PulseDot.tsx");
-    expect(pulse).toContain("withRepeat");
-    expect(pulse).not.toContain("ReduceMotion");
+    const orbs = read("app/src/components/EffortOrbs.tsx");
+    expect(orbs).toContain("ReduceMotion.System");
+    expect(orbs).toContain("reduceMotion: reduce");
+    const voice = read("app/src/screens/VoiceScreen.tsx");
+    expect(voice).toContain("withRepeat(withTiming");
+    expect(voice).not.toContain("ReduceMotion");
   });
 
-  test("default tab stays Chats until language.md changes, even if #29 is claimed", () => {
+  test("default tab is Orchestra after overnight #29; language.md matches", () => {
     const node = tree.nodes.find((n) => n.id === "chrome.default-tab");
-    expect(node?.adopted).toBe("chats");
-    expect(node?.target).toBe("chats");
-    expect(kindOf(node!)).toBe("fork");
-    expect(read("docs/design/language.md")).toContain("Default tab: **Chats**");
-    expect(read("app/src/screens/MainScreen.tsx")).toContain("useState(1)");
+    expect(node?.adopted).toBe("orchestra");
+    expect(node?.target).toBe("orchestra");
+    expect(kindOf(node!)).toBe("lock");
+    expect(read("docs/design/language.md")).toContain("Default tab: **Orchestra**");
+    expect(read("app/src/lib/home.ts")).toContain("export const DEFAULT_MAIN_TAB = 2");
+    expect(read("app/src/screens/MainScreen.tsx")).toContain("DEFAULT_MAIN_TAB");
   });
 
   test("compose-entry fork: language.md says pencil, Main ships the dock", () => {
@@ -212,7 +219,7 @@ describe("Dash UX decision tree", () => {
     expect(node?.target).toBe("dock");
     expect(kindOf(node!)).toBe("fork");
     expect(read("docs/design/language.md")).toContain("header** (pencil)");
-    expect(read("app/src/screens/MainScreen.tsx")).toContain("placeholder=\"Message Dash\"");
+    expect(read("app/src/screens/MainScreen.tsx")).toContain("placeholder={feedbackOn");
   });
 
   test("lying and silent affordances are pinned to source", () => {
@@ -252,7 +259,7 @@ describe("Dash UX decision tree", () => {
     expect(bots).not.toContain("RefreshControl");
 
     const detail = read("app/src/screens/OrchestraDetailScreen.tsx");
-    expect(detail).toContain("if (chat) openChat(chat.id)");
+    expect(detail).toContain("threadTargetForAgent");
 
     const pill = read("app/src/components/ConnectionPill.tsx");
     expect(pill).not.toContain("accessibilityLabel");

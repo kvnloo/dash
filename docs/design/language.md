@@ -8,7 +8,7 @@ Source refs: `docs/design/references/` (`REF-grok-*`, `REF-zero-*`).
 
 Phone app for coding agents on the laptop (OMP, Codex, Grok, Hermes, Claude).
 
-Main: three full-screen swipe panes, **top** tabs **Bots | Chats | Orchestra**, **bottom** `@` search dock. Default tab: **Chats**. Compose lives in the **header** (pencil), not a FAB.
+Main: three full-screen swipe panes, **top** tabs **Bots | Chats | Orchestra**, **bottom** `@` search dock. Default tab: **Orchestra**. Compose lives in the **header** (pencil), not a FAB.
 
 - **Bots** — Hermes profiles + harness agents. Status **dot**, never “Online” pills.
 - **Chats** — all conversations, Grok History density: date groups, circular avatars, 1-line preview.
