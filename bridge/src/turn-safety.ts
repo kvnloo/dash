@@ -5,6 +5,10 @@ export const CANCELLED_EXIT_CODE = 130;
 export const TIMEOUT_EXIT_CODE = 124;
 export const DEFAULT_TURN_TIMEOUT_MS = 10 * 60 * 1000;
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export function turnTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.DASH_TURN_TIMEOUT_MS;
   if (!raw) return DEFAULT_TURN_TIMEOUT_MS;
@@ -22,8 +26,8 @@ export function parseHarnessJsonLine(
   if (line.length === 0 || line.charCodeAt(0) !== 123 /* { */) return null;
   try {
     const value: unknown = JSON.parse(line);
-    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      return { ok: true, value: value as Record<string, unknown> };
+    if (isObjectRecord(value)) {
+      return { ok: true, value };
     }
     return { ok: false, error: "Harness JSON line was not an object." };
   } catch {

@@ -146,3 +146,17 @@ describe("fx", () => {
     expect(deltas).toEqual(["partial answer"]);
   });
 });
+
+describe("malformed harness JSON", () => {
+  test("OMP parser surfaces a structured error instead of dropping the line", () => {
+    const omp = byId("omp");
+    expect(omp).toBeDefined();
+    const { sink, errors, deltas } = collectSink();
+    const parser = omp!.parser(sink);
+    parser.line("{not-json");
+    parser.line(JSON.stringify({ type: "session", id: "keep-going" }));
+    parser.end();
+    expect(errors).toEqual(["Harness emitted malformed JSON."]);
+    expect(deltas).toEqual([]);
+  });
+});
