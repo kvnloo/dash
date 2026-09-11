@@ -10,7 +10,7 @@
 // the rest. Finished turns are kept for RETAIN_MS so late reattaches still work.
 
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { hostname } from "node:os";
+import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import {
   PROTOCOL_VERSION,
@@ -22,7 +22,7 @@ import {
 import { CLAIM_KEY_BYTES, claimSession, currentOrCreateSession, startBoundSession } from "./pair";
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
-import { collectRoster } from "./src/roster";
+import { collectRoster, readLiveTranscript } from "./src/roster";
 import { runHermesSession } from "./src/hermes-session";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
 import {
@@ -702,6 +702,17 @@ const server = Bun.serve<SocketData>({
           }
           log("ws.attach", { remote: ws.remoteAddress, count: message.turns.length });
           break;
+        case "history": {
+          const home = homedir();
+          const sessionRoot = join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions");
+          sendTo(ws, {
+            type: "history",
+            harness: message.harness,
+            sessionId: message.sessionId,
+            messages: readLiveTranscript(message.harness, message.sessionId, sessionRoot, message.cwd, home),
+          });
+          break;
+        }
       }
     },
     close(ws) {

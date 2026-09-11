@@ -6,9 +6,11 @@ import type { Conversation } from "../model";
 import {
   conversationPreview,
   findLiveConversation,
+  hydrateLiveConversation,
   liveConversationId,
   liveSessionTitle,
   mergeLiveConversations,
+  shouldRequestHistory,
 } from "./live-sessions";
 
 const now = 1_700_000_000_000;
@@ -115,5 +117,56 @@ describe("mergeLiveConversations", () => {
     expect(pane).toContain("conversationPreview");
     const chat = readFileSync(join(import.meta.dir, "../screens/ChatScreen.tsx"), "utf8");
     expect(chat).toContain("cwd: current.cwd");
+  });
+
+  test("a live OMP jsonl hydrates user and assistant turns after setActive", () => {
+    const [listed] = mergeLiveConversations([], [liveOmp], now);
+    expect(listed?.messages).toEqual([]);
+    expect(shouldRequestHistory(listed)).toBe(true);
+    const hydrated = hydrateLiveConversation(listed!, [
+      { id: "u1", role: "user", text: "ship the live transcript", at: now - 20 },
+      { id: "a1", role: "assistant", text: "opening the row shows this", at: now - 10 },
+    ]);
+    expect(hydrated.messages.map((m) => ({ role: m.role, text: m.text }))).toEqual([
+      { role: "user", text: "ship the live transcript" },
+      { role: "assistant", text: "opening the row shows this" },
+    ]);
+    expect(hydrated.sessionId).toBe("01liveomp");
+    expect(conversationPreview(hydrated)).toBe("opening the row shows this");
+    expect(hydrateLiveConversation(hydrated, [{ id: "u2", role: "user", text: "again", at: now }])).toBe(hydrated);
+  });
+
+  test("in-flight streaming turns keep attach; hydration does not mint a second chat", () => {
+    const listed = mergeLiveConversations([], [liveOmp], now)[0]!;
+    const streaming: Conversation = {
+      ...listed,
+      messages: [
+        {
+          id: "a-live",
+          role: "assistant",
+          text: "partial",
+          at: now,
+          state: "streaming",
+          turnId: "turn-1",
+          seq: 4,
+        },
+      ],
+    };
+    expect(shouldRequestHistory(streaming)).toBe(false);
+    expect(
+      hydrateLiveConversation(streaming, [{ id: "u1", role: "user", text: "hi", at: now }]),
+    ).toBe(streaming);
+    expect(shouldRequestHistory({ ...listed, harness: "cursor-cloud", sessionId: "cursor-secret" })).toBe(false);
+  });
+
+  test("setActive requests live history over the existing socket", () => {
+    const app = readFileSync(join(import.meta.dir, "../store/app.ts"), "utf8");
+    expect(app).toContain("hydrateLiveConversation");
+    expect(app).toContain("applyLiveHistory");
+    expect(app).toContain("shouldRequestHistory");
+    const bridge = readFileSync(join(import.meta.dir, "../net/bridge.ts"), "utf8");
+    expect(bridge).toContain('type: "history"');
+    expect(bridge).toContain("applyLiveHistory");
+    expect(bridge).not.toContain("cursor-cloud");
   });
 });

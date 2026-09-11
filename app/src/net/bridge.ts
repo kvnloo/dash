@@ -5,10 +5,12 @@ import { fetchRoster } from "../lib/roster";
 import type { Settings } from "../model";
 import {
   applyDeltas,
+  applyLiveHistory,
   applyTranscript,
   applyTurnEvent,
   markTurnLost,
   setConnection,
+  setLiveHistoryRequester,
   store,
   streamingTurns,
 } from "../store/app";
@@ -193,6 +195,9 @@ class Bridge {
         this.flushDeltas();
         applyTurnEvent(message);
         return;
+      case "history":
+        applyLiveHistory(message.harness, message.sessionId, message.messages);
+        return;
       default: {
         const _exhaustive: never = message;
         return _exhaustive;
@@ -246,6 +251,15 @@ function closeReason(code: number): string {
 }
 
 export const bridge = new Bridge();
+
+setLiveHistoryRequester((input) => {
+  bridge.send({
+    type: "history",
+    harness: input.harness,
+    sessionId: input.sessionId,
+    cwd: input.cwd,
+  });
+});
 
 /** Send one chat turn for the active conversation. Returns false if offline. */
 export function sendChat(input: {

@@ -1,6 +1,6 @@
-import type { AgentInfo, HostInfo } from "../../../shared/protocol";
+import type { AgentInfo, HistoryMessage, HostInfo } from "../../../shared/protocol";
 import { isCatalogHarness } from "../../../shared/catalog";
-import type { Conversation } from "../model";
+import type { Conversation, Message } from "../model";
 
 export function liveConversationId(harness: string, sessionId: string): string {
   return `live:${harness}:${sessionId}`;
@@ -73,4 +73,50 @@ export function mergeLiveConversations(
   }
   if (adopted.length === 0) return existing;
   return [...adopted, ...existing];
+}
+
+export function shouldRequestHistory(c: Conversation | undefined): boolean {
+  if (!c?.sessionId?.trim()) return false;
+  if (!isCatalogHarness(c.harness)) return false;
+  if (c.messages.length > 0) return false;
+  return true;
+}
+
+export function hydrateLiveConversation(conversation: Conversation, history: HistoryMessage[]): Conversation {
+  if (
+    conversation.messages.some(
+      (m) => m.role === "assistant" && (m.state === "streaming" || m.state === "pending"),
+    )
+  ) {
+    return conversation;
+  }
+  if (conversation.messages.length > 0) return conversation;
+  const messages = historyToMessages(history);
+  if (messages.length === 0) return conversation;
+  const last = messages[messages.length - 1];
+  return {
+    ...conversation,
+    messages,
+    updatedAt: last ? last.at : conversation.updatedAt,
+  };
+}
+
+function historyToMessages(history: HistoryMessage[]): Message[] {
+  const out: Message[] = [];
+  for (const h of history) {
+    if (h.role === "user") {
+      out.push({ id: h.id, role: "user", text: h.text, at: h.at });
+      continue;
+    }
+    out.push({
+      id: h.id,
+      role: "assistant",
+      text: h.text,
+      at: h.at,
+      state: "done",
+      turnId: h.id,
+      seq: 0,
+    });
+  }
+  return out;
 }

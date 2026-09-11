@@ -6,12 +6,15 @@ import {
   assembleRoster,
   attachOmpSessions,
   dnsLabel,
+  findOmpJsonl,
   hermesA2AUrl,
   isPhoneOs,
   liveOmpFromDaemonRoot,
   ompSessionDirName,
   parseHermesGatewayList,
+  parseOmpTranscript,
   parseTailscaleStatus,
+  readLiveTranscript,
   timedArgv,
 } from "./roster";
 
@@ -326,5 +329,79 @@ describe("live OMP sessions", () => {
     expect(liveOmpFromDaemonRoot(root, (pid) => pid === 4242)).toEqual([
       { id: "38a3f3a952f042e1", cwd: "/home/you/workspace/dash" },
     ]);
+  });
+
+  test("parses user and assistant turns from an OMP jsonl", () => {
+    const text = [
+      JSON.stringify({ type: "session", version: 3, id: "01liveomp" }),
+      JSON.stringify({
+        type: "message",
+        id: "u1",
+        timestamp: "2026-09-10T23:30:36.633Z",
+        message: { role: "user", content: [{ type: "text", text: "ship the live transcript" }] },
+      }),
+      JSON.stringify({
+        type: "message",
+        id: "think",
+        timestamp: "2026-09-10T23:30:37.000Z",
+        message: { role: "assistant", content: [{ type: "thinking", thinking: "planning" }] },
+      }),
+      JSON.stringify({
+        type: "message",
+        id: "tool",
+        timestamp: "2026-09-10T23:30:38.000Z",
+        message: { role: "toolResult", content: [{ type: "text", text: "ignored" }] },
+      }),
+      JSON.stringify({
+        type: "message",
+        id: "a1",
+        timestamp: "2026-09-10T23:30:40.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "draft" },
+            { type: "text", text: "opening the row shows this" },
+          ],
+        },
+      }),
+    ].join("\n");
+    expect(parseOmpTranscript(text)).toEqual([
+      { id: "u1", role: "user", text: "ship the live transcript", at: Date.parse("2026-09-10T23:30:36.633Z") },
+      { id: "a1", role: "assistant", text: "opening the row shows this", at: Date.parse("2026-09-10T23:30:40.000Z") },
+    ]);
+  });
+
+  test("reads the jsonl for a live sessionId and fails closed on unknown harness ids", () => {
+    const root = mkdtempSync(join(tmpdir(), "dash-omp-"));
+    const home = join(root, "home");
+    const cwd = join(home, "workspace", "dash");
+    const sessionRoot = join(root, "sessions");
+    const sessionDir = join(sessionRoot, ompSessionDirName(cwd, home));
+    mkdirSync(sessionDir, { recursive: true });
+    writeFileSync(
+      join(sessionDir, "2026-09-10T23-30-36-633Z_01liveomp.jsonl"),
+      `${JSON.stringify({ type: "session", version: 3, id: "01liveomp" })}\n${JSON.stringify({
+        type: "message",
+        id: "u1",
+        timestamp: "2026-09-10T23:30:36.633Z",
+        message: { role: "user", content: [{ type: "text", text: "hello from firstmate" }] },
+      })}\n${JSON.stringify({
+        type: "message",
+        id: "a1",
+        timestamp: "2026-09-10T23:30:41.000Z",
+        message: { role: "assistant", content: [{ type: "text", text: "this is the transcript" }] },
+      })}\n`,
+    );
+    expect(findOmpJsonl(sessionRoot, "01liveomp", cwd, home)?.endsWith("_01liveomp.jsonl")).toBe(true);
+    expect(readLiveTranscript("omp", "01liveomp", sessionRoot, cwd, home).map((m) => m.text)).toEqual([
+      "hello from firstmate",
+      "this is the transcript",
+    ]);
+    expect(readLiveTranscript("cursor-cloud", "01liveomp", sessionRoot, cwd, home)).toEqual([]);
+    expect(readLiveTranscript("omp", "../etc/passwd", sessionRoot, cwd, home)).toEqual([]);
+    const src = readFileSync(join(import.meta.dir, "../index.ts"), "utf8");
+    expect(src).toContain('case "history"');
+    expect(src).toContain("readLiveTranscript");
+    expect(src).not.toContain("api.cursor.com");
   });
 });
