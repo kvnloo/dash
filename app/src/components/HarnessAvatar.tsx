@@ -1,28 +1,18 @@
 import { memo } from "react";
-import { StyleSheet, Text } from "react-native";
-import { colors, type } from "../theme";
-import { GlassSurface } from "./GlassSurface";
+import { loadVisualCatalog, providerIdForHarness, resolveProvider } from "../catalog/visual";
+import { OrchestraCore } from "./TopologyBadge";
 
-/** Circle badge with the harness initial — matches preview.html conversation rows. */
+/** AODL visual.json core for a catalog harness. Unknown ids fail closed to the unknown hue, never a letter. */
 export const HarnessAvatar = memo(function HarnessAvatar({
   name,
+  harnessId,
   size = 48,
 }: {
   name: string;
+  harnessId?: string;
   size?: number;
 }) {
-  const letter = (name.trim()[0] ?? "?").toUpperCase();
-  return (
-    <GlassSurface variant="chip" blur={false} borderRadius={size / 2} style={[styles.avatar, { width: size, height: size }]}>
-      <Text style={[styles.letter, { fontSize: size * 0.42 }]}>{letter}</Text>
-    </GlassSurface>
-  );
-});
-
-const styles = StyleSheet.create({
-  avatar: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  letter: { color: colors.text, ...type.heading, fontWeight: "600" },
+  const catalog = loadVisualCatalog();
+  const provider = resolveProvider(catalog, providerIdForHarness(harnessId ?? ""));
+  return <OrchestraCore hue={provider.hue} size={size} accessibilityLabel={`${name} · ${provider.label}`} />;
 });

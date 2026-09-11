@@ -30,6 +30,8 @@ export interface OrchestraProject {
   chatIds: string[];
   status: "active" | "idle" | "paused";
   updatedAt: number;
+  topologyId: string;
+  providerId: string;
 }
 
 export interface AodlHarness {
@@ -127,6 +129,18 @@ export function parseAodlCatalog(raw: unknown): AodlCatalog {
   };
 }
 
+
+/** Declared Dash display encoding. Not inferred from drawing density. Only expressible ir-map topologies. */
+const NETWORK_VISUAL: Record<AodlNetworkId, { topologyId: string; providerId: string }> = {
+  aodl: { topologyId: "mesh", providerId: "multi" },
+  dash: { topologyId: "paired", providerId: "cursor" },
+  "frontier-kb": { topologyId: "solo", providerId: "unknown" },
+  "hermes-keel": { topologyId: "supervisor", providerId: "unknown" },
+  "hermes-agent": { topologyId: "mesh", providerId: "unknown" },
+  blueprint: { topologyId: "pipeline", providerId: "unknown" },
+  evolve: { topologyId: "pipeline", providerId: "unknown" },
+};
+
 function agentsForNode(id: AodlNetworkId, harnesses: Map<string, AodlHarness>): string[] {
   if (id === "dash") {
     const agents: string[] = [];
@@ -147,6 +161,7 @@ export function orchestrasFromCatalog(catalog: AodlCatalog): OrchestraProject[] 
   for (const id of AODL_NETWORK_IDS) {
     const node = catalog.network.get(id);
     if (!node) continue;
+    const visual = NETWORK_VISUAL[node.id];
     rows.push({
       id: node.id,
       name: node.id,
@@ -155,6 +170,8 @@ export function orchestrasFromCatalog(catalog: AodlCatalog): OrchestraProject[] 
       chatIds: [],
       status: "active",
       updatedAt: CATALOG_UPDATED_AT,
+      topologyId: visual.topologyId,
+      providerId: visual.providerId,
     });
   }
   return rows;

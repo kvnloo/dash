@@ -32,7 +32,7 @@ const ProfileRow = memo(function ProfileRow({
       accessibilityRole="button"
       accessibilityState={{ disabled: !canOpen }}
     >
-      <HarnessAvatar name={profile.name} size={44} />
+      <HarnessAvatar name={profile.name} harnessId={profile.harness} size={44} />
       <View style={styles.main}>
         <View style={styles.top}>
           <Text style={styles.title} numberOfLines={1}>
