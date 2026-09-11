@@ -75,4 +75,20 @@ export const DEMO_BOT_PROFILES: BotProfile[] = [
     description: "Install claude on laptop to enable",
     online: false,
   },
+  {
+    id: "pi-main",
+    harness: "pi",
+    name: "Pi",
+    role: "Earendil CLI",
+    description: "Install pi on laptop to enable",
+    online: false,
+  },
+  {
+    id: "fx-main",
+    harness: "fx",
+    name: "fx",
+    role: "Vercel Labs CLI",
+    description: "Install fx on laptop to enable",
+    online: false,
+  },
 ];

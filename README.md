@@ -80,5 +80,9 @@ See `AGENTS.md` for multi-agent ownership rules.
 - **Grok** — `grok --output-format streaming-json`
 - **Hermes** — `hermes chat -q` (slow; may warn on toolsets)
 - **Claude Code** — shown unavailable until `claude` is on `PATH`
+- **Pi** — `pi --mode json`; unavailable until `pi` is on `PATH`
+- **fx** — `fx ask --json --full-access` (Vercel Labs; not antonmedv/fx); unavailable until `fx` is on `PATH`
 
 Each harness keeps its own session id for multi-turn threads.
+
+Canonical ids: [kvnloo/aodl `harnesses/catalog.json`](https://github.com/kvnloo/aodl/blob/main/harnesses/catalog.json). `o8` is a control room; firstmate is a distro — neither is a Dash spawn target.

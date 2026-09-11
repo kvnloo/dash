@@ -1,6 +1,8 @@
 // One adapter per agent CLI. Each adapter knows two things: how to build the
 // argv for a turn, and how to turn the CLI's stdout into protocol events.
 
+import { hermesCliArgv } from "./hermes-session";
+
 export interface TurnInput {
   text: string;
   cwd: string;
@@ -67,6 +69,33 @@ function describeTool(name: string, args: unknown): string {
   return oneLine(name);
 }
 
+// omp and pi share Pi's `--mode json` event stream (session, text_delta, tools).
+function sessionNdjsonParser(sink: Sink): TurnParser {
+  return {
+    line(line) {
+      const ev = parseJsonLine(line);
+      if (!ev) return;
+      switch (ev.type) {
+        case "session":
+          if (str(ev.id)) sink.session(ev.id);
+          break;
+        case "message_update": {
+          const e = ev.assistantMessageEvent;
+          if (isRecord(e) && e.type === "text_delta" && str(e.delta)) sink.delta(e.delta);
+          break;
+        }
+        case "tool_execution_start":
+          if (str(ev.toolName)) sink.status(describeTool(ev.toolName, ev.args));
+          break;
+        case "tool_execution_end":
+          sink.status("");
+          break;
+      }
+    },
+    end() {},
+  };
+}
+
 // omp: `--mode json` streams one event per line.
 const omp: Harness = {
   id: "omp",
@@ -85,31 +114,7 @@ const omp: Harness = {
       text,
     ];
   },
-  parser(sink) {
-    return {
-      line(line) {
-        const ev = parseJsonLine(line);
-        if (!ev) return;
-        switch (ev.type) {
-          case "session":
-            if (str(ev.id)) sink.session(ev.id);
-            break;
-          case "message_update": {
-            const e = ev.assistantMessageEvent;
-            if (isRecord(e) && e.type === "text_delta" && str(e.delta)) sink.delta(e.delta);
-            break;
-          }
-          case "tool_execution_start":
-            if (str(ev.toolName)) sink.status(describeTool(ev.toolName, ev.args));
-            break;
-          case "tool_execution_end":
-            sink.status("");
-            break;
-        }
-      },
-      end() {},
-    };
-  },
+  parser: sessionNdjsonParser,
 };
 
 // codex: `exec --json` emits thread/turn/item events. Messages arrive whole, not as deltas.
@@ -264,9 +269,7 @@ const hermes: Harness = {
   id: "hermes",
   name: "Hermes",
   bin: "hermes",
-  argv({ text, cwd, sessionId }) {
-    return ["chat", "-q", text, "-Q", "--in", cwd, ...(sessionId ? ["--resume", sessionId] : [])];
-  },
+  argv: hermesCliArgv,
   parser(sink) {
     const lines: string[] = [];
     return {
@@ -287,4 +290,67 @@ const hermes: Harness = {
   },
 };
 
-export const HARNESSES: readonly Harness[] = [omp, codex, grok, claude, hermes];
+// pi: Earendil CLI. `--mode json` is the documented event stream; `--approve`
+// trusts project-local files in non-interactive mode. cwd comes from spawn.
+const pi: Harness = {
+  id: "pi",
+  name: "Pi",
+  bin: "pi",
+  argv({ text, sessionId }) {
+    return [
+      "--mode",
+      "json",
+      "--approve",
+      ...(sessionId ? ["--session", sessionId] : []),
+      "--",
+      text,
+    ];
+  },
+  parser: sessionNdjsonParser,
+};
+
+// fx: `fx ask --json` emits one object with session_id, output, final_output.
+// --full-access matches the other laptop adapters (approvals already bypassed).
+function fxAskParser(sink: Sink): TurnParser {
+  const lines: string[] = [];
+  return {
+    line(line) {
+      lines.push(line);
+    },
+    end() {
+      const raw = lines.join("\n").trim();
+      if (!raw) return;
+      const ev = parseJsonLine(raw);
+      if (!ev) return;
+      if (str(ev.session_id)) sink.session(ev.session_id);
+      const text =
+        str(ev.output) && ev.output.length > 0
+          ? ev.output
+          : str(ev.final_output)
+            ? ev.final_output
+            : "";
+      if (text) sink.delta(text);
+    },
+  };
+}
+
+const fx: Harness = {
+  id: "fx",
+  name: "fx",
+  bin: "fx",
+  argv({ text, sessionId }) {
+    return [
+      "ask",
+      "--json",
+      "--full-access",
+      ...(sessionId ? ["--resume-id", sessionId] : []),
+      "--",
+      text,
+    ];
+  },
+  parser: fxAskParser,
+};
+
+export const HARNESSES: readonly Harness[] = [omp, codex, grok, claude, hermes, pi, fx];
+
+

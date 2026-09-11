@@ -296,16 +296,21 @@ function spawnText(argv: string[], seconds = 1): string {
 
 let hermesListCache = "";
 function refreshHermesList(): void {
-  const proc = Bun.spawn(["hermes", "gateway", "list"], { stdout: "pipe", stderr: "ignore" });
-  const timer = setTimeout(() => proc.kill(), 2500);
-  void proc.exited.then(async () => {
-    clearTimeout(timer);
-    if (proc.exitCode !== 0) return;
-    const text = await new Response(proc.stdout).text();
-    if (text.trim()) hermesListCache = text;
-  }).catch(() => {
-    clearTimeout(timer);
-  });
+  if (Bun.which("hermes") === null) return;
+  try {
+    const proc = Bun.spawn(["hermes", "gateway", "list"], { stdout: "pipe", stderr: "ignore" });
+    const timer = setTimeout(() => proc.kill(), 2500);
+    void proc.exited.then(async () => {
+      clearTimeout(timer);
+      if (proc.exitCode !== 0) return;
+      const text = await new Response(proc.stdout).text();
+      if (text.trim()) hermesListCache = text;
+    }).catch(() => {
+      clearTimeout(timer);
+    });
+  } catch {
+    return;
+  }
 }
 
 let rosterCache: { at: number; key: string; hosts: HostInfo[] } | null = null;
