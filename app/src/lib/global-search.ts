@@ -1,5 +1,5 @@
 import { DEMO_BOT_PROFILES, type BotProfile } from "../mock/bots";
-import { DEMO_ORCHESTRAS, type OrchestraProject } from "../mock/orchestra";
+import { loadAodlOrchestras, type OrchestraProject } from "../catalog/orchestra";
 import {
   DEMO_FILES,
   DEMO_PLUGINS,
@@ -168,7 +168,7 @@ export function runGlobalSearch(params: {
 }): SearchResult[] {
   const parsed = parseSearchQuery(params.query);
   const bots = params.botProfiles ?? DEMO_BOT_PROFILES;
-  const products = params.products ?? enrichProducts(params.conversations, DEMO_ORCHESTRAS);
+  const products = params.products ?? enrichProducts(params.conversations, loadAodlOrchestras());
   const results: SearchResult[] = [];
   const discoverEmpty = parsed.mode === "discover" && !parsed.text;
 
