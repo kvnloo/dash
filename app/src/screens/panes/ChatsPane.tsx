@@ -37,7 +37,7 @@ const Row = memo(function Row({
       style={[styles.row, active && styles.rowActive]}
       accessibilityRole="button"
     >
-      <HarnessAvatar name={harnessName} />
+      <HarnessAvatar name={harnessName} harnessId={item.harness} />
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
           <Text style={styles.rowTitle} numberOfLines={1}>
