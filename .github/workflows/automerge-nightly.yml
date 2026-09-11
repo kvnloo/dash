@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Enable auto-merge into nightly when scheme allows
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

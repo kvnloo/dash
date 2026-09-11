@@ -57,8 +57,8 @@ files:
     sha256: f7b19ea5ae7226368a3515db9dd292ab20844fb09618bebb7c92f8abc3d6132d
     kit_sha256: f7b19ea5ae7226368a3515db9dd292ab20844fb09618bebb7c92f8abc3d6132d
   - path: .github/workflows/automerge-nightly.yml
-    source: kit
-    sha256: b1db0e5112b5f16cad13b3683ddf4ea699e398fc1c81221a8c34056e0d6c78b8
+    source: modified
+    sha256: 4ee17b3a27cca9a4aa4c8017612711688700d98f116b916acdc61e437bc33e07
     kit_sha256: b1db0e5112b5f16cad13b3683ddf4ea699e398fc1c81221a8c34056e0d6c78b8
   - path: .github/workflows/automerge-preview.yml
     source: modified
