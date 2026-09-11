@@ -109,9 +109,10 @@ describe("live bridge wiring", () => {
     const src = readFileSync(join(import.meta.dir, "../index.ts"), "utf8");
     expect(src).toContain('from "./src/turn-safety"');
     expect(src).toContain("waitForExitOrTimeout");
-    expect(src).toContain("parseHarnessJsonLine");
     expect(src).toContain("replayAfter");
     expect(src).toContain("TIMEOUT_EXIT_CODE");
     expect(src).not.toContain("const exitCode = await proc.exited;");
+    const adapters = readFileSync(join(import.meta.dir, "harnesses.ts"), "utf8");
+    expect(adapters).toContain("parseHarnessJsonLine");
   });
 });
