@@ -4,7 +4,8 @@ import { StyleSheet, Text, View } from "react-native";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
-import { DEMO_ORCHESTRAS, type OrchestraProject } from "../../mock/orchestra";
+import { loadAodlOrchestras, type OrchestraProject } from "../../catalog/orchestra";
+import { enrichProducts } from "../../lib/global-search";
 import type { ScreenProps } from "../../navigation";
 import { store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
@@ -65,13 +66,8 @@ const Card = memo(function Card({
 export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
   const harnesses = store.use((s) => s.connection.harnesses);
   const conversations = store.use((s) => s.conversations);
-
   const projects = useMemo(() => {
-    if (conversations.length === 0) return DEMO_ORCHESTRAS;
-    return DEMO_ORCHESTRAS.map((p) => ({
-      ...p,
-      chatIds: conversations.filter((c) => p.agents.includes(c.harness)).map((c) => c.id),
-    }));
+    return enrichProducts(conversations, loadAodlOrchestras());
   }, [conversations]);
 
   const open = useCallback(

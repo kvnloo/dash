@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HarnessAvatar } from "../components/HarnessAvatar";
 import { AppNav } from "../components/AppNav";
 import { haptic } from "../haptics";
-import { DEMO_ORCHESTRAS } from "../mock/orchestra";
+import { loadAodlOrchestras } from "../catalog/orchestra";
+import { enrichProducts } from "../lib/global-search";
 import type { ScreenProps } from "../navigation";
 import { setActive, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
@@ -18,12 +19,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
   const conversations = store.use((s) => s.conversations);
 
   const project = useMemo(() => {
-    const base = DEMO_ORCHESTRAS.find((p) => p.id === orchestraId);
-    if (!base) return null;
-    return {
-      ...base,
-      chatIds: conversations.filter((c) => base.agents.includes(c.harness)).map((c) => c.id),
-    };
+    return enrichProducts(conversations, loadAodlOrchestras()).find((p) => p.id === orchestraId) ?? null;
   }, [conversations, orchestraId]);
 
   const linkedChats = useMemo(
@@ -58,6 +54,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <AppNav navigation={navigation} tab={2} />
       <View style={styles.hero}>
+        <Text style={styles.title}>{project.name}</Text>
         <Text style={styles.subtitle}>{project.subtitle}</Text>
         <View style={styles.metaRow}>
           <View
@@ -114,6 +111,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   hero: { paddingHorizontal: space.lg, paddingBottom: space.lg },
+  title: { color: colors.text, ...type.heading },
   subtitle: { color: colors.textMuted, ...type.body, marginTop: 4 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
