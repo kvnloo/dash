@@ -1,6 +1,7 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { runtimeStateFromAgent } from "../../catalog/runtime-state";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
@@ -32,7 +33,12 @@ const ProfileRow = memo(function ProfileRow({
       accessibilityRole="button"
       accessibilityState={{ disabled: !canOpen }}
     >
-      <HarnessAvatar name={profile.name} size={44} />
+      <HarnessAvatar
+        name={profile.name}
+        harnessId={profile.harness}
+        size={44}
+        stateId={runtimeStateFromAgent(profile.online ? "available" : "offline")}
+      />
       <View style={styles.main}>
         <View style={styles.top}>
           <Text style={styles.title} numberOfLines={1}>

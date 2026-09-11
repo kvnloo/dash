@@ -10,7 +10,7 @@
 // the rest. Finished turns are kept for RETAIN_MS so late reattaches still work.
 
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { hostname } from "node:os";
+import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import {
   PROTOCOL_VERSION,
@@ -22,8 +22,18 @@ import {
 import { CLAIM_KEY_BYTES, claimSession, currentOrCreateSession, startBoundSession } from "./pair";
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
-import { collectRoster } from "./src/roster";
+import { collectRoster, readLiveTranscript } from "./src/roster";
 import { hermesCliArgv, runHermesSession } from "./src/hermes-session";
+import {
+  CANCELLED_EXIT_CODE,
+  TIMEOUT_EXIT_CODE,
+  nonZeroExitMessage,
+  parseHarnessJsonLine,
+  replayAfter,
+  timeoutMessage,
+  turnTimeoutMs,
+  waitForExitOrTimeout,
+} from "./src/turn-safety";
 import { speechAvailable, transcribe, warmup } from "./speech";
 
 // ---------------------------------------------------------------------------
@@ -67,14 +77,14 @@ function str(value: unknown): value is string {
   return typeof value === "string";
 }
 
-function parseJsonLine(line: string): Record<string, unknown> | null {
-  if (line.charCodeAt(0) !== 123 /* { */) return null;
-  try {
-    const value: unknown = JSON.parse(line);
-    return isRecord(value) ? value : null;
-  } catch {
+function parseJsonLine(line: string, sink?: Sink): Record<string, unknown> | null {
+  const parsed = parseHarnessJsonLine(line);
+  if (!parsed) return null;
+  if (!parsed.ok) {
+    sink?.error(parsed.error);
     return null;
   }
+  return parsed.value;
 }
 
 const STATUS_MAX = 100;
@@ -119,7 +129,7 @@ const omp: Harness = {
   parser(sink) {
     return {
       line(line) {
-        const ev = parseJsonLine(line);
+        const ev = parseJsonLine(line, sink);
         if (!ev) return;
         switch (ev.type) {
           case "session":
@@ -157,7 +167,7 @@ const codex: Harness = {
     let emitted = false;
     return {
       line(line) {
-        const ev = parseJsonLine(line);
+        const ev = parseJsonLine(line, sink);
         if (!ev) return;
         if (ev.type === "thread.started" && str(ev.thread_id)) {
           sink.session(ev.thread_id);
@@ -198,7 +208,7 @@ function anthropicStreamParser(sink: Sink): LineParser {
   let sawDelta = false;
   return {
     line(line) {
-      const ev = parseJsonLine(line);
+      const ev = parseJsonLine(line, sink);
       if (!ev) return;
       switch (ev.type) {
         case "system":
@@ -332,7 +342,6 @@ interface SocketData {
 /** Batches text deltas so a fast model doesn't turn into hundreds of tiny frames per second. */
 const FLUSH_MS = 40;
 const STDERR_TAIL = 2000;
-const CANCELLED_EXIT_CODE = 130;
 /** How long a finished turn stays replayable. */
 const RETAIN_MS = 10 * 60 * 1000;
 const MAX_RETAINED = 50;
@@ -441,19 +450,22 @@ class Turn implements Sink {
     });
 
     void (async () => {
-      const exitCode = await proc.exited;
+      const timeoutMs = turnTimeoutMs();
+      const { exitCode, timedOut } = await waitForExitOrTimeout(proc, timeoutMs);
       await Promise.all([stdoutDone, stderrDone]);
       parser.end();
       if (this.cancelled) {
         this.finish(CANCELLED_EXIT_CODE);
+      } else if (timedOut) {
+        this.error(timeoutMessage(this.harness.name, timeoutMs));
+        this.finish(TIMEOUT_EXIT_CODE);
       } else {
         if (exitCode !== 0) {
-          const detail = stderrTail.trim();
-          this.error(detail || `${this.harness.name} exited with code ${exitCode}`);
+          this.error(nonZeroExitMessage(this.harness.name, exitCode, stderrTail));
         }
         this.finish(exitCode);
       }
-      log("turn.end", { id: this.id, harness: this.harness.id, exitCode, cancelled: this.cancelled });
+      log("turn.end", { id: this.id, harness: this.harness.id, exitCode, cancelled: this.cancelled, timedOut });
     })();
   }
 
@@ -474,9 +486,7 @@ class Turn implements Sink {
 
   /** Send every event after `afterSeq` to one socket. */
   replay(ws: Socket, afterSeq: number): void {
-    for (const event of this.events) {
-      if (event.seq > afterSeq) sendTo(ws, event);
-    }
+    for (const event of replayAfter(this.events, afterSeq)) sendTo(ws, event);
   }
 
   // Sink -------------------------------------------------------------------
@@ -984,6 +994,17 @@ const server = Bun.serve<SocketData>({
           }
           log("ws.attach", { remote: ws.remoteAddress, count: message.turns.length });
           break;
+        case "history": {
+          const home = homedir();
+          const sessionRoot = join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions");
+          sendTo(ws, {
+            type: "history",
+            harness: message.harness,
+            sessionId: message.sessionId,
+            messages: readLiveTranscript(message.harness, message.sessionId, sessionRoot, message.cwd, home),
+          });
+          break;
+        }
       }
     },
     close(ws) {
