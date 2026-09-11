@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { TurnEvent } from "../../../shared/protocol";
+import type { HistoryMessage, TurnEvent } from "../../../shared/protocol";
 import {
   newId,
   parseConversation,
@@ -11,7 +11,7 @@ import {
   type Message,
   type Settings,
 } from "../model";
-import { mergeLiveConversations } from "../lib/live-sessions";
+import { hydrateLiveConversation, mergeLiveConversations, shouldRequestHistory } from "../lib/live-sessions";
 import { createStore } from "./createStore";
 import { notifyTurnSettled } from "./queue";
 
@@ -114,9 +114,26 @@ export async function forgetEverything(): Promise<void> {
 
 // ---- conversations ---------------------------------------------------------
 
+type LiveHistoryRequest = (input: { harness: string; sessionId: string; cwd?: string }) => void;
+let requestLiveHistory: LiveHistoryRequest | undefined;
+
+export function setLiveHistoryRequester(fn: LiveHistoryRequest | undefined): void {
+  requestLiveHistory = fn;
+}
+
+export function applyLiveHistory(harness: string, sessionId: string, messages: HistoryMessage[]): void {
+  const conv = store.get().conversations.find((c) => c.harness === harness && c.sessionId === sessionId);
+  if (!conv) return;
+  updateConversation(conv.id, (c) => hydrateLiveConversation(c, messages));
+}
+
 export function setActive(id: string | null): void {
   store.set((s) => ({ ...s, activeId: id }));
   scheduleSave();
+  if (!id) return;
+  const current = store.get().conversations.find((c) => c.id === id);
+  if (!current || !shouldRequestHistory(current) || !current.sessionId) return;
+  requestLiveHistory?.({ harness: current.harness, sessionId: current.sessionId, cwd: current.cwd });
 }
 
 export function createConversation(harness: string): Conversation {

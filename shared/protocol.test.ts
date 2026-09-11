@@ -86,6 +86,30 @@ describe("parseClientMessage", () => {
     expect(parseClientMessage({ type: "attach", turns: [{ id: "t1", seq: "3" }] })).toBeNull();
     expect(parseClientMessage({ type: "attach" })).toBeNull();
   });
+
+  test("accepts a live transcript request", () => {
+    expect(parseClientMessage({ type: "history", harness: "omp", sessionId: "01liveomp" })).toEqual({
+      type: "history",
+      harness: "omp",
+      sessionId: "01liveomp",
+      cwd: undefined,
+    });
+    expect(
+      parseClientMessage({
+        type: "history",
+        harness: "omp",
+        sessionId: "01liveomp",
+        cwd: "/home/you/workspace/dash",
+      }),
+    ).toEqual({
+      type: "history",
+      harness: "omp",
+      sessionId: "01liveomp",
+      cwd: "/home/you/workspace/dash",
+    });
+    expect(parseClientMessage({ type: "history", harness: "omp" })).toBeNull();
+    expect(parseClientMessage({ type: "history", harness: 1, sessionId: "01liveomp" })).toBeNull();
+  });
 });
 
 describe("parseServerMessage", () => {
@@ -178,6 +202,37 @@ describe("parseServerMessage", () => {
       },
     ]);
     expect(hosts?.[0]?.agents[0]?.sessionId).toBe("01liveomp");
+  });
+
+  test("accepts a live transcript reply and ignores a bad message row", () => {
+    expect(
+      parseServerMessage({
+        type: "history",
+        harness: "omp",
+        sessionId: "01liveomp",
+        messages: [
+          { id: "u1", role: "user", text: "ship chats", at: 1_700_000_000_000 },
+          { id: "a1", role: "assistant", text: "opening the row", at: 1_700_000_000_100 },
+        ],
+      }),
+    ).toEqual({
+      type: "history",
+      harness: "omp",
+      sessionId: "01liveomp",
+      messages: [
+        { id: "u1", role: "user", text: "ship chats", at: 1_700_000_000_000 },
+        { id: "a1", role: "assistant", text: "opening the row", at: 1_700_000_000_100 },
+      ],
+    });
+    expect(
+      parseServerMessage({
+        type: "history",
+        harness: "omp",
+        sessionId: "01liveomp",
+        messages: [{ id: "u1", role: "system", text: "nope", at: 1 }],
+      }),
+    ).toBeNull();
+    expect(parseServerMessage({ type: "history", harness: "omp", sessionId: "01liveomp" })).toBeNull();
   });
 
   test("rejects a host when sessionId is not a string", () => {

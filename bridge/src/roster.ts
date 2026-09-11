@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isCatalogHarness } from "../../shared/catalog";
-import type { AgentInfo, HarnessInfo, HostInfo } from "../../shared/protocol";
+import type { AgentInfo, HarnessInfo, HistoryMessage, HostInfo } from "../../shared/protocol";
 
 export type TailscaleNode = {
   hostName: string;
@@ -128,7 +128,7 @@ function latestJsonl(dir: string): string | undefined {
     } catch {
       continue;
     }
-    if (mtime >= latestMtime) {
+    if (mtime > latestMtime || (mtime === latestMtime && name > (latest ?? ""))) {
       latestMtime = mtime;
       latest = name;
     }
@@ -172,6 +172,128 @@ export function attachOmpSessions(tabs: OmpTab[], sessionRoot: string, home: str
     if (!found) return { ...tab, sessionId: tab.id };
     return { ...tab, sessionId: found.sessionId, title: found.title ?? tab.title };
   });
+}
+
+const SESSION_ID_OK = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function textFromContent(content: unknown): string {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  const parts: string[] = [];
+  for (const block of content) {
+    if (typeof block === "string") {
+      if (block.trim()) parts.push(block);
+      continue;
+    }
+    if (!isRecord(block)) continue;
+    if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
+      parts.push(block.text);
+    }
+  }
+  return parts.join("\n").trim();
+}
+
+function timestampMs(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const ms = Date.parse(value);
+    if (Number.isFinite(ms)) return ms;
+  }
+  return 0;
+}
+
+/** User/assistant turns only. Thinking, tools, and unknown roles are dropped. */
+export function parseOmpTranscript(text: string): HistoryMessage[] {
+  const out: HistoryMessage[] = [];
+  for (const line of text.split("\n")) {
+    if (line.charCodeAt(0) !== 123) continue;
+    let rec: Record<string, unknown>;
+    try {
+      const value: unknown = JSON.parse(line);
+      if (!isRecord(value)) continue;
+      rec = value;
+    } catch {
+      continue;
+    }
+    if (rec.type !== "message") continue;
+    if (!isRecord(rec.message)) continue;
+    const role = rec.message.role;
+    if (role !== "user" && role !== "assistant") continue;
+    const extracted = textFromContent(rec.message.content);
+    if (!extracted) continue;
+    const id = typeof rec.id === "string" && rec.id.length > 0 ? rec.id : `${role}-${out.length}`;
+    out.push({ id, role, text: extracted, at: timestampMs(rec.timestamp ?? rec.message.timestamp) });
+  }
+  return out;
+}
+
+function jsonlMatchingSession(dir: string, sessionId: string): string | undefined {
+  if (!existsSync(dir)) return undefined;
+  const suffix = `_${sessionId}.jsonl`;
+  let latest: string | undefined;
+  let latestMtime = -1;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(suffix)) continue;
+    const path = join(dir, name);
+    let mtime = 0;
+    try {
+      mtime = statSync(path).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (mtime > latestMtime || (mtime === latestMtime && path > (latest ?? ""))) {
+      latestMtime = mtime;
+      latest = path;
+    }
+  }
+  return latest;
+}
+
+export function findOmpJsonl(sessionRoot: string, sessionId: string, cwd?: string, home?: string): string | undefined {
+  if (!SESSION_ID_OK.test(sessionId)) return undefined;
+  if (cwd && home) {
+    const hit = jsonlMatchingSession(join(sessionRoot, ompSessionDirName(cwd, home)), sessionId);
+    if (hit) return hit;
+  }
+  if (!existsSync(sessionRoot)) return undefined;
+  for (const name of readdirSync(sessionRoot)) {
+    const path = join(sessionRoot, name);
+    let isDir = false;
+    try {
+      isDir = statSync(path).isDirectory();
+    } catch {
+      continue;
+    }
+    if (!isDir) {
+      if (name.endsWith(`_${sessionId}.jsonl`)) return path;
+      continue;
+    }
+    const hit = jsonlMatchingSession(path, sessionId);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** Local OMP jsonl only. Unknown harness ids (including Cursor cloud) return []. */
+export function readLiveTranscript(
+  harness: string,
+  sessionId: string,
+  sessionRoot: string,
+  cwd?: string,
+  home?: string,
+): HistoryMessage[] {
+  if (harness !== "omp") return [];
+  const path = findOmpJsonl(sessionRoot, sessionId, cwd, home);
+  if (!path) return [];
+  try {
+    return parseOmpTranscript(readFileSync(path, "utf8"));
+  } catch {
+    return [];
+  }
 }
 
 export function parseHermesGatewayList(text: string): HermesProfileInfo[] {
