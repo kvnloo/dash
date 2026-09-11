@@ -84,6 +84,7 @@ These themes reflect current priorities toward the mesh vision:
 
 - Discover and register available machines on the tailnet (mesh directory).
 - Route agent spawns to available compute (load balancing, affinity).
+- NVIDIA PAIR (Personal-AI-Router): Integrate as a first-class mesh building block for home inference routing across devices. NVIDIA PAIR is distinct from Dash phone pairing; it's a separate mesh compute library alongside Tailscale.
 - Edge compute integration (not yet unlocked; keel is internal scaffolding).
 
 **Examples of issues:**
