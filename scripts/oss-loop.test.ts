@@ -61,6 +61,8 @@ describe("verified-oss-loop onboard (Dash)", () => {
     const nightly = read(".github/workflows/automerge-nightly.yml");
     expect(preview).toContain("branches: [preview]");
     expect(nightly).toContain("branches: [nightly]");
+    expect(preview).toContain("github.event.pull_request.head.sha");
+    expect(nightly).toContain("github.event.pull_request.head.sha");
     expect(preview).toContain("--auto");
     expect(nightly).toContain("--auto");
     expect(preview.includes("branches: [main]")).toBe(false);
