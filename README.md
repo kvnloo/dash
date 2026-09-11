@@ -69,6 +69,7 @@ See `AGENTS.md` for multi-agent ownership rules.
   - `tdd` — fail-then-pass + mutation. Use this for every behavior change.
   - `dash-onboard` — first-run for any agent (layout, ownership, conventions).
   - `dash-bridge` — bridge architecture and harness adapter patterns (read-only guidance).
+  - `dash-debug` — pair → roster → WS hello/attach on :4747. Never paste tokens.
   - `dash-contribute` — PR hygiene, fail-then-pass proofs, community norms.
   - `dash-android-ui` / `dash-motion` — phone UI (only if the issue assigns UI work).
   - `verify-dash` — runtime proofs against the live bridge.
