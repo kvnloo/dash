@@ -136,12 +136,19 @@ export function setActive(id: string | null): void {
   requestLiveHistory?.({ harness: current.harness, sessionId: current.sessionId, cwd: current.cwd });
 }
 
-export function createConversation(harness: string): Conversation {
+export function createConversation(harness: string, opts?: { id?: string; title?: string }): Conversation {
+  if (opts?.id) {
+    const existing = store.get().conversations.find((c) => c.id === opts.id);
+    if (existing) {
+      setActive(existing.id);
+      return existing;
+    }
+  }
   const now = Date.now();
   const conversation: Conversation = {
-    id: newId(),
+    id: opts?.id ?? newId(),
     harness,
-    title: "New chat",
+    title: opts?.title ?? "New chat",
     createdAt: now,
     updatedAt: now,
     messages: [],

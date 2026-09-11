@@ -8,6 +8,8 @@ export interface Settings {
   harness: string;
   /** Optional working directory override sent with every turn. */
   cwd?: string;
+  /** Product feedback from Main composer, Voice, and row long-press. Default on in beta. */
+  inAppFeedback: boolean;
 }
 
 export type AssistantState = "pending" | "streaming" | "done" | "error" | "interrupted";
@@ -76,6 +78,7 @@ export function parseSettings(raw: unknown): Settings | null {
     token: raw.token,
     harness: raw.harness,
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
+    inAppFeedback: raw.inAppFeedback !== false,
   };
 }
 

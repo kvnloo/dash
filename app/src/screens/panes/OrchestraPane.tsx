@@ -8,9 +8,12 @@ import { EffortOrbs } from "../../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../../components/TopologyBadge";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
+import { inAppFeedbackEnabled } from "../../lib/feedback";
+import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { enrichProducts } from "../../lib/global-search";
+import { threadTargetForOrchestra } from "../../lib/orchestra-thread";
 import type { ScreenProps } from "../../navigation";
-import { store } from "../../store/app";
+import { setActive, store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
 import { timeAgo } from "../../util";
 
@@ -18,10 +21,12 @@ const Card = memo(function Card({
   item,
   streaming,
   onPress,
+  onLongPress,
 }: {
   item: OrchestraProject;
   streaming: boolean;
-  onPress(id: string): void;
+  onPress(item: OrchestraProject): void;
+  onLongPress?(item: OrchestraProject): void;
 }) {
   const visual = loadVisualCatalog();
   const topology = resolveTopology(visual, item.topologyId);
@@ -29,7 +34,13 @@ const Card = memo(function Card({
   const state = resolveRuntimeState(visual, runtimeStateFromOrchestra({ status: item.status, streaming }));
   const effort = resolveEffort(visual, effortIdForTurn({ turnState: streaming ? "streaming" : undefined }));
   return (
-    <PressScale onPress={() => onPress(item.id)} style={styles.card} accessibilityRole="button">
+    <PressScale
+      onPress={() => onPress(item)}
+      onLongPress={onLongPress ? () => onLongPress(item) : undefined}
+      delayLongPress={350}
+      style={styles.card}
+      accessibilityRole="button"
+    >
       <View style={styles.cardTop}>
         <View style={styles.cardTitles}>
           <Text style={styles.name} numberOfLines={1}>
@@ -57,6 +68,7 @@ const Card = memo(function Card({
 
 export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
   const conversations = store.use((s) => s.conversations);
+  const settings = store.use((s) => s.settings);
   const projects = useMemo(() => {
     return enrichProducts(conversations, loadAodlOrchestras());
   }, [conversations]);
@@ -69,19 +81,41 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
   }, [conversations]);
 
   const open = useCallback(
-    (id: string) => {
+    (item: OrchestraProject) => {
       haptic.select();
-      navigation.navigate("OrchestraDetail", { orchestraId: id });
+      const target = threadTargetForOrchestra(item, store.get().conversations);
+      if (target.kind === "chat") {
+        setActive(target.conversationId);
+        navigation.navigate("Chat");
+        return;
+      }
+      navigation.navigate("OrchestraDetail", { orchestraId: target.orchestraId });
     },
     [navigation],
   );
 
+  const onFeedback = useCallback(
+    (item: OrchestraProject) => {
+      if (!inAppFeedbackEnabled(store.get().settings)) return;
+      haptic.select();
+      submitInAppFeedback({
+        kind: "select",
+        text: `Selected orchestra ${item.name}`,
+        selection: { kind: "orchestra", id: item.id, label: item.name },
+      });
+      navigation.navigate("Chat");
+    },
+    [navigation],
+  );
+
+  const feedbackOn = inAppFeedbackEnabled(settings);
+
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<OrchestraProject>) => {
       const streaming = item.chatIds.some((id) => streamingIds.has(id));
-      return <Card item={item} streaming={streaming} onPress={open} />;
+      return <Card item={item} streaming={streaming} onPress={open} onLongPress={feedbackOn ? onFeedback : undefined} />;
     },
-    [open, streamingIds],
+    [feedbackOn, onFeedback, open, streamingIds],
   );
 
   return (

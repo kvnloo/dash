@@ -6,6 +6,8 @@ import { HarnessAvatar } from "../../components/HarnessAvatar";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { conversationPreview as preview } from "../../lib/live-sessions";
+import { inAppFeedbackEnabled } from "../../lib/feedback";
+import { submitInAppFeedback } from "../../lib/feedback-submit";
 import type { ConnectionStatus, Conversation } from "../../model";
 import type { ScreenProps } from "../../navigation";
 import { deleteConversation, setActive, store } from "../../store/app";
@@ -22,21 +24,21 @@ const Row = memo(function Row({
   harnessName,
   connectionStatus,
   onPress,
-  onDelete,
+  onLongPress,
 }: {
   item: Conversation;
   active: boolean;
   harnessName: string;
   connectionStatus: ConnectionStatus;
   onPress(id: string): void;
-  onDelete(id: string): void;
+  onLongPress(id: string): void;
 }) {
   const turnState = lastAssistantState(item.messages);
   const stateId = runtimeStateFromTurn({ turnState, connectionStatus });
   return (
     <PressScale
       onPress={() => onPress(item.id)}
-      onLongPress={() => onDelete(item.id)}
+      onLongPress={() => onLongPress(item.id)}
       delayLongPress={350}
       style={[styles.row, active && styles.rowActive]}
       accessibilityRole="button"
@@ -106,6 +108,23 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
     });
   }, []);
 
+  const onFeedback = useCallback(
+    (id: string) => {
+      if (!inAppFeedbackEnabled(store.get().settings)) return;
+      const conversation = store.get().conversations.find((c) => c.id === id);
+      haptic.select();
+      submitInAppFeedback({
+        kind: "select",
+        text: `Selected chat ${conversation?.title ?? id}`,
+        selection: { kind: "chat", id, label: conversation?.title || id },
+      });
+      navigation.navigate("Chat");
+    },
+    [navigation],
+  );
+
+  const feedbackOn = inAppFeedbackEnabled(store.use((s) => s.settings));
+
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<ChatsListItem>) => {
       if (item.kind === "section") return <SectionHeader title={item.title} />;
@@ -117,11 +136,11 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
           harnessName={harnesses.find((h) => h.id === c.harness)?.name ?? c.harness}
           connectionStatus={connectionStatus}
           onPress={open}
-          onDelete={remove}
+          onLongPress={feedbackOn ? onFeedback : remove}
         />
       );
     },
-    [activeId, connectionStatus, harnesses, open, remove],
+    [activeId, connectionStatus, feedbackOn, harnesses, onFeedback, open, remove],
   );
 
   const getItemType = useCallback((item: ChatsListItem) => item.kind, []);

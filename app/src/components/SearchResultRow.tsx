@@ -101,9 +101,11 @@ function avatarMotion(item: SearchResult): { effortId?: string; stateId?: string
 export const SearchResultRow = memo(function SearchResultRow({
   item,
   onPress,
+  onLongPress,
 }: {
   item: SearchResult;
   onPress(item: SearchResult): void;
+  onLongPress?(item: SearchResult): void;
 }) {
   const title = resultTitle(item);
   const meta =
@@ -127,6 +129,8 @@ export const SearchResultRow = memo(function SearchResultRow({
   return (
     <PressScale
       onPress={() => onPress(item)}
+      onLongPress={onLongPress ? () => onLongPress(item) : undefined}
+      delayLongPress={350}
       style={styles.row}
       accessibilityRole="button"
     >

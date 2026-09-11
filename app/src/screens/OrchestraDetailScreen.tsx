@@ -10,8 +10,9 @@ import { EffortOrbs } from "../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../components/TopologyBadge";
 import { haptic } from "../haptics";
 import { enrichProducts } from "../lib/global-search";
+import { threadTargetForAgent } from "../lib/orchestra-thread";
 import type { ScreenProps } from "../navigation";
-import { setActive, store } from "../store/app";
+import { createConversation, setActive, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { timeAgo } from "../util";
 
@@ -56,8 +57,10 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
 
   const openAgent = (harnessId: string) => {
     haptic.select();
-    const chat = linkedChats.find((c) => c.harness === harnessId);
-    if (chat) openChat(chat.id);
+    const target = threadTargetForAgent(harnessId, conversations);
+    if (target.kind === "create") createConversation(harnessId);
+    else setActive(target.conversationId);
+    navigation.navigate("Chat");
   };
 
   return (
