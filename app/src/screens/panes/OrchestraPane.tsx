@@ -1,8 +1,10 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../../catalog/runtime-state";
 import { loadAodlOrchestras, type OrchestraProject } from "../../catalog/orchestra";
-import { loadVisualCatalog, resolveProvider, resolveTopology } from "../../catalog/visual";
+import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../../catalog/visual";
+import { EffortOrbs } from "../../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../../components/TopologyBadge";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
@@ -14,14 +16,18 @@ import { timeAgo } from "../../util";
 
 const Card = memo(function Card({
   item,
+  streaming,
   onPress,
 }: {
   item: OrchestraProject;
+  streaming: boolean;
   onPress(id: string): void;
 }) {
   const visual = loadVisualCatalog();
   const topology = resolveTopology(visual, item.topologyId);
   const provider = resolveProvider(visual, item.providerId);
+  const state = resolveRuntimeState(visual, runtimeStateFromOrchestra({ status: item.status, streaming }));
+  const effort = resolveEffort(visual, effortIdForTurn({ turnState: streaming ? "streaming" : undefined }));
   return (
     <PressScale onPress={() => onPress(item.id)} style={styles.card} accessibilityRole="button">
       <View style={styles.cardTop}>
@@ -33,7 +39,9 @@ const Card = memo(function Card({
             {item.subtitle}
           </Text>
         </View>
-        <OrchestraCore hue={provider.hue} />
+        <EffortOrbs hue={provider.hue} size={36} effort={effort} state={state} accessibilityLabel={`${item.name} · ${state.label}`}>
+          <OrchestraCore hue={provider.hue} size={36} />
+        </EffortOrbs>
       </View>
       <TopologyBadge topologyId={item.topologyId} providerId={item.providerId} width={220} />
       <View style={styles.footer}>
@@ -52,6 +60,13 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
   const projects = useMemo(() => {
     return enrichProducts(conversations, loadAodlOrchestras());
   }, [conversations]);
+  const streamingIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const conversation of conversations) {
+      if (conversationStreaming(conversation.messages)) ids.add(conversation.id);
+    }
+    return ids;
+  }, [conversations]);
 
   const open = useCallback(
     (id: string) => {
@@ -63,9 +78,10 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<OrchestraProject>) => {
-      return <Card item={item} onPress={open} />;
+      const streaming = item.chatIds.some((id) => streamingIds.has(id));
+      return <Card item={item} streaming={streaming} onPress={open} />;
     },
-    [open],
+    [open, streamingIds],
   );
 
   return (

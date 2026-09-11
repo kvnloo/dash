@@ -37,8 +37,8 @@ function getItemType(item: Message): string {
   return item.role;
 }
 
-function renderItem({ item }: ListRenderItemInfo<Message>) {
-  return <MessageRow message={item} />;
+function renderItem({ item }: ListRenderItemInfo<Message>, harnessId: string) {
+  return <MessageRow message={item} harnessId={harnessId} />;
 }
 
 export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
@@ -172,7 +172,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         <FlashList
           ref={listRef}
           data={messages}
-          renderItem={renderItem}
+          renderItem={(info) => renderItem(info, harnessId)}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
           maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.2 }}
