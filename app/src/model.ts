@@ -45,6 +45,8 @@ export interface Conversation {
   updatedAt: number;
   /** Harness-native session id once the first turn reports it. */
   sessionId?: string;
+  /** Working directory on the paired host when this row is a live session. */
+  cwd?: string;
   messages: Message[];
 }
 
@@ -129,6 +131,7 @@ export function parseConversation(raw: unknown): Conversation | null {
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     sessionId: typeof raw.sessionId === "string" ? raw.sessionId : undefined,
+    cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
     messages,
   };
 }

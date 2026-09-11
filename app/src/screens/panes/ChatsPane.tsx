@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
+import { conversationPreview as preview } from "../../lib/live-sessions";
 import type { Conversation } from "../../model";
 import type { ScreenProps } from "../../navigation";
 import { deleteConversation, setActive, store } from "../../store/app";
@@ -13,16 +14,6 @@ import { confirmDestructive, dateGroupLabel, timeAgo } from "../../util";
 type ChatsListItem =
   | { kind: "section"; id: string; title: string }
   | { kind: "conversation"; id: string; conversation: Conversation };
-
-function preview(c: Conversation): string {
-  const last = c.messages[c.messages.length - 1];
-  if (!last) return "Empty chat";
-  if (last.role === "assistant") {
-    const t = last.text.replace(/\s+/g, " ").trim();
-    return last.status ? last.status : t || "Thinking…";
-  }
-  return last.text.replace(/\s+/g, " ").trim();
-}
 
 const Row = memo(function Row({
   item,

@@ -71,11 +71,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     (text: string, active = conversation ?? createConversation(harnessId)) => {
       const { turnId } = beginTurn(active.id, text);
       haptic.tap();
+      const current = store.get().conversations.find((c) => c.id === active.id) ?? active;
       const ok = sendChat({
         turnId,
-        harness: active.harness,
+        harness: current.harness,
         text,
-        sessionId: store.get().conversations.find((c) => c.id === active.id)?.sessionId ?? active.sessionId,
+        sessionId: current.sessionId,
+        cwd: current.cwd,
       });
       if (!ok) {
         applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Not connected to the bridge." });
@@ -102,11 +104,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         return;
       }
       haptic.tap();
+      const current = store.get().conversations.find((c) => c.id === conversationId);
       const ok = sendChat({
         turnId,
         harness: payload.harness,
         text: payload.text,
-        sessionId: store.get().conversations.find((c) => c.id === conversationId)?.sessionId ?? payload.sessionId,
+        sessionId: current?.sessionId ?? payload.sessionId,
+        cwd: current?.cwd,
       });
       if (!ok) {
         applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Not connected to the bridge." });
