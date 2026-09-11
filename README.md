@@ -73,6 +73,8 @@ See `AGENTS.md` for multi-agent ownership rules.
   - `dash-android-ui` / `dash-motion` — phone UI (only if the issue assigns UI work).
   - `verify-dash` — runtime proofs against the live bridge.
 
+Pixel language: [docs/design/language.md](docs/design/language.md). Competitor + AODL + frontier-kb UI map: [docs/design/ai-ui-patterns/](docs/design/ai-ui-patterns/README.md).
+
 ## Harness notes
 
 - **OMP** — `omp -p --mode json`
