@@ -1,28 +1,21 @@
 import { memo } from "react";
-import { StyleSheet, Text } from "react-native";
-import { colors, type } from "../theme";
-import { GlassSurface } from "./GlassSurface";
+import { harnessLookOrUnspecified, loadVisualCatalog, runtimeStateFromLive } from "../catalog/visual";
+import { VisualCore } from "./TopologyBadge";
 
-/** Circle badge with the harness initial — matches preview.html conversation rows. */
+/** visual.json core for a catalog harness id. Unknown owners fail closed to the declared unknown look. */
 export const HarnessAvatar = memo(function HarnessAvatar({
-  name,
+  harnessId,
   size = 48,
+  assistantState,
+  online,
 }: {
-  name: string;
+  harnessId: string;
   size?: number;
+  assistantState?: string;
+  online?: boolean;
 }) {
-  const letter = (name.trim()[0] ?? "?").toUpperCase();
-  return (
-    <GlassSurface variant="chip" blur={false} borderRadius={size / 2} style={[styles.avatar, { width: size, height: size }]}>
-      <Text style={[styles.letter, { fontSize: size * 0.42 }]}>{letter}</Text>
-    </GlassSurface>
-  );
-});
-
-const styles = StyleSheet.create({
-  avatar: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  letter: { color: colors.text, ...type.heading, fontWeight: "600" },
+  const catalog = loadVisualCatalog();
+  const look = harnessLookOrUnspecified(catalog, harnessId);
+  const stateId = runtimeStateFromLive({ assistantState, online });
+  return <VisualCore look={look} size={size} stateId={stateId} />;
 });

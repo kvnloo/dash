@@ -53,3 +53,11 @@ If you need a protocol change, add it to `shared/protocol.ts` with a parser upda
 - No new dependencies for things under 100 lines.
 - Pure black UI, system font, one accent. Match the existing components before adding new ones.
 - Streaming text goes through `app/src/store/text.ts` (per-reply subscriptions, rAF-coalesced). Never put per-token updates in the chats store.
+- Orchestra pane lists the pinned AODL network in `app/src/catalog/` (`aodl-catalog.json` + `encodings/visual.json` / `ir-map.json`). `HarnessAvatar` draws `VisualCore` from `ownerRules` (unknown harness ids fail closed to the declared unknown look). Unknown ids and not-inferred silhouettes fail closed. `o8` and `firstmate` are not Orchestra graphs. No letter-in-circle, no OpenAvatar marks.
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.

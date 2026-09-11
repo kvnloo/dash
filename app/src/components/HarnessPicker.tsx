@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { HarnessInfo } from "../../../shared/protocol";
 import { colors, radius, space, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
+import { HarnessAvatar } from "./HarnessAvatar";
 import { PressScale } from "./PressScale";
 
 interface Props {
@@ -36,6 +37,7 @@ export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose 
                   accessibilityRole="button"
                   accessibilityState={{ selected: active, disabled: !h.available }}
                 >
+                  <HarnessAvatar harnessId={h.id} size={36} online={h.available} />
                   <View style={styles.rowText}>
                     <Text style={[styles.name, !h.available && styles.unavailable]}>{h.name}</Text>
                     {!h.available ? <Text style={styles.hint}>Not installed on the bridge machine</Text> : null}
@@ -65,6 +67,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
+    gap: space.md,
     paddingVertical: 14,
     paddingHorizontal: space.sm,
     borderRadius: radius.md,
