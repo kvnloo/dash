@@ -26,6 +26,30 @@ export interface VisualProvider {
   hue: string;
 }
 
+export interface VisualEffort {
+  id: string;
+  label: string;
+  orbits: number;
+  energy: number;
+  accent: string;
+}
+
+export interface RuntimeCadence {
+  periodMs: number;
+  rotate: boolean;
+  opacityMin: number;
+  opacityMax: number;
+}
+
+export interface VisualRuntimeState {
+  id: string;
+  label: string;
+  marker: string;
+  accent: string;
+  cadence: RuntimeCadence;
+}
+
+
 export interface TopologyGraph {
   nodes: Array<[number, number, number]>;
   edges: Array<[number, number]>;
@@ -45,6 +69,8 @@ export interface VisualCatalog {
   providers: Map<string, VisualProvider>;
   graphs: Map<string, TopologyGraph>;
   ir: Map<string, IrTopologyStatus>;
+  efforts: Map<string, VisualEffort>;
+  runtimeStates: Map<string, VisualRuntimeState>;
   irStatus(id: string): IrTopologyStatus;
   graph(pattern: string): TopologyGraph;
   inferTopology(nodeCount: number, edgeCount: number): never;
@@ -166,12 +192,71 @@ function parseIr(raw: unknown): Map<string, IrTopologyStatus> {
   return out;
 }
 
+const MARKER_CADENCE: Record<string, RuntimeCadence> = {
+  hollow: { periodMs: 1600, rotate: false, opacityMin: 0.35, opacityMax: 0.72 },
+  flow: { periodMs: 900, rotate: true, opacityMin: 0.55, opacityMax: 1 },
+  pause: { periodMs: 0, rotate: false, opacityMin: 0.45, opacityMax: 0.45 },
+  expired: { periodMs: 2200, rotate: false, opacityMin: 0.18, opacityMax: 0.4 },
+  contain: { periodMs: 480, rotate: false, opacityMin: 0.5, opacityMax: 1 },
+  unknown: { periodMs: 0, rotate: false, opacityMin: 0.22, opacityMax: 0.22 },
+};
+
+function cadenceForMarker(marker: string): RuntimeCadence {
+  const cadence = MARKER_CADENCE[marker];
+  if (cadence) return cadence;
+  return { periodMs: 0, rotate: false, opacityMin: 0.22, opacityMax: 0.22 };
+}
+
+function parseEfforts(raw: unknown): Map<string, VisualEffort> {
+  if (!isRecord(raw)) fail("Unknown visual.efforts");
+  const out = new Map<string, VisualEffort>();
+  for (const id of Object.keys(raw)) {
+    const row = raw[id];
+    if (!isRecord(row)) fail(`Unknown effort ${id}`);
+    const orbits = readNumber(row, "orbits", `efforts.${id}`);
+    if (!Number.isInteger(orbits) || orbits < 1 || orbits > 4) fail(`Unknown effort orbits ${id}`);
+    const energy = readNumber(row, "energy", `efforts.${id}`);
+    if (energy < 0 || energy > 1) fail(`Unknown effort energy ${id}`);
+    out.set(id, {
+      id,
+      label: readString(row, "label", `efforts.${id}`),
+      orbits,
+      energy,
+      accent: readString(row, "accent", `efforts.${id}`),
+    });
+  }
+  return out;
+}
+
+function parseRuntimeStates(raw: unknown): Map<string, VisualRuntimeState> {
+  if (!isRecord(raw)) fail("Unknown visual.runtimeStates");
+  const out = new Map<string, VisualRuntimeState>();
+  for (const id of Object.keys(raw)) {
+    const row = raw[id];
+    if (!isRecord(row)) fail(`Unknown runtime state ${id}`);
+    const marker = readString(row, "marker", `runtimeStates.${id}`);
+    out.set(id, {
+      id,
+      label: readString(row, "label", `runtimeStates.${id}`),
+      marker,
+      accent: readString(row, "accent", `runtimeStates.${id}`),
+      cadence: cadenceForMarker(marker),
+    });
+  }
+  return out;
+}
+
+
 export function parseVisualCatalog(visualRaw: unknown, irRaw: unknown, graphsRaw: unknown): VisualCatalog {
   if (!isRecord(visualRaw)) fail("Unknown visual catalog");
   const topologies = parseTopologies(visualRaw.topologies);
   const providers = parseProviders(visualRaw.providers);
   const graphs = parseGraphs(graphsRaw);
   const ir = parseIr(irRaw);
+  const efforts = parseEfforts(visualRaw.efforts);
+  const runtimeStates = parseRuntimeStates(visualRaw.runtimeStates);
+  if (!efforts.has("unknown")) fail("Unknown effort id: unknown");
+  if (!runtimeStates.has("unknown")) fail("Unknown runtime state id: unknown");
   for (const id of topologies.keys()) {
     if (!ir.has(id)) fail(`Unknown ir-map row for topology ${id}`);
     const topology = topologies.get(id);
@@ -183,6 +268,8 @@ export function parseVisualCatalog(visualRaw: unknown, irRaw: unknown, graphsRaw
     providers,
     graphs,
     ir,
+    efforts,
+    runtimeStates,
     irStatus(id: string): IrTopologyStatus {
       const status = ir.get(id);
       if (!status) fail(`Unknown topology id: ${id}`);
@@ -198,6 +285,7 @@ export function parseVisualCatalog(visualRaw: unknown, irRaw: unknown, graphsRaw
     },
   };
 }
+
 
 let cached: VisualCatalog | undefined;
 
@@ -248,3 +336,28 @@ export function providerIdForHarness(harnessId: string): string {
   const mapped = HARNESS_PROVIDER_ID[harnessId];
   return mapped ?? "unknown";
 }
+
+function unknownEffort(catalog: VisualCatalog): VisualEffort {
+  const found = catalog.efforts.get("unknown");
+  if (!found) fail("Unknown effort id: unknown");
+  return found;
+}
+
+function unknownRuntimeState(catalog: VisualCatalog): VisualRuntimeState {
+  const found = catalog.runtimeStates.get("unknown");
+  if (!found) fail("Unknown runtime state id: unknown");
+  return found;
+}
+
+/** Unknown or missing effort ids fail closed to `unknown`. */
+export function resolveEffort(catalog: VisualCatalog, id: string | undefined): VisualEffort {
+  if (!id) return unknownEffort(catalog);
+  return catalog.efforts.get(id) ?? unknownEffort(catalog);
+}
+
+/** Unknown or missing runtime state ids fail closed to `unknown`. */
+export function resolveRuntimeState(catalog: VisualCatalog, id: string | undefined): VisualRuntimeState {
+  if (!id) return unknownRuntimeState(catalog);
+  return catalog.runtimeStates.get(id) ?? unknownRuntimeState(catalog);
+}
+

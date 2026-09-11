@@ -2,9 +2,11 @@ import { FlashList } from "@shopify/flash-list";
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../catalog/runtime-state";
 import { loadAodlOrchestras } from "../catalog/orchestra";
-import { loadVisualCatalog, resolveProvider, resolveTopology } from "../catalog/visual";
+import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../catalog/visual";
 import { AppNav } from "../components/AppNav";
+import { EffortOrbs } from "../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../components/TopologyBadge";
 import { haptic } from "../haptics";
 import { enrichProducts } from "../lib/global-search";
@@ -42,6 +44,9 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
   const visual = loadVisualCatalog();
   const topology = resolveTopology(visual, project.topologyId);
   const provider = resolveProvider(visual, project.providerId);
+  const streaming = linkedChats.some((c) => conversationStreaming(c.messages));
+  const state = resolveRuntimeState(visual, runtimeStateFromOrchestra({ status: project.status, streaming }));
+  const effort = resolveEffort(visual, effortIdForTurn({ turnState: streaming ? "streaming" : undefined }));
 
   const openChat = (id: string) => {
     haptic.select();
@@ -64,7 +69,9 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
             <Text style={styles.title}>{project.name}</Text>
             <Text style={styles.subtitle}>{project.subtitle}</Text>
           </View>
-          <OrchestraCore hue={provider.hue} size={48} />
+          <EffortOrbs hue={provider.hue} size={48} effort={effort} state={state} accessibilityLabel={`${project.name} · ${state.label}`}>
+            <OrchestraCore hue={provider.hue} size={48} />
+          </EffortOrbs>
         </View>
         <TopologyBadge topologyId={project.topologyId} providerId={project.providerId} width={240} />
         <View style={styles.metaRow}>
