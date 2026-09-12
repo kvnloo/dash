@@ -67,4 +67,14 @@ Catalog sheaf copy (no `topos`, no schema, no swarm) is in [`catalog-readings-dr
 
 **\(\pi_v\) static leg already runs:** `examples/valid/craid.json` has 10 nodes, 11 edges, \(|P(v)|=2\) everywhere; `analysis` fan-in 2 matches `fanIn=reducer`. Full triple (ports ↔ MPST ↔ \(\lambda_A\)) still needs a Hermes witness.
 
-Stigmergy aliases, paper-code hunt, Hermes-dry-run smallest, and MAVLink rMPST still in flight.
+**Paper code:** Wang et al. AgentFlow/AgentZoo is **not** on GitHub from the abs/HTML (NONE). `shouc/agentflow` redirects to `agentenv/agentflow` — same collision.
+
+**Gate 1 smallest:** after `validate.py`, project a 2-task `sequence` (A→B) to compiled-plan JSON (`cards[]`,`deps[]`); **stop** on `message`/mesh/auction; no Kanban writes, no spawn. Negative: C(RAID) fanout+message must exit 1. That is interchange, not a second scheduler.
+
+**Legal-but-unsafe sequences:** rMPST [2501.18874](https://arxiv.org/abs/2501.18874) — per-message legality is not trace safety. Same hole on MCP/A2A-shaped `message` edges today; optional session profile fills it. SKIP aviation.
+
+**Bookseller:** Buyer/Seller are ports; `~>` is `message`; accept/reject is `humanGate`; stock lookup is seller-local `tool`. No new kinds.
+
+**Shared-state aliases (query 06 recovered):** blackboard [2507.01701](https://arxiv.org/abs/2507.01701) bMAS, [2510.01285](https://arxiv.org/abs/2510.01285); stigmergy [2608.26081](https://arxiv.org/abs/2608.26081) SwarmWorld; `Happyarch/stigmergy`. Unlabeled swarm still \(\bot\).
+
+FLAQR, Firstmate, rust-MPST, shared-state overlay still in flight.
