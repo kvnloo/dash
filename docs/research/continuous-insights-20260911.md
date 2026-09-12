@@ -81,6 +81,6 @@ Catalog sheaf copy (no `topos`, no schema, no swarm) is in [`catalog-readings-dr
 
 **Audit vs IR:** [agentic-radar](https://github.com/splx-ai/agentic-radar) and [Agent-Wiz](https://github.com/Repello-AI/Agent-Wiz) sit in AgentFlow’s lane — recovered workflow graphs for threats, not \(\mathcal{O}_t\). [Firstmate](https://github.com/kvnloo/firstmate) is a **distro** (`dash: none`), not a ninth harness.
 
-**Merge ≠ verify (again):** StateFuse keeps conflicts visible (`claim_id`); AgentRoom is a CRDT workspace + MCP claims. Same CodeCRDT lesson: character/file merge is not a verifier.
+**Merge ≠ verify (again):** StateFuse keeps conflicts visible (`claim_id`); AgentRoom is a CRDT workspace + MCP claims. Same CodeCRDT lesson: character/file merge is not a verifier. [`nZiben/statefuse`](https://github.com/nZiben/statefuse) is the early Python library (KEEP as research memory, SKIP as Dash dep). Kernel-managed SHM [2609.10144](https://arxiv.org/abs/2609.10144) is **governance on `stateStore` reads** (selective inject vs dump), not a new node kind.
 
-Kernel-SHM paper and `nZiben/statefuse` still in flight.
+S-layer wave closed. Next product is I-phase: PER-1460 catalog paste from [`catalog-readings-draft.md`](catalog-readings-draft.md).
