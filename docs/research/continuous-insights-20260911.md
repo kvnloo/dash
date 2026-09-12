@@ -77,4 +77,6 @@ Catalog sheaf copy (no `topos`, no schema, no swarm) is in [`catalog-readings-dr
 
 **Shared-state aliases (query 06 recovered):** blackboard [2507.01701](https://arxiv.org/abs/2507.01701) bMAS, [2510.01285](https://arxiv.org/abs/2510.01285); stigmergy [2608.26081](https://arxiv.org/abs/2608.26081) SwarmWorld; `Happyarch/stigmergy`. Unlabeled swarm still \(\bot\).
 
-FLAQR, Firstmate, rust-MPST, shared-state overlay still in flight.
+**\(S_t\) is not a silhouette:** bMAS/SwarmWorld/Happyarch are **stateStore / observation** readings — shared board or env traces, not `policies.kinds: swarm`. FLAQR/FLAME labels are **edge classification** (compile witness), not Haskell in Dash. mpstthree is another message-profile analog. New 2026 S-cousins queued: StateFuse [2607.05844](https://arxiv.org/abs/2607.05844), AgentRoom [2608.23740](https://arxiv.org/abs/2608.23740), kernel SHM [2609.10144](https://arxiv.org/abs/2609.10144). α-UMi (X-PLUG) is a planner-router fragment, SKIP as IR.
+
+Firstmate and Agent-Wiz still in flight.
