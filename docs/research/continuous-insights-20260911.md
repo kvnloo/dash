@@ -59,9 +59,12 @@ Graphs-meet-agents: KEEP taxonomy, SKIP as normative; it soft-conflates ToT with
 
 Catalog sheaf copy (no `topos`, no schema, no swarm) is in [`catalog-readings-draft.md`](catalog-readings-draft.md) for PER-1460.
 
-## Next (wave 3, 10-cap refill)
+## Wave 3 — partial
 
-1. Disambiguate GitHub `agentenv/agentflow` (orchestrator name-collision) vs paper 2607.01640 authors.
-2. HasChor / FlameChor as choreography libraries.
-3. Stigmergy / tuplespace aliases (DDGS empty on the first wording).
-4. Port-count measurement against AODL `examples/valid` fixtures (paper-gate #3’s sibling).
+**Name collision:** [`agentenv/agentflow`](https://github.com/agentenv/agentflow) is a graph *orchestrator* (~1.4k★), not Wang et al. ADG recovery. Do not map arXiv 2607.01640 onto that repo.
+
+**Choreography stack:** HasChor is the reference (global → projection). FlameChor adds compile-time IFC/quorum on sends — that is **edge classification / \(\Gamma\) profile** on existing `message` edges, not new kinds. koka-choreo is a 0★ port: lift the bookseller fixture, skip vendoring. SARL-ACL is stale tutorial: SKIP as adapter, KEEP FIPA performatives as history.
+
+**\(\pi_v\) static leg already runs:** `examples/valid/craid.json` has 10 nodes, 11 edges, \(|P(v)|=2\) everywhere; `analysis` fan-in 2 matches `fanIn=reducer`. Full triple (ports ↔ MPST ↔ \(\lambda_A\)) still needs a Hermes witness.
+
+Stigmergy aliases, paper-code hunt, Hermes-dry-run smallest, and MAVLink rMPST still in flight.
