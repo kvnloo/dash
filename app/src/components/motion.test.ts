@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { GEL, MOTION_MS, PRESS_SCALE, SNAP } from "../motion";
+import { BOT_CHAT_MS, BOT_CHAT_OFFSETS, GEL, MOTION_MS, PRESS_SCALE, SNAP } from "../motion";
 
 describe("motion springs", () => {
   test("press SNAP is snappier than the nav gel", () => {
@@ -34,6 +34,26 @@ describe("motion springs", () => {
     expect(MOTION_MS.enter).toBeLessThanOrEqual(300);
     expect(MOTION_MS.exit).toBeLessThanOrEqual(180);
     expect(MOTION_MS.stagger).toBeLessThanOrEqual(50);
+  });
+
+  test("bot-chat clock reuses MOTION_MS, not a second language", () => {
+    expect(BOT_CHAT_MS.enter).toBe(MOTION_MS.enter);
+    expect(BOT_CHAT_MS.exit).toBe(MOTION_MS.exit);
+    expect(BOT_CHAT_MS.stagger).toBe(MOTION_MS.stagger);
+    expect(BOT_CHAT_MS.enter).toBe(240);
+    expect(BOT_CHAT_MS.exit).toBe(140);
+    expect(BOT_CHAT_MS.stagger).toBe(36);
+    expect(BOT_CHAT_MS.enter).toBeLessThan(300);
+    expect(BOT_CHAT_MS.exit).toBeLessThan(300);
+  });
+
+  test("bot-chat offsets are small translateY, not layout", () => {
+    expect(BOT_CHAT_OFFSETS.enterY).toBe(8);
+    expect(BOT_CHAT_OFFSETS.exitY).toBe(8);
+    expect(BOT_CHAT_OFFSETS.enterY).toBeGreaterThan(0);
+    expect(BOT_CHAT_OFFSETS.enterY).toBeLessThanOrEqual(12);
+    expect(BOT_CHAT_OFFSETS.exitY).toBeGreaterThan(0);
+    expect(BOT_CHAT_OFFSETS.exitY).toBeLessThanOrEqual(12);
   });
 });
 
@@ -77,5 +97,49 @@ describe("PressScale wiring", () => {
     expect(nav).toContain("PRESS_SCALE.nav");
     expect(nav).not.toContain("GOLD_GLOW");
     expect(nav).not.toContain("styles.glow");
+  });
+});
+
+describe("bot-chat dash-motion library", () => {
+  test("entry/exit use SNAP springs, transforms, opacity, ReduceMotion.System", () => {
+    const src = readFileSync(join(import.meta.dir, "../dash-motion/index.ts"), "utf8");
+    expect(src).toContain("from \"../motion\"");
+    expect(src).toContain("SNAP");
+    expect(src).toContain("BOT_CHAT_MS");
+    expect(src).toContain("BOT_CHAT_OFFSETS");
+    expect(src).toContain("GEL");
+    expect(src).toContain("transform");
+    expect(src).toContain("opacity");
+    expect(src).toContain("ReduceMotion.System");
+    expect(src).toContain("botChatEnter");
+    expect(src).toContain("botChatExit");
+    expect(src).not.toContain("GOLD_GLOW");
+    expect(src).not.toContain("width:");
+    expect(src).not.toContain("height:");
+    expect(src).not.toContain("LayoutAnimation");
+    expect(src).not.toContain("from \"react-native\"");
+  });
+
+  test("visual.json pins Reanimated 4 bot-chat constraints", () => {
+    const visual = JSON.parse(
+      readFileSync(join(import.meta.dir, "../catalog/encodings/visual.json"), "utf8"),
+    ) as {
+      runtime: string;
+      properties: string[];
+      maxDurationMs: number;
+      reduceMotion: string;
+      appNav: { goldGlow: boolean };
+      flashList: { entering: boolean };
+      botChat: { ms: string; offsets: { enterY: number; exitY: number } };
+    };
+    expect(visual.runtime).toBe("reanimated-4");
+    expect(visual.properties).toEqual(["transform", "opacity"]);
+    expect(visual.maxDurationMs).toBe(300);
+    expect(visual.reduceMotion).toBe("ReduceMotion.System");
+    expect(visual.appNav.goldGlow).toBe(false);
+    expect(visual.flashList.entering).toBe(false);
+    expect(visual.botChat.ms).toBe("BOT_CHAT_MS");
+    expect(visual.botChat.offsets.enterY).toBe(8);
+    expect(visual.botChat.offsets.exitY).toBe(8);
   });
 });
