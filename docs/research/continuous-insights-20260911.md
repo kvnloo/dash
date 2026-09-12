@@ -43,15 +43,25 @@ Disagreement \(\mapsto \bot\). NuScr / Scribble / ocaml-mpst are **compiler prof
 
 LLM min-effort agents over-skip anything that is not already typed \(\mathcal{O}_t\). That is the correct *IR* test and the wrong *readings* test. The join table is the filter: keep cousins as adapters/profiles; skip neutrinos and lead pipes; do not let SKIP eat \(\lambda_A\)/Pact/sheaves/RLM.
 
-## This wave (10 agents, in flight)
+## Wave 2 — closed (10/10)
 
-Alias search (10 queries): AgentFlow ADG, Scribble/NuScr/ocaml-mpst, Cloudchor, Graphs-meet-agents. Blackboard-2026 query returned empty (codec miss, try stigmergy/tuplespace next).
+LLM overlay agreed with the join, and named the missing morphism:
 
-Agents: AgentFlow paper, graphs-meet-agents, NuScr, Scribble, ocaml-mpst, Cloudchor, plus four reasoning cards (morphism, attention budget, slice experiment, catalog sheaf copy). Cards land in `/tmp/research/insights/` when they finish; this file stays the human join.
+**\(\pi_v\)** (compiler witness, not a kind): \(P(v)\) \(\leftrightarrow\) MPST local endpoints \(\leftrightarrow\) \(\lambda_A\) oracle/tool/`fix_n` arity. Triple mismatch \(\mapsto \bot\). Smallest measurement: on one Hermes dry-run fixture, fraction of \(n \ge 10\) nodes with exact port-multiset agreement.
 
-## Next (when slots free)
+Scribble’s three layers map without remainder: type \(\to E_t\) (session), assertion \(\to \Pi_t\), protocol document \(\to \Gamma_t\). NuScr / ocaml-mpst / Cloudchor (HasChor) are **KEEP adapters**; do not ship Haskell into Dash.
 
-1. Stigmergy / tuplespace / blackboard aliases (query 06 died).
-2. AgentZoo / AgentFlow implementation repo if public.
-3. Slice-vs-dump experiment card → paper-gate #3, still unmeasured.
-4. Catalog PER-1460: paste Readings (cousins + AgentFlow dual) and Adapters (MCP/A2A/AG-UI) — no schema change.
+AgentFlow KEEP as recovered-graph audit; SKIP as runtime contract. It has **no** intent/plan/observed split — do not quote scanners that collapse AODL’s three objects into “must be equal.”
+
+Graphs-meet-agents: KEEP taxonomy, SKIP as normative; it soft-conflates ToT with orchestration under “planning.”
+
+`constraints.budgets.humanAttention` is schema-legal today. Slice-vs-dump falsifier: 24 paired probes, dump wins by \(\ge 15\)pp at matched \(B\) \(\Rightarrow\) claim dies. Must not claim RLM proves interchange.
+
+Catalog sheaf copy (no `topos`, no schema, no swarm) is in [`catalog-readings-draft.md`](catalog-readings-draft.md) for PER-1460.
+
+## Next (wave 3, 10-cap refill)
+
+1. Disambiguate GitHub `agentenv/agentflow` (orchestrator name-collision) vs paper 2607.01640 authors.
+2. HasChor / FlameChor as choreography libraries.
+3. Stigmergy / tuplespace aliases (DDGS empty on the first wording).
+4. Port-count measurement against AODL `examples/valid` fixtures (paper-gate #3’s sibling).
