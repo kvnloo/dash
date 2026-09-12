@@ -82,6 +82,8 @@ describe("verified-oss-loop onboard (Dash)", () => {
     expect(skill).toContain("rollout.py");
     expect(skill).toContain("feature_target");
     expect(skill.includes("open a PR against `main`")).toBe(false);
+    expect(skill.includes("If nothing is claimable: stop")).toBe(false);
+    expect(skill).toContain("not labeled `claimed`");
   });
 
   test("kit skills do not replace Dash verify-dash or mutate.ts", () => {

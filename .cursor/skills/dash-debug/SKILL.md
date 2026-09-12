@@ -76,19 +76,21 @@ Turns outlive sockets. After unlock the phone sends:
 { "type": "attach", "turns": [{ "id": "<turnId>", "seq": <lastSeen> }] }
 ```
 
-Bridge replays events with `seq > lastSeen`. Unknown ids get `{ type: "lost", id }`.
+Bridge replays events with `seq > lastSeen` **after flushing** the 40ms delta buffer. Unknown ids get `{ type: "lost", id }`. A dropped socket must not delete in-flight `voice_*` chunks; those stay until commit, cancel, or size limit.
 
 | Symptom | Check |
 |---------|--------|
 | Chat blank after unlock | Client `seq` too high, or turn pruned (10 min / max 50). |
-| Duplicate deltas | Client applied replay on top of events it already had. |
-| Turn never `done` | Child still running. On main the spawn path waits on `proc.exited` with no hang timer until turn-safety lands. Cancel is exit 130. |
+| Last ~40ms of tokens missing | Attach must call `flush` before replay (`attachSocket`). |
+| Duplicate deltas | Client applied replay on top of events it already had (seq skip should no-op). |
+| Spoken turn dies on screen lock | `close` must not `utterances.delete`. |
+| Turn never `done` | Child still running. Hang kill is exit 124 (`DASH_TURN_TIMEOUT_MS`). Cancel is exit 130. |
 
 ## 6. Turn / harness stdout
 
 | Symptom | Check |
 |---------|--------|
-| Silence, process still running | `ps` the child. Main has no hang kill. Look for `turn.start` without `turn.end` in bridge stderr. |
+| Silence, process still running | `ps` the child. Hang kill is exit 124. Look for `turn.start` without `turn.end` in bridge stderr. |
 | `{`-prefixed garbage, no error | Parser currently drops non-JSON object lines. A structured `error` event is the intended contract. |
 | Non-zero exit, no error | Bridge should already `error` with stderr tail or `"<name> exited with code N"`. |
 | Hermes slow | Gateway/peer path in `hermes-session.ts`. `hermes chat -q` is fallback. |

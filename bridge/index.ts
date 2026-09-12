@@ -28,6 +28,9 @@ import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnes
 import {
   CANCELLED_EXIT_CODE,
   TIMEOUT_EXIT_CODE,
+  attachSocket,
+  detachSocket,
+  pruneStaleUtterances,
   nonZeroExitMessage,
   replayAfter,
   timeoutMessage,
@@ -197,6 +200,11 @@ class Turn implements Sink {
     for (const event of replayAfter(this.events, afterSeq)) sendTo(ws, event);
   }
 
+  /** Re-subscribe after a drop: flush the coalesced batch, then replay. */
+  attach(ws: Socket, afterSeq: number): void {
+    for (const event of attachSocket(this, ws, afterSeq)) sendTo(ws, event);
+  }
+
   // Sink -------------------------------------------------------------------
 
   session(sessionId: string): void {
@@ -247,7 +255,7 @@ class Turn implements Sink {
     pruneTurns();
   }
 
-  private flush(): void {
+  flush(): void {
     if (this.timer !== null) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -696,9 +704,8 @@ const server = Bun.serve<SocketData>({
               sendTo(ws, { type: "lost", id });
               continue;
             }
-            turn.listeners.add(ws);
             ws.data.turns.add(id);
-            turn.replay(ws, seq);
+            turn.attach(ws, seq);
           }
           log("ws.attach", { remote: ws.remoteAddress, count: message.turns.length });
           break;
@@ -716,10 +723,9 @@ const server = Bun.serve<SocketData>({
       }
     },
     close(ws) {
-      for (const id of ws.data.turns) {
-        turns.get(id)?.listeners.delete(ws);
-        // A half-uploaded utterance can't be resumed on another socket.
-        utterances.delete(id);
+      detachSocket(ws.data.turns, (id) => turns.get(id), ws);
+      for (const id of pruneStaleUtterances(utterances, Date.now())) {
+        turns.get(id)?.endWithout("That recording was interrupted.");
       }
       log("ws.close", { remote: ws.remoteAddress, subscribed: ws.data.turns.size });
       ws.data.turns.clear();

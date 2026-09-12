@@ -30,7 +30,7 @@ The bridge is a Bun WebSocket server that:
   Send SIGTERM to the running process (followed by SIGKILL after 3s if it doesn't exit).
 
 - `{ type: "attach", turns: [{ id: string, seq: number }] }`  
-  Re-subscribe to turns that were in flight when the socket dropped. `seq` is the last event sequence the client saw; the bridge replays everything after it.
+  Re-subscribe to turns that were in flight when the socket dropped. `seq` is the last event sequence the client saw; the bridge flushes any coalesced delta batch, then replays everything after `seq`. A dropped socket does not discard in-flight voice audio.
 
 **Server → Client (bridge → phone):**
 
