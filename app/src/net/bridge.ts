@@ -8,6 +8,7 @@ import {
   applyLiveHistory,
   applyTranscript,
   applyTurnEvent,
+  flushPendingSends,
   markTurnLost,
   setConnection,
   setLiveHistoryRequester,
@@ -169,6 +170,7 @@ class Bridge {
         }
         const turns = streamingTurns();
         if (turns.length) this.send({ type: "attach", turns });
+        flushPendingSends(sendChat);
         return;
       }
       case "lost":

@@ -15,16 +15,16 @@ import type { Message } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge, sendChat } from "../net/bridge";
 import {
-  applyTurnEvent,
   beginTurn,
   conversationBusy,
   createConversation,
+  parkUnsentTurn,
   promotePendingTurn,
   saveSettings,
   setActive,
   store,
 } from "../store/app";
-import { dequeue, enqueue, notifyTurnSettled, onTurnSettled, queueLength } from "../store/queue";
+import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, space, type } from "../theme";
 
 const EMPTY: Message[] = [];
@@ -80,8 +80,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         cwd: current.cwd,
       });
       if (!ok) {
-        applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Not connected to the bridge." });
-        haptic.error();
+        parkUnsentTurn(turnId);
       }
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
@@ -113,9 +112,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         cwd: current?.cwd,
       });
       if (!ok) {
-        applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Not connected to the bridge." });
-        haptic.error();
-        notifyTurnSettled(conversationId);
+        parkUnsentTurn(turnId);
+        return;
       }
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
@@ -147,6 +145,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   useEffect(() => {
     if (conversation && !streamingMessage && queueLength(conversation.id) > 0) flushQueue(conversation.id);
   }, [conversation?.id, streamingMessage, flushQueue]);
+
+  useEffect(() => {
+    if (online && conversation && queueLength(conversation.id) > 0) flushQueue(conversation.id);
+  }, [online, conversation?.id, flushQueue]);
 
   const onStop = useCallback(() => {
     if (streamingMessage) bridge.send({ type: "cancel", id: streamingMessage.turnId });

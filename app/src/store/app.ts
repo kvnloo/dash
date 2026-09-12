@@ -13,7 +13,8 @@ import {
 } from "../model";
 import { hydrateLiveConversation, mergeLiveConversations, shouldRequestHistory } from "../lib/live-sessions";
 import { createStore } from "./createStore";
-import { notifyTurnSettled } from "./queue";
+import { dequeue, enqueue, notifyTurnSettled } from "./queue";
+import { nextPendingSend, parkMessage } from "./offline-send";
 
 export interface AppState {
   hydrated: boolean;
@@ -369,4 +370,46 @@ export function markTurnLost(turnId: string): void {
     m.state === "streaming" ? { ...m, state: "interrupted", status: undefined } : m,
   );
   notifyTurnSettled(where.conversationId);
+}
+
+/** Socket was down: keep the user text and retry after hello. */
+export function parkUnsentTurn(turnId: string): boolean {
+  const where = locateTurn(turnId);
+  if (!where) return false;
+  updateMessage(where.conversationId, where.messageId, parkMessage);
+  enqueue(where.conversationId, turnId);
+  return true;
+}
+
+export type ChatSender = (input: {
+  turnId: string;
+  harness: string;
+  text: string;
+  sessionId?: string;
+  cwd?: string;
+}) => boolean;
+
+/** After reconnect, send parked turns that never reached the laptop. */
+export function flushPendingSends(send: ChatSender): number {
+  let sent = 0;
+  for (const conv of store.get().conversations) {
+    const pending = nextPendingSend(conv);
+    if (!pending) continue;
+    dequeue(conv.id);
+    const payload = promotePendingTurn(pending.turnId);
+    if (!payload) continue;
+    const ok = send({
+      turnId: pending.turnId,
+      harness: payload.harness,
+      text: payload.text,
+      sessionId: conv.sessionId ?? payload.sessionId,
+      cwd: conv.cwd,
+    });
+    if (!ok) {
+      parkUnsentTurn(pending.turnId);
+      continue;
+    }
+    sent += 1;
+  }
+  return sent;
 }
