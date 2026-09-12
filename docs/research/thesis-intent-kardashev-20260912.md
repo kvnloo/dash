@@ -196,4 +196,4 @@ If energy, modality certificates, or hole-markers need a home, they go in **open
 
 *AODL is the simultaneous logogram of an orchestration: codecs (text, image, video, \(\tau\)) plus capability certificates plus a named residual \(\varepsilon\); scale is \(\Gamma_t\) (energy, compute, attention, spawn); smarter models make unmarked holes more dangerous, not less; fail closed is how expectation \(\to 0\).*
 
-Promote with PER-1461 when a token can push aodl / frontier-kb. Until then this file *is* the saved message and the argument.
+Promote with PER-1461 when a token can push aodl / frontier-kb. Evidence chain: [`thesis-evidence-chain-20260912.md`](thesis-evidence-chain-20260912.md). Shared model: [`thesis-shared-model-xrisk-20260912.md`](thesis-shared-model-xrisk-20260912.md). Until then this file *is* the saved message and the argument.

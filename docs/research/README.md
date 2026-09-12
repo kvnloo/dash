@@ -13,6 +13,8 @@ This folder is a **review export** when a Dash-scoped cloud token cannot push th
 | [`catalog-readings-draft.md`](catalog-readings-draft.md) | PER-1460 paste: sheaf Readings + Adapters (no schema) |
 | [`deep-20260912.md`](deep-20260912.md) | Deep pass: fixture \(\pi_v\), Hermes dry-run CLI, catalog kit; waves 1–2 notes in [`deep/`](deep/) |
 | [`thesis-intent-kardashev-20260912.md`](thesis-intent-kardashev-20260912.md) | Thesis seed: saved utterance + intent residual \(\varepsilon\), codecs, Kardashev-\(\Gamma_t\), capability certificates |
+| [`thesis-shared-model-xrisk-20260912.md`](thesis-shared-model-xrisk-20260912.md) | Shared mental model; screen/page as named holes; augmentation not replacement |
+| [`thesis-evidence-chain-20260912.md`](thesis-evidence-chain-20260912.md) | High-T → math → physics → SOTA → AODL slot. Promote to frontier-kb `inbox/cursor/` |
 | [`kit/`](kit/) | Exact `Language.jsx` + `catalog.spec.js` for aodl Pages |
 | [`tools/pi_v.py`](tools/pi_v.py) | Static port-wiring leg of \(\pi_v\) |
 | [`tools/hermes_dryrun.py`](tools/hermes_dryrun.py) | Fail-closed Kanban projection (not a scheduler) |
