@@ -8,10 +8,12 @@ import {
   type FileResource,
   type NamedResource,
 } from "../mock/resources";
+import { conversationPreview, findLiveConversation, mergeLiveConversations } from "./live-sessions";
 import type { Conversation } from "../model";
+import type { HostInfo } from "../../../shared/protocol";
 
 export type MentionScope = "bots" | "conversation" | "product";
-export type SlashScope = "harness" | "skill" | "plugin" | "tool" | "file";
+export type SlashScope = "live" | "harness" | "skill" | "plugin" | "tool" | "file";
 
 export type SearchMode = "discover" | "mention" | "slash";
 
@@ -34,6 +36,7 @@ const MENTION_ALIASES: Record<string, MentionScope> = {
 };
 
 const SLASH_ALIASES: Record<string, SlashScope> = {
+  live: "live",
   harness: "harness",
   harnesses: "harness",
   skill: "skill",
@@ -53,6 +56,7 @@ export const MENTION_SCOPES: { scope: MentionScope; label: string }[] = [
 ];
 
 export const SLASH_SCOPES: { scope: SlashScope; label: string }[] = [
+  { scope: "live", label: "/live" },
   { scope: "harness", label: "/harness" },
   { scope: "skill", label: "/skill" },
   { scope: "plugin", label: "/plugin" },
@@ -110,7 +114,7 @@ export function formatSearchHint(parsed: ParsedSearchQuery): string | null {
   if (parsed.scope === "unknown") {
     return parsed.mode === "mention"
       ? `Unknown @${parsed.rawScope} · try @bots @conversation @product`
-      : `Unknown /${parsed.rawScope} · try /harness /skill /file`;
+      : `Unknown /${parsed.rawScope} · try /live /harness /skill /file`;
   }
   const label = scopeLabel(parsed.scope);
   if (!parsed.text) {
@@ -119,7 +123,9 @@ export function formatSearchHint(parsed: ParsedSearchQuery): string | null {
         ? "conversations"
         : parsed.scope === "product"
           ? "products"
-          : `${parsed.scope}s`;
+          : parsed.scope === "live"
+            ? "live sessions"
+            : `${parsed.scope}s`;
     return `${label} · all ${noun}`;
   }
   return `${label} · “${parsed.text}”`;
@@ -146,15 +152,7 @@ function matches(text: string, haystack: string): boolean {
   return haystack.toLowerCase().includes(text);
 }
 
-export function conversationPreview(c: Conversation): string {
-  const last = c.messages[c.messages.length - 1];
-  if (!last) return "Empty chat";
-  if (last.role === "assistant") {
-    const t = last.text.replace(/\s+/g, " ").trim();
-    return last.status ? last.status : t || "Thinking…";
-  }
-  return last.text.replace(/\s+/g, " ").trim();
-}
+export { conversationPreview } from "./live-sessions";
 
 export function enrichProducts(conversations: Conversation[], orchestras: OrchestraProject[]): OrchestraProject[] {
   if (conversations.length === 0) return orchestras;
@@ -172,6 +170,7 @@ export function runGlobalSearch(params: {
   harnesses: { id: string; name: string; available?: boolean }[];
   botProfiles?: BotProfile[];
   products?: OrchestraProject[];
+  hosts?: HostInfo[];
 }): SearchResult[] {
   const parsed = parseSearchQuery(params.query);
   const bots = params.botProfiles ?? DEMO_BOT_PROFILES;
@@ -215,6 +214,24 @@ export function runGlobalSearch(params: {
       results.push({ kind: "product", key: `prod:${p.id}`, project: p, subtitle: p.subtitle });
       count += 1;
       if (discoverEmpty && count >= DISCOVER_LIMITS.product) break;
+    }
+  }
+
+  if (parsed.mode === "slash" && parsed.scope === "live") {
+    const listed = mergeLiveConversations([], params.hosts ?? [], Date.now());
+    for (const live of listed) {
+      const conversation = findLiveConversation(params.conversations, live) ?? live;
+      const harnessName = params.harnesses.find((h) => h.id === conversation.harness)?.name ?? conversation.harness;
+      const preview = conversationPreview(conversation);
+      const hay = [conversation.title, harnessName, preview, conversation.harness, conversation.sessionId ?? "", conversation.cwd ?? ""].join(" ");
+      if (!matches(parsed.text, hay)) continue;
+      results.push({
+        kind: "conversation",
+        key: `live:${conversation.id}`,
+        conversation,
+        harnessName,
+        subtitle: preview,
+      });
     }
   }
 

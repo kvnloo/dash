@@ -85,7 +85,7 @@ Contribute code, docs, or skills by pairing with an agent on a focused branch. T
 
 Dash is designed for human+agent collaboration. When contributing:
 
-- **Agent skills live in `.cursor/skills/`** (see [skills directory](.cursor/skills/)). Each skill is a short `SKILL.md` with a "when to use" description and a recipe. Agents read these to learn the repo.
+- **Agent skills live in `.cursor/skills/`** (see [skills directory](.cursor/skills/)). Each skill is a short `SKILL.md` with a "when to use" description and a recipe. Agents read these to learn the repo. Pairing, roster, and attach failures: `.cursor/skills/dash-debug/SKILL.md`.
 - **Agent-friendly commits**: Clear commit messages, one logical change per commit, and references to issues/discussions.
 - **Harness patterns**: Each harness (omp, codex, grok, claude, hermes) has its own CLI and output format. When adding harness support, see [`bridge/src/harnesses.ts`](bridge/src/harnesses.ts) for examples.
 

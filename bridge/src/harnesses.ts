@@ -2,6 +2,7 @@
 // argv for a turn, and how to turn the CLI's stdout into protocol events.
 
 import { hermesCliArgv } from "./hermes-session";
+import { parseHarnessJsonLine } from "./turn-safety";
 
 export interface TurnInput {
   text: string;
@@ -40,14 +41,14 @@ function str(value: unknown): value is string {
   return typeof value === "string";
 }
 
-function parseJsonLine(line: string): Record<string, unknown> | null {
-  if (line.charCodeAt(0) !== 123 /* { */) return null;
-  try {
-    const value: unknown = JSON.parse(line);
-    return isRecord(value) ? value : null;
-  } catch {
+function parseJsonLine(line: string, sink?: Sink): Record<string, unknown> | null {
+  const parsed = parseHarnessJsonLine(line);
+  if (!parsed) return null;
+  if (!parsed.ok) {
+    sink?.error(parsed.error);
     return null;
   }
+  return parsed.value;
 }
 
 const STATUS_MAX = 100;
@@ -73,7 +74,7 @@ function describeTool(name: string, args: unknown): string {
 function sessionNdjsonParser(sink: Sink): TurnParser {
   return {
     line(line) {
-      const ev = parseJsonLine(line);
+      const ev = parseJsonLine(line, sink);
       if (!ev) return;
       switch (ev.type) {
         case "session":
@@ -131,7 +132,7 @@ const codex: Harness = {
     let emitted = false;
     return {
       line(line) {
-        const ev = parseJsonLine(line);
+        const ev = parseJsonLine(line, sink);
         if (!ev) return;
         if (ev.type === "thread.started" && str(ev.thread_id)) {
           sink.session(ev.thread_id);
@@ -172,7 +173,7 @@ function anthropicStreamParser(sink: Sink): TurnParser {
   let sawDelta = false;
   return {
     line(line) {
-      const ev = parseJsonLine(line);
+      const ev = parseJsonLine(line, sink);
       if (!ev) return;
       switch (ev.type) {
         case "system":
@@ -320,7 +321,7 @@ function fxAskParser(sink: Sink): TurnParser {
     end() {
       const raw = lines.join("\n").trim();
       if (!raw) return;
-      const ev = parseJsonLine(raw);
+      const ev = parseJsonLine(raw, sink);
       if (!ev) return;
       if (str(ev.session_id)) sink.session(ev.session_id);
       const text =
