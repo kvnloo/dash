@@ -1,5 +1,5 @@
 import { sendChat } from "../net/bridge";
-import { applyTurnEvent, beginTurn, createConversation, store } from "../store/app";
+import { beginTurn, createConversation, parkUnsentTurn, store } from "../store/app";
 import {
   FEEDBACK_CONVERSATION_ID,
   submitFeedback,
@@ -27,7 +27,7 @@ export function submitInAppFeedback(action: FeedbackAction): { conversationId: s
         cwd: current.cwd,
       });
       if (!ok) {
-        applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Not connected to the bridge." });
+        parkUnsentTurn(turnId);
       }
     },
   });

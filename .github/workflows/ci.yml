@@ -25,7 +25,7 @@ jobs:
       - name: Install app and bridge
         run: bun install --frozen-lockfile --cwd app && bun install --frozen-lockfile --cwd bridge
       - name: Unit tests
-        run: bun test app/src bridge/src shared scripts/mutate.test.ts scripts/assert-nav-dots.test.ts scripts/oss-loop.test.ts scripts/phone-install.test.ts
+        run: bun test app/src bridge/src shared scripts/mutate.test.ts scripts/assert-nav-dots.test.ts scripts/oss-loop.test.ts scripts/phone-install.test.ts scripts/keep-going.test.ts
 
   mutation:
     needs: unit-tests
