@@ -67,6 +67,49 @@ describe("parseClientMessage", () => {
     expect(parseClientMessage("chat")).toBeNull();
     expect(parseClientMessage({ type: "hello" })).toBeNull();
   });
+
+  test("rejects chat when harness or id is the wrong type", () => {
+    expect(parseClientMessage({ type: "chat", id: "t1", harness: 1, text: "hi" })).toBeNull();
+    expect(parseClientMessage({ type: "chat", id: 1, harness: "omp", text: "hi" })).toBeNull();
+    expect(parseClientMessage({ type: "chat", id: "t1", harness: "omp", text: "" })).toEqual({
+      type: "chat",
+      id: "t1",
+      harness: "omp",
+      text: "",
+      sessionId: undefined,
+      cwd: undefined,
+    });
+  });
+
+  test("attach requires seq on every entry; empty turns is still attach", () => {
+    expect(parseClientMessage({ type: "attach", turns: [] })).toEqual({ type: "attach", turns: [] });
+    expect(parseClientMessage({ type: "attach", turns: [{ id: "t1", seq: "3" }] })).toBeNull();
+    expect(parseClientMessage({ type: "attach" })).toBeNull();
+  });
+
+  test("accepts a live transcript request", () => {
+    expect(parseClientMessage({ type: "history", harness: "omp", sessionId: "01liveomp" })).toEqual({
+      type: "history",
+      harness: "omp",
+      sessionId: "01liveomp",
+      cwd: undefined,
+    });
+    expect(
+      parseClientMessage({
+        type: "history",
+        harness: "omp",
+        sessionId: "01liveomp",
+        cwd: "/home/you/workspace/dash",
+      }),
+    ).toEqual({
+      type: "history",
+      harness: "omp",
+      sessionId: "01liveomp",
+      cwd: "/home/you/workspace/dash",
+    });
+    expect(parseClientMessage({ type: "history", harness: "omp" })).toBeNull();
+    expect(parseClientMessage({ type: "history", harness: 1, sessionId: "01liveomp" })).toBeNull();
+  });
 });
 
 describe("parseServerMessage", () => {
@@ -96,7 +139,7 @@ describe("parseServerMessage", () => {
         hostname: "mbp",
         online: true,
         self: true,
-        agents: [{ id: "a2a:hermes", name: "Hermes", kind: "hermes", status: "running" }],
+        agents: [{ id: "a2a:hermes", name: "Hermes", kind: "hermes", status: "running" as const }],
       },
     ];
     const hello = parseServerMessage({
@@ -133,6 +176,75 @@ describe("parseServerMessage", () => {
           online: true,
           self: true,
           agents: [{ id: "x", name: "X", kind: "omp", status: "maybe" }],
+        },
+      ]),
+    ).toBeUndefined();
+  });
+
+  test("accepts optional harness sessionId on an agent", () => {
+    const hosts = parseHosts([
+      {
+        id: "mbp",
+        name: "mbp",
+        hostname: "mbp",
+        online: true,
+        self: true,
+        agents: [
+          {
+            id: "omp:aaa",
+            name: "OMP",
+            kind: "omp",
+            status: "running",
+            cwd: "/home/you/workspace/dash",
+            sessionId: "01liveomp",
+          },
+        ],
+      },
+    ]);
+    expect(hosts?.[0]?.agents[0]?.sessionId).toBe("01liveomp");
+  });
+
+  test("accepts a live transcript reply and ignores a bad message row", () => {
+    expect(
+      parseServerMessage({
+        type: "history",
+        harness: "omp",
+        sessionId: "01liveomp",
+        messages: [
+          { id: "u1", role: "user", text: "ship chats", at: 1_700_000_000_000 },
+          { id: "a1", role: "assistant", text: "opening the row", at: 1_700_000_000_100 },
+        ],
+      }),
+    ).toEqual({
+      type: "history",
+      harness: "omp",
+      sessionId: "01liveomp",
+      messages: [
+        { id: "u1", role: "user", text: "ship chats", at: 1_700_000_000_000 },
+        { id: "a1", role: "assistant", text: "opening the row", at: 1_700_000_000_100 },
+      ],
+    });
+    expect(
+      parseServerMessage({
+        type: "history",
+        harness: "omp",
+        sessionId: "01liveomp",
+        messages: [{ id: "u1", role: "system", text: "nope", at: 1 }],
+      }),
+    ).toBeNull();
+    expect(parseServerMessage({ type: "history", harness: "omp", sessionId: "01liveomp" })).toBeNull();
+  });
+
+  test("rejects a host when sessionId is not a string", () => {
+    expect(
+      parseHosts([
+        {
+          id: "mbp",
+          name: "mbp",
+          hostname: "mbp",
+          online: true,
+          self: true,
+          agents: [{ id: "omp:aaa", name: "OMP", kind: "omp", status: "running", sessionId: 1 }],
         },
       ]),
     ).toBeUndefined();
