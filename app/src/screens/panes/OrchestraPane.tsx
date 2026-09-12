@@ -1,7 +1,7 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { loadAodlOrchestras, type OrchestraProject } from "../../catalog/orchestra";
+import { hydrateOrchestras, loadAodlOrchestras, type OrchestraProject } from "../../catalog/orchestra";
 import { loadVisualCatalog, resolveProvider, resolveTopology } from "../../catalog/visual";
 import { OrchestraCore, TopologyBadge } from "../../components/TopologyBadge";
 import { PressScale } from "../../components/PressScale";
@@ -49,9 +49,10 @@ const Card = memo(function Card({
 
 export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
   const conversations = store.use((s) => s.conversations);
+  const hosts = store.use((s) => s.connection.hosts);
   const projects = useMemo(() => {
-    return enrichProducts(conversations, loadAodlOrchestras());
-  }, [conversations]);
+    return enrichProducts(conversations, hydrateOrchestras(loadAodlOrchestras(), hosts, Date.now()));
+  }, [conversations, hosts]);
 
   const open = useCallback(
     (id: string) => {

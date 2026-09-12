@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { AgentInfo, HostInfo } from "../../../shared/protocol";
 import {
   AODL_NETWORK_IDS,
   getOrchestra,
+  hydrateOrchestras,
   loadAodlOrchestras,
   orchestrasFromCatalog,
   parseAodlCatalog,
+  type OrchestraProject,
 } from "./orchestra";
 
 const PINNED_NETWORK_IDS = [
@@ -62,16 +65,16 @@ describe("AODL orchestra catalog", () => {
     }
   });
 
-  test("maps owns onto subtitle and executor harnesses onto dash agents", () => {
+  test("maps owns onto subtitle and never pins live agents or active status", () => {
     const rows = orchestrasFromCatalog(parseAodlCatalog(fixture()));
     const byId = new Map(rows.map((row) => [row.id, row]));
     expect(byId.get("dash")?.subtitle).toBe("phone UI + Tailscale bridge that spawns executor CLIs");
-    expect(byId.get("dash")?.agents).toEqual(["hermes", "omp", "grok", "codex", "claude", "pi", "fx"]);
-    expect(byId.get("dash")?.agents).not.toContain("o8");
-    expect(byId.get("hermes-keel")?.agents).toEqual(["hermes"]);
-    expect(byId.get("hermes-agent")?.agents).toEqual(["hermes"]);
-    expect(byId.get("aodl")?.agents).toEqual([]);
     expect(byId.get("frontier-kb")?.name).toBe("frontier-kb");
+    for (const row of rows) {
+      expect(row.status).toBe("idle");
+      expect(row.agents).toEqual([]);
+      expect(row.chatIds).toEqual([]);
+    }
   });
 
   test("rejects unknown orchestra ids", () => {
@@ -128,15 +131,19 @@ describe("AODL orchestra catalog", () => {
     expect("firstmate" in raw.network).toBe(false);
   });
 
-  test("Orchestra UI reads the catalog loader, not DEMO_ORCHESTRAS", () => {
+  test("Orchestra UI hydrates from connection.hosts, not DEMO_ORCHESTRAS", () => {
     const pane = readFileSync(join(import.meta.dir, "../screens/panes/OrchestraPane.tsx"), "utf8");
     const detail = readFileSync(join(import.meta.dir, "../screens/OrchestraDetailScreen.tsx"), "utf8");
     const mock = readFileSync(join(import.meta.dir, "../mock/orchestra.ts"), "utf8");
     const search = readFileSync(join(import.meta.dir, "../lib/global-search.ts"), "utf8");
     const scenarios = readFileSync(join(import.meta.dir, "../debug/scenarios.ts"), "utf8");
     expect(pane).toContain("loadAodlOrchestras");
+    expect(pane).toContain("hydrateOrchestras");
+    expect(pane).toContain("connection.hosts");
     expect(pane).not.toContain("DEMO_ORCHESTRAS");
     expect(detail).toContain("loadAodlOrchestras");
+    expect(detail).toContain("hydrateOrchestras");
+    expect(detail).toContain("connection.hosts");
     expect(detail).not.toContain("DEMO_ORCHESTRAS");
     expect(search).toContain("loadAodlOrchestras");
     expect(search).not.toContain("DEMO_ORCHESTRAS");
@@ -144,6 +151,184 @@ describe("AODL orchestra catalog", () => {
     expect(mock).not.toContain("DEMO_ORCHESTRAS");
     expect(scenarios).toContain('orchestraId: "dash"');
     expect(scenarios).not.toContain("orch-dash");
+  });
+});
+
+function host(partial: Omit<HostInfo, "name" | "hostname" | "online" | "self" | "agents"> & Partial<HostInfo>): HostInfo {
+  return {
+    name: partial.name ?? partial.id,
+    hostname: partial.hostname ?? partial.id,
+    online: partial.online ?? true,
+    self: partial.self ?? false,
+    agents: partial.agents ?? [],
+    address: partial.address,
+    id: partial.id,
+  };
+}
+
+function agent(partial: Omit<AgentInfo, "name" | "kind" | "status"> & Partial<AgentInfo>): AgentInfo {
+  return {
+    name: partial.name ?? partial.id,
+    kind: partial.kind ?? "omp",
+    status: partial.status ?? "running",
+    detail: partial.detail,
+    cwd: partial.cwd,
+    id: partial.id,
+  };
+}
+
+function byId(rows: OrchestraProject[]): Map<string, OrchestraProject> {
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
+describe("hydrateOrchestras", () => {
+  const NOW = 1_700_000_000_000;
+
+  test("empty hosts leave every pinned node idle", () => {
+    const rows = orchestrasFromCatalog(parseAodlCatalog(fixture()));
+    const hydrated = hydrateOrchestras(rows, [], NOW);
+    expect(hydrated.map((row) => row.id)).toEqual([...PINNED_NETWORK_IDS]);
+    for (const row of hydrated) {
+      expect(row.status).toBe("idle");
+      expect(row.agents).toEqual([]);
+      expect(row.chatIds).toEqual([]);
+    }
+  });
+
+  test("dash is active only when the self host is online with a running dash cwd", () => {
+    const rows = orchestrasFromCatalog(parseAodlCatalog(fixture()));
+    const self = host({
+      id: "mbp",
+      self: true,
+      agents: [
+        agent({ id: "omp:dash", kind: "omp", cwd: "/home/you/workspace/dash" }),
+        agent({ id: "omp:other", kind: "omp", cwd: "/home/you/workspace/keyconf.gen" }),
+      ],
+    });
+    const live = byId(hydrateOrchestras(rows, [self], NOW));
+    expect(live.get("dash")?.status).toBe("active");
+    expect(live.get("dash")?.agents).toEqual(["omp"]);
+    expect(live.get("dash")?.chatIds).toEqual([]);
+    expect(live.get("dash")?.updatedAt).toBe(NOW);
+    expect(live.get("aodl")?.status).toBe("idle");
+    expect(live.get("hermes-agent")?.status).toBe("idle");
+  });
+
+  test("dash stays idle when self is offline or the matching agent is not running", () => {
+    const rows = orchestrasFromCatalog(parseAodlCatalog(fixture()));
+    const offline = host({
+      id: "mbp",
+      self: true,
+      online: false,
+      agents: [agent({ id: "omp:dash", kind: "omp", cwd: "/home/you/workspace/dash" })],
+    });
+    expect(byId(hydrateOrchestras(rows, [offline], NOW)).get("dash")?.status).toBe("idle");
+
+    const installed = host({
+      id: "mbp",
+      self: true,
+      agents: [agent({ id: "harness:omp", kind: "omp", status: "available", cwd: "/home/you/workspace/dash" })],
+    });
+    expect(byId(hydrateOrchestras(rows, [installed], NOW)).get("dash")?.status).toBe("idle");
+
+    const peer = host({
+      id: "groot",
+      self: false,
+      agents: [agent({ id: "omp:dash", kind: "omp", cwd: "/home/you/workspace/dash" })],
+    });
+    expect(byId(hydrateOrchestras(rows, [peer], NOW)).get("dash")?.status).toBe("idle");
+  });
+
+  test("hermes-agent is active iff a running hermes or gateway is on the roster", () => {
+    const rows = orchestrasFromCatalog(parseAodlCatalog(fixture()));
+    const hermes = host({
+      id: "groot",
+      agents: [agent({ id: "a2a:hermes", name: "Hermes", kind: "hermes" })],
+    });
+    const withHermes = byId(hydrateOrchestras(rows, [hermes], NOW));
+    expect(withHermes.get("hermes-agent")?.status).toBe("active");
+    expect(withHermes.get("hermes-agent")?.agents).toEqual(["hermes"]);
+    expect(withHermes.get("hermes-keel")?.status).toBe("idle");
+    expect(withHermes.get("dash")?.status).toBe("idle");
+
+    const gateway = host({
+      id: "mbp",
+      self: true,
+      agents: [agent({ id: "hermes:default", name: "gateway", kind: "hermes" })],
+    });
+    expect(byId(hydrateOrchestras(rows, [gateway], NOW)).get("hermes-agent")?.status).toBe("active");
+
+    const stopped = host({
+      id: "mbp",
+      self: true,
+      agents: [agent({ id: "a2a:hermes", name: "Hermes", kind: "hermes", status: "offline" })],
+    });
+    expect(byId(hydrateOrchestras(rows, [stopped], NOW)).get("hermes-agent")?.status).toBe("idle");
+  });
+
+  test("aodl frontier-kb blueprint evolve stay idle unless a running cwd or name matches", () => {
+    const rows = orchestrasFromCatalog(parseAodlCatalog(fixture()));
+    const matches = host({
+      id: "mbp",
+      self: true,
+      agents: [
+        agent({ id: "omp:aodl", kind: "omp", cwd: "/home/you/workspace/aodl" }),
+        agent({ id: "codex:kb", kind: "codex", name: "frontier-kb", cwd: "/tmp/notes" }),
+        agent({ id: "omp:blueprint", kind: "omp", cwd: "/opt/blueprint" }),
+        agent({ id: "claude:evolve", kind: "claude", cwd: "/home/you/evolve" }),
+      ],
+    });
+    const live = byId(hydrateOrchestras(rows, [matches], NOW));
+    expect(live.get("aodl")?.status).toBe("active");
+    expect(live.get("aodl")?.agents).toEqual(["omp"]);
+    expect(live.get("frontier-kb")?.status).toBe("active");
+    expect(live.get("frontier-kb")?.agents).toEqual(["codex"]);
+    expect(live.get("blueprint")?.status).toBe("active");
+    expect(live.get("evolve")?.status).toBe("active");
+    expect(live.get("dash")?.status).toBe("idle");
+    expect(live.get("hermes-keel")?.status).toBe("idle");
+  });
+
+  test("fails closed on orch-dash and o8 even if callers smuggle them in", () => {
+    const rows = orchestrasFromCatalog(parseAodlCatalog(fixture()));
+    const smuggled: OrchestraProject[] = [
+      ...rows,
+      {
+        id: "orch-dash",
+        name: "Dash",
+        subtitle: "demo",
+        agents: ["omp"],
+        chatIds: ["demo-omp"],
+        status: "active",
+        updatedAt: NOW,
+        topologyId: "unknown",
+        providerId: "unknown",
+      },
+      {
+        id: "o8",
+        name: "o8",
+        subtitle: "control room",
+        agents: ["o8"],
+        chatIds: [],
+        status: "active",
+        updatedAt: NOW,
+        topologyId: "unknown",
+        providerId: "unknown",
+      },
+    ];
+    const self = host({
+      id: "mbp",
+      self: true,
+      agents: [
+        agent({ id: "omp:dash", kind: "omp", cwd: "/home/you/workspace/dash" }),
+        agent({ id: "o8", kind: "o8", name: "o8", cwd: "/opt/o8" }),
+      ],
+    });
+    const hydrated = hydrateOrchestras(smuggled, [self], NOW);
+    expect(hydrated.map((row) => row.id)).toEqual([...PINNED_NETWORK_IDS]);
+    expect(hydrated.map((row) => row.id)).not.toContain("orch-dash");
+    expect(hydrated.map((row) => row.id)).not.toContain("o8");
+    expect(hydrated.every((row) => row.status !== "paused")).toBe(true);
   });
 });
 

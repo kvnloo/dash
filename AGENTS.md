@@ -53,7 +53,7 @@ If you need a protocol change, add it to `shared/protocol.ts` with a parser upda
 - No new dependencies for things under 100 lines.
 - Pure black UI, system font, one accent. Match the existing components before adding new ones.
 - Streaming text goes through `app/src/store/text.ts` (per-reply subscriptions, rAF-coalesced). Never put per-token updates in the chats store.
-- Orchestra pane lists the pinned AODL network in `app/src/catalog/` (`aodl-catalog.json` + `encodings/visual.json` / `ir-map.json`). Unknown ids and not-inferred silhouettes fail closed. `o8` and `firstmate` are not Orchestra graphs. No OpenAvatar marks.
+- Orchestra pane lists the pinned AODL network in `app/src/catalog/` (`aodl-catalog.json` + `encodings/visual.json` / `ir-map.json`). Status/agents come from `hydrateOrchestras` + `connection.hosts`, never from the pin. Unknown ids and not-inferred silhouettes fail closed. `o8` and `firstmate` are not Orchestra graphs. No OpenAvatar marks.
 
 ## Maintaining this file
 
