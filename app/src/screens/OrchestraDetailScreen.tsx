@@ -2,17 +2,14 @@ import { FlashList } from "@shopify/flash-list";
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../catalog/runtime-state";
-import { loadAodlOrchestras } from "../catalog/orchestra";
-import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../catalog/visual";
+import { hydrateOrchestras, loadAodlOrchestras } from "../catalog/orchestra";
+import { loadVisualCatalog, resolveProvider, resolveTopology } from "../catalog/visual";
 import { AppNav } from "../components/AppNav";
-import { EffortOrbs } from "../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../components/TopologyBadge";
 import { haptic } from "../haptics";
 import { enrichProducts } from "../lib/global-search";
-import { threadTargetForAgent } from "../lib/orchestra-thread";
 import type { ScreenProps } from "../navigation";
-import { createConversation, setActive, store } from "../store/app";
+import { setActive, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { timeAgo } from "../util";
 
@@ -21,10 +18,15 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
   const { orchestraId } = route.params;
   const harnesses = store.use((s) => s.connection.harnesses);
   const conversations = store.use((s) => s.conversations);
+  const hosts = store.use((s) => s.connection.hosts);
 
   const project = useMemo(() => {
-    return enrichProducts(conversations, loadAodlOrchestras()).find((p) => p.id === orchestraId) ?? null;
-  }, [conversations, orchestraId]);
+    return (
+      enrichProducts(conversations, hydrateOrchestras(loadAodlOrchestras(), hosts, Date.now())).find(
+        (p) => p.id === orchestraId,
+      ) ?? null
+    );
+  }, [conversations, hosts, orchestraId]);
 
   const linkedChats = useMemo(
     () => conversations.filter((c) => project?.chatIds.includes(c.id)),
@@ -45,9 +47,6 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
   const visual = loadVisualCatalog();
   const topology = resolveTopology(visual, project.topologyId);
   const provider = resolveProvider(visual, project.providerId);
-  const streaming = linkedChats.some((c) => conversationStreaming(c.messages));
-  const state = resolveRuntimeState(visual, runtimeStateFromOrchestra({ status: project.status, streaming }));
-  const effort = resolveEffort(visual, effortIdForTurn({ turnState: streaming ? "streaming" : undefined }));
 
   const openChat = (id: string) => {
     haptic.select();
@@ -57,10 +56,8 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
 
   const openAgent = (harnessId: string) => {
     haptic.select();
-    const target = threadTargetForAgent(harnessId, conversations);
-    if (target.kind === "create") createConversation(harnessId);
-    else setActive(target.conversationId);
-    navigation.navigate("Chat");
+    const chat = linkedChats.find((c) => c.harness === harnessId);
+    if (chat) openChat(chat.id);
   };
 
   return (
@@ -72,9 +69,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
             <Text style={styles.title}>{project.name}</Text>
             <Text style={styles.subtitle}>{project.subtitle}</Text>
           </View>
-          <EffortOrbs hue={provider.hue} size={48} effort={effort} state={state} accessibilityLabel={`${project.name} · ${state.label}`}>
-            <OrchestraCore hue={provider.hue} size={48} />
-          </EffortOrbs>
+          <OrchestraCore hue={provider.hue} size={48} />
         </View>
         <TopologyBadge topologyId={project.topologyId} providerId={project.providerId} width={240} />
         <View style={styles.metaRow}>

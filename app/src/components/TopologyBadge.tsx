@@ -202,14 +202,12 @@ function Edge({
 export function OrchestraCore({
   hue,
   size = 36,
-  accessibilityLabel,
 }: {
   hue: string;
   size?: number;
-  accessibilityLabel?: string;
 }) {
   return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }} accessibilityRole="image" accessibilityLabel={accessibilityLabel}>
+    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }} accessibilityRole="image">
       <View
         style={{
           position: "absolute",

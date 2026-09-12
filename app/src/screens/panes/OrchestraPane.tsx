@@ -1,46 +1,29 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../../catalog/runtime-state";
-import { loadAodlOrchestras, type OrchestraProject } from "../../catalog/orchestra";
-import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../../catalog/visual";
-import { EffortOrbs } from "../../components/EffortOrbs";
+import { hydrateOrchestras, loadAodlOrchestras, type OrchestraProject } from "../../catalog/orchestra";
+import { loadVisualCatalog, resolveProvider, resolveTopology } from "../../catalog/visual";
 import { OrchestraCore, TopologyBadge } from "../../components/TopologyBadge";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
-import { inAppFeedbackEnabled } from "../../lib/feedback";
-import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { enrichProducts } from "../../lib/global-search";
-import { threadTargetForOrchestra } from "../../lib/orchestra-thread";
 import type { ScreenProps } from "../../navigation";
-import { setActive, store } from "../../store/app";
+import { store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
 import { timeAgo } from "../../util";
 
 const Card = memo(function Card({
   item,
-  streaming,
   onPress,
-  onLongPress,
 }: {
   item: OrchestraProject;
-  streaming: boolean;
-  onPress(item: OrchestraProject): void;
-  onLongPress?(item: OrchestraProject): void;
+  onPress(id: string): void;
 }) {
   const visual = loadVisualCatalog();
   const topology = resolveTopology(visual, item.topologyId);
   const provider = resolveProvider(visual, item.providerId);
-  const state = resolveRuntimeState(visual, runtimeStateFromOrchestra({ status: item.status, streaming }));
-  const effort = resolveEffort(visual, effortIdForTurn({ turnState: streaming ? "streaming" : undefined }));
   return (
-    <PressScale
-      onPress={() => onPress(item)}
-      onLongPress={onLongPress ? () => onLongPress(item) : undefined}
-      delayLongPress={350}
-      style={styles.card}
-      accessibilityRole="button"
-    >
+    <PressScale onPress={() => onPress(item.id)} style={styles.card} accessibilityRole="button">
       <View style={styles.cardTop}>
         <View style={styles.cardTitles}>
           <Text style={styles.name} numberOfLines={1}>
@@ -50,9 +33,7 @@ const Card = memo(function Card({
             {item.subtitle}
           </Text>
         </View>
-        <EffortOrbs hue={provider.hue} size={36} effort={effort} state={state} accessibilityLabel={`${item.name} · ${state.label}`}>
-          <OrchestraCore hue={provider.hue} size={36} />
-        </EffortOrbs>
+        <OrchestraCore hue={provider.hue} />
       </View>
       <TopologyBadge topologyId={item.topologyId} providerId={item.providerId} width={220} />
       <View style={styles.footer}>
@@ -68,54 +49,24 @@ const Card = memo(function Card({
 
 export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
   const conversations = store.use((s) => s.conversations);
-  const settings = store.use((s) => s.settings);
+  const hosts = store.use((s) => s.connection.hosts);
   const projects = useMemo(() => {
-    return enrichProducts(conversations, loadAodlOrchestras());
-  }, [conversations]);
-  const streamingIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const conversation of conversations) {
-      if (conversationStreaming(conversation.messages)) ids.add(conversation.id);
-    }
-    return ids;
-  }, [conversations]);
+    return enrichProducts(conversations, hydrateOrchestras(loadAodlOrchestras(), hosts, Date.now()));
+  }, [conversations, hosts]);
 
   const open = useCallback(
-    (item: OrchestraProject) => {
+    (id: string) => {
       haptic.select();
-      const target = threadTargetForOrchestra(item, store.get().conversations);
-      if (target.kind === "chat") {
-        setActive(target.conversationId);
-        navigation.navigate("Chat");
-        return;
-      }
-      navigation.navigate("OrchestraDetail", { orchestraId: target.orchestraId });
+      navigation.navigate("OrchestraDetail", { orchestraId: id });
     },
     [navigation],
   );
-
-  const onFeedback = useCallback(
-    (item: OrchestraProject) => {
-      if (!inAppFeedbackEnabled(store.get().settings)) return;
-      haptic.select();
-      submitInAppFeedback({
-        kind: "select",
-        text: `Selected orchestra ${item.name}`,
-        selection: { kind: "orchestra", id: item.id, label: item.name },
-      });
-      navigation.navigate("Chat");
-    },
-    [navigation],
-  );
-
-  const feedbackOn = inAppFeedbackEnabled(settings);
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<OrchestraProject>) => {
-      const streaming = item.chatIds.some((id) => streamingIds.has(id));
-      return <Card item={item} streaming={streaming} onPress={open} onLongPress={feedbackOn ? onFeedback : undefined} />;
+      return <Card item={item} onPress={open} />;
     },
-    [feedbackOn, onFeedback, open, streamingIds],
+    [open],
   );
 
   return (

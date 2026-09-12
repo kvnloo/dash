@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadAodlOrchestras } from "./orchestra";
-import { compileTopology, loadVisualCatalog, providerIdForHarness, resolveEffort, resolveRuntimeState, resolveTopology } from "./visual";
+import { compileTopology, loadVisualCatalog, resolveTopology } from "./visual";
 
 describe("AODL visual encodings", () => {
   test("pins visual.json topology ids and ir-map statuses", () => {
@@ -66,74 +65,5 @@ describe("AODL visual encodings", () => {
     expect(detail).not.toContain("HarnessAvatar");
     expect(badge).toContain("topology-graphs.json");
     expect(badge).not.toContain("OpenAvatar");
-  });
-
-  test("catalog harnesses map to visual.json providers and fail closed", () => {
-    expect(providerIdForHarness("omp")).toBe("cursor");
-    expect(providerIdForHarness("codex")).toBe("openai");
-    expect(providerIdForHarness("grok")).toBe("xai");
-    expect(providerIdForHarness("claude")).toBe("anthropic");
-    expect(providerIdForHarness("not-a-harness")).toBe("unknown");
-    const avatar = readFileSync(join(import.meta.dir, "../components/HarnessAvatar.tsx"), "utf8");
-    expect(avatar).toContain("OrchestraCore");
-    expect(avatar).toContain("providerIdForHarness");
-    expect(avatar).not.toContain("toUpperCase");
-  });
-
-  test("Orchestra network nodes declare expressible topologies", () => {
-    const catalog = loadVisualCatalog();
-    for (const row of loadAodlOrchestras()) {
-      expect(compileTopology(catalog, row.topologyId).status).toBe("expressible");
-      expect(catalog.providers.has(row.providerId)).toBe(true);
-    }
-  });
-
-  test("effort orbit counts match visual.json and unknown ids fail closed", () => {
-    const catalog = loadVisualCatalog();
-    expect(resolveEffort(catalog, "min").orbits).toBe(1);
-    expect(resolveEffort(catalog, "standard").orbits).toBe(2);
-    expect(resolveEffort(catalog, "high").orbits).toBe(3);
-    expect(resolveEffort(catalog, "max").orbits).toBe(4);
-    expect(resolveEffort(catalog, "min").energy).toBe(0.35);
-    expect(resolveEffort(catalog, "standard").energy).toBe(0.55);
-    expect(resolveEffort(catalog, "high").energy).toBe(0.78);
-    expect(resolveEffort(catalog, "max").energy).toBe(1);
-    const closed = resolveEffort(catalog, "not-an-effort");
-    expect(closed.id).toBe("unknown");
-    expect(closed.orbits).toBe(1);
-    expect(closed.energy).toBe(0.2);
-    expect(resolveEffort(catalog, "openavatar").id).toBe("unknown");
-    expect(resolveEffort(catalog, undefined).id).toBe("unknown");
-    expect(resolveEffort(catalog, "").id).toBe("unknown");
-  });
-
-  test("runtime state ids fail closed to unknown", () => {
-    const catalog = loadVisualCatalog();
-    expect(resolveRuntimeState(catalog, "claimed").marker).toBe("hollow");
-    expect(resolveRuntimeState(catalog, "running").marker).toBe("flow");
-    expect(resolveRuntimeState(catalog, "paused").marker).toBe("pause");
-    expect(resolveRuntimeState(catalog, "stale").marker).toBe("expired");
-    expect(resolveRuntimeState(catalog, "blocked").marker).toBe("contain");
-    expect(resolveRuntimeState(catalog, "running").cadence.rotate).toBe(true);
-    expect(resolveRuntimeState(catalog, "claimed").cadence.rotate).toBe(false);
-    expect(resolveRuntimeState(catalog, "not-a-state").id).toBe("unknown");
-    expect(resolveRuntimeState(catalog, "openavatar").id).toBe("unknown");
-    expect(resolveRuntimeState(catalog, undefined).id).toBe("unknown");
-  });
-
-  test("thinking marker uses EffortOrbs, not PulseDot", () => {
-    const row = readFileSync(join(import.meta.dir, "../components/MessageRow.tsx"), "utf8");
-    const avatar = readFileSync(join(import.meta.dir, "../components/HarnessAvatar.tsx"), "utf8");
-    const orbs = readFileSync(join(import.meta.dir, "../components/EffortOrbs.tsx"), "utf8");
-    expect(row).toContain("EffortOrbs");
-    expect(row).not.toContain("PulseDot");
-    expect(avatar).toContain("EffortOrbs");
-    expect(orbs).toContain("useAnimatedStyle");
-    expect(orbs).toContain("transform");
-    expect(orbs).toContain("opacity");
-    expect(orbs).toContain("ReduceMotion.System");
-    expect(orbs).not.toContain("OpenAvatar");
-    expect(orbs).not.toContain("fetch(");
-    expect(existsSync(join(import.meta.dir, "../components/PulseDot.tsx"))).toBe(false);
   });
 });

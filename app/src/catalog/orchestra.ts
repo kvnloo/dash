@@ -3,6 +3,7 @@
  * harnesses/catalog.json blob daecbb11a30af9ca4975912455576bcb10a7952c
  * Do not fetch at runtime. Unknown ids fail closed.
  */
+import type { AgentInfo, HostInfo } from "../../../shared/protocol";
 import pinnedCatalog from "./aodl-catalog.json";
 
 export const AODL_NETWORK_IDS = [
@@ -129,49 +130,21 @@ export function parseAodlCatalog(raw: unknown): AodlCatalog {
   };
 }
 
-
-/** Declared Dash display encoding. Not inferred from drawing density. Only expressible ir-map topologies. */
-const NETWORK_VISUAL: Record<AodlNetworkId, { topologyId: string; providerId: string }> = {
-  aodl: { topologyId: "mesh", providerId: "multi" },
-  dash: { topologyId: "paired", providerId: "cursor" },
-  "frontier-kb": { topologyId: "solo", providerId: "unknown" },
-  "hermes-keel": { topologyId: "supervisor", providerId: "unknown" },
-  "hermes-agent": { topologyId: "mesh", providerId: "unknown" },
-  blueprint: { topologyId: "pipeline", providerId: "unknown" },
-  evolve: { topologyId: "pipeline", providerId: "unknown" },
-};
-
-function agentsForNode(id: AodlNetworkId, harnesses: Map<string, AodlHarness>): string[] {
-  if (id === "dash") {
-    const agents: string[] = [];
-    for (const [harnessId, harness] of harnesses) {
-      if (harness.kind === "executor") agents.push(harnessId);
-    }
-    return agents;
-  }
-  if (id === "hermes-keel" || id === "hermes-agent") {
-    if (!harnesses.has("hermes")) fail("Unknown id: hermes");
-    return ["hermes"];
-  }
-  return [];
-}
-
 export function orchestrasFromCatalog(catalog: AodlCatalog): OrchestraProject[] {
   const rows: OrchestraProject[] = [];
   for (const id of AODL_NETWORK_IDS) {
     const node = catalog.network.get(id);
     if (!node) continue;
-    const visual = NETWORK_VISUAL[node.id];
     rows.push({
       id: node.id,
       name: node.id,
       subtitle: node.owns,
-      agents: agentsForNode(node.id, catalog.harnesses),
+      agents: [],
       chatIds: [],
-      status: "active",
+      status: "idle",
       updatedAt: CATALOG_UPDATED_AT,
-      topologyId: visual.topologyId,
-      providerId: visual.providerId,
+      topologyId: "unknown",
+      providerId: "unknown",
     });
   }
   return rows;
@@ -190,4 +163,95 @@ export function getOrchestra(catalog: AodlCatalog, id: string): OrchestraProject
 export function loadAodlOrchestras(): OrchestraProject[] {
   const raw: unknown = pinnedCatalog;
   return orchestrasFromCatalog(parseAodlCatalog(raw));
+}
+
+function cwdMatches(cwd: string | undefined, nodeId: string): boolean {
+  if (!cwd) return false;
+  const parts = cwd.replace(/\\/g, "/").split("/").filter((part) => part.length > 0);
+  return parts.some((part) => part === nodeId);
+}
+
+function nameMatches(agent: AgentInfo, nodeId: string): boolean {
+  const needle = nodeId.toLowerCase();
+  return agent.name.toLowerCase() === needle || agent.kind.toLowerCase() === needle || agent.id.toLowerCase() === needle;
+}
+
+function isRunning(agent: AgentInfo): boolean {
+  return agent.status === "running";
+}
+
+function isHermesOrGateway(agent: AgentInfo): boolean {
+  if (!isRunning(agent)) return false;
+  const kind = agent.kind.toLowerCase();
+  const id = agent.id.toLowerCase();
+  const name = agent.name.toLowerCase();
+  return kind === "hermes" || kind === "gateway" || id.includes("gateway") || name.includes("gateway");
+}
+
+function uniqueKinds(agents: AgentInfo[]): string[] {
+  const seen = new Set<string>();
+  const kinds: string[] = [];
+  for (const agent of agents) {
+    if (seen.has(agent.kind)) continue;
+    seen.add(agent.kind);
+    kinds.push(agent.kind);
+  }
+  return kinds;
+}
+
+function dashAgents(hosts: HostInfo[]): string[] {
+  const self = hosts.find((row) => row.self);
+  if (!self?.online) return [];
+  return uniqueKinds(self.agents.filter((agent) => isRunning(agent) && cwdMatches(agent.cwd, "dash")));
+}
+
+function hermesAgents(hosts: HostInfo[]): string[] {
+  const matched: AgentInfo[] = [];
+  for (const host of hosts) {
+    for (const agent of host.agents) {
+      if (isHermesOrGateway(agent)) matched.push(agent);
+    }
+  }
+  return uniqueKinds(matched);
+}
+
+function matchingAgents(hosts: HostInfo[], nodeId: AodlNetworkId): string[] {
+  const matched: AgentInfo[] = [];
+  for (const host of hosts) {
+    for (const agent of host.agents) {
+      if (!isRunning(agent)) continue;
+      if (cwdMatches(agent.cwd, nodeId) || nameMatches(agent, nodeId)) matched.push(agent);
+    }
+  }
+  return uniqueKinds(matched);
+}
+
+export function hydrateOrchestras(rows: OrchestraProject[], hosts: HostInfo[], now: number): OrchestraProject[] {
+  const byId = new Map<string, OrchestraProject>();
+  for (const row of rows) {
+    if (!isNetworkId(row.id) || FORBIDDEN_GRAPH_IDS.has(row.id)) continue;
+    byId.set(row.id, row);
+  }
+  const out: OrchestraProject[] = [];
+  for (const id of AODL_NETWORK_IDS) {
+    const row = byId.get(id);
+    if (!row) continue;
+    let agents: string[] = [];
+    if (id === "dash") agents = dashAgents(hosts);
+    else if (id === "hermes-agent") agents = hermesAgents(hosts);
+    else agents = matchingAgents(hosts, id);
+    const active = agents.length > 0;
+    out.push({
+      id: row.id,
+      name: row.name,
+      subtitle: row.subtitle,
+      topologyId: row.topologyId,
+      providerId: row.providerId,
+      agents,
+      chatIds: [],
+      status: active ? "active" : "idle",
+      updatedAt: active ? now : row.updatedAt,
+    });
+  }
+  return out;
 }
