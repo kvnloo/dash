@@ -9,7 +9,11 @@ This folder is a **review export** when a Dash-scoped cloud token cannot push th
 | [`aodl-craid-20260911.md`](aodl-craid-20260911.md) | C(RAID) R-phase capture (alias search + formalism) |
 | [`competitors-100-20260911.md`](competitors-100-20260911.md) | 100-wide paper+repo competitor join (readings vs adapters vs noise) |
 | [`competitors-100.tsv`](competitors-100.tsv) | Machine table for that batch (keyword score + human override) |
-| [`continuous-insights-20260911.md`](continuous-insights-20260911.md) | Wave-2 join: AgentFlow as read-side dual; \(\pi_v\); open \(\Gamma_t\) budgets |
+| [`continuous-insights-20260911.md`](continuous-insights-20260911.md) | Wave-2/3 join: AgentFlow dual; \(\pi_v\); open \(\Gamma_t\) budgets |
 | [`catalog-readings-draft.md`](catalog-readings-draft.md) | PER-1460 paste: sheaf Readings + Adapters (no schema) |
+| [`deep-20260912.md`](deep-20260912.md) | Deep pass: fixture \(\pi_v\), Hermes dry-run CLI, catalog kit |
+| [`kit/`](kit/) | Exact `Language.jsx` + `catalog.spec.js` for aodl Pages |
+| [`tools/pi_v.py`](tools/pi_v.py) | Static port-wiring leg of \(\pi_v\) |
+| [`tools/hermes_dryrun.py`](tools/hermes_dryrun.py) | Fail-closed Kanban projection (not a scheduler) |
 
 Promote: copy into `aodl` `docs/` and frontier-kb `inbox/cursor/`, then delete or leave a pointer. Workers never merge `main`.
