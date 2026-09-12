@@ -5,6 +5,8 @@ import {
   CANCELLED_EXIT_CODE,
   DEFAULT_TURN_TIMEOUT_MS,
   TIMEOUT_EXIT_CODE,
+  attachSocket,
+  detachSocket,
   nonZeroExitMessage,
   parseHarnessJsonLine,
   replayAfter,
@@ -47,6 +49,42 @@ describe("replayAfter", () => {
     expect(replayAfter(events, 1).map((e) => e.seq)).toEqual([2, 3]);
     expect(replayAfter(events, 3)).toEqual([]);
     expect(replayAfter(events, 99)).toEqual([]);
+  });
+});
+
+describe("attachSocket", () => {
+  test("flushes buffered deltas before replay so a 40ms batch is not dropped", () => {
+    const events: { seq: number; text: string }[] = [{ seq: 1, text: "hi" }];
+    let buffer = " there";
+    const listeners = new Set<string>();
+    const replayed = attachSocket(
+      {
+        events,
+        listeners,
+        flush() {
+          if (!buffer) return;
+          events.push({ seq: events.length + 1, text: buffer });
+          buffer = "";
+        },
+      },
+      "ws-2",
+      1,
+    );
+    expect(buffer).toBe("");
+    expect(listeners.has("ws-2")).toBe(true);
+    expect(replayed.map((event) => event.text)).toEqual([" there"]);
+  });
+});
+
+describe("detachSocket", () => {
+  test("drops the socket from turn listeners and leaves voice utterances in place", () => {
+    const ws = { id: "old" };
+    const turn = { listeners: new Set([ws]) };
+    const turns = new Map<string, { listeners: Set<typeof ws> }>([["t1", turn]]);
+    const utterances = new Map<string, { bytes: number }>([["t1", { bytes: 12 }]]);
+    detachSocket(["t1"], (id) => turns.get(id), ws);
+    expect(turn.listeners.size).toBe(0);
+    expect(utterances.get("t1")?.bytes).toBe(12);
   });
 });
 
@@ -110,8 +148,12 @@ describe("live bridge wiring", () => {
     expect(src).toContain('from "./src/turn-safety"');
     expect(src).toContain("waitForExitOrTimeout");
     expect(src).toContain("replayAfter");
+    expect(src).toContain("attachSocket");
+    expect(src).toContain("detachSocket");
+    expect(src).toContain("turn.attach(");
     expect(src).toContain("TIMEOUT_EXIT_CODE");
     expect(src).not.toContain("const exitCode = await proc.exited;");
+    expect(src).not.toMatch(/close\(ws\) \{[\s\S]*?utterances\.delete/);
     const adapters = readFileSync(join(import.meta.dir, "harnesses.ts"), "utf8");
     expect(adapters).toContain("parseHarnessJsonLine");
   });

@@ -23,7 +23,16 @@ python3 .verified-oss-loop/rollout.py show
 
 Take **one** open issue labeled `claimable` and not `claimed`. Prefer `priority:P0` then `P1`, then `good-first-issue`. Skip `needs-discussion` unless the human assigned it.
 
-If nothing is claimable: stop. Comment on the newest `needs-discussion` issue with a one-paragraph proposal. Do not start coding. Do not open a consolation PR at `main`.
+An empty `claimable` list is **not** a stop. Cloud agents often cannot write GitHub labels. Pick the highest-priority open issue that is:
+
+- not labeled `claimed`
+- has no claim comment newer than 24h
+- has no open PR that already covers the same scope (including work already on `origin/nightly`)
+- allowed by ownership in `AGENTS.md`
+
+Pinned ethos/docs issues that name no concrete code gap are not a coding pick. If the human said keep working, autodevelop, or the app is not done: open the PR, then pick the next such issue. Do not treat a merged loop or green CI as "Dash is finished".
+
+If nothing remains except `needs-discussion` and claimed work: comment a one-paragraph proposal on the newest `needs-discussion` issue. Do not start coding that discussion. Do not open a consolation PR at `main`.
 
 ## Claim (lease)
 

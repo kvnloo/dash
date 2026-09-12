@@ -20,6 +20,34 @@ export function replayAfter<T extends { seq: number }>(events: readonly T[], aft
   return events.filter((event) => event.seq > afterSeq);
 }
 
+export type AttachableTurn<E extends { seq: number }, S> = {
+  events: E[];
+  listeners: Set<S>;
+  flush(): void;
+};
+
+/** Flush the 40ms delta batch, subscribe, then replay. Unflushed buffer would otherwise vanish on reattach. */
+export function attachSocket<E extends { seq: number }, S>(
+  turn: AttachableTurn<E, S>,
+  ws: S,
+  afterSeq: number,
+): E[] {
+  turn.flush();
+  turn.listeners.add(ws);
+  return replayAfter(turn.events, afterSeq);
+}
+
+/** Drop this socket from in-flight turns. Do not touch voice utterances — chunks already on the laptop must survive screen lock. */
+export function detachSocket<S>(
+  turnIds: Iterable<string>,
+  lookup: (id: string) => { listeners: Set<S> } | undefined,
+  ws: S,
+): void {
+  for (const id of turnIds) {
+    lookup(id)?.listeners.delete(ws);
+  }
+}
+
 export function parseHarnessJsonLine(
   line: string,
 ): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } | null {
