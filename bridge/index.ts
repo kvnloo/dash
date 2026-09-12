@@ -30,6 +30,7 @@ import {
   TIMEOUT_EXIT_CODE,
   attachSocket,
   detachSocket,
+  pruneStaleUtterances,
   nonZeroExitMessage,
   replayAfter,
   timeoutMessage,
@@ -723,6 +724,9 @@ const server = Bun.serve<SocketData>({
     },
     close(ws) {
       detachSocket(ws.data.turns, (id) => turns.get(id), ws);
+      for (const id of pruneStaleUtterances(utterances, Date.now())) {
+        turns.get(id)?.endWithout("That recording was interrupted.");
+      }
       log("ws.close", { remote: ws.remoteAddress, subscribed: ws.data.turns.size });
       ws.data.turns.clear();
     },

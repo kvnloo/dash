@@ -7,6 +7,7 @@ import {
   TIMEOUT_EXIT_CODE,
   attachSocket,
   detachSocket,
+  pruneStaleUtterances,
   nonZeroExitMessage,
   parseHarnessJsonLine,
   replayAfter,
@@ -88,6 +89,18 @@ describe("detachSocket", () => {
   });
 });
 
+describe("pruneStaleUtterances", () => {
+  test("drops recordings older than the TTL so a dropped socket cannot leak forever", () => {
+    const utterances = new Map<string, { startedAt: number }>([
+      ["fresh", { startedAt: 10_000 }],
+      ["stale", { startedAt: 1000 }],
+    ]);
+    expect(pruneStaleUtterances(utterances, 10_000, 5000)).toEqual(["stale"]);
+    expect(utterances.has("fresh")).toBe(true);
+    expect(utterances.has("stale")).toBe(false);
+  });
+});
+
 describe("exit messages", () => {
   test("non-zero exit prefers stderr, else a structured code", () => {
     expect(nonZeroExitMessage("OMP", 1, "  boom  ")).toBe("boom");
@@ -150,6 +163,7 @@ describe("live bridge wiring", () => {
     expect(src).toContain("replayAfter");
     expect(src).toContain("attachSocket");
     expect(src).toContain("detachSocket");
+    expect(src).toContain("pruneStaleUtterances");
     expect(src).toContain("turn.attach(");
     expect(src).toContain("TIMEOUT_EXIT_CODE");
     expect(src).not.toContain("const exitCode = await proc.exited;");

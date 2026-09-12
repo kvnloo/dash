@@ -48,6 +48,24 @@ export function detachSocket<S>(
   }
 }
 
+/** Abandoned spoken uploads after a drop. 2 minutes covers reconnect; forever would leak RAM. */
+export const DEFAULT_UTTERANCE_TTL_MS = 2 * 60 * 1000;
+
+export function pruneStaleUtterances<T extends { startedAt: number }>(
+  utterances: Map<string, T>,
+  now: number,
+  ttlMs: number = DEFAULT_UTTERANCE_TTL_MS,
+): string[] {
+  const dropped: string[] = [];
+  for (const [id, utterance] of utterances) {
+    if (now - utterance.startedAt > ttlMs) {
+      utterances.delete(id);
+      dropped.push(id);
+    }
+  }
+  return dropped;
+}
+
 export function parseHarnessJsonLine(
   line: string,
 ): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } | null {
