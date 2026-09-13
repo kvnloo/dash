@@ -29,6 +29,44 @@ describe("parseClientMessage", () => {
       text: "hi",
       sessionId: undefined,
       cwd: "/home/you/workspace/dash",
+      intent: undefined,
+    });
+  });
+
+  test("accepts optional intent on chat and keeps a chat if intent is malformed", () => {
+    expect(
+      parseClientMessage({
+        type: "chat",
+        id: "t1",
+        harness: "omp",
+        text: "Ship the surface",
+        intent: { declared: "Ship the surface", harnessId: "omp", visualId: "solo", stylusCount: 3 },
+      }),
+    ).toEqual({
+      type: "chat",
+      id: "t1",
+      harness: "omp",
+      text: "Ship the surface",
+      sessionId: undefined,
+      cwd: undefined,
+      intent: { declared: "Ship the surface", harnessId: "omp", visualId: "solo", stylusCount: 3 },
+    });
+    expect(
+      parseClientMessage({
+        type: "chat",
+        id: "t1",
+        harness: "omp",
+        text: "hi",
+        intent: { declared: 1 },
+      }),
+    ).toEqual({
+      type: "chat",
+      id: "t1",
+      harness: "omp",
+      text: "hi",
+      sessionId: undefined,
+      cwd: undefined,
+      intent: undefined,
     });
   });
 

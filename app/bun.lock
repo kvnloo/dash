@@ -6,6 +6,7 @@
       "name": "expo-template-blank-typescript",
       "dependencies": {
         "@expo/vector-icons": "^15.0.2",
+        "@kvnloo/aodl-ui": "./vendor/aodl-ui",
         "@react-native-async-storage/async-storage": "2.2.0",
         "@react-navigation/native": "^7.3.18",
         "@react-navigation/native-stack": "^7.18.10",
@@ -273,6 +274,8 @@
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.6.0", "", {}, "sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw=="],
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
+
+    "@kvnloo/aodl-ui": ["@kvnloo/aodl-ui@file:vendor/aodl-ui", { "peerDependencies": { "react": "*", "react-native": "*" } }],
 
     "@react-native-async-storage/async-storage": ["@react-native-async-storage/async-storage@2.2.0", "", { "dependencies": { "merge-options": "^3.0.4" }, "peerDependencies": { "react-native": "^0.0.0-0 || >=0.65 <1.0" } }, "sha512-gvRvjR5JAaUZF8tv2Kcq/Gbt3JHwbKFYfmb445rhOj6NUMx3qPLixmDx5pZAyb9at1bYvJ4/eTUipU5aki45xw=="],
 

@@ -32,6 +32,14 @@ export interface HostInfo {
   agents: AgentInfo[];
 }
 
+/** Declared-intent payload from `@kvnloo/aodl-ui`. Optional on `chat`; old clients omit it. */
+export type IntentWire = {
+  declared: string;
+  visualId?: string;
+  harnessId?: string;
+  stylusCount?: number;
+};
+
 export type ClientMessage =
   | {
       type: "chat";
@@ -43,6 +51,8 @@ export type ClientMessage =
       sessionId?: string;
       /** Working directory on the laptop. Falls back to the bridge default. */
       cwd?: string;
+      /** From the intent surface. Old phones omit this; old bridges ignore it. */
+      intent?: IntentWire;
     }
   /**
    * Start a spoken turn. The phone streams the recorded utterance as
@@ -110,6 +120,21 @@ function optStr(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
 }
 
+function parseIntentWire(value: unknown): IntentWire | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value) || !str(value.declared)) return undefined;
+  if (value.visualId !== undefined && !str(value.visualId)) return undefined;
+  if (value.harnessId !== undefined && !str(value.harnessId)) return undefined;
+  if (value.stylusCount !== undefined && !num(value.stylusCount)) return undefined;
+  const intent: IntentWire = { declared: value.declared };
+  if (typeof value.visualId === "string") intent.visualId = value.visualId;
+  if (typeof value.harnessId === "string") intent.harnessId = value.harnessId;
+  if (typeof value.stylusCount === "number" && Number.isFinite(value.stylusCount)) {
+    intent.stylusCount = value.stylusCount;
+  }
+  return intent;
+}
+
 function isAttachEntry(value: unknown): value is { id: string; seq: number } {
   return isRecord(value) && str(value.id) && num(value.seq);
 }
@@ -132,6 +157,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
           text: raw.text,
           sessionId: raw.sessionId,
           cwd: raw.cwd,
+          intent: parseIntentWire(raw.intent),
         };
       }
       return null;

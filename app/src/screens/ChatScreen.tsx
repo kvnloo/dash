@@ -1,6 +1,7 @@
 import { FlashList, type FlashListRef, type ListRenderItemInfo } from "@shopify/flash-list";
+import { IntentSurface, type IntentSurfaceHandle } from "@kvnloo/aodl-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
 import { KeyboardDock } from "../components/KeyboardDock";
@@ -14,6 +15,7 @@ import { haptic } from "../haptics";
 import type { Message } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge, sendChat } from "../net/bridge";
+import type { IntentWire } from "../../../shared/protocol";
 import {
   applyTurnEvent,
   beginTurn,
@@ -45,6 +47,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const composerDraft = route.params?.draft;
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<Message>>(null);
+  const intentRef = useRef<IntentSurfaceHandle | null>(null);
   const debugPicker = debugUi.use((s) => s.chatHarnessPickerOpen);
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerVisible = debugPicker ?? pickerOpen;
@@ -67,6 +70,17 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     return last?.role === "assistant" && last.state === "streaming" ? last : undefined;
   }, [messages]);
 
+  const intentWire = useCallback(
+    (text: string): IntentWire => {
+      const snap = intentRef.current?.snapshot();
+      const intent: IntentWire = { declared: text, harnessId };
+      if (snap?.wire.visualId) intent.visualId = snap.wire.visualId;
+      if (snap?.wire.stylusCount !== undefined) intent.stylusCount = snap.wire.stylusCount;
+      return intent;
+    },
+    [harnessId],
+  );
+
   const sendTurn = useCallback(
     (text: string, active = conversation ?? createConversation(harnessId)) => {
       const { turnId } = beginTurn(active.id, text);
@@ -76,6 +90,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         harness: active.harness,
         text,
         sessionId: store.get().conversations.find((c) => c.id === active.id)?.sessionId ?? active.sessionId,
+        intent: intentWire(text),
       });
       if (!ok) {
         applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Not connected to the bridge." });
@@ -83,7 +98,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       }
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
-    [conversation, harnessId],
+    [conversation, harnessId, intentWire],
   );
 
   const flushQueue = useCallback(
@@ -107,6 +122,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         harness: payload.harness,
         text: payload.text,
         sessionId: store.get().conversations.find((c) => c.id === conversationId)?.sessionId ?? payload.sessionId,
+        intent: intentWire(payload.text),
       });
       if (!ok) {
         applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Not connected to the bridge." });
@@ -115,7 +131,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       }
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
-    [online],
+    [online, intentWire],
   );
 
   const onSend = useCallback(
@@ -186,24 +202,34 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         />
       </View>
       <KeyboardDock>
-        <Composer
-          key={composerDraft ?? "composer"}
+        <IntentSurface
+          harnessId={harnessId}
+          docked
           disabled={!online}
-          streaming={streamingMessage !== undefined}
-          initialText={composerDraft}
-          placeholder={
-            online
-              ? streamingMessage
-                ? conversation && queueLength(conversation.id) > 0
-                  ? `Queue another (${queueLength(conversation.id)} waiting)…`
-                  : `Queue next message for ${harnessName}…`
-                : `Message ${harnessName}`
-              : "Waiting for the bridge…"
-          }
-          onSend={onSend}
-          onStop={onStop}
-          onVoice={() => navigation.navigate("Voice")}
-        />
+          debugFallback={Platform.OS === "web"}
+          initialDeclared={composerDraft ?? ""}
+          surfaceRef={intentRef}
+          onDeclare={(doc) => onSend(doc.declared)}
+        >
+          <Composer
+            key={composerDraft ?? "composer"}
+            disabled={!online}
+            streaming={streamingMessage !== undefined}
+            initialText={composerDraft}
+            placeholder={
+              online
+                ? streamingMessage
+                  ? conversation && queueLength(conversation.id) > 0
+                    ? `Queue another (${queueLength(conversation.id)} waiting)…`
+                    : `Queue next message for ${harnessName}…`
+                  : `Message ${harnessName}`
+                : "Waiting for the bridge…"
+            }
+            onSend={onSend}
+            onStop={onStop}
+            onVoice={() => navigation.navigate("Voice")}
+          />
+        </IntentSurface>
       </KeyboardDock>
       <HarnessPicker
         visible={pickerVisible}

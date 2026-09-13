@@ -1,5 +1,5 @@
 import { AppState as RNAppState, type AppStateStatus } from "react-native";
-import { parseServerMessage, type ClientMessage } from "../../../shared/protocol";
+import { parseServerMessage, type ClientMessage, type IntentWire } from "../../../shared/protocol";
 import { isDebugMode } from "../debug/mode";
 import { fetchRoster } from "../lib/roster";
 import type { Settings } from "../model";
@@ -253,6 +253,7 @@ export function sendChat(input: {
   harness: string;
   text: string;
   sessionId?: string;
+  intent?: IntentWire;
 }): boolean {
   const cwd = store.get().settings?.cwd;
   return bridge.send({
@@ -262,6 +263,7 @@ export function sendChat(input: {
     text: input.text,
     sessionId: input.sessionId,
     cwd,
+    intent: input.intent,
   });
 }
 
