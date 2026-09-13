@@ -16,6 +16,7 @@ describe("KeyboardDock", () => {
     const chat = readFileSync(join(import.meta.dir, "../screens/ChatScreen.tsx"), "utf8");
     expect(main).toContain("KeyboardDock");
     expect(chat).toContain("KeyboardDock");
+    expect(chat).toContain("Ripple");
     expect(main).not.toMatch(/paddingBottom:\s*Math\.max\(insets\.bottom/);
     expect(chat).not.toContain("keyboardVerticalOffset={insets.bottom}");
   });
