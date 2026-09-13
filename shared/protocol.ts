@@ -32,7 +32,7 @@ export interface HostInfo {
   agents: AgentInfo[];
 }
 
-/** Declared-intent payload from `@kvnloo/aodl-ui`. Optional on `chat`; old clients omit it. */
+/** Declared-intent payload from `@kvnloo/ripple`. Optional on `chat`; old clients omit it. */
 export type IntentWire = {
   declared: string;
   visualId?: string;

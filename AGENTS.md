@@ -45,7 +45,7 @@ Non-trivial work uses `/poteto-mode`. Prove it with `.cursor/skills/verify-dash`
 
 Anyone adding an app dependency: run `bunx expo install <pkg>` from `app/`, never edit `package.json` by hand, and keep the app runnable in Expo Go (no native modules outside the Expo SDK).
 
-The chat composer mounts `{ IntentSurface }` from `@kvnloo/aodl-ui` (vendored snapshot of [kvnloo/aodl-ui](https://github.com/kvnloo/aodl-ui)). Do not port AODL catalog UI, HOTL, or orbs into Dash. S-Pen is the JS contract in that package; no native module.
+The chat composer mounts `{ Ripple }` from `@kvnloo/ripple` (vendored snapshot of [kvnloo/ripple](https://github.com/kvnloo/ripple)). Gloss: ephemeral intent surface. S-Pen is an input. Do not port AODL catalog UI, HOTL, or orbs into Dash. No native module.
 
 If you need a protocol change, add it to `shared/protocol.ts` with a parser update and keep old fields working.
 

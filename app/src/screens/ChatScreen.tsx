@@ -1,5 +1,5 @@
 import { FlashList, type FlashListRef, type ListRenderItemInfo } from "@shopify/flash-list";
-import { IntentSurface, type IntentSurfaceHandle } from "@kvnloo/aodl-ui";
+import { Ripple, type RippleHandle } from "@kvnloo/ripple";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -47,7 +47,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const composerDraft = route.params?.draft;
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<Message>>(null);
-  const intentRef = useRef<IntentSurfaceHandle | null>(null);
+  const rippleRef = useRef<RippleHandle | null>(null);
   const debugPicker = debugUi.use((s) => s.chatHarnessPickerOpen);
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerVisible = debugPicker ?? pickerOpen;
@@ -72,7 +72,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
 
   const intentWire = useCallback(
     (text: string): IntentWire => {
-      const snap = intentRef.current?.snapshot();
+      const snap = rippleRef.current?.snapshot();
       const intent: IntentWire = { declared: text, harnessId };
       if (snap?.wire.visualId) intent.visualId = snap.wire.visualId;
       if (snap?.wire.stylusCount !== undefined) intent.stylusCount = snap.wire.stylusCount;
@@ -202,13 +202,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         />
       </View>
       <KeyboardDock>
-        <IntentSurface
+        <Ripple
           harnessId={harnessId}
           docked
           disabled={!online}
           debugFallback={Platform.OS === "web"}
           initialDeclared={composerDraft ?? ""}
-          surfaceRef={intentRef}
+          surfaceRef={rippleRef}
           onDeclare={(doc) => onSend(doc.declared)}
         >
           <Composer
@@ -229,7 +229,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             onStop={onStop}
             onVoice={() => navigation.navigate("Voice")}
           />
-        </IntentSurface>
+        </Ripple>
       </KeyboardDock>
       <HarnessPicker
         visible={pickerVisible}

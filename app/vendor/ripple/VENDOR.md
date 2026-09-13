@@ -1,0 +1,1 @@
+Snapshot of https://github.com/kvnloo/ripple (branch cursor/intent-surface-e30f). Source of truth is that repo. Dash imports @kvnloo/ripple from this tree so Expo Go / bun test work without npm publish.

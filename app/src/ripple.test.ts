@@ -1,31 +1,33 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { INTENT_NODE_SIZE, INTENT_STRIP_HEIGHT, OWNS_KEYBOARD_DOCK } from "../vendor/aodl-ui/src/geometry";
+import { INTENT_NODE_SIZE, INTENT_STRIP_HEIGHT, OWNS_KEYBOARD_DOCK } from "../vendor/ripple/src/geometry";
 
-describe("AODL intent surface on chat", () => {
+describe("Ripple on chat", () => {
   test("pins vendor geometry and Expo Go keyboard ownership", () => {
     expect(INTENT_NODE_SIZE).toBe(36);
     expect(INTENT_STRIP_HEIGHT).toBe(52);
     expect(OWNS_KEYBOARD_DOCK).toBe(false);
   });
 
-  test("Chat mounts IntentSurface from @kvnloo/aodl-ui inside KeyboardDock, not Orchestra", () => {
+  test("Chat mounts Ripple from @kvnloo/ripple inside KeyboardDock, not Orchestra", () => {
     const chat = readFileSync(join(import.meta.dir, "screens/ChatScreen.tsx"), "utf8");
     const orchestra = readFileSync(join(import.meta.dir, "screens/panes/OrchestraPane.tsx"), "utf8");
     const metro = readFileSync(join(import.meta.dir, "../metro.config.js"), "utf8");
-    expect(chat).toContain('from "@kvnloo/aodl-ui"');
-    expect(chat).toContain("IntentSurface");
+    expect(chat).toContain('from "@kvnloo/ripple"');
+    expect(chat).toContain("<Ripple");
+    expect(chat).not.toContain("IntentSurface");
     expect(chat).toContain("KeyboardDock");
-    expect(chat).toContain("surfaceRef={intentRef}");
+    expect(chat).toContain("surfaceRef={rippleRef}");
     expect(chat).toContain("debugFallback={Platform.OS === \"web\"}");
     expect(chat).toContain("intent: intentWire(");
     expect(chat).not.toContain("OrchestraPane");
     expect(chat).not.toContain("GOLD_GLOW");
     expect(chat).not.toContain("entering=");
-    expect(orchestra).not.toContain("@kvnloo/aodl-ui");
-    expect(metro).toContain("vendor/aodl-ui");
-    expect(metro).toContain("@kvnloo/aodl-ui");
+    expect(orchestra).not.toContain("@kvnloo/ripple");
+    expect(metro).toContain("vendor/ripple");
+    expect(metro).toContain("@kvnloo/ripple");
+    expect(metro).not.toContain("aodl-ui");
   });
 
   test("sendChat forwards optional intent on the existing chat type", () => {
