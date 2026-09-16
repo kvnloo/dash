@@ -1,0 +1,101 @@
+n	kind	id	overlap	skip	aodl	name	url	note	overlap_keyword
+001	paper	2604.11767	high	0	V|E|adapter	$λ_A$: A Typed Lambda Calculus for LLM Agent Composition	https://arxiv.org/abs/2604.11767	intra-node calculus; keep	med
+002	paper	2605.03143	high	0	V|E	Pact: A Choreographic Language for Agentic Ecosystems	https://arxiv.org/abs/2605.03143	choreography / message profile	med
+003	paper	2510.24205	high	0	V|E	CoMPSeT: A Framework for Comparing Multiparty Session Types	https://arxiv.org/abs/2510.24205	MPST compare; optional message profile	med
+004	paper	2603.06007	high	0	V|E|Pi|Gamma	MASFactory: A Graph-centric Framework for Orchestrating LLM-Based Multi-Agent Systems with Vibe Graphing	https://arxiv.org/abs/2603.06007		high
+005	paper	2602.16873	high	0	V|E|Pi	AdaptOrch: Task-Adaptive Multi-Agent Orchestration in the Era of LLM Performance Convergence	https://arxiv.org/abs/2602.16873	topology > model	med
+006	paper	2602.07072	high	0	V|E|S	AgentSpawn: Adaptive Multi-Agent Collaboration Through Dynamic Spawning for Long-Horizon Code Generation	https://arxiv.org/abs/2602.07072	bounded spawn	med
+007	paper	2510.18893	high	0	V|E|S	CodeCRDT: Observation-Driven Coordination for Multi-Agent LLM Code Generation	https://arxiv.org/abs/2510.18893	observation / CRDT ≠ verify	med
+008	paper	2605.01879	high	0	V|S	Sheaf-Theoretic Planning: A Categorical Foundation for Resilient Multi-Agent Autonomous Systems	https://arxiv.org/abs/2605.01879	sheaf reading of three objects	med
+009	paper	2512.24601	high	0	S|Pi	Recursive Language Models	https://arxiv.org/abs/2512.24601	keyword miss; RLM is the slice claim	low
+010	paper	2608.09096	high	0	V|E|S|Pi	Evo-Bench: Can Language Models Improve Agent Harness?	https://arxiv.org/abs/2608.09096		high
+011	paper	2606.19812	high	0	V|E|Pi|Gamma	Human-on-the-Loop Orchestration for AI-Assisted Legal Discovery	https://arxiv.org/abs/2606.19812		high
+012	paper	2606.08919	high	0	V|Pi|Gamma	Oversight Has a Capacity: Calibrating Agent Guards to a Subjective, Fatiguing Human	https://arxiv.org/abs/2606.08919	human-attention budget in Gamma	med
+013	paper	2603.07532	low	1	none	Quantum Minimal Learning Machine: A Fidelity-Based Approach to Error Mitigation	https://arxiv.org/abs/2603.07532		low
+014	paper	2607.26429	med	0	E|S	NMKFR: A Robust Framework for Time-Aware Cold-Start Recommendation	https://arxiv.org/abs/2607.26429		med
+015	paper	2601.00867	med	0	V|E|S	The Silicon Psyche: Anthropomorphic Vulnerabilities in Large Language Models	https://arxiv.org/abs/2601.00867		med
+016	paper	2603.03195	med	0	V|E	Chain of World: World Model Thinking in Latent Motion	https://arxiv.org/abs/2603.03195		med
+017	paper	2608.07651	med	0	V|E|Pi	An Agentic AI Framework Overcomes Fundamental Limitations of Large Language Models for Glaucoma Detection from Fundus Photography	https://arxiv.org/abs/2608.07651		med
+018	paper	2602.20122	med	0	V|E	NanoKnow: How to Know What Your Language Model Knows	https://arxiv.org/abs/2602.20122		med
+019	paper	2604.07992	med	0	E|S	Context-Aware Disentanglement for Cross-Domain Sequential Recommendation: A Causal View	https://arxiv.org/abs/2604.07992		med
+020	paper	2608.01180	med	0	V|S	Interpretable Machine Learning for Traffic Congestion Prediction: Unveiling the Impact of Different COVID-19 Periods	https://arxiv.org/abs/2608.01180		med
+021	paper	2603.25032	med	0	E|S	Treatment effect estimation under convergent network interference	https://arxiv.org/abs/2603.25032		med
+022	paper	2608.16962	low	1	V	Clinical Pathways Matter for Multimodal Deep Learning in Early Alzheimers Disease Detection	https://arxiv.org/abs/2608.16962		low
+023	paper	2601.16267	low	1	S	Measuring the Black Hole and Accretion Parameters of Sagittarius A* from EHT Observations using a Semi-Analytic Model	https://arxiv.org/abs/2601.16267		low
+024	paper	2608.08053	low	1	V|E|S|Gamma	PhysX-CoT: Structured Physical Reasoning from a Single Image to Simulation-Ready 3D Assets	https://arxiv.org/abs/2608.08053	physics CoT; alias bleed	high
+025	paper	2601.15726	med	0	S|Pi|Gamma	Profit Maximization for Viral Marketing in Online Social Networks using Two Phase Diffusion Approach	https://arxiv.org/abs/2601.15726		med
+026	paper	2602.16347	med	0	V|Gamma	Load Balanced Parallel Node Generation for Meshless Numerical Methods	https://arxiv.org/abs/2602.16347		med
+027	paper	2608.19093	low	1	Gamma	The Equality Cases of the Weak Simplex Conjecture	https://arxiv.org/abs/2608.19093		low
+028	paper	2603.16159	low	1	E	AI-Generated Figures in Academic Publishing: Policies, Tools, and Practical Guidelines	https://arxiv.org/abs/2603.16159		low
+029	paper	2608.20653	low	1	none	Meta-clustering of milk mid-infrared spectra identifies dairy cow groups associated with negative energy balance in early lactation	https://arxiv.org/abs/2608.20653		low
+030	paper	2604.22681	med	0	V|S	The potential of directional neutrino detection to observe neutrino spin oscillations	https://arxiv.org/abs/2604.22681		med
+031	paper	2602.02605	low	1	E	Fine-Tuning Language Models to Know What They Know	https://arxiv.org/abs/2602.02605		low
+032	paper	2608.12911	low	1	V	Beyond Visual Evidence: Revealing and Mitigating Relational Privacy Leakage in Document MLLMs	https://arxiv.org/abs/2608.12911		low
+033	paper	2606.06089	low	1	none	Leveraging LLMs for Unstructured Claims Data Analysis	https://arxiv.org/abs/2606.06089		low
+034	paper	2603.16607	med	0	V|S	Efficient methods for wave propagation in electron microscopy	https://arxiv.org/abs/2603.16607		med
+035	paper	2608.21621	low	1	none	FrugalSOT - Frugal Search Over the Models	https://arxiv.org/abs/2608.21621		low
+036	paper	2603.22621	low	1	E	Transfer learning via interpolating structures	https://arxiv.org/abs/2603.22621		low
+037	paper	2608.19987	low	1	S	STEP: Score-Based Temporal Energy for Human Pose Video Anomaly Detection	https://arxiv.org/abs/2608.19987		low
+038	paper	2603.13754	low	1	E	A Highly Sensitive Diamond NV Magnetometer Using Ramsey Interferometry with a Short Sensor-to-Sample Distance	https://arxiv.org/abs/2603.13754		low
+039	paper	2608.18512	low	1	Gamma	Integer Linear Programming Decoder for Abelian and Non-Abelian Topological Codes	https://arxiv.org/abs/2608.18512		low
+040	paper	2602.14762	med	0	E|Gamma	Near-infrared lensless holographic microscopy on a visible sensor enables label-free high-throughput imaging in strong scattering	https://arxiv.org/abs/2602.14762		med
+041	paper	2608.21451	low	1	none	Power Series for the Quantum Statistical Mechanics Probability with Results for the Second Virial Coefficient of Helium	https://arxiv.org/abs/2608.21451		low
+042	paper	2606.19832	med	0	V|E	Ratio-Independent Three-Cycle Decomposition with Optimal Ordered Local-Switch Cost in Six-Regular Non-Axis Eisenstein--Jacobi Networks	https://arxiv.org/abs/2606.19832		med
+043	paper	2602.16367	med	0	V|E	A Multihop Rendezvous Protocol for Cognitive Radio-based Emergency Response Network	https://arxiv.org/abs/2602.16367		med
+044	paper	2608.21477	low	1	Gamma	Explainable Adaptive Zero Trust Framework for AWS with Adversarial Robustness Evaluation	https://arxiv.org/abs/2608.21477		low
+045	paper	2608.12651	med	0	S|Gamma	Horizon-regular cross-focusing and inner-horizon obstructions in spherical f(R) gravity	https://arxiv.org/abs/2608.12651		med
+046	paper	2509.25292	med	0	V|E|adapter	A Measurement Study of Model Context Protocol Ecosystem	https://arxiv.org/abs/2509.25292		med
+047	paper	2601.07585	low	1	none	Robust Multicentre Detection and Classification of Colorectal Liver Metastases on CT: Application of Foundation Models	https://arxiv.org/abs/2601.07585		low
+048	paper	2608.02515	med	0	V|S	LiveMem: Maintaining Memory State Continuity in Long-Running LLM Inference	https://arxiv.org/abs/2608.02515		med
+049	paper	2608.19922	low	1	V|E|S|Gamma	Auditing Recorded Predictive Lead Service-Line Classifications Against Physical Verification: A Statewide Study of New York	https://arxiv.org/abs/2608.19922	lead service-line audit; alias bleed	high
+050	paper	2602.21280	med	0	V|S|Pi	A Path to an All-Sky Survey with Roman	https://arxiv.org/abs/2602.21280		med
+051	paper	2603.07992	low	1	E	SI-ChainFL: Shapley-Incentivized Secure Federated Learning for High-Speed Rail Data Sharing	https://arxiv.org/abs/2603.07992		low
+052	paper	2603.13756	med	0	V|S	Exploration-assisted Bottleneck Transition Toward Robust and Data-efficient Deformable Object Manipulation	https://arxiv.org/abs/2603.13756		med
+053	paper	2608.04651	low	1	Gamma	Active Learning Guided Design Space Refinement for Scalable Multi-Objective Bayesian Optimization in Materials Discovery	https://arxiv.org/abs/2608.04651		low
+054	paper	2608.16762	med	0	V|S|Gamma	On the (Non)Unitarity with respect to the Clock of a Dynamical Local Observer and the Einstein Equivalence Principle	https://arxiv.org/abs/2608.16762		med
+055	paper	2603.25267	low	1	E	EagleNet: Energy-Aware Fine-Grained Relationship Learning Network for Text-Video Retrieval	https://arxiv.org/abs/2603.25267		low
+056	paper	2608.04617	med	0	V|S	Type I X-Ray Burst Models With Rotation	https://arxiv.org/abs/2608.04617		med
+057	paper	2603.16119	med	0	V|E	BLADE: Adaptive Wi-Fi Contention Control for Next-Generation Real-Time Communication	https://arxiv.org/abs/2603.16119		med
+058	paper	2608.19023	low	1	S	Local null controllability of a quasi-linear system and related numerical experiments	https://arxiv.org/abs/2608.19023		low
+059	repo	huggingface/smolagents	med	0	V|E|adapter	huggingface/smolagents (29286★ Python)	https://github.com/huggingface/smolagents		med
+060	repo	langchain-ai/langgraph	high	0	V|E|S|Pi|Gamma	langchain-ai/langgraph (41479★ Python)	https://github.com/langchain-ai/langgraph		high
+061	repo	crewAIInc/crewAI	high	0	V|E|S|Pi	crewAIInc/crewAI (58375★ Python)	https://github.com/crewAIInc/crewAI		high
+062	repo	microsoft/autogen	high	0	V|E|Pi|adapter	microsoft/autogen (60939★ Python)	https://github.com/microsoft/autogen		high
+063	repo	openai/openai-agents-python	high	0	V|E|S|Pi|Gamma|adapter	openai/openai-agents-python (29367★ Python)	https://github.com/openai/openai-agents-python		high
+064	repo	pydantic/pydantic-ai	high	0	V|E|S|adapter	pydantic/pydantic-ai (19869★ Python)	https://github.com/pydantic/pydantic-ai		high
+065	repo	PrefectHQ/prefect	med	0	E|S|Pi	PrefectHQ/prefect (23820★ Python)	https://github.com/PrefectHQ/prefect		med
+066	repo	apache/airflow	med	0	V|E|Pi	apache/airflow (46827★ Python)	https://github.com/apache/airflow		med
+067	repo	dagster-io/dagster	high	0	V|E|S|Pi	dagster-io/dagster (16139★ Python)	https://github.com/dagster-io/dagster		high
+068	repo	flyteorg/flyte	high	0	V|E|Pi|adapter	flyteorg/flyte (7465★ Go)	https://github.com/flyteorg/flyte		high
+069	repo	temporalio/sdk-python	high	0	V|E|Pi|adapter	temporalio/sdk-python (1188★ Python)	https://github.com/temporalio/sdk-python		high
+070	repo	argoproj/argo-workflows	med	0	E|Pi|adapter	argoproj/argo-workflows (16968★ Go)	https://github.com/argoproj/argo-workflows		med
+071	repo	n8n-io/n8n	high	0	V|E|S|adapter	n8n-io/n8n (204037★ TypeScript)	https://github.com/n8n-io/n8n		high
+072	repo	langgenius/dify	high	0	V|E|S|adapter	langgenius/dify (155457★ TypeScript)	https://github.com/langgenius/dify		high
+073	repo	infiniflow/ragflow	med	0	V|E	infiniflow/ragflow (90531★ Go)	https://github.com/infiniflow/ragflow		med
+074	repo	microsoft/semantic-kernel	high	0	V|E|S|Pi|adapter	microsoft/semantic-kernel (28552★ C#)	https://github.com/microsoft/semantic-kernel		high
+075	repo	stanfordnlp/dspy	med	0	V|E|Gamma	stanfordnlp/dspy (37950★ Python)	https://github.com/stanfordnlp/dspy		med
+076	repo	jlowin/fastmcp	med	0	V|E|adapter	PrefectHQ/fastmcp (27624★ Python)	https://github.com/PrefectHQ/fastmcp		med
+077	repo	modelcontextprotocol/python-sdk	med	0	V|E|adapter	modelcontextprotocol/python-sdk (24271★ Python)	https://github.com/modelcontextprotocol/python-sdk		med
+078	repo	modelcontextprotocol/specification	med	0	E|adapter	modelcontextprotocol/modelcontextprotocol (9188★ TypeScript)	https://github.com/modelcontextprotocol/modelcontextprotocol		med
+079	repo	ag-ui-protocol/ag-ui	high	0	V|E|S|Gamma|adapter	ag-ui-protocol/ag-ui (15850★ Python)	https://github.com/ag-ui-protocol/ag-ui		high
+080	repo	a2aproject/A2A	high	0	V|E|S|Pi|adapter	a2aproject/A2A (25736★ Shell)	https://github.com/a2aproject/A2A		high
+081	repo	CopilotKit/CopilotKit	high	0	V|E|S|Gamma|adapter	CopilotKit/CopilotKit (37307★ TypeScript)	https://github.com/CopilotKit/CopilotKit		high
+082	repo	vercel/ai	med	0	V|adapter	vercel/ai (26695★ TypeScript)	https://github.com/vercel/ai		med
+083	repo	langchain-ai/langchain	high	0	V|E|S|Pi	langchain-ai/langchain (146137★ Python)	https://github.com/langchain-ai/langchain		high
+084	repo	Significant-Gravitas/AutoGPT	med	0	V|E|Pi	Significant-Gravitas/AutoGPT (187271★ Python)	https://github.com/Significant-Gravitas/AutoGPT		med
+085	repo	All-Hands-AI/OpenHands	med	0	V|E|Pi	OpenHands/OpenHands (87518★ TypeScript)	https://github.com/OpenHands/OpenHands		med
+086	repo	open-webui/open-webui	high	0	V|E|S|Pi|adapter	open-webui/open-webui (151670★ Python)	https://github.com/open-webui/open-webui		high
+087	repo	Aider-AI/aider	med	0	V|adapter	Aider-AI/aider (48910★ Python)	https://github.com/Aider-AI/aider	renamed from aider-chat/aider	low
+088	repo	cline/cline	high	0	V|Pi|Gamma|adapter	cline/cline (67853★ TypeScript)	https://github.com/cline/cline		high
+089	repo	RooCodeInc/Roo-Code	high	0	V|E|S|adapter	RooCodeInc/Roo-Code (24303★ TypeScript)	https://github.com/RooCodeInc/Roo-Code		high
+090	repo	block/goose	high	0	V|E|Pi|adapter	aaif-goose/goose (54135★ Rust)	https://github.com/aaif-goose/goose		high
+091	repo	NVIDIA/NeMo-Agent-Toolkit	high	0	V|E|S|Pi|adapter	NVIDIA/NeMo-Agent-Toolkit (2630★ Python)	https://github.com/NVIDIA/NeMo-Agent-Toolkit		high
+092	repo	agno-agi/agno	high	0	V|E|S|Pi|adapter	agno-agi/agno (42140★ Python)	https://github.com/agno-agi/agno		high
+093	repo	camel-ai/camel	med	0	V|E|Pi	camel-ai/camel (17705★ Python)	https://github.com/camel-ai/camel	MAS framework; keyword under-scored	low
+094	repo	google/adk-python	high	0	V|E|S|Pi|Gamma|adapter	google/adk-python (21502★ Python)	https://github.com/google/adk-python		high
+095	repo	NousResearch/hermes-agent	high	0	V|E|S|Pi|Gamma	NousResearch/hermes-agent (244588★ Python)	https://github.com/NousResearch/hermes-agent		high
+096	repo	kvnloo/hermes-keel	high	0	V|S|Pi|Gamma	kvnloo/hermes-keel (0★ Python)	https://github.com/kvnloo/hermes-keel		high
+097	repo	openai/codex	med	0	V|Pi	openai/codex (123410★ Rust)	https://github.com/openai/codex		med
+098	repo	sst/opencode	med	0	V|E	anomalyco/opencode (206755★ TypeScript)	https://github.com/anomalyco/opencode		med
+099	repo	continuedev/continue	med	0	V|adapter	continuedev/continue (35873★ TypeScript)	https://github.com/continuedev/continue	renamed from continue-community/continue	low
+100	repo	eclipse-zenoh/zenoh	med	0	V|E|Pi	eclipse-zenoh/zenoh (3168★ Rust)	https://github.com/eclipse-zenoh/zenoh		med
