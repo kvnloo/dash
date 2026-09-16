@@ -1,6 +1,27 @@
 # Issue Priority Rubric
 
-This rubric helps maintainers and contributors prioritize work toward the Dash vision: a **personalized compute mesh** (phone + laptop + edge as unified compute, with Tailscale as the fabric and agents as the intelligence layer).
+> **Current backlog snapshot (2026-09-15, dash-issue-reprio)** — ranked by impact × effort toward the personalized compute mesh (phone + Tailscale + edge as compute; Expo↔mbp Tailscale `:4747`; hermes mesh bus; nvidia PAIR + Tailscale as first-class libs; keel production HOLD). NVIDIA PAIR ≠ dash phone pair.
+>
+> **Closed this cycle (shipped):** [#3](https://github.com/kvnloo/dash/issues/3) (PR #42), [#4](https://github.com/kvnloo/dash/issues/4) (PR #34), [#6](https://github.com/kvnloo/dash/issues/6) (PR #36), [#44](https://github.com/kvnloo/dash/issues/44) (PR #45). Earlier: #17, #43.
+>
+> | Rank | Issue | Pri | Notes |
+> |------|-------|-----|-------|
+> | 1 | [#8](https://github.com/kvnloo/dash/issues/8) Roster remaining chatable / non-static | P0 | claimable; partial on main |
+> | 2 | [#20](https://github.com/kvnloo/dash/issues/20) Adopt live harness sessions | P0 | phone attach loop |
+> | 3 | [#26](https://github.com/kvnloo/dash/issues/26) Live row shows transcript | P0 | |
+> | 4 | [#28](https://github.com/kvnloo/dash/issues/28) Composer `/live` list + attach | P0 | |
+> | 5 | [#10](https://github.com/kvnloo/dash/issues/10) Verification pyramid | P0 | pinned |
+> | 6 | [#5](https://github.com/kvnloo/dash/issues/5) Tailscale auto-discover bridges | P1 | needs-discussion |
+> | 7 | [#9](https://github.com/kvnloo/dash/issues/9) Hermes gateway A2A residual | P1 | claimable; mostly on main |
+> | 8 | [#19](https://github.com/kvnloo/dash/issues/19) Orchestra AODL network | P1 | |
+> | 9 | [#29](https://github.com/kvnloo/dash/issues/29) Default self-dev loop view | P1 | Kevin owns `app/` |
+> | 10 | [#21](https://github.com/kvnloo/dash/issues/21) AODL `visual.json` cores | P1 | |
+> | 11 | [#15](https://github.com/kvnloo/dash/issues/15) Ethos thin-UI docs | P1 | pinned; demoted from P0 |
+> | 12 | [#11](https://github.com/kvnloo/dash/issues/11) Maestro nav-dot CI | P1 | claimable |
+> | 13 | [#12](https://github.com/kvnloo/dash/issues/12) Expand mutation testing | P2 | claimable |
+> | 14 | [#27](https://github.com/kvnloo/dash/issues/27) Thinking orbs / AODL animations | P2 | demoted from P0 (UI polish) |
+>
+> Stale `claimed` leases cleared this run. Re-rank quietly when unchanged next weekday.
 
 ## Priority Framework: Impact × Effort
 
@@ -40,9 +61,9 @@ These themes reflect current priorities toward the mesh vision:
 
 **Examples of issues:**
 
-- "WebSocket drops on iOS screen lock and loses events" (P0)
+- "Live roster rows still not chatable / Cursor host empty" (P0) — see #8
+- "Phone attach loses last buffered events on rare path" (P0 residual; core #3/#4 shipped)
 - "Hermes CLI times out after 60s with no status" (P1)
-- "Bridge crashes when OMP emits malformed JSON" (P0)
 
 ### Theme 2: Harness Coverage (P1)
 
@@ -72,9 +93,9 @@ These themes reflect current priorities toward the mesh vision:
 
 **Examples of issues:**
 
-- "Add skill: dash-debug (debugging the bridge)" (P1)
-- "Example: multi-turn conversation with session resume" (P2)
+- "Example: multi-turn conversation with session resume" (P2) — `dash-debug` shipped (#6 / PR #36)
 - "Template: PR description for new harness" (P2)
+- "Onboarding: search-first + fail-then-pass proofs" (P2)
 
 ### Theme 4: Mesh Primitives (P1–P2)
 
