@@ -100,7 +100,7 @@ export const DEBUG_SCENARIOS: Record<DebugScenarioId, DebugScenario> = {
     id: "orchestra-dash",
     label: "Orchestra — Dash product",
     seed: "paired",
-    route: { name: "OrchestraDetail", params: { orchestraId: "orch-dash" } },
+    route: { name: "OrchestraDetail", params: { orchestraId: "dash" } },
   },
 };
 
