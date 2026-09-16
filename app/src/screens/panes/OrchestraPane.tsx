@@ -1,30 +1,27 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { HarnessAvatar } from "../../components/HarnessAvatar";
+import { loadAodlOrchestras, type OrchestraProject } from "../../catalog/orchestra";
+import { loadVisualCatalog, resolveProvider, resolveTopology } from "../../catalog/visual";
+import { OrchestraCore, TopologyBadge } from "../../components/TopologyBadge";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
-import { DEMO_ORCHESTRAS, type OrchestraProject } from "../../mock/orchestra";
+import { enrichProducts } from "../../lib/global-search";
 import type { ScreenProps } from "../../navigation";
 import { store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
 import { timeAgo } from "../../util";
 
-const STATUS_COLOR = {
-  active: colors.ok,
-  idle: colors.textMuted,
-  paused: colors.warn,
-} as const;
-
 const Card = memo(function Card({
   item,
-  harnessNames,
   onPress,
 }: {
   item: OrchestraProject;
-  harnessNames: string[];
   onPress(id: string): void;
 }) {
+  const visual = loadVisualCatalog();
+  const topology = resolveTopology(visual, item.topologyId);
+  const provider = resolveProvider(visual, item.providerId);
   return (
     <PressScale onPress={() => onPress(item.id)} style={styles.card} accessibilityRole="button">
       <View style={styles.cardTop}>
@@ -32,28 +29,16 @@ const Card = memo(function Card({
           <Text style={styles.name} numberOfLines={1}>
             {item.name}
           </Text>
-          <Text style={styles.sub} numberOfLines={1}>
+          <Text style={styles.sub} numberOfLines={2}>
             {item.subtitle}
           </Text>
         </View>
-        <View
-          style={[styles.statusDot, { backgroundColor: STATUS_COLOR[item.status] }]}
-          accessibilityLabel={item.status}
-        />
+        <OrchestraCore hue={provider.hue} />
       </View>
-      <View style={styles.agents}>
-        {harnessNames.slice(0, 4).map((name) => (
-          <HarnessAvatar key={name} name={name} size={36} />
-        ))}
-        {harnessNames.length > 4 ? (
-          <View style={styles.more}>
-            <Text style={styles.moreText}>+{harnessNames.length - 4}</Text>
-          </View>
-        ) : null}
-      </View>
+      <TopologyBadge topologyId={item.topologyId} providerId={item.providerId} width={220} />
       <View style={styles.footer}>
         <Text style={styles.meta}>
-          {item.agents.length} agent{item.agents.length === 1 ? "" : "s"} · {item.chatIds.length} chat
+          {topology.label} · {item.agents.length} agent{item.agents.length === 1 ? "" : "s"} · {item.chatIds.length} chat
           {item.chatIds.length === 1 ? "" : "s"}
         </Text>
         <Text style={styles.time}>{timeAgo(item.updatedAt)}</Text>
@@ -63,15 +48,9 @@ const Card = memo(function Card({
 });
 
 export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
-  const harnesses = store.use((s) => s.connection.harnesses);
   const conversations = store.use((s) => s.conversations);
-
   const projects = useMemo(() => {
-    if (conversations.length === 0) return DEMO_ORCHESTRAS;
-    return DEMO_ORCHESTRAS.map((p) => ({
-      ...p,
-      chatIds: conversations.filter((c) => p.agents.includes(c.harness)).map((c) => c.id),
-    }));
+    return enrichProducts(conversations, loadAodlOrchestras());
   }, [conversations]);
 
   const open = useCallback(
@@ -84,10 +63,9 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<OrchestraProject>) => {
-      const harnessNames = item.agents.map((id) => harnesses.find((h) => h.id === id)?.name ?? id);
-      return <Card item={item} harnessNames={harnessNames} onPress={open} />;
+      return <Card item={item} onPress={open} />;
     },
-    [harnesses, open],
+    [open],
   );
 
   return (
@@ -118,19 +96,8 @@ const styles = StyleSheet.create({
   cardTitles: { flex: 1, minWidth: 0 },
   name: { color: colors.text, ...type.heading },
   sub: { color: colors.textMuted, ...type.small, marginTop: 2, textTransform: "none", letterSpacing: 0 },
-  statusDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
-  agents: { flexDirection: "row", gap: space.sm, marginTop: space.lg },
-  more: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surfaceRaised,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  moreText: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
   footer: { flexDirection: "row", justifyContent: "space-between", marginTop: space.md },
-  meta: { color: colors.textFaint, fontSize: 12 },
+  meta: { color: colors.textFaint, fontSize: 12, flex: 1, marginRight: space.sm },
   time: { color: colors.textFaint, fontSize: 12 },
   empty: { paddingTop: "35%", paddingHorizontal: space.xl, alignItems: "center" },
   emptyTitle: { color: colors.text, ...type.heading, marginBottom: space.sm },
