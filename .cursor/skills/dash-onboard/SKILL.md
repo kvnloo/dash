@@ -66,6 +66,7 @@ Read [CONTRIBUTING.md](../../../CONTRIBUTING.md) for the full guide. Quick summa
 ## Next Steps
 
 - If working on **bridge or protocol changes**, read `.cursor/skills/dash-bridge/SKILL.md`.
+- If pairing, roster, hello, or attach is broken, read `.cursor/skills/dash-debug/SKILL.md`.
 - If opening a PR, read `.cursor/skills/dash-contribute/SKILL.md` for PR hygiene.
 - If adding a new harness, study `bridge/src/harnesses.ts` for adapter patterns.
 - If writing docs or skills, follow the existing structure (short, clear, actionable).

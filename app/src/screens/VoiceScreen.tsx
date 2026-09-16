@@ -71,11 +71,13 @@ export function VoiceScreen({ navigation }: ScreenProps<"Voice">): React.JSX.Ele
         store.get().conversations.find((c) => c.id === conversationId) ?? createConversation(harness);
       // The text is empty until the bridge tells us what it heard.
       const { turnId } = beginTurn(active.id, "");
+      const current = store.get().conversations.find((c) => c.id === active.id) ?? active;
       const opened = sendVoiceBegin({
         turnId,
-        harness: active.harness,
+        harness: current.harness,
         mime,
-        sessionId: store.get().conversations.find((c) => c.id === active.id)?.sessionId,
+        sessionId: current.sessionId,
+        cwd: current.cwd,
       });
       if (!opened) {
         setError("Not connected to your computer.");

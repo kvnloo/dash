@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { effortIdForTurn, lastAssistantState, runtimeStateFromAgent, runtimeStateFromOrchestra, runtimeStateFromTurn } from "../catalog/runtime-state";
 import type { SearchResult } from "../lib/global-search";
 import { colors, space, type } from "../theme";
 import { PressScale } from "./PressScale";
@@ -61,12 +62,50 @@ function avatarName(item: SearchResult): string {
   }
 }
 
+
+function avatarHarnessId(item: SearchResult): string | undefined {
+  switch (item.kind) {
+    case "bot":
+      return item.profile.harness;
+    case "conversation":
+      return item.conversation.harness;
+    case "harness":
+      return item.id;
+    default:
+      return undefined;
+  }
+}
+
+function avatarMotion(item: SearchResult): { effortId?: string; stateId?: string } {
+  if (item.kind === "conversation") {
+    const turnState = lastAssistantState(item.conversation.messages);
+    return {
+      effortId: effortIdForTurn({ turnState }),
+      stateId: runtimeStateFromTurn({ turnState }),
+    };
+  }
+  if (item.kind === "product") {
+    return {
+      stateId: runtimeStateFromOrchestra({ status: item.project.status, streaming: false }),
+    };
+  }
+  if (item.kind === "bot") {
+    return { stateId: runtimeStateFromAgent(item.profile.online ? "available" : "offline") };
+  }
+  if (item.kind === "harness") {
+    return { stateId: item.available ? "paused" : "stale" };
+  }
+  return {};
+}
+
 export const SearchResultRow = memo(function SearchResultRow({
   item,
   onPress,
+  onLongPress,
 }: {
   item: SearchResult;
   onPress(item: SearchResult): void;
+  onLongPress?(item: SearchResult): void;
 }) {
   const title = resultTitle(item);
   const meta =
@@ -84,15 +123,14 @@ export const SearchResultRow = memo(function SearchResultRow({
                 : "Unavailable"
               : null;
 
-  const streaming =
-    item.kind === "conversation" &&
-    item.conversation.messages.some((m) => m.role === "assistant" && m.state === "streaming");
-
   const showFileIcon = item.kind === "file" || item.kind === "tool";
+  const motion = avatarMotion(item);
 
   return (
     <PressScale
       onPress={() => onPress(item)}
+      onLongPress={onLongPress ? () => onLongPress(item) : undefined}
+      delayLongPress={350}
       style={styles.row}
       accessibilityRole="button"
     >
@@ -105,7 +143,12 @@ export const SearchResultRow = memo(function SearchResultRow({
           />
         </GlassSurface>
       ) : (
-        <HarnessAvatar name={avatarName(item)} />
+        <HarnessAvatar
+          name={avatarName(item)}
+          harnessId={avatarHarnessId(item)}
+          effortId={motion.effortId}
+          stateId={motion.stateId}
+        />
       )}
       <View style={styles.main}>
         <View style={styles.top}>
@@ -119,7 +162,6 @@ export const SearchResultRow = memo(function SearchResultRow({
         </Text>
         <Text style={styles.kind}>{KIND_LABEL[item.kind]}</Text>
       </View>
-      {streaming ? <View style={styles.dot} /> : null}
     </PressScale>
   );
 });
@@ -148,5 +190,4 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginTop: 4,
   },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.text, opacity: 0.7 },
 });
