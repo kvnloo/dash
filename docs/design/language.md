@@ -69,6 +69,10 @@ Typography: system sans. Display 22/700. Heading 17/600. Body 16/24. Small 13/18
 
 Sample content: OMP / Grok / Codex / Hermes, “fix the auth bug in login.ts”, host `mbp`, address `100.64.0.1:4747`.
 
+## Pattern atlas
+
+Competitor surfaces (T3 Code, ChatGPT, Grok, Claude, Conductor, Cursor 3, harness TUIs) plus AODL encodings and frontier-kb links live in [`ai-ui-patterns/`](ai-ui-patterns/README.md). Attention case study and inspectable tree: [`ai-ui-patterns/synergy.md`](ai-ui-patterns/synergy.md). Phone UI still follows this language file first. Unknown AODL ids fail closed.
+
 ## Non-goals
 
 No cartoon robots. No generic chatbot chrome. No bottom tab bar (tabs are **top**). No cyan/violet “zerOS” palette — that was invented; host `0` Hermes/zerOS share has GrowTwin previews, not Dash tokens.
