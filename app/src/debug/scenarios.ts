@@ -30,10 +30,10 @@ export interface DebugScenario {
 export const DEBUG_SCENARIOS: Record<DebugScenarioId, DebugScenario> = {
   main: {
     id: "main",
-    label: "Main — Chats tab",
+    label: "Main — Orchestra tab",
     seed: "paired",
     route: { name: "Main" },
-    ui: { mainSearchQuery: "", mainTabIndex: 1 },
+    ui: { mainSearchQuery: "", mainTabIndex: 2 },
   },
   "main-bots": {
     id: "main-bots",
@@ -100,7 +100,7 @@ export const DEBUG_SCENARIOS: Record<DebugScenarioId, DebugScenario> = {
     id: "orchestra-dash",
     label: "Orchestra — Dash product",
     seed: "paired",
-    route: { name: "OrchestraDetail", params: { orchestraId: "orch-dash" } },
+    route: { name: "OrchestraDetail", params: { orchestraId: "dash" } },
   },
 };
 

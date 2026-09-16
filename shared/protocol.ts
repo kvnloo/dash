@@ -19,6 +19,8 @@ export interface AgentInfo {
   status: "running" | "available" | "offline";
   detail?: string;
   cwd?: string;
+  /** Harness-native session id when this row is a live conversation we can resume. */
+  sessionId?: string;
 }
 
 /** A machine on the tailnet (this laptop, groot/0, …). */
@@ -68,7 +70,17 @@ export type ClientMessage =
    * `seq` is the last event sequence number the client has for that turn;
    * the bridge replays everything after it.
    */
-  | { type: "attach"; turns: { id: string; seq: number }[] };
+  | { type: "attach"; turns: { id: string; seq: number }[] }
+  /** Replay a live harness transcript into the open Chat. Unknown harness ids fail closed. */
+  | { type: "history"; harness: string; sessionId: string; cwd?: string };
+
+/** One user or assistant turn from a harness session file. */
+export interface HistoryMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  at: number;
+}
 
 /** Events that belong to a turn. `seq` is per-turn and strictly increasing from 1. */
 export type TurnEvent =
@@ -92,6 +104,8 @@ export type ServerMessage =
     }
   /** Reply to `attach` for a turn the bridge no longer knows about. */
   | { type: "lost"; id: string }
+  /** Live session transcript for `history`. Empty `messages` if the harness is unknown. */
+  | { type: "history"; harness: string; sessionId: string; messages: HistoryMessage[] }
   | TurnEvent;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -112,6 +126,16 @@ function optStr(value: unknown): value is string | undefined {
 
 function isAttachEntry(value: unknown): value is { id: string; seq: number } {
   return isRecord(value) && str(value.id) && num(value.seq);
+}
+
+function isHistoryMessage(value: unknown): value is HistoryMessage {
+  return (
+    isRecord(value) &&
+    str(value.id) &&
+    (value.role === "user" || value.role === "assistant") &&
+    str(value.text) &&
+    num(value.at)
+  );
 }
 
 export function parseClientMessage(raw: unknown): ClientMessage | null {
@@ -157,6 +181,11 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return Array.isArray(raw.turns) && raw.turns.every(isAttachEntry)
         ? { type: "attach", turns: raw.turns }
         : null;
+    case "history":
+      if (str(raw.harness) && str(raw.sessionId) && raw.sessionId.length > 0 && optStr(raw.cwd)) {
+        return { type: "history", harness: raw.harness, sessionId: raw.sessionId, cwd: raw.cwd };
+      }
+      return null;
     default:
       return null;
   }
@@ -183,6 +212,7 @@ function isAgentInfo(value: unknown): value is AgentInfo {
   }
   if (value.detail !== undefined && !str(value.detail)) return false;
   if (value.cwd !== undefined && !str(value.cwd)) return false;
+  if (value.sessionId !== undefined && !str(value.sessionId)) return false;
   return true;
 }
 
@@ -251,6 +281,10 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     case "error":
       return str(raw.id) && num(raw.seq) && str(raw.message)
         ? { type: "error", id: raw.id, seq: raw.seq, message: raw.message }
+        : null;
+    case "history":
+      return str(raw.harness) && str(raw.sessionId) && Array.isArray(raw.messages) && raw.messages.every(isHistoryMessage)
+        ? { type: "history", harness: raw.harness, sessionId: raw.sessionId, messages: raw.messages }
         : null;
     default:
       return null;

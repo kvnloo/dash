@@ -1,9 +1,12 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { runtimeStateFromAgent } from "../../catalog/runtime-state";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
+import { inAppFeedbackEnabled } from "../../lib/feedback";
+import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { canChatWithAgent, emptyHostProfile, profileFromAgent } from "../../lib/roster";
 import { DEMO_BOT_PROFILES, type BotProfile } from "../../mock/bots";
 import type { ScreenProps } from "../../navigation";
@@ -18,21 +21,30 @@ const ProfileRow = memo(function ProfileRow({
   profile,
   chat,
   onPress,
+  onLongPress,
 }: {
   profile: BotProfile;
   chat: boolean;
   onPress(profile: BotProfile): void;
+  onLongPress?(profile: BotProfile): void;
 }) {
   const canOpen = profile.online && chat;
   return (
     <PressScale
       onPress={() => canOpen && onPress(profile)}
-      disabled={!canOpen}
+      onLongPress={onLongPress ? () => onLongPress(profile) : undefined}
+      delayLongPress={350}
+      disabled={!canOpen && !onLongPress}
       style={[styles.profileCard, !profile.online && styles.offline]}
       accessibilityRole="button"
       accessibilityState={{ disabled: !canOpen }}
     >
-      <HarnessAvatar name={profile.name} size={44} />
+      <HarnessAvatar
+        name={profile.name}
+        harnessId={profile.harness}
+        size={44}
+        stateId={runtimeStateFromAgent(profile.online ? "available" : "offline")}
+      />
       <View style={styles.main}>
         <View style={styles.top}>
           <Text style={styles.title} numberOfLines={1}>
@@ -141,14 +153,37 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
     [conversations, navigation, settings],
   );
 
+  const onFeedback = useCallback(
+    (profile: BotProfile) => {
+      if (!inAppFeedbackEnabled(store.get().settings)) return;
+      haptic.select();
+      submitInAppFeedback({
+        kind: "select",
+        text: `Selected bot ${profile.name}`,
+        selection: { kind: "bot", id: profile.id, label: profile.name },
+      });
+      navigation.navigate("Chat");
+    },
+    [navigation],
+  );
+
+  const feedbackOn = inAppFeedbackEnabled(settings);
+
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<BotsListItem>) => {
       if (item.kind === "section") {
         return <SectionHeader title={item.title} subtitle={item.subtitle} online={item.online} />;
       }
-      return <ProfileRow profile={item.profile} chat={item.chat} onPress={openProfile} />;
+      return (
+        <ProfileRow
+          profile={item.profile}
+          chat={item.chat}
+          onPress={openProfile}
+          onLongPress={feedbackOn ? onFeedback : undefined}
+        />
+      );
     },
-    [openProfile],
+    [feedbackOn, onFeedback, openProfile],
   );
 
   const getItemType = useCallback((item: BotsListItem) => item.kind, []);

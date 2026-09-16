@@ -8,6 +8,7 @@ const DEBUG_SETTINGS: Settings = {
   token: "debug-token-not-real",
   harness: "omp",
   cwd: "~/workspace/dash",
+  inAppFeedback: true,
 };
 
 const DEBUG_HOSTS = [
