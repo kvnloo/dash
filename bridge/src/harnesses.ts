@@ -1,6 +1,7 @@
 // One adapter per agent CLI. Each adapter knows two things: how to build the
 // argv for a turn, and how to turn the CLI's stdout into protocol events.
 
+import type { AcpStatus } from "../../shared/protocol";
 import { hermesCliArgv } from "./hermes-session";
 import { approvalArgs, type ApprovalEnv } from "./argv-policy";
 import { parseHarnessJsonLine } from "./turn-safety";
@@ -15,7 +16,7 @@ export interface Sink {
   session(sessionId: string): void;
   delta(text: string): void;
   /** Short line describing what the agent is doing right now. Empty string clears it. */
-  status(text: string): void;
+  status(text: string, acp?: AcpStatus): void;
   error(message: string): void;
 }
 

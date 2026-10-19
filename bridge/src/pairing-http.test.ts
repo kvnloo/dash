@@ -33,6 +33,20 @@ function fixture(options: { limit?: number; audioCode?: string } = {}) {
 }
 
 describe("pairing HTTP trust boundary", () => {
+  test("audio upload ceiling is exactly one MiB", () => {
+    expect(MAX_PAIR_AUDIO_BYTES).toBe(1024 * 1024);
+  });
+
+  test("rejects malformed declared body lengths before reading valid JSON", async () => {
+    const f = fixture();
+    try {
+      const response = await f.handler(new Request("http://localhost/pair/claim", {
+        method: "POST", headers: { ...f.auth, "content-length": "not-a-number" }, body: '{"code":"AAAAAA"}',
+      }), "127.0.0.1");
+      expect(response?.status).toBe(413);
+    } finally { f.stop(); }
+  });
+
   test("every bootstrap/pair route rejects unauthenticated callers before effects", async () => {
     const f = fixture();
     try {
