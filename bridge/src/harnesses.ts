@@ -2,6 +2,7 @@
 // argv for a turn, and how to turn the CLI's stdout into protocol events.
 
 import { hermesCliArgv } from "./hermes-session";
+import { approvalArgs, type ApprovalEnv } from "./argv-policy";
 import { parseHarnessJsonLine } from "./turn-safety";
 
 export interface TurnInput {
@@ -29,7 +30,7 @@ export interface Harness {
   id: string;
   name: string;
   bin: string;
-  argv(input: TurnInput): string[];
+  argv(input: TurnInput, env?: ApprovalEnv): string[];
   parser(sink: Sink): TurnParser;
 }
 
@@ -102,13 +103,12 @@ const omp: Harness = {
   id: "omp",
   name: "OMP",
   bin: "omp",
-  argv({ text, cwd, sessionId }) {
+  argv({ text, cwd, sessionId }, env) {
     return [
       "-p",
       "--mode",
       "json",
-      "--auto-approve",
-      "--allow-home",
+      ...approvalArgs("omp", env),
       "--cwd",
       cwd,
       ...(sessionId ? ["--resume", sessionId] : []),
@@ -123,10 +123,10 @@ const codex: Harness = {
   id: "codex",
   name: "Codex",
   bin: "codex",
-  argv({ text, cwd, sessionId }) {
+  argv({ text, cwd, sessionId }, env) {
     return sessionId
-      ? ["exec", "resume", "--json", "--skip-git-repo-check", sessionId, text]
-      : ["exec", "--json", "--skip-git-repo-check", "-C", cwd, "-s", "workspace-write", text];
+      ? [...approvalArgs("codex", env), "exec", "resume", "--json", "--skip-git-repo-check", sessionId, text]
+      : [...approvalArgs("codex", env), "exec", "--json", "--skip-git-repo-check", "-C", cwd, text];
   },
   parser(sink) {
     let emitted = false;
@@ -227,14 +227,14 @@ const grok: Harness = {
   id: "grok",
   name: "Grok",
   bin: "grok",
-  argv({ text, cwd, sessionId }) {
+  argv({ text, cwd, sessionId }, env) {
     return [
       "-p",
       text,
       "--output-format",
       "streaming-messages-json",
       "--include-partial-messages",
-      "--always-approve",
+      ...approvalArgs("grok", env),
       "--cwd",
       cwd,
       ...(sessionId ? ["--resume", sessionId] : []),
@@ -247,7 +247,7 @@ const claude: Harness = {
   id: "claude",
   name: "Claude Code",
   bin: "claude",
-  argv({ text, sessionId }) {
+  argv({ text, sessionId }, env) {
     return [
       "-p",
       text,
@@ -255,8 +255,7 @@ const claude: Harness = {
       "stream-json",
       "--verbose",
       "--include-partial-messages",
-      "--permission-mode",
-      "bypassPermissions",
+      ...approvalArgs("claude", env),
       ...(sessionId ? ["--resume", sessionId] : []),
     ];
   },
@@ -291,17 +290,16 @@ const hermes: Harness = {
   },
 };
 
-// pi: Earendil CLI. `--mode json` is the documented event stream; `--approve`
-// trusts project-local files in non-interactive mode. cwd comes from spawn.
+// pi: Earendil CLI. cwd comes from spawn.
 const pi: Harness = {
   id: "pi",
   name: "Pi",
   bin: "pi",
-  argv({ text, sessionId }) {
+  argv({ text, sessionId }, env) {
     return [
       "--mode",
       "json",
-      "--approve",
+      ...approvalArgs("pi", env),
       ...(sessionId ? ["--session", sessionId] : []),
       "--",
       text,
@@ -311,7 +309,6 @@ const pi: Harness = {
 };
 
 // fx: `fx ask --json` emits one object with session_id, output, final_output.
-// --full-access matches the other laptop adapters (approvals already bypassed).
 function fxAskParser(sink: Sink): TurnParser {
   const lines: string[] = [];
   return {
@@ -339,11 +336,11 @@ const fx: Harness = {
   id: "fx",
   name: "fx",
   bin: "fx",
-  argv({ text, sessionId }) {
+  argv({ text, sessionId }, env) {
     return [
       "ask",
       "--json",
-      "--full-access",
+      ...approvalArgs("fx", env),
       ...(sessionId ? ["--resume-id", sessionId] : []),
       "--",
       text,

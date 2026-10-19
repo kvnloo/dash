@@ -91,7 +91,7 @@ describe("roster", () => {
     expect(hosts.map((h) => h.id)).toEqual(["mbp", "0", "cursor"]);
     expect(hosts.find((h) => h.id === "0")?.hostname).toBe("groot");
     expect(hosts.find((h) => h.id === "0")?.online).toBe(true);
-    expect(hosts.find((h) => h.id === "0")?.agents.map((a) => a.name)).toEqual(["Hermes"]);
+    expect(hosts.find((h) => h.id === "0")?.agents).toEqual([]);
     expect(hosts.find((h) => h.id === "cursor")?.agents).toEqual([]);
     const mbp = hosts[0]!;
     expect(mbp.self).toBe(true);
@@ -137,6 +137,7 @@ describe("roster", () => {
       id: "hermes:default",
       name: "Hermes",
       kind: "hermes",
+      profileId: "default",
       status: "running",
       detail: "Gateway",
     });
@@ -144,19 +145,20 @@ describe("roster", () => {
       id: "hermes:connect-all",
       name: "connect-all",
       kind: "hermes",
+      profileId: "connect-all",
       status: "offline",
       detail: "Gateway stopped",
     });
   });
 
   test("Hermes A2A health running vs offline overlays the default profile", () => {
-    const base = {
+    const base: Parameters<typeof assembleRoster>[0] = {
       nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
-      ompTabs: [] as const,
-      harnesses: [] as { id: string; name: string; available: boolean }[],
+      ompTabs: [],
+      harnesses: [],
       selfFallback: { hostname: "mbp", address: "100.64.0.1" },
       signals: {
-        hermesProfiles: [{ id: "default", gateway: "running" as const }],
+        hermesProfiles: [{ id: "default", gateway: "running" }],
       },
     };
     const running = assembleRoster({
@@ -215,9 +217,7 @@ describe("roster", () => {
       selfFallback: { hostname: "mbp" },
     });
     expect(hosts.find((h) => h.id === "cursor")?.agents).toEqual([]);
-    expect(hosts.find((h) => h.id === "0")?.agents).toEqual([
-      { id: "hermes", name: "Hermes", kind: "hermes", status: "running", detail: "Mesh node" },
-    ]);
+    expect(hosts.find((h) => h.id === "0")?.agents).toEqual([]);
   });
 
   test("parses hermes gateway list running vs stopped", () => {
@@ -231,6 +231,33 @@ describe("roster", () => {
       { id: "connect-all", gateway: "stopped" },
       { id: "cairn-verify", gateway: "stopped" },
     ]);
+  });
+
+  test("observed remote agents retain host, profile, and session identity", () => {
+    const nodes = parseTailscaleStatus(status);
+    const hosts = assembleRoster({ nodes, ompTabs: [], harnesses: [], selfFallback: { hostname: "mbp" },
+      signals: { remoteAgents: { "0": [{ id: "hermes:research", name: "research", kind: "hermes",
+        profileId: "research", sessionId: "remote-session", status: "running" }] } },
+    });
+    expect(hosts.find((host) => host.id === "0")?.agents).toEqual([{
+      id: "hermes:research", name: "research", kind: "hermes", hostId: "0",
+      profileId: "research", sessionId: "remote-session", status: "running",
+    }]);
+    const offline = assembleRoster({ nodes: nodes.map((node) => ({ ...node, online: node.self })),
+      ompTabs: [], harnesses: [], selfFallback: { hostname: "mbp" },
+      signals: { remoteAgents: { "0": [{ id: "hermes:research", name: "research", kind: "hermes",
+        profileId: "research", sessionId: "remote-session", status: "running" }] } },
+    });
+    expect(offline.find((host) => host.id === "0")?.agents[0]?.status).toBe("offline");
+  });
+
+  test("Hermes profile identity and native session stay distinct", () => {
+    const hosts = assembleRoster({ nodes: [], ompTabs: [], harnesses: [], selfFallback: { hostname: "mbp" },
+      signals: { hermesProfiles: [{ id: "research", gateway: "running", sessionId: "native-session" }] },
+    });
+    expect(hosts[0]?.agents[0]?.id).toBe("hermes:research");
+    expect(hosts[0]?.agents[0]?.profileId).toBe("research");
+    expect(hosts[0]?.agents[0]?.sessionId).toBe("native-session");
   });
 
   test("builds A2A URL from env or self address, never a baked 100.x", () => {
@@ -262,10 +289,12 @@ describe("timed probes", () => {
     expect(src).not.toContain('spawnText(["hermes", "gateway", "list"])');
   });
 
-  test("bridge listens on all interfaces so LAN pair works", () => {
+  test("bridge resolves its tailnet binding through the fail-closed host policy", () => {
     const src = readFileSync(join(import.meta.dir, "../index.ts"), "utf8");
-    expect(src).toContain('const HOST = process.env.DASH_HOST ?? "0.0.0.0";');
-    expect(src).not.toContain("process.env.DASH_HOST ?? tailscaleIp");
+    expect(src).toContain("const HOST = resolveBridgeHost(");
+    expect(src).toContain("tailnetIp: tailscaleIp");
+    expect(src).toContain("process.env.DASH_ALLOW_LOOPBACK");
+    expect(src).not.toContain('process.env.DASH_HOST ?? "0.0.0.0"');
     const start = JSON.parse(readFileSync(join(import.meta.dir, "../package.json"), "utf8")).scripts.start as string;
     expect(start).not.toContain("DASH_HOST=");
   });

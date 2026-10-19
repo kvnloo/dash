@@ -23,12 +23,14 @@ export type OmpTab = {
 export type HermesProfileInfo = {
   id: string;
   gateway: "running" | "stopped";
+  sessionId?: string;
 };
 
 export type RosterSignals = {
   hermesProfiles?: HermesProfileInfo[];
   hermesA2A?: { ok: boolean; url: string };
   grokBot?: boolean;
+  remoteAgents?: Record<string, AgentInfo[]>;
 };
 
 const PHONE_OS = new Set(["android", "ios", "ipados", "tvos"]);
@@ -343,7 +345,11 @@ function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster
   const v4 = firstV4(node.ips);
   const agents = node.self
     ? selfAgents(input.ompTabs, input.harnesses, input.signals)
-    : peerAgents(name, node.hostName);
+    : (input.signals?.remoteAgents?.[name] ?? []).map((agent) => ({
+      ...agent,
+      hostId: name,
+      status: node.online ? agent.status : "offline",
+    }));
   return {
     id: name,
     name,
@@ -353,17 +359,6 @@ function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster
     address: v4,
     agents,
   };
-}
-
-function isGroot(id: string, hostname: string): boolean {
-  return id === "0" || hostname.toLowerCase() === "groot";
-}
-
-function peerAgents(id: string, hostname: string): AgentInfo[] {
-  if (isGroot(id, hostname)) {
-    return [{ id: "hermes", name: "Hermes", kind: "hermes", status: "running", detail: "Mesh node" }];
-  }
-  return [];
 }
 
 function selfHost(
@@ -392,13 +387,16 @@ function hermesProfileAgent(profile: HermesProfileInfo, a2a?: { ok: boolean; url
     status = overlay.ok ? "running" : "offline";
     detail = overlay.url;
   }
-  return {
+  const agent: AgentInfo = {
     id: `hermes:${profile.id}`,
     name: profile.id === "default" ? "Hermes" : profile.id,
     kind: "hermes",
     status,
     detail,
+    profileId: profile.id,
   };
+  if (profile.sessionId) agent.sessionId = profile.sessionId;
+  return agent;
 }
 
 function selfAgents(tabs: OmpTab[], harnesses: HarnessInfo[], signals?: RosterSignals): AgentInfo[] {
