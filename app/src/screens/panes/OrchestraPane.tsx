@@ -2,7 +2,6 @@ import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../../catalog/runtime-state";
-import { hydrateOrchestras, loadAodlOrchestras, type OrchestraProject } from "../../catalog/orchestra";
 import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../../catalog/visual";
 import { EffortOrbs } from "../../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../../components/TopologyBadge";
@@ -10,7 +9,7 @@ import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
-import { enrichProducts } from "../../lib/global-search";
+import { projectsFromHosts, type LiveProject } from "../../lib/project-data";
 import { threadTargetForOrchestra } from "../../lib/orchestra-thread";
 import type { ScreenProps } from "../../navigation";
 import { setActive, store } from "../../store/app";
@@ -23,10 +22,10 @@ const Card = memo(function Card({
   onPress,
   onLongPress,
 }: {
-  item: OrchestraProject;
+  item: LiveProject;
   streaming: boolean;
-  onPress(item: OrchestraProject): void;
-  onLongPress?(item: OrchestraProject): void;
+  onPress(item: LiveProject): void;
+  onLongPress?(item: LiveProject): void;
 }) {
   const visual = loadVisualCatalog();
   const topology = resolveTopology(visual, item.topologyId);
@@ -57,7 +56,7 @@ const Card = memo(function Card({
       <TopologyBadge topologyId={item.topologyId} providerId={item.providerId} width={220} />
       <View style={styles.footer}>
         <Text style={styles.meta}>
-          {topology.label} · {item.agents.length} agent{item.agents.length === 1 ? "" : "s"} · {item.chatIds.length} chat
+          {topology.label} · {item.agentRows.length} agent{item.agentRows.length === 1 ? "" : "s"} · {item.chatIds.length} chat
           {item.chatIds.length === 1 ? "" : "s"}
         </Text>
         <Text style={styles.time}>{timeAgo(item.updatedAt)}</Text>
@@ -70,9 +69,10 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
   const conversations = store.use((s) => s.conversations);
   const settings = store.use((s) => s.settings);
   const hosts = store.use((s) => s.connection.hosts);
+  const cwd = store.use((s) => s.connection.cwd);
   const projects = useMemo(() => {
-    return enrichProducts(conversations, hydrateOrchestras(loadAodlOrchestras(), hosts, Date.now()));
-  }, [conversations, hosts]);
+    return projectsFromHosts({ conversations, hosts, cwd, now: Date.now() });
+  }, [conversations, hosts, cwd]);
   const streamingIds = useMemo(() => {
     const ids = new Set<string>();
     for (const conversation of conversations) {
@@ -82,9 +82,10 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
   }, [conversations]);
 
   const open = useCallback(
-    (item: OrchestraProject) => {
+    (item: LiveProject) => {
       haptic.select();
-      const target = threadTargetForOrchestra(item, store.get().conversations);
+      const linked = store.get().conversations.filter((conversation) => item.chatIds.includes(conversation.id));
+      const target = threadTargetForOrchestra(item, linked);
       if (target.kind === "chat") {
         setActive(target.conversationId);
         navigation.navigate("Chat");
@@ -96,7 +97,7 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
   );
 
   const onFeedback = useCallback(
-    (item: OrchestraProject) => {
+    (item: LiveProject) => {
       if (!inAppFeedbackEnabled(store.get().settings)) return;
       haptic.select();
       submitInAppFeedback({
@@ -112,7 +113,7 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
   const feedbackOn = inAppFeedbackEnabled(settings);
 
   const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<OrchestraProject>) => {
+    ({ item }: ListRenderItemInfo<LiveProject>) => {
       const streaming = item.chatIds.some((id) => streamingIds.has(id));
       return <Card item={item} streaming={streaming} onPress={open} onLongPress={feedbackOn ? onFeedback : undefined} />;
     },
@@ -128,7 +129,7 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
       ListEmptyComponent={
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No orchestras</Text>
-          <Text style={styles.emptySub}>Projects will appear when agents and chats are linked.</Text>
+          <Text style={styles.emptySub}>Projects appear when the bridge reports an agent working directory or a chat has one.</Text>
         </View>
       }
     />

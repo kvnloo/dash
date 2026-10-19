@@ -1,35 +1,34 @@
 import { FlashList } from "@shopify/flash-list";
 import { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../catalog/runtime-state";
-import { hydrateOrchestras, loadAodlOrchestras } from "../catalog/orchestra";
 import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../catalog/visual";
 import { AppNav } from "../components/AppNav";
 import { EffortOrbs } from "../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../components/TopologyBadge";
 import { haptic } from "../haptics";
-import { enrichProducts } from "../lib/global-search";
-import { threadTargetForAgent } from "../lib/orchestra-thread";
+import { projectsFromHosts } from "../lib/project-data";
+import type { BotProfile } from "../mock/bots";
 import type { ScreenProps } from "../navigation";
-import { createConversation, setActive, store } from "../store/app";
+import { openBotConversation, setActive, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { timeAgo } from "../util";
 
 export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"OrchestraDetail">) {
   const insets = useSafeAreaInsets();
   const { orchestraId } = route.params;
-  const harnesses = store.use((s) => s.connection.harnesses);
   const conversations = store.use((s) => s.conversations);
   const hosts = store.use((s) => s.connection.hosts);
+  const cwd = store.use((s) => s.connection.cwd);
 
   const project = useMemo(() => {
     return (
-      enrichProducts(conversations, hydrateOrchestras(loadAodlOrchestras(), hosts, Date.now())).find(
+      projectsFromHosts({ conversations, hosts, cwd, now: Date.now() }).find(
         (p) => p.id === orchestraId,
       ) ?? null
     );
-  }, [conversations, hosts, orchestraId]);
+  }, [conversations, hosts, cwd, orchestraId]);
 
   const linkedChats = useMemo(
     () => conversations.filter((c) => project?.chatIds.includes(c.id)),
@@ -60,11 +59,13 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
     navigation.navigate("Chat");
   };
 
-  const openAgent = (harnessId: string) => {
+  const openAgent = (profile: BotProfile) => {
     haptic.select();
-    const target = threadTargetForAgent(harnessId, conversations);
-    if (target.kind === "create") createConversation(harnessId);
-    else setActive(target.conversationId);
+    const result = openBotConversation(profile);
+    if ("error" in result) {
+      Alert.alert("Agent unavailable", result.error);
+      return;
+    }
     navigation.navigate("Chat");
   };
 
@@ -94,25 +95,27 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
             accessibilityLabel={project.status}
           />
           <Text style={styles.meta}>
-            {topology.label} · {project.agents.length} agents · {linkedChats.length} chats
+            {topology.label} · {project.agentRows.length} agents · {linkedChats.length} chats
           </Text>
         </View>
       </View>
 
       <Text style={styles.section}>Agents</Text>
       <FlashList
-        data={project.agents}
-        keyExtractor={(id) => id}
+        data={project.agentRows}
+        keyExtractor={(profile) => profile.id}
         scrollEnabled={false}
-        renderItem={({ item: harnessId }) => {
-          const name = harnesses.find((h) => h.id === harnessId)?.name ?? harnessId;
+        ListEmptyComponent={<Text style={styles.emptyChats}>No agents reported for this project</Text>}
+        renderItem={({ item: profile }) => {
           return (
             <Pressable
-              onPress={() => openAgent(harnessId)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${profile.name} in ${project.name}`}
+              onPress={() => openAgent(profile)}
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             >
-              <Text style={styles.rowTitle}>{name}</Text>
-              <Text style={styles.rowId}>{harnessId}</Text>
+              <Text style={styles.rowTitle}>{profile.name}</Text>
+              <Text style={styles.rowId}>{profile.online ? profile.harness : "Offline"}</Text>
             </Pressable>
           );
         }}

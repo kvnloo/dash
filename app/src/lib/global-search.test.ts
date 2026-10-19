@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { HostInfo } from "../../../shared/protocol";
 import type { Conversation } from "../model";
 import {
@@ -110,6 +108,10 @@ describe("runGlobalSearch /live", () => {
     expect(results.some((r) => r.kind === "conversation" && r.conversation.sessionId === "peer-sess")).toBe(false);
   });
 
+  test("an offline host does not advertise a live session", () => {
+    expect(runGlobalSearch({ query: "/live", conversations: [], harnesses, hosts: [{ ...liveOmp, online: false }] })).toEqual([]);
+  });
+
   test("selecting a live row reuses the store Conversation that already owns the session", () => {
     const existing: Conversation = {
       id: "phone-1",
@@ -135,14 +137,33 @@ describe("runGlobalSearch /live", () => {
   });
 });
 
-describe("MainScreen /live attach", () => {
-  test("selecting a live conversation navigates to Chat with that session active", () => {
-    const main = readFileSync(join(import.meta.dir, "../screens/MainScreen.tsx"), "utf8");
-    expect(main).toContain("hosts");
-    expect(main).toContain("runGlobalSearch({ query, conversations, harnesses, botProfiles, hosts })");
-    expect(main).toContain('case "conversation":');
-    expect(main).toContain("openConversation(item.conversation.id)");
-    expect(main).toContain("setActive(id)");
-    expect(main).toContain('navigation.navigate("Chat")');
+describe("search uses bridge evidence", () => {
+  test("an empty connection has no invented bots, projects, or resources", () => {
+    for (const query of ["", "@bots", "@product", "/skill", "/plugin", "/tool", "/file"]) {
+      expect(runGlobalSearch({ query, conversations: [], harnesses: [] })).toEqual([]);
+    }
+  });
+
+  test("product search discovers a real directory outside the pinned catalog", () => {
+    const host: HostInfo = {
+      ...liveOmp,
+      agents: [{ id: "codex:real", name: "Codex", kind: "codex", status: "running", cwd: "/work/weather-station", sessionId: "weather" }],
+    };
+    const results = runGlobalSearch({ query: "@product weather", conversations: [], harnesses, hosts: [host] });
+    expect(results).toHaveLength(1);
+    const row = results[0];
+    if (row?.kind !== "product") throw new Error("expected product");
+    expect(row.project.name).toBe("weather-station");
+    expect(row.project.agents).toEqual(["codex"]);
+    expect(row.project.subtitle).toContain("/work/weather-station");
+  });
+
+  test("bot search derives only actual roster profiles when no profiles are supplied", () => {
+    const results = runGlobalSearch({ query: "@bots", conversations: [], harnesses, hosts: [groot] });
+    expect(results).toHaveLength(1);
+    const row = results[0];
+    if (row?.kind !== "bot") throw new Error("expected bot");
+    expect(row.profile.id).toBe("0:hermes");
+    expect(row.profile.name).toBe("Hermes");
   });
 });

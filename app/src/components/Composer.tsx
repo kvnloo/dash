@@ -40,15 +40,6 @@ export const Composer = memo(function Composer({
   return (
     <View style={styles.wrap}>
       <GlassSurface borderRadius={radius.pill} style={styles.shell} contentStyle={styles.field}>
-        <PressScale
-          scaleTo={PRESS_SCALE.control}
-          style={styles.sideIcon}
-          accessibilityRole="button"
-          accessibilityLabel="Attach"
-          hitSlop={8}
-        >
-          <Ionicons name="add" size={22} color={colors.textMuted} />
-        </PressScale>
         <TextInput
           style={styles.input}
           value={text}
