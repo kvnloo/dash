@@ -1,0 +1,212 @@
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { Sink, TurnInput } from "../harnesses";
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+type Pending = { resolve(value: unknown): void; reject(error: Error): void };
+export type AcpOptions = { command: string[]; cwd: string; timeoutMs?: number; sink: Sink };
+
+/** One owned stdio connection. Client capabilities are deliberately empty. */
+export class AcpClient {
+  private proc: ChildProcessWithoutNullStreams;
+  private pending = new Map<number, Pending>();
+  private sequence = 0;
+  private sessionId?: string;
+  private prompting = false;
+  private used = false;
+  private failure?: Error;
+  private timer: ReturnType<typeof setTimeout>;
+  private exit: Promise<void>;
+  private closing?: Promise<void>;
+  exited = false;
+  phase = "starting";
+  negotiated?: { protocolVersion: number; name?: string; version?: string; loadSession: boolean };
+
+  get exitCode(): number | null { return this.proc.exitCode; }
+  get exitSignal(): NodeJS.Signals | null { return this.proc.signalCode; }
+
+  constructor(private options: AcpOptions) {
+    if (options.command.length === 0) throw new Error("ACP executable unavailable");
+    this.proc = spawn("nice", ["-n", "10", ...options.command], {
+      cwd: options.cwd,
+      detached: true,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
+    });
+    this.exit = new Promise(resolve => {
+      this.proc.once("close", () => {
+        this.exited = true;
+        this.fail(new Error("ACP process exited before completion"));
+        resolve();
+      });
+    });
+    this.proc.once("error", () => this.fail(new Error("ACP process could not start")));
+    this.proc.stdin.on("error", () => this.fail(new Error("ACP input closed")));
+    // Drain diagnostics without putting provider credentials into phone events or receipts.
+    this.proc.stderr.resume();
+    let rest = "";
+    this.proc.stdout.setEncoding("utf8");
+    this.proc.stdout.on("data", (chunk: string) => {
+      rest += chunk;
+      if (Buffer.byteLength(rest) > 1024 * 1024) {
+        this.fail(new Error("ACP frame exceeds 1 MiB"));
+        this.kill("SIGKILL");
+        return;
+      }
+      for (;;) {
+        const end = rest.indexOf("\n");
+        if (end < 0) break;
+        const line = rest.slice(0, end);
+        rest = rest.slice(end + 1);
+        if (line.trim()) this.receive(line);
+      }
+    });
+    const timeoutMs = Math.min(Math.max(options.timeoutMs ?? 120_000, 1), 120_000);
+    this.timer = setTimeout(() => {
+      this.fail(new Error("ACP turn timed out"));
+      this.kill("SIGKILL");
+    }, timeoutMs);
+  }
+
+  private kill(signal: NodeJS.Signals): void {
+    if (!this.proc.pid) return;
+    try { process.kill(-this.proc.pid, signal); }
+    catch { if (!this.exited) this.proc.kill(signal); }
+  }
+
+  private fail(error: Error): void {
+    this.failure ??= error;
+    for (const pending of this.pending.values()) pending.reject(this.failure);
+    this.pending.clear();
+  }
+
+  private send(value: unknown): void {
+    if (!this.proc.stdin.destroyed) this.proc.stdin.write(`${JSON.stringify(value)}\n`);
+  }
+
+  private request(method: string, params: unknown): Promise<unknown> {
+    if (this.failure) return Promise.reject(this.failure);
+    const id = ++this.sequence;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.send({ jsonrpc: "2.0", id, method, params });
+    });
+  }
+
+  private receive(line: string): void {
+    let message: unknown;
+    try { message = JSON.parse(line); }
+    catch { this.fail(new Error("ACP invalid JSON frame")); return; }
+    if (!record(message) || message.jsonrpc !== "2.0") {
+      this.fail(new Error("ACP invalid JSON-RPC envelope"));
+      return;
+    }
+    if (typeof message.method === "string") {
+      if (message.id !== undefined) {
+        if (message.method === "session/request_permission") {
+          this.send({ jsonrpc: "2.0", id: message.id, result: { outcome: { outcome: "cancelled" } } });
+          this.options.sink.status("Permission denied by bridge policy");
+        } else {
+          this.send({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Client capability unavailable" } });
+        }
+      } else if (message.method === "session/update" && this.prompting && record(message.params)) {
+        const params = message.params;
+        if (params.sessionId !== this.sessionId || !record(params.update)) return;
+        const update = params.update;
+        switch (update.sessionUpdate) {
+          case "agent_message_chunk":
+            if (record(update.content) && update.content.type === "text" && typeof update.content.text === "string") {
+              this.options.sink.delta(update.content.text);
+            }
+            break;
+          case "agent_thought_chunk": this.options.sink.status("Thinking"); break;
+          case "tool_call":
+          case "tool_call_update":
+            this.options.sink.status(typeof update.title === "string" ? update.title : `Tool ${String(update.status ?? "update")}`);
+            break;
+          case "plan": this.options.sink.status("Plan updated"); break;
+        }
+      }
+      return;
+    }
+    if (typeof message.id !== "number") return;
+    const pending = this.pending.get(message.id);
+    if (!pending) return;
+    this.pending.delete(message.id);
+    if (message.error !== undefined) {
+      const code = record(message.error) && typeof message.error.code === "number" ? message.error.code : "unknown";
+      pending.reject(new Error(`ACP request failed (code ${code}); check host authentication and agent diagnostics`));
+    } else if ("result" in message) pending.resolve(message.result);
+    else pending.reject(new Error("ACP response missing result"));
+  }
+
+  async turn(input: TurnInput): Promise<string> {
+    if (this.used) throw new Error("ACP connection already used");
+    this.used = true;
+    this.phase = "initialize";
+    const initialized = await this.request("initialize", {
+      protocolVersion: 1,
+      clientInfo: { name: "dash-bridge", version: "0.1.0" },
+      clientCapabilities: {},
+    });
+    if (!record(initialized) || initialized.protocolVersion !== 1) throw new Error("ACP protocol version unavailable");
+    this.negotiated = {
+      protocolVersion: initialized.protocolVersion,
+      name: record(initialized.agentInfo) && typeof initialized.agentInfo.name === "string" ? initialized.agentInfo.name : undefined,
+      version: record(initialized.agentInfo) && typeof initialized.agentInfo.version === "string" ? initialized.agentInfo.version : undefined,
+      loadSession: record(initialized.agentCapabilities) && initialized.agentCapabilities.loadSession === true,
+    };
+    this.phase = input.sessionId ? "session/load" : "session/new";
+    if (input.sessionId) {
+      if (!record(initialized.agentCapabilities) || initialized.agentCapabilities.loadSession !== true) {
+        throw new Error("ACP session loading unavailable for this agent");
+      }
+      this.sessionId = input.sessionId;
+      await this.request("session/load", { sessionId: input.sessionId, cwd: input.cwd, mcpServers: [] });
+    } else {
+      const session = await this.request("session/new", { cwd: input.cwd, mcpServers: [] });
+      if (!record(session) || typeof session.sessionId !== "string" || !session.sessionId) {
+        throw new Error("ACP agent did not provide a session id");
+      }
+      this.sessionId = session.sessionId;
+    }
+    this.options.sink.session(this.sessionId);
+    this.prompting = true;
+    this.phase = "session/prompt";
+    const result = await this.request("session/prompt", {
+      sessionId: this.sessionId,
+      prompt: [{ type: "text", text: input.text }],
+    });
+    this.prompting = false;
+    if (!record(result) || typeof result.stopReason !== "string") throw new Error("ACP prompt missing stop reason");
+    if (result.stopReason === "cancelled") throw new Error("ACP turn cancelled");
+    this.phase = "complete";
+    return result.stopReason;
+  }
+
+  async cancel(): Promise<void> {
+    if (this.sessionId) this.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: this.sessionId } });
+    this.fail(new Error("ACP turn cancelled"));
+    await this.close();
+  }
+
+  close(): Promise<void> {
+    this.closing ??= this.shutdown();
+    return this.closing;
+  }
+
+  private async shutdown(): Promise<void> {
+    clearTimeout(this.timer);
+    this.fail(new Error("ACP connection closed"));
+    this.proc.stdin.end();
+    this.kill("SIGTERM");
+    let force: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([this.exit, new Promise<void>(resolve => { force = setTimeout(resolve, 500); })]);
+    clearTimeout(force);
+    // The leader can exit while its children ignore TERM and close their pipes.
+    this.kill("SIGKILL");
+    await this.exit;
+  }
+}
