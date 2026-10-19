@@ -39,7 +39,8 @@ describe("verified-oss-loop onboard (Dash)", () => {
     const ci = read(".github/workflows/ci.yml");
     expect(ci).toContain("preview");
     expect(ci).toContain("nightly");
-    expect(ci).toContain("cache: true");
+    expect(ci).toContain("actions/cache@v4");
+    expect(ci).toContain("~/.bun/install/cache");
     expect(ci).toContain("--frozen-lockfile");
     expect(ci).toContain("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD");
     expect(ci).toContain("cancel-in-progress: true");

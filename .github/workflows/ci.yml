@@ -26,6 +26,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'app/bun.lock', 'bridge/bun.lock') }}
       - name: Install locked dependencies
         run: bun install --frozen-lockfile && bun install --frozen-lockfile --cwd app && bun install --frozen-lockfile --cwd bridge
       - name: Typecheck app, bridge, shared and scripts
@@ -36,7 +40,7 @@ jobs:
         run: bun run lint
       - name: Unit and regression tests
         if: matrix.gate == 'test'
-        run: bun test
+        run: bun run test
       - name: Mutation tests (including protocol and roster branches)
         if: matrix.gate == 'mutation'
         run: bun scripts/mutate.ts --threshold 80 --max 200

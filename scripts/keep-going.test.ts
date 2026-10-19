@@ -28,7 +28,8 @@ describe("keep going until Dash is done", () => {
   });
 
   test("CI runs this heartbeat", () => {
-    expect(read(".github/workflows/ci.yml")).toContain("scripts/keep-going.test.ts");
+    expect(read(".github/workflows/ci.yml")).toContain("bun run test");
+    expect(read("package.json")).toContain("scripts/keep-going.test.ts");
   });
 
   test("blocked claimed work is not a reason to idle while an open slice remains", () => {

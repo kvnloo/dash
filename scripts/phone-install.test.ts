@@ -77,6 +77,7 @@ describe("phone install surface", () => {
   });
 
   test("CI unit job runs this file", () => {
-    expect(read(".github/workflows/ci.yml")).toContain("scripts/phone-install.test.ts");
+    expect(read(".github/workflows/ci.yml")).toContain("bun run test");
+    expect(read("package.json")).toContain("scripts/phone-install.test.ts");
   });
 });

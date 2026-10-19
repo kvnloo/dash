@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { parseSettings } from "../model";
 import {
   FEEDBACK_CONVERSATION_ID,
+  type FeedbackIssue,
   githubIssueFromFeedback,
   inAppFeedbackEnabled,
   steerPromptFromFeedback,
@@ -43,7 +44,7 @@ describe("in-app feedback", () => {
     };
 
     for (const action of [typed, voice, select]) {
-      const issues: Array<{ title: string; body: string }> = [];
+      const issues: FeedbackIssue[] = [];
       const steers: string[] = [];
       const result = submitFeedback(action, {
         fileIssue: (issue) => issues.push(issue),
@@ -56,9 +57,9 @@ describe("in-app feedback", () => {
       expect(steers).toHaveLength(1);
       expect(steers[0]).toContain("secondmate");
       expect(steers[0]).toContain(".cursor/skills/autodevelop/SKILL.md");
-      expect(result.issue).toEqual(issues[0]);
+      expect(issues[0]).toEqual(result.issue);
       expect(githubIssueFromFeedback(action).labels).toContain("feedback");
-      expect(steerPromptFromFeedback(action, result.issue)).toBe(steers[0]);
+      expect(steers[0]).toBe(steerPromptFromFeedback(action, result.issue));
     }
 
     expect(githubIssueFromFeedback(select).body).toContain("dash");

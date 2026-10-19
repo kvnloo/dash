@@ -2,7 +2,7 @@ import { Children, forwardRef, useEffect, useImperativeHandle, useRef } from "re
 import { View } from "react-native";
 import PagerView from "react-native-pager-view";
 import Animated, { useEvent, useHandler, useSharedValue, type SharedValue } from "react-native-reanimated";
-import type { MainPagerProps, MainPagerRef } from "./MainPager";
+import type { MainPagerProps, MainPagerRef, PageScrollEvent } from "./MainPager";
 
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
 
@@ -18,13 +18,13 @@ function usePagerProgressHandler(progress: SharedValue<number> | undefined, arme
       progress.value = e.position + e.offset - BOUNCE;
     },
   };
-  const { context, doDependenciesDiffer } = useHandler(handlers, [progress, armed]);
-  return useEvent(
+  const { doDependenciesDiffer } = useHandler(handlers, [progress, armed]);
+  return useEvent<PageScrollEvent>(
     (event) => {
       "worklet";
       const { onPageScroll } = handlers;
       if (onPageScroll && String(event.eventName ?? "").endsWith("onPageScroll")) {
-        onPageScroll(event, context);
+        onPageScroll(event);
       }
     },
     ["onPageScroll"],
