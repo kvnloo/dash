@@ -121,7 +121,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           ) : null}
           {firstRun ? (
             <Text style={styles.intro}>
-              Chat with the coding agents on your own computer. Run the bridge there, then enter what it prints.
+              Chat with the coding agents on your own computer. Run the bridge there, then enter its address and privately transferred execution token.
             </Text>
           ) : null}
 
@@ -141,7 +141,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
               label="Token"
               value={token}
               onChangeText={setToken}
-              placeholder="from the bridge output"
+              placeholder="from ~/.dash/token (private)"
               autoCapitalize="none"
               autoComplete="off"
               secure
@@ -200,7 +200,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             <Text style={styles.mono}>cd bridge && bun run start</Text>
           </GlassSurface>
           <Text style={styles.help}>
-            Run this from the Dash repository. The bridge prints its Tailscale address and token. Both devices need to be on the same tailnet.
+            Run this from the Dash repository. The bridge prints its Tailscale address, never credentials. Transfer ~/.dash/token privately for manual setup, or use Pair with ~/.dash/bootstrap-token. Both devices need the same tailnet.
           </Text>
 
           <Pressable onPress={() => navigation.navigate("Pair")} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>

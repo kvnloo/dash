@@ -457,7 +457,7 @@ const HOST = resolveBridgeHost({
   requestedHost: process.env.DASH_HOST,
   allowLoopback: process.env.DASH_ALLOW_LOOPBACK === "1",
 });
-const { token: TOKEN, bootstrapToken: BOOTSTRAP_TOKEN } = loadBridgeSecrets(join(homedir(), ".dash"));
+const { token: TOKEN, bootstrapToken: BOOTSTRAP_TOKEN } = loadBridgeSecrets(process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash"));
 let bridgeAddress = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${PORT}`;
 const handleHttp = createPairingHttpHandler({
   bootstrapToken: BOOTSTRAP_TOKEN,

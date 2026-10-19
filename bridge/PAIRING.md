@@ -18,6 +18,8 @@ The root metadata endpoint requires either credential in an authorization header
 
 Pair routes allow 12 requests per socket address per minute. Forwarded headers do not change that address. JSON claims are limited to 16 KiB, encoded audio to 1 MiB after decoding, and ffmpeg output to twelve seconds. Audio workers have a ten-second timeout. Credential responses use `Cache-Control: no-store`.
 
+`DASH_CREDENTIAL_DIR` optionally selects an isolated private credential directory without changing HOME or agent login state.
+
 For an isolated local verification server, explicitly set both `DASH_ALLOW_LOOPBACK=1` and `DASH_HOST=127.0.0.1`. `::1` is also allowed. This opt-in does not permit wildcard or LAN bindings. Use a disposable process and credential directory for tests. Do not change the running `dash-pair` service.
 
 Run the security checks from the repository root:

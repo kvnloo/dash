@@ -30,11 +30,12 @@ import { colors, radius, space, type } from "../theme";
 
 const RECORD_MS = 6500;
 
-export function PairScreen({ navigation }: ScreenProps<"Pair">) {
+export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
   const insets = useSafeAreaInsets();
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
-  const [computer, setComputer] = useState("");
-  const [manualCode, setManualCode] = useState("");
+  const [computer, setComputer] = useState(route.params?.address ?? "");
+  const [manualCode, setManualCode] = useState(route.params?.code ?? "");
+  const [bootstrapToken, setBootstrapToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,10 +59,10 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
     async (code: string, claimKey?: Uint8Array) => {
       setError(null);
       setStatus("Finishing secure pairing…");
-      const claim = await claimPairCode(computer, code, claimKey);
+      const claim = await claimPairCode(computer, code, claimKey, bootstrapToken);
       await connectClaim(claim);
     },
-    [computer, navigation],
+    [computer, bootstrapToken, navigation],
   );
 
   const connectClaim = useCallback(
@@ -78,6 +79,7 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
         onConnected: () => {
           haptic.success();
           claimKeyRef.current = null;
+          setBootstrapToken("");
           navigation.replace("Main");
         },
       });
@@ -102,7 +104,7 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       if (!recorder.getStatus().isRecording) throw new Error("Microphone did not start recording");
 
       setStatus("Listening… hold the phone by the laptop speakers");
-      const playing = startSonicPair(computer, claimKey);
+      const playing = startSonicPair(computer, claimKey, bootstrapToken);
       await sleep(RECORD_MS);
       await recorder.stop();
       await playing;
@@ -112,7 +114,7 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setStatus("Decoding pairing tones…");
       const bytes = new Uint8Array(await new File(uri).arrayBuffer());
       const mime = uri.toLowerCase().endsWith(".wav") ? "audio/wav" : "audio/m4a";
-      const claim = await hearPairTones(computer, claimKey, bytes, mime);
+      const claim = await hearPairTones(computer, claimKey, bytes, mime, bootstrapToken);
       await connectClaim(claim);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -127,15 +129,15 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setBusy(false);
       setStatus(null);
     }
-  }, [busy, computer, connectClaim, ensureClaimKey, recorder]);
+  }, [busy, computer, bootstrapToken, connectClaim, ensureClaimKey, recorder]);
 
   const pairOverTailscale = useCallback(async () => {
-    if (busy || computer.trim().length === 0) return;
+    if (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0) return;
     setBusy(true);
     setError(null);
     try {
       setStatus(`Connecting to ${computer.trim()}…`);
-      const claim = await claimLivePair(computer);
+      const claim = await claimLivePair(computer, bootstrapToken);
       await connectClaim(claim);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -145,10 +147,10 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setBusy(false);
       setStatus(null);
     }
-  }, [busy, computer, connectClaim]);
+  }, [busy, computer, bootstrapToken, connectClaim]);
 
   const pairWithCode = useCallback(async () => {
-    if (busy || computer.trim().length === 0 || manualCode.trim().length !== 6) return;
+    if (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0 || manualCode.trim().length !== 6) return;
     setBusy(true);
     setError(null);
     try {
@@ -161,7 +163,7 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setBusy(false);
       setStatus(null);
     }
-  }, [busy, computer, finishClaim, manualCode]);
+  }, [busy, computer, bootstrapToken, finishClaim, manualCode]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
@@ -186,18 +188,34 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
         </GlassSurface>
         <Text style={styles.hint}>Use the Tailscale IPv4 the bridge prints if MagicDNS does not resolve.</Text>
 
+        <GlassSurface variant="raised" borderRadius={radius.md} style={styles.inputWrap}>
+          <TextInput
+            value={bootstrapToken}
+            onChangeText={setBootstrapToken}
+            placeholder="Bootstrap token"
+            accessibilityLabel="Bootstrap token"
+            placeholderTextColor={colors.textFaint}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="off"
+            style={styles.inputInner}
+          />
+        </GlassSurface>
+        <Text style={styles.hint}>Transfer ~/.dash/bootstrap-token privately from your computer. Used only for enrollment; not saved.</Text>
+
         <Pressable
           onPress={() => void pairOverTailscale()}
-          disabled={busy || computer.trim().length === 0}
-          style={({ pressed }) => [styles.primary, (busy || computer.trim().length === 0) && styles.primaryDisabled, pressed && styles.pressed]}
+          disabled={busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0}
+          style={({ pressed }) => [styles.primary, (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0) && styles.primaryDisabled, pressed && styles.pressed]}
         >
           {busy ? <ActivityIndicator color={colors.onAccent} /> : <Text style={styles.primaryText}>Pair over Tailscale</Text>}
         </Pressable>
 
         <Pressable
           onPress={() => void pairWithSound()}
-          disabled={busy || computer.trim().length === 0}
-          style={({ pressed }) => [styles.secondary, (busy || computer.trim().length === 0) && styles.secondaryDisabled, pressed && styles.pressed]}
+          disabled={busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0}
+          style={({ pressed }) => [styles.secondary, (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0) && styles.secondaryDisabled, pressed && styles.pressed]}
         >
           <Text style={styles.secondaryText}>Listen for pairing sound</Text>
         </Pressable>
@@ -218,8 +236,8 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
         </GlassSurface>
         <Pressable
           onPress={() => void pairWithCode()}
-          disabled={busy || computer.trim().length === 0 || manualCode.length !== 6}
-          style={({ pressed }) => [styles.secondary, (busy || computer.trim().length === 0 || manualCode.length !== 6) && styles.secondaryDisabled, pressed && styles.pressed]}
+          disabled={busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0 || manualCode.length !== 6}
+          style={({ pressed }) => [styles.secondary, (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0 || manualCode.length !== 6) && styles.secondaryDisabled, pressed && styles.pressed]}
         >
           <Text style={styles.secondaryText}>Pair with code</Text>
         </Pressable>
