@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../catalog/runtime-state";
-import { loadAodlOrchestras } from "../catalog/orchestra";
+import { hydrateOrchestras, loadAodlOrchestras } from "../catalog/orchestra";
 import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../catalog/visual";
 import { AppNav } from "../components/AppNav";
 import { EffortOrbs } from "../components/EffortOrbs";
@@ -21,10 +21,15 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
   const { orchestraId } = route.params;
   const harnesses = store.use((s) => s.connection.harnesses);
   const conversations = store.use((s) => s.conversations);
+  const hosts = store.use((s) => s.connection.hosts);
 
   const project = useMemo(() => {
-    return enrichProducts(conversations, loadAodlOrchestras()).find((p) => p.id === orchestraId) ?? null;
-  }, [conversations, orchestraId]);
+    return (
+      enrichProducts(conversations, hydrateOrchestras(loadAodlOrchestras(), hosts, Date.now())).find(
+        (p) => p.id === orchestraId,
+      ) ?? null
+    );
+  }, [conversations, hosts, orchestraId]);
 
   const linkedChats = useMemo(
     () => conversations.filter((c) => project?.chatIds.includes(c.id)),

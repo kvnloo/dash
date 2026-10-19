@@ -2,7 +2,7 @@ import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../../catalog/runtime-state";
-import { loadAodlOrchestras, type OrchestraProject } from "../../catalog/orchestra";
+import { hydrateOrchestras, loadAodlOrchestras, type OrchestraProject } from "../../catalog/orchestra";
 import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../../catalog/visual";
 import { EffortOrbs } from "../../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../../components/TopologyBadge";
@@ -69,9 +69,10 @@ const Card = memo(function Card({
 export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
   const conversations = store.use((s) => s.conversations);
   const settings = store.use((s) => s.settings);
+  const hosts = store.use((s) => s.connection.hosts);
   const projects = useMemo(() => {
-    return enrichProducts(conversations, loadAodlOrchestras());
-  }, [conversations]);
+    return enrichProducts(conversations, hydrateOrchestras(loadAodlOrchestras(), hosts, Date.now()));
+  }, [conversations, hosts]);
   const streamingIds = useMemo(() => {
     const ids = new Set<string>();
     for (const conversation of conversations) {
