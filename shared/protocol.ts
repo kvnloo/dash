@@ -21,6 +21,8 @@ export interface AgentInfo {
   cwd?: string;
   /** Harness-native session id when this row is a live conversation we can resume. */
   sessionId?: string;
+  hostId?: string;
+  profileId?: string;
 }
 
 /** A machine on the tailnet (this laptop, groot/0, …). */
@@ -43,6 +45,8 @@ export type ClientMessage =
       text: string;
       /** Harness-native session id from a previous `session` event, for multi-turn. */
       sessionId?: string;
+      hostId?: string;
+      profileId?: string;
       /** Working directory on the laptop. Falls back to the bridge default. */
       cwd?: string;
     }
@@ -56,6 +60,8 @@ export type ClientMessage =
       id: string;
       harness: string;
       sessionId?: string;
+      hostId?: string;
+      profileId?: string;
       cwd?: string;
       /** Container the phone recorded, e.g. "audio/m4a". */
       mime: string;
@@ -72,7 +78,7 @@ export type ClientMessage =
    */
   | { type: "attach"; turns: { id: string; seq: number }[] }
   /** Replay a live harness transcript into the open Chat. Unknown harness ids fail closed. */
-  | { type: "history"; harness: string; sessionId: string; cwd?: string };
+  | { type: "history"; harness: string; sessionId: string; cwd?: string; hostId?: string; profileId?: string };
 
 /** One user or assistant turn from a harness session file. */
 export interface HistoryMessage {
@@ -82,13 +88,19 @@ export interface HistoryMessage {
   at: number;
 }
 
+/** Native ACP tool/plan update retained beside the legacy status text. */
+export interface AcpStatus {
+  sessionId: string;
+  update: Record<string, unknown>;
+}
+
 /** Events that belong to a turn. `seq` is per-turn and strictly increasing from 1. */
 export type TurnEvent =
-  | { type: "session"; id: string; seq: number; sessionId: string }
+  | { type: "session"; id: string; seq: number; sessionId: string; hostId?: string; profileId?: string; harnessId?: string; transport?: string }
   /** What the bridge heard for a spoken turn. Precedes the reply's deltas. */
   | { type: "transcript"; id: string; seq: number; text: string }
   | { type: "delta"; id: string; seq: number; text: string }
-  | { type: "status"; id: string; seq: number; text: string }
+  | { type: "status"; id: string; seq: number; text: string; acp?: AcpStatus }
   | { type: "done"; id: string; seq: number; exitCode: number }
   | { type: "error"; id: string; seq: number; message: string };
 
@@ -146,6 +158,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
         str(raw.id) &&
         str(raw.harness) &&
         str(raw.text) &&
+        optStr(raw.hostId) && optStr(raw.profileId) &&
         optStr(raw.sessionId) &&
         optStr(raw.cwd)
       ) {
@@ -155,18 +168,22 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
           harness: raw.harness,
           text: raw.text,
           sessionId: raw.sessionId,
+          hostId: raw.hostId,
+          profileId: raw.profileId,
           cwd: raw.cwd,
         };
       }
       return null;
     case "voice_begin":
-      if (str(raw.id) && str(raw.harness) && str(raw.mime) && optStr(raw.sessionId) && optStr(raw.cwd)) {
+      if (str(raw.id) && str(raw.harness) && str(raw.mime) && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.sessionId) && optStr(raw.cwd)) {
         return {
           type: "voice_begin",
           id: raw.id,
           harness: raw.harness,
           mime: raw.mime,
           sessionId: raw.sessionId,
+          hostId: raw.hostId,
+          profileId: raw.profileId,
           cwd: raw.cwd,
         };
       }
@@ -182,8 +199,8 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
         ? { type: "attach", turns: raw.turns }
         : null;
     case "history":
-      if (str(raw.harness) && str(raw.sessionId) && raw.sessionId.length > 0 && optStr(raw.cwd)) {
-        return { type: "history", harness: raw.harness, sessionId: raw.sessionId, cwd: raw.cwd };
+      if (str(raw.harness) && str(raw.sessionId) && raw.sessionId.length > 0 && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.cwd)) {
+        return { type: "history", harness: raw.harness, sessionId: raw.sessionId, cwd: raw.cwd, hostId: raw.hostId, profileId: raw.profileId };
       }
       return null;
     default:
@@ -213,6 +230,7 @@ function isAgentInfo(value: unknown): value is AgentInfo {
   if (value.detail !== undefined && !str(value.detail)) return false;
   if (value.cwd !== undefined && !str(value.cwd)) return false;
   if (value.sessionId !== undefined && !str(value.sessionId)) return false;
+  if (!optStr(value.profileId) || !optStr(value.hostId)) return false;
   return true;
 }
 
@@ -259,8 +277,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     case "lost":
       return str(raw.id) ? { type: "lost", id: raw.id } : null;
     case "session":
-      return str(raw.id) && num(raw.seq) && str(raw.sessionId)
-        ? { type: "session", id: raw.id, seq: raw.seq, sessionId: raw.sessionId }
+      return str(raw.id) && num(raw.seq) && str(raw.sessionId) && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.harnessId) && optStr(raw.transport)
+        ? { type: "session", id: raw.id, seq: raw.seq, sessionId: raw.sessionId, hostId: raw.hostId, profileId: raw.profileId, harnessId: raw.harnessId, transport: raw.transport }
         : null;
     case "transcript":
       return str(raw.id) && num(raw.seq) && str(raw.text)
@@ -270,10 +288,12 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
       return str(raw.id) && num(raw.seq) && str(raw.text)
         ? { type: "delta", id: raw.id, seq: raw.seq, text: raw.text }
         : null;
-    case "status":
-      return str(raw.id) && num(raw.seq) && str(raw.text)
-        ? { type: "status", id: raw.id, seq: raw.seq, text: raw.text }
-        : null;
+    case "status": {
+      if (!str(raw.id) || !num(raw.seq) || !str(raw.text)) return null;
+      if (raw.acp === undefined) return { type: "status", id: raw.id, seq: raw.seq, text: raw.text };
+      if (!isRecord(raw.acp) || !str(raw.acp.sessionId) || !isRecord(raw.acp.update) || Array.isArray(raw.acp.update)) return null;
+      return { type: "status", id: raw.id, seq: raw.seq, text: raw.text, acp: { sessionId: raw.acp.sessionId, update: raw.acp.update } };
+    }
     case "done":
       return str(raw.id) && num(raw.seq) && num(raw.exitCode)
         ? { type: "done", id: raw.id, seq: raw.seq, exitCode: raw.exitCode }
