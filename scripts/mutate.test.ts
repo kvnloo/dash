@@ -2,7 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyMutant, collectMutants, ROOT, TARGETS } from "./mutate";
+import { applyMutant, collectMutants, ROOT, TARGETS, runMutation } from "./mutate";
+
+ test("default mutation plan exercises parser and roster branches, not only constants", async () => {
+  const report = await runMutation({ dryRun: true, max: 200 });
+  for (const file of ["shared/protocol.ts", "bridge/src/roster.ts"]) {
+    const branches = report.results.filter((row) => row.file === file && (row.operator === "eq" || row.operator === "logic"));
+    expect(branches.length).toBeGreaterThanOrEqual(12);
+    expect(new Set(branches.map((row) => row.start)).size).toBe(branches.length);
+  }
+});
 
 describe("collectMutants", () => {
   test("mutates numeric constants that lock UI geometry", () => {

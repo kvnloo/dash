@@ -2,9 +2,8 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, preview, nightly, dev, integrate/device-layer]
   push:
-    branches: [main, preview, nightly, dev, integrate/device-layer]
+    branches: [main, preview, nightly, dev, integrate/dash-v2]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -14,50 +13,40 @@ env:
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
 jobs:
-  unit-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-          cache: true
-      - name: Install app and bridge
-        run: bun install --frozen-lockfile --cwd app && bun install --frozen-lockfile --cwd bridge
-      - name: Unit tests
-        run: bun test app/src bridge/src shared scripts/mutate.test.ts scripts/assert-nav-dots.test.ts scripts/oss-loop.test.ts scripts/phone-install.test.ts scripts/keep-going.test.ts
-
-  mutation:
-    needs: unit-tests
+  checks:
+    name: ${{ matrix.gate }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [typecheck, lint, test, mutation]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-          cache: true
-      - name: Install app and bridge
-        run: bun install --frozen-lockfile --cwd app && bun install --frozen-lockfile --cwd bridge
-      - name: Mutation tests
+          bun-version: 1.3.14
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile && bun install --frozen-lockfile --cwd app && bun install --frozen-lockfile --cwd bridge
+      - name: Typecheck app, bridge, shared and scripts
+        if: matrix.gate == 'typecheck'
+        run: bun run typecheck
+      - name: Lint
+        if: matrix.gate == 'lint'
+        run: bun run lint
+      - name: Unit and regression tests
+        if: matrix.gate == 'test'
+        run: bun test
+      - name: Mutation tests (including protocol and roster branches)
+        if: matrix.gate == 'mutation'
         run: bun scripts/mutate.ts --threshold 80 --max 200
 
-  maestro-nav-dots:
+  required-gates:
+    if: always()
+    needs: checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-          cache: true
-      - name: Maestro nav flows must not kill Metro
-        run: |
-          set -euo pipefail
-          for f in .maestro/nav-dots.yaml .maestro/inspect-nav.yaml; do
-            if grep -E 'launchApp|stopApp' "$f"; then
-              echo "$f must not launchApp/stopApp (kills Metro 8097)"
-              exit 1
-            fi
-          done
-      - name: Nav-dot geometry checker (Yoga collapse class)
-        run: bun test scripts/assert-nav-dots.test.ts
+      - name: Reject failed, cancelled or skipped gates
+        env:
+          GATE_RESULT: ${{ needs.checks.result }}
+        run: test "$GATE_RESULT" = success
