@@ -1,7 +1,7 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Animated, { useAnimatedStyle, useFrameCallback, useSharedValue } from "react-native-reanimated";
-import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Alert, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
@@ -25,7 +25,7 @@ import { DEFAULT_MAIN_TAB } from "../lib/home";
 import { profilesFromHosts } from "../lib/roster";
 import type { BotProfile } from "../mock/bots";
 import type { ScreenProps } from "../navigation";
-import { createConversation, saveSettings, setActive, setConnection, store } from "../store/app";
+import { createConversation, openBotConversation, saveSettings, setActive, setConnection, store } from "../store/app";
 import { colors, space, type } from "../theme";
 import { BotsPane } from "./panes/BotsPane";
 import { ChatsPane } from "./panes/ChatsPane";
@@ -177,6 +177,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const conversations = store.use((s) => s.conversations);
   const harnesses = store.use((s) => s.connection.harnesses);
   const hosts = store.use((s) => s.connection.hosts);
+  const cwd = store.use((s) => s.connection.cwd);
   const settings = store.use((s) => s.settings);
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
@@ -184,8 +185,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const botProfiles = useMemo(() => (hosts.length > 0 ? profilesFromHosts(hosts) : undefined), [hosts]);
 
   const results = useMemo(
-    () => runGlobalSearch({ query, conversations, harnesses, botProfiles, hosts }),
-    [query, conversations, harnesses, botProfiles, hosts],
+    () => runGlobalSearch({ query, conversations, harnesses, botProfiles, hosts, cwd }),
+    [query, conversations, harnesses, botProfiles, hosts, cwd],
   );
 
   const hint = formatSearchHint(parsed);
@@ -195,7 +196,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       if (!harnessId) return;
       haptic.select();
       if (settings) saveSettings({ ...settings, harness: harnessId });
-      const existing = conversations.find((c) => c.harness === harnessId);
+      const existing = conversations.find((c) => c.harness === harnessId && !c.targetHostId && !c.sessionId);
       if (existing) setActive(existing.id);
       else createConversation(harnessId);
       navigation.navigate("Chat", draft ? { draft } : undefined);
@@ -205,10 +206,15 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
   const openBot = useCallback(
     (profile: BotProfile) => {
-      if (!profile.online) return;
-      openHarness(profile.harness);
+      const result = openBotConversation(profile);
+      if ("error" in result) {
+        Alert.alert("Agent unavailable", result.error);
+        return;
+      }
+      haptic.select();
+      navigation.navigate("Chat");
     },
-    [openHarness],
+    [navigation],
   );
 
   const openConversation = useCallback(
@@ -290,7 +296,9 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       : parsed.mode === "mention" && parsed.scope === "unknown"
         ? `Unknown @${parsed.rawScope}. Pick @bots, @conversation, or @product.`
         : parsed.mode === "slash"
-          ? "No laptop resources match. Try another keyword or scope."
+          ? parsed.scope === "skill" || parsed.scope === "plugin" || parsed.scope === "tool" || parsed.scope === "file"
+            ? `The bridge does not report ${parsed.scope} inventory yet.`
+            : "No live sessions or installed harnesses match."
           : "No matches. Use @ for bots and chats, / for harness files and tools.";
 
   return (

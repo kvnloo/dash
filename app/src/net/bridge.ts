@@ -10,6 +10,7 @@ import {
   applyTurnEvent,
   flushPendingSends,
   markTurnLost,
+  rejectUnavailableTurn,
   setConnection,
   setLiveHistoryRequester,
   store,
@@ -271,6 +272,7 @@ export function sendChat(input: {
   sessionId?: string;
   cwd?: string;
 }): boolean {
+  if (rejectUnavailableTurn(input.turnId)) return false;
   const cwd = input.cwd ?? store.get().settings?.cwd;
   return bridge.send({
     type: "chat",
@@ -290,8 +292,9 @@ export function sendVoiceBegin(input: {
   sessionId?: string;
   cwd?: string;
 }): boolean {
+  if (rejectUnavailableTurn(input.turnId)) return false;
   const cwd = input.cwd ?? store.get().settings?.cwd;
-  return bridge.send({
+  const sent = bridge.send({
     type: "voice_begin",
     id: input.turnId,
     harness: input.harness,
@@ -299,6 +302,8 @@ export function sendVoiceBegin(input: {
     sessionId: input.sessionId,
     cwd,
   });
+  if (!sent) applyTurnEvent({ type: "error", id: input.turnId, seq: 1, message: "Not connected to your computer." });
+  return sent;
 }
 
 export function sendVoiceChunk(turnId: string, data: string): boolean {

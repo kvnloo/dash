@@ -47,17 +47,17 @@ export function mergeLiveConversations(
   const adopted: Conversation[] = [];
   const seen = new Set<string>();
   for (const c of existing) {
-    if (c.sessionId) seen.add(`${c.harness}:${c.sessionId}`);
+    if (c.sessionId) seen.add(`${c.targetHostId ?? "*"}:${c.harness}:${c.sessionId}`);
   }
   for (const host of hosts) {
-    if (!host.self) continue;
+    if (!host.self || !host.online) continue;
     for (const agent of host.agents) {
       if (agent.status !== "running") continue;
       if (!isCatalogHarness(agent.kind)) continue;
       const sessionId = agent.sessionId?.trim();
       if (!sessionId) continue;
-      const key = `${agent.kind}:${sessionId}`;
-      if (seen.has(key)) continue;
+      const key = `${host.id}:${agent.kind}:${sessionId}`;
+      if (seen.has(key) || seen.has(`*:${agent.kind}:${sessionId}`)) continue;
       seen.add(key);
       adopted.push({
         id: liveConversationId(agent.kind, sessionId),
@@ -67,6 +67,8 @@ export function mergeLiveConversations(
         updatedAt: now,
         sessionId,
         cwd: agent.cwd,
+        targetHostId: host.id,
+        profileId: agent.id,
         messages: [],
       });
     }

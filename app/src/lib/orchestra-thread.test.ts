@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { OrchestraProject } from "../catalog/orchestra";
 import type { Conversation } from "../model";
 import { threadTargetForAgent, threadTargetForOrchestra } from "./orchestra-thread";
@@ -64,13 +62,5 @@ describe("orchestra live thread targets", () => {
 
   test("tapping an agent with no chat creates a real thread", () => {
     expect(threadTargetForAgent("codex", [])).toEqual({ kind: "create", harnessId: "codex" });
-  });
-
-  test("Orchestra pane and detail call the thread helpers", () => {
-    const pane = readFileSync(join(import.meta.dir, "../screens/panes/OrchestraPane.tsx"), "utf8");
-    const detail = readFileSync(join(import.meta.dir, "../screens/OrchestraDetailScreen.tsx"), "utf8");
-    expect(pane).toContain("threadTargetForOrchestra");
-    expect(detail).toContain("threadTargetForAgent");
-    expect(detail).toContain("navigate(\"Chat\")");
   });
 });

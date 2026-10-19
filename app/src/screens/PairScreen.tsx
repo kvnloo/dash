@@ -5,7 +5,7 @@ import {
   useAudioRecorder,
 } from "expo-audio";
 import { File } from "expo-file-system";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -22,6 +22,7 @@ import { GlassSurface } from "../components/GlassSurface";
 import { haptic } from "../haptics";
 import { newClaimKey } from "../lib/pair-crypto";
 import { claimLivePair, claimPairCode, hearPairTones, settingsFromClaim, startSonicPair } from "../lib/pair-api";
+import { connectSettings } from "../lib/settings-flow";
 import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
 import { saveSettings, store } from "../store/app";
@@ -38,6 +39,15 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const claimKeyRef = useRef<Uint8Array | null>(null);
+  const attemptRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("blur", () => attemptRef.current?.abort());
+    return () => {
+      unsubscribe();
+      attemptRef.current?.abort();
+    };
+  }, [navigation]);
 
   const ensureClaimKey = useCallback((): Uint8Array => {
     claimKeyRef.current ??= newClaimKey();
@@ -56,14 +66,21 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
 
   const connectClaim = useCallback(
     async (claim: Awaited<ReturnType<typeof claimPairCode>>) => {
-      const settings = settingsFromClaim(claim);
-      saveSettings(settings);
-      bridge.start(settings);
-      const online = await waitForOnline(8000);
-      if (!online) throw new Error("Paired but bridge WebSocket did not connect");
-      haptic.success();
-      claimKeyRef.current = null;
-      navigation.replace("Main");
+      const attempt = new AbortController();
+      attemptRef.current?.abort();
+      attemptRef.current = attempt;
+      await connectSettings({
+        settings: settingsFromClaim(claim),
+        connection: store,
+        save: saveSettings,
+        start: (settings) => bridge.start(settings),
+        signal: attempt.signal,
+        onConnected: () => {
+          haptic.success();
+          claimKeyRef.current = null;
+          navigation.replace("Main");
+        },
+      });
     },
     [navigation],
   );
@@ -131,7 +148,7 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
   }, [busy, computer, connectClaim]);
 
   const pairWithCode = useCallback(async () => {
-    if (busy || manualCode.trim().length !== 6) return;
+    if (busy || computer.trim().length === 0 || manualCode.trim().length !== 6) return;
     setBusy(true);
     setError(null);
     try {
@@ -144,7 +161,7 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setBusy(false);
       setStatus(null);
     }
-  }, [busy, finishClaim, manualCode]);
+  }, [busy, computer, finishClaim, manualCode]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
@@ -201,8 +218,8 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
         </GlassSurface>
         <Pressable
           onPress={() => void pairWithCode()}
-          disabled={busy || manualCode.length !== 6}
-          style={({ pressed }) => [styles.secondary, (busy || manualCode.length !== 6) && styles.secondaryDisabled, pressed && styles.pressed]}
+          disabled={busy || computer.trim().length === 0 || manualCode.length !== 6}
+          style={({ pressed }) => [styles.secondary, (busy || computer.trim().length === 0 || manualCode.length !== 6) && styles.secondaryDisabled, pressed && styles.pressed]}
         >
           <Text style={styles.secondaryText}>Pair with code</Text>
         </Pressable>
@@ -217,19 +234,6 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function waitForOnline(timeoutMs: number): Promise<boolean> {
-  if (store.get().connection.status === "online") return Promise.resolve(true);
-  return new Promise((resolve) => {
-    const start = Date.now();
-    const tick = () => {
-      if (store.get().connection.status === "online") return resolve(true);
-      if (Date.now() - start >= timeoutMs) return resolve(false);
-      setTimeout(tick, 200);
-    };
-    tick();
-  });
 }
 
 const styles = StyleSheet.create({
