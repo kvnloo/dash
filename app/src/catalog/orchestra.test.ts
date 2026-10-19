@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentInfo, HostInfo } from "../../../shared/protocol";
+import { projectsFromHosts } from "../lib/project-data";
 import {
   AODL_NETWORK_IDS,
   getOrchestra,
@@ -131,26 +132,15 @@ describe("AODL orchestra catalog", () => {
     expect("firstmate" in raw.network).toBe(false);
   });
 
-  test("Orchestra UI hydrates from connection.hosts, not DEMO_ORCHESTRAS", () => {
-    const pane = readFileSync(join(import.meta.dir, "../screens/panes/OrchestraPane.tsx"), "utf8");
-    const detail = readFileSync(join(import.meta.dir, "../screens/OrchestraDetailScreen.tsx"), "utf8");
-    const mock = readFileSync(join(import.meta.dir, "../mock/orchestra.ts"), "utf8");
-    const search = readFileSync(join(import.meta.dir, "../lib/global-search.ts"), "utf8");
-    const scenarios = readFileSync(join(import.meta.dir, "../debug/scenarios.ts"), "utf8");
-    expect(pane).toContain("loadAodlOrchestras");
-    expect(pane).toContain("hydrateOrchestras");
-    expect(pane).toContain("connection.hosts");
-    expect(pane).not.toContain("DEMO_ORCHESTRAS");
-    expect(detail).toContain("loadAodlOrchestras");
-    expect(detail).toContain("hydrateOrchestras");
-    expect(detail).toContain("connection.hosts");
-    expect(detail).not.toContain("DEMO_ORCHESTRAS");
-    expect(search).toContain("loadAodlOrchestras");
-    expect(search).not.toContain("DEMO_ORCHESTRAS");
-    expect(mock).not.toContain("orch-dash");
-    expect(mock).not.toContain("DEMO_ORCHESTRAS");
-    expect(scenarios).toContain('orchestraId: "dash"');
-    expect(scenarios).not.toContain("orch-dash");
+  test("the project list uses roster evidence without populating the pinned catalog", () => {
+    const hosts: HostInfo[] = [{
+      id: "laptop", name: "Laptop", hostname: "laptop", online: true, self: true,
+      agents: [{ id: "codex:weather", name: "Codex", kind: "codex", status: "running", cwd: "/work/weather", sessionId: "weather" }],
+    }];
+    const projects = projectsFromHosts({ hosts, conversations: [], now: 1_700_000_000_000 });
+    expect(projects.map((project) => project.name)).toEqual(["weather"]);
+    expect(projects.map((project) => project.cwd)).toEqual(["/work/weather"]);
+    expect(projectsFromHosts({ hosts: [], conversations: [], now: 1_700_000_000_000 })).toEqual([]);
   });
 });
 

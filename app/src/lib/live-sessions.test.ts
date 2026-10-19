@@ -170,3 +170,23 @@ describe("mergeLiveConversations", () => {
     expect(bridge).not.toContain("cursor-cloud");
   });
 });
+
+describe("live host identity", () => {
+  test("offline self hosts do not adopt stale running rows", () => {
+    expect(mergeLiveConversations([], [{ ...liveOmp, online: false }], now)).toEqual([]);
+  });
+  test("another host's identical session does not shadow the paired host", () => {
+    const remote: Conversation = { id: "remote-chat", harness: "omp", title: "remote", createdAt: now, updatedAt: now,
+      targetHostId: "remote", profileId: "omp:aaa", sessionId: "01liveomp", messages: [] };
+    const rows = mergeLiveConversations([remote], [liveOmp], now);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ targetHostId: "mbp", profileId: "omp:aaa", sessionId: "01liveomp" });
+  });
+});
+
+test("live search matches the paired session rather than an identical remote session", () => {
+  const local = mergeLiveConversations([], [liveOmp], now)[0];
+  if (!local) throw new Error("Missing local live conversation");
+  const remote = { ...local, id: "remote", targetHostId: "remote" };
+  expect(findLiveConversation([remote, local], local)?.id).toBe(local.id);
+});

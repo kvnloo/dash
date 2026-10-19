@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { effortIdForTurn, runtimeStateFromTurn } from "../catalog/runtime-state";
 import { loadVisualCatalog, providerIdForHarness, resolveEffort, resolveProvider, resolveRuntimeState } from "../catalog/visual";
 import type { AssistantMessage, AssistantState, Message } from "../model";
+import { replyText, useKeyed } from "../store/text";
 import { colors, radius, space, type } from "../theme";
 import { EffortOrbs } from "./EffortOrbs";
 import { Markdown } from "./Markdown";
@@ -46,6 +47,7 @@ function ThinkingMarker({ harnessId, turnState }: { harnessId?: string; turnStat
 }
 
 function AssistantBody({ message, harnessId }: { message: AssistantMessage; harnessId?: string }) {
+  const liveText = useKeyed(replyText, message.turnId);
   switch (message.state) {
     case "pending":
       return (
@@ -59,7 +61,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
     case "streaming":
       return (
         <>
-          {message.text ? <Markdown text={message.text} /> : null}
+          {liveText || message.text ? <Markdown text={liveText || message.text} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text style={styles.statusText} numberOfLines={1}>
@@ -76,7 +78,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
           {message.text ? <Markdown text={message.text} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
-            <Text style={styles.noteText}>Connection to the bridge was lost mid-reply.</Text>
+            <Text style={styles.noteText}>{message.status ?? "Connection to the bridge was lost mid-reply."}</Text>
           </View>
         </>
       );

@@ -49,6 +49,8 @@ export interface Conversation {
   sessionId?: string;
   /** Working directory on the paired host when this row is a live session. */
   cwd?: string;
+  targetHostId?: string;
+  profileId?: string;
   messages: Message[];
 }
 
@@ -135,6 +137,8 @@ export function parseConversation(raw: unknown): Conversation | null {
     updatedAt: raw.updatedAt,
     sessionId: typeof raw.sessionId === "string" ? raw.sessionId : undefined,
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
+    targetHostId: typeof raw.targetHostId === "string" ? raw.targetHostId : undefined,
+    profileId: typeof raw.profileId === "string" ? raw.profileId : undefined,
     messages,
   };
 }

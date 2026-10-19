@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppNav } from "../components/AppNav";
 import { GlassSurface } from "../components/GlassSurface";
 import { haptic } from "../haptics";
+import { connectSettings } from "../lib/settings-flow";
 import { normalizeAddress } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
@@ -12,32 +13,40 @@ import { forgetEverything, saveSettings, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
 
-export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
+export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const insets = useSafeAreaInsets();
   const settings = store.use((s) => s.settings);
   const connection = store.use((s) => s.connection);
-  const firstRun = settings === null;
+  const [firstRun] = useState(() => route.params?.firstRun ?? settings === null);
 
   const [address, setAddress] = useState(settings?.address ?? "");
   const [token, setToken] = useState(settings?.token ?? "");
   const [cwd, setCwd] = useState(settings?.cwd ?? "");
-  const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const attemptRef = useRef<AbortController | null>(null);
 
   const dirty =
     normalizeAddress(address) !== (settings?.address ?? "") ||
     token.trim() !== (settings?.token ?? "") ||
     (cwd.trim() || undefined) !== settings?.cwd;
-  const canSave = normalizeAddress(address).length > 0 && token.trim().length > 0 && (dirty || connection.status !== "online");
+  const canSave = !saving && normalizeAddress(address).length > 0 && token.trim().length > 0 && (dirty || connection.status !== "online");
 
-  // First run: once the bridge answers, drop straight into chat.
   useEffect(() => {
-    if (firstRun && submitted && connection.status === "online") {
-      haptic.success();
-      navigation.replace("Main");
-    }
-  }, [firstRun, submitted, connection.status, navigation]);
+    const unsubscribe = navigation.addListener("blur", () => attemptRef.current?.abort());
+    return () => {
+      unsubscribe();
+      attemptRef.current?.abort();
+    };
+  }, [navigation]);
 
-  const save = () => {
+  const save = async () => {
+    if (!canSave) return;
+    const attempt = new AbortController();
+    attemptRef.current?.abort();
+    attemptRef.current = attempt;
+    setSaving(true);
+    setSaveError(null);
     const next = {
       address: normalizeAddress(address),
       token: token.trim(),
@@ -45,10 +54,31 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
       cwd: cwd.trim() || undefined,
       inAppFeedback: settings?.inAppFeedback ?? true,
     };
-    saveSettings(next);
-    bridge.start(next);
-    setSubmitted(true);
     haptic.tap();
+    try {
+      await connectSettings({
+        settings: next,
+        connection: store,
+        save: saveSettings,
+        start: (saved) => bridge.start(saved),
+        signal: attempt.signal,
+        onConnected: () => {
+          haptic.success();
+          if (firstRun || !navigation.canGoBack()) navigation.replace("Main");
+          else navigation.goBack();
+        },
+      });
+    } catch (error) {
+      if (!attempt.signal.aborted) {
+        setSaveError(error instanceof Error ? error.message : String(error));
+        haptic.error();
+      }
+    } finally {
+      if (attemptRef.current === attempt) {
+        attemptRef.current = null;
+        setSaving(false);
+      }
+    }
   };
 
   const forget = () => {
@@ -134,15 +164,16 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
           </View>
 
           <Pressable
-            onPress={save}
+            onPress={() => void save()}
             disabled={!canSave}
             style={({ pressed }) => [styles.primary, !canSave && styles.primaryDisabled, pressed && styles.pressed]}
             accessibilityRole="button"
           >
             <Text style={[styles.primaryText, !canSave && styles.primaryTextDisabled]}>
-              {firstRun ? "Connect" : dirty ? "Save and reconnect" : "Reconnect"}
+              {saving ? "Connecting…" : firstRun ? "Connect" : dirty ? "Save and reconnect" : "Reconnect"}
             </Text>
           </Pressable>
+          {saveError ? <Text style={[styles.help, styles.dangerText]} accessibilityRole="alert">{saveError}</Text> : null}
 
           {connection.harnesses.length > 0 ? (
             <>
@@ -166,10 +197,10 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
 
           <Text style={styles.label}>On your computer</Text>
           <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
-            <Text style={styles.mono}>cd dash/server && bun run start</Text>
+            <Text style={styles.mono}>cd bridge && bun run start</Text>
           </GlassSurface>
           <Text style={styles.help}>
-            The bridge prints its Tailscale address and token. Both devices need to be on the same tailnet.
+            Run this from the Dash repository. The bridge prints its Tailscale address and token. Both devices need to be on the same tailnet.
           </Text>
 
           <Pressable onPress={() => navigation.navigate("Pair")} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>

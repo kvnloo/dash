@@ -1,6 +1,6 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import { runtimeStateFromAgent } from "../../catalog/runtime-state";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
 import { PressScale } from "../../components/PressScale";
@@ -8,9 +8,9 @@ import { haptic } from "../../haptics";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { canChatWithAgent, emptyHostProfile, profileFromAgent } from "../../lib/roster";
-import { DEMO_BOT_PROFILES, type BotProfile } from "../../mock/bots";
+import type { BotProfile } from "../../mock/bots";
 import type { ScreenProps } from "../../navigation";
-import { createConversation, saveSettings, setActive, store } from "../../store/app";
+import { openBotConversation, store } from "../../store/app";
 import { colors, space, type } from "../../theme";
 
 type BotsListItem =
@@ -31,13 +31,12 @@ const ProfileRow = memo(function ProfileRow({
   const canOpen = profile.online && chat;
   return (
     <PressScale
-      onPress={() => canOpen && onPress(profile)}
+      onPress={() => onPress(profile)}
       onLongPress={onLongPress ? () => onLongPress(profile) : undefined}
       delayLongPress={350}
-      disabled={!canOpen && !onLongPress}
       style={[styles.profileCard, !profile.online && styles.offline]}
       accessibilityRole="button"
-      accessibilityState={{ disabled: !canOpen }}
+      accessibilityHint={canOpen ? "Open this agent" : "Show why this agent is unavailable"}
     >
       <HarnessAvatar
         name={profile.name}
@@ -90,7 +89,6 @@ const SectionHeader = memo(function SectionHeader({
 export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
   const harnesses = store.use((s) => s.connection.harnesses);
   const hosts = store.use((s) => s.connection.hosts);
-  const conversations = store.use((s) => s.conversations);
   const settings = store.use((s) => s.settings);
   const chatKinds = useMemo(() => new Set(harnesses.filter((h) => h.available).map((h) => h.id)), [harnesses]);
 
@@ -121,36 +119,20 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
       }
       return out;
     }
-    for (const h of harnesses) {
-      const profiles = DEMO_BOT_PROFILES.filter((p) => p.harness === h.id);
-      if (profiles.length === 0) continue;
-      out.push({ kind: "section", id: `sec-${h.id}`, title: h.name, online: h.available });
-      for (const profile of profiles) {
-        out.push({ kind: "profile", id: profile.id, profile, chat: h.available });
-      }
-    }
     return out;
   }, [chatKinds, harnesses, hosts]);
 
   const openProfile = useCallback(
     (profile: BotProfile) => {
       haptic.select();
-      const harnessId = profile.harness;
-      if (settings) {
-        saveSettings({
-          ...settings,
-          harness: harnessId,
-          cwd: profile.cwd ?? settings.cwd,
-        });
+      const result = openBotConversation(profile);
+      if ("error" in result) {
+        Alert.alert("Agent unavailable", result.error);
+        return;
       }
-      const existing = conversations.find(
-        (c) => c.harness === harnessId && (!profile.cwd || settings?.cwd === profile.cwd),
-      );
-      if (existing) setActive(existing.id);
-      else createConversation(harnessId);
       navigation.navigate("Chat");
     },
-    [conversations, navigation, settings],
+    [navigation],
   );
 
   const onFeedback = useCallback(

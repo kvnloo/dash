@@ -17,11 +17,13 @@ import { bridge, sendChat } from "../net/bridge";
 import {
   beginTurn,
   conversationBusy,
+  conversationTargetError,
   createConversation,
   parkUnsentTurn,
   promotePendingTurn,
   saveSettings,
   setActive,
+  stopConversation,
   store,
 } from "../store/app";
 import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
@@ -61,10 +63,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const harness = connection.harnesses.find((h) => h.id === harnessId);
   const harnessName = harness?.name ?? harnessId;
   const online = connection.status === "online";
+  const targetError = conversation ? conversationTargetError(conversation) : undefined;
 
   const streamingMessage = useMemo(() => {
-    const last = messages[messages.length - 1];
-    return last?.role === "assistant" && last.state === "streaming" ? last : undefined;
+    return messages.find((m) => m.role === "assistant" && m.state === "streaming");
   }, [messages]);
 
   const sendTurn = useCallback(
@@ -151,8 +153,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, [online, conversation?.id, flushQueue]);
 
   const onStop = useCallback(() => {
-    if (streamingMessage) bridge.send({ type: "cancel", id: streamingMessage.turnId });
-  }, [streamingMessage]);
+    if (conversation) stopConversation(conversation.id, (id) => { bridge.send({ type: "cancel", id }); });
+  }, [conversation]);
 
   const onSelectHarness = useCallback(
     (id: string) => {
@@ -170,6 +172,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <AppNav navigation={navigation} tab={1} />
       <ConnectionPill />
+      {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       <View style={styles.body}>
         <FlashList
           ref={listRef}
@@ -194,8 +197,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       <KeyboardDock>
         <Composer
           key={composerDraft ?? "composer"}
-          disabled={!online}
-          streaming={streamingMessage !== undefined}
+          disabled={!online || targetError !== undefined}
+          streaming={conversation ? conversationBusy(conversation.id) : false}
           initialText={composerDraft}
           placeholder={
             online
@@ -224,6 +227,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  targetError: { color: colors.danger, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   body: { flex: 1 },
   listContent: { paddingVertical: space.sm },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: "45%" },
