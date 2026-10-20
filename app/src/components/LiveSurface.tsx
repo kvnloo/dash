@@ -5,6 +5,7 @@ import { refreshLiveReceipts, sendLiveIntent } from "../net/bridge";
 import { liveStore, setAskHermes, showVersion, EMPTY_LIVE, type LiveLine, type LiveState } from "../store/live";
 import { colors, controlMin, glass, radius, space, type } from "../theme";
 import { LiveArtifactFrame } from "./LiveArtifactFrame";
+import { Markdown } from "./Markdown";
 import { PressScale } from "./PressScale";
 
 /**
@@ -57,10 +58,16 @@ export const LiveSurface = memo(function LiveSurface({ conversationId }: { conve
       </ScrollView>
       <PressScale accessibilityRole="button" accessibilityLabel={`Receipts in Hermes: ${live.receipts.length}`} onPress={() => setReceiptsOpen(o => !o)} style={styles.receipts}>
         <Text style={styles.label}>In Hermes · {live.receipts.length} receipt{live.receipts.length === 1 ? "" : "s"}</Text>
-        <Text style={styles.meta} numberOfLines={receiptsOpen ? undefined : 1}>
-          {receiptsOpen ? live.receipts.slice(-6).map(r => `${r.hermes ? `#${r.hermes.messageId} ` : ""}${r.decisions.length ? `decided ${r.decisions.join("; ")}` : r.summary}`).join("\n")
-            : last ? (last.decisions.length ? `Decided: ${last.decisions.join("; ")}` : last.summary) : "Nothing recorded yet"}
-        </Text>
+        {receiptsOpen ? live.receipts.slice(-6).map((r, i) => (
+          <Text key={`${r.at}-${i}`} style={styles.meta} numberOfLines={2}>
+            <Text style={styles.mono}>{r.hermes ? `#${r.hermes.messageId} ` : ""}{r.kind} · </Text>
+            {r.decisions.length ? `Decided ${r.decisions.join("; ")}` : r.summary.replace(/\s+/g, " ")}
+          </Text>
+        )) : (
+          <Text style={styles.meta} numberOfLines={1}>
+            {last ? (last.decisions.length ? `Decided: ${last.decisions.join("; ")}` : last.summary.replace(/\s+/g, " ")) : "Nothing recorded yet"}
+          </Text>
+        )}
       </PressScale>
       <View style={styles.bar}>
         <PressScale accessibilityRole="switch" accessibilityState={{ checked: live.askHermes }} aria-checked={live.askHermes} accessibilityLabel="Ask Hermes"
@@ -86,11 +93,12 @@ function Line({ line }: { line: LiveLine }) {
     return (
       <View style={styles.hermes} accessibilityLabel={`Hermes: ${line.text}`}>
         <Text style={[styles.mono, line.state === "error" && { color: colors.danger }]}>Hermes</Text>
-        <Text style={styles.body}>{line.text}</Text>
+        {line.state === "error" ? <Text style={styles.body}>{line.text}</Text> : <Markdown text={line.text} />}
       </View>
     );
   }
-  return <Text style={[styles.body, styles.worker, line.state === "error" && { color: colors.danger }]}>{line.text || (line.state === "streaming" ? "…" : "")}</Text>;
+  if (line.state === "error" || !line.text) return <Text style={[styles.body, styles.worker, line.state === "error" && { color: colors.danger }]}>{line.text || (line.state === "streaming" ? "…" : "")}</Text>;
+  return <Markdown text={line.text} />;
 }
 
 function NativeControl({ control, onIntent }: { control: LiveControl; onIntent: (intent: LiveIntent) => void }) {

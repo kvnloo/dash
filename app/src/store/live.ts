@@ -11,6 +11,8 @@ export interface LiveLine {
   role: "owner" | "worker" | "hermes" | "note";
   text: string;
   state: "streaming" | "done" | "error";
+  /** A tool ran since the last text: the next text starts a new paragraph. */
+  broken?: boolean;
 }
 
 export interface LiveTiming {
@@ -109,7 +111,7 @@ function applyEvent(state: LiveState, lineId: string | undefined, event: LiveEve
   switch (event.type) {
     case "delta": {
       const timing = state.timing && !state.timing.firstCharAt ? { ...state.timing, firstCharAt: now() } : state.timing;
-      return { ...line(l => ({ ...l, text: l.text + event.text })), timing };
+      return { ...line(l => ({ ...l, text: l.text + (l.broken && l.text ? "\n\n" : "") + event.text, broken: false })), timing };
     }
     case "artifact": {
       const artifacts = [...state.artifacts.filter(a => a.version !== event.artifact.version), event.artifact].sort((a, b) => a.version - b.version);
@@ -130,8 +132,9 @@ function applyEvent(state: LiveState, lineId: string | undefined, event: LiveEve
     }
     case "error":
       return { ...line(l => ({ ...l, text: l.text || event.message, state: "error" })), busy: false };
-    case "status":
     case "tool":
+      return line(l => ({ ...l, broken: true }));
+    case "status":
       return state;
   }
 }
