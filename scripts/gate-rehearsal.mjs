@@ -15,7 +15,7 @@ const records = () => {
 const human = records().find(i => i.state === "pending" && i.policy.requires_human_text);
 assert(human, "real copied pending human proposal required");
 const screenshots = resolve(home, "screens"); mkdirSync(screenshots, { recursive: true });
-const browser = await chromium.launch({ headless: true, args: ["--disable-gpu"] });
+const browser = await chromium.launch({ executablePath: process.env.DASH_BROWSER_BIN ?? "/usr/bin/chromium", headless: true, args: ["--disable-gpu"] });
 const context = await browser.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1 });
 const page = await context.newPage();
 const errors = [];
@@ -72,7 +72,7 @@ try {
   assert.equal(errors.length,0);
   result.passed=true;
 } catch(e) {
-  result.passed=false; result.failure=String(e); result.screenshots.push(await shot("failure")); throw e;
+  result.passed=false; result.failure=e instanceof Error ? e.message.replace(/fill\([^)]*\)/g,"fill([redacted])") : "Rehearsal failed"; result.screenshots.push(await shot("failure")); throw new Error("Rehearsal failed; inspect the sanitized receipt");
 } finally {
   writeFileSync(resolve(home,"receipt.json"),JSON.stringify(result,null,2));
   await browser.close();

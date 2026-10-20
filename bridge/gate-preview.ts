@@ -8,9 +8,11 @@ if (!process.env.DASH_WEB_DIR || !await Bun.file(resolve(root, "index.html")).ex
 const host = execFileSync("tailscale", ["ip", "-4"], { encoding: "utf8" }).trim().split("\n")[0];
 if (!host) throw new Error("Tailnet unavailable");
 const sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const build: unknown = await Bun.file(resolve(root,"build.json")).json();
+if (typeof build !== "object" || build === null || !("sha" in build) || build.sha !== sha) throw new Error("Export build.json must match this exact clean Git head; export before previewing");
 const web = Bun.serve({ hostname: host, port: 0, async fetch(request) {
   const url = new URL(request.url);
-  if (url.pathname === "/build.json") return Response.json({ sha, feature: "approvals-gate", exported: true }, { headers: { "Cache-Control": "no-store" } });
+  if (url.pathname === "/build.json") return Response.json(build, { headers: { "Cache-Control": "no-store" } });
   const path = resolve(root, "." + decodeURIComponent(url.pathname));
   if (path !== root && !path.startsWith(root + sep)) return new Response("Forbidden", { status: 403 });
   const file = Bun.file(path);
