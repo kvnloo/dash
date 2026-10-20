@@ -2,13 +2,16 @@ import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { HermesSessions } from "./hermes-sessions";
 import { runHermesSession } from "./hermes-session";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 function fixture() {
-  const root = mkdtempSync(join(process.env.TMPDIR!, "dash-hermes-")); roots.push(root);
+  const scratch = process.env.TMPDIR ?? join(homedir(), ".cache", "dash-tests");
+  mkdirSync(scratch, { recursive: true });
+  const root = mkdtempSync(join(scratch, "dash-hermes-")); roots.push(root);
   mkdirSync(join(root, "profiles/clean"), { recursive: true });
   for (const home of [root, join(root, "profiles/clean")]) {
     const db = new Database(join(home, "state.db"));

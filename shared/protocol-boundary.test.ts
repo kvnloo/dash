@@ -2,14 +2,14 @@ import { expect, test } from "bun:test";
 import { type AgentInfo, type ServerMessage, parseClientMessage, parseServerMessage, parseHosts } from "./protocol";
 
 test("Hermes session metadata and scoped history survive the wire boundary", () => {
-  const agent = { id: "hermes:session:clean:owner", name: "Native title", kind: "hermes", status: "available", sessionId: "owner", profileId: "clean", lastActivityAt: 1700000000000, messageCount: 12, source: "local" };
+  const agent: AgentInfo = { id: "hermes:session:clean:owner", name: "Native title", kind: "hermes", status: "available", sessionId: "owner", profileId: "clean", lastActivityAt: 1700000000000, messageCount: 12, source: "local" };
   const host = { id: "host", name: "host", hostname: "host", self: true, online: true, agents: [agent] };
   expect(parseHosts([host])).toEqual([host]);
   for (const key of ["lastActivityAt", "messageCount"]) {
     for (const bad of ["12", null, NaN, Infinity]) expect(parseHosts([{ ...host, agents: [{ ...agent, [key]: bad }] }])).toBeUndefined();
   }
   expect(parseHosts([{ ...host, agents: [{ ...agent, source: 3 }] }])).toBeUndefined();
-  const history = { type: "history", harness: "hermes", sessionId: "owner", hostId: "host", profileId: agent.id, messages: [{ id: "1", role: "assistant", text: "reply", at: 1700000000000 }] };
+  const history: ServerMessage = { type: "history", harness: "hermes", sessionId: "owner", hostId: "host", profileId: agent.id, messages: [{ id: "1", role: "assistant", text: "reply", at: 1700000000000 }] };
   expect(parseServerMessage(history)).toEqual(history);
   expect(parseServerMessage({ ...history, profileId: 42 })).toBeNull();
   expect(parseServerMessage({ ...history, hostId: [] })).toBeNull();
