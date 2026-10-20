@@ -38,6 +38,9 @@ jobs:
       - name: Lint
         if: matrix.gate == 'lint'
         run: bun run lint
+      - name: Install real audio decoder for pairing regression
+        if: matrix.gate == 'test'
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends ffmpeg
       - name: Unit and regression tests
         if: matrix.gate == 'test'
         run: bun run test
