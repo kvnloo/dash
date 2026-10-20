@@ -134,3 +134,32 @@ test("handoff copy is honest about what was sent", () => {
   expect(handoffText({ state: "queued", surface: "cli", host: "groot" })).toBe("Open in CLI on groot · reply queued until it closes");
   expect(handoffText({ state: "sending", surface: "tui", host: "groot" })).toBe("TUI on groot closed · sending queued reply");
 });
+
+test("a fresh CLI's live lease maps to the authority row it created in the same instant", async () => {
+  for (const withCreatedSource of [true, false]) {
+    const root = scratchRoot();
+    const db = new Database(join(root, "state.db"));
+    db.exec(`CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, title TEXT, started_at REAL, last_activity_at REAL, message_count INTEGER, cwd TEXT, archived INTEGER DEFAULT 0, hidden INTEGER DEFAULT 0, parent_session_id TEXT, end_reason TEXT, model_config TEXT${withCreatedSource ? ", created_source TEXT" : ""});
+      CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL, active INTEGER DEFAULT 1);`);
+    const cols = withCreatedSource ? "id,source,title,started_at,last_activity_at,created_source" : "id,source,title,started_at,last_activity_at";
+    const vals = (id: string, started: number) => withCreatedSource ? [id, "local", id, started, started + 5, "cli"] : [id, "local", id, started, started + 5];
+    const marks = withCreatedSource ? "?,?,?,?,?,?" : "?,?,?,?,?";
+    db.run(`INSERT INTO sessions (${cols}) VALUES (${marks})`, vals("local-owner", 1000.05));
+    db.run(`INSERT INTO sessions (${cols}) VALUES (${marks})`, vals("local-other", 2000));
+    db.run(`INSERT INTO sessions (${cols}) VALUES (${marks})`, vals("local-twin-a", 3000.1));
+    db.run(`INSERT INTO sessions (${cols}) VALUES (${marks})`, vals("local-twin-b", 3000.4));
+    db.close();
+    writeLeases(root, [
+      { session_id: "20261019_192603_93cd94", surface: "cli", pid: 4242, started_at: 1000 },
+      { session_id: "20261019_ambiguous", surface: "cli", pid: 4343, started_at: 3000.2 },
+    ]);
+    const sessions = new HermesSessions({ root, env: {}, processes: alive({ 4242: undefined, 4343: undefined }) });
+    const byId = new Map((await sessions.list()).map(a => [a.sessionId, a]));
+    expect(byId.get("local-owner")?.openIn).toBe("CLI");
+    expect(byId.get("local-other")?.openIn).toBeUndefined();
+    expect(byId.get("local-twin-a")?.openIn).toBeUndefined();
+    expect(byId.get("local-twin-b")?.openIn).toBeUndefined();
+    expect(sessions.liveOwner("default", "local-owner")?.pid).toBe(4242);
+    expect(sessions.liveOwner("default", "local-other")).toBeUndefined();
+  }
+});

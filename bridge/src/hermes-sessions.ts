@@ -93,6 +93,26 @@ function lineageIds(db: Database, id: string): Set<string> {
   }
   return ids;
 }
+/**
+ * Under session authority a fresh classic CLI leases its own live id, and its transcript
+ * is a separate `local-*` row created in the same instant (the registry stores no link).
+ * Map such a lease to the one interactive row that started within 1.5 s of it. Ambiguity
+ * maps to nothing. This only ever withholds writes, so a miss is the unsafe direction.
+ */
+const OWNER_MATCH_WINDOW_S = 1.5;
+export function ownerSessionIds(db: Database, owner: LiveOwner): Set<string> {
+  const direct = db.query<Row, [string]>("SELECT id FROM sessions WHERE id=?").get(owner.sessionId);
+  if (direct || owner.startedAt === undefined) return lineageIds(db, owner.sessionId);
+  let rows: Row[] = [];
+  const window = [owner.startedAt - OWNER_MATCH_WINDOW_S, owner.startedAt + OWNER_MATCH_WINDOW_S] as const;
+  try {
+    rows = db.query<Row, [number, number]>("SELECT id FROM sessions WHERE started_at BETWEEN ? AND ? AND coalesce(created_source, source) IN ('cli','tui','local') AND parent_session_id IS NULL").all(...window);
+  } catch {
+    rows = db.query<Row, [number, number]>("SELECT id FROM sessions WHERE started_at BETWEEN ? AND ? AND source IN ('cli','tui','local') AND parent_session_id IS NULL").all(...window);
+  }
+  const only = rows.length === 1 ? rows[0]?.id : undefined;
+  return typeof only === "string" ? lineageIds(db, only) : new Set([owner.sessionId]);
+}
 function localHistory(profile: Profile, id: string): HistoryMessage[] {
   return withDb(profile, db => {
     const args = [...lineageIds(db, id)];
@@ -171,7 +191,7 @@ export class HermesSessions {
       // Few leases, many rows: expand each live lease over its compression lineage once.
       const heldBy = new Map<string, LiveOwner>();
       const owners = readLiveOwners(profile.home, this.processes);
-      if (owners.length > 0) withDb(profile, db => { for (const owner of owners) for (const id of lineageIds(db, owner.sessionId)) heldBy.set(id, owner); });
+      if (owners.length > 0) withDb(profile, db => { for (const owner of owners) for (const id of ownerSessionIds(db, owner)) heldBy.set(id, owner); });
       for (const owner of owners) if (!heldBy.has(owner.sessionId)) heldBy.set(owner.sessionId, owner);
       return rows.flatMap(row => { const agent = toAgent(row, profile, typeof row.id === "string" ? heldBy.get(row.id) : undefined); if (!agent || seen.has(agent.id)) return []; seen.add(agent.id); return [agent]; })
         .sort((a, b) => (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0)).slice(0, RECENT_LIMIT);
@@ -209,7 +229,10 @@ export class HermesSessions {
     if (!profile) return undefined;
     const owners = readLiveOwners(profile.home, this.processes);
     if (owners.length === 0) return undefined;
-    return ownerOf(owners, withDb(profile, db => lineageIds(db, sessionId)) ?? new Set([sessionId]));
+    return withDb(profile, db => {
+      const target = lineageIds(db, sessionId);
+      return owners.find(owner => [...ownerSessionIds(db, owner)].some(id => target.has(id)));
+    }) ?? ownerOf(owners, new Set([sessionId]));
   }
   /** Profile id whose home is `home` (e.g. the bridge's own HERMES_HOME). */
   profileForHome(home: string): string | undefined {

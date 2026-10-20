@@ -11,7 +11,7 @@ import { join } from "node:path";
  * Hermes itself prunes. Unknown/unreadable registry = no owner evidence; the
  * caller still never resumes through a second classic CLI.
  */
-export type LiveOwner = { surface: string; pid: number; sessionId: string };
+export type LiveOwner = { surface: string; pid: number; sessionId: string; startedAt?: number };
 
 type ProcessProbe = { alive(pid: number): boolean; startTime(pid: number): number | undefined };
 
@@ -56,7 +56,8 @@ export function readLiveOwners(home: string, probe: ProcessProbe = hostProcesses
     const recorded = typeof entry.process_start_time === "number" ? entry.process_start_time : undefined;
     const actual = recorded === undefined ? undefined : probe.startTime(pid);
     if (recorded !== undefined && actual !== undefined && Math.abs(actual - recorded) > 2) continue;
-    owners.push({ surface: typeof entry.surface === "string" && entry.surface ? entry.surface : "another surface", pid, sessionId: entry.session_id });
+    owners.push({ surface: typeof entry.surface === "string" && entry.surface ? entry.surface : "another surface", pid, sessionId: entry.session_id,
+      ...(typeof entry.started_at === "number" && Number.isFinite(entry.started_at) ? { startedAt: entry.started_at } : {}) });
   }
   return owners;
 }
