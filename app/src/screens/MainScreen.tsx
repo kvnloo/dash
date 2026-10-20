@@ -1,7 +1,7 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Animated, { useAnimatedStyle, useFrameCallback, useSharedValue } from "react-native-reanimated";
-import { Alert, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
@@ -313,6 +313,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
         }}
       />
       <ConnectionPill />
+      <Pressable accessibilityRole="button" accessibilityLabel="Approvals" onPress={() => navigation.navigate("Approvals")} style={{ marginTop: space.xl, minHeight: 44, justifyContent: "center", paddingHorizontal: space.lg, alignSelf: "flex-end" }}><Text style={{ color: colors.ink2, ...type.small }}>Approvals</Text></Pressable>
 
       <View style={styles.body}>
         {searchActive ? (

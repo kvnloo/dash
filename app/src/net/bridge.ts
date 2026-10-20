@@ -1,3 +1,4 @@
+import { applyGateMessage } from "../store/approvals";
 import { AppState as RNAppState, type AppStateStatus } from "react-native";
 import { parseServerMessage, type ClientMessage } from "../../../shared/protocol";
 import { isDebugMode } from "../debug/mode";
@@ -155,6 +156,9 @@ class Bridge {
     const message = parseServerMessage(parsed);
     if (!message) return;
     switch (message.type) {
+      case "gate_snapshot":
+      case "gate_status":
+      case "gate_error": applyGateMessage(message); return;
       case "hello": {
         setConnection({
           status: "online",
@@ -171,6 +175,7 @@ class Bridge {
         }
         const turns = streamingTurns();
         if (turns.length) this.send({ type: "attach", turns });
+        this.send({ type: "gate_list" });
         flushPendingSends(sendChat);
         return;
       }
