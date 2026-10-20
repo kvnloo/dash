@@ -59,7 +59,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
         </>
       );
     case "done":
-      return <Markdown text={message.text} />;
+      return <><Markdown text={message.text} />{message.status ? <View style={styles.statusRow}><ThinkingMarker turnState="done" /><Text style={styles.statusText}>Done · {message.status}</Text></View> : null}</>;
     case "interrupted":
       return (
         <>

@@ -112,6 +112,6 @@ const styles = StyleSheet.create({
   body: { color: colors.ink, ...type.body }, small: { color: colors.ink2, ...type.small }, badge: { color: colors.textMuted, ...type.small, alignSelf: "center", flexShrink: 1 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, paddingHorizontal: space.sm }, button: { minHeight: 44, minWidth: 44, justifyContent: "center", paddingHorizontal: space.md, backgroundColor: "transparent", borderWidth: 1, borderColor: colors.hair, borderRadius: radius.sm }, buttonText: { color: colors.ink, ...type.small },
   link: { minHeight: 44, justifyContent: "center" }, linkText: { color: colors.text, ...type.small, textDecorationLine: "underline", flexShrink: 1 }, error: { color: colors.warn, ...type.small, padding: space.lg },
-  scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", padding: space.lg }, sheet: { padding: space.xl, gap: space.lg, backgroundColor: colors.surface, borderRadius: radius.lg },
+  scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", padding: space.lg }, sheet: { padding: space.xl, gap: space.lg, backgroundColor: colors.surface, borderRadius: radius.md },
   input: { color: colors.text, backgroundColor: colors.surface, margin: space.lg, padding: space.lg, borderRadius: radius.md, minHeight: 120, maxHeight: 260, ...type.body, textAlignVertical: "top" },
 });

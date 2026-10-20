@@ -311,6 +311,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
         tab={index}
         progress={pagerProgress}
         onTab={(next) => {
+          setIndex(next);
           pagerRef.current?.setPage(next);
         }}
       />

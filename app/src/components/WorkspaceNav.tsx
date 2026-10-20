@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { NavigationProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../navigation";
 import { actionable, approvals } from "../store/approvals";
@@ -14,15 +14,16 @@ export const AppNav = forwardRef<AppNavHandle, { navigation: NavigationProp<Root
   const pull = useBridgePullOptional();
   const pan = useBridgePullPan();
   const pending = approvals.use(s => s.items.filter(actionable).length);
-  return <GestureDetector gesture={pan}><View>
+  const content = <View>
     <View style={styles.header}><Text style={styles.brand}>Dash</Text><IconButton icon="chevron-down" label="Bridge details" onPress={() => pull?.toggle()} /><IconButton icon="edit-3" label="New chat" onPress={() => { createConversation(store.get().settings?.harness ?? "omp"); navigation.navigate("Chat"); }} /><IconButton icon="settings" label="Settings" onPress={() => navigation.navigate("Settings")} /></View>
     <View style={styles.tabs} accessibilityLabel="Primary mobile workspace">
-      {["Bots", "Chats", "Orchestra"].map((label, i) => <Pressable key={label} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected: i === tab }} onPress={() => onTab ? onTab(i) : navigation.navigate("Main", { tab: i })} style={styles.tab}>
+      {["Bots", "Chats", "Orchestra"].map((label, i) => <Pressable key={label} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected: i === tab }} aria-selected={i === tab} onPress={() => onTab ? onTab(i) : navigation.navigate("Main", { tab: i })} style={styles.tab}>
         <Text style={[styles.label, i === tab && styles.active]}>{label}</Text>{i === tab ? <View style={styles.dot} /> : null}
       </Pressable>)}
       {pending > 0 ? <Pressable accessibilityRole="tab" accessibilityLabel={`Approvals, ${pending} pending`} onPress={() => navigation.navigate("Approvals")} style={styles.tab}><View style={styles.badgeRow}><Text style={styles.label}>Approvals</Text><Text style={styles.badge}>{pending}</Text></View></Pressable> : null}
     </View>
-  </View></GestureDetector>;
+  </View>;
+  return Platform.OS === "web" ? content : <GestureDetector gesture={pan}>{content}</GestureDetector>;
 });
 const styles = StyleSheet.create({
  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },

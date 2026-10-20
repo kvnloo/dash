@@ -176,7 +176,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
           Same Tailscale tailnet as this phone. Computer is the MagicDNS name or Tailscale IP (port 4747).
         </Text>
 
-        <GlassSurface variant="raised" borderRadius={radius.md} style={styles.inputWrap}>
+        <GlassSurface variant="raised" borderRadius={radius.sm} style={styles.inputWrap}>
           <TextInput
             value={computer}
             onChangeText={setComputer}
@@ -190,7 +190,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
         </GlassSurface>
         <Text style={styles.hint}>Use the Tailscale IPv4 the bridge prints if MagicDNS does not resolve.</Text>
 
-        <GlassSurface variant="raised" borderRadius={radius.md} style={styles.inputWrap}>
+        <GlassSurface variant="raised" borderRadius={radius.sm} style={styles.inputWrap}>
           <TextInput
             value={bootstrapToken}
             onChangeText={setBootstrapToken}
@@ -219,7 +219,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
         {status ? <Text style={styles.status}>{status}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <GlassSurface variant="raised" borderRadius={radius.md} style={styles.inputWrap}>
+        <GlassSurface variant="raised" borderRadius={radius.sm} style={styles.inputWrap}>
           <TextInput
             value={manualCode}
             onChangeText={(t) => setManualCode(t.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
