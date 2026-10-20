@@ -68,7 +68,8 @@ describe("host roster reconciliation", () => {
     app.applyTurnEvent({ type: "status", id: t.turnId, seq: 2, text: "CLI on groot closed · sending queued reply", handoff: { state: "sending", surface: "cli", host: "groot" } });
     expect(waiting()).toMatchObject({ handoff: "sending" });
     app.applyTurnEvent({ type: "status", id: t.turnId, seq: 3, text: "Thinking" });
-    expect(waiting()?.role === "assistant" && waiting()?.handoff).toBeUndefined();
+    const after = waiting();
+    expect(after?.role === "assistant" ? after.handoff : "not an assistant").toBeUndefined();
     replyText.set(t.turnId, "done");
     app.applyTurnEvent({ type: "done", id: t.turnId, seq: 4, exitCode: 0 });
     expect(waiting()).toMatchObject({ state: "done", handoff: undefined });

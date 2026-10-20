@@ -253,7 +253,7 @@ describe("parseServerMessage", () => {
 
 describe("Hermes handoff wire fields", () => {
   test("status carries a queued/sending handoff and rejects malformed ones", () => {
-    const base = { type: "status", id: "t", seq: 2, text: "Open in CLI on groot · reply queued until it closes" };
+    const base = { type: "status" as const, id: "t", seq: 2, text: "Open in CLI on groot · reply queued until it closes" };
     expect(parseServerMessage({ ...base, handoff: { state: "queued", surface: "cli", host: "groot" } })).toEqual({ ...base, handoff: { state: "queued", surface: "cli", host: "groot" } });
     expect(parseServerMessage({ ...base, handoff: { state: "sending", surface: "cli", host: "groot" } })).toMatchObject({ handoff: { state: "sending" } });
     expect(parseServerMessage({ ...base, handoff: { state: "sent", surface: "cli", host: "groot" } })).toBeNull();
