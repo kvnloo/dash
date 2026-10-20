@@ -1,6 +1,8 @@
 /** zerOS ui-foundation/tokens.json @ 5cf5101. OKLCH → linear sRGB → sRGB,
  * clamped to gamut and rounded to 8 bits once; no runtime colour conversion. */
 const mono = process.env.EXPO_PUBLIC_ZEROS_THEME === "proof-mono";
+/** Proof Mono: meaning must survive without hue. */
+export const proofMono = mono;
 const night = {
   bg: "#0c0c0a", surfaceRaised: "#151611",
   text: "#ECE8DF", textMuted: "#B4AFA3", textTertiary: "#837F74", textFaint: "#5e5b52",

@@ -14,7 +14,7 @@ import { PRESS_SCALE } from "../motion";
 import type { RootStackParamList } from "../navigation";
 import { useBridgePullOptional, useBridgePullPan } from "./BridgePull";
 import { PressScale } from "./PressScale";
-import { colors, glass } from "../theme";
+import { colors, glass, proofMono } from "../theme";
 import {
   GOLD_68,
   GOLD_RIM,
@@ -264,9 +264,9 @@ const styles = StyleSheet.create({
   pill: {
     flex: 1,
     borderRadius: NAV_PILL_RADIUS,
-    backgroundColor: GOLD_68,
+    backgroundColor: proofMono ? "rgba(240, 240, 237, 0.62)" : GOLD_68,
     borderWidth: 1,
-    borderColor: GOLD_RIM,
+    borderColor: proofMono ? "#ffffff" : GOLD_RIM,
     overflow: "hidden",
   },
   spec: {
