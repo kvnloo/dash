@@ -22,6 +22,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
   const [selected, setSelected] = useState<string[]>([]);
   const [confirm, setConfirm] = useState<string[]>([]);
   const [confirmHashes, setConfirmHashes] = useState<{ id: string; body_sha256: string }[]>([]);
+  const confirmCount = confirm.length || confirmHashes.length;
   const [editor, setEditor] = useState<{ item: GateItem; reject: boolean } | null>(null);
   const [text, setText] = useState("");
   const [changed, setChanged] = useState(false);
@@ -59,6 +60,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
               {bulkEligible(item) ? <Pressable accessibilityRole="checkbox" accessibilityLabel={`Select ${item.id}`} accessibilityState={{ checked: selected.includes(item.id), disabled: !online }} disabled={!online} onPress={() => toggle([item.id])} style={styles.button}><Text style={[styles.buttonText, selected.includes(item.id) && { color: colors.gold }]}>{selected.includes(item.id) ? "Selected" : "Select"}</Text></Pressable> : null}
               <Text style={styles.badge}>{item.policy.requires_human_text ? "HUMAN TEXT" : item.policy.bulk_ok ? "BULK SAFE" : "INDIVIDUAL"}</Text><Text style={styles.badge}>{item.kind.replaceAll("_", " ")}</Text>
             </View>
+            {item.target.title ? <Text style={styles.heading}>{item.target.title}</Text> : null}
             <Link label={`${repo}${item.target.number ? ` #${item.target.number}` : " · " + (item.target.head ?? "new action")}`} url={`https://github.com/${repo}${item.target.number ? `/${item.kind === "issue_comment" ? "issues" : "pull"}/${item.target.number}` : ""}`} />
             <Text style={styles.small}>{item.policy.reason}</Text>
             <Text numberOfLines={6} selectable style={styles.body}>{item.body || "Write your own response. Generated text is not shown under this policy."}</Text>
@@ -79,13 +81,13 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
       {state.loaded && !visible.length ? <Text style={styles.body}>No pending proposals. Agents can propose work with the gate CLI.</Text> : null}
     </ScrollView>
     <Modal visible={confirm.length > 0} transparent animationType="fade" onRequestClose={() => setConfirm([])}>
-      <View style={styles.scrim}><View style={styles.sheet}><Text style={styles.title}>Approve {confirm.length} {confirm.length === 1 ? "item" : "items"}?</Text><Text style={styles.body}>By confirming, I approve only these exact bodies and targets for 24 hours. I checked peer tone, the smallest optional ask, available evidence and current feedback. No merge or expanded scope. Posting is separate. {state.dryRun ? "This bridge is dry-run only." : "Live posting is enabled."}</Text>
-        <Button label={`Confirm approve ${confirm.length}`} disabled={!online} onPress={() => { send({ type: "gate_decide", decision: { action: "approve", ids: confirm, expected: confirmHashes } }); setConfirm([]); setSelected([]); }} /><Button label="Cancel" onPress={() => setConfirm([])} /></View></View>
+      <View style={styles.scrim}><View style={styles.sheet}><Text style={styles.title}>Approve {confirmCount} {confirmCount === 1 ? "item" : "items"}?</Text><Text style={styles.body}>By confirming, I approve only these exact bodies and targets for 24 hours. I checked peer tone, the smallest optional ask, available evidence and current feedback. No merge or expanded scope. Posting is separate. {state.dryRun ? "This bridge is dry-run only." : "Live posting is enabled."}</Text>
+        <Button label={`Confirm approve ${confirmCount}`} disabled={!online} onPress={() => { send({ type: "gate_decide", decision: { action: "approve", ids: confirm, expected: confirmHashes } }); setConfirm([]); setSelected([]); }} /><Button label="Cancel" onPress={() => setConfirm([])} /></View></View>
     </Modal>
     <Modal visible={editor !== null} animationType="slide" onRequestClose={() => setEditor(null)}>
       <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View style={styles.header}><Text style={styles.title}>{editor?.reject ? "Reject proposal" : "Write / edit response"}</Text><Button label="Close" onPress={() => setEditor(null)} /></View>
-        <ScrollView contentContainerStyle={styles.content}><Text style={styles.body}>{editor?.item.target.repo} #{editor?.item.target.number}</Text><Text style={styles.body}>{editor?.reject ? "Give the agent a reason. No upstream comment will be posted." : editor?.item.policy.reason}</Text>{editor?.item.evidence.map((e,n) => <Link key={n} label={e.label} url={e.url_or_path} />)}</ScrollView>
+        <ScrollView contentContainerStyle={styles.content}><Text style={styles.body}>{editor?.item.target.repo}{editor?.item.target.number ? ` #${editor.item.target.number}` : " · New action"}</Text><Text style={styles.body}>{editor?.reject ? "Give the agent a reason. No upstream comment will be posted." : editor?.item.policy.reason}</Text>{editor?.item.evidence.map((e,n) => <Link key={n} label={e.label} url={e.url_or_path} />)}</ScrollView>
         <KeyboardDock><TextInput accessibilityLabel={editor?.reject ? "Rejection reason" : "Owner response"} multiline value={text} onChangeText={v => { setText(v); setChanged(true); }} placeholder={editor?.reject ? "Why should this not be posted?" : "Write your response in your own words…"} placeholderTextColor={colors.textMuted} style={styles.input} />
           <Button label={editor?.reject ? "Confirm reject" : "Save owner text"} disabled={!online || !changed || !text.trim() || !editor?.reject && text === editor?.item.body} onPress={() => { if (!editor) return; send({ type: "gate_decide", decision: editor.reject ? { action: "reject", id: editor.item.id, reason: text } : { action: "edit", id: editor.item.id, body: text } }); setEditor(null); }} />
         </KeyboardDock>

@@ -20,7 +20,7 @@ const context = await browser.newContext({ viewport: { width: 412, height: 915 }
 const page = await context.newPage();
 const errors = [];
 page.on("pageerror", e => errors.push(e.message));
-const shot = async name => { const path = resolve(screenshots,name+".png"); await page.screenshot({path}); return path; };
+const shot = async name => { await page.waitForTimeout(450); const path = resolve(screenshots,name+".png"); await page.screenshot({path, animations:"disabled"}); return path; };
 const result = { source_build: manifest.build_sha, viewport: "412x915", real_copied_items: records().length-fixtureIds.length, synthetic_fixture_items: fixtureIds.length, screenshots: [], checks: [], errors };
 try {
   await page.goto(manifest.web_url, { waitUntil: "networkidle" });
@@ -51,6 +51,10 @@ try {
   assert.equal(await composer.inputValue(),"");
   await composer.fill("REHEARSAL ONLY. Composer exercised on a copied real proposal. No real human approval or upstream posting.");
   result.screenshots.push(await shot("03-human-text-composer"));
+  const saveBounds = await page.getByRole("button",{name:"Save owner text",exact:true}).boundingBox();
+  const editorBounds = await composer.boundingBox();
+  assert(saveBounds && saveBounds.y >= 0 && saveBounds.y + saveBounds.height <= 915, "Save control must render within phone viewport");
+  assert(editorBounds && editorBounds.y >= 0 && editorBounds.y + editorBounds.height <= 915, "Composer must render within phone viewport");
   await page.getByRole("button",{name:"Save owner text",exact:true}).click();
   for(let n=0;n<100 && records().find(i=>i.id===human.id)?.state!=="edited";n++) await page.waitForTimeout(30);
   assert.equal(records().find(i=>i.id===human.id).state,"edited");
