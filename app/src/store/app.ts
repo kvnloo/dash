@@ -128,15 +128,16 @@ export async function forgetEverything(): Promise<void> {
 
 // ---- conversations ---------------------------------------------------------
 
-type LiveHistoryRequest = (input: { harness: string; sessionId: string; cwd?: string }) => void;
+type LiveHistoryRequest = (input: { harness: string; sessionId: string; cwd?: string; hostId?: string; profileId?: string }) => void;
 let requestLiveHistory: LiveHistoryRequest | undefined;
 
 export function setLiveHistoryRequester(fn: LiveHistoryRequest | undefined): void {
   requestLiveHistory = fn;
 }
 
-export function applyLiveHistory(harness: string, sessionId: string, messages: HistoryMessage[]): void {
-  const conv = store.get().conversations.find((c) => c.harness === harness && c.sessionId === sessionId);
+export function applyLiveHistory(harness: string, sessionId: string, messages: HistoryMessage[], hostId?: string, profileId?: string): void {
+  const candidates = store.get().conversations.filter(c => c.harness === harness && c.sessionId === sessionId && (!hostId || c.targetHostId === hostId) && (!profileId || c.profileId === profileId));
+  const conv = candidates.length === 1 ? candidates[0] : undefined;
   if (!conv) return;
   updateConversation(conv.id, (c) => hydrateLiveConversation(c, messages));
 }
@@ -148,7 +149,7 @@ export function setActive(id: string | null): void {
   const current = store.get().conversations.find((c) => c.id === id);
   if (!current || !shouldRequestHistory(current) || !current.sessionId) return;
   if (conversationTargetError(current)) return;
-  requestLiveHistory?.({ harness: current.harness, sessionId: current.sessionId, cwd: current.cwd });
+  requestLiveHistory?.({ harness: current.harness, sessionId: current.sessionId, cwd: current.cwd, hostId: current.targetHostId, profileId: current.profileId });
 }
 
 export function createConversation(harness: string, opts?: { id?: string; title?: string; targetHostId?: string; profileId?: string; sessionId?: string; cwd?: string }): Conversation {
@@ -177,7 +178,8 @@ export function createConversation(harness: string, opts?: { id?: string; title?
   return conversation;
 }
 
-export function conversationTargetError(target: Pick<Conversation, "targetHostId" | "profileId" | "harness" | "sessionId">): string | undefined {
+export function conversationTargetError(target: Pick<Conversation, "targetHostId" | "profileId" | "harness" | "sessionId" | "stale">): string | undefined {
+  if (target.stale) return "This chat has ended on the host. Its saved history is still on this phone.";
   if (!target.targetHostId) return undefined;
   const { connection } = store.get();
   const host = connection.hosts.find((h) => h.id === target.targetHostId);
@@ -205,6 +207,12 @@ export function openBotConversation(profile: BotProfile): { conversation: Conver
   const conversation = createConversation(profile.harness, { title: profile.name, targetHostId: profile.targetHostId, profileId: profile.profileId, sessionId: profile.sessionId, cwd: profile.cwd });
   if (conversation.sessionId) setActive(conversation.id);
   return { conversation };
+}
+
+export function clearEndedConversations(): void {
+  const ids = store.get().conversations.filter(c => c.stale).map(c => c.id);
+  store.set(s => ({ ...s, conversations: s.conversations.filter(c => !c.stale), activeId: ids.includes(s.activeId ?? "") ? null : s.activeId }));
+  scheduleSave();
 }
 
 export function deleteConversation(id: string): void {
@@ -272,7 +280,7 @@ export function beginTurn(
   };
   updateConversation(conversationId, (c) => ({
     ...c,
-    title: c.messages.length === 0 ? titleFrom(text) : c.title,
+    title: c.messages.length === 0 && !c.sessionId ? titleFrom(text) : c.title,
     messages: [...c.messages, user, assistant],
     updatedAt: now,
   }));
@@ -350,7 +358,7 @@ export function applyTranscript(turnId: string, text: string): void {
     const userTurns = c.messages.filter((m) => m.role === "user").length;
     return {
       ...c,
-      title: userTurns <= 1 ? titleFrom(text) : c.title,
+      title: userTurns <= 1 && !c.sessionId ? titleFrom(text) : c.title,
       messages,
       updatedAt: Date.now(),
     };
@@ -364,7 +372,7 @@ export function applyTurnEvent(
   if (!where) return;
   switch (event.type) {
     case "session":
-      updateConversation(where.conversationId, (c) => ({ ...c, sessionId: event.sessionId }));
+      updateConversation(where.conversationId, (c) => ({ ...c, sessionId: event.sessionId, ...(event.transport === "api" ? { profileId: event.profileId ?? c.profileId, targetHostId: event.hostId ?? c.targetHostId, stale: false } : {}) }));
       updateMessage(where.conversationId, where.messageId, (m) => (event.seq <= m.seq ? m : { ...m, seq: event.seq }));
       return;
     case "status":

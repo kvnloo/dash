@@ -118,7 +118,7 @@ export function createPairingHttpHandler(options: PairingHttpOptions) {
     }
     if (url.pathname === "/roster") {
       if (!secretMatches(bearer ?? url.searchParams.get("token"), options.token)) return unauthorized();
-      return json({ host: options.hostname, hosts: options.roster() });
+      return json({ host: options.hostname, hosts: await options.roster() });
     }
     try {
       if (url.pathname === "/pair" && request.method === "GET") {

@@ -10,7 +10,7 @@ import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import type { ConnectionStatus, Conversation } from "../../model";
 import type { ScreenProps } from "../../navigation";
-import { deleteConversation, setActive, store } from "../../store/app";
+import { clearEndedConversations, deleteConversation, setActive, store } from "../../store/app";
 import { colors, space, type } from "../../theme";
 import { confirmDestructive, dateGroupLabel, timeAgo } from "../../util";
 
@@ -34,7 +34,7 @@ const Row = memo(function Row({
   onLongPress(id: string): void;
 }) {
   const turnState = lastAssistantState(item.messages);
-  const stateId = runtimeStateFromTurn({ turnState, connectionStatus });
+  const stateId = item.stale ? "stale" : runtimeStateFromTurn({ turnState, connectionStatus });
   return (
     <PressScale
       onPress={() => onPress(item.id)}
@@ -51,13 +51,13 @@ const Row = memo(function Row({
       />
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
+          <Text style={[styles.rowTitle, item.stale && { color: colors.textMuted }]} numberOfLines={1}>
             {item.title || harnessName}
           </Text>
-          <Text style={styles.rowTime}>{timeAgo(item.updatedAt)}</Text>
+          <Text style={styles.rowTime}>{item.stale ? "ended" : timeAgo(item.updatedAt)}</Text>
         </View>
         <Text style={styles.rowPreview} numberOfLines={1}>
-          {preview(item)}
+          {item.profileName ? `${item.profileName} · ` : ""}{preview(item)}
         </Text>
       </View>
     </PressScale>
@@ -147,6 +147,11 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
 
   return (
     <View style={styles.wrap}>
+      {conversations.some(c => c.stale) && (
+        <PressScale onPress={() => confirmDestructive("Clear ended chats?", "Saved history is removed from this phone only.", "Clear ended", clearEndedConversations)} accessibilityRole="button" style={styles.section}>
+          <Text style={styles.sectionTitle}>Clear ended</Text>
+        </PressScale>
+      )}
       <FlashList
         data={items}
         renderItem={renderItem}
