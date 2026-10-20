@@ -42,7 +42,7 @@ try {
   const conversations = mergeLiveConversations([{ id: "saved-omp", harness: "omp", title: "Previously paired OMP", sessionId: "no-longer-live", createdAt: 1, updatedAt: 1, messages: [] }], hosts, Date.now());
   if (!conversations.find(c => c.id === "saved-omp")?.stale || conversations.find(c => c.sessionId === sessionId)?.title !== native.title) throw new Error("Roster reconciliation failed");
   const inbox: ServerMessage[] = [];
-  ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { Authorization: `Bearer ${token}` } });
+  ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${encodeURIComponent(token)}`);
   ws.addEventListener("message", event => { const value = parseServerMessage(JSON.parse(String(event.data))); if (value) inbox.push(value); });
   for (let n = 0; n < 150 && !inbox.some(m => m.type === "hello"); n++) await Bun.sleep(100);
   const hello = inbox.find(m => m.type === "hello");
