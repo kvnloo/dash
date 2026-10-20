@@ -313,7 +313,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
         }}
       />
       <ConnectionPill />
-      <Pressable accessibilityRole="button" accessibilityLabel="Approvals" onPress={() => navigation.navigate("Approvals")} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: space.lg, alignSelf: "flex-end" }}><Text style={{ color: colors.ink2, ...type.small }}>Approvals</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Approvals" onPress={() => navigation.navigate("Approvals")} style={{ marginTop: space.xl, minHeight: 44, justifyContent: "center", paddingHorizontal: space.lg, alignSelf: "flex-end" }}><Text style={{ color: colors.ink2, ...type.small }}>Approvals</Text></Pressable>
 
       <View style={styles.body}>
         {searchActive ? (
