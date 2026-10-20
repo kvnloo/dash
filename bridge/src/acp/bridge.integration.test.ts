@@ -13,7 +13,7 @@ async function bridgeFixture(mode = "ok") {
   await writeFile(join(bin, "tailscale"), "#!/bin/sh\nexit 1\n", { mode: 0o700 });
   await writeFile(join(bin, "omp"), `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(join(import.meta.dir, "fixtures/agent.ts"))} ${shellQuote(mode)}\n`, { mode: 0o700 });
   const proc = Bun.spawn([process.execPath, resolve(import.meta.dir, "../../index.ts")], {
-    env: { ...process.env, HOME: root, PATH: `${bin}:${process.env.PATH}`, DASH_ALLOW_LOOPBACK: "1", DASH_HOST: "127.0.0.1", DASH_PORT: "0", DASH_STT_MODEL: join(root, "no-model"), DASH_ENABLE_LEGACY_CLI: "0", DASH_ACP_FIXTURE_PID: join(root, "agent.pid") },
+    env: { ...process.env, HOME: root, PATH: `${bin}:${process.env.PATH}`, DASH_ALLOW_LOOPBACK: "1", DASH_HOST: "127.0.0.1", DASH_PORT: "0", DASH_STT_MODEL: join(root, "no-model"), DASH_ALLOWED_ORIGINS: "http://localhost:8100", DASH_ENABLE_LEGACY_CLI: "0", DASH_ACP_FIXTURE_PID: join(root, "agent.pid") },
     stdin: "ignore", stdout: "ignore", stderr: "pipe",
   });
   let stderr = "";
@@ -69,6 +69,12 @@ test("canonical bridge auth, stdio response, replay and routing rejection work t
     expect((await fetch(`http://127.0.0.1:${f.port}/pair`, { headers: { authorization: `Bearer ${f.bootstrap}` } })).status).toBe(200);
     expect((await fetch(`http://127.0.0.1:${f.port}/pair`, { headers: { authorization: `Bearer ${f.bootstrap}`, origin: "https://attacker.invalid" } })).status).toBe(403);
     expect((await fetch(`http://127.0.0.1:${f.port}/pair`, { headers: { authorization: `Bearer ${f.bootstrap}`, host: "attacker.invalid" } })).status).toBe(403);
+    const preflight = await fetch(`http://127.0.0.1:${f.port}/pair`, { method: "OPTIONS", headers: { origin: "http://localhost:8100", "access-control-request-method": "POST", "access-control-request-headers": "authorization,content-type" } });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("http://localhost:8100");
+    const browserPair = await fetch(`http://127.0.0.1:${f.port}/pair`, { headers: { origin: "http://localhost:8100", authorization: `Bearer ${f.bootstrap}` } });
+    expect(browserPair.status).toBe(200);
+    expect(browserPair.headers.get("access-control-allow-origin")).toBe("http://localhost:8100");
     connection = await connect(f.port, f.token);
     connection.send({ type: "chat", id: "turn", harness: "omp", text: "hi" });
     expect(await connection.until(value => value.type === "done" && value.id === "turn")).toMatchObject({ exitCode: 0 });

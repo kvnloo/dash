@@ -488,8 +488,20 @@ const server = Bun.serve<SocketData>({
       return new Response("forbidden origin or host", { status: 403 });
     }
     if (url.pathname !== "/ws") {
+      const cors = (response: Response): Response => {
+        if (origin !== null) {
+          response.headers.set("Access-Control-Allow-Origin", origin);
+          response.headers.set("Vary", "Origin");
+          response.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+          response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+        }
+        return response;
+      };
+      // Only origins admitted above can preflight. The actual request still
+      // requires the endpoint's separate bootstrap or execution credential.
+      if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       const http = await handleHttp(request, server.requestIP(request)?.address ?? null);
-      return http ?? new Response("not found", { status: 404 });
+      return cors(http ?? new Response("not found", { status: 404 }));
     }
     if (!secretMatches(bearerToken(request) ?? url.searchParams.get("token"), TOKEN)) {
       return new Response("unauthorized", { status: 401 });
