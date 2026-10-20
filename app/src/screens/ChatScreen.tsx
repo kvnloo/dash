@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
+import { composerPlaceholder } from "./composer-placeholder";
 import { KeyboardDock } from "../components/KeyboardDock";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { HarnessPicker } from "../components/HarnessPicker";
@@ -207,17 +208,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           disabled={!online || targetError !== undefined}
           streaming={conversation ? conversationBusy(conversation.id) : false}
           initialText={composerDraft}
-          placeholder={
-            online
-              ? streamingMessage
-                ? conversation && queueLength(conversation.id) > 0
-                  ? `Queue another (${queueLength(conversation.id)} waiting)…`
-                  : `Queue next message for ${harnessName}…`
-                : conversation?.openIn
-                  ? `Queue a reply for when the ${conversation.openIn} closes…`
-                  : `Message ${harnessName}`
-              : "Waiting for the bridge…"
-          }
+          placeholder={composerPlaceholder({
+            online,
+            streaming: Boolean(streamingMessage),
+            queued: conversation ? queueLength(conversation.id) : 0,
+            openIn: conversation?.openIn,
+            harnessName,
+          })}
           onSend={onSend}
           onStop={onStop}
           onVoice={() => navigation.navigate("Voice")}
