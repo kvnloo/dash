@@ -89,6 +89,7 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
+      {Platform.OS === "web" ? <style>{"input:focus,textarea:focus{outline:none!important}"}</style> : null}
       <SafeAreaProvider>
         <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
           <BridgePullProvider>

@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { HarnessInfo } from "../../../shared/protocol";
@@ -20,7 +20,7 @@ export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose 
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close">
         <Pressable onPress={() => {}}>
-          <GlassSurface variant="raised" borderRadius={radius.lg + 6} style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, space.lg) }]}>
+          <GlassSurface variant="raised" borderRadius={radius.md} style={styles.sheet} contentStyle={{ paddingBottom: Math.max(insets.bottom, space.lg) }}>
             <Text style={styles.label}>Harness</Text>
             {harnesses.map((h) => {
               const active = h.id === selected;
@@ -40,7 +40,7 @@ export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose 
                     <Text style={[styles.name, !h.available && styles.unavailable]}>{h.name}</Text>
                     {!h.available ? <Text style={styles.hint}>Not installed on the bridge machine</Text> : null}
                   </View>
-                  {active ? <Ionicons name="checkmark" size={20} color={colors.text} /> : null}
+                  {active ? <Feather name="check" size={20} color={colors.text} /> : null}
                 </PressScale>
               );
             })}
@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.lg + 6,
     borderTopRightRadius: radius.lg + 6,
   },
-  label: { color: colors.textMuted, ...type.label, marginBottom: space.sm, marginLeft: space.sm },
+  label: { color: colors.gold, ...type.cardTitle, marginBottom: space.sm, marginLeft: space.sm },
   row: {
     flexDirection: "row",
     alignItems: "center",
