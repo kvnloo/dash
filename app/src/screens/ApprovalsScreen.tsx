@@ -11,12 +11,15 @@ import { bridge } from "../net/bridge";
 import { store } from "../store/app";
 import { actionable, approvals, bulkEligible, itemTitle } from "../store/approvals";
 import { colors, fonts, radius, space, type } from "../theme";
+import { StageLinks } from "../components/artifact-stage/StageLinks";
+import { isStageUrl } from "../lib/stage-link";
 
 // `.z-btn` ghost: glass tint, hairline rim, pill, 44 px touch target.
 function Button({ label, onPress, disabled = false }: { label: string; onPress(): void; disabled?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, disabled && styles.buttonDisabled, pressed && styles.buttonPressed]}><Text style={styles.buttonText}>{label}</Text></Pressable>;
 }
 function Link({ label, url }: { label: string; url: string }) {
+  if (isStageUrl(url)) return <StageLinks text={url} label={label} />;
   return /^https:\/\//.test(url) ? <Pressable accessibilityRole="link" hitSlop={6} onPress={() => void Linking.openURL(url)} style={styles.link}><Text style={styles.linkText} numberOfLines={2}>{label}</Text></Pressable> : <Text selectable style={styles.small}>{label}: {url}</Text>;
 }
 export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
