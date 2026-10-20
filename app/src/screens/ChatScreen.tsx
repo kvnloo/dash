@@ -15,16 +15,18 @@ import type { Message } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge, sendChat } from "../net/bridge";
 import {
-  applyTurnEvent,
   beginTurn,
   conversationBusy,
+  conversationTargetError,
   createConversation,
+  parkUnsentTurn,
   promotePendingTurn,
   saveSettings,
   setActive,
+  stopConversation,
   store,
 } from "../store/app";
-import { dequeue, enqueue, notifyTurnSettled, onTurnSettled, queueLength } from "../store/queue";
+import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, space, type } from "../theme";
 
 const EMPTY: Message[] = [];
@@ -37,8 +39,8 @@ function getItemType(item: Message): string {
   return item.role;
 }
 
-function renderItem({ item }: ListRenderItemInfo<Message>) {
-  return <MessageRow message={item} />;
+function renderItem({ item }: ListRenderItemInfo<Message>, harnessId: string) {
+  return <MessageRow message={item} harnessId={harnessId} />;
 }
 
 export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
@@ -61,25 +63,26 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const harness = connection.harnesses.find((h) => h.id === harnessId);
   const harnessName = harness?.name ?? harnessId;
   const online = connection.status === "online";
+  const targetError = conversation ? conversationTargetError(conversation) : undefined;
 
   const streamingMessage = useMemo(() => {
-    const last = messages[messages.length - 1];
-    return last?.role === "assistant" && last.state === "streaming" ? last : undefined;
+    return messages.find((m) => m.role === "assistant" && m.state === "streaming");
   }, [messages]);
 
   const sendTurn = useCallback(
     (text: string, active = conversation ?? createConversation(harnessId)) => {
       const { turnId } = beginTurn(active.id, text);
       haptic.tap();
+      const current = store.get().conversations.find((c) => c.id === active.id) ?? active;
       const ok = sendChat({
         turnId,
-        harness: active.harness,
+        harness: current.harness,
         text,
-        sessionId: store.get().conversations.find((c) => c.id === active.id)?.sessionId ?? active.sessionId,
+        sessionId: current.sessionId,
+        cwd: current.cwd,
       });
       if (!ok) {
-        applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Not connected to the bridge." });
-        haptic.error();
+        parkUnsentTurn(turnId);
       }
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
@@ -102,16 +105,17 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         return;
       }
       haptic.tap();
+      const current = store.get().conversations.find((c) => c.id === conversationId);
       const ok = sendChat({
         turnId,
         harness: payload.harness,
         text: payload.text,
-        sessionId: store.get().conversations.find((c) => c.id === conversationId)?.sessionId ?? payload.sessionId,
+        sessionId: current?.sessionId ?? payload.sessionId,
+        cwd: current?.cwd,
       });
       if (!ok) {
-        applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Not connected to the bridge." });
-        haptic.error();
-        notifyTurnSettled(conversationId);
+        parkUnsentTurn(turnId);
+        return;
       }
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
@@ -144,9 +148,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     if (conversation && !streamingMessage && queueLength(conversation.id) > 0) flushQueue(conversation.id);
   }, [conversation?.id, streamingMessage, flushQueue]);
 
+  useEffect(() => {
+    if (online && conversation && queueLength(conversation.id) > 0) flushQueue(conversation.id);
+  }, [online, conversation?.id, flushQueue]);
+
   const onStop = useCallback(() => {
-    if (streamingMessage) bridge.send({ type: "cancel", id: streamingMessage.turnId });
-  }, [streamingMessage]);
+    if (conversation) stopConversation(conversation.id, (id) => { bridge.send({ type: "cancel", id }); });
+  }, [conversation]);
 
   const onSelectHarness = useCallback(
     (id: string) => {
@@ -164,11 +172,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <AppNav navigation={navigation} tab={1} />
       <ConnectionPill />
+      {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       <View style={styles.body}>
         <FlashList
           ref={listRef}
           data={messages}
-          renderItem={renderItem}
+          renderItem={(info) => renderItem(info, harnessId)}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
           maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.2 }}
@@ -188,8 +197,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       <KeyboardDock>
         <Composer
           key={composerDraft ?? "composer"}
-          disabled={!online}
-          streaming={streamingMessage !== undefined}
+          disabled={!online || targetError !== undefined}
+          streaming={conversation ? conversationBusy(conversation.id) : false}
           initialText={composerDraft}
           placeholder={
             online
@@ -218,6 +227,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  targetError: { color: colors.danger, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   body: { flex: 1 },
   listContent: { paddingVertical: space.sm },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: "45%" },

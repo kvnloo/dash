@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
   },
   circleHair: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: "rgba(236,232,223,0.16)",
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 9 },
   },
   hair: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: NAV_PAGER_RADIUS,
     borderWidth: 1,
     borderColor: "rgba(236,232,223,0.16)",

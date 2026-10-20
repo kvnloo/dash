@@ -54,6 +54,7 @@ export class VoiceSession {
   private readonly vad = new Vad();
   private busy = false;
   private running = false;
+  private generation = 0;
   private phase: VoicePhase = "idle";
   private replyActive = false;
 
@@ -65,12 +66,15 @@ export class VoiceSession {
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
-    await this.beginRecording();
+    const generation = ++this.generation;
+    await this.beginRecording(generation);
+    if (!this.running || generation !== this.generation) return;
     this.timer = setInterval(() => void this.tick(), POLL_MS);
   }
 
   async stop(): Promise<void> {
     this.running = false;
+    this.generation++;
     clearInterval(this.timer);
     this.timer = undefined;
     this.vad.reset();
@@ -95,12 +99,14 @@ export class VoiceSession {
     if (this.phase === "thinking") this.setPhase(this.replyActive ? "speaking" : "listening");
   }
 
-  private async beginRecording(): Promise<void> {
+  private async beginRecording(generation: number): Promise<void> {
     try {
       await this.recorder.prepareToRecordAsync();
+      if (!this.running || generation !== this.generation) return;
       this.recorder.record();
       this.setPhase(this.replyActive ? "speaking" : "listening");
     } catch (error) {
+      if (!this.running || generation !== this.generation) return;
       this.hooks.onError(error instanceof Error ? error.message : String(error));
       await this.stop();
     }
@@ -132,10 +138,13 @@ export class VoiceSession {
   }
 
   private async finishUtterance(send: boolean): Promise<void> {
+    const generation = this.generation;
     await this.recorder.stop();
+    if (!this.running || generation !== this.generation) return;
     const uri = this.recorder.uri;
     if (send && uri) {
       const bytes = new Uint8Array(await new File(uri).arrayBuffer());
+      if (!this.running || generation !== this.generation) return;
       const encoded = bytesToBase64(bytes);
       const chunks: string[] = [];
       for (let i = 0; i < encoded.length; i += CHUNK_CHARS) {
@@ -143,7 +152,7 @@ export class VoiceSession {
       }
       if (this.hooks.onUtterance(chunks, mimeFor(uri))) this.setPhase("thinking");
     }
-    if (this.running) await this.beginRecording();
+    if (this.running && generation === this.generation) await this.beginRecording(generation);
   }
 
   private setPhase(phase: VoicePhase): void {

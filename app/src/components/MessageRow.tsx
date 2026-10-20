@@ -1,11 +1,21 @@
 import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import type { AssistantMessage, Message } from "../model";
+import { effortIdForTurn, runtimeStateFromTurn } from "../catalog/runtime-state";
+import { loadVisualCatalog, providerIdForHarness, resolveEffort, resolveProvider, resolveRuntimeState } from "../catalog/visual";
+import type { AssistantMessage, AssistantState, Message } from "../model";
+import { replyText, useKeyed } from "../store/text";
 import { colors, radius, space, type } from "../theme";
+import { EffortOrbs } from "./EffortOrbs";
 import { Markdown } from "./Markdown";
-import { PulseDot } from "./PulseDot";
+import { OrchestraCore } from "./TopologyBadge";
 
-export const MessageRow = memo(function MessageRow({ message }: { message: Message }) {
+export const MessageRow = memo(function MessageRow({
+  message,
+  harnessId,
+}: {
+  message: Message;
+  harnessId?: string;
+}) {
   if (message.role === "user") {
     return (
       <View style={styles.userRow}>
@@ -19,16 +29,30 @@ export const MessageRow = memo(function MessageRow({ message }: { message: Messa
   }
   return (
     <View style={styles.assistantRow}>
-      <AssistantBody message={message} />
+      <AssistantBody message={message} harnessId={harnessId} />
     </View>
   );
 });
 
-function AssistantBody({ message }: { message: AssistantMessage }) {
+function ThinkingMarker({ harnessId, turnState }: { harnessId?: string; turnState: AssistantState }) {
+  const catalog = loadVisualCatalog();
+  const provider = resolveProvider(catalog, providerIdForHarness(harnessId ?? ""));
+  const effort = resolveEffort(catalog, effortIdForTurn({ turnState }));
+  const state = resolveRuntimeState(catalog, runtimeStateFromTurn({ turnState }));
+  return (
+    <EffortOrbs hue={provider.hue} size={22} effort={effort} state={state}>
+      <OrchestraCore hue={provider.hue} size={16} />
+    </EffortOrbs>
+  );
+}
+
+function AssistantBody({ message, harnessId }: { message: AssistantMessage; harnessId?: string }) {
+  const liveText = useKeyed(replyText, message.turnId);
   switch (message.state) {
     case "pending":
       return (
         <View style={styles.statusRow}>
+          <ThinkingMarker harnessId={harnessId} turnState={message.state} />
           <Text style={styles.statusText} numberOfLines={1}>
             Queued…
           </Text>
@@ -37,9 +61,9 @@ function AssistantBody({ message }: { message: AssistantMessage }) {
     case "streaming":
       return (
         <>
-          {message.text ? <Markdown text={message.text} /> : null}
+          {liveText || message.text ? <Markdown text={liveText || message.text} /> : null}
           <View style={styles.statusRow}>
-            <PulseDot />
+            <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text style={styles.statusText} numberOfLines={1}>
               {message.status ?? "Working"}
             </Text>
@@ -52,16 +76,22 @@ function AssistantBody({ message }: { message: AssistantMessage }) {
       return (
         <>
           {message.text ? <Markdown text={message.text} /> : null}
-          <Text style={styles.noteText}>Connection to the bridge was lost mid-reply.</Text>
+          <View style={styles.statusRow}>
+            <ThinkingMarker harnessId={harnessId} turnState={message.state} />
+            <Text style={styles.noteText}>{message.status ?? "Connection to the bridge was lost mid-reply."}</Text>
+          </View>
         </>
       );
     case "error":
       return (
         <>
           {message.text ? <Markdown text={message.text} /> : null}
-          <Text selectable style={styles.errorText}>
-            {message.error ?? "Something went wrong"}
-          </Text>
+          <View style={styles.statusRow}>
+            <ThinkingMarker harnessId={harnessId} turnState={message.state} />
+            <Text selectable style={styles.errorText}>
+              {message.error ?? "Something went wrong"}
+            </Text>
+          </View>
         </>
       );
     default: {
@@ -89,8 +119,8 @@ const styles = StyleSheet.create({
   userText: { color: colors.text, ...type.body },
   assistantRow: { paddingHorizontal: space.lg, paddingVertical: space.sm },
   assistantText: { color: colors.text, ...type.body },
-  statusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, minHeight: 20 },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, minHeight: 22 },
   statusText: { color: colors.textMuted, ...type.small, flexShrink: 1 },
-  noteText: { color: colors.textMuted, ...type.small, marginTop: 4 },
-  errorText: { color: colors.danger, ...type.small, marginTop: 4 },
+  noteText: { color: colors.textMuted, ...type.small, flexShrink: 1 },
+  errorText: { color: colors.danger, ...type.small, flexShrink: 1 },
 });

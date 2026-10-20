@@ -1,17 +1,14 @@
-import { DEMO_BOT_PROFILES, type BotProfile } from "../mock/bots";
-import { DEMO_ORCHESTRAS, type OrchestraProject } from "../mock/orchestra";
-import {
-  DEMO_FILES,
-  DEMO_PLUGINS,
-  DEMO_SKILLS,
-  DEMO_TOOLS,
-  type FileResource,
-  type NamedResource,
-} from "../mock/resources";
+import type { HostInfo } from "../../../shared/protocol";
+import type { OrchestraProject } from "../catalog/orchestra";
+import type { BotProfile } from "../mock/bots";
+import type { FileResource, NamedResource } from "../mock/resources";
 import type { Conversation } from "../model";
+import { conversationPreview, findLiveConversation, mergeLiveConversations } from "./live-sessions";
+import { projectsFromHosts } from "./project-data";
+import { profilesFromHosts } from "./roster";
 
 export type MentionScope = "bots" | "conversation" | "product";
-export type SlashScope = "harness" | "skill" | "plugin" | "tool" | "file";
+export type SlashScope = "live" | "harness" | "skill" | "plugin" | "tool" | "file";
 
 export type SearchMode = "discover" | "mention" | "slash";
 
@@ -34,6 +31,7 @@ const MENTION_ALIASES: Record<string, MentionScope> = {
 };
 
 const SLASH_ALIASES: Record<string, SlashScope> = {
+  live: "live",
   harness: "harness",
   harnesses: "harness",
   skill: "skill",
@@ -53,6 +51,7 @@ export const MENTION_SCOPES: { scope: MentionScope; label: string }[] = [
 ];
 
 export const SLASH_SCOPES: { scope: SlashScope; label: string }[] = [
+  { scope: "live", label: "/live" },
   { scope: "harness", label: "/harness" },
   { scope: "skill", label: "/skill" },
   { scope: "plugin", label: "/plugin" },
@@ -110,7 +109,7 @@ export function formatSearchHint(parsed: ParsedSearchQuery): string | null {
   if (parsed.scope === "unknown") {
     return parsed.mode === "mention"
       ? `Unknown @${parsed.rawScope} · try @bots @conversation @product`
-      : `Unknown /${parsed.rawScope} · try /harness /skill /file`;
+      : `Unknown /${parsed.rawScope} · try /live /harness /skill /file`;
   }
   const label = scopeLabel(parsed.scope);
   if (!parsed.text) {
@@ -119,7 +118,9 @@ export function formatSearchHint(parsed: ParsedSearchQuery): string | null {
         ? "conversations"
         : parsed.scope === "product"
           ? "products"
-          : `${parsed.scope}s`;
+          : parsed.scope === "live"
+            ? "live sessions"
+            : `${parsed.scope}s`;
     return `${label} · all ${noun}`;
   }
   return `${label} · “${parsed.text}”`;
@@ -146,23 +147,7 @@ function matches(text: string, haystack: string): boolean {
   return haystack.toLowerCase().includes(text);
 }
 
-export function conversationPreview(c: Conversation): string {
-  const last = c.messages[c.messages.length - 1];
-  if (!last) return "Empty chat";
-  if (last.role === "assistant") {
-    const t = last.text.replace(/\s+/g, " ").trim();
-    return last.status ? last.status : t || "Thinking…";
-  }
-  return last.text.replace(/\s+/g, " ").trim();
-}
-
-export function enrichProducts(conversations: Conversation[], orchestras: OrchestraProject[]): OrchestraProject[] {
-  if (conversations.length === 0) return orchestras;
-  return orchestras.map((p) => ({
-    ...p,
-    chatIds: conversations.filter((c) => p.agents.includes(c.harness)).map((c) => c.id),
-  }));
-}
+export { conversationPreview } from "./live-sessions";
 
 const DISCOVER_LIMITS = { conversation: 8, bot: 6, product: 4 } as const;
 
@@ -172,10 +157,17 @@ export function runGlobalSearch(params: {
   harnesses: { id: string; name: string; available?: boolean }[];
   botProfiles?: BotProfile[];
   products?: OrchestraProject[];
+  hosts?: HostInfo[];
+  cwd?: string;
 }): SearchResult[] {
   const parsed = parseSearchQuery(params.query);
-  const bots = params.botProfiles ?? DEMO_BOT_PROFILES;
-  const products = params.products ?? enrichProducts(params.conversations, DEMO_ORCHESTRAS);
+  const bots = params.botProfiles ?? profilesFromHosts(params.hosts ?? []);
+  const products = params.products ?? projectsFromHosts({
+    hosts: params.hosts ?? [],
+    conversations: params.conversations,
+    cwd: params.cwd,
+    now: Date.now(),
+  });
   const results: SearchResult[] = [];
   const discoverEmpty = parsed.mode === "discover" && !parsed.text;
 
@@ -218,6 +210,24 @@ export function runGlobalSearch(params: {
     }
   }
 
+  if (parsed.mode === "slash" && parsed.scope === "live") {
+    const listed = mergeLiveConversations([], (params.hosts ?? []).filter((host) => host.online), Date.now());
+    for (const live of listed) {
+      const conversation = findLiveConversation(params.conversations, live) ?? live;
+      const harnessName = params.harnesses.find((h) => h.id === conversation.harness)?.name ?? conversation.harness;
+      const preview = conversationPreview(conversation);
+      const hay = [conversation.title, harnessName, preview, conversation.harness, conversation.sessionId ?? "", conversation.cwd ?? ""].join(" ");
+      if (!matches(parsed.text, hay)) continue;
+      results.push({
+        kind: "conversation",
+        key: `live:${conversation.id}`,
+        conversation,
+        harnessName,
+        subtitle: preview,
+      });
+    }
+  }
+
   if (parsed.mode === "slash" && parsed.scope === "harness") {
     for (const h of params.harnesses) {
       const hay = [h.id, h.name, h.available ? "available online" : "offline unavailable"].join(" ");
@@ -230,42 +240,6 @@ export function runGlobalSearch(params: {
           available: h.available !== false,
           subtitle: h.available !== false ? "Available on bridge" : "Not installed on laptop",
         });
-      }
-    }
-  }
-
-  if (parsed.mode === "slash" && parsed.scope === "skill") {
-    for (const skill of DEMO_SKILLS) {
-      const hay = [skill.name, skill.description, skill.harness ?? ""].join(" ");
-      if (matches(parsed.text, hay)) {
-        results.push({ kind: "skill", key: `skill:${skill.id}`, skill, subtitle: skill.description });
-      }
-    }
-  }
-
-  if (parsed.mode === "slash" && parsed.scope === "plugin") {
-    for (const plugin of DEMO_PLUGINS) {
-      const hay = [plugin.name, plugin.description, plugin.harness ?? ""].join(" ");
-      if (matches(parsed.text, hay)) {
-        results.push({ kind: "plugin", key: `plugin:${plugin.id}`, plugin, subtitle: plugin.description });
-      }
-    }
-  }
-
-  if (parsed.mode === "slash" && parsed.scope === "tool") {
-    for (const tool of DEMO_TOOLS) {
-      const hay = [tool.name, tool.description, tool.harness ?? ""].join(" ");
-      if (matches(parsed.text, hay)) {
-        results.push({ kind: "tool", key: `tool:${tool.id}`, tool, subtitle: tool.description });
-      }
-    }
-  }
-
-  if (parsed.mode === "slash" && parsed.scope === "file") {
-    for (const file of DEMO_FILES) {
-      const hay = [file.path, file.description].join(" ");
-      if (matches(parsed.text, hay)) {
-        results.push({ kind: "file", key: `file:${file.id}`, file, subtitle: file.description });
       }
     }
   }

@@ -2,7 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyMutant, collectMutants, ROOT, TARGETS } from "./mutate";
+import { applyMutant, collectMutants, ROOT, TARGETS, runMutation } from "./mutate";
+
+ test("default mutation plan exercises parser and roster branches, not only constants", async () => {
+  const report = await runMutation({ dryRun: true, max: 200 });
+  for (const file of ["shared/protocol.ts", "bridge/src/roster.ts"]) {
+    const branches = report.results.filter((row) => row.file === file && (row.operator === "eq" || row.operator === "logic"));
+    expect(branches.length).toBeGreaterThanOrEqual(12);
+    expect(new Set(branches.map((row) => row.start)).size).toBe(branches.length);
+  }
+});
 
 describe("collectMutants", () => {
   test("mutates numeric constants that lock UI geometry", () => {
@@ -12,11 +21,11 @@ describe("collectMutants", () => {
     expect(mutants.some((m) => m.original === "true" && m.replacement === "false")).toBe(true);
   });
 
-  test("does not mutate equivalent operators inside functions", () => {
+  test("mutates equality and logic operators that change parse/roster branches", () => {
     const source = "export const ok = (n: number) => n < 2 && n === 0;\n";
     const mutants = collectMutants(source, "cmp.ts");
-    expect(mutants.some((m) => m.original === "===")).toBe(false);
-    expect(mutants.some((m) => m.original === "&&")).toBe(false);
+    expect(mutants.some((m) => m.original === "===" && m.replacement === "!==")).toBe(true);
+    expect(mutants.some((m) => m.original === "&&" && m.replacement === "||")).toBe(true);
   });
 
   test("does not mutate numbers inside strings or comments", () => {

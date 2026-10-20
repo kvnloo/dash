@@ -8,12 +8,9 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BridgePullOverlay, BridgePullProvider } from "./src/components/BridgePull";
 import type { RootStackParamList } from "./src/navigation";
-import { claimPairAt, settingsFromClaim } from "./src/lib/pair-api";
 import { parseDashConnectUrl } from "./src/lib/pair-url";
-import { haptic } from "./src/haptics";
 import { bridge } from "./src/net/bridge";
 import { ChatScreen } from "./src/screens/ChatScreen";
-import { ConversationsScreen } from "./src/screens/ConversationsScreen";
 import { MainScreen } from "./src/screens/MainScreen";
 import { OrchestraDetailScreen } from "./src/screens/OrchestraDetailScreen";
 import { PairScreen } from "./src/screens/PairScreen";
@@ -24,7 +21,7 @@ import { isDebugActive } from "./src/debug/expose";
 import { debugNavigationRef, flushPendingDebugNavigation } from "./src/debug/nav";
 import { clearDebugPersistence, applyDebugSeed } from "./src/debug/seed";
 import { applyDemoSeed } from "./src/mock/seed";
-import { hydrate, saveSettings, store } from "./src/store/app";
+import { hydrate, store } from "./src/store/app";
 import { colors } from "./src/theme";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -46,16 +43,12 @@ const linking = {
 async function applyDeepLink(url: string): Promise<boolean> {
   const parsed = parseDashConnectUrl(url);
   if (!parsed) return false;
-  try {
-    const claim = await claimPairAt(parsed.address, parsed.code);
-    const settings = settingsFromClaim(claim);
-    saveSettings(settings);
-    bridge.start(settings);
-    haptic.success();
-    return true;
-  } catch {
-    return false;
-  }
+  // A link can prefill enrollment, but cannot authorize execution. Bootstrap
+  // credentials stay out of URLs and must be provided privately on Pair.
+  for (let attempt = 0; !debugNavigationRef.isReady() && attempt < 100; attempt++) await new Promise(resolve => setTimeout(resolve, 50));
+  if (!debugNavigationRef.isReady()) return false;
+  debugNavigationRef.navigate("Pair", parsed);
+  return true;
 }
 
 export default function App() {
@@ -106,7 +99,6 @@ export default function App() {
                 <Stack.Screen name="Main" component={MainScreen} />
                 <Stack.Screen name="Chat" component={ChatScreen} />
                 <Stack.Screen name="OrchestraDetail" component={OrchestraDetailScreen} />
-                <Stack.Screen name="Conversations" component={ConversationsScreen} options={{ presentation: "modal" }} />
                 <Stack.Screen name="Voice" component={VoiceScreen} options={{ presentation: "fullScreenModal" }} />
                 <Stack.Screen name="Pair" component={PairScreen} />
                 <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: "modal" }} />

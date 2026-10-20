@@ -8,6 +8,9 @@ export interface BotProfile {
   online: boolean;
   /** Working directory on the host when this row is a live OMP tab. */
   cwd?: string;
+  targetHostId?: string;
+  profileId?: string;
+  sessionId?: string;
 }
 
 export const DEMO_BOT_PROFILES: BotProfile[] = [

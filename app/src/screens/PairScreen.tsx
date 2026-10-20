@@ -5,7 +5,7 @@ import {
   useAudioRecorder,
 } from "expo-audio";
 import { File } from "expo-file-system";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -22,6 +22,7 @@ import { GlassSurface } from "../components/GlassSurface";
 import { haptic } from "../haptics";
 import { newClaimKey } from "../lib/pair-crypto";
 import { claimLivePair, claimPairCode, hearPairTones, settingsFromClaim, startSonicPair } from "../lib/pair-api";
+import { connectSettings } from "../lib/settings-flow";
 import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
 import { saveSettings, store } from "../store/app";
@@ -29,15 +30,25 @@ import { colors, radius, space, type } from "../theme";
 
 const RECORD_MS = 6500;
 
-export function PairScreen({ navigation }: ScreenProps<"Pair">) {
+export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
   const insets = useSafeAreaInsets();
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
-  const [computer, setComputer] = useState("");
-  const [manualCode, setManualCode] = useState("");
+  const [computer, setComputer] = useState(route.params?.address ?? "");
+  const [manualCode, setManualCode] = useState(route.params?.code ?? "");
+  const [bootstrapToken, setBootstrapToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const claimKeyRef = useRef<Uint8Array | null>(null);
+  const attemptRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("blur", () => attemptRef.current?.abort());
+    return () => {
+      unsubscribe();
+      attemptRef.current?.abort();
+    };
+  }, [navigation]);
 
   const ensureClaimKey = useCallback((): Uint8Array => {
     claimKeyRef.current ??= newClaimKey();
@@ -48,22 +59,30 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
     async (code: string, claimKey?: Uint8Array) => {
       setError(null);
       setStatus("Finishing secure pairing…");
-      const claim = await claimPairCode(computer, code, claimKey);
+      const claim = await claimPairCode(computer, code, claimKey, bootstrapToken);
       await connectClaim(claim);
     },
-    [computer, navigation],
+    [computer, bootstrapToken, navigation],
   );
 
   const connectClaim = useCallback(
     async (claim: Awaited<ReturnType<typeof claimPairCode>>) => {
-      const settings = settingsFromClaim(claim);
-      saveSettings(settings);
-      bridge.start(settings);
-      const online = await waitForOnline(8000);
-      if (!online) throw new Error("Paired but bridge WebSocket did not connect");
-      haptic.success();
-      claimKeyRef.current = null;
-      navigation.replace("Main");
+      const attempt = new AbortController();
+      attemptRef.current?.abort();
+      attemptRef.current = attempt;
+      await connectSettings({
+        settings: settingsFromClaim(claim),
+        connection: store,
+        save: saveSettings,
+        start: (settings) => bridge.start(settings),
+        signal: attempt.signal,
+        onConnected: () => {
+          haptic.success();
+          claimKeyRef.current = null;
+          setBootstrapToken("");
+          navigation.replace("Main");
+        },
+      });
     },
     [navigation],
   );
@@ -85,7 +104,7 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       if (!recorder.getStatus().isRecording) throw new Error("Microphone did not start recording");
 
       setStatus("Listening… hold the phone by the laptop speakers");
-      const playing = startSonicPair(computer, claimKey);
+      const playing = startSonicPair(computer, claimKey, bootstrapToken);
       await sleep(RECORD_MS);
       await recorder.stop();
       await playing;
@@ -95,7 +114,7 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setStatus("Decoding pairing tones…");
       const bytes = new Uint8Array(await new File(uri).arrayBuffer());
       const mime = uri.toLowerCase().endsWith(".wav") ? "audio/wav" : "audio/m4a";
-      const claim = await hearPairTones(computer, claimKey, bytes, mime);
+      const claim = await hearPairTones(computer, claimKey, bytes, mime, bootstrapToken);
       await connectClaim(claim);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -110,15 +129,15 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setBusy(false);
       setStatus(null);
     }
-  }, [busy, computer, connectClaim, ensureClaimKey, recorder]);
+  }, [busy, computer, bootstrapToken, connectClaim, ensureClaimKey, recorder]);
 
   const pairOverTailscale = useCallback(async () => {
-    if (busy || computer.trim().length === 0) return;
+    if (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0) return;
     setBusy(true);
     setError(null);
     try {
       setStatus(`Connecting to ${computer.trim()}…`);
-      const claim = await claimLivePair(computer);
+      const claim = await claimLivePair(computer, bootstrapToken);
       await connectClaim(claim);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -128,10 +147,10 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setBusy(false);
       setStatus(null);
     }
-  }, [busy, computer, connectClaim]);
+  }, [busy, computer, bootstrapToken, connectClaim]);
 
   const pairWithCode = useCallback(async () => {
-    if (busy || manualCode.trim().length !== 6) return;
+    if (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0 || manualCode.trim().length !== 6) return;
     setBusy(true);
     setError(null);
     try {
@@ -144,7 +163,7 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
       setBusy(false);
       setStatus(null);
     }
-  }, [busy, finishClaim, manualCode]);
+  }, [busy, computer, bootstrapToken, finishClaim, manualCode]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
@@ -169,18 +188,34 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
         </GlassSurface>
         <Text style={styles.hint}>Use the Tailscale IPv4 the bridge prints if MagicDNS does not resolve.</Text>
 
+        <GlassSurface variant="raised" borderRadius={radius.md} style={styles.inputWrap}>
+          <TextInput
+            value={bootstrapToken}
+            onChangeText={setBootstrapToken}
+            placeholder="Bootstrap token"
+            accessibilityLabel="Bootstrap token"
+            placeholderTextColor={colors.textFaint}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="off"
+            style={styles.inputInner}
+          />
+        </GlassSurface>
+        <Text style={styles.hint}>Transfer ~/.dash/bootstrap-token privately from your computer. Used only for enrollment; not saved.</Text>
+
         <Pressable
           onPress={() => void pairOverTailscale()}
-          disabled={busy || computer.trim().length === 0}
-          style={({ pressed }) => [styles.primary, (busy || computer.trim().length === 0) && styles.primaryDisabled, pressed && styles.pressed]}
+          disabled={busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0}
+          style={({ pressed }) => [styles.primary, (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0) && styles.primaryDisabled, pressed && styles.pressed]}
         >
           {busy ? <ActivityIndicator color={colors.onAccent} /> : <Text style={styles.primaryText}>Pair over Tailscale</Text>}
         </Pressable>
 
         <Pressable
           onPress={() => void pairWithSound()}
-          disabled={busy || computer.trim().length === 0}
-          style={({ pressed }) => [styles.secondary, (busy || computer.trim().length === 0) && styles.secondaryDisabled, pressed && styles.pressed]}
+          disabled={busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0}
+          style={({ pressed }) => [styles.secondary, (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0) && styles.secondaryDisabled, pressed && styles.pressed]}
         >
           <Text style={styles.secondaryText}>Listen for pairing sound</Text>
         </Pressable>
@@ -201,8 +236,8 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
         </GlassSurface>
         <Pressable
           onPress={() => void pairWithCode()}
-          disabled={busy || manualCode.length !== 6}
-          style={({ pressed }) => [styles.secondary, (busy || manualCode.length !== 6) && styles.secondaryDisabled, pressed && styles.pressed]}
+          disabled={busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0 || manualCode.length !== 6}
+          style={({ pressed }) => [styles.secondary, (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0 || manualCode.length !== 6) && styles.secondaryDisabled, pressed && styles.pressed]}
         >
           <Text style={styles.secondaryText}>Pair with code</Text>
         </Pressable>
@@ -217,19 +252,6 @@ export function PairScreen({ navigation }: ScreenProps<"Pair">) {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function waitForOnline(timeoutMs: number): Promise<boolean> {
-  if (store.get().connection.status === "online") return Promise.resolve(true);
-  return new Promise((resolve) => {
-    const start = Date.now();
-    const tick = () => {
-      if (store.get().connection.status === "online") return resolve(true);
-      if (Date.now() - start >= timeoutMs) return resolve(false);
-      setTimeout(tick, 200);
-    };
-    tick();
-  });
 }
 
 const styles = StyleSheet.create({

@@ -8,6 +8,8 @@ export interface Settings {
   harness: string;
   /** Optional working directory override sent with every turn. */
   cwd?: string;
+  /** Product feedback from Main composer, Voice, and row long-press. Default on in beta. */
+  inAppFeedback: boolean;
 }
 
 export type AssistantState = "pending" | "streaming" | "done" | "error" | "interrupted";
@@ -45,6 +47,10 @@ export interface Conversation {
   updatedAt: number;
   /** Harness-native session id once the first turn reports it. */
   sessionId?: string;
+  /** Working directory on the paired host when this row is a live session. */
+  cwd?: string;
+  targetHostId?: string;
+  profileId?: string;
   messages: Message[];
 }
 
@@ -74,6 +80,7 @@ export function parseSettings(raw: unknown): Settings | null {
     token: raw.token,
     harness: raw.harness,
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
+    inAppFeedback: raw.inAppFeedback !== false,
   };
 }
 
@@ -129,6 +136,9 @@ export function parseConversation(raw: unknown): Conversation | null {
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     sessionId: typeof raw.sessionId === "string" ? raw.sessionId : undefined,
+    cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
+    targetHostId: typeof raw.targetHostId === "string" ? raw.targetHostId : undefined,
+    profileId: typeof raw.profileId === "string" ? raw.profileId : undefined,
     messages,
   };
 }

@@ -1,7 +1,7 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Animated, { useAnimatedStyle, useFrameCallback, useSharedValue } from "react-native-reanimated";
-import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Alert, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
@@ -19,14 +19,74 @@ import {
   runGlobalSearch,
   type SearchResult,
 } from "../lib/global-search";
+import { FEEDBACK_CONVERSATION_ID, inAppFeedbackEnabled, type FeedbackAction } from "../lib/feedback";
+import { submitInAppFeedback } from "../lib/feedback-submit";
+import { DEFAULT_MAIN_TAB } from "../lib/home";
 import { profilesFromHosts } from "../lib/roster";
 import type { BotProfile } from "../mock/bots";
 import type { ScreenProps } from "../navigation";
-import { createConversation, saveSettings, setActive, store } from "../store/app";
+import { createConversation, openBotConversation, saveSettings, setActive, setConnection, store } from "../store/app";
 import { colors, space, type } from "../theme";
 import { BotsPane } from "./panes/BotsPane";
 import { ChatsPane } from "./panes/ChatsPane";
 import { OrchestraPane } from "./panes/OrchestraPane";
+
+function feedbackFromSearch(item: SearchResult): FeedbackAction {
+  switch (item.kind) {
+    case "bot":
+      return {
+        kind: "select",
+        text: `Selected bot ${item.profile.name}`,
+        selection: { kind: "bot", id: item.profile.id, label: item.profile.name },
+      };
+    case "conversation":
+      return {
+        kind: "select",
+        text: `Selected chat ${item.conversation.title}`,
+        selection: { kind: "chat", id: item.conversation.id, label: item.conversation.title },
+      };
+    case "product":
+      return {
+        kind: "select",
+        text: `Selected orchestra ${item.project.name}`,
+        selection: { kind: "orchestra", id: item.project.id, label: item.project.name },
+      };
+    case "harness":
+      return {
+        kind: "select",
+        text: `Selected harness ${item.name}`,
+        selection: { kind: "search", id: item.id, label: item.name },
+      };
+    case "skill":
+      return {
+        kind: "select",
+        text: `Selected skill ${item.skill.name}`,
+        selection: { kind: "search", id: item.skill.name, label: item.skill.name },
+      };
+    case "plugin":
+      return {
+        kind: "select",
+        text: `Selected plugin ${item.plugin.name}`,
+        selection: { kind: "search", id: item.plugin.name, label: item.plugin.name },
+      };
+    case "tool":
+      return {
+        kind: "select",
+        text: `Selected tool ${item.tool.name}`,
+        selection: { kind: "search", id: item.tool.name, label: item.tool.name },
+      };
+    case "file":
+      return {
+        kind: "select",
+        text: `Selected file ${item.file.path}`,
+        selection: { kind: "search", id: item.file.path, label: item.file.path },
+      };
+    default: {
+      const _exhaustive: never = item;
+      return _exhaustive;
+    }
+  }
+}
 
 function chatDraftForResult(item: SearchResult): string | undefined {
   switch (item.kind) {
@@ -48,8 +108,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const { width } = useWindowDimensions();
   const pagerRef = useRef<MainPagerRef>(null);
   const navRef = useRef<AppNavHandle>(null);
-  const pagerProgress = useSharedValue(1);
-  const pageFollow = useSharedValue(1);
+  const pagerProgress = useSharedValue(DEFAULT_MAIN_TAB);
+  const pageFollow = useSharedValue(DEFAULT_MAIN_TAB);
   const pageVel = useSharedValue(0);
   const routeTab = route.params?.tab;
 
@@ -77,7 +137,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const debugSearch = debugUi.use((s) => s.mainSearchQuery);
   const debugTab = debugUi.use((s) => s.mainTabIndex);
   const [localQuery, setLocalQuery] = useState("");
-  const [localTab, setLocalTab] = useState(1);
+  const [localTab, setLocalTab] = useState(DEFAULT_MAIN_TAB);
   const query = debugSearch !== null ? debugSearch : localQuery;
   const index = debugTab !== null ? debugTab : localTab;
 
@@ -117,6 +177,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const conversations = store.use((s) => s.conversations);
   const harnesses = store.use((s) => s.connection.harnesses);
   const hosts = store.use((s) => s.connection.hosts);
+  const cwd = store.use((s) => s.connection.cwd);
   const settings = store.use((s) => s.settings);
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
@@ -124,8 +185,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const botProfiles = useMemo(() => (hosts.length > 0 ? profilesFromHosts(hosts) : undefined), [hosts]);
 
   const results = useMemo(
-    () => runGlobalSearch({ query, conversations, harnesses, botProfiles }),
-    [query, conversations, harnesses, botProfiles],
+    () => runGlobalSearch({ query, conversations, harnesses, botProfiles, hosts, cwd }),
+    [query, conversations, harnesses, botProfiles, hosts, cwd],
   );
 
   const hint = formatSearchHint(parsed);
@@ -135,7 +196,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       if (!harnessId) return;
       haptic.select();
       if (settings) saveSettings({ ...settings, harness: harnessId });
-      const existing = conversations.find((c) => c.harness === harnessId);
+      const existing = conversations.find((c) => c.harness === harnessId && !c.targetHostId && !c.sessionId);
       if (existing) setActive(existing.id);
       else createConversation(harnessId);
       navigation.navigate("Chat", draft ? { draft } : undefined);
@@ -145,19 +206,27 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
   const openBot = useCallback(
     (profile: BotProfile) => {
-      if (!profile.online) return;
-      openHarness(profile.harness);
+      const result = openBotConversation(profile);
+      if ("error" in result) {
+        Alert.alert("Agent unavailable", result.error);
+        return;
+      }
+      haptic.select();
+      navigation.navigate("Chat");
     },
-    [openHarness],
+    [navigation],
   );
 
   const openConversation = useCallback(
     (id: string) => {
       haptic.select();
+      if (!conversations.some((c) => c.id === id)) {
+        setConnection({ hosts });
+      }
       setActive(id);
       navigation.navigate("Chat");
     },
-    [navigation],
+    [conversations, hosts, navigation],
   );
 
   const openProduct = useCallback(
@@ -194,6 +263,18 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
     [openBot, openConversation, openHarness, openProduct],
   );
 
+  const feedbackOn = inAppFeedbackEnabled(settings);
+
+  const onFeedbackResult = useCallback(
+    (item: SearchResult) => {
+      if (!inAppFeedbackEnabled(store.get().settings)) return;
+      haptic.select();
+      submitInAppFeedback(feedbackFromSearch(item));
+      navigation.navigate("Chat");
+    },
+    [navigation],
+  );
+
   const onScope = useCallback(
     (label: string) => {
       haptic.tap();
@@ -203,17 +284,21 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   );
 
   const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<SearchResult>) => <SearchResultRow item={item} onPress={onResult} />,
-    [onResult],
+    ({ item }: ListRenderItemInfo<SearchResult>) => (
+      <SearchResultRow item={item} onPress={onResult} onLongPress={feedbackOn ? onFeedbackResult : undefined} />
+    ),
+    [feedbackOn, onFeedbackResult, onResult],
   );
 
   const emptyMessage =
     parsed.mode === "slash" && parsed.scope === "unknown"
-      ? `Unknown /${parsed.rawScope}. Pick /harness, /skill, /plugin, /tool, or /file.`
+      ? `Unknown /${parsed.rawScope}. Pick /live, /harness, /skill, /plugin, /tool, or /file.`
       : parsed.mode === "mention" && parsed.scope === "unknown"
         ? `Unknown @${parsed.rawScope}. Pick @bots, @conversation, or @product.`
         : parsed.mode === "slash"
-          ? "No laptop resources match. Try another keyword or scope."
+          ? parsed.scope === "skill" || parsed.scope === "plugin" || parsed.scope === "tool" || parsed.scope === "file"
+            ? `The bridge does not report ${parsed.scope} inventory yet.`
+            : "No live sessions or installed harnesses match."
           : "No matches. Use @ for bots and chats, / for harness files and tools.";
 
   return (
@@ -282,9 +367,24 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           onChange={setQuery}
           onScope={onScope}
           dock="bottom"
-          placeholder="Message Dash"
-          onVoice={() => navigation.navigate("Voice")}
+          placeholder={feedbackOn ? "Feedback for Dash" : "Message Dash"}
+          onVoice={() => {
+            if (feedbackOn) {
+              createConversation(settings?.harness ?? "omp", {
+                id: FEEDBACK_CONVERSATION_ID,
+                title: "Dash feedback",
+              });
+            }
+            navigation.navigate("Voice");
+          }}
           onSend={(text) => {
+            if (feedbackOn) {
+              haptic.select();
+              submitInAppFeedback({ kind: "typed", text });
+              navigation.navigate("Chat");
+              setQuery("");
+              return;
+            }
             const harness = settings?.harness ?? harnesses[0]?.id;
             if (!harness) return;
             openHarness(harness, text);

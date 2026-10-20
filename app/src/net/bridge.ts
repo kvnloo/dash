@@ -5,10 +5,14 @@ import { fetchRoster } from "../lib/roster";
 import type { Settings } from "../model";
 import {
   applyDeltas,
+  applyLiveHistory,
   applyTranscript,
   applyTurnEvent,
+  flushPendingSends,
   markTurnLost,
+  rejectUnavailableTurn,
   setConnection,
+  setLiveHistoryRequester,
   store,
   streamingTurns,
 } from "../store/app";
@@ -167,6 +171,7 @@ class Bridge {
         }
         const turns = streamingTurns();
         if (turns.length) this.send({ type: "attach", turns });
+        flushPendingSends(sendChat);
         return;
       }
       case "lost":
@@ -192,6 +197,9 @@ class Bridge {
         // Keep ordering: text before the event that follows it.
         this.flushDeltas();
         applyTurnEvent(message);
+        return;
+      case "history":
+        applyLiveHistory(message.harness, message.sessionId, message.messages);
         return;
       default: {
         const _exhaustive: never = message;
@@ -247,14 +255,25 @@ function closeReason(code: number): string {
 
 export const bridge = new Bridge();
 
+setLiveHistoryRequester((input) => {
+  bridge.send({
+    type: "history",
+    harness: input.harness,
+    sessionId: input.sessionId,
+    cwd: input.cwd,
+  });
+});
+
 /** Send one chat turn for the active conversation. Returns false if offline. */
 export function sendChat(input: {
   turnId: string;
   harness: string;
   text: string;
   sessionId?: string;
+  cwd?: string;
 }): boolean {
-  const cwd = store.get().settings?.cwd;
+  if (rejectUnavailableTurn(input.turnId)) return false;
+  const cwd = input.cwd ?? store.get().settings?.cwd;
   return bridge.send({
     type: "chat",
     id: input.turnId,
@@ -271,9 +290,11 @@ export function sendVoiceBegin(input: {
   harness: string;
   mime: string;
   sessionId?: string;
+  cwd?: string;
 }): boolean {
-  const cwd = store.get().settings?.cwd;
-  return bridge.send({
+  if (rejectUnavailableTurn(input.turnId)) return false;
+  const cwd = input.cwd ?? store.get().settings?.cwd;
+  const sent = bridge.send({
     type: "voice_begin",
     id: input.turnId,
     harness: input.harness,
@@ -281,6 +302,8 @@ export function sendVoiceBegin(input: {
     sessionId: input.sessionId,
     cwd,
   });
+  if (!sent) applyTurnEvent({ type: "error", id: input.turnId, seq: 1, message: "Not connected to your computer." });
+  return sent;
 }
 
 export function sendVoiceChunk(turnId: string, data: string): boolean {

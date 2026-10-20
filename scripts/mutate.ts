@@ -22,8 +22,8 @@ export const TARGETS: readonly Target[] = [
   { file: "app/src/components/golden-nav.ts", tests: ["app/src/components/golden-nav.test.ts"] },
   { file: "app/src/components/bridge-pull.ts", tests: ["app/src/components/bridge-pull.test.ts"] },
   { file: "app/src/motion.ts", tests: ["app/src/components/motion.test.ts"] },
-  { file: "shared/protocol.ts", tests: ["shared/protocol.test.ts"] },
-  { file: "bridge/src/roster.ts", tests: ["bridge/src/roster.test.ts"] },
+  { file: "shared/protocol.ts", tests: ["shared/protocol.test.ts", "shared/protocol-boundary.test.ts"] },
+  { file: "bridge/src/roster.ts", tests: ["bridge/src/roster.test.ts", "bridge/src/roster-boundary.test.ts"] },
 ];
 
 export type Mutant = {
@@ -90,18 +90,24 @@ export function collectMutants(source: string, file: string): Mutant[] {
       continue;
     }
     if (c === "=" && next === "=") {
-      i += source[i + 2] === "=" ? 3 : 2;
+      const len = source[i + 2] === "=" ? 3 : 2;
+      if (isBinary(source, i)) push(i, i + len, len === 3 ? "!==" : "!=", "eq");
+      i += len;
       continue;
     }
     if (c === "!" && next === "=") {
-      i += source[i + 2] === "=" ? 3 : 2;
+      const len = source[i + 2] === "=" ? 3 : 2;
+      if (isBinary(source, i)) push(i, i + len, len === 3 ? "===" : "==", "eq");
+      i += len;
       continue;
     }
     if (c === "&" && next === "&") {
+      if (isBinary(source, i)) push(i, i + 2, "||", "logic");
       i += 2;
       continue;
     }
     if (c === "|" && next === "|") {
+      if (isBinary(source, i)) push(i, i + 2, "&&", "logic");
       i += 2;
       continue;
     }
@@ -257,7 +263,12 @@ export async function runMutation(opts: {
     const rank = (op: string) => (op === "num" ? 0 : op === "bool" ? 1 : op === "eq" ? 2 : 3);
     const found = collectMutants(source, target.file).sort((a, b) => rank(a.operator) - rank(b.operator));
     const cap = Math.max(8, Math.floor(max / targets.length));
-    for (const m of found.slice(0, cap)) mutants.push(m);
+    const core = found.filter((m) => m.operator === "num" || m.operator === "bool");
+    const branches = found.filter((m) => m.operator === "eq" || m.operator === "logic");
+    const branchBudget = Math.min(12, Math.max(0, cap - core.length), branches.length);
+    const ops = Array.from({ length: branchBudget }, (_, i) => branches[Math.floor(i * branches.length / branchBudget)])
+      .filter((m): m is Mutant => m !== undefined);
+    for (const m of [...core, ...ops].slice(0, cap)) mutants.push(m);
   }
   const selected = mutants.slice(0, max);
 

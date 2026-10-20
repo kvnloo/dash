@@ -3,28 +3,44 @@
 //
 //   bun bridge/index.ts
 //
-// Env: DASH_PORT (4747), DASH_HOST (defaults to all interfaces so LAN + Tailscale both work), DASH_CWD (launch dir).
+// Env: DASH_PORT (4747), DASH_HOST (detected Tailscale IPv4 only), DASH_CWD (launch dir).
 //
 // Turns outlive sockets. A phone that locks its screen drops the WebSocket; on
 // reconnect it sends `attach` with the last seq it saw and the bridge replays
 // the rest. Finished turns are kept for RETAIN_MS so late reattaches still work.
 
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { hostname } from "node:os";
+import { statSync } from "node:fs";
+import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import {
   PROTOCOL_VERSION,
   parseClientMessage,
   type HarnessInfo,
+  type AcpStatus,
   type ServerMessage,
   type TurnEvent,
 } from "../shared/protocol";
-import { CLAIM_KEY_BYTES, claimSession, currentOrCreateSession, startBoundSession } from "./pair";
+import { claimSession, currentOrCreateSession, startBoundSession } from "./pair";
+import { bearerToken, isTailnetIPv4, loadBridgeSecrets, resolveBridgeHost, secretMatches } from "./src/bridge-security";
+import { createPairingHttpHandler } from "./src/pairing-http";
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
-import { collectRoster } from "./src/roster";
+import { collectRoster, readLiveTranscript } from "./src/roster";
 import { runHermesSession } from "./src/hermes-session";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
+import { acpCommand, AcpSupervisor, type AcpHandle } from "./src/acp/supervisor";
+import {
+  CANCELLED_EXIT_CODE,
+  TIMEOUT_EXIT_CODE,
+  attachSocket,
+  detachSocket,
+  pruneStaleUtterances,
+  nonZeroExitMessage,
+  replayAfter,
+  timeoutMessage,
+  turnTimeoutMs,
+  waitForExitOrTimeout,
+} from "./src/turn-safety";
 import { speechAvailable, transcribe, warmup } from "./speech";
 
 // ---------------------------------------------------------------------------
@@ -41,10 +57,10 @@ interface SocketData {
 /** Batches text deltas so a fast model doesn't turn into hundreds of tiny frames per second. */
 const FLUSH_MS = 40;
 const STDERR_TAIL = 2000;
-const CANCELLED_EXIT_CODE = 130;
 /** How long a finished turn stays replayable. */
 const RETAIN_MS = 10 * 60 * 1000;
 const MAX_RETAINED = 50;
+const acpSupervisor = new AcpSupervisor();
 
 class Turn implements Sink {
   readonly events: TurnEvent[] = [];
@@ -56,6 +72,7 @@ class Turn implements Sink {
   private cancelled = false;
   private proc: Bun.Subprocess<"ignore", "pipe", "pipe"> | null = null;
   private abort: AbortController | null = null;
+  private acp: AcpHandle | null = null;
   /** Last two characters of text sent so far; used to separate prose around tool calls. */
   private textTail = "";
   private breakPending = false;
@@ -69,6 +86,26 @@ class Turn implements Sink {
     // A spoken turn is transcribed before it starts, so a cancel can arrive
     // while there is no process to kill yet.
     if (this.cancelled || this.finished) return;
+    if (process.env.DASH_ENABLE_LEGACY_CLI !== "1") {
+      const command = acpCommand(this.harness.id);
+      if (!command) {
+        this.endWithout(`${this.harness.name} ACP unavailable. Install its maintained ACP adapter on the host.`);
+        return;
+      }
+      try {
+        this.acp = acpSupervisor.start({ id: this.id, command, input, sink: this });
+        void this.acp.done.then(
+          () => this.finish(0),
+          error => {
+            if (this.cancelled) this.finish(CANCELLED_EXIT_CODE);
+            else { this.error(error instanceof Error ? error.message : "ACP turn failed"); this.finish(1); }
+          },
+        );
+      } catch (error) {
+        this.endWithout(error instanceof Error ? error.message : "ACP could not start");
+      }
+      return;
+    }
     if (this.harness.id === "hermes") {
       this.startHermes(input);
       return;
@@ -150,25 +187,29 @@ class Turn implements Sink {
     });
 
     void (async () => {
-      const exitCode = await proc.exited;
+      const timeoutMs = turnTimeoutMs();
+      const { exitCode, timedOut } = await waitForExitOrTimeout(proc, timeoutMs);
       await Promise.all([stdoutDone, stderrDone]);
       parser.end();
       if (this.cancelled) {
         this.finish(CANCELLED_EXIT_CODE);
+      } else if (timedOut) {
+        this.error(timeoutMessage(this.harness.name, timeoutMs));
+        this.finish(TIMEOUT_EXIT_CODE);
       } else {
         if (exitCode !== 0) {
-          const detail = stderrTail.trim();
-          this.error(detail || `${this.harness.name} exited with code ${exitCode}`);
+          this.error(nonZeroExitMessage(this.harness.name, exitCode, stderrTail));
         }
         this.finish(exitCode);
       }
-      log("turn.end", { id: this.id, harness: this.harness.id, exitCode, cancelled: this.cancelled });
+      log("turn.end", { id: this.id, harness: this.harness.id, exitCode, cancelled: this.cancelled, timedOut });
     })();
   }
 
   cancel(): void {
     if (this.cancelled || this.finished) return;
     this.cancelled = true;
+    if (this.acp) { void this.acp.cancel(); return; }
     this.abort?.abort();
     if (!this.proc) {
       this.finish(CANCELLED_EXIT_CODE);
@@ -183,16 +224,19 @@ class Turn implements Sink {
 
   /** Send every event after `afterSeq` to one socket. */
   replay(ws: Socket, afterSeq: number): void {
-    for (const event of this.events) {
-      if (event.seq > afterSeq) sendTo(ws, event);
-    }
+    for (const event of replayAfter(this.events, afterSeq)) sendTo(ws, event);
+  }
+
+  /** Re-subscribe after a drop: flush the coalesced batch, then replay. */
+  attach(ws: Socket, afterSeq: number): void {
+    for (const event of attachSocket(this, ws, afterSeq)) sendTo(ws, event);
   }
 
   // Sink -------------------------------------------------------------------
 
   session(sessionId: string): void {
     this.flush();
-    this.emit({ type: "session", id: this.id, seq: 0, sessionId });
+    this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: HOST_NAME, harnessId: this.harness.id, profileId: process.env.DASH_PROFILE_ID ?? "default", transport: process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp" });
   }
 
   /** What we heard, for a turn the user spoke rather than typed. */
@@ -219,10 +263,10 @@ class Turn implements Sink {
     if (this.timer === null) this.timer = setTimeout(() => this.flush(), FLUSH_MS);
   }
 
-  status(text: string): void {
+  status(text: string, acp?: AcpStatus): void {
     this.flush();
     if (text && this.textTail) this.breakPending = true;
-    this.emit({ type: "status", id: this.id, seq: 0, text });
+    this.emit({ type: "status", id: this.id, seq: 0, text, ...(acp ? { acp } : {}) });
   }
 
   error(message: string): void {
@@ -231,6 +275,7 @@ class Turn implements Sink {
   }
 
   private finish(exitCode: number): void {
+    if (this.finished) return;
     this.flush();
     this.finished = true;
     this.emit({ type: "done", id: this.id, seq: 0, exitCode });
@@ -238,7 +283,7 @@ class Turn implements Sink {
     pruneTurns();
   }
 
-  private flush(): void {
+  flush(): void {
     if (this.timer !== null) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -297,21 +342,6 @@ const PORT = Number(process.env.DASH_PORT ?? "4747");
 const DEFAULT_CWD = process.env.DASH_CWD ?? process.cwd();
 const HOST_NAME = hostname();
 
-function loadToken(): string {
-  const directory = join(process.env.HOME ?? ".", ".dash");
-  const path = join(directory, "token");
-  try {
-    const existing = readFileSync(path, "utf8").trim();
-    if (existing.length >= 16) return existing;
-  } catch {
-    // first run
-  }
-  mkdirSync(directory, { recursive: true });
-  const token = crypto.randomUUID().replaceAll("-", "");
-  writeFileSync(path, token, { mode: 0o600 });
-  return token;
-}
-
 function log(event: string, fields: Record<string, unknown> = {}): void {
   const time = new Date().toISOString().slice(11, 19);
   const detail = Object.entries(fields)
@@ -324,7 +354,7 @@ function tailscaleIPv4(): string | null {
   try {
     const result = Bun.spawnSync(["tailscale", "ip", "-4"], { stdout: "pipe", stderr: "ignore" });
     if (result.exitCode !== 0) return null;
-    const ip = result.stdout.toString().split("\n").find((line) => line.startsWith("100."));
+    const ip = result.stdout.toString().split("\n").map((line) => line.trim()).find(isTailnetIPv4);
     return ip ?? null;
   } catch {
     return null;
@@ -340,7 +370,7 @@ function isDirectory(path: string): boolean {
 }
 
 function harnessList(): HarnessInfo[] {
-  return HARNESSES.map((h) => ({ id: h.id, name: h.name, available: Bun.which(h.bin) !== null }));
+  return HARNESSES.map((h) => ({ id: h.id, name: h.name, available: process.env.DASH_ENABLE_LEGACY_CLI === "1" ? Bun.which(h.bin) !== null : acpCommand(h.id) !== null }));
 }
 
 function parseJson(raw: string | Buffer): unknown {
@@ -410,172 +440,70 @@ async function runVoiceTurn(turn: Turn, utterance: Utterance): Promise<void> {
 }
 
 
-function decodeClaimKey(raw: string): Uint8Array {
-  const trimmed = raw.trim();
-  if (!trimmed) throw new Error("empty");
-  const bytes = Buffer.from(trimmed, "base64url");
-  if (bytes.length !== CLAIM_KEY_BYTES) throw new Error("length");
-  return new Uint8Array(bytes);
-}
-
 let pairPlay: Promise<void> = Promise.resolve();
+let pendingPairPlayback = 0;
 function queuePairPlayback(code: string): void {
-  pairPlay = pairPlay.then(() => Promise.resolve(playPairCode(code))).catch(() => {});
+  if (pendingPairPlayback >= 2) return;
+  pendingPairPlayback += 1;
+  pairPlay = pairPlay
+    .then(() => Promise.resolve(playPairCode(code)))
+    .catch(() => {})
+    .finally(() => { pendingPairPlayback -= 1; });
 }
 
 const tailscaleIp = tailscaleIPv4();
-const HOST = process.env.DASH_HOST ?? "0.0.0.0";
-const TOKEN = loadToken();
-
-function bridgeAddress(): string {
-  const host = tailscaleIp ?? (HOST !== "0.0.0.0" ? HOST : "127.0.0.1");
-  return `${host}:${PORT}`;
-}
-
-function pairDeepLink(code: string): string {
-  return `dash://connect?address=${encodeURIComponent(bridgeAddress())}&code=${encodeURIComponent(code)}`;
-}
-
-const claimFailures = new Map<string, { count: number; resetAt: number }>();
-
-function claimRateLimited(remote: string): boolean {
-  const now = Date.now();
-  const entry = claimFailures.get(remote);
-  if (!entry || entry.resetAt <= now) {
-    claimFailures.set(remote, { count: 1, resetAt: now + 60_000 });
-    return false;
-  }
-  entry.count += 1;
-  return entry.count > 12;
-}
-
-async function handleHttp(request: Request, url: URL): Promise<Response | null> {
-  const address = bridgeAddress();
-
-  if (url.pathname === "/pair" && request.method === "GET") {
-    const session = currentOrCreateSession();
-    return Response.json({
-      code: session.code,
-      host: HOST_NAME,
-      address,
-      port: PORT,
-      expiresAt: session.expiresAt,
-      link: pairDeepLink(session.code),
-    });
-  }
-
-  if (url.pathname === "/pair/intent" && request.method === "POST") {
-    const body = parseJson(await request.text());
-    const claimKeyRaw =
-      typeof body === "object" && body !== null && "claimKey" in body && typeof body.claimKey === "string"
-        ? body.claimKey
-        : "";
-    let claimKey: Uint8Array;
-    try {
-      claimKey = decodeClaimKey(claimKeyRaw);
-    } catch {
-      return Response.json({ error: "invalid claim key" }, { status: 400 });
-    }
-    const session = startBoundSession(claimKey);
-    queuePairPlayback(session.code);
-    log("pair.intent", { session: session.id });
-    return Response.json({ ok: true, expiresAt: session.expiresAt, host: HOST_NAME, address });
-  }
-
-  if (url.pathname === "/pair/beep" && request.method === "POST") {
-    const session = currentOrCreateSession();
-    queuePairPlayback(session.code);
-    log("pair.beep", { session: session.id });
-    return Response.json({ ok: true, expiresAt: session.expiresAt, host: HOST_NAME, address });
-  }
-
-
-  if (url.pathname === "/pair/hear" && request.method === "POST") {
-    const body = parseJson(await request.text());
-    const rec = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
-    let claimKey: Uint8Array;
-    try {
-      claimKey = decodeClaimKey(typeof rec.claimKey === "string" ? rec.claimKey : "");
-    } catch {
-      return Response.json({ error: "invalid claim key" }, { status: 400 });
-    }
-    const audioB64 = typeof rec.audio === "string" ? rec.audio : "";
-    if (!audioB64) return Response.json({ error: "missing audio" }, { status: 400 });
-    let bytes: Uint8Array;
-    try {
-      bytes = Uint8Array.from(Buffer.from(audioB64, "base64"));
-    } catch {
-      return Response.json({ error: "invalid audio" }, { status: 400 });
-    }
-    const heard = await decodePairAudio(bytes);
-    if (!heard) return Response.json({ error: "could not hear pairing tones" }, { status: 422 });
-    const session = claimSession(heard, claimKey);
-    if (!session) return Response.json({ error: "invalid or expired code" }, { status: 401 });
-    log("pair.hear", { session: session.id, code: heard });
-    return Response.json({
-      address,
-      token: TOKEN,
-      host: HOST_NAME,
-      cwd: DEFAULT_CWD,
-      harnesses: harnessList(),
-    });
-  }
-
-  if (url.pathname === "/pair/claim" && request.method === "POST") {
-    const remote = request.headers.get("x-forwarded-for") ?? "local";
-    if (claimRateLimited(remote)) return Response.json({ error: "too many attempts" }, { status: 429 });
-    const body = parseJson(await request.text());
-    const code =
-      typeof body === "object" && body !== null && "code" in body && typeof body.code === "string"
-        ? body.code
-        : "";
-    let claimKey: Uint8Array | undefined;
-    if (typeof body === "object" && body !== null && "claimKey" in body && typeof body.claimKey === "string") {
-      try {
-        claimKey = decodeClaimKey(body.claimKey);
-      } catch {
-        return Response.json({ error: "invalid claim key" }, { status: 400 });
-      }
-    }
-    const session = claimSession(code, claimKey);
-    if (!session) return Response.json({ error: "invalid or expired code" }, { status: 401 });
-    log("pair.claim", { remote, session: session.id });
-    return Response.json({
-      address,
-      token: TOKEN,
-      host: HOST_NAME,
-      cwd: DEFAULT_CWD,
-      harnesses: harnessList(),
-    });
-  }
-
-  if (url.pathname === "/roster" && request.method === "GET") {
-    const token = url.searchParams.get("token") ?? request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-    if (token !== TOKEN) return new Response("unauthorized", { status: 401 });
-    const harnesses = harnessList();
-    return Response.json({
-      host: HOST_NAME,
-      hosts: collectRoster(harnesses, { hostname: HOST_NAME, address: address.split(":")[0] }),
-    });
-  }
-
-  if (url.pathname === "/") {
-    return Response.json({ ok: true, host: HOST_NAME, cwd: DEFAULT_CWD, harnesses: harnessList(), pair: "/pair" });
-  }
-
-  return null;
-}
+const HOST = resolveBridgeHost({
+  tailnetIp: tailscaleIp,
+  requestedHost: process.env.DASH_HOST,
+  allowLoopback: process.env.DASH_ALLOW_LOOPBACK === "1",
+});
+const { token: TOKEN, bootstrapToken: BOOTSTRAP_TOKEN } = loadBridgeSecrets(process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash"));
+let bridgeAddress = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${PORT}`;
+const handleHttp = createPairingHttpHandler({
+  bootstrapToken: BOOTSTRAP_TOKEN,
+  token: TOKEN,
+  hostname: HOST_NAME,
+  get address() { return bridgeAddress; },
+  cwd: DEFAULT_CWD,
+  harnesses: harnessList,
+  roster: () => collectRoster(harnessList(), { hostname: HOST_NAME, address: HOST }),
+  pairing: { currentOrCreateSession, startBoundSession, claimSession },
+  playCode: queuePairPlayback,
+  decodeAudio: decodePairAudio,
+  onEvent: log,
+});
 
 const server = Bun.serve<SocketData>({
   hostname: HOST,
   port: PORT,
   async fetch(request, server) {
     const url = new URL(request.url);
-    if (url.pathname !== "/ws") {
-      const http = await handleHttp(request, url);
-      return http ?? new Response("not found", { status: 404 });
+    // Native clients omit Origin; browser clients must use the exact bridge
+    // origin or an explicitly configured origin. Never trust forwarded headers.
+    const authority = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${server.port}`;
+    const origin = request.headers.get("origin");
+    const origins = (process.env.DASH_ALLOWED_ORIGINS ?? "").split(",").filter(Boolean);
+    if ((request.headers.get("host") ?? url.host) !== authority ||
+        (origin !== null && origin !== `http://${authority}` && !origins.includes(origin))) {
+      return new Response("forbidden origin or host", { status: 403 });
     }
-    if (url.searchParams.get("token") !== TOKEN) {
+    if (url.pathname !== "/ws") {
+      const cors = (response: Response): Response => {
+        if (origin !== null) {
+          response.headers.set("Access-Control-Allow-Origin", origin);
+          response.headers.set("Vary", "Origin");
+          response.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+          response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+        }
+        return response;
+      };
+      // Only origins admitted above can preflight. The actual request still
+      // requires the endpoint's separate bootstrap or execution credential.
+      if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      const http = await handleHttp(request, server.requestIP(request)?.address ?? null);
+      return cors(http ?? new Response("not found", { status: 404 }));
+    }
+    if (!secretMatches(bearerToken(request) ?? url.searchParams.get("token"), TOKEN)) {
       return new Response("unauthorized", { status: 401 });
     }
     if (server.upgrade(request, { data: { turns: new Set() } })) return;
@@ -603,10 +531,12 @@ const server = Bun.serve<SocketData>({
       }
       switch (message.type) {
         case "chat": {
+          if (message.hostId && message.hostId !== HOST_NAME) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
+          if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
           if (turns.has(message.id)) return;
           const harness = HARNESSES.find((h) => h.id === message.harness);
           if (!harness) return rejectTurn(ws, message.id, `Unknown agent "${message.harness}".`);
-          if (harness.id !== "hermes" && Bun.which(harness.bin) === null) {
+          if (!harnessList().find(h => h.id === harness.id)?.available) {
             return rejectTurn(
               ws,
               message.id,
@@ -624,6 +554,8 @@ const server = Bun.serve<SocketData>({
           break;
         }
         case "voice_begin": {
+          if (message.hostId && message.hostId !== HOST_NAME) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
+          if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
           if (turns.has(message.id) || utterances.has(message.id)) return;
           const ready = speechAvailable();
           if (!ready.ok) {
@@ -631,7 +563,7 @@ const server = Bun.serve<SocketData>({
           }
           const harness = HARNESSES.find((h) => h.id === message.harness);
           if (!harness) return rejectTurn(ws, message.id, `Unknown agent "${message.harness}".`);
-          if (harness.id !== "hermes" && Bun.which(harness.bin) === null) {
+          if (!harnessList().find(h => h.id === harness.id)?.available) {
             return rejectTurn(
               ws,
               message.id,
@@ -687,25 +619,55 @@ const server = Bun.serve<SocketData>({
               sendTo(ws, { type: "lost", id });
               continue;
             }
-            turn.listeners.add(ws);
             ws.data.turns.add(id);
-            turn.replay(ws, seq);
+            turn.attach(ws, seq);
           }
           log("ws.attach", { remote: ws.remoteAddress, count: message.turns.length });
           break;
+        case "history": {
+          if ((message.hostId && message.hostId !== HOST_NAME) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default"))) {
+            sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, messages: [] });
+            break;
+          }
+          const home = homedir();
+          const sessionRoot = join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions");
+          sendTo(ws, {
+            type: "history",
+            harness: message.harness,
+            sessionId: message.sessionId,
+            messages: readLiveTranscript(message.harness, message.sessionId, sessionRoot, message.cwd, home),
+          });
+          break;
+        }
       }
     },
     close(ws) {
-      for (const id of ws.data.turns) {
-        turns.get(id)?.listeners.delete(ws);
-        // A half-uploaded utterance can't be resumed on another socket.
-        utterances.delete(id);
+      detachSocket(ws.data.turns, (id) => turns.get(id), ws);
+      for (const id of pruneStaleUtterances(utterances, Date.now())) {
+        turns.get(id)?.endWithout("That recording was interrupted.");
       }
       log("ws.close", { remote: ws.remoteAddress, subscribed: ws.data.turns.size });
       ws.data.turns.clear();
     },
   },
 });
+
+bridgeAddress = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${server.port}`;
+
+let stopping = false;
+function shutdown(): void {
+  if (stopping) return;
+  stopping = true;
+  // Stop admission before awaiting cleanup; sockets must not launch new work.
+  server.stop(true);
+  for (const turn of turns.values()) turn.cancel();
+  void acpSupervisor.close().then(() => {
+    log("bridge.stopped");
+    process.exit(0);
+  }, () => process.exit(1));
+}
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 
 const agents = harnessList()
   .map((h) => `${h.id} ${h.available ? "✓" : "✗"}`)
@@ -720,21 +682,20 @@ if (speech.ok) {
   );
 }
 
-const pairSession = currentOrCreateSession();
 process.stderr.write(
   [
     "",
-    `  dash bridge   ws://${server.hostname}:${server.port}/ws?token=${TOKEN}`,
+    `  dash bridge   ws://${bridgeAddress}/ws`,
     `  computer      ${HOST_NAME}`,
     `  cwd           ${DEFAULT_CWD}`,
     `  agents        ${agents}`,
     `  voice         ${speech.ok ? "loading model…" : `unavailable — ${speech.reason ?? "not set up"}`}`,
     "",
-    `  pair code     ${pairSession.code}  (terminal fallback — use Dash sonic pair when possible)`,
+    `  pairing       authenticated bootstrap; see bridge/PAIRING.md`,
     "",
     tailscaleIp
       ? `  Tailscale       ${tailscaleIp}:${server.port}  ·  computer name "${HOST_NAME}"`
-      : "  Tailscale not detected; listening on all interfaces. Set DASH_HOST to restrict.",
+      : "  loopback verification mode enabled explicitly",
     "",
   ].join("\n"),
 );

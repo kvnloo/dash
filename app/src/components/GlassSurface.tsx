@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
-  tint: { ...StyleSheet.absoluteFillObject },
+  tint: { ...StyleSheet.absoluteFill },
   sheen: {
     position: "absolute",
     top: 0,
@@ -109,6 +109,6 @@ const styles = StyleSheet.create({
     height: 10,
     backgroundColor: glass.edge,
   },
-  stroke: { ...StyleSheet.absoluteFillObject, borderWidth: 1 },
+  stroke: { ...StyleSheet.absoluteFill, borderWidth: 1 },
   content: { position: "relative", zIndex: 1 },
 });

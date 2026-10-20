@@ -1,7 +1,10 @@
 // One adapter per agent CLI. Each adapter knows two things: how to build the
 // argv for a turn, and how to turn the CLI's stdout into protocol events.
 
+import type { AcpStatus } from "../../shared/protocol";
 import { hermesCliArgv } from "./hermes-session";
+import { approvalArgs, type ApprovalEnv } from "./argv-policy";
+import { parseHarnessJsonLine } from "./turn-safety";
 
 export interface TurnInput {
   text: string;
@@ -13,7 +16,7 @@ export interface Sink {
   session(sessionId: string): void;
   delta(text: string): void;
   /** Short line describing what the agent is doing right now. Empty string clears it. */
-  status(text: string): void;
+  status(text: string, acp?: AcpStatus): void;
   error(message: string): void;
 }
 
@@ -28,7 +31,7 @@ export interface Harness {
   id: string;
   name: string;
   bin: string;
-  argv(input: TurnInput): string[];
+  argv(input: TurnInput, env?: ApprovalEnv): string[];
   parser(sink: Sink): TurnParser;
 }
 
@@ -40,14 +43,14 @@ function str(value: unknown): value is string {
   return typeof value === "string";
 }
 
-function parseJsonLine(line: string): Record<string, unknown> | null {
-  if (line.charCodeAt(0) !== 123 /* { */) return null;
-  try {
-    const value: unknown = JSON.parse(line);
-    return isRecord(value) ? value : null;
-  } catch {
+function parseJsonLine(line: string, sink?: Sink): Record<string, unknown> | null {
+  const parsed = parseHarnessJsonLine(line);
+  if (!parsed) return null;
+  if (!parsed.ok) {
+    sink?.error(parsed.error);
     return null;
   }
+  return parsed.value;
 }
 
 const STATUS_MAX = 100;
@@ -73,7 +76,7 @@ function describeTool(name: string, args: unknown): string {
 function sessionNdjsonParser(sink: Sink): TurnParser {
   return {
     line(line) {
-      const ev = parseJsonLine(line);
+      const ev = parseJsonLine(line, sink);
       if (!ev) return;
       switch (ev.type) {
         case "session":
@@ -101,13 +104,12 @@ const omp: Harness = {
   id: "omp",
   name: "OMP",
   bin: "omp",
-  argv({ text, cwd, sessionId }) {
+  argv({ text, cwd, sessionId }, env) {
     return [
       "-p",
       "--mode",
       "json",
-      "--auto-approve",
-      "--allow-home",
+      ...approvalArgs("omp", env),
       "--cwd",
       cwd,
       ...(sessionId ? ["--resume", sessionId] : []),
@@ -122,16 +124,16 @@ const codex: Harness = {
   id: "codex",
   name: "Codex",
   bin: "codex",
-  argv({ text, cwd, sessionId }) {
+  argv({ text, cwd, sessionId }, env) {
     return sessionId
-      ? ["exec", "resume", "--json", "--skip-git-repo-check", sessionId, text]
-      : ["exec", "--json", "--skip-git-repo-check", "-C", cwd, "-s", "workspace-write", text];
+      ? [...approvalArgs("codex", env), "exec", "resume", "--json", "--skip-git-repo-check", sessionId, text]
+      : [...approvalArgs("codex", env), "exec", "--json", "--skip-git-repo-check", "-C", cwd, text];
   },
   parser(sink) {
     let emitted = false;
     return {
       line(line) {
-        const ev = parseJsonLine(line);
+        const ev = parseJsonLine(line, sink);
         if (!ev) return;
         if (ev.type === "thread.started" && str(ev.thread_id)) {
           sink.session(ev.thread_id);
@@ -172,7 +174,7 @@ function anthropicStreamParser(sink: Sink): TurnParser {
   let sawDelta = false;
   return {
     line(line) {
-      const ev = parseJsonLine(line);
+      const ev = parseJsonLine(line, sink);
       if (!ev) return;
       switch (ev.type) {
         case "system":
@@ -226,14 +228,14 @@ const grok: Harness = {
   id: "grok",
   name: "Grok",
   bin: "grok",
-  argv({ text, cwd, sessionId }) {
+  argv({ text, cwd, sessionId }, env) {
     return [
       "-p",
       text,
       "--output-format",
       "streaming-messages-json",
       "--include-partial-messages",
-      "--always-approve",
+      ...approvalArgs("grok", env),
       "--cwd",
       cwd,
       ...(sessionId ? ["--resume", sessionId] : []),
@@ -246,7 +248,7 @@ const claude: Harness = {
   id: "claude",
   name: "Claude Code",
   bin: "claude",
-  argv({ text, sessionId }) {
+  argv({ text, sessionId }, env) {
     return [
       "-p",
       text,
@@ -254,8 +256,7 @@ const claude: Harness = {
       "stream-json",
       "--verbose",
       "--include-partial-messages",
-      "--permission-mode",
-      "bypassPermissions",
+      ...approvalArgs("claude", env),
       ...(sessionId ? ["--resume", sessionId] : []),
     ];
   },
@@ -290,17 +291,16 @@ const hermes: Harness = {
   },
 };
 
-// pi: Earendil CLI. `--mode json` is the documented event stream; `--approve`
-// trusts project-local files in non-interactive mode. cwd comes from spawn.
+// pi: Earendil CLI. cwd comes from spawn.
 const pi: Harness = {
   id: "pi",
   name: "Pi",
   bin: "pi",
-  argv({ text, sessionId }) {
+  argv({ text, sessionId }, env) {
     return [
       "--mode",
       "json",
-      "--approve",
+      ...approvalArgs("pi", env),
       ...(sessionId ? ["--session", sessionId] : []),
       "--",
       text,
@@ -310,7 +310,6 @@ const pi: Harness = {
 };
 
 // fx: `fx ask --json` emits one object with session_id, output, final_output.
-// --full-access matches the other laptop adapters (approvals already bypassed).
 function fxAskParser(sink: Sink): TurnParser {
   const lines: string[] = [];
   return {
@@ -320,7 +319,7 @@ function fxAskParser(sink: Sink): TurnParser {
     end() {
       const raw = lines.join("\n").trim();
       if (!raw) return;
-      const ev = parseJsonLine(raw);
+      const ev = parseJsonLine(raw, sink);
       if (!ev) return;
       if (str(ev.session_id)) sink.session(ev.session_id);
       const text =
@@ -338,11 +337,11 @@ const fx: Harness = {
   id: "fx",
   name: "fx",
   bin: "fx",
-  argv({ text, sessionId }) {
+  argv({ text, sessionId }, env) {
     return [
       "ask",
       "--json",
-      "--full-access",
+      ...approvalArgs("fx", env),
       ...(sessionId ? ["--resume-id", sessionId] : []),
       "--",
       text,

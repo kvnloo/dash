@@ -50,6 +50,9 @@ export function profileFromAgent(host: HostInfo, agent: AgentInfo): BotProfile {
     description: agent.detail ?? agent.status,
     online: host.online && agent.status !== "offline",
     cwd: agent.cwd,
+    targetHostId: host.id,
+    profileId: agent.id,
+    sessionId: agent.sessionId,
   };
 }
 
@@ -61,7 +64,7 @@ export async function fetchRoster(settings: Settings): Promise<HostInfo[] | unde
     if (!res.ok) return undefined;
     const raw: unknown = await res.json();
     if (typeof raw !== "object" || raw === null) return undefined;
-    return parseHosts((raw as { hosts?: unknown }).hosts);
+    return "hosts" in raw ? parseHosts(raw.hosts) : undefined;
   } catch {
     return undefined;
   }

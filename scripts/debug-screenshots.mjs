@@ -59,7 +59,8 @@ function startExpo() {
 async function main() {
   await mkdir(outDir, { recursive: true });
 
-  const playwrightRoot = path.join(appDir, "node_modules", "playwright");
+  // Playwright is a laptop screenshot tool, not a phone-app dependency.
+  const playwrightRoot = path.join(root, "node_modules", "playwright");
   let playwright;
   try {
     playwright = await import(path.join(playwrightRoot, "index.mjs"));
@@ -67,7 +68,9 @@ async function main() {
     try {
       playwright = await import("playwright");
     } catch {
-      console.error("Install playwright: cd app && bun add -d playwright && bunx playwright install chromium");
+      console.error(
+        "Install playwright at the repo root (not the phone app): bun add -d playwright && bunx playwright install chromium",
+      );
       process.exit(1);
     }
   }
