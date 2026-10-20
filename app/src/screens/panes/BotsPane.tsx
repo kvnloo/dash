@@ -1,134 +1,93 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Feather } from "@expo/vector-icons";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
-import { runtimeStateFromAgent } from "../../catalog/runtime-state";
-import { HarnessAvatar } from "../../components/HarnessAvatar";
+import type { BotInfo, HostInfo } from "../../../../shared/protocol";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
+import { botSummary, botTarget, botsRows, COLLAPSED_KEY, hostCountLabel, parseCollapsed, toggleCollapsed, type BotsRow } from "../../lib/bots";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
-import { botAgents, canChatWithAgent, emptyHostProfile, profileFromAgent } from "../../lib/roster";
-import type { BotProfile } from "../../mock/bots";
 import type { ScreenProps } from "../../navigation";
-import { openBotConversation, store } from "../../store/app";
-import { colors, space, type } from "../../theme";
+import { openAgentConversation, store } from "../../store/app";
+import { colors, fonts, glass, space, type } from "../../theme";
 
-type BotsListItem =
-  | { kind: "section"; id: string; title: string; subtitle?: string; online: boolean }
-  | { kind: "profile"; id: string; profile: BotProfile; chat: boolean };
-
-const ProfileRow = memo(function ProfileRow({
-  profile,
-  chat,
-  onPress,
-  onLongPress,
-}: {
-  profile: BotProfile;
-  chat: boolean;
-  onPress(profile: BotProfile): void;
-  onLongPress?(profile: BotProfile): void;
-}) {
-  const canOpen = profile.online && chat;
+/** Host section header: a plain host glyph, never an identity orb. Tap to collapse. */
+const HostHeader = memo(function HostHeader({ host, count, collapsed, onToggle }: { host: HostInfo; count: number | null; collapsed: boolean; onToggle(id: string): void }) {
+  const counted = hostCountLabel(count);
   return (
     <PressScale
-      onPress={() => onPress(profile)}
-      onLongPress={onLongPress ? () => onLongPress(profile) : undefined}
-      delayLongPress={350}
-      style={[styles.profileCard, !profile.online && styles.offline]}
+      onPress={() => onToggle(host.id)}
       accessibilityRole="button"
-      accessibilityHint={canOpen ? "Open this agent" : "Show why this agent is unavailable"}
+      accessibilityLabel={`${host.name}${counted ? `, ${counted}` : ""}, ${host.online ? "online" : "offline"}`}
+      accessibilityState={{ expanded: !collapsed }}
+      aria-expanded={!collapsed}
+      style={styles.host}
     >
-      <HarnessAvatar
-        name={profile.name}
-        harnessId={profile.harness}
-        size={40}
-        stateId={runtimeStateFromAgent(profile.online ? "available" : "offline")}
-      />
-      <View style={styles.main}>
-        <View style={styles.top}>
-          <Text style={styles.title} numberOfLines={1}>
-            {profile.name}
-          </Text>
-          <View
-            accessibilityLabel={profile.live ? "Running" : profile.online ? "Available" : "Offline"}
-            style={[styles.statusDot, profile.live ? styles.statusOn : profile.online ? styles.statusIdle : styles.statusOff]}
-          />
-        </View>
-        {/* The host is the section header, so the row skips repeating it. */}
-        <Text style={[styles.desc, (profile.description.startsWith("/") || profile.description.startsWith("~/")) && styles.descMono]} numberOfLines={1}>
-          {profile.description}
-        </Text>
-      </View>
+      <View style={styles.glyph}><Feather name={host.self ? "monitor" : "server"} size={15} color={colors.textMuted} /></View>
+      <Text style={styles.hostName} numberOfLines={1}>{host.name}</Text>
+      {host.address ? <Text style={styles.hostAddress} numberOfLines={1}>{host.address}</Text> : <View style={styles.flex} />}
+      <Text style={styles.count}>{counted}</Text>
+      <View style={[styles.dot, host.online ? styles.dotOn : styles.dotOff]} />
+      <Feather name={collapsed ? "chevron-right" : "chevron-down"} size={16} color={colors.textTertiary} />
     </PressScale>
   );
 });
 
-const SectionHeader = memo(function SectionHeader({
-  title,
-  subtitle,
-  online,
-}: {
-  title: string;
-  subtitle?: string;
-  online: boolean;
-}) {
+const BotRow = memo(function BotRow({ host, bot, onPress, onLongPress }: { host: HostInfo; bot: BotInfo; onPress(host: HostInfo, bot: BotInfo): void; onLongPress?(bot: BotInfo): void }) {
+  const running = bot.status === "running";
   return (
-    <View style={styles.section}>
-      <View style={styles.sectionText}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {subtitle ? (
-          <Text style={styles.sectionSub} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        ) : null}
+    <PressScale
+      onPress={() => onPress(host, bot)}
+      onLongPress={onLongPress ? () => onLongPress(bot) : undefined}
+      delayLongPress={350}
+      accessibilityRole="button"
+      accessibilityLabel={`${bot.name}, ${botSummary(bot)}`}
+      style={styles.bot}
+    >
+      <View style={styles.main}>
+        <Text style={[styles.botName, !running && styles.botIdle]} numberOfLines={1}>{bot.name}</Text>
+        <Text style={styles.botMeta} numberOfLines={1}>{botSummary(bot)}</Text>
       </View>
-      <View style={[styles.statusDot, online ? styles.statusOn : styles.statusOff]} />
-    </View>
+      <View accessibilityLabel={running ? "Running" : "Not running"} style={[styles.dot, running ? styles.dotOn : styles.dotIdle]} />
+    </PressScale>
   );
 });
 
 export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
-  const harnesses = store.use((s) => s.connection.harnesses);
   const hosts = store.use((s) => s.connection.hosts);
   const settings = store.use((s) => s.settings);
-  const chatKinds = useMemo(() => new Set(harnesses.filter((h) => h.available).map((h) => h.id)), [harnesses]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  const items = useMemo((): BotsListItem[] => {
-    const out: BotsListItem[] = [];
-    if (hosts.length > 0) {
-      for (const host of hosts) {
-        const subtitle = [host.hostname !== host.name ? host.hostname : undefined, host.address].filter(Boolean).join(" · ");
-        out.push({ kind: "section", id: `sec-${host.id}`, title: host.name, subtitle, online: host.online });
-        if (host.agents.length === 0) {
-          out.push({
-            kind: "profile",
-            id: `host:${host.id}`,
-            chat: false,
-            profile: emptyHostProfile(host),
-          });
-          continue;
-        }
-        for (const agent of botAgents(host)) {
-          const profile = profileFromAgent(host, agent);
-          out.push({
-            kind: "profile",
-            id: profile.id,
-            profile,
-            chat: canChatWithAgent(agent, { self: host.self, availableKinds: chatKinds }),
-          });
-        }
-      }
-      return out;
-    }
-    return out;
-  }, [chatKinds, harnesses, hosts]);
+  useEffect(() => {
+    let live = true;
+    AsyncStorage.getItem(COLLAPSED_KEY).then(raw => { if (live) setCollapsed(parseCollapsed(raw)); }, () => {});
+    return () => { live = false; };
+  }, []);
 
-  const openProfile = useCallback(
-    (profile: BotProfile) => {
+  const onToggle = useCallback((id: string) => {
+    haptic.select();
+    setCollapsed(current => {
+      const next = toggleCollapsed(current, id);
+      void AsyncStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const rows = useMemo(() => botsRows(hosts, collapsed), [hosts, collapsed]);
+
+  const openBot = useCallback(
+    (host: HostInfo, bot: BotInfo) => {
       haptic.select();
-      const result = openBotConversation(profile);
+      const target = botTarget(host, bot);
+      if (!target) {
+        Alert.alert(bot.name, `${botSummary(bot)}.\n\nDash cannot open a chat with this bot from here. Message it on its own platform.`);
+        return;
+      }
+      const result = openAgentConversation(target);
       if ("error" in result) {
-        Alert.alert("Agent unavailable", result.error);
+        Alert.alert("Bot unavailable", result.error);
         return;
       }
       navigation.navigate("Chat");
@@ -137,14 +96,10 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
   );
 
   const onFeedback = useCallback(
-    (profile: BotProfile) => {
+    (bot: BotInfo) => {
       if (!inAppFeedbackEnabled(store.get().settings)) return;
       haptic.select();
-      submitInAppFeedback({
-        kind: "select",
-        text: `Selected bot ${profile.name}`,
-        selection: { kind: "bot", id: profile.id, label: profile.name },
-      });
+      submitInAppFeedback({ kind: "select", text: `Selected bot ${bot.name}`, selection: { kind: "bot", id: bot.id, label: bot.name } });
       navigation.navigate("Chat");
     },
     [navigation],
@@ -153,27 +108,19 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
   const feedbackOn = inAppFeedbackEnabled(settings);
 
   const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<BotsListItem>) => {
-      if (item.kind === "section") {
-        return <SectionHeader title={item.title} subtitle={item.subtitle} online={item.online} />;
-      }
-      return (
-        <ProfileRow
-          profile={item.profile}
-          chat={item.chat}
-          onPress={openProfile}
-          onLongPress={feedbackOn ? onFeedback : undefined}
-        />
-      );
+    ({ item }: ListRenderItemInfo<BotsRow>) => {
+      if (item.kind === "host") return <HostHeader host={item.host} count={item.count} collapsed={item.collapsed} onToggle={onToggle} />;
+      if (item.kind === "note") return <Text style={styles.note}>{item.text}</Text>;
+      return <BotRow host={item.host} bot={item.bot} onPress={openBot} onLongPress={feedbackOn ? onFeedback : undefined} />;
     },
-    [feedbackOn, onFeedback, openProfile],
+    [feedbackOn, onFeedback, onToggle, openBot],
   );
 
-  const getItemType = useCallback((item: BotsListItem) => item.kind, []);
+  const getItemType = useCallback((item: BotsRow) => item.kind, []);
 
   return (
     <FlashList
-      data={items}
+      data={rows}
       renderItem={renderItem}
       getItemType={getItemType}
       keyExtractor={(item) => item.id}
@@ -181,7 +128,7 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
       ListEmptyComponent={
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No hosts yet</Text>
-          <Text style={styles.emptySub}>Pair with a computer on Tailscale to see hosts and live agents.</Text>
+          <Text style={styles.emptySub}>Pair with a computer on Tailscale to see the bots deployed on it.</Text>
         </View>
       }
     />
@@ -190,35 +137,22 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
 
 const styles = StyleSheet.create({
   list: { paddingHorizontal: space.lg, paddingTop: space.xs, paddingBottom: 120 },
-  section: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: space.lg,
-    paddingBottom: space.sm,
-    gap: space.md,
-  },
-  sectionText: { flex: 1, minWidth: 0 },
-  sectionTitle: { color: colors.text, ...type.section },
-  sectionSub: { color: colors.textTertiary, ...type.mono, marginTop: 2 },
-  profileCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  offline: { opacity: 0.7 },
+  flex: { flex: 1 },
+  host: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 48, marginTop: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  glyph: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: glass.fill, borderWidth: 1, borderColor: glass.hair },
+  hostName: { ...type.heading, color: colors.text, flexShrink: 1 },
+  hostAddress: { ...type.mono, color: colors.textTertiary, flex: 1, minWidth: 0 },
+  count: { ...type.mono, color: colors.textTertiary },
+  bot: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 48, paddingVertical: 5, paddingLeft: 36, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: glass.quiet },
   main: { flex: 1, minWidth: 0 },
-  top: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  title: { color: colors.text, ...type.heading, flex: 1 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusOn: { backgroundColor: colors.gold },
-  statusIdle: { borderWidth: 1.5, borderColor: colors.textTertiary },
-  statusOff: { backgroundColor: colors.textFaint },
-  desc: { color: colors.textMuted, ...type.small, marginTop: 2 },
-  descMono: { ...type.mono, color: colors.textTertiary, marginTop: 4 },
+  botName: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: colors.text },
+  botIdle: { color: colors.textMuted },
+  botMeta: { ...type.small, color: colors.textTertiary },
+  note: { ...type.small, color: colors.textTertiary, paddingLeft: 36, paddingVertical: space.sm },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  dotOn: { backgroundColor: colors.gold },
+  dotIdle: { borderWidth: 1.5, borderColor: colors.textTertiary },
+  dotOff: { backgroundColor: colors.textFaint },
   empty: { paddingTop: "40%", paddingHorizontal: space.xl, alignItems: "center" },
   emptyTitle: { color: colors.text, ...type.heading, marginBottom: space.sm },
   emptySub: { color: colors.textMuted, ...type.body, textAlign: "center" },

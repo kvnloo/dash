@@ -4,13 +4,32 @@ Canonical product is **Dash**. Tokens match `app/src/theme.ts` and the original 
 
 Source refs: `docs/design/references/` (`REF-grok-*`, `REF-zero-*`).
 
+## Glossary
+
+Use these words exactly, in UI strings, accessibility labels, code and tests. If a thing fits none of them, name it plainly; do not stretch one of these.
+
+| Word | Means | Examples | Not |
+|------|-------|----------|-----|
+| **Host** | A machine on the tailnet that runs a Dash bridge or is listed by one. | groot, mbp, `0` | a harness, a bot |
+| **Harness** | An agent CLI or runtime installed on a host. Dash starts chats with it. | hermes, omp, codex, claude, grok, pi, fx | a bot |
+| **Bot** | A deployed messaging identity that people talk to on a chat platform. The host reports it in `HostInfo.bots`. | a Hermes gateway profile bound to Telegram or Discord, OpenDots, GrokBot | a harness, a Hermes profile with no platform, a session |
+| **Session / chat** | One conversation, on the phone or held by a harness on the host. | a live OMP tab, a saved Hermes session | a bot |
+| **Agent target** (code only: `AgentTarget`) | Anything Dash can open a chat with: a harness, a Hermes profile or a live session on a host. | | a bot |
+
+Where each lives in the app:
+
+- **Bots** tab lists only bots, grouped by host in collapsible sections. A host header shows a plain host glyph, the address, the bot count and an online dot. A bot row shows its name and one muted line of channel states ("Telegram connected · Discord not running"). No identity orbs on this page.
+- **Harnesses** are in the bridge sheet (the chevron in the top bar): "Harnesses on <host>". Tapping one starts a chat with it. The harness picker in Chat chooses the harness for new chats.
+- **Sessions** are rows in **Chats**.
+- Identity orbs mean a live agent or voice: chat rows and the Voice screen. Never on hosts or bots.
+
 ## Product
 
 Phone app for coding agents on the laptop (OMP, Codex, Grok, Hermes, Claude).
 
 Main: three full-screen swipe panes under the **top navigation bar** (Expand → Voice · three-dot gel pager for **Bots | Chats | Orchestra** · Bridge details chevron), **bottom** `@` search dock. Under the bar, the workspace header names the current pane and holds Approvals, compose (pencil) and Settings. Default tab: **Orchestra**. Compose lives in the **header** (pencil), not a FAB. The bar also sits at the top of Chat and Settings.
 
-- **Bots** — Hermes profiles + harness agents. Status **dot**, never “Online” pills.
+- **Bots** — deployed bots per host (see Glossary), collapsible host sections. Status **dot**, never “Online” pills.
 - **Chats** — all conversations, Grok History density: date groups, circular avatars, 1-line preview.
 - **Orchestra** — product / project mesh (Zero tile density, Dash cards).
 
@@ -59,7 +78,7 @@ Typography: system sans. Display 22/700. Heading 17/600. Body 16/24. Small 13/18
 
 1. `main-chats` — date-grouped conversations, compose in header, `@` dock
 2. `main-chats-search` — same, search focused, chips `@bot @chat @file`
-3. `main-bots` — harness sections, status dots, role + 1-line desc
+3. `main-bots` — host sections (collapsible, count), bots only, 1-line channel summary, status dots
 4. `main-orchestra` — product cards, agent avatars, active/idle
 5. `chat` — user bubble, assistant plain, attach + mic composer
 5a. `chat-attachments` — composer chips (uploaded, uploading, refused), sent files in the bubble, Send to phone

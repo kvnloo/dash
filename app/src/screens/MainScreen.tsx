@@ -24,10 +24,9 @@ import {
 import { FEEDBACK_CONVERSATION_ID, inAppFeedbackEnabled, type FeedbackAction } from "../lib/feedback";
 import { submitInAppFeedback } from "../lib/feedback-submit";
 import { DEFAULT_MAIN_TAB } from "../lib/home";
-import { profilesFromHosts } from "../lib/roster";
-import type { BotProfile } from "../mock/bots";
+import type { AgentTarget } from "../mock/agents";
 import type { ScreenProps } from "../navigation";
-import { createConversation, openBotConversation, saveSettings, setActive, setConnection, store } from "../store/app";
+import { createConversation, openAgentConversation, saveSettings, setActive, setConnection, store } from "../store/app";
 import { colors, space, type } from "../theme";
 import { BotsPane } from "./panes/BotsPane";
 import { ChatsPane } from "./panes/ChatsPane";
@@ -38,8 +37,8 @@ function feedbackFromSearch(item: SearchResult): FeedbackAction {
     case "bot":
       return {
         kind: "select",
-        text: `Selected bot ${item.profile.name}`,
-        selection: { kind: "bot", id: item.profile.id, label: item.profile.name },
+        text: `Selected bot ${item.bot.name}`,
+        selection: { kind: "bot", id: item.bot.id, label: item.bot.name },
       };
     case "conversation":
       return {
@@ -184,11 +183,10 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
   const searchActive = parsed.mode !== "discover";
-  const botProfiles = useMemo(() => (hosts.length > 0 ? profilesFromHosts(hosts) : undefined), [hosts]);
 
   const results = useMemo(
-    () => runGlobalSearch({ query, conversations, harnesses, botProfiles, hosts, cwd }),
-    [query, conversations, harnesses, botProfiles, hosts, cwd],
+    () => runGlobalSearch({ query, conversations, harnesses, hosts, cwd }),
+    [query, conversations, harnesses, hosts, cwd],
   );
 
   const hint = formatSearchHint(parsed);
@@ -207,8 +205,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   );
 
   const openBot = useCallback(
-    (profile: BotProfile) => {
-      const result = openBotConversation(profile);
+    (profile: AgentTarget) => {
+      const result = openAgentConversation(profile);
       if ("error" in result) {
         Alert.alert("Agent unavailable", result.error);
         return;
@@ -243,7 +241,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
     (item: SearchResult) => {
       switch (item.kind) {
         case "bot":
-          openBot(item.profile);
+          if (item.target) openBot(item.target);
+          else Alert.alert(item.bot.name, `${item.subtitle}.\n\nDash cannot open a chat with this bot from here. Message it on its own platform.`);
           break;
         case "conversation":
           openConversation(item.conversation.id);

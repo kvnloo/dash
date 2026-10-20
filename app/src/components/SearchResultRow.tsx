@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { effortIdForTurn, lastAssistantState, runtimeStateFromAgent, runtimeStateFromOrchestra, runtimeStateFromTurn } from "../catalog/runtime-state";
+import { effortIdForTurn, lastAssistantState, runtimeStateFromOrchestra, runtimeStateFromTurn } from "../catalog/runtime-state";
 import type { SearchResult } from "../lib/global-search";
 import { colors, space, type } from "../theme";
 import { PressScale } from "./PressScale";
@@ -23,7 +23,7 @@ const KIND_LABEL: Record<SearchResult["kind"], string> = {
 function resultTitle(item: SearchResult): string {
   switch (item.kind) {
     case "bot":
-      return item.profile.name;
+      return item.bot.name;
     case "conversation":
       return item.conversation.title || item.harnessName;
     case "product":
@@ -44,7 +44,7 @@ function resultTitle(item: SearchResult): string {
 function avatarName(item: SearchResult): string {
   switch (item.kind) {
     case "bot":
-      return item.profile.name;
+      return item.bot.name;
     case "conversation":
       return item.harnessName;
     case "product":
@@ -65,8 +65,6 @@ function avatarName(item: SearchResult): string {
 
 function avatarHarnessId(item: SearchResult): string | undefined {
   switch (item.kind) {
-    case "bot":
-      return item.profile.harness;
     case "conversation":
       return item.conversation.harness;
     case "harness":
@@ -88,9 +86,6 @@ function avatarMotion(item: SearchResult): { effortId?: string; stateId?: string
     return {
       stateId: runtimeStateFromOrchestra({ status: item.project.status, streaming: false }),
     };
-  }
-  if (item.kind === "bot") {
-    return { stateId: runtimeStateFromAgent(item.profile.online ? "available" : "offline") };
   }
   if (item.kind === "harness") {
     return { stateId: item.available ? "paused" : "stale" };
@@ -114,17 +109,18 @@ export const SearchResultRow = memo(function SearchResultRow({
       ? stale ? "ended" : timeAgo(item.conversation.updatedAt)
       : item.kind === "product"
         ? timeAgo(item.project.updatedAt)
-        : item.kind === "bot" && item.profile.online
-          ? "Online"
+        : item.kind === "bot" && item.bot.status === "running"
+          ? "Running"
           : item.kind === "bot"
-            ? "Offline"
+            ? "Not running"
             : item.kind === "harness"
               ? item.available
                 ? "Available"
                 : "Unavailable"
               : null;
 
-  const showFileIcon = item.kind === "file" || item.kind === "tool";
+  // Bots get a plain glyph: identity orbs mean a live agent or voice, not a messaging bot.
+  const showFileIcon = item.kind === "file" || item.kind === "tool" || item.kind === "bot";
   const motion = avatarMotion(item);
 
   return (
@@ -138,7 +134,7 @@ export const SearchResultRow = memo(function SearchResultRow({
       {showFileIcon ? (
         <GlassSurface variant="chip" blur={false} borderRadius={24} style={styles.iconWrap}>
           <Feather
-            name={item.kind === "file" ? "file-text" : "tool"}
+            name={item.kind === "file" ? "file-text" : item.kind === "bot" ? "message-circle" : "tool"}
             size={22}
             color={colors.textMuted}
           />

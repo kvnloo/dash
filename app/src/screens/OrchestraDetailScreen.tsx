@@ -10,9 +10,9 @@ import { EffortOrbs } from "../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../components/TopologyBadge";
 import { haptic } from "../haptics";
 import { projectsFromHosts } from "../lib/project-data";
-import type { BotProfile } from "../mock/bots";
+import type { AgentTarget } from "../mock/agents";
 import type { ScreenProps } from "../navigation";
-import { openBotConversation, setActive, store } from "../store/app";
+import { openAgentConversation, setActive, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { timeAgo } from "../util";
 
@@ -60,9 +60,9 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
     navigation.navigate("Chat");
   };
 
-  const openAgent = (profile: BotProfile) => {
+  const openAgent = (profile: AgentTarget) => {
     haptic.select();
-    const result = openBotConversation(profile);
+    const result = openAgentConversation(profile);
     if ("error" in result) {
       Alert.alert("Agent unavailable", result.error);
       return;

@@ -24,7 +24,7 @@ import { GEL, PRESS_SCALE } from "../motion";
 import type { Connection } from "../model";
 import type { RootStackParamList } from "../navigation";
 import { bridge } from "../net/bridge";
-import { store } from "../store/app";
+import { createConversation, saveSettings, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import {
   backdropOpacity,
@@ -174,6 +174,15 @@ export function BridgePullOverlay() {
   // The sheet drops from under the top navigation bar, beside its chevron.
   const top = insets.top + NAV_CHROME_HEIGHT;
 
+  const startHarness = (id: string) => {
+    if (!settings) return;
+    api.close();
+    haptic.tap();
+    saveSettings({ ...settings, harness: id });
+    createConversation(id);
+    navigation.navigate("Chat");
+  };
+
   const goEdit = () => {
     api.close();
     haptic.tap();
@@ -263,15 +272,24 @@ export function BridgePullOverlay() {
 
             {harnesses.length > 0 ? (
               <View style={styles.section}>
-                <Text style={styles.label}>Harnesses</Text>
+                {/* Harnesses are the agent CLIs on this host. Tap one to start a chat with it. */}
+                <Text style={styles.label}>Harnesses on {connection.host ?? "this host"}</Text>
                 <View style={styles.chips}>
                   {harnesses.map((h) => (
-                    <View key={h.id} style={styles.chip}>
+                    <PressScale
+                      key={h.id}
+                      scaleTo={PRESS_SCALE.control}
+                      disabled={!h.available || !settings}
+                      onPress={() => startHarness(h.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={h.available ? `New ${h.name} chat` : `${h.name}, not installed`}
+                      style={[styles.chip, !h.available && styles.chipOff]}
+                    >
                       <View
                         style={[styles.dotSm, { backgroundColor: h.available ? colors.ok : colors.textFaint }]}
                       />
                       <Text style={styles.chipText}>{h.name}</Text>
-                    </View>
+                    </PressScale>
                   ))}
                 </View>
               </View>
@@ -339,6 +357,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(18,18,18,0.45)",
   },
   chipText: { color: colors.ink2, ...type.small },
+  chipOff: { opacity: 0.55 },
   edit: {
     alignSelf: "flex-start",
     paddingHorizontal: 12,

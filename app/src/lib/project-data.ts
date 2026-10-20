@@ -1,6 +1,6 @@
 import type { HostInfo } from "../../../shared/protocol";
 import type { OrchestraProject } from "../catalog/orchestra";
-import type { BotProfile } from "../mock/bots";
+import type { AgentTarget } from "../mock/agents";
 import type { Conversation } from "../model";
 import { isPersistedChat, profileFromAgent } from "./roster";
 
@@ -8,7 +8,7 @@ export interface LiveProject extends OrchestraProject {
   hostId?: string;
   hostName: string;
   cwd: string;
-  agentRows: BotProfile[];
+  agentRows: AgentTarget[];
 }
 
 function directory(value: string | undefined): string | undefined {

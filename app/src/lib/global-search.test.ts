@@ -158,12 +158,15 @@ describe("search uses bridge evidence", () => {
     expect(row.project.subtitle).toContain("/work/weather-station");
   });
 
-  test("bot search derives only actual roster profiles when no profiles are supplied", () => {
-    const results = runGlobalSearch({ query: "@bots", conversations: [], harnesses, hosts: [groot] });
+  test("bot search lists only deployed bots the host reports, never harnesses", () => {
+    expect(runGlobalSearch({ query: "@bots", conversations: [], harnesses, hosts: [groot] })).toEqual([]);
+    const withBot: HostInfo = { ...groot, bots: [{ id: "hermes-bot:clean", name: "clean", runtime: "hermes", status: "running", channels: [{ platform: "telegram", state: "connected" }], agentId: "hermes:clean" }] };
+    const results = runGlobalSearch({ query: "@bots tele", conversations: [], harnesses, hosts: [withBot] });
     expect(results).toHaveLength(1);
     const row = results[0];
     if (row?.kind !== "bot") throw new Error("expected bot");
-    expect(row.profile.id).toBe("0:hermes");
-    expect(row.profile.name).toBe("Hermes");
+    expect(row.bot.name).toBe("clean");
+    expect(row.subtitle).toBe(`${groot.name} · Telegram connected`);
+    expect(row.target).toBeUndefined();
   });
 });

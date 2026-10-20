@@ -1,11 +1,11 @@
-import type { HostInfo } from "../../../shared/protocol";
+import type { BotInfo, HostInfo } from "../../../shared/protocol";
 import type { OrchestraProject } from "../catalog/orchestra";
-import type { BotProfile } from "../mock/bots";
+import type { AgentTarget } from "../mock/agents";
 import type { FileResource, NamedResource } from "../mock/resources";
 import type { Conversation } from "../model";
 import { conversationPreview, findLiveConversation, mergeLiveConversations } from "./live-sessions";
 import { projectsFromHosts } from "./project-data";
-import { profilesFromHosts } from "./roster";
+import { botSummary, botTarget } from "./bots";
 
 export type MentionScope = "bots" | "conversation" | "product";
 export type SlashScope = "live" | "harness" | "skill" | "plugin" | "tool" | "file";
@@ -133,7 +133,8 @@ export function applyScopePrefix(current: string, label: string): string {
 }
 
 export type SearchResult =
-  | { kind: "bot"; key: string; profile: BotProfile; subtitle: string }
+  /** A deployed bot the host reports; `target` is set when Dash can open a chat with it. */
+  | { kind: "bot"; key: string; bot: BotInfo; hostName: string; target?: AgentTarget; subtitle: string }
   | { kind: "conversation"; key: string; conversation: Conversation; harnessName: string; subtitle: string }
   | { kind: "product"; key: string; project: OrchestraProject; subtitle: string }
   | { kind: "harness"; key: string; id: string; name: string; available: boolean; subtitle: string }
@@ -155,13 +156,12 @@ export function runGlobalSearch(params: {
   query: string;
   conversations: Conversation[];
   harnesses: { id: string; name: string; available?: boolean }[];
-  botProfiles?: BotProfile[];
   products?: OrchestraProject[];
   hosts?: HostInfo[];
   cwd?: string;
 }): SearchResult[] {
   const parsed = parseSearchQuery(params.query);
-  const bots = params.botProfiles ?? profilesFromHosts(params.hosts ?? []);
+  const bots = (params.hosts ?? []).flatMap(host => (host.bots ?? []).map(bot => ({ host, bot })));
   const products = params.products ?? projectsFromHosts({
     hosts: params.hosts ?? [],
     conversations: params.conversations,
@@ -172,13 +172,13 @@ export function runGlobalSearch(params: {
   const discoverEmpty = parsed.mode === "discover" && !parsed.text;
 
   if (parsed.mode === "discover" || (parsed.mode === "mention" && parsed.scope === "bots")) {
-    const ranked = [...bots].sort((a, b) => Number(b.online) - Number(a.online));
+    const ranked = [...bots].sort((a, b) => Number(b.bot.status === "running") - Number(a.bot.status === "running"));
     let count = 0;
-    for (const profile of ranked) {
-      const harness = params.harnesses.find((h) => h.id === profile.harness);
-      const hay = [profile.name, profile.role, profile.description, profile.harness, harness?.name ?? ""].join(" ");
-      if (!matches(parsed.mode === "discover" ? parsed.text : parsed.text, hay)) continue;
-      results.push({ kind: "bot", key: `bot:${profile.id}`, profile, subtitle: profile.role });
+    for (const { host, bot } of ranked) {
+      const summary = botSummary(bot);
+      const hay = [bot.name, bot.runtime, summary, host.name].join(" ");
+      if (!matches(parsed.text, hay)) continue;
+      results.push({ kind: "bot", key: `bot:${host.id}:${bot.id}`, bot, hostName: host.name, target: botTarget(host, bot), subtitle: `${host.name} · ${summary}` });
       count += 1;
       if (discoverEmpty && count >= DISCOVER_LIMITS.bot) break;
     }

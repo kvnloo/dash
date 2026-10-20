@@ -1,5 +1,5 @@
-/** Bot profile cards — Hermes subagents, Grok bots, harness personas. */
-export interface BotProfile {
+/** Something Dash can open a chat with on a host: a harness, a Hermes profile or a live session. Not a bot (see docs/design/language.md). */
+export interface AgentTarget {
   id: string;
   harness: string;
   name: string;
@@ -15,7 +15,7 @@ export interface BotProfile {
   sessionId?: string;
 }
 
-export const DEMO_BOT_PROFILES: BotProfile[] = [
+export const DEMO_AGENT_TARGETS: AgentTarget[] = [
   {
     id: "omp-main",
     harness: "omp",

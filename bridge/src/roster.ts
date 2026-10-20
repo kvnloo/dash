@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { isCatalogHarness } from "../../shared/catalog";
 import { hermesSessions } from "./hermes-sessions";
+import { grokDesktopBot, hermesBots, hostBotSources, serviceBots } from "./bots";
 import type { AgentInfo, HarnessInfo, HistoryMessage, HostInfo } from "../../shared/protocol";
 
 export type TailscaleNode = {
@@ -537,6 +538,21 @@ function grokBotAlive(): boolean {
   return spawnText(["pgrep", "-x", "grok-bot"]).trim().length > 0;
 }
 
+/** A recorded gateway pid counts only while that pid is still a Hermes gateway. */
+function gatewayAlive(pid: number): boolean {
+  if (!pidAlive(pid)) return false;
+  try { return readFileSync(`/proc/${pid}/cmdline`, "utf8").includes("gateway"); } catch { return true; }
+}
+
+function localBots() {
+  const root = process.env.DASH_HERMES_ROOT ?? join(homedir(), ".hermes");
+  return [
+    ...hermesBots(hostBotSources(root, gatewayAlive)),
+    ...serviceBots(spawnText(["systemctl", "--user", "list-units", "--type=service", "--state=running", "--no-legend", "--plain"])),
+    ...(grokBotAlive() ? [grokDesktopBot()] : []),
+  ];
+}
+
 function listedHermesProfiles(profiles: HermesProfileInfo[]): HermesProfileInfo[] {
   return profiles.filter((p) => p.gateway === "running" || p.id === "default" || p.id === "connect-all");
 }
@@ -572,7 +588,10 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
   });
   const sessions = await hermesSessions.list();
   const local = hosts.find(h => h.self);
-  if (local) local.agents.push(...sessions);
+  if (local) {
+    local.agents.push(...sessions);
+    local.bots = localBots();
+  }
   rosterCache = { at: now, key, hosts };
   return hosts;
 }

@@ -39,6 +39,20 @@ export async function assertLivingNight(page, scenario) {
       result.chips = await list.boundingBox();
       assert.ok(result.chips.y < box.y, "scope chips open above dock");
     }
+    if (scenario === "main-bots") {
+      assert.equal(await page.getByRole("img", { name: /identity orb$/ }).count(), 0, "Bots never shows identity orbs");
+      for (const name of [/^Codex/, /^Claude Code/, /^OMP 1/]) assert.equal(await page.getByRole("button", { name }).count(), 0, "harnesses and sessions are not bots");
+      const host = page.getByRole("button", { name: /^mbp, 3 bots, online$/ });
+      await host.waitFor();
+      result.hostHeader = await host.boundingBox();
+      assert.ok(result.hostHeader.height >= 44 && result.hostHeader.height <= 52, "host header 44-52px");
+      result.botRows = [];
+      for (const name of [/^clean, /, /^chiefstaff, /, /^opendots, /]) {
+        const b = await page.getByRole("button", { name }).boundingBox();
+        assert.ok(b.height >= 44 && b.height <= 56, "bot row stays dense");
+        result.botRows.push(b);
+      }
+    }
     if (scenario === "main-orchestra") {
       const cards = page.getByRole("button").filter({ hasText: "Topology not reported" });
       for (const card of await cards.all()) {
@@ -106,6 +120,14 @@ export async function exerciseLivingNight(page, scenario) {
     await page.getByRole("button", { name: "Back", exact: true }).click();
     await page.getByRole("tab", { name: "Chats", selected: true, exact: true }).waitFor();
     steps.push("compose opens chat; Back returns to Chats");
+  }
+  if (scenario === "main-bots") {
+    const host = page.getByRole("button", { name: /^mbp, 3 bots, online$/ });
+    await host.click();
+    await page.getByRole("button", { name: /^clean, / }).waitFor({ state: "hidden" });
+    await host.click();
+    await page.getByRole("button", { name: /^clean, / }).waitFor();
+    steps.push("host section collapses and expands");
   }
   if (scenario === "main-chats-search") {
     await page.getByRole("textbox", { name: "Message", exact: true }).blur();

@@ -1,6 +1,6 @@
 import type { AgentInfo, HostInfo } from "../../../shared/protocol";
 import { parseHosts } from "../../../shared/protocol";
-import type { BotProfile } from "../mock/bots";
+import type { AgentTarget } from "../mock/agents";
 import type { Settings } from "../model";
 
 export function chatKind(agent: { id: string; kind: string }): string {
@@ -15,37 +15,12 @@ export function canChatWithAgent(
   return opts.self && opts.availableKinds.has(chatKind(agent));
 }
 
-/** A persisted host chat (e.g. a saved Hermes session). It belongs in Chats, not in Bots or the project mesh. */
+/** A persisted host chat (e.g. a saved Hermes session). It belongs in Chats, not in the project mesh. */
 export function isPersistedChat(agent: { id: string }): boolean {
   return agent.id.startsWith("hermes:session:");
 }
 
-/**
- * Bots shows agents and profiles, not every saved chat. Persisted Hermes sessions
- * collapse into a count on their profile row ("clean · 37 chats"), and into the
- * generic Hermes row when the host lists no profile rows.
- */
-export function botAgents(host: HostInfo): AgentInfo[] {
-  const chats = new Map<string, number>();
-  let total = 0;
-  for (const agent of host.agents) {
-    if (!isPersistedChat(agent)) continue;
-    total += 1;
-    const profile = agent.profileId ?? "default";
-    chats.set(profile, (chats.get(profile) ?? 0) + 1);
-  }
-  const visible = host.agents.filter(agent => !isPersistedChat(agent));
-  const hasProfiles = visible.some(agent => agent.kind === "hermes" && agent.id.startsWith("hermes:") && agent.id !== "hermes:default");
-  return visible.map(agent => {
-    const count = agent.id.startsWith("hermes:") ? chats.get(agent.id.slice("hermes:".length)) ?? 0
-      : agent.kind === "hermes" && !hasProfiles ? total : 0;
-    if (!count) return agent;
-    const label = `${count} chat${count === 1 ? "" : "s"}`;
-    return { ...agent, detail: agent.detail ? `${label} · ${agent.detail}` : label };
-  });
-}
-
-export function emptyHostProfile(host: HostInfo): BotProfile {
+export function emptyHostProfile(host: HostInfo): AgentTarget {
   return {
     id: `host:${host.id}`,
     harness: "host",
@@ -56,8 +31,8 @@ export function emptyHostProfile(host: HostInfo): BotProfile {
   };
 }
 
-export function profilesFromHosts(hosts: HostInfo[]): BotProfile[] {
-  const out: BotProfile[] = [];
+export function profilesFromHosts(hosts: HostInfo[]): AgentTarget[] {
+  const out: AgentTarget[] = [];
   for (const host of hosts) {
     if (host.agents.length === 0) {
       out.push(emptyHostProfile(host));
@@ -70,7 +45,7 @@ export function profilesFromHosts(hosts: HostInfo[]): BotProfile[] {
   return out;
 }
 
-export function profileFromAgent(host: HostInfo, agent: AgentInfo): BotProfile {
+export function profileFromAgent(host: HostInfo, agent: AgentInfo): AgentTarget {
   const hostLabel = host.name === host.hostname ? host.name : `${host.name} · ${host.hostname}`;
   return {
     id: `${host.id}:${agent.id}`,

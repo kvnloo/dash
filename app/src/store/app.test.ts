@@ -191,12 +191,12 @@ describe("bot target identity", () => {
     const agent = host.agents[0];
     if (!agent) throw new Error("Missing fixture agent");
     const profile = profileFromAgent(host, agent);
-    const result = app.openBotConversation(profile);
+    const result = app.openAgentConversation(profile);
     expect(result).toHaveProperty("conversation");
     if (!("conversation" in result)) throw new Error(result.error);
     expect(result.conversation).toMatchObject({ targetHostId: "self", profileId: "omp:project", sessionId: "session-project", cwd: "/work/project", harness: "omp" });
     expect(app.store.get().settings).toBeNull();
-    const again = app.openBotConversation(profile);
+    const again = app.openAgentConversation(profile);
     expect(again).toEqual(result);
   });
   test("same harness on another host fails explicitly instead of opening local", () => {
@@ -208,11 +208,11 @@ describe("bot target identity", () => {
     const before = app.store.get().conversations;
     const agent = host.agents[0];
     if (!agent) throw new Error("Missing fixture agent");
-    expect(app.openBotConversation(profileFromAgent(host, agent))).toEqual({ error: expect.stringContaining("remote") });
+    expect(app.openAgentConversation(profileFromAgent(host, agent))).toEqual({ error: expect.stringContaining("remote") });
     expect(app.store.get().conversations).toBe(before);
   });
   test("a stale or unavailable target does not select another profile", () => {
-    expect(app.openBotConversation({ id: "gone:omp", targetHostId: "gone", profileId: "omp", harness: "omp", name: "Gone", role: "gone", description: "gone", online: true })).toEqual({ error: expect.any(String) });
+    expect(app.openAgentConversation({ id: "gone:omp", targetHostId: "gone", profileId: "omp", harness: "omp", name: "Gone", role: "gone", description: "gone", online: true })).toEqual({ error: expect.any(String) });
     expect(app.store.get().conversations).toHaveLength(0);
   });
 });
@@ -250,7 +250,7 @@ describe("project agent actions", () => {
     const { projectsFromHosts } = await import("../lib/project-data");
     const row = projectsFromHosts({ hosts: [host], cwd: "/work/actual", conversations: [], now: 1 })[0]?.agentRows[0];
     if (!row) throw new Error("Missing actual agent row");
-    const result = app.openBotConversation(row);
+    const result = app.openAgentConversation(row);
     if (!("conversation" in result)) throw new Error(result.error);
     expect(result.conversation).toMatchObject({ targetHostId: "self", profileId: "harness:omp", cwd: "/work/actual" });
     const t = app.beginTurn(result.conversation.id, "hello");

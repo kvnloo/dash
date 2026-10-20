@@ -33,6 +33,12 @@ const DEBUG_HOSTS = [
       { id: "harness:pi", name: "Pi", kind: "pi", status: "offline" as const, detail: "Not installed" },
       { id: "harness:fx", name: "fx", kind: "fx", status: "offline" as const, detail: "Not installed" },
     ],
+    // Fixture bots: deployed messaging identities, not harnesses.
+    bots: [
+      { id: "hermes-bot:clean", name: "clean", runtime: "hermes", status: "running" as const, channels: [{ platform: "telegram", state: "connected" as const }], agentId: "hermes:clean", detail: "Hermes gateway profile" },
+      { id: "hermes-bot:chiefstaff", name: "chiefstaff", runtime: "hermes", status: "available" as const, channels: [{ platform: "discord", state: "configured" as const }, { platform: "telegram", state: "configured" as const }], agentId: "hermes:chiefstaff", detail: "Hermes gateway profile" },
+      { id: "service:opendots", name: "opendots", runtime: "service", status: "running" as const, channels: [], detail: "User service" },
+    ],
   },
   {
     id: "0",
@@ -42,6 +48,10 @@ const DEBUG_HOSTS = [
     self: false,
     address: "100.64.0.2",
     agents: [{ id: "hermes", name: "Hermes", kind: "hermes", status: "running" as const, detail: "Mesh node" }],
+    bots: [
+      { id: "grok-bot", name: "GrokBot", runtime: "grok", status: "running" as const, channels: [{ platform: "discord", state: "connected" as const }], detail: "Desktop app" },
+      { id: "hermes-bot:intake", name: "intake", runtime: "hermes", status: "available" as const, channels: [{ platform: "telegram", state: "disconnected" as const }], detail: "Hermes gateway profile" },
+    ],
   },
 ];
 

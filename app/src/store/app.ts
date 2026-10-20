@@ -16,7 +16,7 @@ import { createStore } from "./createStore";
 import { dequeue, enqueue, notifyTurnSettled } from "./queue";
 import { nextPendingSend, parkMessage } from "./offline-send";
 import { replyText } from "./text";
-import type { BotProfile } from "../mock/bots";
+import type { AgentTarget } from "../mock/agents";
 import { chatKind } from "../lib/roster";
 
 const liveSequences = new Map<string, number>();
@@ -194,11 +194,11 @@ export function conversationTargetError(target: Pick<Conversation, "targetHostId
   return undefined;
 }
 
-export function openBotConversation(profile: BotProfile): { conversation: Conversation } | { error: string } {
+export function openAgentConversation(profile: AgentTarget): { conversation: Conversation } | { error: string } {
   if (!profile.online) return { error: "This agent is offline." };
   const error = conversationTargetError(profile);
   if (error) return { error };
-  if (!profile.targetHostId || !profile.profileId) return { error: "This bot has no target identity. Refresh the roster." };
+  if (!profile.targetHostId || !profile.profileId) return { error: "This agent has no target identity. Refresh the roster." };
   const existing = store.get().conversations.find((c) => c.harness === profile.harness && c.targetHostId === profile.targetHostId && c.profileId === profile.profileId && c.sessionId === profile.sessionId && c.cwd === profile.cwd);
   if (existing) {
     setActive(existing.id);
