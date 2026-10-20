@@ -4,7 +4,8 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../catalog/runtime-state";
 import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../catalog/visual";
-import { AppNav } from "../components/AppNav";
+import { Canvas } from "../components/Canvas";
+import { ScreenHeader } from "../components/ScreenHeader";
 import { EffortOrbs } from "../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../components/TopologyBadge";
 import { haptic } from "../haptics";
@@ -38,7 +39,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
   if (!project) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
-        <AppNav navigation={navigation} tab={2} />
+        <Canvas /><ScreenHeader title="Orchestra" onBack={() => navigation.navigate("Main")} />
         <View style={styles.empty}>
           <Text style={styles.emptyText}>Project not found</Text>
         </View>
@@ -71,7 +72,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <AppNav navigation={navigation} tab={2} />
+      <Canvas /><ScreenHeader title="Orchestra" onBack={() => navigation.navigate("Main")} />
       <View style={styles.hero}>
         <View style={styles.heroTop}>
           <View style={styles.heroCopy}>
@@ -82,7 +83,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
             <OrchestraCore hue={provider.hue} size={48} />
           </EffortOrbs>
         </View>
-        <TopologyBadge topologyId={project.topologyId} providerId={project.providerId} width={240} />
+        {project.topologyId === "unknown" ? <Text style={{ ...type.mono, color: colors.textTertiary }}>Topology not reported</Text> : <TopologyBadge topologyId={project.topologyId} providerId={project.providerId} width={180} />}
         <View style={styles.metaRow}>
           <View
             style={[
@@ -148,17 +149,16 @@ const styles = StyleSheet.create({
   hero: { paddingHorizontal: space.lg, paddingBottom: space.lg, gap: space.md },
   heroTop: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
   heroCopy: { flex: 1, minWidth: 0 },
-  title: { color: colors.text, ...type.heading },
-  subtitle: { color: colors.textMuted, ...type.body, marginTop: 4 },
+  title: { color: colors.text, ...type.title },
+  subtitle: { color: colors.textTertiary, ...type.mono, marginTop: 4 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   meta: { color: colors.textFaint, fontSize: 12 },
   section: {
     color: colors.textMuted,
-    ...type.small,
+    ...type.section,
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
-    textTransform: "uppercase",
   },
   row: {
     flexDirection: "row",

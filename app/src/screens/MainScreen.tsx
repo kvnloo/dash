@@ -1,3 +1,5 @@
+import { Canvas } from "../components/Canvas";
+import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Animated, { useAnimatedStyle, useFrameCallback, useSharedValue } from "react-native-reanimated";
@@ -302,7 +304,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           : "No matches. Use @ for bots and chats, / for harness files and tools.";
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav
         ref={navRef}
         navigation={navigation}
@@ -313,7 +315,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
         }}
       />
       <ConnectionPill />
-      <Pressable accessibilityRole="button" accessibilityLabel="Approvals" onPress={() => navigation.navigate("Approvals")} style={{ marginTop: space.xl, minHeight: 44, justifyContent: "center", paddingHorizontal: space.lg, alignSelf: "flex-end" }}><Text style={{ color: colors.ink2, ...type.small }}>Approvals</Text></Pressable>
+
 
       <View style={styles.body}>
         {searchActive ? (
@@ -368,7 +370,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           onChange={setQuery}
           onScope={onScope}
           dock="bottom"
-          placeholder={feedbackOn ? "Feedback for Dash" : "Message Dash"}
+          placeholder={feedbackOn ? "Feedback for Dash" : "Search or message Dash"}
           onVoice={() => {
             if (feedbackOn) {
               createConversation(settings?.harness ?? "omp", {
@@ -402,7 +404,7 @@ const styles = StyleSheet.create({
   body: { flex: 1, overflow: "visible" },
   pager: { flex: 1, overflow: "visible" },
   searchDock: {
-    backgroundColor: colors.bg,
+    backgroundColor: "transparent",
   },
   hint: {
     color: colors.textMuted,

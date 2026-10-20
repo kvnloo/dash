@@ -1,9 +1,12 @@
+import { Canvas } from "../components/Canvas";
+import { ScreenHeader } from "../components/ScreenHeader";
 import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppNav } from "../components/AppNav";
 import { GlassSurface } from "../components/GlassSurface";
+import { PrimaryButton } from "../components/PrimaryButton";
 import { haptic } from "../haptics";
 import { connectSettings } from "../lib/settings-flow";
 import { normalizeAddress } from "../model";
@@ -106,8 +109,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   })();
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <AppNav navigation={navigation} tab={1} />
+    <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
+      <ScreenHeader title="Settings" onBack={() => navigation.navigate("Main")} />
       <KeyboardAvoidingView style={styles.body} behavior="padding">
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.xxl }]}
@@ -126,7 +129,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           ) : null}
 
           <Text style={styles.label}>Bridge</Text>
-          <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
+          <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field
               label="Address"
               value={address}
@@ -163,22 +166,13 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             </Text>
           </View>
 
-          <Pressable
-            onPress={() => void save()}
-            disabled={!canSave}
-            style={({ pressed }) => [styles.primary, !canSave && styles.primaryDisabled, pressed && styles.pressed]}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.primaryText, !canSave && styles.primaryTextDisabled]}>
-              {saving ? "Connecting…" : firstRun ? "Connect" : dirty ? "Save and reconnect" : "Reconnect"}
-            </Text>
-          </Pressable>
+          <PrimaryButton onPress={() => void save()} disabled={!canSave} label={saving ? "Connecting…" : firstRun ? "Connect" : dirty ? "Save and reconnect" : "Reconnect"} />
           {saveError ? <Text style={[styles.help, styles.dangerText]} accessibilityRole="alert">{saveError}</Text> : null}
 
           {connection.harnesses.length > 0 ? (
             <>
               <Text style={styles.label}>Harnesses on {connection.host}</Text>
-              <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
+              <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
                 {connection.harnesses.map((h, i) => (
                   <View key={h.id}>
                     {i > 0 ? <View style={styles.divider} /> : null}
@@ -195,8 +189,9 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             </>
           ) : null}
 
+          <Pressable accessibilityRole="button" accessibilityLabel="Approvals" onPress={() => navigation.navigate("Approvals")} style={styles.secondary}><Text style={styles.secondaryText}>Review approvals</Text></Pressable>
           <Text style={styles.label}>On your computer</Text>
-          <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
+          <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Text style={styles.mono}>cd bridge && bun run start</Text>
           </GlassSurface>
           <Text style={styles.help}>
@@ -210,7 +205,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           {!firstRun && settings ? (
             <>
               <Text style={styles.label}>Beta</Text>
-              <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
+              <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
                 <Pressable
                   onPress={() => {
                     saveSettings({ ...settings, inAppFeedback: !settings.inAppFeedback });
@@ -274,7 +269,7 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   content: { paddingHorizontal: space.lg, paddingTop: space.sm },
   intro: { color: colors.textMuted, ...type.body, marginBottom: space.xl },
-  label: { color: colors.textMuted, ...type.label, marginTop: space.xl, marginBottom: space.sm, marginLeft: space.xs },
+  label: { color: colors.text, ...type.cardTitle, marginTop: space.xl, marginBottom: space.sm, marginLeft: space.xs },
   card: {
     overflow: "hidden",
   },
@@ -284,7 +279,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     color: colors.text,
-    ...type.body,
+    ...type.mono,
     paddingVertical: 14,
     ...(Platform.OS === "web" ? { outlineStyle: "none" as never } : null),
   },
@@ -301,7 +296,7 @@ const styles = StyleSheet.create({
   primaryDisabled: { backgroundColor: colors.surfaceRaised },
   secondary: {
     marginTop: space.lg,
-    borderRadius: radius.pill,
+    borderRadius: radius.sm,
     paddingVertical: 14,
     alignItems: "center",
     borderWidth: StyleSheet.hairlineWidth,

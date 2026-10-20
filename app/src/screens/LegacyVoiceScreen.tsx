@@ -1,16 +1,12 @@
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from "expo-audio";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, {
-  cancelAnimation,
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
+import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppNav } from "../components/AppNav";
+import { Canvas } from "../components/Canvas";
+import { ScreenHeader } from "../components/ScreenHeader";
+import { VoiceOrb } from "../components/VoiceOrb";
+import { presetForHarness } from "../components/orb-html";
 import { haptic } from "../haptics";
 import { ReplySpeaker } from "../lib/speak";
 import { VoiceSession, type Recorder, type VoicePhase } from "../lib/voice-session";
@@ -41,7 +37,6 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
   const [started, setStarted] = useState(false);
 
   const level = useSharedValue(0);
-  const pulse = useSharedValue(0);
   const sessionRef = useRef<VoiceSession | null>(null);
   const speakerRef = useRef<ReplySpeaker | null>(null);
   const turnRef = useRef<string | null>(null);
@@ -160,36 +155,14 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
     };
   }, [recorder, level, sendUtterance, started]);
 
-  // A slow breath while idle; a faster one while the agent works.
-  useEffect(() => {
-    cancelAnimation(pulse);
-    const duration = phase === "thinking" ? 900 : 2600;
-    pulse.value = 0;
-    pulse.value = withRepeat(withTiming(1, { duration, easing: Easing.inOut(Easing.ease) }), -1, true);
-  }, [phase, pulse]);
-
-  const orbStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + pulse.value * 0.05 + level.value * 0.16 }],
-    opacity: 0.85 + pulse.value * 0.15,
-  }));
-
-  const haloStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1.08 + level.value * 0.42 }],
-    opacity: 0.05 + level.value * 0.3,
-  }));
-
   const caption = useMemo(() => error ?? CAPTION[phase], [error, phase]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.xl }]}>
-      <AppNav navigation={navigation} tab={1} />
+      <Canvas /><ScreenHeader title="Voice" onBack={() => navigation.navigate("Main")} />
 
       <View style={styles.stage}>
-        <Animated.View style={[styles.halo, haloStyle]} />
-        <Animated.View style={[styles.orb, orbStyle]}>
-          <View style={styles.orbCore} />
-          <View style={styles.orbHighlight} />
-        </Animated.View>
+        <VoiceOrb preset={presetForHarness(harness)} phase={!started || error ? "idle" : phase === "hearing" ? "listening" : phase} size={190} />
       </View>
 
       <View style={styles.footer}>

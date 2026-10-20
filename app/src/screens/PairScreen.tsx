@@ -17,8 +17,10 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppNav } from "../components/AppNav";
+import { Canvas } from "../components/Canvas";
+import { ScreenHeader } from "../components/ScreenHeader";
 import { GlassSurface } from "../components/GlassSurface";
+import { PrimaryButton } from "../components/PrimaryButton";
 import { haptic } from "../haptics";
 import { newClaimKey } from "../lib/pair-crypto";
 import { claimLivePair, claimPairCode, hearPairTones, settingsFromClaim, startSonicPair } from "../lib/pair-api";
@@ -166,8 +168,8 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
   }, [busy, computer, bootstrapToken, finishClaim, manualCode]);
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
-      <AppNav navigation={navigation} tab={1} />
+    <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}><Canvas />
+      <ScreenHeader title="Connect" onBack={() => navigation.navigate("Main")} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Pair with your laptop</Text>
         <Text style={styles.intro}>
@@ -204,13 +206,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
         </GlassSurface>
         <Text style={styles.hint}>Transfer ~/.dash/bootstrap-token privately from your computer. Used only for enrollment; not saved.</Text>
 
-        <Pressable
-          onPress={() => void pairOverTailscale()}
-          disabled={busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0}
-          style={({ pressed }) => [styles.primary, (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0) && styles.primaryDisabled, pressed && styles.pressed]}
-        >
-          {busy ? <ActivityIndicator color={colors.onAccent} /> : <Text style={styles.primaryText}>Pair over Tailscale</Text>}
-        </Pressable>
+        <PrimaryButton onPress={() => void pairOverTailscale()} disabled={busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0} label={busy ? "Pairing…" : "Pair over Tailscale"} />
 
         <Pressable
           onPress={() => void pairWithSound()}
@@ -263,7 +259,7 @@ const styles = StyleSheet.create({
   inputWrap: { marginBottom: space.sm },
   inputInner: {
     color: colors.text,
-    ...type.body,
+    ...type.mono,
     paddingHorizontal: space.lg,
     paddingVertical: 14,
     ...(Platform.OS === "web" ? { outlineStyle: "none" as never } : null),
@@ -282,7 +278,7 @@ const styles = StyleSheet.create({
   primaryText: { color: colors.onAccent, ...type.heading },
   secondary: {
     marginTop: space.sm,
-    borderRadius: radius.pill,
+    borderRadius: radius.sm,
     paddingVertical: 14,
     alignItems: "center",
     borderWidth: StyleSheet.hairlineWidth,

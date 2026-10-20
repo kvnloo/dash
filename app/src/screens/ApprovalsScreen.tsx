@@ -1,3 +1,6 @@
+import { Canvas } from "../components/Canvas";
+import { PrimaryButton } from "../components/PrimaryButton";
+import { ScreenHeader } from "../components/ScreenHeader";
 import { useEffect, useMemo, useState } from "react";
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -38,18 +41,21 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
   const send = (message: Parameters<typeof bridge.send>[0]) => { if (!bridge.send(message)) setLocalError("Disconnected. Reconnect before deciding."); };
   const openEditor = (item: GateItem, reject = false) => { setEditor({ item, reject }); setText(reject || item.policy.requires_human_text && item.state !== "edited" ? "" : item.body); setChanged(false); };
   return <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-    <View style={styles.header}><Button label="Back" onPress={() => navigation.goBack()} /><Text style={styles.title}>Approvals</Text><Button label="Refresh" onPress={() => send({ type: "gate_list" })} disabled={!online} /></View>
-    <Text style={styles.mode}>{state.dryRun ? "DRY RUN · Nothing will be posted" : "LIVE · Approved items can be posted"}</Text>
+    <Canvas /><ScreenHeader title="Approvals" onBack={() => navigation.goBack()} action="Refresh" icon="refresh-cw" onAction={() => send({ type: "gate_list" })} />
+    <Text style={styles.mode}>{state.dryRun ? "Dry run · Nothing will be posted" : "Live · Approved items can be posted"}</Text>
     <Text style={styles.subtitle}>{state.ownerDecisions ? "Human approvals are recorded on the project coordination thread." : "Rehearsal decisions only. These are not live human approval."}</Text>
-    <Text style={styles.subtitle}>{state.items.filter(actionable).length} waiting · {state.items.filter(i => i.state === "stale").length} stale</Text>
+    <View testID="approval-metrics" style={styles.metrics}>
+      {[{ label: "Pending", count: state.items.filter(actionable).length, note: "To review" }, { label: "Bulk-ready", count: eligible.length, note: "Policy checked" }, { label: "Blocked", count: state.items.filter(i => ["stale", "failed"].includes(i.state)).length, note: "Needs attention" }].map((metric, i) => <View key={metric.label} style={[styles.metric, i > 0 && styles.metricBorder]}><Text style={styles.metricLabel}>{metric.label}</Text><Text style={styles.metricNumber}>{metric.count}</Text><Text style={styles.metricNote}>{metric.note}</Text></View>)}
+    </View>
     {!online ? <Text style={styles.error}>Offline. Decisions disabled until the paired bridge reconnects.</Text> : null}
     {state.error || localError ? <Text accessibilityRole="alert" style={styles.error}>{state.error || localError}</Text> : null}
     {!state.loaded ? <Text style={styles.subtitle}>Waiting for authenticated outbox…</Text> : null}
     <View style={styles.actions}>
       <Button label="Select all bulk-safe" onPress={() => toggle(eligible)} disabled={!online || !eligible.length} />
-      <Button label={`Approve selected (${selected.length})`} onPress={() => askApprove(selected)} disabled={!online || !selected.length} />
+
       <Button label={showHistory ? "Hide history" : "Show history"} onPress={() => setShowHistory(!showHistory)} />
     </View>
+    <View style={{ paddingHorizontal: 16, marginBottom: 8 }}><PrimaryButton label={`Approve selected (${selected.length})`} onPress={() => askApprove(selected)} disabled={!online || !selected.length} /></View>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       {groups.map(repo => {
         const items = visible.filter(i => i.target.repo === repo), ids = items.filter(bulkEligible).map(i => i.id);
@@ -58,7 +64,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
           {items.map(item => <View key={item.id} testID={`gate-card-${item.id}`} style={styles.card}>
             <View style={styles.actions}>
               {bulkEligible(item) ? <Pressable accessibilityRole="checkbox" accessibilityLabel={`Select ${item.id}`} accessibilityState={{ checked: selected.includes(item.id), disabled: !online }} disabled={!online} onPress={() => toggle([item.id])} style={styles.button}><Text style={[styles.buttonText, selected.includes(item.id) && { color: colors.gold }]}>{selected.includes(item.id) ? "Selected" : "Select"}</Text></Pressable> : null}
-              <Text style={styles.badge}>{item.policy.requires_human_text ? "HUMAN TEXT" : item.policy.bulk_ok ? "BULK SAFE" : "INDIVIDUAL"}</Text><Text style={styles.badge}>{item.kind.replaceAll("_", " ")}</Text>
+              <Text style={styles.badge}>{item.policy.requires_human_text ? "Human text" : item.policy.bulk_ok ? "Bulk safe" : "Individual"}</Text><Text style={styles.badge}>{item.kind.replaceAll("_", " ")}</Text>
             </View>
             {item.target.title ? <Text style={styles.heading}>{item.target.title}</Text> : null}
             <Link label={`${repo}${item.target.number ? ` #${item.target.number}` : " · " + (item.target.head ?? "new action")}`} url={`https://github.com/${repo}${item.target.number ? `/${item.kind === "issue_comment" ? "issues" : "pull"}/${item.target.number}` : ""}`} />
@@ -96,12 +102,15 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
   </View>;
 }
 const styles = StyleSheet.create({
+  metrics: { flexDirection: "row", marginHorizontal: 16, marginVertical: 16, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.hair, paddingVertical: 12 },
+  metric: { flex: 1, gap: 4, paddingHorizontal: 8 }, metricBorder: { borderLeftWidth: 1, borderColor: colors.hair },
+  metricLabel: { ...type.label, color: colors.textMuted }, metricNumber: { ...type.number, color: colors.text }, metricNote: { ...type.mono, color: colors.textTertiary, fontSize: 10 },
   screen: { flex: 1, backgroundColor: colors.bg }, header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.md, gap: space.sm },
-  title: { color: colors.text, ...type.title, flexShrink: 1 }, heading: { color: colors.ink, ...type.heading, flexShrink: 1 }, mode: { color: colors.ink2, ...type.small, paddingHorizontal: space.lg, paddingTop: space.sm }, subtitle: { color: colors.textMuted, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
+  title: { color: colors.text, ...type.title, flexShrink: 1 }, heading: { color: colors.ink, ...type.cardTitle, flexShrink: 1 }, mode: { color: colors.ink2, ...type.small, paddingHorizontal: space.lg, paddingTop: space.sm }, subtitle: { color: colors.textMuted, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   content: { padding: space.lg, gap: space.lg }, group: { gap: space.md }, groupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
-  card: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.hair2, padding: space.lg, gap: space.sm },
+  card: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.hair, borderTopColor: "rgba(255,255,255,.18)", padding: space.lg, gap: space.sm },
   body: { color: colors.ink, ...type.body }, small: { color: colors.ink2, ...type.small }, badge: { color: colors.textMuted, ...type.small, alignSelf: "center", flexShrink: 1 },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, paddingHorizontal: space.sm }, button: { minHeight: 44, minWidth: 44, justifyContent: "center", paddingHorizontal: space.md, backgroundColor: colors.surfaceRaised, borderRadius: radius.sm }, buttonText: { color: colors.ink, ...type.small },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, paddingHorizontal: space.sm }, button: { minHeight: 44, minWidth: 44, justifyContent: "center", paddingHorizontal: space.md, backgroundColor: "transparent", borderWidth: 1, borderColor: colors.hair, borderRadius: radius.sm }, buttonText: { color: colors.ink, ...type.small },
   link: { minHeight: 44, justifyContent: "center" }, linkText: { color: colors.text, ...type.small, textDecorationLine: "underline", flexShrink: 1 }, error: { color: colors.warn, ...type.small, padding: space.lg },
   scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", padding: space.lg }, sheet: { padding: space.xl, gap: space.lg, backgroundColor: colors.surface, borderRadius: radius.lg },
   input: { color: colors.text, backgroundColor: colors.surface, margin: space.lg, padding: space.lg, borderRadius: radius.md, minHeight: 120, maxHeight: 260, ...type.body, textAlignVertical: "top" },
