@@ -61,7 +61,7 @@ const Row = memo(function Row({
             {item.title || harnessName}
           </Text>
           {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
-          <Text style={styles.rowTime}>{stale ? "ended" : timeAgo(item.updatedAt)}</Text>
+          <Text style={styles.rowTime} numberOfLines={1}>{stale ? "ended" : item.openIn ? `${item.openIn} · ${timeAgo(item.updatedAt)}` : timeAgo(item.updatedAt)}</Text>
         </View>
           <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
             {item.profileName ? `${item.profileName} · ` : ""}{preview(item)}

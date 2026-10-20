@@ -29,6 +29,11 @@ export interface AssistantMessage {
   state: AssistantState;
   /** Latest tool/thinking status from the harness while streaming. */
   status?: string;
+  /**
+   * The host holds this session open elsewhere (CLI/TUI). `queued`: nothing sent yet;
+   * `sending`: the owner closed and the reply is going out. Never shown as work.
+   */
+  handoff?: "queued" | "sending";
   /** Error text when `state` is "error". */
   error?: string;
   /** Bridge turn id; used to re-attach after a reconnect. */
@@ -53,6 +58,8 @@ export interface Conversation {
   profileId?: string;
   profileName?: string;
   messageCount?: number;
+  /** Live host surface holding this chat open (e.g. "CLI"); replies wait for it. */
+  openIn?: string;
   /** True when the latest successful host roster no longer reports this chat. */
   stale?: boolean;
   messages: Message[];
@@ -108,6 +115,7 @@ function parseMessage(raw: unknown): Message | null {
       // A turn that was mid-stream when the app was killed can be re-attached on launch.
       state: raw.state,
       status: typeof raw.status === "string" ? raw.status : undefined,
+      handoff: raw.handoff === "queued" || raw.handoff === "sending" ? raw.handoff : undefined,
       error: typeof raw.error === "string" ? raw.error : undefined,
       turnId: raw.turnId,
       seq: typeof raw.seq === "number" ? raw.seq : 0,

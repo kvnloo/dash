@@ -6,7 +6,7 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 type Pending = { resolve(value: unknown): void; reject(error: Error): void };
-export type AcpOptions = { command: string[]; cwd: string; timeoutMs?: number; sink: Sink };
+export type AcpOptions = { command: string[]; cwd: string; timeoutMs?: number; sink: Sink; env?: Record<string, string> };
 
 /** One owned stdio connection. Client capabilities are deliberately empty. */
 export class AcpClient {
@@ -33,7 +33,7 @@ export class AcpClient {
       cwd: options.cwd,
       detached: true,
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
+      env: { ...process.env, ...options.env, NO_COLOR: "1", FORCE_COLOR: "0" },
     });
     this.exit = new Promise(resolve => {
       this.proc.once("close", () => {

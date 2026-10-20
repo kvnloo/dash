@@ -30,8 +30,10 @@ export const MessageRow = memo(function MessageRow({
   );
 });
 
-function ThinkingMarker({ harnessId, turnState }: { harnessId?: string; turnState: AssistantState }) {
-  return <View accessibilityLabel={turnState} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: turnState === "done" ? colors.ok : turnState === "error" ? colors.danger : colors.gold }} />;
+function ThinkingMarker({ turnState, waiting = false }: { harnessId?: string; turnState: AssistantState; waiting?: boolean }) {
+  // A reply held for a host handoff is not work in progress: faint, never gold.
+  const color = waiting ? colors.textTertiary : turnState === "done" ? colors.ok : turnState === "error" ? colors.danger : colors.gold;
+  return <View accessibilityLabel={waiting ? "queued" : turnState} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: color }} />;
 }
 
 function AssistantBody({ message, harnessId }: { message: AssistantMessage; harnessId?: string }) {
@@ -51,8 +53,8 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
         <>
           {liveText || message.text ? <Markdown text={liveText || message.text} /> : null}
           <View style={styles.statusRow}>
-            <ThinkingMarker harnessId={harnessId} turnState={message.state} />
-            <Text style={styles.statusText} numberOfLines={1}>
+            <ThinkingMarker harnessId={harnessId} turnState={message.state} waiting={message.handoff === "queued"} />
+            <Text style={styles.statusText} numberOfLines={2}>
               {message.status ?? "Working"}
             </Text>
           </View>

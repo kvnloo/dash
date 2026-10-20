@@ -250,3 +250,22 @@ describe("parseServerMessage", () => {
     ).toBeUndefined();
   });
 });
+
+describe("Hermes handoff wire fields", () => {
+  test("status carries a queued/sending handoff and rejects malformed ones", () => {
+    const base = { type: "status", id: "t", seq: 2, text: "Open in CLI on groot · reply queued until it closes" };
+    expect(parseServerMessage({ ...base, handoff: { state: "queued", surface: "cli", host: "groot" } })).toEqual({ ...base, handoff: { state: "queued", surface: "cli", host: "groot" } });
+    expect(parseServerMessage({ ...base, handoff: { state: "sending", surface: "cli", host: "groot" } })).toMatchObject({ handoff: { state: "sending" } });
+    expect(parseServerMessage({ ...base, handoff: { state: "sent", surface: "cli", host: "groot" } })).toBeNull();
+    expect(parseServerMessage({ ...base, handoff: { state: "queued", surface: 1, host: "groot" } })).toBeNull();
+    expect(parseServerMessage({ ...base, handoff: "queued" })).toBeNull();
+    expect(parseServerMessage({ ...base, handoff: { state: "queued", surface: "cli", host: "groot" }, acp: { sessionId: "s", update: {} } })).toBeNull();
+    expect(parseServerMessage(base)).toEqual(base);
+  });
+  test("roster agents may say which live surface holds them", () => {
+    const host = (openIn: unknown) => [{ id: "g", name: "g", hostname: "g", online: true, self: true, agents: [{ id: "hermes:session:clean:s", name: "Chat", kind: "hermes", status: "available", sessionId: "s", openIn }] }];
+    expect(parseHosts(host("CLI"))?.[0]?.agents[0]?.openIn).toBe("CLI");
+    expect(parseHosts(host(undefined))?.[0]?.agents[0]?.openIn).toBeUndefined();
+    expect(parseHosts(host(3))).toBeUndefined();
+  });
+});

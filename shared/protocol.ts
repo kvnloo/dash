@@ -28,6 +28,8 @@ export interface AgentInfo {
   lastActivityAt?: number;
   messageCount?: number;
   source?: string;
+  /** A live host surface (e.g. "CLI") holds this persisted chat open. Dash replies wait for it. */
+  openIn?: string;
 }
 
 /** A machine on the tailnet (this laptop, groot/0, …). */
@@ -109,13 +111,23 @@ export interface AcpStatus {
   update: Record<string, unknown>;
 }
 
+/**
+ * A reply waiting for an ordered handoff: a live host surface (CLI/TUI) holds the
+ * session, so the bridge holds the reply until it closes. `queued` = nothing sent yet.
+ */
+export interface HandoffInfo {
+  state: "queued" | "sending";
+  surface: string;
+  host: string;
+}
+
 /** Events that belong to a turn. `seq` is per-turn and strictly increasing from 1. */
 export type TurnEvent =
   | { type: "session"; id: string; seq: number; sessionId: string; hostId?: string; profileId?: string; harnessId?: string; transport?: string }
   /** What the bridge heard for a spoken turn. Precedes the reply's deltas. */
   | { type: "transcript"; id: string; seq: number; text: string }
   | { type: "delta"; id: string; seq: number; text: string }
-  | { type: "status"; id: string; seq: number; text: string; acp?: AcpStatus }
+  | { type: "status"; id: string; seq: number; text: string; acp?: AcpStatus; handoff?: HandoffInfo }
   | { type: "done"; id: string; seq: number; exitCode: number }
   | { type: "error"; id: string; seq: number; message: string };
 
@@ -254,6 +266,7 @@ function isAgentInfo(value: unknown): value is AgentInfo {
   if (value.sessionId !== undefined && !str(value.sessionId)) return false;
   if (!optStr(value.profileId) || !optStr(value.hostId) || !optStr(value.source)) return false;
   if (value.lastActivityAt !== undefined && !num(value.lastActivityAt)) return false;
+  if (value.openIn !== undefined && !str(value.openIn)) return false;
   if (value.messageCount !== undefined && !num(value.messageCount)) return false;
   return true;
 }
@@ -317,6 +330,11 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
         : null;
     case "status": {
       if (!str(raw.id) || !num(raw.seq) || !str(raw.text)) return null;
+      if (raw.handoff !== undefined) {
+        const h = raw.handoff;
+        if (!isRecord(h) || (h.state !== "queued" && h.state !== "sending") || !str(h.surface) || !str(h.host) || raw.acp !== undefined) return null;
+        return { type: "status", id: raw.id, seq: raw.seq, text: raw.text, handoff: { state: h.state, surface: h.surface, host: h.host } };
+      }
       if (raw.acp === undefined) return { type: "status", id: raw.id, seq: raw.seq, text: raw.text };
       if (!isRecord(raw.acp) || !str(raw.acp.sessionId) || !isRecord(raw.acp.update) || Array.isArray(raw.acp.update)) return null;
       return { type: "status", id: raw.id, seq: raw.seq, text: raw.text, acp: { sessionId: raw.acp.sessionId, update: raw.acp.update } };

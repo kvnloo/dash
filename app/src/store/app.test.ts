@@ -47,6 +47,48 @@ describe("host roster reconciliation", () => {
     expect(app.store.get().conversations).toHaveLength(1);
     expect(app.store.get().activeId).toBeNull();
   });
+  test("a CLI-held Hermes chat says so, and clears when the CLI closes or the chat ends", () => {
+    app.setConnection({ hosts: [{ ...host, agents: [{ ...agent, openIn: "CLI" }] }], harnesses: [{ id: "hermes", name: "Hermes", available: true }] });
+    const held = app.store.get().conversations[0]!;
+    expect(held.openIn).toBe("CLI");
+    expect(app.conversationTargetError(held)).toBeUndefined(); // replies are allowed: they queue on the host
+    app.setConnection({ hosts: [host] });
+    expect(app.store.get().conversations[0]?.openIn).toBeUndefined();
+    app.setConnection({ hosts: [{ ...host, agents: [{ ...agent, openIn: "CLI" }] }] });
+    app.setConnection({ hosts: [{ ...host, agents: [] }] });
+    expect(app.store.get().conversations[0]).toMatchObject({ stale: true, openIn: undefined });
+  });
+  test("a queued handoff reply is shown as waiting, then settles like any turn", () => {
+    app.setConnection({ hosts: [{ ...host, agents: [{ ...agent, openIn: "CLI" }] }], harnesses: [{ id: "hermes", name: "Hermes", available: true }] });
+    const c = app.store.get().conversations[0]!;
+    const t = app.beginTurn(c.id, "reply from the phone");
+    app.applyTurnEvent({ type: "status", id: t.turnId, seq: 1, text: "Open in CLI on groot · reply queued until it closes", handoff: { state: "queued", surface: "cli", host: "groot" } });
+    const waiting = () => app.store.get().conversations[0]!.messages.find(m => m.id === t.messageId);
+    expect(waiting()).toMatchObject({ state: "streaming", handoff: "queued", status: "Open in CLI on groot · reply queued until it closes" });
+    app.applyTurnEvent({ type: "status", id: t.turnId, seq: 2, text: "CLI on groot closed · sending queued reply", handoff: { state: "sending", surface: "cli", host: "groot" } });
+    expect(waiting()).toMatchObject({ handoff: "sending" });
+    app.applyTurnEvent({ type: "status", id: t.turnId, seq: 3, text: "Thinking" });
+    expect(waiting()?.role === "assistant" && waiting()?.handoff).toBeUndefined();
+    replyText.set(t.turnId, "done");
+    app.applyTurnEvent({ type: "done", id: t.turnId, seq: 4, exitCode: 0 });
+    expect(waiting()).toMatchObject({ state: "done", handoff: undefined });
+  });
+  test("a new Hermes chat adopts the host profile identity from its ACP session event", () => {
+    app.setConnection({ hosts: [host], harnesses: [{ id: "hermes", name: "Hermes", available: true }] });
+    const fresh = app.createConversation("hermes", { profileId: "hermes:default", targetHostId: "groot" });
+    const t = app.beginTurn(fresh.id, "hello");
+    app.applyTurnEvent({ type: "session", id: t.turnId, seq: 1, sessionId: "new-acp", hostId: "groot", profileId: "hermes:session:clean:new-acp", harnessId: "hermes", transport: "acp" });
+    expect(app.store.get().conversations.find(c => c.id === fresh.id)).toMatchObject({ sessionId: "new-acp", profileId: "hermes:session:clean:new-acp" });
+    const before = app.store.get().conversations.length;
+    app.setConnection({ hosts: [{ ...host, agents: [agent, { ...agent, id: "hermes:session:clean:new-acp", sessionId: "new-acp", name: "Hello" }] }] });
+    // Merged into the phone's chat, not adopted as a duplicate row.
+    expect(app.store.get().conversations.filter(c => c.sessionId === "new-acp")).toHaveLength(1);
+    expect(app.store.get().conversations.length).toBe(before);
+    const omp = app.createConversation("omp");
+    const o = app.beginTurn(omp.id, "x");
+    app.applyTurnEvent({ type: "session", id: o.turnId, seq: 1, sessionId: "omp-1", profileId: "default", transport: "acp" });
+    expect(app.store.get().conversations.find(c => c.id === omp.id)?.profileId).toBeUndefined();
+  });
   test("same session id in two profiles stays distinct; history cannot cross targets", () => {
     const other = { ...agent, id: "hermes:session:other:owner", profileId: "other" };
     app.setConnection({ hosts: [{ ...host, agents: [agent, other] }] });

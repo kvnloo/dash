@@ -36,15 +36,15 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     const matches = reported.filter(({ host, agent }) => agent.kind === c.harness && agent.sessionId === c.sessionId && (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
     const match = matches.length === 1 ? matches[0] : undefined;
     if (!match) {
-      if (c.stale) return c;
-      changed = true; return { ...c, stale: true };
+      if (c.stale && c.openIn === undefined) return c;
+      changed = true; return { ...c, stale: true, openIn: undefined };
     }
     const { host, agent } = match;
     const title = c.harness === "hermes" ? agent.name : c.title;
     const updatedAt = agent.lastActivityAt ?? c.updatedAt;
-    if (c.stale === false && title === c.title && updatedAt === c.updatedAt && c.messageCount === agent.messageCount && c.targetHostId === host.id && c.profileId === agent.id) return c;
+    if (c.stale === false && title === c.title && updatedAt === c.updatedAt && c.messageCount === agent.messageCount && c.targetHostId === host.id && c.profileId === agent.id && c.openIn === agent.openIn) return c;
     changed = true;
-    return { ...c, stale: false, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, title, updatedAt, messageCount: agent.messageCount, cwd: agent.cwd ?? c.cwd };
+    return { ...c, stale: false, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, title, updatedAt, messageCount: agent.messageCount, cwd: agent.cwd ?? c.cwd, openIn: agent.openIn };
   });
   const adopted: Conversation[] = [];
   for (const { host, agent } of reported) {
@@ -53,7 +53,7 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     const baseId = liveConversationId(agent.kind, sessionId);
     adopted.push({ id: agent.kind === "hermes" ? `${baseId}:${host.id}:${agent.profileId ?? agent.id}` : baseId,
       harness: agent.kind, title: liveSessionTitle(agent), createdAt: agent.lastActivityAt ?? now, updatedAt: agent.lastActivityAt ?? now,
-      sessionId, cwd: agent.cwd, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, messageCount: agent.messageCount, stale: false, messages: [] });
+      sessionId, cwd: agent.cwd, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, messageCount: agent.messageCount, stale: false, ...(agent.openIn ? { openIn: agent.openIn } : {}), messages: [] });
   }
   return adopted.length ? [...adopted, ...rows] : changed ? rows : existing;
 }

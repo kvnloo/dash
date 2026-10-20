@@ -372,12 +372,14 @@ export function applyTurnEvent(
   if (!where) return;
   switch (event.type) {
     case "session":
-      updateConversation(where.conversationId, (c) => ({ ...c, sessionId: event.sessionId, ...(event.transport === "api" ? { profileId: event.profileId ?? c.profileId, targetHostId: event.hostId ?? c.targetHostId, stale: false } : {}) }));
+      // Host-resolved identity: native API turns, and Hermes sessions the bridge names
+      // (new ACP chats land in a host profile), so the roster row merges into this chat.
+      updateConversation(where.conversationId, (c) => ({ ...c, sessionId: event.sessionId, ...(event.transport === "api" || event.profileId?.startsWith("hermes:session:") ? { profileId: event.profileId ?? c.profileId, targetHostId: event.hostId ?? c.targetHostId, stale: false } : {}) }));
       updateMessage(where.conversationId, where.messageId, (m) => (event.seq <= m.seq ? m : { ...m, seq: event.seq }));
       return;
     case "status":
       updateMessage(where.conversationId, where.messageId, (m) =>
-        event.seq <= m.seq || m.state !== "streaming" ? m : { ...m, status: event.text, seq: event.seq },
+        event.seq <= m.seq || m.state !== "streaming" ? m : { ...m, status: event.text, seq: event.seq, handoff: event.handoff?.state },
       );
       return;
     case "done":
@@ -385,7 +387,7 @@ export function applyTurnEvent(
         if (event.seq <= m.seq || m.state === "interrupted") return m;
         const text = replyText.get(event.id) || m.text;
         const error = m.error ?? (event.exitCode !== 0 ? `Process exited with code ${event.exitCode}` : text ? undefined : "No response");
-        return { ...m, text, state: error ? "error" : "done", error, status: undefined, seq: event.seq };
+        return { ...m, text, state: error ? "error" : "done", error, status: undefined, handoff: undefined, seq: event.seq };
       });
       liveSequences.delete(event.id);
       notifyTurnSettled(where.conversationId);
@@ -397,6 +399,7 @@ export function applyTurnEvent(
         state: "error",
         error: event.message,
         status: undefined,
+        handoff: undefined,
         seq: Math.max(m.seq, event.seq),
       }));
       notifyTurnSettled(where.conversationId);

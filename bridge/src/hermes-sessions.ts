@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentInfo, HistoryMessage } from "../../shared/protocol";
 import { parseHermesEnvFile, type EnvMap, type HermesFetch } from "./hermes-session";
+import { hostProcesses, ownerOf, readLiveOwners, surfaceLabel, type LiveOwner } from "./hermes-owner";
 
 // Deliberate allowlist: interactive surfaces and messaging platforms, never kitchen,
 // cron, oneshot, kanban, tool or delegated workers. `local` is native session authority CLI.
@@ -36,12 +37,13 @@ function text(content: unknown): string {
   return content.flatMap(block => record(block) && block.type === "text" && typeof block.text === "string" ? [block.text] : []).join("\n");
 }
 export function hermesSessionAgentId(profile: string, session: string): string { return `hermes:session:${encodeURIComponent(profile)}:${encodeURIComponent(session)}`; }
-function toAgent(row: Row, profile: Profile): AgentInfo | undefined {
+function toAgent(row: Row, profile: Profile, owner?: LiveOwner): AgentInfo | undefined {
   if (!visible(row) || typeof row.id !== "string") return undefined;
   const title = typeof row.title === "string" && row.title.trim() ? row.title : `Hermes · ${profile.id}`;
   return { id: hermesSessionAgentId(profile.id, row.id), name: title, kind: "hermes", status: "available", sessionId: row.id, profileId: profile.id,
     detail: `${profile.id} · ${String(row.source)}`, source: String(row.source), cwd: typeof row.cwd === "string" ? row.cwd : undefined,
-    lastActivityAt: stamp(row.last_active ?? row.last_activity_at ?? row.started_at), messageCount: typeof row.message_count === "number" ? row.message_count : 0 };
+    lastActivityAt: stamp(row.last_active ?? row.last_activity_at ?? row.started_at), messageCount: typeof row.message_count === "number" ? row.message_count : 0,
+    ...(owner ? { openIn: surfaceLabel(owner.surface) } : {}) };
 }
 export function parseHermesHistory(rows: unknown): HistoryMessage[] {
   if (!Array.isArray(rows)) return [];
@@ -70,27 +72,30 @@ function localRows(profile: Profile): Row[] {
 function localSession(profile: Profile, id: string): Row | undefined {
   return withDb(profile, db => db.query<Row, [string]>(`SELECT ${SESSION_FIELDS} FROM sessions WHERE id=?`).get(id) ?? undefined);
 }
+// Compression continuations only, never delegate children. Bounded lineage walk.
+function lineageIds(db: Database, id: string): Set<string> {
+  let tip = id;
+  const ids = new Set<string>([id]);
+  for (let n = 0; n < 64; n++) {
+    const row = db.query<Row, [string]>(`SELECT ${SESSION_FIELDS} FROM sessions WHERE id=?`).get(tip);
+    if (!row || row.end_reason !== "compression") break;
+    const child = db.query<Row, [string]>(`SELECT ${SESSION_FIELDS} FROM sessions WHERE parent_session_id=? AND coalesce(archived,0)=0 AND coalesce(hidden,0)=0 AND source IN (${HERMES_CHAT_SOURCES.map(s => `'${s}'`).join(",")}) ORDER BY started_at DESC LIMIT 1`).get(tip);
+    if (!child || !visible(child) || typeof child.id !== "string" || ids.has(child.id)) break;
+    tip = child.id; ids.add(tip);
+  }
+  let cursor = id;
+  for (let n = 0; n < 64; n++) {
+    const row = db.query<Row, [string]>("SELECT parent_session_id FROM sessions WHERE id=?").get(cursor);
+    if (typeof row?.parent_session_id !== "string" || ids.has(row.parent_session_id)) break;
+    const parent = db.query<Row, [string]>(`SELECT ${SESSION_FIELDS} FROM sessions WHERE id=?`).get(row.parent_session_id);
+    if (!parent || parent.end_reason !== "compression" || !visible(parent)) break;
+    cursor = row.parent_session_id; ids.add(cursor);
+  }
+  return ids;
+}
 function localHistory(profile: Profile, id: string): HistoryMessage[] {
   return withDb(profile, db => {
-    // Compression continuations only, never delegate children. Bounded lineage walk.
-    let tip = id;
-    const ids = new Set<string>([id]);
-    for (let n = 0; n < 64; n++) {
-      const row = db.query<Row, [string]>(`SELECT ${SESSION_FIELDS} FROM sessions WHERE id=?`).get(tip);
-      if (!row || row.end_reason !== "compression") break;
-      const child = db.query<Row, [string]>(`SELECT ${SESSION_FIELDS} FROM sessions WHERE parent_session_id=? AND coalesce(archived,0)=0 AND coalesce(hidden,0)=0 AND source IN (${HERMES_CHAT_SOURCES.map(s => `'${s}'`).join(",")}) ORDER BY started_at DESC LIMIT 1`).get(tip);
-      if (!child || !visible(child) || typeof child.id !== "string" || ids.has(child.id)) break;
-      tip = child.id; ids.add(tip);
-    }
-    let cursor = id;
-    for (let n = 0; n < 64; n++) {
-      const row = db.query<Row, [string]>("SELECT parent_session_id FROM sessions WHERE id=?").get(cursor);
-      if (typeof row?.parent_session_id !== "string" || ids.has(row.parent_session_id)) break;
-      const parent = db.query<Row, [string]>(`SELECT ${SESSION_FIELDS} FROM sessions WHERE id=?`).get(row.parent_session_id);
-      if (!parent || parent.end_reason !== "compression" || !visible(parent)) break;
-      cursor = row.parent_session_id; ids.add(cursor);
-    }
-    const args = [...ids];
+    const args = [...lineageIds(db, id)];
     const rows = db.query<Row, string[]>(`SELECT id,role,content,timestamp FROM messages WHERE session_id IN (${args.map(() => "?").join(",")})
       AND active=1 AND role IN ('user','assistant') AND length(trim(coalesce(content,'')))>0 ORDER BY timestamp DESC,id DESC LIMIT 200`).all(...args);
     return parseHermesHistory(rows.reverse());
@@ -105,10 +110,12 @@ export class HermesSessions {
   private readonly root: string;
   private readonly env: EnvMap;
   private readonly fetch: HermesFetch;
-  constructor(options: { root?: string; env?: EnvMap; fetch?: HermesFetch } = {}) {
+  private readonly processes: typeof hostProcesses;
+  constructor(options: { root?: string; env?: EnvMap; fetch?: HermesFetch; processes?: typeof hostProcesses } = {}) {
     this.env = options.env ?? process.env;
     this.root = options.root ?? this.env.DASH_HERMES_ROOT ?? join(homedir(), ".hermes");
     this.fetch = options.fetch ?? globalThis.fetch;
+    this.processes = options.processes ?? hostProcesses;
   }
   private profiles(): Profile[] {
     const profiles: Profile[] = [{ id: "default", home: this.root }];
@@ -161,7 +168,12 @@ export class HermesSessions {
         rows = apiRows.filter(visible).slice(0, RECENT_LIMIT).map(row => ({ ...local.find(l => l.id === row.id) ?? (typeof row.id === "string" ? localSession(profile, row.id) : undefined), ...row }));
       } catch { /* API is optional for reads; native DB remains authoritative offline. */ }
       const seen = new Set<string>();
-      return rows.flatMap(row => { const agent = toAgent(row, profile); if (!agent || seen.has(agent.id)) return []; seen.add(agent.id); return [agent]; })
+      // Few leases, many rows: expand each live lease over its compression lineage once.
+      const heldBy = new Map<string, LiveOwner>();
+      const owners = readLiveOwners(profile.home, this.processes);
+      if (owners.length > 0) withDb(profile, db => { for (const owner of owners) for (const id of lineageIds(db, owner.sessionId)) heldBy.set(id, owner); });
+      for (const owner of owners) if (!heldBy.has(owner.sessionId)) heldBy.set(owner.sessionId, owner);
+      return rows.flatMap(row => { const agent = toAgent(row, profile, typeof row.id === "string" ? heldBy.get(row.id) : undefined); if (!agent || seen.has(agent.id)) return []; seen.add(agent.id); return [agent]; })
         .sort((a, b) => (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0)).slice(0, RECENT_LIMIT);
     }));
     const agents = lists.flat();
@@ -187,6 +199,26 @@ export class HermesSessions {
       if (!record(body) || !Array.isArray(body.data)) throw new Error("Invalid history");
       return parseHermesHistory(body.data);
     } catch { return row ? localHistory(profile, sessionId) : []; }
+  }
+  /**
+   * A live CLI/TUI that holds this session (or any id in its compression lineage).
+   * Dash must not write while it does: the reply waits for an ordered handoff.
+   */
+  liveOwner(profileId: string, sessionId: string): LiveOwner | undefined {
+    const profile = this.profiles().find(p => p.id === profileId);
+    if (!profile) return undefined;
+    const owners = readLiveOwners(profile.home, this.processes);
+    if (owners.length === 0) return undefined;
+    return ownerOf(owners, withDb(profile, db => lineageIds(db, sessionId)) ?? new Set([sessionId]));
+  }
+  /** Profile id whose home is `home` (e.g. the bridge's own HERMES_HOME). */
+  profileForHome(home: string): string | undefined {
+    let wanted: string;
+    try { wanted = realpathSync(home); } catch { return undefined; }
+    return this.profiles().find(p => { try { return realpathSync(p.home) === wanted; } catch { return false; } })?.id;
+  }
+  homeOf(profileId: string): string | undefined {
+    return this.profiles().find(p => p.id === profileId)?.home;
   }
   // Resolve only host-known profile/session identities. Phone input cannot select a
   // URL, secret file or arbitrary HERMES_HOME. Existing sessions never resume via CLI.

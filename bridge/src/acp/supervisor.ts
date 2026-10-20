@@ -27,9 +27,9 @@ export class AcpSupervisor {
 
   async close(): Promise<void> { await this.active?.cancel(); }
 
-  start(options: { id: string; command: string[]; input: TurnInput; sink: Sink; timeoutMs?: number }): AcpHandle {
+  start(options: { id: string; command: string[]; input: TurnInput; sink: Sink; timeoutMs?: number; env?: Record<string, string> }): AcpHandle {
     if (this.active) throw new Error("ACP supervisor busy; concurrency is limited to one turn");
-    const client = new AcpClient({ command: options.command, cwd: options.input.cwd, sink: options.sink, timeoutMs: options.timeoutMs });
+    const client = new AcpClient({ command: options.command, cwd: options.input.cwd, sink: options.sink, timeoutMs: options.timeoutMs, env: options.env });
     this.active = client;
     const done = client.turn(options.input).finally(async () => {
       await client.close();

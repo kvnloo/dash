@@ -175,6 +175,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => navigation.navigate("Main", { tab: 1 })} action="Choose harness" icon="sliders" onAction={() => setPickerVisible(true)} />
       <ConnectionPill />
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
+      {!targetError && conversation?.openIn ? (
+        <Text accessibilityRole="text" style={styles.handoffNote}>
+          Open in {conversation.openIn} on {connection.hosts.find((h) => h.id === conversation.targetHostId)?.name ?? connection.host ?? "the host"}. Replies wait until it closes there.
+        </Text>
+      ) : null}
       <View style={styles.body}>
         <FlashList
           ref={listRef}
@@ -208,7 +213,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
                 ? conversation && queueLength(conversation.id) > 0
                   ? `Queue another (${queueLength(conversation.id)} waiting)…`
                   : `Queue next message for ${harnessName}…`
-                : `Message ${harnessName}`
+                : conversation?.openIn
+                  ? `Queue a reply for when the ${conversation.openIn} closes…`
+                  : `Message ${harnessName}`
               : "Waiting for the bridge…"
           }
           onSend={onSend}
@@ -230,6 +237,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   targetError: { color: colors.danger, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
+  handoffNote: { color: colors.textTertiary, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   body: { flex: 1 },
   listContent: { paddingVertical: space.sm },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: "45%" },

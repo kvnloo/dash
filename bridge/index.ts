@@ -31,6 +31,8 @@ import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript } from "./src/roster";
 import { runHermesSession } from "./src/hermes-session";
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
+import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, type HandoffState } from "./src/hermes-continue";
+import type { LiveOwner } from "./src/hermes-owner";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
 import { acpCommand, AcpSupervisor, type AcpHandle } from "./src/acp/supervisor";
 import {
@@ -87,15 +89,16 @@ class Turn implements Sink {
     readonly harness: Harness,
   ) {}
 
+  /** Host profile that owns this Hermes turn's session, once known. */
   private hermesProfile?: string;
+  private hermesTransport?: "api" | "acp";
 
   start(input: TurnInput): void {
     // A spoken turn is transcribed before it starts, so a cancel can arrive
     // while there is no process to kill yet.
     if (this.cancelled || this.finished) return;
     if (this.harness.id === "hermes" && input.sessionId) {
-      this.hermesProfile = input.profileId;
-      this.startHermes(input);
+      this.continueHermes(input);
       return;
     }
     if (process.env.DASH_ENABLE_LEGACY_CLI !== "1") {
@@ -104,18 +107,13 @@ class Turn implements Sink {
         this.endWithout(`${this.harness.name} ACP unavailable. Install its maintained ACP adapter on the host.`);
         return;
       }
-      try {
-        this.acp = acpSupervisor.start({ id: this.id, command, input, sink: this });
-        void this.acp.done.then(
-          () => this.finish(0),
-          error => {
-            if (this.cancelled) this.finish(CANCELLED_EXIT_CODE);
-            else { this.error(error instanceof Error ? error.message : "ACP turn failed"); this.finish(1); }
-          },
-        );
-      } catch (error) {
-        this.endWithout(error instanceof Error ? error.message : "ACP could not start");
+      if (this.harness.id === "hermes") {
+        // A new Hermes chat lands in the bridge's own HERMES_HOME profile. Name it so the
+        // phone keeps one conversation when the roster reports that session.
+        this.hermesProfile = hermesSessions.profileForHome(process.env.HERMES_HOME?.trim() || join(homedir(), ".hermes"));
+        this.hermesTransport = "acp";
       }
+      this.runAcp(command, input);
       return;
     }
     if (this.harness.id === "hermes") {
@@ -123,6 +121,82 @@ class Turn implements Sink {
       return;
     }
     this.spawnCli(input);
+  }
+
+  private runAcp(command: string[], input: TurnInput, env?: Record<string, string>, release?: () => void): void {
+    try {
+      this.acp = acpSupervisor.start({ id: this.id, command, input, sink: this, env });
+      void this.acp.done.then(
+        () => { release?.(); this.finish(0); },
+        error => {
+          release?.();
+          if (this.cancelled) this.finish(CANCELLED_EXIT_CODE);
+          else { this.error(error instanceof Error ? error.message : "ACP turn failed"); this.finish(1); }
+        },
+      );
+    } catch (error) {
+      release?.();
+      this.endWithout(error instanceof Error ? error.message : "ACP could not start");
+    }
+  }
+
+  private handoff(state: HandoffState, owner: LiveOwner): void {
+    const handoff = { state, surface: owner.surface, host: HOST_NAME };
+    this.flush();
+    this.emit({ type: "status", id: this.id, seq: 0, text: handoffText(handoff), handoff });
+  }
+
+  /**
+   * Reply into an existing Hermes session. A live CLI/TUI owner keeps the session:
+   * the reply waits (queued, nothing sent) until that owner closes, then goes through
+   * Hermes's own native API or ACP. See src/hermes-continue.ts for the transport seam.
+   */
+  private continueHermes(input: TurnInput): void {
+    const sessionId = input.sessionId;
+    const target = sessionId ? hermesSessions.target(input.profileId, sessionId) : undefined;
+    if (!sessionId || !target) { this.endWithout("Unknown or ambiguous Hermes profile/session."); return; }
+    this.hermesProfile = target.profile;
+    const release = claimContinuation(target.profile, sessionId);
+    if (!release) { this.endWithout("A Dash reply is already queued or running in this Hermes session. Wait for it, or stop it first."); return; }
+    const abort = new AbortController();
+    this.abort = abort;
+    log("turn.start", { id: this.id, harness: "hermes", cwd: input.cwd, resume: true });
+    void (async () => {
+      let handedOff = false;
+      try {
+        const waited = await awaitHandoff({
+          owner: () => hermesSessions.liveOwner(target.profile, sessionId),
+          signal: abort.signal,
+          onQueued: owner => { this.handoff("queued", owner); log("hermes.handoff", { id: this.id, state: "queued", surface: owner.surface }); },
+        });
+        if (waited) { this.handoff("sending", waited); log("hermes.handoff", { id: this.id, state: "sending", surface: waited.surface }); }
+        if (this.cancelled || this.finished) return;
+        const route = chooseHermesRoute({ api: target.api, home: hermesSessions.homeOf(target.profile), acpCommand: acpCommand("hermes") });
+        if (route.kind === "unavailable") throw new Error(route.reason);
+        if (route.kind === "acp") {
+          this.hermesTransport = "acp";
+          handedOff = true;
+          this.runAcp(route.command, input, { HERMES_HOME: route.home }, release);
+          return;
+        }
+        this.hermesTransport = "api";
+        const result = await runHermesSession({ input, api: route.api, env: process.env, log, signal: abort.signal });
+        if (this.cancelled) { if (!this.finished) this.finish(CANCELLED_EXIT_CODE); return; }
+        if (this.finished) return;
+        if (result.path === "cli") throw new Error("Hermes CLI resume is never used for an existing session.");
+        if (result.sessionId) this.session(result.sessionId);
+        if (result.text) this.delta(result.text);
+        this.finish(0);
+        log("turn.end", { id: this.id, harness: "hermes", exitCode: 0, path: result.path });
+      } catch (error) {
+        if (this.cancelled) { if (!this.finished) this.finish(CANCELLED_EXIT_CODE); return; }
+        if (this.finished) return;
+        this.error(error instanceof HandoffAborted ? error.message : String(error));
+        this.finish(1);
+      } finally {
+        if (!handedOff) release();
+      }
+    })();
   }
 
   private startHermes(input: TurnInput): void {
@@ -252,7 +326,7 @@ class Turn implements Sink {
 
   session(sessionId: string): void {
     this.flush();
-    this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: HOST_NAME, harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp" });
+    this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: HOST_NAME, harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesTransport ?? (this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp") });
   }
 
   /** What we heard, for a turn the user spoke rather than typed. */
