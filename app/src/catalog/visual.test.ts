@@ -75,7 +75,7 @@ describe("AODL visual encodings", () => {
     expect(providerIdForHarness("claude")).toBe("anthropic");
     expect(providerIdForHarness("not-a-harness")).toBe("unknown");
     const avatar = readFileSync(join(import.meta.dir, "../components/HarnessAvatar.tsx"), "utf8");
-    expect(avatar).toContain("presetForHarness");
+    expect(avatar).toContain("avatarPresetForHarness");
     expect(avatar).toContain("assets/orbs/");
     expect(avatar).not.toContain("<Text");
     expect(avatar).not.toContain("toUpperCase");

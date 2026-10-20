@@ -347,10 +347,11 @@ describe("Living Night navigation wiring", () => {
     expect(src).toContain('>{label}</Text>');
     expect(src).toContain('minHeight: 44');
   });
-  test("pending approvals get a serif gold numeral and conditional fourth tab", () => {
+  test("pending approvals get a sans numeral on a gold pill and a conditional fourth tab", () => {
     expect(src).toContain('pending > 0');
     expect(src).toContain('s.items.filter(actionable).length');
-    expect(src).toContain('...type.cardTitle, color: colors.gold');
+    expect(src).toContain('backgroundColor: colors.gold');
+    expect(src).not.toContain('...type.cardTitle, color: colors.gold'); // a serif "1" reads as the letter I
     expect(src).toContain('navigation.navigate("Approvals")');
   });
   test("compose, settings and bridge details remain reachable", () => {

@@ -158,8 +158,8 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
   return (
     <View style={styles.wrap}>
       {conversations.some(c => c.stale) && (
-        <PressScale onPress={() => confirmDestructive("Clear ended chats?", "Saved history is removed from this phone only.", "Clear ended", clearEndedConversations)} accessibilityRole="button" style={styles.section}>
-          <Text style={styles.sectionTitle}>Clear ended</Text>
+        <PressScale onPress={() => confirmDestructive("Clear ended chats?", "Saved history is removed from this phone only.", "Clear ended", clearEndedConversations)} accessibilityRole="button" style={styles.clearEnded}>
+          <Text style={styles.clearEndedText}>Clear ended</Text>
         </PressScale>
       )}
       <FlashList
@@ -188,6 +188,8 @@ const styles = StyleSheet.create({
     paddingBottom: space.sm,
   },
   sectionTitle: { color: colors.text, ...type.section },
+  clearEnded: { alignSelf: "flex-end", paddingHorizontal: space.lg, paddingTop: space.sm, minHeight: 44, justifyContent: "center" },
+  clearEndedText: { color: colors.gold, ...type.label },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -199,7 +201,9 @@ const styles = StyleSheet.create({
   rowActive: { backgroundColor: "rgba(215,185,134,.035)" },
   stale: { color: colors.textTertiary },
   liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.gold },
-  hairline: { position: "absolute", left: 68, right: 16, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.hair },
+  // PressScale applies padding on its outer Pressable and lays children out in an inner view,
+  // so the divider must sit below that padding, not on the inner view's bottom edge.
+  hairline: { position: "absolute", left: 52, right: 0, bottom: -14, height: StyleSheet.hairlineWidth, backgroundColor: colors.hair },
   rowMain: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
   rowTitle: { color: colors.text, ...type.heading, flex: 1 },
