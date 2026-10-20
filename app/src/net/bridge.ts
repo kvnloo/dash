@@ -1,6 +1,6 @@
 import { applyGateMessage } from "../store/approvals";
 import { AppState as RNAppState, type AppStateStatus } from "react-native";
-import { parseServerMessage, type ClientMessage } from "../../../shared/protocol";
+import { parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
 import { isDebugMode } from "../debug/mode";
 import { fetchRoster } from "../lib/roster";
 import type { Settings } from "../model";
@@ -299,6 +299,7 @@ export function sendChat(input: {
   text: string;
   sessionId?: string;
   cwd?: string;
+  attachments?: ChatAttachment[];
 }): boolean {
   if (rejectUnavailableTurn(input.turnId)) return false;
   const cwd = input.cwd ?? store.get().settings?.cwd;
@@ -310,6 +311,7 @@ export function sendChat(input: {
     text: input.text,
     sessionId: input.sessionId,
     cwd,
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   });
 }
 

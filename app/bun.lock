@@ -17,9 +17,11 @@
         "expo-audio": "~57.0.4",
         "expo-blur": "^57.0.2",
         "expo-constants": "~57.0.17",
+        "expo-document-picker": "~57.0.3",
         "expo-file-system": "~57.0.6",
         "expo-font": "57.0.4",
         "expo-haptics": "~57.0.2",
+        "expo-image-picker": "~57.0.20",
         "expo-linear-gradient": "57.0.2",
         "expo-secure-store": "~57.0.3",
         "expo-speech": "~57.0.2",
@@ -505,11 +507,17 @@
 
     "expo-constants": ["expo-constants@57.0.22", "", { "dependencies": { "@expo/env": "~2.4.3" }, "peerDependencies": { "expo": "*", "react-native": "*" } }, "sha512-+mBjnzMWMKIrQa7BP7LTDRC0W7cI+q12/sZns4HzVQJGzgGoAdRJSTEKiObxIw/3EswKXlESkRob8upiL95Q4A=="],
 
+    "expo-document-picker": ["expo-document-picker@57.0.3", "", { "peerDependencies": { "expo": "*" } }, "sha512-XlxdZ0zzv44JRD8O15DISgIO8FTaZ581oc4kQp6MJoR7vdahjcY+2qCuDt5k1J8/lc0YR+bXon/v81norciuxw=="],
+
     "expo-file-system": ["expo-file-system@57.0.7", "", { "peerDependencies": { "expo": "*", "react-native": "*" } }, "sha512-1vkZRadOsIputFDBcclqBa1pO3iXOO6iIsdqJipQWw4V5TSnWgmRTuOF7ro8IzrVue+PHbum++KCG3Tawem4cg=="],
 
     "expo-font": ["expo-font@57.0.4", "", { "dependencies": { "fontfaceobserver": "^2.1.0" }, "peerDependencies": { "expo": "*", "react": "*", "react-native": "*" } }, "sha512-7WOMC2oA6xCfOm8bbofqWn2bIqyWFm7YLEnpc/gA1MJH0Ll0TfT/3+CqRkoW2eNRWMS8sxrz5WukUmSvmNquHA=="],
 
     "expo-haptics": ["expo-haptics@57.0.3", "", { "peerDependencies": { "expo": "*" } }, "sha512-qucUXtwtJdtECKSQK5D6TQBc/0SxKj7s5wQ4mrfSxhZsHrS9a4rcxINl/gbruMaY9spTXStco32ST4pV0vXmxw=="],
+
+    "expo-image-loader": ["expo-image-loader@57.0.1", "", { "peerDependencies": { "expo": "*" } }, "sha512-uhrZKLT/cTl2mXyR28kPpVkS5O+PK9N1QA/07IFM4f5T4g0lTW1JHT3NEWwEEsGFldPmVX4j7LwUVVZxE+woug=="],
+
+    "expo-image-picker": ["expo-image-picker@57.0.20", "", { "dependencies": { "expo-image-loader": "~57.0.1" }, "peerDependencies": { "expo": "*" } }, "sha512-plgcGuMZMWqDchjXQW6S/WepYLB5KqfbZOzwC6xe0+j5IhY4ipvVuRZcXeP/0NgKgU0Jiu/XoTK4Bi8crtZ+sQ=="],
 
     "expo-keep-awake": ["expo-keep-awake@57.0.2", "", { "peerDependencies": { "expo": "*", "react": "*" } }, "sha512-GqgH746wtJImmsbyHmCQoi7cOslKuWQBbJHXr53S35Bpf5UvxCAztvnitUEd7D0QvFN2rvkOhylbZpgZZfBLlQ=="],
 

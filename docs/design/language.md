@@ -62,6 +62,7 @@ Typography: system sans. Display 22/700. Heading 17/600. Body 16/24. Small 13/18
 3. `main-bots` — harness sections, status dots, role + 1-line desc
 4. `main-orchestra` — product cards, agent avatars, active/idle
 5. `chat` — user bubble, assistant plain, attach + mic composer
+5a. `chat-attachments` — composer chips (uploaded, uploading, refused), sent files in the bubble, Send to phone
 6. `chat-streaming` — status line, stop
 7. `pair` — sonic listen CTA
 8. `settings` — grouped rows

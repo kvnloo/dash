@@ -1,4 +1,4 @@
-import type { HarnessInfo, HostInfo } from "../../shared/protocol";
+import { parseChatAttachment, type ChatAttachment, type HarnessInfo, type HostInfo } from "../../shared/protocol";
 
 export interface Settings {
   /** `host:port` of the bridge, no scheme. */
@@ -19,6 +19,8 @@ export interface UserMessage {
   role: "user";
   text: string;
   at: number;
+  /** Files uploaded to the bridge with this message. */
+  attachments?: ChatAttachment[];
 }
 
 export interface AssistantMessage {
@@ -105,7 +107,10 @@ function parseMessage(raw: unknown): Message | null {
   if (!isRecord(raw) || typeof raw.id !== "string" || typeof raw.text !== "string" || typeof raw.at !== "number") {
     return null;
   }
-  if (raw.role === "user") return { id: raw.id, role: "user", text: raw.text, at: raw.at };
+  if (raw.role === "user") {
+    const attachments = Array.isArray(raw.attachments) ? raw.attachments.flatMap(item => { const parsed = parseChatAttachment(item); return parsed ? [parsed] : []; }) : [];
+    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(attachments.length ? { attachments } : {}) };
+  }
   if (raw.role === "assistant" && isAssistantState(raw.state) && typeof raw.turnId === "string") {
     return {
       id: raw.id,

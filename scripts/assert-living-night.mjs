@@ -47,7 +47,18 @@ export async function assertLivingNight(page, scenario) {
       }
     }
   }
-  if (["chat", "chat-streaming"].includes(scenario)) {
+  if (scenario === "chat-attachments") {
+    for (const text of ["seedlings.png", "watering-log.txt", "Uploading…", "walkthrough.mov is 39.1 MB. The limit is 25.0 MB per file."]) await page.getByText(text, { exact: true }).first().waitFor();
+    const chips = page.getByRole("button", { name: /^Remove / });
+    assert.equal(await chips.count(), 3, "one remove control per chip");
+    const send = page.getByRole("button", { name: "Send", exact: true });
+    assert.equal(await send.isDisabled(), true, "send waits for uploads");
+    const share = page.getByRole("button", { name: "Send tray-3-marked.png to phone", exact: true });
+    await share.waitFor();
+    result.share = await share.boundingBox();
+    for (const name of ["Attached tray-3.jpg", "Attached watering-log.txt"]) await page.getByLabel(name, { exact: true }).waitFor();
+  }
+  if (["chat", "chat-streaming", "chat-attachments"].includes(scenario)) {
     const input = page.getByRole("textbox", { name: "Message", exact: true });
     assert.equal(await input.evaluate(e => e.tagName), "INPUT", "placeholder cannot wrap in a textarea");
     const boxes = [];

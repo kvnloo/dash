@@ -95,6 +95,12 @@ export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
   store.set((s) => ({
     ...s,
     conversations: [...DEMO_CONVERSATIONS, ...([{
+      id: "debug-attach", harness: "hermes", title: "What is wrong with these seedlings?", createdAt: Date.now() - 600000, updatedAt: Date.now() - 600000,
+      messages: [
+        { id: "debug-attach-user", role: "user", text: "What is wrong with these seedlings?", at: Date.now() - 600000, attachments: [{ id: "fedcba9876543210fedcba9876543210", name: "tray-3.jpg", mime: "image/jpeg", size: 1_843_200 }, { id: "00112233445566778899aabbccddeeff", name: "watering-log.txt", mime: "text/plain", size: 2_310 }] },
+        { id: "debug-attach-reply", role: "assistant", text: "The lower leaves are yellowing from overwatering: the log shows water every day. I drew the affected plants on a copy at /home/you/Pictures/dash/tray-3-marked.png.", at: Date.now() - 590000, state: "done", turnId: "debug-attach-turn", seq: 0 },
+      ],
+    }, {
       id: "debug-ended", harness: "hermes", title: "Review the session handoff", createdAt: Date.now() - 86400000, updatedAt: Date.now() - 86400000, stale: true,
       messages: [{ id: "debug-ended-reply", role: "assistant", text: "The handoff is saved. This host session has ended.", at: Date.now() - 86400000, state: "done", turnId: "debug-ended-turn", seq: 0 }],
     }] satisfies (Conversation & { stale?: boolean })[])],

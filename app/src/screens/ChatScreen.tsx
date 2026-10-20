@@ -14,6 +14,7 @@ import { MessageRow } from "../components/MessageRow";
 import { isDebugActive } from "../debug/expose";
 import { debugUi } from "../debug/ui-store";
 import { haptic } from "../haptics";
+import type { ChatAttachment } from "../../../shared/protocol";
 import type { Message } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge, sendChat } from "../net/bridge";
@@ -51,6 +52,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<Message>>(null);
   const debugPicker = debugUi.use((s) => s.chatHarnessPickerOpen);
+  const debugAttachments = debugUi.use((s) => s.chatComposerAttachments);
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerVisible = debugPicker ?? pickerOpen;
   const setPickerVisible = useCallback((open: boolean) => {
@@ -73,8 +75,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, [messages]);
 
   const sendTurn = useCallback(
-    (text: string, active = conversation ?? createConversation(harnessId)) => {
-      const { turnId } = beginTurn(active.id, text);
+    (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId)) => {
+      const { turnId } = beginTurn(active.id, text, { attachments });
       haptic.tap();
       const current = store.get().conversations.find((c) => c.id === active.id) ?? active;
       const ok = sendChat({
@@ -83,6 +85,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         text,
         sessionId: current.sessionId,
         cwd: current.cwd,
+        attachments,
       });
       if (!ok) {
         parkUnsentTurn(turnId);
@@ -115,6 +118,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         text: payload.text,
         sessionId: current?.sessionId ?? payload.sessionId,
         cwd: current?.cwd,
+        attachments: payload.attachments,
       });
       if (!ok) {
         parkUnsentTurn(turnId);
@@ -126,16 +130,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   );
 
   const onSend = useCallback(
-    (text: string) => {
+    (text: string, attachments: ChatAttachment[]) => {
       const active = conversation ?? createConversation(harnessId);
       if (conversationBusy(active.id)) {
-        const { turnId } = beginTurn(active.id, text, { pending: true });
+        const { turnId } = beginTurn(active.id, text, { pending: true, attachments });
         enqueue(active.id, turnId);
         haptic.tap();
         requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
         return;
       }
-      sendTurn(text, active);
+      sendTurn(text, attachments, active);
     },
     [conversation, harnessId, sendTurn],
   );
@@ -205,7 +209,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       </View>
       <KeyboardDock>
         <Composer
-          key={composerDraft ?? "composer"}
+          key={composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}
+          initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
           disabled={!online || targetError !== undefined}
           streaming={conversation ? conversationBusy(conversation.id) : false}
           initialText={composerDraft}

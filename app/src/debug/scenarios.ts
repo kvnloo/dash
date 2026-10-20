@@ -1,3 +1,4 @@
+import type { DraftAttachment } from "../lib/attachments";
 import type { RootStackParamList } from "../navigation";
 import type { DebugSeedVariant } from "./seed";
 
@@ -15,6 +16,7 @@ export type DebugScenarioId =
   | "chat-omp"
   | "chat-streaming"
   | "chat-picker"
+  | "chat-attachments"
   | "pair"
   | "settings"
   | "orchestra-dash";
@@ -29,6 +31,7 @@ export interface DebugScenario {
     mainTabIndex?: number;
     chatHarnessPickerOpen?: boolean;
     activeConversationId?: string;
+    chatComposerAttachments?: DraftAttachment[];
   };
 }
 
@@ -86,6 +89,21 @@ export const DEBUG_SCENARIOS: Record<DebugScenarioId, DebugScenario> = {
     seed: "paired",
     route: { name: "Chat" },
     ui: { activeConversationId: "demo-codex" },
+  },
+  "chat-attachments": {
+    id: "chat-attachments",
+    label: "Chat — attachments in the composer",
+    seed: "paired",
+    route: { name: "Chat" },
+    ui: {
+      activeConversationId: "debug-attach",
+      // Fixture chips: one uploaded photo, one uploading text file, one refused video.
+      chatComposerAttachments: [
+        { key: "fx-1", name: "seedlings.png", mime: "image/png", size: 48_213, uri: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAA4klEQVR42sXSIXIEIRSE4T1EVET0f4YoFAqFQqGeokZQiCnUUygUCoVCzTFzgNmtrZikqu1nuvvx9fnxqzz+A7gDfxAO4oEcvAG24Aq+EAqxIIVUeAlMxVZcxVdCJVakkiq58gR8K0axilO8EpSoiJKUrJzKDTRMwzZcwzdCIzakkRq5cbY76JiO7biO74RO7EgndXLn7HcwMAM7cAM/CIM4kEEa5ME57mBiJnbiJn4SJnEikzTJk3PyrKWFXbiFX4RFXMgiLfLi9Q4bt/GbsIkb2aTNu6Uv/EW4iBdy8efn+wHoA5P/4Nb2SwAAAABJRU5ErkJggg==", state: "ready", ref: { id: "0123456789abcdef0123456789abcdef", name: "seedlings.png", mime: "image/png", size: 48_213 } },
+        { key: "fx-2", name: "watering-log.txt", mime: "text/plain", size: 2_310, uri: "file:///fixture/watering-log.txt", state: "uploading" },
+        { key: "fx-3", name: "walkthrough.mov", mime: "video/quicktime", size: 41_000_000, uri: "file:///fixture/walkthrough.mov", state: "error", error: "walkthrough.mov is 39.1 MB. The limit is 25.0 MB per file." },
+      ],
+    },
   },
   "chat-picker": {
     id: "chat-picker",

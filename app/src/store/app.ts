@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { HistoryMessage, TurnEvent } from "../../../shared/protocol";
+import type { ChatAttachment, HistoryMessage, TurnEvent } from "../../../shared/protocol";
 import {
   newId,
   parseConversation,
@@ -263,12 +263,12 @@ function updateMessage(
 export function beginTurn(
   conversationId: string,
   text: string,
-  opts?: { pending?: boolean },
+  opts?: { pending?: boolean; attachments?: ChatAttachment[] },
 ): { turnId: string; messageId: string } {
   const turnId = newId();
   const messageId = newId();
   const now = Date.now();
-  const user: Message = { id: newId(), role: "user", text, at: now };
+  const user: Message = { id: newId(), role: "user", text, at: now, ...(opts?.attachments?.length ? { attachments: opts.attachments } : {}) };
   const assistant: AssistantMessage = {
     id: messageId,
     role: "assistant",
@@ -280,7 +280,7 @@ export function beginTurn(
   };
   updateConversation(conversationId, (c) => ({
     ...c,
-    title: c.messages.length === 0 && !c.sessionId ? titleFrom(text) : c.title,
+    title: c.messages.length === 0 && !c.sessionId ? titleFrom(text || opts?.attachments?.[0]?.name || "") : c.title,
     messages: [...c.messages, user, assistant],
     updatedAt: now,
   }));
@@ -414,7 +414,7 @@ export function applyTurnEvent(
 
 
 /** Start a queued turn: pending → streaming, ready for the bridge. */
-export function promotePendingTurn(turnId: string): { text: string; harness: string; sessionId?: string } | null {
+export function promotePendingTurn(turnId: string): { text: string; harness: string; sessionId?: string; attachments?: ChatAttachment[] } | null {
   const where = locateTurn(turnId);
   if (!where) return null;
   const conv = store.get().conversations.find((c) => c.id === where.conversationId);
@@ -426,7 +426,7 @@ export function promotePendingTurn(turnId: string): { text: string; harness: str
   updateMessage(where.conversationId, where.messageId, (m) =>
     m.state === "pending" ? { ...m, state: "streaming" } : m,
   );
-  return { text: user.text, harness: conv.harness, sessionId: conv.sessionId };
+  return { text: user.text, harness: conv.harness, sessionId: conv.sessionId, ...(user.attachments?.length ? { attachments: user.attachments } : {}) };
 }
 
 export function conversationBusy(conversationId: string): boolean {
@@ -480,6 +480,7 @@ export type ChatSender = (input: {
   text: string;
   sessionId?: string;
   cwd?: string;
+  attachments?: ChatAttachment[];
 }) => boolean;
 
 /** After reconnect, send parked turns that never reached the laptop. */
@@ -497,6 +498,7 @@ export function flushPendingSends(send: ChatSender): number {
       text: payload.text,
       sessionId: conv.sessionId ?? payload.sessionId,
       cwd: conv.cwd,
+      attachments: payload.attachments,
     });
     if (!ok) {
       parkUnsentTurn(pending.turnId);
