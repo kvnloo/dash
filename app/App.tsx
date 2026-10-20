@@ -11,6 +11,7 @@ import type { RootStackParamList } from "./src/navigation";
 import { parseDashConnectUrl } from "./src/lib/pair-url";
 import { bridge } from "./src/net/bridge";
 import { ChatScreen } from "./src/screens/ChatScreen";
+import { ApprovalsScreen } from "./src/screens/ApprovalsScreen";
 import { MainScreen } from "./src/screens/MainScreen";
 import { OrchestraDetailScreen } from "./src/screens/OrchestraDetailScreen";
 import { PairScreen } from "./src/screens/PairScreen";
@@ -97,6 +98,7 @@ export default function App() {
                 screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "default" }}
               >
                 <Stack.Screen name="Main" component={MainScreen} />
+                <Stack.Screen name="Approvals" component={ApprovalsScreen} />
                 <Stack.Screen name="Chat" component={ChatScreen} />
                 <Stack.Screen name="OrchestraDetail" component={OrchestraDetailScreen} />
                 <Stack.Screen name="Voice" component={VoiceScreen} options={{ presentation: "fullScreenModal" }} />

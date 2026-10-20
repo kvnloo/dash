@@ -9,6 +9,9 @@
 // reconnect it sends `attach` with the last seq it saw and the bridge replays
 // the rest. Finished turns are kept for RETAIN_MS so late reattaches still work.
 
+import { GateService } from "./src/gate/service";
+import { GateStore } from "./src/gate/store";
+import type { GateServerMessage } from "../shared/protocol";
 import { statSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
@@ -52,6 +55,7 @@ type Socket = Bun.ServerWebSocket<SocketData>;
 interface SocketData {
   /** Turn ids this socket is subscribed to. */
   turns: Set<string>;
+  gateSend?: (message: GateServerMessage) => void;
 }
 
 /** Batches text deltas so a fast model doesn't turn into hundreds of tiny frames per second. */
@@ -473,6 +477,9 @@ const handleHttp = createPairingHttpHandler({
   onEvent: log,
 });
 
+const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
+const gatePoll = gate ? setInterval(() => { try { gate.refresh(); } catch { /* Explicit next request returns corruption error. */ } }, 2000) : null;
+
 const server = Bun.serve<SocketData>({
   hostname: HOST,
   port: PORT,
@@ -530,6 +537,14 @@ const server = Bun.serve<SocketData>({
         return;
       }
       switch (message.type) {
+        case "gate_list":
+        case "gate_decide":
+        case "gate_post": {
+          if (!gate) { sendTo(ws, { type: "gate_error", message: "Approvals are not enabled on this bridge" }); break; }
+          ws.data.gateSend ??= event => sendTo(ws, event);
+          void gate.handle(message, ws.data.gateSend);
+          break;
+        }
         case "chat": {
           if (message.hostId && message.hostId !== HOST_NAME) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
           if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
@@ -642,6 +657,7 @@ const server = Bun.serve<SocketData>({
       }
     },
     close(ws) {
+      if (ws.data.gateSend) gate?.unsubscribe(ws.data.gateSend);
       detachSocket(ws.data.turns, (id) => turns.get(id), ws);
       for (const id of pruneStaleUtterances(utterances, Date.now())) {
         turns.get(id)?.endWithout("That recording was interrupted.");
@@ -658,6 +674,7 @@ let stopping = false;
 function shutdown(): void {
   if (stopping) return;
   stopping = true;
+  if (gatePoll) clearInterval(gatePoll);
   // Stop admission before awaiting cleanup; sockets must not launch new work.
   server.stop(true);
   for (const turn of turns.values()) turn.cancel();

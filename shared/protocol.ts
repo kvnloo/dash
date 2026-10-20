@@ -2,6 +2,7 @@
 // One WebSocket; JSON text frames; every message has a `type` discriminant.
 // Imported by both `bridge/` and `app/`, so it must stay dependency-free.
 
+import { isGateItem, parseGateDecision, type GateItem, type GateDecision } from "./gate";
 export const PROTOCOL_VERSION = 1;
 
 export interface HarnessInfo {
@@ -36,7 +37,17 @@ export interface HostInfo {
   agents: AgentInfo[];
 }
 
+export type GateClientMessage =
+  | { type: "gate_list" }
+  | { type: "gate_decide"; decision: GateDecision }
+  | { type: "gate_post"; id: string };
+export type GateServerMessage =
+  | { type: "gate_snapshot"; items: GateItem[]; dry_run: boolean; owner_decisions?: boolean }
+  | { type: "gate_status"; id: string; message: string }
+  | { type: "gate_error"; message: string };
+
 export type ClientMessage =
+  | GateClientMessage
   | {
       type: "chat";
       /** Client-chosen id for this turn; echoed on every server event for it. */
@@ -105,6 +116,7 @@ export type TurnEvent =
   | { type: "error"; id: string; seq: number; message: string };
 
 export type ServerMessage =
+  | GateServerMessage
   | {
       type: "hello";
       version: number;
@@ -153,6 +165,12 @@ function isHistoryMessage(value: unknown): value is HistoryMessage {
 export function parseClientMessage(raw: unknown): ClientMessage | null {
   if (!isRecord(raw)) return null;
   switch (raw.type) {
+    case "gate_list": return { type: "gate_list" };
+    case "gate_decide": {
+      const decision = parseGateDecision(raw.decision);
+      return decision ? { type: "gate_decide", decision } : null;
+    }
+    case "gate_post": return str(raw.id) && /^[a-f0-9-]{36}$/.test(raw.id) ? { type: "gate_post", id: raw.id } : null;
     case "chat":
       if (
         str(raw.id) &&
@@ -256,6 +274,9 @@ function isHostInfo(value: unknown): value is HostInfo {
 export function parseServerMessage(raw: unknown): ServerMessage | null {
   if (!isRecord(raw)) return null;
   switch (raw.type) {
+    case "gate_snapshot": return Array.isArray(raw.items) && raw.items.every(isGateItem) && typeof raw.dry_run === "boolean" ? { type: "gate_snapshot", items: raw.items, dry_run: raw.dry_run, owner_decisions: raw.owner_decisions === true } : null;
+    case "gate_status": return str(raw.id) && str(raw.message) ? { type: "gate_status", id: raw.id, message: raw.message } : null;
+    case "gate_error": return str(raw.message) ? { type: "gate_error", message: raw.message } : null;
     case "hello":
       if (
         num(raw.version) &&

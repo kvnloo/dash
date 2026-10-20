@@ -5,6 +5,7 @@ export type RootStackParamList = {
   Chat: { draft?: string } | undefined;
   OrchestraDetail: { orchestraId: string };
   Voice: undefined;
+  Approvals: undefined;
   Pair: { address?: string; code?: string } | undefined;
   Settings: { firstRun?: boolean } | undefined;
 };
