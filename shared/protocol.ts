@@ -32,6 +32,30 @@ export interface AgentInfo {
   openIn?: string;
 }
 
+/** One messaging surface a bot is bound to (telegram, discord, …) and its last reported link state. */
+export interface BotChannel {
+  platform: string;
+  /** `configured`: enabled in config, no live gateway reports it. */
+  state: "connected" | "retrying" | "disconnected" | "configured";
+}
+
+/**
+ * A deployed bot identity: something people message on a chat platform (a Hermes gateway
+ * profile bound to Telegram/Discord, OpenDots, GrokBot). Not a harness, not a chat.
+ */
+export interface BotInfo {
+  id: string;
+  name: string;
+  /** What runs it, e.g. "hermes" (gateway profile) or "service" (a user unit). */
+  runtime: string;
+  /** running = a live gateway/service reports it; available = configured but not live. */
+  status: "running" | "available" | "offline";
+  channels: BotChannel[];
+  /** Roster agent id to open a chat with this bot's profile, when Dash can. */
+  agentId?: string;
+  detail?: string;
+}
+
 /** A machine on the tailnet (this laptop, groot/0, …). */
 export interface HostInfo {
   id: string;
@@ -41,7 +65,26 @@ export interface HostInfo {
   self: boolean;
   address?: string;
   agents: AgentInfo[];
+  /** Deployed bots on this host. Optional; old bridges omit it. */
+  bots?: BotInfo[];
 }
+
+/**
+ * A file the phone uploaded with `POST /attachments` before sending its turn. The bridge
+ * resolves `id` to the stored file; the phone never names a host path.
+ */
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+}
+
+/** Per-file upload cap, enforced on both sides. */
+export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+export const MAX_ATTACHMENTS_PER_TURN = 8;
+/** Upload ids are 128-bit random hex minted by the bridge. */
+export const ATTACHMENT_ID = /^[a-f0-9]{32}$/;
 
 export type GateClientMessage =
   | { type: "gate_list" }
@@ -66,6 +109,8 @@ export type ClientMessage =
       profileId?: string;
       /** Working directory on the laptop. Falls back to the bridge default. */
       cwd?: string;
+      /** Files uploaded for this turn. Optional; old phones omit it. */
+      attachments?: ChatAttachment[];
     }
   /**
    * Start a spoken turn. The phone streams the recorded utterance as
@@ -164,6 +209,25 @@ function optStr(value: unknown): value is string | undefined {
   return value === undefined || typeof value === "string";
 }
 
+export function parseChatAttachment(value: unknown): ChatAttachment | null {
+  if (!isRecord(value) || !str(value.id) || !ATTACHMENT_ID.test(value.id) || !str(value.name) || !str(value.mime) || !num(value.size)) return null;
+  if (value.name.length === 0 || value.name.length > 255 || value.size < 0 || value.size > MAX_ATTACHMENT_BYTES || !Number.isInteger(value.size)) return null;
+  return { id: value.id, name: value.name, mime: value.mime, size: value.size };
+}
+
+/** `undefined` when absent; `null` when present but malformed (the message fails closed). */
+export function parseChatAttachments(raw: unknown): ChatAttachment[] | null | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || raw.length > MAX_ATTACHMENTS_PER_TURN) return null;
+  const out: ChatAttachment[] = [];
+  for (const item of raw) {
+    const parsed = parseChatAttachment(item);
+    if (!parsed || out.some(a => a.id === parsed.id)) return null;
+    out.push(parsed);
+  }
+  return out;
+}
+
 function isAttachEntry(value: unknown): value is { id: string; seq: number } {
   return isRecord(value) && str(value.id) && num(value.seq);
 }
@@ -187,14 +251,16 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return decision ? { type: "gate_decide", decision } : null;
     }
     case "gate_post": return str(raw.id) && /^[a-f0-9-]{36}$/.test(raw.id) ? { type: "gate_post", id: raw.id } : null;
-    case "chat":
+    case "chat": {
+      const attachments = parseChatAttachments(raw.attachments);
       if (
         str(raw.id) &&
         str(raw.harness) &&
         str(raw.text) &&
         optStr(raw.hostId) && optStr(raw.profileId) &&
         optStr(raw.sessionId) &&
-        optStr(raw.cwd)
+        optStr(raw.cwd) &&
+        attachments !== null
       ) {
         return {
           type: "chat",
@@ -205,9 +271,11 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
           hostId: raw.hostId,
           profileId: raw.profileId,
           cwd: raw.cwd,
+          ...(attachments && attachments.length > 0 ? { attachments } : {}),
         };
       }
       return null;
+    }
     case "voice_begin":
       if (str(raw.id) && str(raw.harness) && str(raw.mime) && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.sessionId) && optStr(raw.cwd)) {
         return {
@@ -276,6 +344,26 @@ export function parseHosts(raw: unknown): HostInfo[] | undefined {
   return raw;
 }
 
+const BOT_CHANNEL_STATES = ["connected", "retrying", "disconnected", "configured"] as const;
+
+function isBotChannel(value: unknown): value is BotChannel {
+  return isRecord(value) && str(value.platform) && typeof value.state === "string" && BOT_CHANNEL_STATES.some(s => s === value.state);
+}
+
+export function isBotInfo(value: unknown): value is BotInfo {
+  return (
+    isRecord(value) &&
+    str(value.id) &&
+    str(value.name) &&
+    str(value.runtime) &&
+    isAgentStatus(value.status) &&
+    Array.isArray(value.channels) &&
+    value.channels.every(isBotChannel) &&
+    optStr(value.agentId) &&
+    optStr(value.detail)
+  );
+}
+
 function isHostInfo(value: unknown): value is HostInfo {
   return (
     isRecord(value) &&
@@ -286,7 +374,8 @@ function isHostInfo(value: unknown): value is HostInfo {
     typeof value.self === "boolean" &&
     (value.address === undefined || str(value.address)) &&
     Array.isArray(value.agents) &&
-    value.agents.every(isAgentInfo)
+    value.agents.every(isAgentInfo) &&
+    (value.bots === undefined || (Array.isArray(value.bots) && value.bots.every(isBotInfo)))
   );
 }
 
