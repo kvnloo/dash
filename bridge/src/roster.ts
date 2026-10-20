@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isCatalogHarness } from "../../shared/catalog";
+import { hermesSessions } from "./hermes-sessions";
 import type { AgentInfo, HarnessInfo, HistoryMessage, HostInfo } from "../../shared/protocol";
 
 export type TailscaleNode = {
@@ -542,7 +543,7 @@ function listedHermesProfiles(profiles: HermesProfileInfo[]): HermesProfileInfo[
 
 refreshHermesList();
 
-export function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }): HostInfo[] {
+export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }): Promise<HostInfo[]> {
   const key = `${self.hostname}:${self.address ?? ""}:${harnesses.map((h) => `${h.id}:${h.available}`).join(",")}`;
   const now = Date.now();
   if (rosterCache && rosterCache.key === key && now - rosterCache.at < ROSTER_TTL_MS) return rosterCache.hosts;
@@ -569,6 +570,9 @@ export function collectRoster(harnesses: HarnessInfo[], self: { hostname: string
       grokBot: grokBotAlive(),
     },
   });
+  const sessions = await hermesSessions.list();
+  const local = hosts.find(h => h.self);
+  if (local) local.agents.push(...sessions);
   rosterCache = { at: now, key, hosts };
   return hosts;
 }

@@ -24,6 +24,10 @@ export interface AgentInfo {
   sessionId?: string;
   hostId?: string;
   profileId?: string;
+  /** Persisted session metadata. A listed chat need not have a running process. */
+  lastActivityAt?: number;
+  messageCount?: number;
+  source?: string;
 }
 
 /** A machine on the tailnet (this laptop, groot/0, …). */
@@ -129,7 +133,7 @@ export type ServerMessage =
   /** Reply to `attach` for a turn the bridge no longer knows about. */
   | { type: "lost"; id: string }
   /** Live session transcript for `history`. Empty `messages` if the harness is unknown. */
-  | { type: "history"; harness: string; sessionId: string; messages: HistoryMessage[] }
+  | { type: "history"; harness: string; sessionId: string; messages: HistoryMessage[]; hostId?: string; profileId?: string }
   | TurnEvent;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -248,7 +252,9 @@ function isAgentInfo(value: unknown): value is AgentInfo {
   if (value.detail !== undefined && !str(value.detail)) return false;
   if (value.cwd !== undefined && !str(value.cwd)) return false;
   if (value.sessionId !== undefined && !str(value.sessionId)) return false;
-  if (!optStr(value.profileId) || !optStr(value.hostId)) return false;
+  if (!optStr(value.profileId) || !optStr(value.hostId) || !optStr(value.source)) return false;
+  if (value.lastActivityAt !== undefined && !num(value.lastActivityAt)) return false;
+  if (value.messageCount !== undefined && !num(value.messageCount)) return false;
   return true;
 }
 
@@ -324,8 +330,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
         ? { type: "error", id: raw.id, seq: raw.seq, message: raw.message }
         : null;
     case "history":
-      return str(raw.harness) && str(raw.sessionId) && Array.isArray(raw.messages) && raw.messages.every(isHistoryMessage)
-        ? { type: "history", harness: raw.harness, sessionId: raw.sessionId, messages: raw.messages }
+      return str(raw.harness) && str(raw.sessionId) && optStr(raw.hostId) && optStr(raw.profileId) && Array.isArray(raw.messages) && raw.messages.every(isHistoryMessage)
+        ? { type: "history", harness: raw.harness, sessionId: raw.sessionId, messages: raw.messages, hostId: raw.hostId, profileId: raw.profileId }
         : null;
     default:
       return null;

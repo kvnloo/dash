@@ -44,7 +44,7 @@ export type PeerRequest = {
 };
 
 export type HermesSessionResult =
-  | { path: "gateway" | "peer"; text: string; sessionId?: string }
+  | { path: "gateway" | "peer" | "api"; text: string; sessionId?: string }
   | { path: "cli"; reason: string };
 
 const DEFAULT_A2A_PORT = "9900";
@@ -268,7 +268,7 @@ async function fetchJson(
 }
 
 
-const HERMES_ENV_KEYS = /^(A2A_|HERMES_A2A_|HERMES_PEER_)/;
+const HERMES_ENV_KEYS = /^(A2A_|HERMES_A2A_|HERMES_PEER_|API_SERVER_)/;
 
 export function parseHermesEnvFile(text: string): EnvMap {
   const env: EnvMap = {};
@@ -324,13 +324,17 @@ function requireReply(path: "gateway" | "peer", body: unknown): string {
   if (typeof status === "string" && ["failed", "canceled", "cancelled", "rejected"].includes(status.toLowerCase())) {
     throw new Error(`Hermes ${path} task ${status}.`);
   }
-  const text = extractA2AText(body);
+  const text = extractA2AText(isRecord(body.message) && body.message.role === "assistant" ? body.message : body);
   if (!text) throw new Error(`Hermes ${path} returned an empty reply.`);
   return text;
 }
 
+const activeNativeSessions = new Set<string>();
+
 export async function runHermesSession(options: {
   input: HermesTurnInput;
+  /** Already resolved against the host's profile database. Never phone supplied. */
+  api?: { url: string; key: string };
   env?: EnvMap;
   envFile?: string;
   fetch?: HermesFetch;
@@ -341,6 +345,24 @@ export async function runHermesSession(options: {
   const home = override.HERMES_HOME?.trim() || join(homedir(), ".hermes");
   const env = mergeEnv(loadHermesEnvFile(options.envFile ?? join(home, ".env")), override);
   const fetchFn = options.fetch ?? globalThis.fetch;
+  if (options.api) {
+    const sessionId = options.input.sessionId;
+    if (!sessionId) throw new Error("Hermes API requires an existing session.");
+    const identityKey = `${options.api.url}:${sessionId}`;
+    if (activeNativeSessions.has(identityKey)) throw new Error("A Dash turn is already running in this Hermes session.");
+    activeNativeSessions.add(identityKey);
+    try {
+      const request = buildPeerRequest({ origin: options.api.url, sessionId, text: options.input.text, token: options.api.key });
+      const identity = await fetchJson(fetchFn, `${options.api.url}/api/sessions/${encodeURIComponent(sessionId)}`, { method: "GET", headers: request.headers }, CARD_TIMEOUT_MS, options.signal);
+      if (!identity.ok || !isRecord(identity.body) || !isRecord(identity.body.session) || identity.body.session.id !== sessionId) throw new Error("Hermes API does not own this profile/session. No send attempted.");
+      const sent = await fetchJson(fetchFn, request.url, { method: request.method, headers: request.headers, body: JSON.stringify(request.body) }, SEND_TIMEOUT_MS, options.signal);
+      if (!sent.ok) throw new Error(`Hermes API HTTP ${sent.status}. No fallback attempted; the host may still own this session.`);
+      if (sent.status === 202) throw new Error("Hermes queued this turn with its live owner. Refresh history; do not resend.");
+      const reply = requireReply("peer", sent.body);
+      options.log("hermes.path", { path: "api" });
+      return { path: "api", text: reply, sessionId: extractA2ASessionId(sent.body) ?? sessionId };
+    } finally { activeNativeSessions.delete(identityKey); }
+  }
   const origin = gatewayOrigin(env);
   const token = a2aBearerToken(env);
 

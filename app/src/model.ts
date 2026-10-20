@@ -51,6 +51,10 @@ export interface Conversation {
   cwd?: string;
   targetHostId?: string;
   profileId?: string;
+  profileName?: string;
+  messageCount?: number;
+  /** True when the latest successful host roster no longer reports this chat. */
+  stale?: boolean;
   messages: Message[];
 }
 
@@ -139,6 +143,9 @@ export function parseConversation(raw: unknown): Conversation | null {
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
     targetHostId: typeof raw.targetHostId === "string" ? raw.targetHostId : undefined,
     profileId: typeof raw.profileId === "string" ? raw.profileId : undefined,
+    profileName: typeof raw.profileName === "string" ? raw.profileName : undefined,
+    messageCount: typeof raw.messageCount === "number" ? raw.messageCount : undefined,
+    stale: raw.stale === true,
     messages,
   };
 }

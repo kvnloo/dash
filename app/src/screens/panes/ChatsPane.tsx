@@ -11,7 +11,7 @@ import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import type { ConnectionStatus, Conversation } from "../../model";
 import type { ScreenProps } from "../../navigation";
-import { deleteConversation, setActive, store } from "../../store/app";
+import { clearEndedConversations, deleteConversation, setActive, store } from "../../store/app";
 import { colors, space, type } from "../../theme";
 import { confirmDestructive, dateGroupLabel, timeAgo } from "../../util";
 
@@ -39,7 +39,7 @@ const Row = memo(function Row({
   const appearance = threadAppearance({ stale: item.stale, live });
   const stale = appearance.stale;
   const turnState = lastAssistantState(item.messages);
-  const stateId = runtimeStateFromTurn({ turnState, connectionStatus });
+  const stateId = item.stale ? "stale" : runtimeStateFromTurn({ turnState, connectionStatus });
   return (
     <PressScale
       onPress={() => onPress(item.id)}
@@ -63,8 +63,8 @@ const Row = memo(function Row({
           {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
           <Text style={styles.rowTime}>{stale ? "ended" : timeAgo(item.updatedAt)}</Text>
         </View>
-        <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
-          {preview(item)}
+          <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
+            {item.profileName ? `${item.profileName} · ` : ""}{preview(item)}
         </Text>
       </View>
       <View style={styles.hairline} />
@@ -157,6 +157,11 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
 
   return (
     <View style={styles.wrap}>
+      {conversations.some(c => c.stale) && (
+        <PressScale onPress={() => confirmDestructive("Clear ended chats?", "Saved history is removed from this phone only.", "Clear ended", clearEndedConversations)} accessibilityRole="button" style={styles.section}>
+          <Text style={styles.sectionTitle}>Clear ended</Text>
+        </PressScale>
+      )}
       <FlashList
         data={items}
         renderItem={renderItem}
