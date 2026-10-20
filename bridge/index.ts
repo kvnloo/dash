@@ -50,6 +50,7 @@ import {
 import { speechAvailable, transcribe, warmup } from "./speech";
 import { AttachmentError, AttachmentStore, promptWithAttachments, type StoredAttachment } from "./src/attachments";
 import { createFilesHttpHandler } from "./src/files-http";
+import { LiveSurface } from "./src/live-surface";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 
 // ---------------------------------------------------------------------------
@@ -581,6 +582,7 @@ const handleFiles = createFilesHttpHandler({
 });
 
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
+const liveSurface = new LiveSurface({ log });
 const gatePoll = gate ? setInterval(() => { try { gate.refresh(); } catch { /* Explicit next request returns corruption error. */ } }, 2000) : null;
 
 const server = Bun.serve<SocketData>({
@@ -648,6 +650,14 @@ const server = Bun.serve<SocketData>({
           if (!gate) { sendTo(ws, { type: "gate_error", message: "Approvals are not enabled on this bridge" }); break; }
           ws.data.gateSend ??= event => sendTo(ws, event);
           void gate.handle(message, ws.data.gateSend);
+          break;
+        }
+        case "live_open":
+        case "live_turn":
+        case "live_intent":
+        case "live_receipts": {
+          // Fast lane of a Hermes chat: a libfx worker behind z0bridge on this host. Hermes stays in charge.
+          void liveSurface.handle(message, event => sendTo(ws, event));
           break;
         }
         case "chat": {
