@@ -48,6 +48,9 @@ import {
   waitForExitOrTimeout,
 } from "./src/turn-safety";
 import { speechAvailable, transcribe, warmup } from "./speech";
+import { AttachmentError, AttachmentStore, promptWithAttachments, type StoredAttachment } from "./src/attachments";
+import { createFilesHttpHandler } from "./src/files-http";
+import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 
 // ---------------------------------------------------------------------------
 // Turns: one spawned process, a replayable event log, and a set of listeners
@@ -566,6 +569,17 @@ const handleHttp = createPairingHttpHandler({
   onEvent: log,
 });
 
+const CREDENTIAL_DIR = process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash");
+const attachments = new AttachmentStore(process.env.DASH_ATTACHMENT_DIR?.trim() || join(CREDENTIAL_DIR, "attachments"));
+const handleFiles = createFilesHttpHandler({
+  token: TOKEN,
+  store: attachments,
+  shareRoots: () => shareRoots(defaultShareDirs(DEFAULT_CWD, attachments.root, homedir()), process.env.DASH_SHARE_DIRS, homedir()),
+  device: process.env.DASH_KDECONNECT_DEVICE,
+  run: bunRun,
+  onEvent: log,
+});
+
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
 const gatePoll = gate ? setInterval(() => { try { gate.refresh(); } catch { /* Explicit next request returns corruption error. */ } }, 2000) : null;
 
@@ -596,6 +610,8 @@ const server = Bun.serve<SocketData>({
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      const files = await handleFiles(request);
+      if (files) return cors(files);
       const http = await handleHttp(request, server.requestIP(request)?.address ?? null);
       return cors(http ?? new Response("not found", { status: 404 }));
     }
@@ -655,11 +671,18 @@ const server = Bun.serve<SocketData>({
           const cwd = message.cwd?.trim() || DEFAULT_CWD;
           if (!isDirectory(cwd)) return rejectTurn(ws, message.id, `Not a directory on ${HOST_NAME}: ${cwd}`);
 
+          let files: StoredAttachment[] = [];
+          if (message.attachments?.length) {
+            try { files = attachments.claim(message.id, message.attachments); }
+            catch (error) { return rejectTurn(ws, message.id, error instanceof AttachmentError ? error.message : "Could not prepare the attachments on the host."); }
+            log("turn.attachments", { id: message.id, count: files.length, bytes: files.reduce((n, f) => n + f.size, 0) });
+          }
+
           const turn = new Turn(message.id, harness);
           turn.listeners.add(ws);
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
-          turn.start({ text: message.text, cwd, sessionId: message.sessionId, profileId: message.profileId });
+          turn.start({ text: promptWithAttachments(message.text, files), cwd, sessionId: message.sessionId, profileId: message.profileId, ...(files.length ? { attachments: files } : {}) });
           break;
         }
         case "voice_begin": {

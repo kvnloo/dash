@@ -1,8 +1,38 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import type { Sink, TurnInput } from "../harnesses";
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Images inlined as ACP image blocks only up to this size; larger ones go as links. */
+export const ACP_INLINE_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function promptImages(initialized: unknown): boolean {
+  if (!record(initialized) || !record(initialized.agentCapabilities)) return false;
+  const prompt = initialized.agentCapabilities.promptCapabilities;
+  return record(prompt) && prompt.image === true;
+}
+
+/**
+ * The text block (which already lists every path), then one block per attachment: an inline
+ * image when the agent advertises image prompts, otherwise a `resource_link`, which every ACP
+ * agent must accept. Unreadable files fall back to the link.
+ */
+export function acpPromptBlocks(input: Pick<TurnInput, "text" | "attachments">, images: boolean, read: (path: string) => Buffer = path => readFileSync(path)): Record<string, unknown>[] {
+  const blocks: Record<string, unknown>[] = [{ type: "text", text: input.text }];
+  for (const file of input.attachments ?? []) {
+    if (images && /^image\/(png|jpeg|gif|webp)$/.test(file.mime) && file.size <= ACP_INLINE_IMAGE_BYTES) {
+      try {
+        blocks.push({ type: "image", mimeType: file.mime, data: read(file.path).toString("base64"), uri: pathToFileURL(file.path).href });
+        continue;
+      } catch { /* fall through to a link */ }
+    }
+    blocks.push({ type: "resource_link", uri: pathToFileURL(file.path).href, name: file.name, mimeType: file.mime, size: file.size });
+  }
+  return blocks;
 }
 
 type Pending = { resolve(value: unknown): void; reject(error: Error): void };
@@ -177,7 +207,7 @@ export class AcpClient {
     this.phase = "session/prompt";
     const result = await this.request("session/prompt", {
       sessionId: this.sessionId,
-      prompt: [{ type: "text", text: input.text }],
+      prompt: acpPromptBlocks(input, promptImages(initialized)),
     });
     this.prompting = false;
     if (!record(result) || typeof result.stopReason !== "string") throw new Error("ACP prompt missing stop reason");

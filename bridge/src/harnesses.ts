@@ -7,10 +7,13 @@ import { approvalArgs, type ApprovalEnv } from "./argv-policy";
 import { parseHarnessJsonLine } from "./turn-safety";
 
 export interface TurnInput {
+  /** Prompt text. Attachment paths are already listed in it (see src/attachments.ts). */
   text: string;
   cwd: string;
   sessionId?: string;
   profileId?: string;
+  /** Files the phone attached, stored on this host. ACP turns also get native blocks. */
+  attachments?: readonly { path: string; name: string; mime: string; size: number }[];
 }
 
 export interface Sink {
