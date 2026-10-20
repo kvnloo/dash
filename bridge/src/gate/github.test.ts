@@ -35,7 +35,7 @@ test("review-first sweep blocks latest requested changes", async () => {
   const api: Api = async path => {
     if (path.includes("/pulls?")) return [{number:12,user:{login:"kvnloo"},head:{user:{login:"kvnloo"},sha:"a".repeat(40)}}];
     if (path.endsWith("/pulls/12")) return {mergeable:true};
-    if (path.includes("/reviews?")) return [{user:{login:"reviewer"},state:"CHANGES_REQUESTED"}];
+    if (path.includes("/reviews?")) return [{user:{login:"reviewer"},state:"CHANGES_REQUESTED"},{user:{login:"reviewer"},state:"COMMENTED"}];
     throw new Error("unexpected path");
   };
   await expect(new FactoryGuard(api, () => [project]).reviewFirst(project)).rejects.toThrow("CHANGES_REQUESTED");

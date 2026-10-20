@@ -62,7 +62,7 @@ export class FactoryGuard {
       if (live.mergeable === false || live.mergeable === null) throw new Error(`Review-first gate: #${n} has conflicts or unknown mergeability`);
       const reviews = await this.pages(`${root}/pulls/${n}/reviews`);
       const latest = new Map<unknown, unknown>();
-      for (const r of reviews) latest.set(object(r.user).login, r.state);
+      for (const r of reviews) if (["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(String(r.state))) latest.set(object(r.user).login, r.state);
       if ([...latest.values()].includes("CHANGES_REQUESTED")) throw new Error(`Review-first gate: #${n} has CHANGES_REQUESTED`);
       const inline = await this.pages(`${root}/pulls/${n}/comments`);
       // REST cannot prove thread resolution. Fail closed rather than guessing from a "fixed" reply.
