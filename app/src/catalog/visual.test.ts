@@ -75,8 +75,9 @@ describe("AODL visual encodings", () => {
     expect(providerIdForHarness("claude")).toBe("anthropic");
     expect(providerIdForHarness("not-a-harness")).toBe("unknown");
     const avatar = readFileSync(join(import.meta.dir, "../components/HarnessAvatar.tsx"), "utf8");
-    expect(avatar).toContain("OrchestraCore");
-    expect(avatar).toContain("providerIdForHarness");
+    expect(avatar).toContain("presetForHarness");
+    expect(avatar).toContain("assets/orbs/");
+    expect(avatar).not.toContain("<Text");
     expect(avatar).not.toContain("toUpperCase");
   });
 
@@ -121,13 +122,14 @@ describe("AODL visual encodings", () => {
     expect(resolveRuntimeState(catalog, undefined).id).toBe("unknown");
   });
 
-  test("thinking marker uses EffortOrbs, not PulseDot", () => {
+  test("Living Night status uses a dot; identity is a static catalog orb", () => {
     const row = readFileSync(join(import.meta.dir, "../components/MessageRow.tsx"), "utf8");
     const avatar = readFileSync(join(import.meta.dir, "../components/HarnessAvatar.tsx"), "utf8");
     const orbs = readFileSync(join(import.meta.dir, "../components/EffortOrbs.tsx"), "utf8");
-    expect(row).toContain("EffortOrbs");
+    expect(row).toContain("width: 4, height: 4");
     expect(row).not.toContain("PulseDot");
-    expect(avatar).toContain("EffortOrbs");
+    expect(avatar).toContain("<Image");
+    expect(avatar).not.toContain("withRepeat");
     expect(orbs).toContain("useAnimatedStyle");
     expect(orbs).toContain("transform");
     expect(orbs).toContain("opacity");
