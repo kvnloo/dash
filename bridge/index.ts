@@ -31,6 +31,7 @@ import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript } from "./src/roster";
 import { runHermesSession } from "./src/hermes-session";
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
+import { z0bridgeHermes } from "./src/z0bridge-hermes";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
 import { acpCommand, AcpSupervisor, type AcpHandle } from "./src/acp/supervisor";
 import {
@@ -88,6 +89,7 @@ class Turn implements Sink {
   ) {}
 
   private hermesProfile?: string;
+  private hermesTransport?: string;
 
   start(input: TurnInput): void {
     // A spoken turn is transcribed before it starts, so a cancel can arrive
@@ -138,6 +140,20 @@ class Turn implements Sink {
       try {
         const target = input.sessionId ? hermesSessions.target(input.profileId, input.sessionId) : undefined;
         if (target) this.hermesProfile = target.profile;
+        // Prefer the host's z0bridge daemon (ACP to `hermes -p <profile> acp`). Fall back to the
+        // native API path only when z0bridge is not running; a z0bridge answer is final.
+        const z0 = input.sessionId && target ? await z0bridgeHermes.ready() : undefined;
+        if (z0 && input.sessionId && target) {
+          this.hermesTransport = "z0bridge";
+          log("hermes.path", { path: "z0bridge" });
+          const outcome = await z0bridgeHermes.continue(z0, { profile: target.profile, sessionId: input.sessionId, text: input.text }, this, abort.signal);
+          if (this.finished) return;
+          if (this.cancelled || outcome.exitCode === "cancelled") { this.finish(CANCELLED_EXIT_CODE); return; }
+          if (outcome.exitCode === 1) this.error(outcome.message);
+          this.finish(outcome.exitCode);
+          log("turn.end", { id: this.id, harness: "hermes", exitCode: outcome.exitCode, path: "z0bridge" });
+          return;
+        }
         if (input.sessionId && !target?.api) throw new Error("No native API configured for this Hermes profile. History is read-only until the host configures DASH_HERMES_APIS. CLI resume is not attempted.");
         const result = await runHermesSession({
           input,
@@ -252,7 +268,7 @@ class Turn implements Sink {
 
   session(sessionId: string): void {
     this.flush();
-    this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: HOST_NAME, harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp" });
+    this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: HOST_NAME, harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesTransport ?? (this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp") });
   }
 
   /** What we heard, for a turn the user spoke rather than typed. */
@@ -667,7 +683,7 @@ const server = Bun.serve<SocketData>({
           if (message.harness === "hermes") {
             const target = hermesSessions.target(message.profileId, message.sessionId);
             const messages = (!message.hostId || message.hostId === HOST_NAME) && target
-              ? await hermesSessions.history(target.profile, message.sessionId) : [];
+              ? (await z0bridgeHermes.history(target.profile, message.sessionId)) ?? await hermesSessions.history(target.profile, message.sessionId) : [];
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: HOST_NAME, profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages });
             break;
           }
