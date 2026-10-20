@@ -99,8 +99,9 @@ describe("mergeLiveConversations", () => {
       },
     ];
     const merged = mergeLiveConversations(existing, [liveOmp], now);
-    expect(merged).toBe(existing);
-    expect(merged[0]?.id).toBe("phone-1");
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ id: "phone-1", title: "Ship chats", targetHostId: "mbp", profileId: "omp:aaa", stale: false });
+    expect(merged[0]?.messages).toEqual(existing[0]?.messages);
   });
 
   test("still lists a live session when history is empty", () => {

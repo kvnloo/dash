@@ -18,6 +18,46 @@ beforeEach(() => {
   app.store.set({ hydrated: true, settings: null, connection: { status: "online", harnesses: [], hosts: [] }, conversations: [], activeId: null });
 });
 
+describe("host roster reconciliation", () => {
+  const agent = { id: "hermes:session:clean:owner", name: "Debug Hermes crashing", kind: "hermes", status: "available" as const, sessionId: "owner", profileId: "clean", cwd: "/project", lastActivityAt: 1700000000000, messageCount: 3 };
+  const host = { id: "groot", name: "groot", hostname: "groot", online: true, self: true, agents: [agent] };
+  test("every refresh updates titles/activity, marks ended without deleting history, and revives", () => {
+    app.setConnection({ hosts: [host], harnesses: [{ id: "hermes", name: "Hermes", available: true }] });
+    const first = app.store.get().conversations[0]!;
+    expect(first).toMatchObject({ title: agent.name, profileName: "clean", updatedAt: agent.lastActivityAt, stale: false });
+    const history = [{ id: "h1", role: "user" as const, text: "previous", at: 1699999999999 }];
+    app.applyLiveHistory("hermes", "owner", history, "groot", agent.id);
+    app.setConnection({ hosts: [{ ...host, agents: [] }] });
+    expect(app.store.get().conversations[0]).toMatchObject({ id: first.id, stale: true, messages: history });
+    expect(app.conversationTargetError(app.store.get().conversations[0]!)).toContain("ended");
+    app.setConnection({ status: "offline" }); // no successful roster, no extra reconciliation
+    expect(app.store.get().conversations).toHaveLength(1);
+    app.setConnection({ hosts: [{ ...host, agents: [{ ...agent, name: "New real title", lastActivityAt: agent.lastActivityAt + 10000 }] }] });
+    expect(app.store.get().conversations).toHaveLength(1);
+    expect(app.store.get().conversations[0]).toMatchObject({ id: first.id, title: "New real title", stale: false, messages: history });
+  });
+  test("old unscoped OMP chat becomes ended and Clear ended preserves new chats", () => {
+    const old = app.createConversation("omp", { sessionId: "dead-omp" });
+    app.beginTurn(old.id, "saved message");
+    app.setConnection({ hosts: [host] });
+    const ended = app.store.get().conversations.find(c => c.id === old.id)!;
+    expect(ended.stale).toBe(true);
+    expect(app.conversationTargetError(ended)).toContain("ended");
+    app.clearEndedConversations();
+    expect(app.store.get().conversations).toHaveLength(1);
+    expect(app.store.get().activeId).toBeNull();
+  });
+  test("same session id in two profiles stays distinct; history cannot cross targets", () => {
+    const other = { ...agent, id: "hermes:session:other:owner", profileId: "other" };
+    app.setConnection({ hosts: [{ ...host, agents: [agent, other] }] });
+    expect(new Set(app.store.get().conversations.map(c => c.id)).size).toBe(2);
+    app.applyLiveHistory("hermes", "owner", [{ id: "h", role: "assistant", text: "only clean", at: agent.lastActivityAt }], "groot", agent.id);
+    expect(app.store.get().conversations.find(c => c.profileId === other.id)?.messages).toHaveLength(0);
+    app.applyLiveHistory("hermes", "owner", [{ id: "h2", role: "assistant", text: "new latest", at: agent.lastActivityAt + 1 }], "groot", agent.id);
+    expect(app.store.get().conversations.find(c => c.profileId === agent.id)?.messages.at(-1)?.text).toBe("new latest");
+  });
+});
+
 function turn() {
   const conversation = app.createConversation("omp");
   return { conversation, ...app.beginTurn(conversation.id, "hello") };

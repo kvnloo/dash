@@ -10,6 +10,7 @@ export interface TurnInput {
   text: string;
   cwd: string;
   sessionId?: string;
+  profileId?: string;
 }
 
 export interface Sink {

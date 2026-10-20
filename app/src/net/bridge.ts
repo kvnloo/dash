@@ -11,6 +11,7 @@ import {
   applyTurnEvent,
   flushPendingSends,
   markTurnLost,
+  locateTurn,
   rejectUnavailableTurn,
   setConnection,
   setLiveHistoryRequester,
@@ -32,6 +33,7 @@ class Bridge {
   private attempt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private connectTimer: ReturnType<typeof setTimeout> | undefined;
+  private rosterTimer: ReturnType<typeof setInterval> | undefined;
   private pending = new Map<string, { text: string; seq: number }>();
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private appState: AppStateStatus = RNAppState.currentState;
@@ -80,6 +82,7 @@ class Bridge {
 
   stop(): void {
     this.settings = null;
+    this.clearTimers();
     this.teardownSocket();
     setConnection({ status: "idle", error: undefined });
   }
@@ -168,11 +171,9 @@ class Bridge {
           hosts: message.hosts ?? [],
           error: undefined,
         });
-        if (this.settings) {
-          void fetchRoster(this.settings).then((hosts) => {
-            if (hosts) setConnection({ hosts });
-          });
-        }
+        void this.refreshRoster();
+        clearInterval(this.rosterTimer);
+        this.rosterTimer = setInterval(() => { if (this.appState === "active") void this.refreshRoster(); }, 10000);
         const turns = streamingTurns();
         if (turns.length) this.send({ type: "attach", turns });
         this.send({ type: "gate_list" });
@@ -204,12 +205,24 @@ class Bridge {
         applyTurnEvent(message);
         return;
       case "history":
-        applyLiveHistory(message.harness, message.sessionId, message.messages);
+        applyLiveHistory(message.harness, message.sessionId, message.messages, message.hostId, message.profileId);
         return;
       default: {
         const _exhaustive: never = message;
         return _exhaustive;
       }
+    }
+  }
+
+  private async refreshRoster(): Promise<void> {
+    const settings = this.settings;
+    if (!settings || !this.isOpen()) return;
+    const hosts = await fetchRoster(settings);
+    if (!hosts || this.settings !== settings || !this.isOpen()) return;
+    setConnection({ hosts });
+    const current = store.get().conversations.find(c => c.id === store.get().activeId);
+    if (current?.harness === "hermes" && !current.stale && current.sessionId && !current.messages.some(m => m.role === "assistant" && (m.state === "streaming" || m.state === "pending"))) {
+      this.send({ type: "history", harness: current.harness, sessionId: current.sessionId, hostId: current.targetHostId, profileId: current.profileId });
     }
   }
 
@@ -227,6 +240,8 @@ class Bridge {
   private clearTimers(): void {
     clearTimeout(this.retryTimer);
     clearTimeout(this.connectTimer);
+    clearInterval(this.rosterTimer);
+    this.rosterTimer = undefined;
     this.retryTimer = undefined;
     this.connectTimer = undefined;
   }
@@ -266,8 +281,16 @@ setLiveHistoryRequester((input) => {
     harness: input.harness,
     sessionId: input.sessionId,
     cwd: input.cwd,
+    hostId: input.hostId,
+    profileId: input.profileId,
   });
 });
+
+function targetForTurn(turnId: string): { hostId?: string; profileId?: string } {
+  const where = locateTurn(turnId);
+  const conversation = store.get().conversations.find(c => c.id === where?.conversationId);
+  return { hostId: conversation?.targetHostId, profileId: conversation?.profileId };
+}
 
 /** Send one chat turn for the active conversation. Returns false if offline. */
 export function sendChat(input: {
@@ -282,6 +305,7 @@ export function sendChat(input: {
   return bridge.send({
     type: "chat",
     id: input.turnId,
+    ...targetForTurn(input.turnId),
     harness: input.harness,
     text: input.text,
     sessionId: input.sessionId,
@@ -302,6 +326,7 @@ export function sendVoiceBegin(input: {
   const sent = bridge.send({
     type: "voice_begin",
     id: input.turnId,
+    ...targetForTurn(input.turnId),
     harness: input.harness,
     mime: input.mime,
     sessionId: input.sessionId,

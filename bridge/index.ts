@@ -30,6 +30,7 @@ import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript } from "./src/roster";
 import { runHermesSession } from "./src/hermes-session";
+import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
 import { acpCommand, AcpSupervisor, type AcpHandle } from "./src/acp/supervisor";
 import {
@@ -86,10 +87,17 @@ class Turn implements Sink {
     readonly harness: Harness,
   ) {}
 
+  private hermesProfile?: string;
+
   start(input: TurnInput): void {
     // A spoken turn is transcribed before it starts, so a cancel can arrive
     // while there is no process to kill yet.
     if (this.cancelled || this.finished) return;
+    if (this.harness.id === "hermes" && input.sessionId) {
+      this.hermesProfile = input.profileId;
+      this.startHermes(input);
+      return;
+    }
     if (process.env.DASH_ENABLE_LEGACY_CLI !== "1") {
       const command = acpCommand(this.harness.id);
       if (!command) {
@@ -128,8 +136,12 @@ class Turn implements Sink {
     });
     void (async () => {
       try {
+        const target = input.sessionId ? hermesSessions.target(input.profileId, input.sessionId) : undefined;
+        if (target) this.hermesProfile = target.profile;
+        if (input.sessionId && !target?.api) throw new Error("No native API configured for this Hermes profile. History is read-only until the host configures DASH_HERMES_APIS. CLI resume is not attempted.");
         const result = await runHermesSession({
           input,
+          api: target?.api,
           env: process.env,
           log,
           signal: abort.signal,
@@ -240,7 +252,7 @@ class Turn implements Sink {
 
   session(sessionId: string): void {
     this.flush();
-    this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: HOST_NAME, harnessId: this.harness.id, profileId: process.env.DASH_PROFILE_ID ?? "default", transport: process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp" });
+    this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: HOST_NAME, harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp" });
   }
 
   /** What we heard, for a turn the user spoke rather than typed. */
@@ -405,6 +417,7 @@ interface Utterance {
   bytes: number;
   cwd: string;
   sessionId?: string;
+  profileId?: string;
   startedAt: number;
 }
 
@@ -436,7 +449,7 @@ async function runVoiceTurn(turn: Turn, utterance: Utterance): Promise<void> {
       return;
     }
     turn.transcript(heard.text);
-    turn.start({ text: heard.text, cwd: utterance.cwd, sessionId: utterance.sessionId });
+    turn.start({ text: heard.text, cwd: utterance.cwd, sessionId: utterance.sessionId, profileId: utterance.profileId });
   } catch (error) {
     log("voice.failed", { id: turn.id, error: String(error) });
     turn.endWithout(error instanceof Error ? error.message : String(error));
@@ -518,7 +531,7 @@ const server = Bun.serve<SocketData>({
   },
   websocket: {
     idleTimeout: 0,
-    open(ws) {
+    async open(ws) {
       log("ws.open", { remote: ws.remoteAddress });
       const harnesses = harnessList();
       sendTo(ws, {
@@ -527,10 +540,10 @@ const server = Bun.serve<SocketData>({
         host: HOST_NAME,
         cwd: DEFAULT_CWD,
         harnesses,
-        hosts: collectRoster(harnesses, { hostname: HOST_NAME, address: tailscaleIp ?? undefined }),
+        hosts: await collectRoster(harnesses, { hostname: HOST_NAME, address: tailscaleIp ?? undefined }),
       });
     },
-    message(ws, raw) {
+    async message(ws, raw) {
       const message = parseClientMessage(parseJson(raw));
       if (!message) {
         log("ws.bad_message", { remote: ws.remoteAddress });
@@ -547,7 +560,12 @@ const server = Bun.serve<SocketData>({
         }
         case "chat": {
           if (message.hostId && message.hostId !== HOST_NAME) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
-          if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
+          if (message.harness === "hermes" && message.sessionId) {
+            if (!hermesSessions.target(message.profileId, message.sessionId)) return rejectTurn(ws, message.id, "Unknown or ambiguous Hermes profile/session.");
+          } else if (message.harness === "omp" && message.profileId?.startsWith("omp:")) {
+            const hosts = await collectRoster(harnessList(), { hostname: HOST_NAME, address: HOST });
+            if (!hosts.some(h => h.self && h.agents.some(a => a.id === message.profileId && a.sessionId === message.sessionId && a.status === "running"))) return rejectTurn(ws, message.id, "This OMP session has ended on the host.");
+          } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !(message.harness === "hermes" && message.profileId === "hermes:default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
           if (turns.has(message.id)) return;
           const harness = HARNESSES.find((h) => h.id === message.harness);
           if (!harness) return rejectTurn(ws, message.id, `Unknown agent "${message.harness}".`);
@@ -565,12 +583,17 @@ const server = Bun.serve<SocketData>({
           turn.listeners.add(ws);
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
-          turn.start({ text: message.text, cwd, sessionId: message.sessionId });
+          turn.start({ text: message.text, cwd, sessionId: message.sessionId, profileId: message.profileId });
           break;
         }
         case "voice_begin": {
           if (message.hostId && message.hostId !== HOST_NAME) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
-          if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
+          if (message.harness === "hermes" && message.sessionId) {
+            if (!hermesSessions.target(message.profileId, message.sessionId)) return rejectTurn(ws, message.id, "Unknown or ambiguous Hermes profile/session.");
+          } else if (message.harness === "omp" && message.profileId?.startsWith("omp:")) {
+            const hosts = await collectRoster(harnessList(), { hostname: HOST_NAME, address: HOST });
+            if (!hosts.some(h => h.self && h.agents.some(a => a.id === message.profileId && a.sessionId === message.sessionId && a.status === "running"))) return rejectTurn(ws, message.id, "This OMP session has ended on the host.");
+          } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !(message.harness === "hermes" && message.profileId === "hermes:default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
           if (turns.has(message.id) || utterances.has(message.id)) return;
           const ready = speechAvailable();
           if (!ready.ok) {
@@ -597,6 +620,7 @@ const server = Bun.serve<SocketData>({
             bytes: 0,
             cwd,
             sessionId: message.sessionId,
+            profileId: message.profileId,
             startedAt: Date.now(),
           });
           break;
@@ -640,7 +664,14 @@ const server = Bun.serve<SocketData>({
           log("ws.attach", { remote: ws.remoteAddress, count: message.turns.length });
           break;
         case "history": {
-          if ((message.hostId && message.hostId !== HOST_NAME) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default"))) {
+          if (message.harness === "hermes") {
+            const target = hermesSessions.target(message.profileId, message.sessionId);
+            const messages = (!message.hostId || message.hostId === HOST_NAME) && target
+              ? await hermesSessions.history(target.profile, message.sessionId) : [];
+            sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: HOST_NAME, profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages });
+            break;
+          }
+          if ((message.hostId && message.hostId !== HOST_NAME) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && !message.profileId.startsWith("omp:"))) {
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, messages: [] });
             break;
           }
