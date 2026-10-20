@@ -11,13 +11,16 @@ import { ConnectionPill } from "../components/ConnectionPill";
 import { HarnessPicker } from "../components/HarnessPicker";
 import { AppNav } from "../components/AppNav";
 import { MessageRow } from "../components/MessageRow";
+import { LiveSurface } from "../components/LiveSurface";
+import { PressScale } from "../components/PressScale";
 import { isDebugActive } from "../debug/expose";
 import { debugUi } from "../debug/ui-store";
 import { haptic } from "../haptics";
 import type { ChatAttachment } from "../../../shared/protocol";
 import type { Message } from "../model";
 import type { ScreenProps } from "../navigation";
-import { bridge, sendChat } from "../net/bridge";
+import { bridge, openLiveSurface, sendChat, sendLiveTurn } from "../net/bridge";
+import { EMPTY_LIVE, liveOf, liveStore, setLiveOpen } from "../store/live";
 import {
   beginTurn,
   conversationBusy,
@@ -31,7 +34,7 @@ import {
   store,
 } from "../store/app";
 import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
-import { colors, space, type } from "../theme";
+import { colors, glass, radius, space, type } from "../theme";
 
 const EMPTY: Message[] = [];
 
@@ -69,6 +72,20 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const harnessName = harness?.name ?? harnessId;
   const online = connection.status === "online";
   const targetError = conversation ? conversationTargetError(conversation) : undefined;
+  const live = liveStore.use((all) => (conversation ? all[conversation.id] ?? EMPTY_LIVE : EMPTY_LIVE));
+  const liveOn = harnessId === "hermes" && live.open;
+
+  const toggleLive = useCallback(() => {
+    const active = conversation ?? createConversation("hermes");
+    const next = !liveOf(active.id).open;
+    haptic.select();
+    setLiveOpen(active.id, next);
+    if (next && liveOf(active.id).status !== "ready") openLiveSurface(active.id, { profileId: active.profileId, sessionId: active.sessionId });
+  }, [conversation]);
+
+  const onLiveSend = useCallback((text: string) => {
+    if (conversation) { haptic.tap(); sendLiveTurn(conversation.id, text); }
+  }, [conversation]);
 
   const streamingMessage = useMemo(() => {
     return messages.find((m) => m.role === "assistant" && m.state === "streaming");
@@ -186,7 +203,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           Open in {conversation.openIn} on {connection.hosts.find((h) => h.id === conversation.targetHostId)?.name ?? connection.host ?? "the host"}. Replies wait until it closes there.
         </Text>
       ) : null}
-      <View style={styles.body}>
+      {harnessId === "hermes" ? (
+        <View style={styles.liveRow}>
+          <PressScale accessibilityRole="switch" accessibilityLabel="Live surface" accessibilityState={{ checked: liveOn }} aria-checked={liveOn}
+            onPress={toggleLive} style={[styles.liveChip, liveOn && styles.liveChipOn]}>
+            <Text style={[styles.liveChipText, liveOn && styles.liveChipTextOn]}>Live surface</Text>
+          </PressScale>
+          <Text style={styles.liveNote} numberOfLines={1}>{liveOn ? "fast lane · Hermes stays in charge" : "Hermes chat"}</Text>
+        </View>
+      ) : null}
+      {liveOn && conversation ? <View style={styles.body}><LiveSurface conversationId={conversation.id} /></View> : <View style={styles.body}>
         <FlashList
           ref={listRef}
           data={messages}
@@ -206,22 +232,22 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             </View>
           }
         />
-      </View>
+      </View>}
       <KeyboardDock>
         <Composer
           key={composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
-          disabled={!online || targetError !== undefined}
-          streaming={conversation ? conversationBusy(conversation.id) : false}
+          disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
+          streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
           initialText={composerDraft}
-          placeholder={composerPlaceholder({
+          placeholder={liveOn ? (live.askHermes ? "Ask Hermes through the live surface" : "Live surface · quick reply") : composerPlaceholder({
             online,
             streaming: Boolean(streamingMessage),
             queued: conversation ? queueLength(conversation.id) : 0,
             openIn: conversation?.openIn,
             harnessName,
           })}
-          onSend={onSend}
+          onSend={liveOn ? onLiveSend : onSend}
           onStop={onStop}
           onVoice={() => navigation.navigate("Voice")}
         />
@@ -246,4 +272,10 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: "45%" },
   emptyTitle: { color: colors.text, ...type.title },
   emptySubtitle: { color: colors.textMuted, ...type.body, marginTop: 6 },
+  liveRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.xs },
+  liveChip: { height: 32, borderRadius: radius.pill, borderWidth: 1, borderColor: glass.hair, backgroundColor: glass.fillChip, paddingHorizontal: space.md, justifyContent: "center" },
+  liveChipOn: { borderColor: colors.gold, backgroundColor: glass.fillChipOn },
+  liveChipText: { ...type.label, color: colors.textMuted },
+  liveChipTextOn: { color: colors.gold },
+  liveNote: { ...type.mono, color: colors.textTertiary, flex: 1 },
 });

@@ -1,7 +1,9 @@
 import { applyGateMessage } from "../store/approvals";
 import { AppState as RNAppState, type AppStateStatus } from "react-native";
 import { parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
+import type { LiveIntent } from "../../../shared/live";
 import { isDebugMode } from "../debug/mode";
+import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf } from "../store/live";
 import { fetchRoster } from "../lib/roster";
 import type { Settings } from "../model";
 import {
@@ -207,6 +209,12 @@ class Bridge {
       case "history":
         applyLiveHistory(message.harness, message.sessionId, message.messages, message.hostId, message.profileId);
         return;
+      case "live_opened":
+      case "live_event":
+      case "live_receipts":
+      case "live_error":
+        applyLiveMessage(message);
+        return;
       default: {
         const _exhaustive: never = message;
         return _exhaustive;
@@ -345,4 +353,37 @@ export function sendVoiceChunk(turnId: string, data: string): boolean {
 /** End of utterance: the bridge transcribes and runs the turn. */
 export function sendVoiceCommit(turnId: string): boolean {
   return bridge.send({ type: "voice_commit", id: turnId });
+}
+
+/** Live surface (fast lane of a Hermes chat): open the worker for this conversation. */
+export function openLiveSurface(conversationId: string, target: { profileId?: string; sessionId?: string }): boolean {
+  const id = beginOpen(conversationId);
+  const ok = bridge.send({ type: "live_open", id, ...(target.profileId ? { profileId: target.profileId } : {}), ...(target.sessionId ? { sessionId: target.sessionId } : {}) });
+  if (!ok) applyLiveMessage({ type: "live_error", id, message: "Not connected to the bridge." });
+  return ok;
+}
+
+export function sendLiveTurn(conversationId: string, text: string): boolean {
+  const live = liveOf(conversationId);
+  if (!live.workerId || !live.profileId) return false;
+  const id = beginLiveTurn(conversationId, text, live.askHermes);
+  const ok = bridge.send({ type: "live_turn", id, workerId: live.workerId, profileId: live.profileId, text, ...(live.askHermes ? { askHermes: true } : {}) });
+  if (!ok) applyLiveMessage({ type: "live_error", id, message: "Not connected to the bridge." });
+  return ok;
+}
+
+/** The owner's tap on an fx0 control or a native fast control: recorded in Hermes, then the worker reacts. */
+export function sendLiveIntent(conversationId: string, intent: LiveIntent): boolean {
+  const live = liveOf(conversationId);
+  if (!live.workerId || !live.profileId) return false;
+  const id = beginIntent(conversationId, intent);
+  const ok = bridge.send({ type: "live_intent", id, workerId: live.workerId, profileId: live.profileId, intent, continue: true });
+  if (!ok) applyLiveMessage({ type: "live_error", id, message: "Not connected to the bridge." });
+  return ok;
+}
+
+export function refreshLiveReceipts(conversationId: string): boolean {
+  const live = liveOf(conversationId);
+  if (!live.workerId || !live.profileId) return false;
+  return bridge.send({ type: "live_receipts", id: beginReceipts(conversationId), workerId: live.workerId, profileId: live.profileId });
 }
