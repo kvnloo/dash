@@ -1,5 +1,5 @@
 import { Canvas } from "../components/Canvas";
-import { ScreenHeader } from "../components/ScreenHeader";
+import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Animated, { useAnimatedStyle, useFrameCallback, useSharedValue } from "react-native-reanimated";
@@ -315,9 +315,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           pagerRef.current?.setPage(next);
         }}
       />
+      <WorkspaceHeader navigation={navigation} tab={index} />
       <ConnectionPill />
-
-
       <View style={styles.body}>
         {searchActive ? (
           <>

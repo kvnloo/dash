@@ -4,12 +4,24 @@ import assert from "node:assert/strict";
 export async function assertLivingNight(page, scenario) {
   const result = { scenario, viewport: page.viewportSize() };
   assert.deepEqual(result.viewport, { width: 390, height: 844 });
+  if (scenario.startsWith("main") || scenario.startsWith("chat") || scenario === "settings") {
+    // The restored top navigation bar: Expand · three-dot gel pager · Bridge details, in a 60px band.
+    const expand = await page.getByRole("button", { name: "Expand", exact: true }).boundingBox();
+    const bridge = await page.getByRole("button", { name: "Bridge details", exact: true }).boundingBox();
+    const tabs = [];
+    for (const label of ["Bots", "Chats", "Orchestra"]) tabs.push(await page.getByRole("tab", { name: label, exact: true }).boundingBox());
+    for (const b of [expand, bridge, ...tabs]) assert.ok(b.y >= 0 && b.y + b.height <= 60, "nav controls sit in the 60px bar");
+    assert.ok(expand.x < tabs[0].x && tabs[0].x < tabs[1].x && tabs[1].x < tabs[2].x && tabs[2].x < bridge.x, "Expand, pager, Bridge details in order");
+    assert.ok(Math.abs((tabs[1].x + tabs[1].width / 2) - 195) <= 2, "pager is centred on the phone");
+    assert.ok(expand.width >= 44 && bridge.width >= 44, "44px nav hit targets");
+    result.nav = { expand, bridge, tabs };
+  }
   if (scenario.startsWith("main")) {
-    for (const label of ["Bots", "Chats", "Orchestra"]) {
-      const tab = page.getByRole("tab", { name: label, exact: true });
-      await tab.waitFor();
-      assert.equal(await tab.innerText(), label, "top tabs must have visible labels");
-    }
+    const selected = page.getByRole("tab", { selected: true });
+    const label = await selected.getAttribute("aria-label");
+    const heading = page.getByRole("heading", { name: label, exact: true });
+    await heading.waitFor();
+    assert.ok((await heading.boundingBox()).y >= 60, "pane title sits under the bar");
     const mention = page.getByRole("button", { name: "Mention", exact: true });
     const box = await mention.boundingBox();
     assert.ok(box.x >= 12 && box.y >= 0 && box.y + box.height <= 844, "@ stays inside the phone dock");
@@ -68,8 +80,9 @@ export async function exerciseLivingNight(page, scenario) {
     for (const label of ["Bots", "Chats", "Orchestra", "Chats"]) {
       await page.getByRole("tab", { name: label, exact: true }).click();
       await page.getByRole("tab", { name: label, selected: true, exact: true }).waitFor();
+      await page.getByRole("heading", { name: label, exact: true }).waitFor();
     }
-    steps.push("switch Bots / Chats / Orchestra / Chats");
+    steps.push("switch Bots / Chats / Orchestra / Chats with the dot pager; the header names the pane");
     await page.getByRole("button", { name: "Bridge details", exact: true }).click();
     await page.getByRole("button", { name: "Edit bridge", exact: true }).waitFor();
     const dismiss = page.getByRole("button", { name: "Dismiss bridge details", exact: true });

@@ -173,6 +173,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
+      <AppNav navigation={navigation} tab={1} />
       <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => navigation.navigate("Main", { tab: 1 })} action="Choose harness" icon="sliders" onAction={() => setPickerVisible(true)} />
       <ConnectionPill />
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}

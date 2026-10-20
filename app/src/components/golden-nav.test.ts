@@ -321,46 +321,163 @@ describe("pinned geometry (mutation canaries)", () => {
     expect(PILL_TRAVEL).toBe(0.55);
   });
 
-  test("Living Night uses a centred 4px dot below the selected label", () => {
-    const src = readFileSync(join(import.meta.dir, "WorkspaceNav.tsx"), "utf8");
-    expect(src).toContain('width: 4, height: 4');
-    expect(src).toContain('borderRadius: 2');
-    expect(src).toContain('bottom: 5');
-    expect(src).toContain('alignItems: "center"');
-    expect(src).not.toContain('styles.pill');
+  test("dots sit in the pill center: three equal slots, not stuck to the top", () => {
+    const src = readFileSync(join(import.meta.dir, "GelNav.tsx"), "utf8");
+    const tabs = src.match(/tabs: \{[\s\S]*?\n  \},/)?.[0] ?? "";
+    const tab = src.match(/tab: \{[\s\S]*?\n  \},/)?.[0] ?? "";
+    expect(tabs).toContain("top: NAV_PAGER_PAD");
+    expect(tabs).toContain("height: NAV_PILL_HEIGHT");
+    expect(tabs).toContain("width: NAV_SLOT_WIDTH * 3");
+    expect(tabs).toContain('flexDirection: "row"');
+    expect(tab).toContain("width: NAV_SLOT_WIDTH");
+    expect(tab).toContain("height: NAV_PILL_HEIGHT");
+    expect(tab).toContain('alignItems: "center"');
+    expect(tab).toContain('justifyContent: "center"');
+    const dot = src.match(/dot: \{[\s\S]*?\n  \},/)?.[0] ?? "";
+    expect(dot).toContain('position: "absolute"');
+    expect(dot).toContain("top: NAV_DOT_TOP");
+    expect(dot).toContain("left: NAV_DOT_LEFT");
+    expect(dot).toContain("width: NAV_DOT_SIZE");
+    expect(dot).toContain("height: NAV_DOT_SIZE");
+    expect(src).toContain("borderRadius: NAV_DOT_SIZE / 2");
+    expect(tabs).not.toContain("top: 0");
   });
 });
 
-// Intentional visual contract change: labelled top tabs replace the old dot-only gel.
-// Pure pager/gel numerical tests remain above and below this renderer contract.
-describe("Living Night navigation wiring", () => {
-  const src = readFileSync(join(import.meta.dir, "WorkspaceNav.tsx"), "utf8");
-  test("native and web share the same accessible native renderer", () => {
-    for (const file of ["AppNav.tsx", "AppNav.web.tsx"]) expect(readFileSync(join(import.meta.dir, file), "utf8")).toContain('./WorkspaceNav');
+// The owner asked for the top navigation bar back after the Living Night restyle: Expand,
+// the three-dot gel pager and the Bridge chevron, in their old positions, restyled to tokens.
+// The pane name, approvals, compose and settings live in the WorkspaceHeader row under it.
+describe("top navigation bar wiring", () => {
+  const src = readFileSync(join(import.meta.dir, "GelNav.tsx"), "utf8");
+  test("native and web share one Reanimated renderer, not a WebView", () => {
+    for (const file of ["AppNav.tsx", "AppNav.web.tsx"]) expect(readFileSync(join(import.meta.dir, file), "utf8")).toContain("./GelNav");
     expect(src).not.toContain("react-native-webview");
     expect(src).not.toContain("injectJavaScript");
+    expect(src).not.toContain("androidLayerType");
+    expect(src).toContain("react-native-reanimated");
+    expect(src).toContain("indicatorTranslateX");
+    expect(src).toContain("setProgress");
   });
-  test("labels and selected state are visible, not only accessibility labels", () => {
-    expect(src).toContain('["Bots", "Chats", "Orchestra"]');
+
+  test("keeps the old controls in order: Expand, pager, Bridge details", () => {
+    const expand = src.indexOf('accessibilityLabel="Expand"');
+    const pager = src.indexOf('accessibilityLabel="Primary mobile workspace"');
+    const bridge = src.indexOf('accessibilityLabel="Bridge details"');
+    expect(expand).toBeGreaterThan(0);
+    expect(pager).toBeGreaterThan(expand);
+    expect(bridge).toBeGreaterThan(pager);
+    expect(src).toContain('navigation.navigate("Voice")');
+    expect(src).toContain("pull.toggle()");
+    expect(src).toContain("useBridgePullPan");
+  });
+
+  test("tabs are accessible with explicit web selected state", () => {
+    expect(src).toContain("TAB_LABELS.map");
     expect(src).toContain('accessibilityRole="tab"');
-    expect(src).toContain('selected: i === tab');
-    expect(src).toContain('>{label}</Text>');
-    expect(src).toContain('minHeight: 44');
+    expect(src).toContain("selected: i === active");
+    expect(src).toContain("aria-selected={i === active}");
   });
-  test("pending approvals get a sans numeral on a gold pill and a conditional fourth tab", () => {
-    expect(src).toContain('pending > 0');
-    expect(src).toContain('s.items.filter(actionable).length');
-    expect(src).toContain('backgroundColor: colors.gold');
-    expect(src).not.toContain('...type.cardTitle, color: colors.gold'); // a serif "1" reads as the letter I
-    expect(src).toContain('navigation.navigate("Approvals")');
+
+  test("paints three 4dp dots as native views above the gold pill", () => {
+    expect(src).toContain("NAV_DOT_SIZE");
+    expect(src).toContain("#211b10");
+    expect(src).toContain("#837F74");
+    const tabsBlock = src.slice(src.indexOf("TAB_LABELS.map"), src.indexOf("styles.hair"));
+    expect(tabsBlock).toContain("<Pressable");
+    expect(tabsBlock).not.toContain("PressScale");
   });
-  test("compose, settings and bridge details remain reachable", () => {
+
+  test("does not snap the pill to the integer tab when a flick settles", () => {
+    expect(src).not.toContain("progress.value = clampProgress(tab)");
+    // Web has no scroll progress, so it follows the settled page only there.
+    expect(src).toContain('if (Platform.OS === "web") internal.value = clampSettled(tab)');
+    // ...and never writes the page progress that drives the page-body gel.
+    expect(src).toContain('Platform.OS === "web" ? internal : (progressProp ?? internal)');
+  });
+
+  test("dots are circular and the gold pill is not a hardware-texture square", () => {
+    expect(src).toContain("borderRadius: NAV_DOT_SIZE / 2");
+    expect(src).toContain('overflow: "hidden"');
+    expect(src).not.toContain("renderToHardwareTextureAndroid");
+    expect(src).not.toContain("elevation:");
+    expect(src).toContain("android_ripple");
+    expect(src).toContain("transparent");
+  });
+
+  test("stadium layout does not eat 2px of slot width with a Yoga border", () => {
+    expect(src).toContain("NAV_PAGER_WIDTH");
+    expect(src).toContain("NAV_SLOT_WIDTH");
+    expect(src).toContain("NAV_PILL_HEIGHT");
+    const pagerStyle = src.match(/pager: \{[\s\S]*?\n  \},/)?.[0] ?? "";
+    expect(pagerStyle).toContain("width: NAV_PAGER_WIDTH");
+    expect(pagerStyle).not.toContain("borderWidth");
+    expect(src).toContain("styles.hair");
+  });
+
+  test("tab hit targets fill the 44px slot so the 4px dots sit in the pill center", () => {
+    const tabStyle = src.match(/tab: \{[\s\S]*?\n  \},/)?.[0] ?? "";
+    expect(tabStyle).toContain("width: NAV_SLOT_WIDTH");
+    expect(tabStyle).toContain("height: NAV_PILL_HEIGHT");
+    expect(tabStyle).not.toContain("flex: 1");
+    expect(tabStyle).not.toContain("transform");
+  });
+
+  test("gold pill is a UI-thread gel: spring follow, stretch X, squash Y", () => {
+    expect(src).toContain("useFrameCallback");
+    expect(src).toContain("pillStep");
+    expect(src).toContain("pillStretch");
+    expect(src).toContain("scaleX");
+    expect(src).toContain("scaleY");
+    expect(src).not.toContain("progress.value < 0 ? 0");
+    expect(src).toContain("pillStep(follow.value, vel.value, progress.value");
+  });
+
+  test("pager outline uses the same squircle radius as the gold pill", () => {
+    expect(src).toContain("NAV_PAGER_RADIUS");
+    expect(src).toContain("NAV_PILL_RADIUS");
+    expect(NAV_PAGER_RADIUS).toBe(NAV_PILL_RADIUS);
+    expect(src).not.toContain("borderRadius: 23");
+  });
+
+  test("chrome is the 60px bar in Living Night glass with an inset gold pill", () => {
+    expect(src).toContain("NAV_CHROME_HEIGHT");
+    expect(src).toContain("GOLD_68");
+    expect(src).toContain("styles.spec");
+    expect(src).toContain("styles.shade");
+    expect(src).toContain("glass.fillNavStrong");
+    expect(src).toContain("borderTopColor: glass.highlight");
+    expect(src).not.toContain("styles.glow");
+    expect(src).not.toContain("height: 80");
+    // One stroke icon family (Feather), no bitmap icons.
+    expect(src).toContain('name="maximize-2"');
+    expect(src).toContain('name="chevron-down"');
+    expect(src).not.toContain("require(");
+  });
+
+  test("Main, Chat and Settings all mount the bar", () => {
+    for (const screen of ["MainScreen", "ChatScreen", "SettingsScreen"]) {
+      expect(readFileSync(join(import.meta.dir, `../screens/${screen}.tsx`), "utf8")).toContain("<AppNav");
+    }
+  });
+});
+
+describe("workspace header under the bar", () => {
+  const src = readFileSync(join(import.meta.dir, "WorkspaceHeader.tsx"), "utf8");
+  test("names the current pane and keeps compose, settings and approvals reachable", () => {
+    expect(src).toContain("TAB_LABELS[clampTab(tab)]");
     expect(src).toContain('label="New chat"');
     expect(src).toContain('label="Settings"');
-    expect(src).toContain('label="Bridge details"');
-    expect(src).toContain('createConversation');
-    expect(src).toContain('pull?.toggle()');
-    expect(src).toContain('useBridgePullPan');
+    expect(src).toContain("createConversation");
+    expect(src).toContain("pending > 0");
+    expect(src).toContain("s.items.filter(actionable).length");
+    expect(src).toContain('navigation.navigate("Approvals")');
+    expect(src).toContain("backgroundColor: colors.gold");
+    expect(src).not.toContain("...type.cardTitle, color: colors.gold"); // a serif "1" reads as the letter I
+    expect(src).not.toContain("Bridge details"); // the chevron lives in the bar only
+  });
+  test("is mounted on Main directly under the bar", () => {
+    const main = readFileSync(join(import.meta.dir, "../screens/MainScreen.tsx"), "utf8");
+    expect(main.indexOf("<WorkspaceHeader")).toBeGreaterThan(main.indexOf("<AppNav"));
   });
 });
 

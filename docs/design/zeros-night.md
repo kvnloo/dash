@@ -78,9 +78,13 @@ existing splash. The scale:
 
 ## Components
 
-- **Top tabs** (Bots, Chats, Orchestra, plus Approvals when pending): Hanken 15/600.
-  Inactive tabs use text-tertiary. The active tab uses text-primary, with a 4 px gold dot
-  centred below it (not an underline). The badge on Approvals is a gold numeral in Cormorant.
+- **Top navigation bar** (owner decision, 2026-10-20: keep the bar): a 60 px row with the
+  Expand button (opens Voice), the 144×50 three-dot pager with the gold gel pill, and the
+  Bridge details chevron, as before the restyle. Living Night only restyles it: glass-strong
+  fill, glass-rim top edge, hairline, Feather stroke icons in text-secondary. Geometry lives in
+  `golden-nav.ts` and is pinned by mutation tests.
+- **Workspace header** (Main, under the bar): the current pane's name in Cormorant 30, then
+  Approvals with a sans numeral on a gold pill when pending, New chat and Settings icon buttons.
 - **Header icons**: `.z-icon-btn`, a 44 px hit area with a 36 px glass circle and a 1.5 px
   stroke icon in text-secondary. Pressed state is gold. Use one consistent stroke icon family.
 - **Chat rows**: the avatar is a 40 px circle carrying the harness identity orb (a small

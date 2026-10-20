@@ -81,13 +81,13 @@ describe("bridge pull wiring", () => {
   });
 
   test("down chevron and nav pan toggle the overlay instead of pushing Settings", () => {
-    const nav = readFileSync(join(import.meta.dir, "WorkspaceNav.tsx"), "utf8");
+    const nav = readFileSync(join(import.meta.dir, "GelNav.tsx"), "utf8");
     const web = readFileSync(join(import.meta.dir, "AppNav.web.tsx"), "utf8");
     expect(nav).toContain("useBridgePullPan");
-    expect(nav).toContain("pull?.toggle()");
+    expect(nav).toContain("pull.toggle()");
     expect(nav).toContain("Bridge details");
-    expect(web).toContain("./WorkspaceNav");
-    expect(nav).toContain("GestureDetector gesture={pan}");
+    expect(web).toContain("./GelNav");
+    expect(nav).toContain("<GestureDetector gesture={pullPan}>");
   });
 
   test("does not invent a third spring", () => {

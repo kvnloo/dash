@@ -110,6 +110,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
+      <AppNav navigation={navigation} tab={1} />
       <ScreenHeader title="Settings" onBack={() => navigation.navigate("Main")} />
       <KeyboardAvoidingView style={styles.body} behavior="padding">
         <ScrollView

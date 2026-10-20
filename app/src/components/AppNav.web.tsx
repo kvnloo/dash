@@ -1,1 +1,1 @@
-export { AppNav, type AppNavHandle } from "./WorkspaceNav";
+export { AppNav, type AppNavHandle } from "./GelNav";

@@ -34,6 +34,7 @@ import {
   sheetTranslateY,
 } from "./bridge-pull";
 import { GlassSurface } from "./GlassSurface";
+import { NAV_CHROME_HEIGHT } from "./golden-nav";
 import { PressScale } from "./PressScale";
 
 const gel = { ...GEL, reduceMotion: ReduceMotion.System };
@@ -170,8 +171,8 @@ export function BridgePullOverlay() {
   const canRetry = connection.status === "offline" || connection.status === "connecting";
   const hosts = connection.hosts;
   const harnesses = connection.harnesses;
-  // The labelled workspace header has a 56px title row and 52px tabs.
-  const top = insets.top + 108;
+  // The sheet drops from under the top navigation bar, beside its chevron.
+  const top = insets.top + NAV_CHROME_HEIGHT;
 
   const goEdit = () => {
     api.close();
