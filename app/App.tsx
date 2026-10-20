@@ -16,6 +16,8 @@ import { createDeepLinkRouter } from "./src/lib/deep-link";
 import { bridge } from "./src/net/bridge";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { ApprovalsScreen } from "./src/screens/ApprovalsScreen";
+import { ArtifactStageScreen } from "./src/screens/ArtifactStageScreen";
+import { parseStageDeepLink } from "./src/lib/stage-link";
 import { MainScreen } from "./src/screens/MainScreen";
 import { OrchestraDetailScreen } from "./src/screens/OrchestraDetailScreen";
 import { PairScreen } from "./src/screens/PairScreen";
@@ -41,6 +43,7 @@ const linking = {
   config: {
     screens: {
       Pair: "connect",
+      ArtifactStage: "stage",
     },
   },
 };
@@ -73,10 +76,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const openStage = (url: string | null) => {
+      const stage = url ? parseStageDeepLink(url) : null;
+      if (stage && debugNavigationRef.isReady()) debugNavigationRef.navigate("ArtifactStage", { url: stage });
+      return !!stage;
+    };
     void Linking.getInitialURL().then((url) => {
-      deepLinks.handle(url);
+      if (!openStage(url)) deepLinks.handle(url);
     });
     const sub = Linking.addEventListener("url", ({ url }) => {
+      if (openStage(url)) return;
       deepLinks.handle(url);
     });
     return () => sub.remove();
@@ -103,6 +112,7 @@ export default function App() {
               >
                 <Stack.Screen name="Main" component={MainScreen} />
                 <Stack.Screen name="Approvals" component={ApprovalsScreen} />
+                <Stack.Screen name="ArtifactStage" component={ArtifactStageScreen} />
                 <Stack.Screen name="Chat" component={ChatScreen} />
                 <Stack.Screen name="OrchestraDetail" component={OrchestraDetailScreen} />
                 <Stack.Screen name="Voice" component={VoiceScreen} options={{ presentation: "fullScreenModal" }} />
