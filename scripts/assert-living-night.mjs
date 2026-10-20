@@ -1,0 +1,116 @@
+import assert from "node:assert/strict";
+
+/** Rendered phone geometry, not source-string or mock layout assertions. */
+export async function assertLivingNight(page, scenario) {
+  const result = { scenario, viewport: page.viewportSize() };
+  assert.deepEqual(result.viewport, { width: 390, height: 844 });
+  if (scenario.startsWith("main")) {
+    for (const label of ["Bots", "Chats", "Orchestra"]) {
+      const tab = page.getByRole("tab", { name: label, exact: true });
+      await tab.waitFor();
+      assert.equal(await tab.innerText(), label, "top tabs must have visible labels");
+    }
+    const mention = page.getByRole("button", { name: "Mention", exact: true });
+    const box = await mention.boundingBox();
+    assert.ok(box.x >= 12 && box.y >= 0 && box.y + box.height <= 844, "@ stays inside the phone dock");
+    assert.equal(await mention.innerText(), "@", "@ must be a contained glyph, not an add icon");
+    if (scenario.startsWith("main-chats")) {
+      const ended = page.getByText("ended", { exact: true });
+      await ended.waitFor();
+      assert.equal(await ended.evaluate(e => getComputedStyle(e).fontFamily.includes("IBMPlexMono")), true);
+      result.ended = await ended.boundingBox();
+    }
+    if (scenario === "main-chats-search") {
+      const list = page.getByRole("list");
+      await list.waitFor();
+      assert.ok((await list.getByRole("button").count()) >= 3, "focused scope chips visible");
+      result.chips = await list.boundingBox();
+      assert.ok(result.chips.y < box.y, "scope chips open above dock");
+    }
+    if (scenario === "main-orchestra") {
+      const cards = page.getByRole("button").filter({ hasText: "Topology not reported" });
+      for (const card of await cards.all()) {
+        const b = await card.boundingBox();
+        assert.ok(b.width >= 350 && b.x >= 12, "project cards stretch consistently across the phone");
+      }
+    }
+  }
+  if (["chat", "chat-streaming"].includes(scenario)) {
+    const input = page.getByRole("textbox", { name: "Message", exact: true });
+    assert.equal(await input.evaluate(e => e.tagName), "INPUT", "placeholder cannot wrap in a textarea");
+    const boxes = [];
+    for (const name of ["Attach file", "Voice input", scenario === "chat-streaming" ? "Stop" : "Send"]) boxes.push(await page.getByRole("button", { name, exact: true }).boundingBox());
+    for (const b of boxes) assert.ok(b.width >= 44 && b.height >= 44 && b.x + b.width <= 390);
+    assert.ok(boxes[0].x < boxes[1].x && boxes[1].x < boxes[2].x);
+    assert.equal(boxes[0].y, boxes[1].y);
+    assert.equal(boxes[1].y, boxes[2].y);
+    result.composerControls = boxes;
+    result.input = await input.boundingBox();
+    assert.ok(result.input.width > 150, "input keeps usable width next to the single controls row");
+  }
+  if (scenario === "voice") {
+    await page.getByText("Microphone off · Start in z0live", { exact: true }).waitFor();
+    assert.ok((await page.locator('iframe[title$="voice orb, idle"]').count()) === 1, "handoff orb stays idle");
+  }
+  if (scenario === "approvals") {
+    for (const label of ["Pending", "Bulk-ready", "Blocked"]) await page.getByText(label, { exact: true }).waitFor();
+    result.metrics = await page.getByTestId("approval-metrics").boundingBox();
+    assert.ok(result.metrics.width <= 390 && result.metrics.height < 150);
+    await page.getByText("Dry run · Nothing will be posted", { exact: true }).waitFor();
+  }
+  return result;
+}
+
+/** Fixture-only real UI journeys. No microphone grant or approval is submitted. */
+export async function exerciseLivingNight(page, scenario) {
+  const steps = [];
+  if (scenario === "main-chats") {
+    for (const label of ["Bots", "Chats", "Orchestra", "Chats"]) {
+      await page.getByRole("tab", { name: label, exact: true }).click();
+      await page.getByRole("tab", { name: label, selected: true, exact: true }).waitFor();
+    }
+    steps.push("switch Bots / Chats / Orchestra / Chats");
+    await page.getByRole("button", { name: "Bridge details", exact: true }).click();
+    await page.getByRole("button", { name: "Edit bridge", exact: true }).waitFor();
+    const dismiss = page.getByRole("button", { name: "Dismiss bridge details", exact: true });
+    const dim = await dismiss.boundingBox();
+    await dismiss.click({ position: { x: dim.width / 2, y: dim.height - 12 } });
+    await page.getByRole("button", { name: "Edit bridge", exact: true }).waitFor({ state: "hidden" });
+    steps.push("bridge details opens and dismisses without blocking tabs");
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
+    await page.getByRole("button", { name: "Attach file", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await page.getByRole("tab", { name: "Chats", selected: true, exact: true }).waitFor();
+    steps.push("compose opens chat; Back returns to Chats");
+  }
+  if (scenario === "main-chats-search") {
+    await page.getByRole("textbox", { name: "Message", exact: true }).blur();
+    await page.getByRole("list").waitFor({ state: "hidden" });
+    await page.getByRole("textbox", { name: "Message", exact: true }).focus();
+    await page.getByRole("list").waitFor();
+    steps.push("scope chips disappear on blur and reopen on focus");
+  }
+  if (scenario === "chat-streaming") {
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Stop", exact: true }).count(), 0);
+    steps.push("Stop settles fixture turn and restores send");
+  }
+  if (scenario === "voice") {
+    await page.getByRole("radio", { name: "Voice appearance: chatgpt", exact: true }).click();
+    await page.locator('iframe[title="chatgpt voice orb, idle"]').waitFor();
+    await page.getByText("Microphone off · Start in z0live", { exact: true }).waitFor();
+    steps.push("appearance switches without claiming microphone activity");
+  }
+  if (scenario === "approvals") {
+    await page.getByRole("button", { name: "Select all bulk-safe", exact: true }).click();
+    const approve = page.getByRole("button", { name: "Approve selected (1)", exact: true });
+    assert.equal(await approve.isEnabled(), true);
+    await approve.click();
+    await page.getByText("Approve 1 item?", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByText("Approve 1 item?", { exact: true }).waitFor({ state: "hidden" });
+    steps.push("bulk selection opens exact confirmation; Cancel submits nothing");
+  }
+  return steps;
+}

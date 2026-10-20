@@ -41,7 +41,7 @@ const ProfileRow = memo(function ProfileRow({
       <HarnessAvatar
         name={profile.name}
         harnessId={profile.harness}
-        size={44}
+        size={40}
         stateId={runtimeStateFromAgent(profile.online ? "available" : "offline")}
       />
       <View style={styles.main}>
@@ -54,7 +54,7 @@ const ProfileRow = memo(function ProfileRow({
         <Text style={styles.role} numberOfLines={1}>
           {profile.role}
         </Text>
-        <Text style={styles.desc} numberOfLines={1}>
+        <Text style={[styles.desc, (profile.description.startsWith("/") || profile.description.startsWith("~/")) && type.mono]} numberOfLines={1}>
           {profile.description}
         </Text>
       </View>
@@ -198,8 +198,8 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   sectionText: { flex: 1, minWidth: 0 },
-  sectionTitle: { color: colors.textMuted, ...type.small, textTransform: "uppercase", letterSpacing: 0.8 },
-  sectionSub: { color: colors.textFaint, fontSize: 12, marginTop: 2 },
+  sectionTitle: { color: colors.text, ...type.section },
+  sectionSub: { color: colors.textTertiary, ...type.mono, marginTop: 2 },
   profileCard: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -208,15 +208,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  offline: { opacity: 0.42 },
+  offline: { opacity: 0.7 },
   main: { flex: 1, minWidth: 0 },
   top: { flexDirection: "row", alignItems: "center", gap: space.sm },
   title: { color: colors.text, ...type.heading, flex: 1 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusOn: { backgroundColor: colors.ok },
+  statusOn: { backgroundColor: colors.gold },
   statusOff: { backgroundColor: colors.textFaint },
-  role: { color: colors.textMuted, ...type.small, marginTop: 4, textTransform: "none", letterSpacing: 0 },
-  desc: { color: colors.textFaint, fontSize: 13, marginTop: 6, lineHeight: 18 },
+  role: { color: colors.textTertiary, ...type.mono, marginTop: 4, textTransform: "none", letterSpacing: 0 },
+  desc: { color: colors.textTertiary, ...type.small, marginTop: 4 },
   empty: { paddingTop: "40%", paddingHorizontal: space.xl, alignItems: "center" },
   emptyTitle: { color: colors.text, ...type.heading, marginBottom: space.sm },
   emptySub: { color: colors.textMuted, ...type.body, textAlign: "center" },

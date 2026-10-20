@@ -3,6 +3,7 @@ import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../../catalog/runtime-state";
 import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../../catalog/visual";
+import { GlassSurface } from "../../components/GlassSurface";
 import { EffortOrbs } from "../../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../../components/TopologyBadge";
 import { PressScale } from "../../components/PressScale";
@@ -40,6 +41,7 @@ const Card = memo(function Card({
       style={styles.card}
       accessibilityRole="button"
     >
+      <GlassSurface borderRadius={14} style={{ alignSelf: "stretch" }} contentStyle={{ padding: 16 }}>
       <View style={styles.cardTop}>
         <View style={styles.cardTitles}>
           <Text style={styles.name} numberOfLines={1}>
@@ -53,7 +55,7 @@ const Card = memo(function Card({
           <OrchestraCore hue={provider.hue} size={36} />
         </EffortOrbs>
       </View>
-      <TopologyBadge topologyId={item.topologyId} providerId={item.providerId} width={220} />
+      {item.topologyId === "unknown" ? <Text style={{ ...type.mono, color: colors.textTertiary, marginTop: 16 }}>Topology not reported</Text> : <TopologyBadge topologyId={item.topologyId} providerId={item.providerId} width={180} />}
       <View style={styles.footer}>
         <Text style={styles.meta}>
           {topology.label} · {item.agentRows.length} agent{item.agentRows.length === 1 ? "" : "s"} · {item.chatIds.length} chat
@@ -61,6 +63,7 @@ const Card = memo(function Card({
         </Text>
         <Text style={styles.time}>{timeAgo(item.updatedAt)}</Text>
       </View>
+      </GlassSurface>
     </PressScale>
   );
 });
@@ -139,18 +142,17 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
 const styles = StyleSheet.create({
   list: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: 120 },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: space.lg,
+    borderRadius: 14,
+    alignItems: "stretch",
     marginBottom: space.md,
   },
   cardTop: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
   cardTitles: { flex: 1, minWidth: 0 },
-  name: { color: colors.text, ...type.heading },
-  sub: { color: colors.textMuted, ...type.small, marginTop: 2, textTransform: "none", letterSpacing: 0 },
+  name: { color: colors.text, ...type.cardTitle },
+  sub: { color: colors.textTertiary, ...type.mono, marginTop: 2, textTransform: "none", letterSpacing: 0 },
   footer: { flexDirection: "row", justifyContent: "space-between", marginTop: space.md },
-  meta: { color: colors.textFaint, fontSize: 12, flex: 1, marginRight: space.sm },
-  time: { color: colors.textFaint, fontSize: 12 },
+  meta: { color: colors.textTertiary, ...type.small, flex: 1, marginRight: space.sm },
+  time: { color: colors.textTertiary, ...type.mono },
   empty: { paddingTop: "35%", paddingHorizontal: space.xl, alignItems: "center" },
   emptyTitle: { color: colors.text, ...type.heading, marginBottom: space.sm },
   emptySub: { color: colors.textMuted, ...type.body, textAlign: "center" },

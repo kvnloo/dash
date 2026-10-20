@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppNav } from "../components/AppNav";
-import { GlassSurface } from "../components/GlassSurface";
+import { Canvas } from "../components/Canvas";
+import { ScreenHeader } from "../components/ScreenHeader";
+import { VoiceOrb } from "../components/VoiceOrb";
+import { presetForHarness, type OrbPreset } from "../components/orb-html";
+import { store } from "../store/app";
+import { PrimaryButton } from "../components/PrimaryButton";
 import { launchSharedVoice, type VoiceLaunchResult } from "../lib/voice-launch";
 import type { ScreenProps } from "../navigation";
 import { colors, radius, space, type } from "../theme";
@@ -15,6 +19,9 @@ type VoiceView =
 
 export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const harness = store.use(s => s.conversations.find(c => c.id === s.activeId)?.harness ?? s.settings?.harness ?? "hermes");
+  const harnessName = store.use(s => s.connection.harnesses.find(h => h.id === harness)?.name ?? harness);
+  const [preset, setPreset] = useState<OrbPreset | null>(null);
   const [view, setView] = useState<VoiceView>({ kind: "shared" });
 
   const openVoice = async (): Promise<void> => {
@@ -38,24 +45,17 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.xl }]}>
-      <AppNav navigation={props.navigation} tab={1} />
+      <Canvas /><ScreenHeader title="Voice" onBack={() => props.navigation.navigate("Main")} />
       <View style={styles.content}>
-        <Text style={styles.title}>Voice</Text>
-        <Text style={styles.caption}>Talk with z0live</Text>
+        <Text style={styles.title}>{harnessName}</Text>
+        <VoiceOrb preset={preset ?? presetForHarness(harness)} phase="idle" size={190} />
+        <Text style={styles.caption}>Say something…</Text>
+        <Text style={styles.note}>Microphone off · Start in z0live</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 4 }}>{(["chatgpt", "gemini", "siri", "alexa", "elevenlabs"] satisfies OrbPreset[]).map((id, i) => <Pressable key={id} accessibilityRole="radio" accessibilityLabel={`Voice appearance: ${id}`} accessibilityState={{ checked: (preset ?? presetForHarness(harness)) === id }} aria-checked={(preset ?? presetForHarness(harness)) === id} onPress={() => setPreset(id)} style={{ minHeight: 44, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.small, color: (preset ?? presetForHarness(harness)) === id ? colors.gold : colors.textTertiary }}>{["Atmosphere", "Spectrum", "Perimeter", "Light ring", "ElevenLabs"][i]}</Text></Pressable>)}</View>
         <Text accessibilityLiveRegion="polite" style={[styles.message, unavailable && styles.error]}>
           {message}
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open z0live voice"
-          disabled={view.kind === "opening"}
-          onPress={() => void openVoice()}
-          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-        >
-          <GlassSurface variant="raised" borderRadius={radius.pill} contentStyle={styles.actionContent}>
-            <Text style={styles.actionText}>{view.kind === "opening" ? "Opening…" : "Open z0live"}</Text>
-          </GlassSurface>
-        </Pressable>
+        <View style={styles.action}><PrimaryButton accessibilityLabel="Open z0live voice" disabled={view.kind === "opening"} onPress={() => void openVoice()} label={view.kind === "opening" ? "Opening…" : "Open z0live"} /></View>
         <Pressable
           accessibilityRole="button"
           disabled={view.kind === "opening"}
@@ -72,7 +72,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: space.xl, gap: space.lg },
+  content: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: space.xl, gap: space.md },
   title: { ...type.title, color: colors.text },
   caption: { ...type.body, color: colors.textMuted, textAlign: "center" },
   message: { ...type.body, color: colors.text, textAlign: "center" },

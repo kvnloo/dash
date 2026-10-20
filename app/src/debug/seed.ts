@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { Connection, Settings } from "../model";
+import { applyGateMessage } from "../store/approvals";
+import type { Connection, Conversation, Settings } from "../model";
 import { DEMO_CONVERSATIONS } from "../mock/seed";
 import { saveSettings, setConnection, store } from "../store/app";
 
@@ -68,6 +69,11 @@ export async function clearDebugPersistence(): Promise<void> {
 }
 
 export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
+  // Screenshot-only proposals. They never contact a bridge and cannot authorize posting.
+  applyGateMessage({ type: "gate_snapshot", dry_run: true, owner_decisions: false, items: [
+    { id: "00000000-0000-4000-8000-000000000001", kind: "pr_comment", state: "pending", target: { repo: "kvnloo/dash", number: 67, title: "Review the pairing fix" }, body: "The pairing error now stays on screen until the next attempt. The regression test covers a refused connection and retry.", evidence: [{ label: "Test evidence", url_or_path: "docs/evidence/pairing.md" }], origin: { agent: "Hermes", session: "debug", created_at: "2026-10-20T12:00:00Z" }, policy: { bulk_ok: true, requires_human_text: false, reason: "Existing review · bounded follow-up", rules: [] }, trail: [] },
+    { id: "00000000-0000-4000-8000-000000000002", kind: "pr_comment", state: "stale", target: { repo: "kvnloo/dash", number: 66, title: "Refresh changed evidence" }, body: "This proposal needs fresh evidence before approval.", evidence: [{ label: "Changed head", url_or_path: "docs/evidence/head.md" }], origin: { agent: "Codex", session: "debug", created_at: "2026-10-20T12:00:00Z" }, policy: { bulk_ok: false, requires_human_text: false, reason: "Target changed since review", rules: [] }, trail: [] },
+  ] });
   if (variant === "unpaired") {
     store.set((s) => ({
       ...s,
@@ -105,7 +111,10 @@ export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
 
   store.set((s) => ({
     ...s,
-    conversations: DEMO_CONVERSATIONS,
+    conversations: [...DEMO_CONVERSATIONS, ...([{
+      id: "debug-ended", harness: "hermes", title: "Review the session handoff", createdAt: Date.now() - 86400000, updatedAt: Date.now() - 86400000, stale: true,
+      messages: [{ id: "debug-ended-reply", role: "assistant", text: "The handoff is saved. This host session has ended.", at: Date.now() - 86400000, state: "done", turnId: "debug-ended-turn", seq: 0 }],
+    }] satisfies (Conversation & { stale?: boolean })[])],
     activeId: DEMO_CONVERSATIONS[0]?.id ?? null,
   }));
 }

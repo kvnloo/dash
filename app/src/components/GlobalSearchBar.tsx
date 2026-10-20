@@ -1,6 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { memo, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import Animated, { LinearTransition } from "react-native-reanimated";
 import {
   applyScopePrefix,
@@ -38,7 +38,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
   const parsed = useMemo(() => parseSearchQuery(value), [value]);
-  const suggestions = useMemo(() => filterScopeSuggestions(value), [value]);
+  const suggestions = useMemo(() => value.trim() ? filterScopeSuggestions(value) : [...filterScopeSuggestions("@").filter(x => x.scope !== "product"), ...filterScopeSuggestions("/").filter(x => x.scope === "file")], [value]);
   const composingScope = parsed.mode === "mention" || parsed.mode === "slash";
   const showScopes = focused && (composingScope || suggestions.length > 0);
   const canSend = value.trim().length > 0;
@@ -64,8 +64,8 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
                 scaleTo={PRESS_SCALE.control}
                 accessibilityRole="button"
               >
-                <GlassSurface variant="raised" blur={false} borderRadius={radius.lg} style={styles.suggestion}>
-                  <Text style={styles.suggestionText}>{label}</Text>
+                <GlassSurface variant="raised" blur={false} borderRadius={radius.pill} style={styles.suggestion}>
+                  <Text style={styles.suggestionText}>{label === "@bots" ? "@bot" : label === "@conversation" ? "@chat" : label === "/file" ? "@file" : label}</Text>
                 </GlassSurface>
               </PressScale>
             </Animated.View>
@@ -73,7 +73,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
         </Animated.View>
       ) : null}
 
-      <GlassSurface borderRadius={radius.pill} style={styles.shell} contentStyle={styles.field}>
+      <GlassSurface blur borderRadius={radius.pill} style={[styles.shell, focused && { borderWidth: 1, borderColor: colors.gold }]} contentStyle={styles.field}>
         <PressScale
           onPress={insertMention}
           scaleTo={PRESS_SCALE.control}
@@ -82,7 +82,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
           accessibilityLabel="Mention"
           hitSlop={8}
         >
-          <Ionicons name="add" size={22} color={colors.textMuted} />
+          <Text style={{ ...type.cardTitle, color: colors.gold }}>@</Text>
         </PressScale>
         <TextInput
           ref={inputRef}
@@ -116,7 +116,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
               accessibilityLabel="Send"
               hitSlop={8}
             >
-              <Ionicons name="arrow-up" size={18} color={colors.onAccent} />
+              <Feather name="arrow-up" size={18} color={colors.onAccent} />
             </PressScale>
           </Animated.View>
         ) : (
@@ -128,7 +128,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
             accessibilityLabel="Voice input"
             hitSlop={8}
           >
-            <Ionicons name="mic-outline" size={22} color={colors.textMuted} />
+            <Feather name="mic" size={22} color={colors.textMuted} />
           </PressScale>
         )}
       </GlassSurface>
@@ -143,27 +143,29 @@ export function applyScopeMention(current: string, label: string): string {
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: space.md, paddingBottom: space.sm, gap: space.sm },
   wrapBottom: { paddingTop: space.xs, paddingBottom: 0 },
-  shell: { minHeight: 48 },
+  shell: { height: 52 },
   field: {
     flexDirection: "row",
     alignItems: "center",
     paddingLeft: 6,
     paddingRight: 6,
     paddingVertical: 6,
-    minHeight: 48,
+    height: 52,
   },
   sideIcon: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
   input: {
     flex: 1,
+    minWidth: 0,
     color: colors.text,
     ...type.body,
     paddingVertical: 8,
     paddingHorizontal: 4,
+    ...(Platform.OS === "web" ? { outlineWidth: 0 } : null),
   },
   send: {
     width: 34,
@@ -174,6 +176,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   suggestions: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  suggestion: { paddingHorizontal: space.md, paddingVertical: 8 },
+  suggestion: { paddingHorizontal: space.md, paddingVertical: 12 },
   suggestionText: { color: colors.text, ...type.small, textTransform: "none", letterSpacing: 0, fontWeight: "600" },
 });

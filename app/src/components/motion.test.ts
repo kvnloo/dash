@@ -57,12 +57,13 @@ describe("PressScale wiring", () => {
     expect(src).toContain('justifyContent: "center"');
   });
 
-  test("composer and search send pop in without FlashList entering", () => {
+  test("composer controls stay mounted; search pops in without FlashList entering", () => {
     const composer = readFileSync(join(import.meta.dir, "Composer.tsx"), "utf8");
     const search = readFileSync(join(import.meta.dir, "GlobalSearchBar.tsx"), "utf8");
     const chats = readFileSync(join(import.meta.dir, "../screens/panes/ChatsPane.tsx"), "utf8");
     const bots = readFileSync(join(import.meta.dir, "../screens/panes/BotsPane.tsx"), "utf8");
-    expect(composer).toContain("popIn");
+    expect(composer).toContain("styles.controls");
+    expect(composer).toContain("multiline={false}");
     expect(composer).toContain("PressScale");
     expect(search).toContain("staggerUp");
     expect(search).toContain("popIn");
@@ -71,10 +72,10 @@ describe("PressScale wiring", () => {
     expect(bots).not.toContain("entering=");
   });
 
-  test("native AppNav press scales circles, not a glow overlay", () => {
-    const nav = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(nav).toContain("PressScale");
-    expect(nav).toContain("PRESS_SCALE.nav");
+  test("header icons use the shared glass press feedback, not a glow overlay", () => {
+    const nav = readFileSync(join(import.meta.dir, "ScreenHeader.tsx"), "utf8");
+    expect(nav).toContain("pressed ? colors.gold");
+    expect(nav).toContain("styles.circle");
     expect(nav).not.toContain("GOLD_GLOW");
     expect(nav).not.toContain("styles.glow");
   });

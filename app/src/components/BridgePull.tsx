@@ -34,7 +34,6 @@ import {
   sheetTranslateY,
 } from "./bridge-pull";
 import { GlassSurface } from "./GlassSurface";
-import { NAV_CHROME_HEIGHT, NAV_PAGER_RADIUS } from "./golden-nav";
 import { PressScale } from "./PressScale";
 
 const gel = { ...GEL, reduceMotion: ReduceMotion.System };
@@ -145,7 +144,6 @@ export function BridgePullOverlay() {
   const connection = store.use((s) => s.connection);
   const settings = store.use((s) => s.settings);
   const sheetPan = useBridgePullPan();
-  const hitPan = useBridgePullPan();
   const [armed, setArmed] = useState(false);
 
   useAnimatedReaction(
@@ -172,7 +170,8 @@ export function BridgePullOverlay() {
   const canRetry = connection.status === "offline" || connection.status === "connecting";
   const hosts = connection.hosts;
   const harnesses = connection.harnesses;
-  const top = insets.top + NAV_CHROME_HEIGHT;
+  // The labelled workspace header has a 56px title row and 52px tabs.
+  const top = insets.top + 108;
 
   const goEdit = () => {
     api.close();
@@ -182,7 +181,7 @@ export function BridgePullOverlay() {
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-      <Animated.View pointerEvents={armed ? "auto" : "none"} style={[styles.dim, { top }, dimStyle]}>
+      <Animated.View pointerEvents={armed ? "auto" : "none"} aria-hidden={!armed} accessibilityElementsHidden={!armed} importantForAccessibility={armed ? "auto" : "no-hide-descendants"} style={[styles.dim, { top }, dimStyle]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={() => {
@@ -193,17 +192,12 @@ export function BridgePullOverlay() {
           accessibilityLabel="Dismiss bridge details"
         />
       </Animated.View>
-      <GestureDetector gesture={hitPan}>
-        <View
-          pointerEvents={armed ? "none" : "auto"}
-          collapsable={false}
-          style={[styles.hit, { top }]}
-          accessibilityElementsHidden
-        />
-      </GestureDetector>
       <GestureDetector gesture={sheetPan}>
         <Animated.View
           pointerEvents={armed ? "auto" : "none"}
+          aria-hidden={!armed}
+          accessibilityElementsHidden={!armed}
+          importantForAccessibility={armed ? "auto" : "no-hide-descendants"}
           style={[styles.sheetWrap, { top: top - 2 }, sheetStyle]}
           onLayout={(e) => {
             const h = e.nativeEvent.layout.height;
@@ -212,7 +206,8 @@ export function BridgePullOverlay() {
         >
           <GlassSurface
             variant="nav"
-            borderRadius={NAV_PAGER_RADIUS}
+            blur
+            borderRadius={radius.md}
             style={styles.sheet}
             contentStyle={styles.sheetInner}
             accessibilityLabel="Bridge details"
@@ -306,22 +301,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "#000",
   },
-  hit: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 24,
-  },
   sheetWrap: {
     position: "absolute",
     left: space.lg,
     right: space.lg,
   },
-  sheet: {
-    overflow: "hidden",
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-  },
+  sheet: { overflow: "hidden" },
   sheetInner: {
     paddingHorizontal: space.lg,
     paddingTop: space.md,
@@ -336,12 +321,12 @@ const styles = StyleSheet.create({
   },
   statusText: { flex: 1, minWidth: 0 },
   title: { color: colors.ink, ...type.heading },
-  meta: { color: colors.ink3, ...type.small, marginTop: 2 },
+  meta: { color: colors.ink3, ...type.mono, marginTop: 2 },
   label: { color: colors.ink3, ...type.label, marginBottom: 6 },
   section: { gap: 6 },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 22 },
   rowTitle: { color: colors.ink, ...type.small, flexShrink: 1 },
-  rowMeta: { color: colors.ink3, ...type.small, marginLeft: "auto", maxWidth: "46%" },
+  rowMeta: { color: colors.ink3, ...type.mono, marginLeft: "auto", maxWidth: "46%" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     flexDirection: "row",

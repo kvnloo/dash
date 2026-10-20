@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { effortIdForTurn, lastAssistantState, runtimeStateFromAgent, runtimeStateFromOrchestra, runtimeStateFromTurn } from "../catalog/runtime-state";
@@ -108,9 +108,10 @@ export const SearchResultRow = memo(function SearchResultRow({
   onLongPress?(item: SearchResult): void;
 }) {
   const title = resultTitle(item);
+  const stale = item.kind === "conversation" && "stale" in item.conversation && item.conversation.stale === true;
   const meta =
     item.kind === "conversation"
-      ? timeAgo(item.conversation.updatedAt)
+      ? stale ? "ended" : timeAgo(item.conversation.updatedAt)
       : item.kind === "product"
         ? timeAgo(item.project.updatedAt)
         : item.kind === "bot" && item.profile.online
@@ -136,8 +137,8 @@ export const SearchResultRow = memo(function SearchResultRow({
     >
       {showFileIcon ? (
         <GlassSurface variant="chip" blur={false} borderRadius={24} style={styles.iconWrap}>
-          <Ionicons
-            name={item.kind === "file" ? "document-text-outline" : "construct-outline"}
+          <Feather
+            name={item.kind === "file" ? "file-text" : "tool"}
             size={22}
             color={colors.textMuted}
           />
@@ -152,12 +153,12 @@ export const SearchResultRow = memo(function SearchResultRow({
       )}
       <View style={styles.main}>
         <View style={styles.top}>
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={[styles.title, stale && { color: colors.textTertiary }]} numberOfLines={1}>
             {title}
           </Text>
           {meta ? <Text style={styles.meta}>{meta}</Text> : null}
         </View>
-        <Text style={styles.subtitle} numberOfLines={1}>
+        <Text style={[styles.subtitle, stale && { color: colors.textTertiary }]} numberOfLines={1}>
           {item.subtitle}
         </Text>
         <Text style={styles.kind}>{KIND_LABEL[item.kind]}</Text>
@@ -180,14 +181,11 @@ const styles = StyleSheet.create({
   main: { flex: 1, minWidth: 0 },
   top: { flexDirection: "row", alignItems: "center", gap: space.sm },
   title: { color: colors.text, ...type.heading, flex: 1 },
-  meta: { color: colors.textMuted, ...type.small, textTransform: "none", letterSpacing: 0 },
+  meta: { color: colors.textTertiary, ...type.mono, textTransform: "none", letterSpacing: 0 },
   subtitle: { color: colors.textMuted, ...type.small, marginTop: 2, textTransform: "none", letterSpacing: 0 },
   kind: {
     color: colors.textFaint,
-    fontSize: 11,
-    fontWeight: "600",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+    ...type.label,
     marginTop: 4,
   },
 });

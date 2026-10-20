@@ -1,13 +1,9 @@
 import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { effortIdForTurn, runtimeStateFromTurn } from "../catalog/runtime-state";
-import { loadVisualCatalog, providerIdForHarness, resolveEffort, resolveProvider, resolveRuntimeState } from "../catalog/visual";
 import type { AssistantMessage, AssistantState, Message } from "../model";
 import { replyText, useKeyed } from "../store/text";
 import { colors, radius, space, type } from "../theme";
-import { EffortOrbs } from "./EffortOrbs";
 import { Markdown } from "./Markdown";
-import { OrchestraCore } from "./TopologyBadge";
 
 export const MessageRow = memo(function MessageRow({
   message,
@@ -35,15 +31,7 @@ export const MessageRow = memo(function MessageRow({
 });
 
 function ThinkingMarker({ harnessId, turnState }: { harnessId?: string; turnState: AssistantState }) {
-  const catalog = loadVisualCatalog();
-  const provider = resolveProvider(catalog, providerIdForHarness(harnessId ?? ""));
-  const effort = resolveEffort(catalog, effortIdForTurn({ turnState }));
-  const state = resolveRuntimeState(catalog, runtimeStateFromTurn({ turnState }));
-  return (
-    <EffortOrbs hue={provider.hue} size={22} effort={effort} state={state}>
-      <OrchestraCore hue={provider.hue} size={16} />
-    </EffortOrbs>
-  );
+  return <View accessibilityLabel={turnState} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: turnState === "done" ? colors.ok : turnState === "error" ? colors.danger : colors.gold }} />;
 }
 
 function AssistantBody({ message, harnessId }: { message: AssistantMessage; harnessId?: string }) {
@@ -71,7 +59,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
         </>
       );
     case "done":
-      return <Markdown text={message.text} />;
+      return <><Markdown text={message.text} />{message.status ? <View style={styles.statusRow}><ThinkingMarker turnState="done" /><Text style={styles.statusText}>Done · {message.status}</Text></View> : null}</>;
     case "interrupted":
       return (
         <>
@@ -112,7 +100,10 @@ const styles = StyleSheet.create({
     maxWidth: "82%",
     backgroundColor: colors.bubble,
     borderRadius: radius.lg,
-    borderBottomRightRadius: 6,
+    borderBottomRightRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.hair,
+    borderTopColor: "rgba(255,255,255,.18)",
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
@@ -120,7 +111,7 @@ const styles = StyleSheet.create({
   assistantRow: { paddingHorizontal: space.lg, paddingVertical: space.sm },
   assistantText: { color: colors.text, ...type.body },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, minHeight: 22 },
-  statusText: { color: colors.textMuted, ...type.small, flexShrink: 1 },
+  statusText: { color: colors.textTertiary, ...type.mono, flexShrink: 1 },
   noteText: { color: colors.textMuted, ...type.small, flexShrink: 1 },
   errorText: { color: colors.danger, ...type.small, flexShrink: 1 },
 });

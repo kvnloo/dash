@@ -2,6 +2,7 @@ import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { effortIdForTurn, lastAssistantState, runtimeStateFromTurn } from "../../catalog/runtime-state";
+import { threadAppearance } from "../../components/thread-appearance";
 import { HarnessAvatar } from "../../components/HarnessAvatar";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
@@ -23,16 +24,20 @@ const Row = memo(function Row({
   active,
   harnessName,
   connectionStatus,
+  live = false,
   onPress,
   onLongPress,
 }: {
-  item: Conversation;
+  item: Conversation & { stale?: boolean };
   active: boolean;
   harnessName: string;
   connectionStatus: ConnectionStatus;
+  live?: boolean;
   onPress(id: string): void;
   onLongPress(id: string): void;
 }) {
+  const appearance = threadAppearance({ stale: item.stale, live });
+  const stale = appearance.stale;
   const turnState = lastAssistantState(item.messages);
   const stateId = runtimeStateFromTurn({ turnState, connectionStatus });
   return (
@@ -40,10 +45,11 @@ const Row = memo(function Row({
       onPress={() => onPress(item.id)}
       onLongPress={() => onLongPress(item.id)}
       delayLongPress={350}
-      style={[styles.row, active && styles.rowActive]}
+      style={[styles.row, active && !stale && styles.rowActive]}
       accessibilityRole="button"
     >
       <HarnessAvatar
+        size={40}
         name={harnessName}
         harnessId={item.harness}
         effortId={effortIdForTurn({ turnState })}
@@ -51,23 +57,25 @@ const Row = memo(function Row({
       />
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
+          <Text style={[styles.rowTitle, stale && styles.stale]} numberOfLines={1}>
             {item.title || harnessName}
           </Text>
-          <Text style={styles.rowTime}>{timeAgo(item.updatedAt)}</Text>
+          {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
+          <Text style={styles.rowTime}>{stale ? "ended" : timeAgo(item.updatedAt)}</Text>
         </View>
-        <Text style={styles.rowPreview} numberOfLines={1}>
+        <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
           {preview(item)}
         </Text>
       </View>
+      <View style={styles.hairline} />
     </PressScale>
   );
 });
 
-const SectionHeader = memo(function SectionHeader({ title }: { title: string }) {
+const SectionHeader = memo(function SectionHeader({ title, count }: { title: string; count: number }) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionTitle}>{title}</Text><Text style={styles.rowTime}>{count}</Text>
     </View>
   );
 });
@@ -77,6 +85,7 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
   const activeId = store.use((s) => s.activeId);
   const harnesses = store.use((s) => s.connection.harnesses);
   const connectionStatus = store.use((s) => s.connection.status);
+  const hosts = store.use((s) => s.connection.hosts);
 
   const items = useMemo((): ChatsListItem[] => {
     const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -127,7 +136,7 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<ChatsListItem>) => {
-      if (item.kind === "section") return <SectionHeader title={item.title} />;
+      if (item.kind === "section") return <SectionHeader title={item.title} count={conversations.filter(c => dateGroupLabel(c.updatedAt) === item.title).length} />;
       const c = item.conversation;
       return (
         <Row
@@ -135,12 +144,13 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
           active={c.id === activeId}
           harnessName={harnesses.find((h) => h.id === c.harness)?.name ?? c.harness}
           connectionStatus={connectionStatus}
+          live={Boolean(c.sessionId && hosts.some(host => host.online && (!c.targetHostId || host.id === c.targetHostId) && host.agents.some(agent => agent.sessionId === c.sessionId && agent.kind === c.harness && agent.status === "running")))}
           onPress={open}
           onLongPress={feedbackOn ? onFeedback : remove}
         />
       );
     },
-    [activeId, connectionStatus, feedbackOn, harnesses, onFeedback, open, remove],
+    [activeId, conversations, connectionStatus, feedbackOn, harnesses, hosts, onFeedback, open, remove],
   );
 
   const getItemType = useCallback((item: ChatsListItem) => item.kind, []);
@@ -167,25 +177,28 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
   section: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: space.lg,
     paddingTop: space.lg,
     paddingBottom: space.sm,
   },
-  sectionTitle: { color: colors.textMuted, ...type.small, textTransform: "none", letterSpacing: 0, fontWeight: "600" },
+  sectionTitle: { color: colors.text, ...type.section },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
     paddingHorizontal: space.lg,
     paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+
   },
-  rowActive: { backgroundColor: colors.surface },
+  rowActive: { backgroundColor: "rgba(215,185,134,.035)" },
+  stale: { color: colors.textTertiary },
+  liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.gold },
+  hairline: { position: "absolute", left: 68, right: 16, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.hair },
   rowMain: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
   rowTitle: { color: colors.text, ...type.heading, flex: 1 },
-  rowTime: { color: colors.textMuted, ...type.small, textTransform: "none", letterSpacing: 0 },
+  rowTime: { color: colors.textTertiary, ...type.mono, textTransform: "none", letterSpacing: 0 },
   rowPreview: { color: colors.textMuted, ...type.small, marginTop: 2, textTransform: "none", letterSpacing: 0 },
   empty: { paddingTop: "40%", alignItems: "center" },
   emptyText: { color: colors.textMuted, ...type.body },

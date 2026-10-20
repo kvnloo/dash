@@ -321,122 +321,45 @@ describe("pinned geometry (mutation canaries)", () => {
     expect(PILL_TRAVEL).toBe(0.55);
   });
 
-  test("dots sit in the pill center: three equal slots, not stuck to the top", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    const tabs = src.match(/tabs: \{[\s\S]*?\n  \},/)?.[0] ?? "";
-    const tab = src.match(/tab: \{[\s\S]*?\n  \},/)?.[0] ?? "";
-    expect(tabs).toContain("top: NAV_PAGER_PAD");
-    expect(tabs).toContain("height: NAV_PILL_HEIGHT");
-    expect(tabs).toContain("width: NAV_SLOT_WIDTH * 3");
-    expect(tabs).toContain('flexDirection: "row"');
-    expect(tab).toContain("width: NAV_SLOT_WIDTH");
-    expect(tab).toContain("height: NAV_PILL_HEIGHT");
-    expect(tab).toContain('alignItems: "center"');
-    expect(tab).toContain('justifyContent: "center"');
-    const dot = src.match(/dot: \{[\s\S]*?\n  \},/)?.[0] ?? "";
-    expect(dot).toContain('position: "absolute"');
-    expect(dot).toContain("top: NAV_DOT_TOP");
-    expect(dot).toContain("left: NAV_DOT_LEFT");
-    expect(dot).toContain("width: NAV_DOT_SIZE");
-    expect(dot).toContain("height: NAV_DOT_SIZE");
-    expect(src).toContain("borderRadius: NAV_DOT_SIZE / 2");
-    expect(tabs).not.toContain("top: 0");
+  test("Living Night uses a centred 4px dot below the selected label", () => {
+    const src = readFileSync(join(import.meta.dir, "WorkspaceNav.tsx"), "utf8");
+    expect(src).toContain('width: 4, height: 4');
+    expect(src).toContain('borderRadius: 2');
+    expect(src).toContain('bottom: 5');
+    expect(src).toContain('alignItems: "center"');
+    expect(src).not.toContain('styles.pill');
   });
 });
 
-describe("native AppNav wiring", () => {
-  test("does not drive the pill through a WebView JS bridge", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+// Intentional visual contract change: labelled top tabs replace the old dot-only gel.
+// Pure pager/gel numerical tests remain above and below this renderer contract.
+describe("Living Night navigation wiring", () => {
+  const src = readFileSync(join(import.meta.dir, "WorkspaceNav.tsx"), "utf8");
+  test("native and web share the same accessible native renderer", () => {
+    for (const file of ["AppNav.tsx", "AppNav.web.tsx"]) expect(readFileSync(join(import.meta.dir, file), "utf8")).toContain('./WorkspaceNav');
     expect(src).not.toContain("react-native-webview");
     expect(src).not.toContain("injectJavaScript");
-    expect(src).not.toContain("androidLayerType");
-    expect(src).toContain("react-native-reanimated");
-    expect(src).toContain("indicatorTranslateX");
-    expect(src).toContain("setProgress");
   });
-
-  test("paints three 4dp dots as native views above the gold pill", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("NAV_DOT_SIZE");
-    expect(src).toContain("#211b10");
-    expect(src).toContain("#837F74");
-    const tabsBlock = src.slice(src.indexOf("TAB_LABELS.map"), src.indexOf("styles.hair"));
-    expect(tabsBlock).toContain("<Pressable");
-    expect(tabsBlock).not.toContain("PressScale");
+  test("labels and selected state are visible, not only accessibility labels", () => {
+    expect(src).toContain('["Bots", "Chats", "Orchestra"]');
+    expect(src).toContain('accessibilityRole="tab"');
+    expect(src).toContain('selected: i === tab');
+    expect(src).toContain('>{label}</Text>');
+    expect(src).toContain('minHeight: 44');
   });
-
-  test("does not snap the pill to the integer tab when a flick settles", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).not.toContain("progress.value = clampProgress(tab)");
+  test("pending approvals get a serif gold numeral and conditional fourth tab", () => {
+    expect(src).toContain('pending > 0');
+    expect(src).toContain('s.items.filter(actionable).length');
+    expect(src).toContain('...type.cardTitle, color: colors.gold');
+    expect(src).toContain('navigation.navigate("Approvals")');
   });
-
-  test("dots are circular and the gold pill is not a hardware-texture square", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("borderRadius: NAV_DOT_SIZE / 2");
-    expect(src).toContain("overflow: \"hidden\"");
-    expect(src).not.toContain("renderToHardwareTextureAndroid");
-    expect(src).not.toContain("elevation:");
-    expect(src).toContain("android_ripple");
-    expect(src).toContain("transparent");
-  });
-
-  test("stadium layout does not eat 2px of slot width with a Yoga border", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("NAV_PAGER_WIDTH");
-    expect(src).toContain("NAV_SLOT_WIDTH");
-    expect(src).toContain("NAV_PILL_HEIGHT");
-    const pagerStyle = src.match(/pager: \{[\s\S]*?\n  \},/)?.[0] ?? "";
-    expect(pagerStyle).toContain("width: NAV_PAGER_WIDTH");
-    expect(pagerStyle).not.toContain("borderWidth");
-    expect(src).toContain("styles.hair");
-  });
-
-  test("tab hit targets fill the 44px slot so the 4px dots sit in the pill center", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("height: NAV_PILL_HEIGHT");
-    expect(src).toContain("width: NAV_SLOT_WIDTH");
-    const tabStyle = src.match(/tab: \{[\s\S]*?\n  \},/)?.[0] ?? "";
-    expect(tabStyle).toContain("width: NAV_SLOT_WIDTH");
-    expect(tabStyle).toContain("height: NAV_PILL_HEIGHT");
-    expect(tabStyle).toContain('alignItems: "center"');
-    expect(tabStyle).toContain('justifyContent: "center"');
-    expect(tabStyle).not.toContain("flex: 1");
-    expect(tabStyle).not.toContain("transform");
-  });
-
-  test("gold pill is a UI-thread gel: spring follow, stretch X, squash Y", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("useFrameCallback");
-    expect(src).toContain("pillStep");
-    expect(src).toContain("pillStretch");
-    expect(src).toContain("scaleX");
-    expect(src).toContain("scaleY");
-  });
-
-  test("follows overscroll past page 0 instead of clamping the gel to the first slot", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).not.toContain("progress.value < 0 ? 0");
-    expect(src).toContain("pillStep(follow.value, vel.value, progress.value");
-  });
-
-  test("pager outline uses the same squircle radius as the gold pill", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("NAV_PAGER_RADIUS");
-    expect(src).toContain("NAV_PILL_RADIUS");
-    expect(NAV_PAGER_RADIUS).toBe(NAV_PILL_RADIUS);
-    expect(GOLDEN_NAV_CSS).toContain(`border-radius: ${NAV_PAGER_RADIUS}px`);
-    expect(src).not.toContain("borderRadius: 23");
-  });
-
-  test("chrome is the 60px collapsed bar with inset pill, not an 80px spacer", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("NAV_CHROME_HEIGHT");
-    expect(src).toContain("GOLD_68");
-    expect(src).toContain("styles.spec");
-    expect(src).toContain("styles.shade");
-    expect(src).not.toContain("styles.glow");
-    expect(src).not.toContain("height: 80");
-    expect(src).not.toContain("react-native-webview");
+  test("compose, settings and bridge details remain reachable", () => {
+    expect(src).toContain('label="New chat"');
+    expect(src).toContain('label="Settings"');
+    expect(src).toContain('label="Bridge details"');
+    expect(src).toContain('createConversation');
+    expect(src).toContain('pull?.toggle()');
+    expect(src).toContain('useBridgePullPan');
   });
 });
 

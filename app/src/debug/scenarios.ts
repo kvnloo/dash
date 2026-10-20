@@ -6,6 +6,11 @@ export type DebugScenarioId =
   | "main-bots"
   | "main-chats"
   | "main-products"
+  | "main-chats-search"
+  | "main-orchestra"
+  | "chat"
+  | "voice"
+  | "approvals"
   | "main-files"
   | "chat-omp"
   | "chat-streaming"
@@ -28,6 +33,11 @@ export interface DebugScenario {
 }
 
 export const DEBUG_SCENARIOS: Record<DebugScenarioId, DebugScenario> = {
+  "main-chats-search": { id: "main-chats-search", label: "Chats — focused search", seed: "paired", route: { name: "Main" }, ui: { mainSearchQuery: "", mainTabIndex: 1 } },
+  "main-orchestra": { id: "main-orchestra", label: "Orchestra", seed: "paired", route: { name: "Main" }, ui: { mainSearchQuery: "", mainTabIndex: 2 } },
+  chat: { id: "chat", label: "Chat", seed: "paired", route: { name: "Chat" }, ui: { activeConversationId: "demo-omp" } },
+  voice: { id: "voice", label: "Voice — microphone off", seed: "paired", route: { name: "Voice" } },
+  approvals: { id: "approvals", label: "Approvals — dry-run fixtures", seed: "paired", route: { name: "Approvals" } },
   main: {
     id: "main",
     label: "Main — Orchestra tab",
@@ -100,7 +110,7 @@ export const DEBUG_SCENARIOS: Record<DebugScenarioId, DebugScenario> = {
     id: "orchestra-dash",
     label: "Orchestra — Dash product",
     seed: "paired",
-    route: { name: "OrchestraDetail", params: { orchestraId: "dash" } },
+    route: { name: "OrchestraDetail", params: { orchestraId: "project:mbp:%2Fhome%2Fyou%2Fworkspace%2Fdash" } },
   },
 };
 
