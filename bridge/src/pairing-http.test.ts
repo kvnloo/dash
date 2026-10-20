@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createPairingSessions } from "../pair";
 import { createPairingHttpHandler, MAX_PAIR_AUDIO_BYTES } from "./pairing-http";
 
-function fixture(options: { limit?: number; audioCode?: string } = {}) {
+function fixture(options: { limit?: number; audioCode?: string; expoGoOrigin?: string } = {}) {
   const pairing = createPairingSessions();
   let plays = 0;
   let decodes = 0;
@@ -18,6 +18,7 @@ function fixture(options: { limit?: number; audioCode?: string } = {}) {
     playCode: () => { plays += 1; },
     decodeAudio: async () => { decodes += 1; return options.audioCode ?? null; },
     rateLimit: options.limit,
+    expoGoOrigin: options.expoGoOrigin,
   });
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -88,6 +89,47 @@ describe("pairing HTTP trust boundary", () => {
       expect(typeof credentials === "object" && credentials !== null && "token" in credentials && credentials.token === "test-execution-secret-never-log").toBe(true);
       expect((await f.request("/pair/claim", claim)).status).toBe(401);
     } finally { f.stop(); }
+  });
+
+  test("GET /pair offers a dev-build link and an Expo Go link that the app parses", async () => {
+    const f = fixture({ expoGoOrigin: "100.90.10.4:8097" });
+    try {
+      const response = await f.request("/pair", { headers: f.auth });
+      expect(response.status).toBe(200);
+      const body: unknown = await response.json();
+      if (typeof body !== "object" || body === null || !("code" in body) || typeof body.code !== "string") throw new Error("no code");
+      const code = body.code;
+      expect("link" in body && body.link).toBe(`dash://connect?address=100.90.10.4%3A4747&code=${code}`);
+      expect("expoGoLink" in body && body.expoGoLink).toBe(`exp://100.90.10.4:8097/--/connect?address=100.90.10.4%3A4747&code=${code}`);
+      const { parseDashConnectUrl } = await import("../../shared/pair-link");
+      expect(parseDashConnectUrl("expoGoLink" in body && typeof body.expoGoLink === "string" ? body.expoGoLink : "")).toEqual({ address: "100.90.10.4:4747", code });
+    } finally { f.stop(); }
+    const plain = fixture();
+    try {
+      const body: unknown = await (await plain.request("/pair", { headers: plain.auth })).json();
+      expect(typeof body === "object" && body !== null && "expoGoLink" in body).toBe(false);
+    } finally { plain.stop(); }
+  });
+
+  test("a nearly expired manual code is replaced, a fresh one is reused", () => {
+    const realNow = Date.now;
+    let now = 1_000_000;
+    Date.now = () => now;
+    try {
+      const pairing = createPairingSessions();
+      const first = pairing.currentOrCreateSession();
+      expect(first.expiresAt).toBe(now + 180_000);
+      now += 119_000; // 61 s left: still reusable
+      expect(pairing.currentOrCreateSession().id).toBe(first.id);
+      now += 1_000; // exactly 60 s left: too little to type it
+      const second = pairing.currentOrCreateSession();
+      expect(second.id === first.id).toBe(false);
+      expect(second.code === first.code).toBe(false);
+      expect(second.expiresAt).toBe(now + 180_000);
+      // The old code still claims until it expires; it was not revoked.
+      expect(pairing.claimSession(first.code)?.id).toBe(first.id);
+      expect(pairing.currentOrCreateSession().id).toBe(second.id);
+    } finally { Date.now = realNow; }
   });
 
   test("sonic sessions do not poison the manual fallback", async () => {

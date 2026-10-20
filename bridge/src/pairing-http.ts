@@ -1,4 +1,5 @@
 import type { HarnessInfo } from "../../shared/protocol";
+import { dashConnectUrl, expoGoConnectUrl } from "../../shared/pair-link";
 import { CLAIM_KEY_BYTES, type PairingSessions } from "../pair";
 import { bearerToken, secretMatches } from "./bridge-security";
 
@@ -20,6 +21,8 @@ export interface PairingHttpOptions {
   playCode(code: string): void;
   decodeAudio(audio: Uint8Array): Promise<string | null>;
   rateLimit?: number;
+  /** Metro `host:port` (or `exp://` origin) the owner's Expo Go loads Dash from. */
+  expoGoOrigin?: string;
   onEvent?(event: string, fields: { session: string }): void;
 }
 
@@ -123,7 +126,11 @@ export function createPairingHttpHandler(options: PairingHttpOptions) {
     try {
       if (url.pathname === "/pair" && request.method === "GET") {
         const session = options.pairing.currentOrCreateSession();
-        return json({ code: session.code, host: options.hostname, address: options.address, port: Number(new URL(`http://${options.address}`).port), expiresAt: session.expiresAt, link: `dash://connect?address=${encodeURIComponent(options.address)}&code=${encodeURIComponent(session.code)}` });
+        const prefill = { address: options.address, code: session.code };
+        // `link` opens a dev/standalone build. Expo Go only opens its own exp:// scheme,
+        // so the same prefill is also offered under the Metro origin when configured.
+        const expoGoLink = options.expoGoOrigin ? expoGoConnectUrl(options.expoGoOrigin, prefill) : undefined;
+        return json({ code: session.code, host: options.hostname, address: options.address, port: Number(new URL(`http://${options.address}`).port), expiresAt: session.expiresAt, link: dashConnectUrl(prefill), ...(expoGoLink ? { expoGoLink } : {}) });
       }
       if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
       if (url.pathname === "/pair/beep") {

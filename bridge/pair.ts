@@ -5,6 +5,8 @@ const CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const TTL_MS = 3 * 60 * 1000;
 const MAX_SESSIONS = 3;
 const CLAIM_KEY_BYTES = 32;
+/** A reused code must leave the owner time to type or tap it. */
+export const MIN_REUSE_REMAINING_MS = 60 * 1000;
 
 export interface PairSession {
   id: string;
@@ -56,8 +58,11 @@ export function createPairingSessions(): PairingSessions {
 
   function currentOrCreateSession(): PairSession {
     purgeExpired();
+    // Reuse only a code with at least a minute left. A nearly expired one is
+    // left to expire on its own (it still claims until then); a fresh code is issued.
+    const reusableAfter = Date.now() + MIN_REUSE_REMAINING_MS;
     const active = [...sessions.values()]
-      .filter((session) => session.claimKeyHash === undefined)
+      .filter((session) => session.claimKeyHash === undefined && session.expiresAt > reusableAfter)
       .sort((a, b) => b.expiresAt - a.expiresAt)[0];
     return active ?? create();
   }

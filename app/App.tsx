@@ -12,7 +12,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BridgePullOverlay, BridgePullProvider } from "./src/components/BridgePull";
 import type { RootStackParamList } from "./src/navigation";
-import { parseDashConnectUrl } from "./src/lib/pair-url";
+import { createDeepLinkRouter } from "./src/lib/deep-link";
 import { bridge } from "./src/net/bridge";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { ApprovalsScreen } from "./src/screens/ApprovalsScreen";
@@ -45,16 +45,13 @@ const linking = {
   },
 };
 
-async function applyDeepLink(url: string): Promise<boolean> {
-  const parsed = parseDashConnectUrl(url);
-  if (!parsed) return false;
-  // A link can prefill enrollment, but cannot authorize execution. Bootstrap
-  // credentials stay out of URLs and must be provided privately on Pair.
-  for (let attempt = 0; !debugNavigationRef.isReady() && attempt < 100; attempt++) await new Promise(resolve => setTimeout(resolve, 50));
-  if (!debugNavigationRef.isReady()) return false;
-  debugNavigationRef.navigate("Pair", parsed);
-  return true;
-}
+// A link can prefill enrollment, but cannot authorize execution. Bootstrap
+// credentials stay out of URLs and must be provided privately on Pair.
+// Expo Go delivers `exp://<metro>/--/connect?…`; dev builds deliver `dash://connect?…`.
+const deepLinks = createDeepLinkRouter({
+  isReady: () => debugNavigationRef.isReady(),
+  openPair: (prefill) => debugNavigationRef.navigate("Pair", prefill),
+});
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ CormorantGaramond_500Medium, HankenGrotesk_400Regular, HankenGrotesk_600SemiBold, IBMPlexMono_400Regular });
@@ -77,10 +74,10 @@ export default function App() {
 
   useEffect(() => {
     void Linking.getInitialURL().then((url) => {
-      if (url) void applyDeepLink(url);
+      deepLinks.handle(url);
     });
     const sub = Linking.addEventListener("url", ({ url }) => {
-      void applyDeepLink(url);
+      deepLinks.handle(url);
     });
     return () => sub.remove();
   }, []);
@@ -97,7 +94,7 @@ export default function App() {
               ref={debugNavigationRef}
               theme={theme}
               linking={Platform.OS === "web" ? linking : undefined}
-              onReady={() => flushPendingDebugNavigation()}
+              onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); }}
             >
             <View style={styles.root}>
               <Stack.Navigator

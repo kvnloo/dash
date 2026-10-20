@@ -487,6 +487,8 @@ const handleHttp = createPairingHttpHandler({
   pairing: { currentOrCreateSession, startBoundSession, claimSession },
   playCode: queuePairPlayback,
   decodeAudio: decodePairAudio,
+  // Expo Go dogfood: Metro serves Dash on 8097 beside this bridge unless configured.
+  expoGoOrigin: process.env.DASH_EXPO_GO_URL?.trim() || `${HOST.includes(":") ? `[${HOST}]` : HOST}:8097`,
   onEvent: log,
 });
 

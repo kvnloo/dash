@@ -27,6 +27,7 @@ import { claimLivePair, claimPairCode, hearPairTones, settingsFromClaim, startSo
 import { connectSettings } from "../lib/settings-flow";
 import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
+import { nextPrefill } from "../lib/deep-link";
 import { saveSettings, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 
@@ -43,6 +44,21 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
   const [error, setError] = useState<string | null>(null);
   const claimKeyRef = useRef<Uint8Array | null>(null);
   const attemptRef = useRef<AbortController | null>(null);
+  const appliedLinkRef = useRef<string | null>(null);
+
+  // A magic link can (re)open an already mounted Pair, e.g. first run, when Pair is
+  // the initial route. Apply each new address/code once; never a credential.
+  const linkAddress = route.params?.address;
+  const linkCode = route.params?.code;
+  useEffect(() => {
+    const next = nextPrefill({ address: linkAddress, code: linkCode }, appliedLinkRef.current);
+    if (!next) return;
+    appliedLinkRef.current = next.key;
+    setComputer(next.prefill.address);
+    setManualCode(next.prefill.code);
+    setError(null);
+    setStatus("Link filled the address and code. Paste the bootstrap token, then Pair with code.");
+  }, [linkAddress, linkCode]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("blur", () => attemptRef.current?.abort());
