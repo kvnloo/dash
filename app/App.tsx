@@ -1,6 +1,10 @@
 import { DarkTheme, NavigationContainer, type Theme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
+import { useFonts } from "expo-font";
+import { CormorantGaramond_500Medium } from "@expo-google-fonts/cormorant-garamond";
+import { HankenGrotesk_400Regular, HankenGrotesk_600SemiBold } from "@expo-google-fonts/hanken-grotesk";
+import { IBMPlexMono_400Regular } from "@expo-google-fonts/ibm-plex-mono";
 import { useEffect } from "react";
 import { Linking, Platform, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -53,6 +57,8 @@ async function applyDeepLink(url: string): Promise<boolean> {
 }
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({ CormorantGaramond_500Medium, HankenGrotesk_400Regular, HankenGrotesk_600SemiBold, IBMPlexMono_400Regular });
+  if (fontError) throw fontError;
   const hydrated = store.use((s) => s.hydrated);
   const hasSettings = store.use((s) => s.settings !== null);
 
@@ -79,7 +85,7 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  if (!hydrated) return <View style={styles.splash} />;
+  if (!hydrated || !fontsLoaded) return <View style={styles.splash} />;
 
   return (
     <GestureHandlerRootView style={styles.root}>
