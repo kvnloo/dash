@@ -43,9 +43,49 @@ are `available`, **not** advertised as running processes.
 
 Native Hermes still owns admission and model selection. Do not launch a second
 classic CLI with `--resume`, take over another live writer or retry an ambiguous
-send. For a classic in-process CLI that cannot accept native API turns, finish
-and exit that CLI normally before continuing its transcript from the phone.
-No owner turn was sent during the read-only proof below.
+send. No owner turn was sent during the read-only proof below.
+
+## Replying from Dash (ordered handoff)
+
+`bridge/src/hermes-continue.ts` is the only place that picks how Dash continues
+an existing Hermes session. In order:
+
+1. **Live owner check.** `bridge/src/hermes-owner.ts` reads Hermes's own lease
+   registry, `<profile home>/runtime/active_sessions.json` (written by the classic
+   CLI and TUI). It never takes the registry lock and never writes it. A lease
+   counts only while its PID is alive and its start time matches. Leases cover the
+   session's compression lineage. The roster marks such rows `openIn: "CLI"`, and
+   the phone shows "Open in CLI on groot. Replies wait until it closes there."
+2. **Held session: the reply waits.** The bridge emits a `status` event with
+   `handoff: { state: "queued" }` ("Open in CLI on groot · reply queued until it
+   closes") and writes nothing. It polls every 2 s. When the CLI exits normally
+   (`/exit`), it emits `handoff: { state: "sending" }` and sends. Stop on the phone
+   cancels the queued reply before anything is sent. A wait over 12 h ends with an
+   explicit "not sent" error. A bridge restart drops queued replies (the phone shows
+   them as interrupted); nothing is sent.
+3. **Transport.** Native API (`/api/sessions/{id}/chat`) when the profile has a
+   host-only key, otherwise Hermes's own ACP server (`hermes acp`, `session/load`
+   then `session/prompt`) under that profile's `HERMES_HOME`. Never a classic CLI.
+4. One Dash continuation per profile session at a time, queued or running.
+
+New Hermes chats start through Hermes ACP in the bridge's own `HERMES_HOME`. Their
+`session` event carries `hermes:session:<profile>:<id>`, so the next roster refresh
+merges into the same phone chat instead of adding a duplicate row.
+
+**z0bridge seam.** The Hermes ACP bridge (`kvnloo/z0bridge`, built separately) plugs
+in as another `HermesRoute` kind in `chooseHermesRoute`. Only z0bridge could take a
+turn *into* a live owner; until it exists, Dash waits for the owner to close.
+
+Proof on a throwaway session (never the owner's sessions):
+
+```sh
+TMPDIR=<scratch> HERMES_HOME=~/.hermes/profiles/clean bun scripts/verify-hermes-handoff.ts
+```
+
+It creates a new session from Dash (ACP), replies into it, opens it in a real classic
+CLI in a private tmux socket, checks that the reply queues and the transcript is
+unchanged while the CLI is open, exits the CLI with `/exit`, and checks delivery.
+Observed 2026-10-20: ALPHA/BRAVO/CHARLIE replies, 4 messages while held, 6 after.
 
 History carries host and profile identity. Only user/assistant text crosses that
 contract; tool output and reasoning fields do not. The DB fallback reads the

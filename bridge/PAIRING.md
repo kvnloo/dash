@@ -10,7 +10,9 @@ The bridge creates two private files under `~/.dash`. `bootstrap-token` authoriz
 4. Send `POST /pair/claim` with the same authorization header and JSON `{"code":"<code>"}`.
 5. Store the returned `token` in the client's secure credential storage. Use that token for `GET /roster` and `/ws`.
 
-A code expires after three minutes and works once. Creating a sonic session does not replace the manual session. All `/pair` routes require the bootstrap header, including `/pair/intent`, `/pair/beep`, `/pair/hear`, and `/pair/claim`. The execution token cannot authorize enrollment. A bootstrap token cannot authorize a WebSocket or roster request. Query parameters cannot supply bootstrap authentication.
+`GET /pair` also returns two magic links that prefill Pair with the address and code: `link` (`dash://connect?address=…&code=…`, for dev and standalone builds) and `expoGoLink` (`exp://<host>:8097/--/connect?…`, for Expo Go). Set `DASH_EXPO_GO_URL` (`host:port` or an `exp://` origin) when Metro is not on port 8097 of the bridge host. A link never carries a credential: the bootstrap token is still entered privately on Pair, then **Pair with code**. The app holds a link that arrives during cold start until navigation is ready, and applies a new link to an already open Pair screen.
+
+A code expires after three minutes and works once. `GET /pair` reuses the open manual code only while more than 60 seconds remain; otherwise it issues a fresh code (the old one still works until it expires). Creating a sonic session does not replace the manual session. All `/pair` routes require the bootstrap header, including `/pair/intent`, `/pair/beep`, `/pair/hear`, and `/pair/claim`. The execution token cannot authorize enrollment. A bootstrap token cannot authorize a WebSocket or roster request. Query parameters cannot supply bootstrap authentication.
 
 Sonic pairing sends a 32-byte base64url `claimKey` to `/pair/intent`. `/pair/hear` accepts the same key plus base64 audio. The heard code must match a live session bound to that key. `/pair/claim` also accepts `claimKey` for clients that decode tones themselves.
 
