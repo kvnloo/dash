@@ -30,7 +30,7 @@ test("draft PR creation is duplicate/head bound; branch creation never overwrite
   expect(await r.check(item)).toContain("already exists");
   expect(await r.check({ ...item, kind: "push_branch", target: {repo:"example/project", head:"main",base:"main",head_sha:"a".repeat(40)} })).toContain("forbidden");
 });
-test("review-first sweep blocks latest requested changes and unknown inline resolution", async () => {
+test("review-first sweep blocks latest requested changes", async () => {
   const project: Project = { id: "p", project_repo: "example/project", coordination_repo: "kvnloo/project", promotion_queue_url: "https://github.com/kvnloo/project/issues/1", civ: {city_id:"oss:p"} };
   const api: Api = async path => {
     if (path.includes("/pulls?")) return [{number:12,user:{login:"kvnloo"},head:{user:{login:"kvnloo"},sha:"a".repeat(40)}}];
@@ -51,4 +51,6 @@ test("canonical receipt write is read back and fails closed on changed body", as
   };
   const auth=await new FactoryGuard(api,()=>[project]).record(base,{approved_by:"synthetic owner",expires_at:new Date(Date.now()+60000).toISOString(),body_sha256:"hash",scope:"fixture only"});
   expect(auth.url).toContain("issuecomment-9"); expect(auth.receipt_sha256).toHaveLength(64); expect(posted).toContain('"kind":"decision"');
+  const changed: Api = async (path, method, body) => path.endsWith("/comments/9") ? { body: "changed", html_url: "https://github.com/kvnloo/project/issues/1#issuecomment-9" } : api(path,method,body);
+  await expect(new FactoryGuard(changed,()=>[project]).record(base,{approved_by:"synthetic owner",expires_at:new Date(Date.now()+60000).toISOString(),body_sha256:"hash",scope:"fixture only"})).rejects.toThrow("readback mismatch");
 });

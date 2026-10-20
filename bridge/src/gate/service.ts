@@ -36,10 +36,12 @@ export class GateService {
         }
         const receipts: Record<string, NonNullable<GateItem["authorization"]>> = {};
         if (message.decision.action === "approve" && this.ownerDecisions) {
+          if (!message.decision.expected) throw new Error("Owner must confirm the exact displayed bodies");
           const guard = new FactoryGuard();
           const candidates = await Promise.all(message.decision.ids.map(id => this.store.show(id)));
           // Validate the entire wave before emitting any canonical human-decision receipt.
           for (const item of candidates) {
+            if (message.decision.expected.find(e => e.id === item.id)?.body_sha256 !== hash(item.body)) throw new Error("Body changed since confirmation");
             if (!["pending", "edited"].includes(item.state)) throw new Error("Only pending or edited proposals can be approved");
             if (candidates.length > 1 && !item.policy.bulk_ok) throw new Error("Bulk policy forbids this wave");
             if (!item.body.trim() || (item.policy.requires_human_text && !item.trail.some(e => e.action === "edit" && e.actor === "dash-owner" && e.body_sha256 === hash(item.body)))) throw new Error("Owner must write text before approval");

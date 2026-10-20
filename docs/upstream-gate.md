@@ -73,7 +73,7 @@ owner to check the complete seven-point factory tone gate: peer framing, no labo
 assignment, no internal goal leakage, smallest optional ask, self-service first,
 local voice and easy decline. Regexes cannot establish those semantic facts.
 
-New PR/branch proposals sweep all open factory-owned origin PRs before approval
+New PR/branch proposals, and comments unless explicitly scoped as `intent:"existing_review"`, sweep all open factory-owned origin PRs before approval
 and execution: conversation/policy comments, latest submitted reviews, inline
 comments, mergeability and checks. REST cannot prove inline-thread resolution, so
 existing inline threads block new contributions until canonical reconciliation is

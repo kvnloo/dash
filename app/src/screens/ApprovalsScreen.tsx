@@ -21,6 +21,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
   const online = store.use(s => s.connection.status === "online");
   const [selected, setSelected] = useState<string[]>([]);
   const [confirm, setConfirm] = useState<string[]>([]);
+  const [confirmHashes, setConfirmHashes] = useState<{ id: string; body_sha256: string }[]>([]);
   const [editor, setEditor] = useState<{ item: GateItem; reject: boolean } | null>(null);
   const [text, setText] = useState("");
   const [changed, setChanged] = useState(false);
@@ -31,6 +32,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
   const visible = state.items.filter(i => showHistory || !["posted", "rejected"].includes(i.state));
   const groups = useMemo(() => [...new Set(visible.map(i => i.target.repo))].sort(), [visible]);
   const eligible = visible.filter(bulkEligible).map(i => i.id);
+  const askApprove = (ids: string[]) => { setConfirm(ids); setConfirmHashes(ids.map(id => ({ id, body_sha256: state.items.find(i => i.id === id)?.trail.at(-1)?.body_sha256 ?? "" }))); };
   const toggle = (ids: string[]) => setSelected(s => ids.every(id => s.includes(id)) ? s.filter(id => !ids.includes(id)) : [...new Set([...s, ...ids])]);
   const send = (message: Parameters<typeof bridge.send>[0]) => { if (!bridge.send(message)) setLocalError("Disconnected. Reconnect before deciding."); };
   const openEditor = (item: GateItem, reject = false) => { setEditor({ item, reject }); setText(reject || item.policy.requires_human_text && item.state !== "edited" ? "" : item.body); setChanged(false); };
@@ -44,7 +46,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
     {!state.loaded ? <Text style={styles.subtitle}>Waiting for authenticated outbox…</Text> : null}
     <View style={styles.actions}>
       <Button label="Select all bulk-safe" onPress={() => toggle(eligible)} disabled={!online || !eligible.length} />
-      <Button label={`Approve selected (${selected.length})`} onPress={() => setConfirm(selected)} disabled={!online || !selected.length} />
+      <Button label={`Approve selected (${selected.length})`} onPress={() => askApprove(selected)} disabled={!online || !selected.length} />
       <Button label={showHistory ? "Hide history" : "Show history"} onPress={() => setShowHistory(!showHistory)} />
     </View>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -68,7 +70,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
                 <Button label={item.policy.requires_human_text ? "Write response" : "Review / edit"} disabled={!online || Boolean(state.status[item.id])} onPress={() => openEditor(item)} />
                 <Button label="Reject" disabled={!online || Boolean(state.status[item.id])} onPress={() => openEditor(item, true)} />
               </> : null}
-              {actionable(item) ? <Button label="Approve item" disabled={!online || item.policy.requires_human_text && item.state !== "edited"} onPress={() => setConfirm([item.id])} /> : null}
+              {actionable(item) ? <Button label="Approve item" disabled={!online || item.policy.requires_human_text && item.state !== "edited"} onPress={() => askApprove([item.id])} /> : null}
               {item.state === "approved" ? <Button label={state.dryRun ? "Check dry run" : "Post approved item"} disabled={!online || Boolean(state.status[item.id])} onPress={() => send({ type: "gate_post", id: item.id })} /> : null}
             </View>
           </View>)}
@@ -78,7 +80,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
     </ScrollView>
     <Modal visible={confirm.length > 0} transparent animationType="fade" onRequestClose={() => setConfirm([])}>
       <View style={styles.scrim}><View style={styles.sheet}><Text style={styles.title}>Approve {confirm.length} {confirm.length === 1 ? "item" : "items"}?</Text><Text style={styles.body}>By confirming, I approve only these exact bodies and targets for 24 hours. I checked peer tone, the smallest optional ask, available evidence and current feedback. No merge or expanded scope. Posting is separate. {state.dryRun ? "This bridge is dry-run only." : "Live posting is enabled."}</Text>
-        <Button label={`Confirm approve ${confirm.length}`} disabled={!online} onPress={() => { send({ type: "gate_decide", decision: { action: "approve", ids: confirm } }); setConfirm([]); setSelected([]); }} /><Button label="Cancel" onPress={() => setConfirm([])} /></View></View>
+        <Button label={`Confirm approve ${confirm.length}`} disabled={!online} onPress={() => { send({ type: "gate_decide", decision: { action: "approve", ids: confirm, expected: confirmHashes } }); setConfirm([]); setSelected([]); }} /><Button label="Cancel" onPress={() => setConfirm([])} /></View></View>
     </Modal>
     <Modal visible={editor !== null} animationType="slide" onRequestClose={() => setEditor(null)}>
       <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>

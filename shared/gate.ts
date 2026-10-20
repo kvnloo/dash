@@ -28,7 +28,7 @@ export interface GateItem extends GateProposal {
   authorization?: { url: string; approved_by: string; expires_at: string; body_sha256: string; scope: string; receipt_sha256?: string };
 }
 export type GateDecision =
-  | { action: "approve"; ids: string[] }
+  | { action: "approve"; ids: string[]; expected?: { id: string; body_sha256: string }[] }
   | { action: "reject"; id: string; reason: string }
   | { action: "edit"; id: string; body: string };
 const record = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -50,12 +50,17 @@ export function isGateItem(v: unknown): v is GateItem {
     typeof v.policy.requires_human_text === "boolean" && text(v.policy.reason) && Array.isArray(v.policy.rules) &&
     v.policy.rules.every(r => record(r) && text(r.path) && text(r.sha256)) && Array.isArray(v.trail) &&
     v.trail.every(e => record(e) && text(e.at) && text(e.actor) && text(e.action) && text(e.body_sha256) && optionalText(e.reason)) &&
+    (v.authorization === undefined || (record(v.authorization) && text(v.authorization.url) && text(v.authorization.approved_by) && text(v.authorization.expires_at) && text(v.authorization.body_sha256) && text(v.authorization.scope) && optionalText(v.authorization.receipt_sha256))) &&
     optionalText(v.reason) && (v.receipt === undefined || (record(v.receipt) && optionalText(v.receipt.url) && typeof v.receipt.dry_run === "boolean" && text(v.receipt.at)));
 }
 export function parseGateDecision(v: unknown): GateDecision | null {
   if (!record(v)) return null;
   const id = (s: unknown): s is string => text(s) && /^[a-f0-9-]{36}$/.test(s);
-  if (v.action === "approve" && Array.isArray(v.ids) && v.ids.length > 0 && v.ids.length <= 100 && v.ids.every(id) && new Set(v.ids).size === v.ids.length) return { action: "approve", ids: v.ids };
+  if (v.action === "approve" && Array.isArray(v.ids) && v.ids.length > 0 && v.ids.length <= 100 && v.ids.every(id) && new Set(v.ids).size === v.ids.length) {
+    if (v.expected === undefined) return { action: "approve", ids: v.ids };
+    if (!Array.isArray(v.expected) || v.expected.length !== v.ids.length || !v.expected.every(e => record(e) && id(e.id) && text(e.body_sha256) && /^[a-f0-9]{64}$/.test(e.body_sha256))) return null;
+    return { action: "approve", ids: v.ids, expected: v.expected };
+  }
   if (v.action === "reject" && id(v.id) && text(v.reason) && v.reason.trim().length > 0 && v.reason.length <= 2000) return { action: "reject", id: v.id, reason: v.reason };
   if (v.action === "edit" && id(v.id) && text(v.body) && v.body.trim().length > 0 && v.body.length <= 60000) return { action: "edit", id: v.id, body: v.body };
   return null;

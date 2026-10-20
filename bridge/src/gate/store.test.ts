@@ -17,13 +17,16 @@ test("outbox proposals cannot approve via CLI; Dash approval is body-bound and d
     const store = new GateStore(dir);
     const item = await store.propose(proposal(), rules);
     expect(item.state).toBe("pending");
+    const poisoned = await store.propose({ ...proposal(), body: "Other valid proposal", state: "posted", receipt: { url: "https://evil.invalid", at: "fake", dry_run: false }, authorization: { url: "fake" } }, rules);
+    expect(poisoned.state).toBe("pending"); expect(poisoned.receipt).toBeUndefined(); expect(poisoned.authorization).toBeUndefined();
+    await expect(store.decide({ action: "approve", ids: [item.id], expected: [{ id: item.id, body_sha256: "0".repeat(64) }] }, "dash-owner")).rejects.toThrow("Body changed");
     await expect(store.decide({ action: "approve", ids: [item.id] }, "agent")).rejects.toThrow("Dash");
     await store.decide({ action: "approve", ids: [item.id] }, "dash-owner");
     expect((await store.show(item.id)).state).toBe("approved");
     await store.decide({ action: "edit", id: item.id, body: "Owner changed this" }, "dash-owner");
     expect((await store.show(item.id)).state).toBe("edited");
-    expect(new GateStore(dir).list().length).toBe(1);
-    expect(readFileSync(join(dir, "events.jsonl"), "utf8").trim().split("\n").length).toBe(3);
+    expect(new GateStore(dir).list().length).toBe(2);
+    expect(readFileSync(join(dir, "events.jsonl"), "utf8").trim().split("\n").length).toBe(4);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -52,7 +52,7 @@ export class GateStore {
   }
   async propose(raw: unknown, rules: Rule[]): Promise<GateItem> {
     if (!isGateProposal(raw) || raw.origin.agent === "dash-owner") throw new Error("Invalid proposal");
-    const input: GateProposal = raw;
+    const input: GateProposal = { kind: raw.kind, target: raw.target, body: raw.body, intent: raw.intent, evidence: raw.evidence, origin: raw.origin };
     return this.locked(async () => {
       const policy = derivePolicy(rules);
       const body = policy.requires_human_text ? "" : stripMentions(input.body);
@@ -71,6 +71,7 @@ export class GateStore {
       for (const item of items) {
         if (!["pending", "edited", "approved"].includes(item.state)) throw new Error(`${item.state} items cannot be decided; propose a fresh item`);
         if (decision.action === "approve") {
+          if (decision.expected && decision.expected.find(e => e.id === item.id)?.body_sha256 !== hash(item.body)) throw new Error("Body changed since the confirmation opened; review it again");
           const receipt = authorizations[item.id];
           if (receipt && receipt.body_sha256 !== hash(item.body)) throw new Error("Proposal changed while recording canonical approval");
           const tone = toneFailure(item.body);
