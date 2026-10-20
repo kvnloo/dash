@@ -54,7 +54,9 @@ export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose 
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
+  // Opaque raised base under the glass tint: chat text must not read through the list.
   sheet: {
+    backgroundColor: colors.surfaceRaised,
     paddingHorizontal: space.lg,
     paddingTop: space.lg,
     gap: 2,

@@ -25,7 +25,10 @@ const DEBUG_HOSTS = [
       { id: "omp:keyconf", name: "OMP 2", kind: "omp", status: "running" as const, detail: "/home/you/workspace/keyconf.gen", cwd: "/home/you/workspace/keyconf.gen" },
       { id: "harness:codex", name: "Codex", kind: "codex", status: "available" as const, detail: "Installed" },
       { id: "harness:grok", name: "Grok", kind: "grok", status: "available" as const, detail: "Installed" },
-      { id: "harness:hermes", name: "Hermes", kind: "hermes", status: "available" as const, detail: "Installed" },
+      { id: "hermes:clean", name: "clean", kind: "hermes", status: "running" as const, detail: "Hermes profile" },
+      // Saved Hermes chats, as the real roster lists them: they belong in Chats, and one is open in a CLI.
+      { id: "hermes:session:clean:debug-cli", name: "Make Dash great on the phone: reply into Hermes sessions, magic links and approvals", kind: "hermes", status: "available" as const, sessionId: "debug-cli", profileId: "clean", source: "cli", cwd: "/home/you/workspace/dash", lastActivityAt: Date.now() - 4 * 60_000, messageCount: 42, openIn: "CLI" },
+      { id: "hermes:session:clean:debug-saved", name: "Garden room planner review", kind: "hermes", status: "available" as const, sessionId: "debug-saved", profileId: "clean", source: "acp", cwd: "/tmp/hermes-scratch", lastActivityAt: Date.now() - 3 * 3_600_000, messageCount: 6 },
       { id: "harness:claude", name: "Claude Code", kind: "claude", status: "offline" as const, detail: "Not installed" },
       { id: "harness:pi", name: "Pi", kind: "pi", status: "offline" as const, detail: "Not installed" },
       { id: "harness:fx", name: "fx", kind: "fx", status: "offline" as const, detail: "Not installed" },
@@ -72,6 +75,7 @@ export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
   // Screenshot-only proposals. They never contact a bridge and cannot authorize posting.
   applyGateMessage({ type: "gate_snapshot", dry_run: true, owner_decisions: false, items: [
     { id: "00000000-0000-4000-8000-000000000001", kind: "pr_comment", state: "pending", target: { repo: "kvnloo/dash", number: 67, title: "Review the pairing fix" }, body: "The pairing error now stays on screen until the next attempt. The regression test covers a refused connection and retry.", evidence: [{ label: "Test evidence", url_or_path: "docs/evidence/pairing.md" }], origin: { agent: "Hermes", session: "debug", created_at: "2026-10-20T12:00:00Z" }, policy: { bulk_ok: true, requires_human_text: false, reason: "Existing review · bounded follow-up", rules: [] }, trail: [] },
+    { id: "00000000-0000-4000-8000-000000000003", kind: "pr_review_reply", state: "pending", target: { repo: "kvnloo/dash", number: 68, comment_id: 1 }, body: "Fixed in 6396f76. The test now waits until verification has started before it cancels, and covers both SIGINT and SIGTERM.", evidence: [{ label: "Fix commit", url_or_path: "docs/evidence/fix.md" }], origin: { agent: "Hermes", session: "debug", created_at: "2026-10-20T12:00:00Z" }, policy: { bulk_ok: true, requires_human_text: false, reason: "Contribution rules captured. Review evidence before approval.", rules: [] }, trail: [] },
     { id: "00000000-0000-4000-8000-000000000002", kind: "pr_comment", state: "stale", target: { repo: "kvnloo/dash", number: 66, title: "Refresh changed evidence" }, body: "This proposal needs fresh evidence before approval.", evidence: [{ label: "Changed head", url_or_path: "docs/evidence/head.md" }], origin: { agent: "Codex", session: "debug", created_at: "2026-10-20T12:00:00Z" }, policy: { bulk_ok: false, requires_human_text: false, reason: "Target changed since review", rules: [] }, trail: [] },
   ] });
   if (variant === "unpaired") {
@@ -86,6 +90,16 @@ export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
   }
 
   saveSettings(DEBUG_SETTINGS);
+
+  // Saved phone chats first, so the roster below reconciles them and adopts host chats.
+  store.set((s) => ({
+    ...s,
+    conversations: [...DEMO_CONVERSATIONS, ...([{
+      id: "debug-ended", harness: "hermes", title: "Review the session handoff", createdAt: Date.now() - 86400000, updatedAt: Date.now() - 86400000, stale: true,
+      messages: [{ id: "debug-ended-reply", role: "assistant", text: "The handoff is saved. This host session has ended.", at: Date.now() - 86400000, state: "done", turnId: "debug-ended-turn", seq: 0 }],
+    }] satisfies (Conversation & { stale?: boolean })[])],
+    activeId: DEMO_CONVERSATIONS[0]?.id ?? null,
+  }));
 
   if (variant === "offline") {
     setConnection({
@@ -108,13 +122,4 @@ export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
   } else {
     setConnection(ONLINE_CONNECTION);
   }
-
-  store.set((s) => ({
-    ...s,
-    conversations: [...DEMO_CONVERSATIONS, ...([{
-      id: "debug-ended", harness: "hermes", title: "Review the session handoff", createdAt: Date.now() - 86400000, updatedAt: Date.now() - 86400000, stale: true,
-      messages: [{ id: "debug-ended-reply", role: "assistant", text: "The handoff is saved. This host session has ended.", at: Date.now() - 86400000, state: "done", turnId: "debug-ended-turn", seq: 0 }],
-    }] satisfies (Conversation & { stale?: boolean })[])],
-    activeId: DEMO_CONVERSATIONS[0]?.id ?? null,
-  }));
 }

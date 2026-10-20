@@ -82,4 +82,24 @@ describe("projects from actual bridge data", () => {
     const project = projectsFromHosts({ hosts: [host("laptop", [codex])], conversations: [], now })[0];
     expect(project?.agentRows[0]).toMatchObject({ id: "laptop:codex:one", harness: "codex", cwd: "/work/weather", sessionId: "one", targetHostId: "laptop" });
   });
+
+  test("saved Hermes chats never mint projects or count as agents, but join existing ones", () => {
+    const saved = (id: string, cwd: string): AgentInfo => ({ id: `hermes:session:clean:${id}`, kind: "hermes", name: id, status: "available", sessionId: id, profileId: "clean", cwd });
+    const hosts = [host("groot", [codex, saved("a", "/tmp/scratch-1"), saved("b", "/work/weather")])];
+    const adopted = (id: string, cwd: string): Conversation => ({ ...chat(id, cwd, "groot"), harness: "hermes", sessionId: id, profileId: `hermes:session:clean:${id}` });
+    const projects = projectsFromHosts({ hosts, conversations: [adopted("a", "/tmp/scratch-1"), adopted("b", "/work/weather")], now });
+    expect(projects.map(p => p.cwd)).toEqual(["/work/weather"]);
+    expect(projects[0]?.agentRows.map(r => r.id)).toEqual(["groot:codex:one"]);
+    expect(projects[0]?.chatIds).toEqual(["b"]);
+  });
+
+  test("a ~/ bridge folder joins the matching absolute agent folder", () => {
+    const omp: AgentInfo = { id: "omp:dash", kind: "omp", name: "OMP", status: "running", cwd: "/home/you/workspace/dash" };
+    const codexIdle: AgentInfo = { id: "harness:codex", kind: "codex", name: "Codex", status: "available" };
+    const projects = projectsFromHosts({ hosts: [host("mbp", [omp, codexIdle])], conversations: [], cwd: "~/workspace/dash", now });
+    expect(projects.map(p => p.cwd)).toEqual(["/home/you/workspace/dash"]);
+    expect(projects[0]?.agentRows).toHaveLength(2);
+    const twoHomes = projectsFromHosts({ hosts: [host("mbp", [omp, { ...omp, id: "omp:x", cwd: "/home/other/x" }])], conversations: [], cwd: "~/workspace/dash", now });
+    expect(twoHomes.some(p => p.cwd === "~/workspace/dash")).toBe(true);
+  });
 });

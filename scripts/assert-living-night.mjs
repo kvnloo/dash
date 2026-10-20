@@ -104,12 +104,13 @@ export async function exerciseLivingNight(page, scenario) {
   }
   if (scenario === "approvals") {
     await page.getByRole("button", { name: "Select all bulk-safe", exact: true }).click();
-    const approve = page.getByRole("button", { name: "Approve selected (1)", exact: true });
+    // Two bulk-safe fixtures (a titled comment and an untitled review reply).
+    const approve = page.getByRole("button", { name: "Approve selected (2)", exact: true });
     assert.equal(await approve.isEnabled(), true);
     await approve.click();
-    await page.getByText("Approve 1 item?", { exact: true }).waitFor();
+    await page.getByText("Approve 2 items?", { exact: true }).waitFor();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    await page.getByText("Approve 1 item?", { exact: true }).waitFor({ state: "hidden" });
+    await page.getByText("Approve 2 items?", { exact: true }).waitFor({ state: "hidden" });
     steps.push("bulk selection opens exact confirmation; Cancel submits nothing");
   }
   return steps;

@@ -2,7 +2,7 @@ import type { HostInfo } from "../../../shared/protocol";
 import type { OrchestraProject } from "../catalog/orchestra";
 import type { BotProfile } from "../mock/bots";
 import type { Conversation } from "../model";
-import { profileFromAgent } from "./roster";
+import { isPersistedChat, profileFromAgent } from "./roster";
 
 export interface LiveProject extends OrchestraProject {
   hostId?: string;
@@ -54,10 +54,22 @@ export function projectsFromHosts(input: {
     return project;
   };
 
-  const bridgeCwd = directory(input.cwd);
+  // The bridge may report its folder as `~/x` while live agents report `/home/me/x`.
+  // When the self host's agents show exactly one home prefix, use it so one folder
+  // is one project, not two cards with the same name.
+  const homes = new Set<string>();
+  for (const agent of self?.agents ?? []) {
+    const match = /^(\/(?:home|Users)\/[^/]+)\//.exec(directory(agent.cwd) ?? "");
+    if (match?.[1]) homes.add(match[1]);
+  }
+  const home = homes.size === 1 ? [...homes][0] : undefined;
+  const rawBridgeCwd = directory(input.cwd);
+  const bridgeCwd = home && rawBridgeCwd?.startsWith("~/") ? `${home}${rawBridgeCwd.slice(1)}` : rawBridgeCwd;
   if (bridgeCwd) ensureProject(self?.id, bridgeCwd);
   for (const host of input.hosts) {
     for (const agent of host.agents) {
+      // Saved chats are not agents; they add chat counts below, never projects of their own.
+      if (isPersistedChat(agent)) continue;
       const cwd = directory(agent.cwd) ?? (host.self && agent.status === "available" ? bridgeCwd : undefined);
       if (!cwd) continue;
       const project = ensureProject(host.id, cwd);
@@ -76,6 +88,10 @@ export function projectsFromHosts(input: {
       cwd = directory(host?.agents.find((agent) => agent.kind === conversation.harness && agent.sessionId === conversation.sessionId)?.cwd);
     }
     if (!cwd) continue;
+    // A host's saved Hermes chats can span dozens of scratch folders. They join an
+    // existing project's count but do not mint projects (the mesh stays readable).
+    const adopted = conversation.profileId?.startsWith("hermes:session:") === true;
+    if (adopted && !projects.has(projectId(hostId, cwd))) continue;
     const project = ensureProject(hostId, cwd);
     project.chatIds.push(conversation.id);
     project.updatedAt = Math.max(project.updatedAt, conversation.updatedAt);

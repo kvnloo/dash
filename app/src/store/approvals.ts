@@ -12,3 +12,12 @@ export function applyGateMessage(m: GateServerMessage) {
 }
 export const actionable = (i: GateItem) => i.state === "pending" || i.state === "edited";
 export const bulkEligible = (i: GateItem) => actionable(i) && i.policy.bulk_ok && !i.policy.requires_human_text;
+
+const KIND_TITLE: Record<GateItem["kind"], string> = {
+  issue_comment: "Comment on issue", pr_comment: "Comment on pull request", pr_review_reply: "Reply to a review comment",
+  pr_open: "Open pull request", pr_ready_for_review: "Mark ready for review", push_branch: "Push branch",
+};
+/** Cards always lead with what the action is, even when the target has no title. */
+export function itemTitle(item: Pick<GateItem, "kind" | "target">): string {
+  return item.target.title?.trim() || KIND_TITLE[item.kind];
+}

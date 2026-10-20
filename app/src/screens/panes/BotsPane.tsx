@@ -7,7 +7,7 @@ import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
-import { canChatWithAgent, emptyHostProfile, profileFromAgent } from "../../lib/roster";
+import { botAgents, canChatWithAgent, emptyHostProfile, profileFromAgent } from "../../lib/roster";
 import type { BotProfile } from "../../mock/bots";
 import type { ScreenProps } from "../../navigation";
 import { openBotConversation, store } from "../../store/app";
@@ -49,12 +49,13 @@ const ProfileRow = memo(function ProfileRow({
           <Text style={styles.title} numberOfLines={1}>
             {profile.name}
           </Text>
-          <View style={[styles.statusDot, profile.online ? styles.statusOn : styles.statusOff]} />
+          <View
+            accessibilityLabel={profile.live ? "Running" : profile.online ? "Available" : "Offline"}
+            style={[styles.statusDot, profile.live ? styles.statusOn : profile.online ? styles.statusIdle : styles.statusOff]}
+          />
         </View>
-        <Text style={styles.role} numberOfLines={1}>
-          {profile.role}
-        </Text>
-        <Text style={[styles.desc, (profile.description.startsWith("/") || profile.description.startsWith("~/")) && type.mono]} numberOfLines={1}>
+        {/* The host is the section header, so the row skips repeating it. */}
+        <Text style={[styles.desc, (profile.description.startsWith("/") || profile.description.startsWith("~/")) && styles.descMono]} numberOfLines={1}>
           {profile.description}
         </Text>
       </View>
@@ -107,7 +108,7 @@ export function BotsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">
           });
           continue;
         }
-        for (const agent of host.agents) {
+        for (const agent of botAgents(host)) {
           const profile = profileFromAgent(host, agent);
           out.push({
             kind: "profile",
@@ -202,9 +203,9 @@ const styles = StyleSheet.create({
   sectionSub: { color: colors.textTertiary, ...type.mono, marginTop: 2 },
   profileCard: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: space.md,
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
@@ -214,9 +215,10 @@ const styles = StyleSheet.create({
   title: { color: colors.text, ...type.heading, flex: 1 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusOn: { backgroundColor: colors.gold },
+  statusIdle: { borderWidth: 1.5, borderColor: colors.textTertiary },
   statusOff: { backgroundColor: colors.textFaint },
-  role: { color: colors.textTertiary, ...type.mono, marginTop: 4, textTransform: "none", letterSpacing: 0 },
-  desc: { color: colors.textTertiary, ...type.small, marginTop: 4 },
+  desc: { color: colors.textMuted, ...type.small, marginTop: 2 },
+  descMono: { ...type.mono, color: colors.textTertiary, marginTop: 4 },
   empty: { paddingTop: "40%", paddingHorizontal: space.xl, alignItems: "center" },
   emptyTitle: { color: colors.text, ...type.heading, marginBottom: space.sm },
   emptySub: { color: colors.textMuted, ...type.body, textAlign: "center" },

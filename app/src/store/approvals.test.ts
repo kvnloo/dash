@@ -17,3 +17,10 @@ test("live snapshots remain authoritative; a status is not a fake posted receipt
   applyGateMessage({ type: "gate_snapshot", items: [{ ...item, state: "stale", reason: "Head changed" }], dry_run: true });
   expect(approvals.get().items[0]?.state).toBe("stale"); expect(approvals.get().status).toEqual({});
 });
+
+test("cards lead with the action when the target has no title", async () => {
+  const { itemTitle } = await import("./approvals");
+  expect(itemTitle({ kind: "pr_review_reply", target: { repo: "omacom/omarchy", number: 10236, comment_id: 1 } })).toBe("Reply to a review comment");
+  expect(itemTitle({ kind: "pr_open", target: { repo: "a/b", title: "  fix(x): y " } })).toBe("fix(x): y");
+  expect(itemTitle({ kind: "issue_comment", target: { repo: "a/b", title: " " } })).toBe("Comment on issue");
+});

@@ -9,14 +9,15 @@ import type { ScreenProps } from "../navigation";
 import { KeyboardDock } from "../components/KeyboardDock";
 import { bridge } from "../net/bridge";
 import { store } from "../store/app";
-import { actionable, approvals, bulkEligible } from "../store/approvals";
-import { colors, radius, space, type } from "../theme";
+import { actionable, approvals, bulkEligible, itemTitle } from "../store/approvals";
+import { colors, fonts, radius, space, type } from "../theme";
 
+// `.z-btn` ghost: glass tint, hairline rim, pill, 44 px touch target.
 function Button({ label, onPress, disabled = false }: { label: string; onPress(): void; disabled?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={[styles.button, disabled && { opacity: 0.4 }]}><Text style={styles.buttonText}>{label}</Text></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, disabled && styles.buttonDisabled, pressed && styles.buttonPressed]}><Text style={styles.buttonText}>{label}</Text></Pressable>;
 }
 function Link({ label, url }: { label: string; url: string }) {
-  return /^https:\/\//.test(url) ? <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(url)} style={styles.link}><Text style={styles.linkText}>{label}</Text></Pressable> : <Text selectable style={styles.small}>{label}: {url}</Text>;
+  return /^https:\/\//.test(url) ? <Pressable accessibilityRole="link" hitSlop={6} onPress={() => void Linking.openURL(url)} style={styles.link}><Text style={styles.linkText} numberOfLines={2}>{label}</Text></Pressable> : <Text selectable style={styles.small}>{label}: {url}</Text>;
 }
 export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
   const insets = useSafeAreaInsets();
@@ -50,9 +51,8 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
     {!online ? <Text style={styles.error}>Offline. Decisions disabled until the paired bridge reconnects.</Text> : null}
     {state.error || localError ? <Text accessibilityRole="alert" style={styles.error}>{state.error || localError}</Text> : null}
     {!state.loaded ? <Text style={styles.subtitle}>Waiting for authenticated outbox…</Text> : null}
-    <View style={styles.actions}>
+    <View style={[styles.actions, styles.toolbar]}>
       <Button label="Select all bulk-safe" onPress={() => toggle(eligible)} disabled={!online || !eligible.length} />
-
       <Button label={showHistory ? "Hide history" : "Show history"} onPress={() => setShowHistory(!showHistory)} />
     </View>
     <View style={{ paddingHorizontal: 16, marginBottom: 8 }}><PrimaryButton label={`Approve selected (${selected.length})`} onPress={() => askApprove(selected)} disabled={!online || !selected.length} /></View>
@@ -63,17 +63,17 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
           <View style={styles.groupHeader}><Text style={styles.heading}>{repo}</Text><Button label={`Select group (${ids.length})`} onPress={() => toggle(ids)} disabled={!online || !ids.length} /></View>
           {items.map(item => <View key={item.id} testID={`gate-card-${item.id}`} style={styles.card}>
             <View style={styles.actions}>
-              {bulkEligible(item) ? <Pressable accessibilityRole="checkbox" accessibilityLabel={`Select ${item.id}`} accessibilityState={{ checked: selected.includes(item.id), disabled: !online }} disabled={!online} onPress={() => toggle([item.id])} style={styles.button}><Text style={[styles.buttonText, selected.includes(item.id) && { color: colors.gold }]}>{selected.includes(item.id) ? "Selected" : "Select"}</Text></Pressable> : null}
-              <Text style={styles.badge}>{item.policy.requires_human_text ? "Human text" : item.policy.bulk_ok ? "Bulk safe" : "Individual"}</Text><Text style={styles.badge}>{item.kind.replaceAll("_", " ")}</Text>
+              {bulkEligible(item) ? <Pressable accessibilityRole="checkbox" accessibilityLabel={`Select ${item.id}`} accessibilityState={{ checked: selected.includes(item.id), disabled: !online }} aria-checked={selected.includes(item.id)} disabled={!online} onPress={() => toggle([item.id])} style={[styles.button, selected.includes(item.id) && styles.buttonSelected]}><Text style={[styles.buttonText, selected.includes(item.id) && { color: colors.gold }]}>{selected.includes(item.id) ? "✓ Selected" : "Select"}</Text></Pressable> : null}
+              <Text style={styles.badge}>{item.policy.requires_human_text ? "Human text" : item.policy.bulk_ok ? "Bulk safe" : "Individual"} · {item.kind.replaceAll("_", " ")}</Text>
             </View>
-            {item.target.title ? <Text style={styles.heading}>{item.target.title}</Text> : null}
+            <Text style={styles.itemTitle} numberOfLines={2}>{itemTitle(item)}</Text>
             <Link label={`${repo}${item.target.number ? ` #${item.target.number}` : " · " + (item.target.head ?? "new action")}`} url={`https://github.com/${repo}${item.target.number ? `/${item.kind === "issue_comment" ? "issues" : "pull"}/${item.target.number}` : ""}`} />
             <Text style={styles.small}>{item.policy.reason}</Text>
             <Text numberOfLines={6} selectable style={styles.body}>{item.body || "Write your own response. Generated text is not shown under this policy."}</Text>
             {item.evidence.map((e,n) => <Link key={`${e.label}-${n}`} label={e.label} url={e.url_or_path} />)}
-            <Text style={[styles.small, { color: item.state === "stale" || item.state === "failed" ? colors.warn : colors.ink2 }]}>{state.status[item.id] ?? item.state}{item.reason ? ` · ${item.reason}` : ""}{item.receipt?.dry_run ? " · Dry-run checks passed. Nothing posted." : ""}</Text>
+            <Text style={[styles.stateLine, { color: item.state === "stale" || item.state === "failed" ? colors.warn : colors.textTertiary }]}>{state.status[item.id] ?? item.state}{item.reason ? ` · ${item.reason}` : ""}{item.receipt?.dry_run ? " · Dry-run checks passed. Nothing posted." : ""}</Text>
             {item.receipt?.url ? <Link label="Posted on GitHub" url={item.receipt.url} /> : null}
-            <View style={styles.actions}>
+            <View style={[styles.actions, styles.cardActions]}>
               {actionable(item) || item.state === "approved" ? <>
                 <Button label={item.policy.requires_human_text ? "Write response" : "Review / edit"} disabled={!online || Boolean(state.status[item.id])} onPress={() => openEditor(item)} />
                 <Button label="Reject" disabled={!online || Boolean(state.status[item.id])} onPress={() => openEditor(item, true)} />
@@ -102,16 +102,21 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
   </View>;
 }
 const styles = StyleSheet.create({
-  metrics: { flexDirection: "row", marginHorizontal: 16, marginVertical: 16, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.hair, paddingVertical: 12 },
-  metric: { flex: 1, gap: 4, paddingHorizontal: 8 }, metricBorder: { borderLeftWidth: 1, borderColor: colors.hair },
-  metricLabel: { ...type.label, color: colors.textMuted }, metricNumber: { ...type.number, color: colors.text }, metricNote: { ...type.mono, color: colors.textTertiary, fontSize: 10 },
+  metrics: { flexDirection: "row", marginHorizontal: space.lg, marginVertical: space.md, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.hair, paddingVertical: 12 },
+  metric: { flex: 1, gap: 2, paddingHorizontal: space.md }, metricBorder: { borderLeftWidth: 1, borderColor: colors.hair },
+  // Sans tabular numerals: Cormorant's old-style "1" reads as the letter I beside a label.
+  metricLabel: { ...type.label, color: colors.textMuted }, metricNumber: { fontFamily: fonts.semibold, fontSize: 30, lineHeight: 36, fontWeight: "600", fontVariant: ["tabular-nums"], color: colors.text }, metricNote: { ...type.mono, color: colors.textTertiary, fontSize: 10 },
   screen: { flex: 1, backgroundColor: colors.bg }, header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.md, gap: space.sm },
-  title: { color: colors.text, ...type.title, flexShrink: 1 }, heading: { color: colors.ink, ...type.cardTitle, flexShrink: 1 }, mode: { color: colors.ink2, ...type.small, paddingHorizontal: space.lg, paddingTop: space.sm }, subtitle: { color: colors.textMuted, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
+  title: { color: colors.text, ...type.title, flexShrink: 1 }, heading: { color: colors.ink, ...type.cardTitle, flexShrink: 1 }, itemTitle: { color: colors.text, ...type.cardTitle },
+  mode: { color: colors.ink2, ...type.small, paddingHorizontal: space.lg, paddingTop: space.sm }, subtitle: { color: colors.textMuted, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.xs },
   content: { padding: space.lg, gap: space.lg }, group: { gap: space.md }, groupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
   card: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.hair, borderTopColor: "rgba(255,255,255,.18)", padding: space.lg, gap: space.sm },
-  body: { color: colors.ink, ...type.body }, small: { color: colors.ink2, ...type.small }, badge: { color: colors.textMuted, ...type.small, alignSelf: "center", flexShrink: 1 },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, paddingHorizontal: space.sm }, button: { minHeight: 44, minWidth: 44, justifyContent: "center", paddingHorizontal: space.md, backgroundColor: "transparent", borderWidth: 1, borderColor: colors.hair, borderRadius: radius.sm }, buttonText: { color: colors.ink, ...type.small },
-  link: { minHeight: 44, justifyContent: "center" }, linkText: { color: colors.text, ...type.small, textDecorationLine: "underline", flexShrink: 1 }, error: { color: colors.warn, ...type.small, padding: space.lg },
-  scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", padding: space.lg }, sheet: { padding: space.xl, gap: space.lg, backgroundColor: colors.surface, borderRadius: radius.md },
+  body: { color: colors.ink, ...type.body }, small: { color: colors.ink2, ...type.small }, badge: { color: colors.textTertiary, ...type.mono, alignSelf: "center", flexShrink: 1 },
+  stateLine: { ...type.mono }, actions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.sm }, toolbar: { paddingHorizontal: space.lg }, cardActions: { marginTop: space.xs },
+  button: { minHeight: 44, minWidth: 44, justifyContent: "center", paddingHorizontal: space.lg, backgroundColor: "rgba(236,232,223,.06)", borderWidth: 1, borderColor: "rgba(236,232,223,.16)", borderTopColor: "rgba(255,255,255,.22)", borderRadius: radius.pill },
+  buttonSelected: { borderColor: colors.gold }, buttonDisabled: { opacity: 0.4 }, buttonPressed: { borderColor: colors.gold },
+  buttonText: { color: colors.text, ...type.small, fontFamily: fonts.semibold, fontWeight: "600" },
+  link: { minHeight: 32, justifyContent: "center" }, linkText: { color: colors.textMuted, ...type.small, textDecorationLine: "underline", flexShrink: 1 }, error: { color: colors.warn, ...type.small, padding: space.lg },
+  scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", padding: space.lg }, sheet: { padding: space.xl, gap: space.lg, backgroundColor: colors.surfaceRaised, borderRadius: radius.lg },
   input: { color: colors.text, backgroundColor: colors.surface, margin: space.lg, padding: space.lg, borderRadius: radius.md, minHeight: 120, maxHeight: 260, ...type.body, textAlignVertical: "top" },
 });

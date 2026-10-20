@@ -55,11 +55,11 @@ const Card = memo(function Card({
           <OrchestraCore hue={provider.hue} size={36} />
         </EffortOrbs>
       </View>
-      {item.topologyId === "unknown" ? <Text style={{ ...type.mono, color: colors.textTertiary, marginTop: 16 }}>Topology not reported</Text> : <TopologyBadge topologyId={item.topologyId} providerId={item.providerId} width={180} />}
+      {/* No topology is claimed until a host reports one: no placeholder diagram or label. */}
+      {item.topologyId === "unknown" ? null : <TopologyBadge topologyId={item.topologyId} providerId={item.providerId} width={180} />}
       <View style={styles.footer}>
-        <Text style={styles.meta}>
-          {topology.label} · {item.agentRows.length} agent{item.agentRows.length === 1 ? "" : "s"} · {item.chatIds.length} chat
-          {item.chatIds.length === 1 ? "" : "s"}
+        <Text style={styles.meta} numberOfLines={1}>
+          {[item.topologyId === "unknown" ? undefined : topology.label, `${item.agentRows.length} agent${item.agentRows.length === 1 ? "" : "s"}`, `${item.chatIds.length} chat${item.chatIds.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}
         </Text>
         <Text style={styles.time}>{timeAgo(item.updatedAt)}</Text>
       </View>

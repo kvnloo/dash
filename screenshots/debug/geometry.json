@@ -1,5 +1,5 @@
 {
-  "sourceHash": "227ee68c156d03923c719f2d10f0f4e0def3b19857490ca7c0a7050696769417",
+  "sourceHash": "4e836b2a731b0b9a065e1e6dab3c2615dc8090533ed2ad0f1420dfc7fb3edd58",
   "geometry": [
     {
       "scenario": "main-chats",
@@ -9,7 +9,7 @@
       },
       "ended": {
         "x": 339,
-        "y": 369,
+        "y": 553,
         "width": 35,
         "height": 16
       },
@@ -27,7 +27,7 @@
       },
       "ended": {
         "x": 339,
-        "y": 369,
+        "y": 553,
         "width": 35,
         "height": 16
       },
@@ -161,9 +161,9 @@
       },
       "metrics": {
         "x": 16,
-        "y": 136,
+        "y": 124,
         "width": 358,
-        "height": 102
+        "height": 98
       },
       "journey": [
         "bulk selection opens exact confirmation; Cancel submits nothing"

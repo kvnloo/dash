@@ -6,6 +6,8 @@ export interface BotProfile {
   role: string;
   description: string;
   online: boolean;
+  /** A running process on the host (not merely installed or saved). Only this earns the gold dot. */
+  live?: boolean;
   /** Working directory on the host when this row is a live OMP tab. */
   cwd?: string;
   targetHostId?: string;

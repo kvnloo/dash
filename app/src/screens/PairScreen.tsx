@@ -235,9 +235,11 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
         {status ? <Text style={styles.status}>{status}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
+        <Text style={styles.sectionLabel}>Have a code from the computer or a link?</Text>
         <GlassSurface variant="raised" borderRadius={radius.sm} style={styles.inputWrap}>
           <TextInput
             value={manualCode}
+            accessibilityLabel="Pairing code"
             onChangeText={(t) => setManualCode(t.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
             placeholder="ABC123"
             placeholderTextColor={colors.textFaint}
@@ -292,16 +294,21 @@ const styles = StyleSheet.create({
   },
   primaryDisabled: { backgroundColor: colors.surfaceRaised },
   primaryText: { color: colors.onAccent, ...type.heading },
+  // `.z-btn` ghost: glass tint, hairline rim, pill.
   secondary: {
     marginTop: space.sm,
-    borderRadius: radius.sm,
-    paddingVertical: 14,
+    borderRadius: radius.pill,
+    minHeight: 48,
+    justifyContent: "center",
     alignItems: "center",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    backgroundColor: "rgba(236,232,223,.06)",
+    borderWidth: 1,
+    borderColor: "rgba(236,232,223,.16)",
+    borderTopColor: "rgba(255,255,255,.22)",
   },
+  sectionLabel: { color: colors.textMuted, ...type.label, marginTop: space.xl, marginBottom: space.sm },
   secondaryDisabled: { opacity: 0.45 },
-  secondaryText: { color: colors.text, ...type.body },
+  secondaryText: { color: colors.text, ...type.heading },
   status: { color: colors.textMuted, ...type.small, marginTop: space.md, textAlign: "center" },
   error: { color: colors.danger, ...type.small, marginTop: space.md, textAlign: "center" },
   linkWrap: { marginTop: space.xxl, alignItems: "center" },

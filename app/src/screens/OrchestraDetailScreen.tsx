@@ -83,7 +83,8 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
             <OrchestraCore hue={provider.hue} size={48} />
           </EffortOrbs>
         </View>
-        {project.topologyId === "unknown" ? <Text style={{ ...type.mono, color: colors.textTertiary }}>Topology not reported</Text> : <TopologyBadge topologyId={project.topologyId} providerId={project.providerId} width={180} />}
+        {/* No topology is claimed until a host reports one. */}
+        {project.topologyId === "unknown" ? null : <TopologyBadge topologyId={project.topologyId} providerId={project.providerId} width={180} />}
         <View style={styles.metaRow}>
           <View
             style={[
@@ -96,33 +97,29 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
             accessibilityLabel={project.status}
           />
           <Text style={styles.meta}>
-            {topology.label} · {project.agentRows.length} agents · {linkedChats.length} chats
+            {[project.topologyId === "unknown" ? undefined : topology.label, `${project.agentRows.length} agent${project.agentRows.length === 1 ? "" : "s"}`, `${linkedChats.length} chat${linkedChats.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}
           </Text>
         </View>
       </View>
 
       <Text style={styles.section}>Agents</Text>
-      <FlashList
-        data={project.agentRows}
-        keyExtractor={(profile) => profile.id}
-        scrollEnabled={false}
-        ListEmptyComponent={<Text style={styles.emptyChats}>No agents reported for this project</Text>}
-        renderItem={({ item: profile }) => {
-          return (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${profile.name} in ${project.name}`}
-              onPress={() => openAgent(profile)}
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-            >
-              <Text style={styles.rowTitle}>{profile.name}</Text>
-              <Text style={styles.rowId}>{profile.online ? profile.harness : "Offline"}</Text>
-            </Pressable>
-          );
-        }}
-      />
+      {/* A few rows: plain views, so the list takes only its height and Chats follows directly. */}
+      <View>
+        {project.agentRows.length === 0 ? <Text style={styles.emptyChats}>No agents reported for this project</Text> : project.agentRows.map((profile) => (
+          <Pressable
+            key={profile.id}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${profile.name} in ${project.name}`}
+            onPress={() => openAgent(profile)}
+            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          >
+            <Text style={styles.rowTitle} numberOfLines={1}>{profile.name}</Text>
+            <Text style={styles.rowId}>{profile.online ? profile.harness : "Offline"}</Text>
+          </Pressable>
+        ))}
+      </View>
 
-      <Text style={styles.section}>Chats</Text>
+      <Text style={[styles.section, styles.sectionGap]}>Chats</Text>
       <FlashList
         data={linkedChats}
         keyExtractor={(c) => c.id}
@@ -153,13 +150,14 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.textTertiary, ...type.mono, marginTop: 4 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
-  meta: { color: colors.textFaint, fontSize: 12 },
+  meta: { color: colors.textTertiary, ...type.small },
   section: {
     color: colors.textMuted,
     ...type.section,
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
   },
+  sectionGap: { marginTop: space.lg },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -171,7 +169,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   rowTitle: { color: colors.text, ...type.heading, flex: 1 },
-  rowId: { color: colors.textFaint, ...type.small, textTransform: "none", letterSpacing: 0 },
+  rowId: { color: colors.textTertiary, ...type.mono, textTransform: "none", letterSpacing: 0 },
   chatRow: {
     flexDirection: "row",
     alignItems: "center",
