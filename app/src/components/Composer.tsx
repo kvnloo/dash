@@ -1,4 +1,6 @@
 import { Feather } from "@expo/vector-icons";
+import { AgentOrb } from "./AgentOrb";
+import type { OrbState } from "../lib/orb-phase";
 import { toggleHandedness, useHandedness } from "../lib/useHandedness";
 import { type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -39,11 +41,13 @@ interface Props {
   onSend(text: string, attachments: ChatAttachment[], mode?: SendMode): void;
   onStop(): void;
   onVoice(): void;
+  /** A live z0live call's orb state: the mic shows a small live orb instead of the glyph. */
+  voiceCall?: OrbState;
 }
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ disabled, streaming, steerBusy = false, placeholder, initialText, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice }: Props) {
+export const Composer = memo(function Composer({ disabled, streaming, steerBusy = false, placeholder, initialText, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice, voiceCall }: Props) {
   const thumb = useHandedness();
   const [choice, setChoice] = useState<SendMode>("steer");
   useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
@@ -122,7 +126,7 @@ export const Composer = memo(function Composer({ disabled, streaming, steerBusy 
       <TextInput style={styles.input} value={text} onChangeText={setText} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline={false} numberOfLines={1} keyboardAppearance="dark" autoCapitalize="sentences" onSubmitEditing={submit} accessibilityLabel="Message" />
       <View style={[styles.controls, thumb.row]}>
         <PressScale accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttach} disabled={disabled} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale>
-        <PressScale accessibilityRole="button" accessibilityLabel="Voice input" accessibilityHint="Long press to switch thumb side" onLongPress={toggleHandedness} onPress={onVoice} style={styles.hit}><Feather name="mic" size={18} color={colors.textMuted} /></PressScale>
+        <PressScale accessibilityRole="button" accessibilityLabel={voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : "Voice input"} accessibilityHint="Long press to switch thumb side" onLongPress={toggleHandedness} onPress={onVoice} style={styles.hit}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : <Feather name="mic" size={18} color={colors.textMuted} />}</PressScale>
         {streaming ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale> : null}
         {steerBusy || !streaming ? <PressScale accessibilityRole="button" accessibilityLabel={sendMode.action} accessibilityHint={sendMode.label} onPress={submit} disabled={!canSend} style={styles.hit}><View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View></PressScale> : null}
       </View>

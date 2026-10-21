@@ -1,29 +1,45 @@
 import { useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AgentOrb } from "../components/AgentOrb";
 import { Canvas } from "../components/Canvas";
-import { ScreenHeader } from "../components/ScreenHeader";
-import { VoiceOrb } from "../components/VoiceOrb";
-import { presetForHarness, type OrbPreset } from "../components/orb-html";
-import { store } from "../store/app";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { ScreenHeader } from "../components/ScreenHeader";
+import { debugUi } from "../debug/ui-store";
+import { useLiveThinking } from "../lib/live-thinking";
+import { mergeVoicePhase, orbCaption, transcriptTail } from "../lib/orb-phase";
+import { screenBack } from "../lib/screen-back";
 import { launchSharedVoice, type VoiceLaunchResult } from "../lib/voice-launch";
+import { useZ0LiveState } from "../lib/z0live-state";
+import type { Message } from "../model";
 import type { ScreenProps } from "../navigation";
+import { store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { LegacyVoiceScreen } from "./LegacyVoiceScreen";
-import { screenBack } from "../lib/screen-back";
 
 type VoiceView =
   | { kind: "shared"; result?: VoiceLaunchResult }
   | { kind: "opening" }
   | { kind: "legacy" };
 
+const EMPTY: Message[] = [];
+
+/** Live conversation mode: the hero orb follows a live z0live call, else the chat's live phase. */
 export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   const insets = useSafeAreaInsets();
-  const harness = store.use(s => s.conversations.find(c => c.id === s.activeId)?.harness ?? s.settings?.harness ?? "hermes");
+  const conversation = store.use(s => s.conversations.find(c => c.id === s.activeId));
+  const settings = store.use(s => s.settings);
+  const harness = conversation?.harness ?? settings?.harness ?? "hermes";
   const harnessName = store.use(s => s.connection.harnesses.find(h => h.id === harness)?.name ?? harness);
-  const [preset, setPreset] = useState<OrbPreset | null>(null);
   const [view, setView] = useState<VoiceView>({ kind: "shared" });
+  const chat = useLiveThinking(conversation);
+  const fixture = debugUi.use(s => s.z0liveFixture ?? null);
+  const polled = useZ0LiveState(settings, chat.online && fixture === null && view.kind !== "legacy");
+  const call = fixture ?? polled;
+  const live = call?.live === true;
+  const orb = mergeVoicePhase(call, chat.thinking);
+  const caption = live ? orbCaption(orb, "listening") : chat.caption;
+  const lines = transcriptTail(call, conversation?.messages ?? EMPTY);
 
   const openVoice = async (): Promise<void> => {
     if (view.kind === "opening") return;
@@ -37,35 +53,44 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   }
 
   const result = view.kind === "shared" ? view.result : undefined;
-  const unavailable = result?.kind === "unavailable";
-  const message = unavailable
-    ? result.message
-    : result?.kind === "opened"
-      ? "z0live controls opened. Tap Start there when you are ready."
-      : "Open the shared z0live controls, then tap Start there when you are ready.";
+  const opening = view.kind === "opening";
+  const launcherLabel = opening ? "Opening…" : live ? "Open in z0live" : "Start voice";
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.xl }]}>
-      <Canvas /><ScreenHeader title="Voice" onBack={() => screenBack(props.navigation)} />
+    <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
+      <Canvas /><ScreenHeader title={live ? "Live call" : "Voice"} onBack={() => screenBack(props.navigation)} />
       <View style={styles.content}>
-        <Text style={styles.title}>{harnessName}</Text>
-        <VoiceOrb preset={preset ?? presetForHarness(harness)} phase="idle" size={190} />
-        <Text style={styles.caption}>Say something…</Text>
-        <Text style={styles.note}>Microphone off · Start in z0live</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 4 }}>{(["chatgpt", "gemini", "siri", "alexa", "elevenlabs"] satisfies OrbPreset[]).map((id, i) => <Pressable key={id} accessibilityRole="radio" accessibilityLabel={`Voice appearance: ${id}`} accessibilityState={{ checked: (preset ?? presetForHarness(harness)) === id }} aria-checked={(preset ?? presetForHarness(harness)) === id} onPress={() => setPreset(id)} style={{ minHeight: 44, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.small, color: (preset ?? presetForHarness(harness)) === id ? colors.gold : colors.textTertiary }}>{["Atmosphere", "Spectrum", "Perimeter", "Light ring", "ElevenLabs"][i]}</Text></Pressable>)}</View>
-        <Text accessibilityLiveRegion="polite" style={[styles.message, unavailable && styles.error]}>
-          {message}
+        <Text style={styles.title}>{live ? "z0live" : harnessName}</Text>
+        <AgentOrb size="hero" thinking={orb} label={`${live ? "z0live call" : harnessName} ${caption}`} />
+        <Text accessibilityLiveRegion="polite" style={styles.caption} testID="voice-caption">
+          {caption}{live && call.muted ? " · muted" : ""}
         </Text>
-        <View style={styles.action}><PrimaryButton accessibilityLabel="Open z0live voice" disabled={view.kind === "opening"} onPress={() => void openVoice()} label={view.kind === "opening" ? "Opening…" : "Open z0live"} /></View>
-        <Pressable
-          accessibilityRole="button"
-          disabled={view.kind === "opening"}
-          onPress={() => setView({ kind: "legacy" })}
-          style={styles.legacy}
-        >
-          <Text style={styles.caption}>Use legacy voice</Text>
-        </Pressable>
-        <Text style={styles.note}>Legacy voice uses the Dash microphone and your paired bridge.</Text>
+        <View style={styles.transcript} testID="voice-transcript">
+          {lines.map((line, i) => (
+            <Text key={`${i}:${line.role}`} numberOfLines={2} style={[styles.line, line.role === "user" ? styles.user : styles.assistant, i < lines.length - 1 && styles.older]}>
+              <Text style={styles.who}>{line.role === "user" ? "you  " : "agent  "}</Text>{line.text}
+            </Text>
+          ))}
+        </View>
+        {result?.kind === "unavailable" ? <Text accessibilityLiveRegion="polite" style={[styles.message, styles.error]}>{result.message}</Text> : null}
+      </View>
+      <View style={styles.controls}>
+        <PrimaryButton accessibilityLabel={live ? "Open in z0live" : "Start voice in z0live"} disabled={opening} onPress={() => void openVoice()} label={launcherLabel} />
+        {live ? (
+          <>
+            <Pressable accessibilityRole="button" onPress={() => screenBack(props.navigation)} style={styles.secondary}>
+              <Text style={styles.secondaryText}>Back to chat · call keeps going</Text>
+            </Pressable>
+            <Text style={styles.note}>Mute and end stay in z0live: the broker has no control API Dash can call for the phone's call.</Text>
+          </>
+        ) : (
+          <>
+            <Pressable accessibilityRole="button" disabled={opening} onPress={() => setView({ kind: "legacy" })} style={styles.secondary}>
+              <Text style={styles.secondaryText}>Use legacy voice</Text>
+            </Pressable>
+            <Text style={styles.note}>{chat.online ? "No live call. Start one in z0live; this view follows it." : "Offline: pair the bridge to follow a live call."}</Text>
+          </>
+        )}
       </View>
     </View>
   );
@@ -75,13 +100,17 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: space.xl, gap: space.md },
   title: { ...type.title, color: colors.text },
-  caption: { ...type.body, color: colors.textMuted, textAlign: "center" },
+  caption: { ...type.body, color: colors.textMuted, textAlign: "center", minHeight: 22 },
+  transcript: { alignSelf: "stretch", gap: space.sm, minHeight: 96, justifyContent: "flex-end", paddingHorizontal: space.sm, borderRadius: radius.md },
+  line: { ...type.body },
+  user: { color: colors.text, textAlign: "right" },
+  assistant: { color: colors.text, textAlign: "left" },
+  older: { opacity: 0.55 },
+  who: { ...type.small, color: colors.textFaint },
   message: { ...type.body, color: colors.text, textAlign: "center" },
   error: { color: colors.danger },
-  action: { alignSelf: "stretch" },
-  actionContent: { minHeight: 48, alignItems: "center", justifyContent: "center", paddingHorizontal: space.xl },
-  actionText: { ...type.heading, color: colors.text },
-  pressed: { transform: [{ scale: 0.985 }] },
-  legacy: { minHeight: 44, justifyContent: "center", paddingHorizontal: space.lg },
+  controls: { paddingHorizontal: space.xl, alignItems: "stretch", gap: space.xs },
+  secondary: { minHeight: 44, justifyContent: "center", alignItems: "center", paddingHorizontal: space.lg },
+  secondaryText: { ...type.body, color: colors.textMuted },
   note: { ...type.small, color: colors.textFaint, textAlign: "center" },
 });

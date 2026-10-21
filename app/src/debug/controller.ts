@@ -45,6 +45,7 @@ function applyScenarioUi(spec: (typeof DEBUG_SCENARIOS)[DebugScenarioId]): void 
     mainTabIndex: spec.ui?.mainTabIndex ?? null,
     chatHarnessPickerOpen: spec.ui?.chatHarnessPickerOpen ?? null,
     chatComposerAttachments: spec.ui?.chatComposerAttachments ?? null,
+    z0liveFixture: spec.ui?.z0liveFixture ?? null,
   }));
   if (spec.ui?.activeConversationId) {
     setActive(spec.ui.activeConversationId);
