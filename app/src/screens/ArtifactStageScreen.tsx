@@ -5,13 +5,14 @@ import { ScreenHeader } from "../components/ScreenHeader";
 import { forDash, isStageUrl, stageLabel } from "../lib/stage-link";
 import type { ScreenProps } from "../navigation";
 import { colors, space, type } from "../theme";
+import { toMain } from "../lib/main-nav";
 
 /** One ephemeral artifact review, opened from a chat reply or an approval item. */
 export function ArtifactStageScreen({ navigation, route }: ScreenProps<"ArtifactStage">) {
   const insets = useSafeAreaInsets();
   const url = route.params?.url ?? "";
   const ok = isStageUrl(url);
-  const back = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate("Main"));
+  const back = () => (navigation.canGoBack() ? navigation.goBack() : toMain(navigation));
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScreenHeader compact title={route.params?.title ?? (ok ? `Stage · ${stageLabel(url)}` : "Stage")} onBack={back} />

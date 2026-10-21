@@ -30,6 +30,7 @@ import { bridge } from "../net/bridge";
 import { nextPrefill } from "../lib/deep-link";
 import { saveSettings, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
+import { toMain } from "../lib/main-nav";
 
 const RECORD_MS = 6500;
 
@@ -185,7 +186,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}><Canvas />
-      <ScreenHeader title="Connect" onBack={() => navigation.navigate("Main")} />
+      <ScreenHeader title="Connect" onBack={() => toMain(navigation)} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Pair with your laptop</Text>
         <Text style={styles.intro}>

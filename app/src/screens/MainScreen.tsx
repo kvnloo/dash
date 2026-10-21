@@ -162,11 +162,14 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
     [],
   );
 
+  // Keyed on the params object: popTo("Main", { tab }) makes a new one per tap, so asking for
+  // the tab Main already recorded (after the user swiped away) still moves the pager.
+  const routeParams = route.params;
   useEffect(() => {
     if (typeof routeTab !== "number") return;
     setIndex(routeTab);
     pagerRef.current?.setPage(routeTab);
-  }, [routeTab, setIndex]);
+  }, [routeParams, routeTab, setIndex]);
 
   const onPage = useCallback(
     (e: { nativeEvent: { position: number } }) => {

@@ -37,6 +37,7 @@ import {
   pillStep,
   pillStretch,
 } from "./golden-nav";
+import { toMain } from "../lib/main-nav";
 
 const RIPPLE = { color: "transparent" as const };
 
@@ -115,7 +116,7 @@ export const AppNav = memo(
     const goTab = (next: number) => {
       haptic.tap();
       if (onTab) onTab(next);
-      else navigation.navigate("Main", { tab: next });
+      else toMain(navigation, next);
     };
 
     const active = clampTab(tab);

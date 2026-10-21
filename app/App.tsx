@@ -108,7 +108,9 @@ export default function App() {
             <View style={styles.root}>
               <Stack.Navigator
                 initialRouteName={isDebugActive() || hasSettings ? "Main" : "Pair"}
-                screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "default" }}
+                // Every screen draws the same nav bar at the same place. A fade keeps it still while the
+                // content changes; a slide carried a second copy of the bar across the screen.
+                screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "fade", animationDuration: 200 }}
               >
                 <Stack.Screen name="Main" component={MainScreen} />
                 <Stack.Screen name="Approvals" component={ApprovalsScreen} />
