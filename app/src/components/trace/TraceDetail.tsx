@@ -62,20 +62,24 @@ export function TraceDetail({ snapshot, row, origin, onClose }: { snapshot: Trac
       else drag.value = withTiming(0, { ...settleTiming(-drag.value, e.velocityY), reduceMotion: ReduceMotion.System });
     });
 
+  // Transform-only morph: the sheet keeps its final size and is scaled/translated from the tapped row's rect.
+  // Animating left/top/width/height re-ran layout for the whole sheet every frame, which made opening lag.
+  const sx = from.width / target.width, sy = from.height / target.height;
+  const dx = from.x - target.x, dy = from.y - target.y;
   const sheet = useAnimatedStyle(() => {
     const k = reduced ? 1 : p.value;
     const lerp = (a: number, b: number) => a + (b - a) * k;
+    const scaleX = lerp(sx, 1), scaleY = lerp(sy, 1);
+    const shrink = 1 - interpolate(drag.value, [0, 400], [0, 0.06], Extrapolation.CLAMP);
     return {
-      left: lerp(from.x, target.x),
-      top: lerp(from.y, target.y) + drag.value,
-      width: lerp(from.width, target.width),
-      height: lerp(from.height, target.height),
-      borderTopLeftRadius: lerp(4, radius.lg),
-      borderTopRightRadius: lerp(4, radius.lg),
-      borderBottomLeftRadius: lerp(4, 0),
-      borderBottomRightRadius: lerp(4, 0),
-      opacity: reduced ? p.value : 1,
-      transform: [{ scale: 1 - interpolate(drag.value, [0, 400], [0, 0.06], Extrapolation.CLAMP) }],
+      opacity: reduced ? p.value : interpolate(k, [0, 0.15], [0.6, 1], Extrapolation.CLAMP),
+      transform: [
+        // scale about the top-left corner: shift by half the size change
+        { translateX: lerp(dx, 0) - (target.width * (1 - scaleX)) / 2 },
+        { translateY: lerp(dy, 0) - (target.height * (1 - scaleY)) / 2 + drag.value },
+        { scaleX: scaleX * shrink },
+        { scaleY: scaleY * shrink },
+      ],
     };
   });
   const scrim = useAnimatedStyle(() => ({ opacity: p.value * 0.72 * (1 - Math.min(1, drag.value / 500)) }));
@@ -89,7 +93,7 @@ export function TraceDetail({ snapshot, row, origin, onClose }: { snapshot: Trac
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close detail" />
       </Animated.View>
       <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.sheet, sheet]} accessibilityViewIsModal>
+        <Animated.View style={[styles.sheet, { left: target.x, top: target.y, width: target.width, height: target.height }, sheet]} accessibilityViewIsModal renderToHardwareTextureAndroid>
           <View style={styles.grab} />
           <View style={styles.head}>
             <View style={{ flex: 1 }}>
@@ -161,7 +165,7 @@ function MiniBar({ w, t0, t1 }: { w: TraceRow["workers"][number]; t0: number; t1
 
 const styles = StyleSheet.create({
   scrim: { backgroundColor: "#000" },
-  sheet: { position: "absolute", backgroundColor: "#121310", borderWidth: 1, borderColor: tc.rule, overflow: "hidden" },
+  sheet: { position: "absolute", backgroundColor: "#121310", borderWidth: 1, borderColor: tc.rule, overflow: "hidden", borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
   grab: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: "rgba(236,232,223,.22)", marginTop: 8 },
   head: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.md, borderBottomWidth: 1, borderBottomColor: tc.rule },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
