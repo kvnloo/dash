@@ -13,7 +13,9 @@ import { VoiceSession, type Recorder, type VoicePhase } from "../lib/voice-sessi
 import { voiceOrbPhase } from "../lib/voice-orb";
 import { onTurnSettled } from "../store/queue";
 import type { ScreenProps } from "../navigation";
-import { sendVoiceBegin, sendVoiceChunk, sendVoiceCommit } from "../net/bridge";
+import { sendChat, sendVoiceBegin, sendVoiceChunk, sendVoiceCommit } from "../net/bridge";
+import { addSegment, registerSink } from "../store/annotate";
+import { canSteer } from "../lib/composer-mode";
 import { beginTurn, createConversation, store } from "../store/app";
 import { replyText } from "../store/text";
 import { colors, radius, space, type } from "../theme";
@@ -36,6 +38,8 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
 
   const [phase, setPhase] = useState<VoicePhase>("idle");
+  const phaseRef = useRef<VoicePhase>("idle");
+  phaseRef.current = phase;
   const [error, setError] = useState<string | undefined>();
   const [started, setStarted] = useState(false);
 
@@ -43,6 +47,8 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
   const sessionRef = useRef<VoiceSession | null>(null);
   const speakerRef = useRef<ReplySpeaker | null>(null);
   const turnRef = useRef<string | null>(null);
+  /** When the current utterance began, for aligning annotation strokes with speech. */
+  const utteranceStart = useRef(0);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const conversationId = store.use((s) => s.activeId);
@@ -66,6 +72,44 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
     unsubscribeRef.current = replyText.subscribe(turnId, tick);
   }, []);
 
+  /** When the bridge reports what it heard, publish it as a timed transcript segment. */
+  const followHeard = useCallback((conversationId: string, turnId: string, start: number, end: number) => {
+    const userText = (): string | undefined => {
+      const messages = store.get().conversations.find(c => c.id === conversationId)?.messages ?? [];
+      const at = messages.findIndex(m => m.role === "assistant" && m.turnId === turnId);
+      const user = at > 0 ? messages[at - 1] : undefined;
+      return user?.role === "user" && user.text ? user.text : undefined;
+    };
+    const unsubscribe = store.subscribe(() => {
+      const text = userText();
+      if (!text) return;
+      unsubscribe();
+      addSegment({ id: `voice-${turnId}`, text, start, end, source: "voice" });
+    });
+    setTimeout(unsubscribe, 120_000);
+  }, []);
+
+  // Live mode: while legacy voice runs, an annotation Send goes into this voice conversation.
+  useEffect(() => {
+    if (!started) return;
+    return registerSink({
+      label: "voice session",
+      live: true,
+      steerable: () => {
+        const c = store.get().conversations.find(x => x.id === conversationId);
+        return canSteer(c?.harness ?? harness, c?.sessionId, phaseRef.current === "thinking" || phaseRef.current === "speaking" ? "thinking" : "idle");
+      },
+      send: (text, attachments, mode) => {
+        const active = store.get().conversations.find(c => c.id === conversationId) ?? createConversation(harness);
+        const { turnId } = beginTurn(active.id, text, { attachments, mode });
+        const current = store.get().conversations.find(c => c.id === active.id) ?? active;
+        sendChat({ turnId, harness: current.harness, mode, text, sessionId: current.sessionId, cwd: current.cwd, attachments });
+        followReply(turnId);
+        turnRef.current = turnId;
+      },
+    });
+  }, [started, conversationId, harness, followReply]);
+
   const sendUtterance = useCallback(
     (chunks: string[], mime: string): boolean => {
       const active =
@@ -85,6 +129,7 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
         setError(message?.role === "assistant" ? message.error ?? "Could not start voice." : "Could not start voice.");
         return false;
       }
+      followHeard(active.id, turnId, utteranceStart.current || Date.now(), Date.now());
       for (const chunk of chunks) sendVoiceChunk(turnId, chunk);
       sendVoiceCommit(turnId);
       turnRef.current = turnId;
@@ -92,7 +137,7 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
       haptic.tap();
       return true;
     },
-    [conversationId, harness, followReply],
+    [conversationId, harness, followReply, followHeard],
   );
 
   useEffect(() => {
@@ -115,7 +160,10 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
     };
 
     const session = new VoiceSession(adapter, {
-      onPhase: setPhase,
+      onPhase: next => {
+        if (next === "hearing" && phaseRef.current !== "hearing") utteranceStart.current = Date.now();
+        setPhase(next);
+      },
       onLevel: (db) => {
         // -50dB is a quiet room, -10dB is loud speech.
         level.value = Math.max(0, Math.min(1, (db + 50) / 40));
