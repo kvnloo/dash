@@ -18,6 +18,7 @@ import { colors, radius, space, type } from "../../theme";
 import { timeAgo } from "../../util";
 import { aodlGraphFromRoster, aodlGraphView } from "../../lib/aodl";
 import { graphHosts } from "../../lib/orchestra-graph";
+import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
 
 const GraphView = aodlGraphView();
 
@@ -143,7 +144,7 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
   return (
     <FlashList
       data={projects}
-      ListHeaderComponent={<RosterGraph width={width - space.lg * 2} />}
+      ListHeaderComponent={<><TraceEntryCard onOpen={() => navigation.navigate("Trace")} /><RosterGraph width={width - space.lg * 2} /></>}
       renderItem={renderItem}
       keyExtractor={(p) => p.id}
       contentContainerStyle={styles.list}
