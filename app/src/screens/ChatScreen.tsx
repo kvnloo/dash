@@ -44,6 +44,8 @@ import {
 import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, glass, radius, space, type } from "../theme";
 import { useLiveThinking } from "../lib/live-thinking";
+import { mergeVoicePhase } from "../lib/orb-phase";
+import { useZ0LiveState } from "../lib/z0live-state";
 import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
@@ -125,6 +127,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const { thinking, caption, external, streamingMessage } = useLiveThinking(conversation);
   useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
   const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
+  const callFixture = debugUi.use((s) => s.z0liveFixture ?? null);
+  const call = useZ0LiveState(settings, online && callFixture === null, 3000);
+  const liveCall = callFixture ?? call;
+  const voiceCall = liveCall?.live ? mergeVoicePhase(liveCall, thinking) : undefined;
 
   const sendTurn = useCallback(
     (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId), mode: SendMode = "queue") => {
@@ -322,6 +328,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onSend={liveOn ? onLiveSend : onSend}
           onStop={onStop}
           onVoice={() => navigation.navigate("Voice")}
+          voiceCall={voiceCall}
         />
       </KeyboardDock>
       <HarnessPicker
