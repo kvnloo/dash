@@ -31,6 +31,8 @@ export interface AssistantMessage {
   state: AssistantState;
   /** Latest tool/thinking status from the harness while streaming. */
   status?: string;
+  /** Actual bridge tool/thinking statuses, retained for collapsed activity details. */
+  activity?: string[];
   /**
    * The host holds this session open elsewhere (CLI/TUI). `queued`: nothing sent yet;
    * `sending`: the owner closed and the reply is going out. Never shown as work.
@@ -120,6 +122,7 @@ function parseMessage(raw: unknown): Message | null {
       // A turn that was mid-stream when the app was killed can be re-attached on launch.
       state: raw.state,
       status: typeof raw.status === "string" ? raw.status : undefined,
+      activity: Array.isArray(raw.activity) ? raw.activity.filter((item): item is string => typeof item === "string").slice(-32) : undefined,
       handoff: raw.handoff === "queued" || raw.handoff === "sending" ? raw.handoff : undefined,
       error: typeof raw.error === "string" ? raw.error : undefined,
       turnId: raw.turnId,
