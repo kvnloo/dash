@@ -1,6 +1,7 @@
 import { DensityText as Text, DensityAnimatedText } from "../Density";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, } from "react";
-import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   ReduceMotion,
@@ -23,7 +24,7 @@ import {
 import { useDensity } from "../Density";
 import { InteractiveTile } from "../InteractiveTile";
 import { PressScale } from "../PressScale";
-import { fonts, radius, space, type } from "../../theme";
+import { colors, fonts, radius, space, type } from "../../theme";
 import { LivePulse, tc } from "./tokens";
 
 export type RowVariant = "bars" | "density" | "compact";
@@ -71,7 +72,8 @@ export function buildItems(rows: TraceRow[], variant: RowVariant, opts: { lanes:
  * Native trace timeline: label column on the left, a pannable / pinchable plot on the right.
  *  - pan: bounded velocity settle; cancel immediately on the next drag
  *  - pinch: zoom around the focal point, 1× (fit) to 24×, rubber band past the limits
- *  - long-press then drag: scrub playhead with a haptic tick every 15 min (stronger on the hour)
+ *  - long-press a ROW: a dropdown of that row's actions opens under it; keep holding, slide to an action, release to run it
+ *    (or lift and tap). Long-press empty plot (axis/lanes): scrub the playhead with a haptic tick every 15 min
  *  - tap a row (label or plot): onOpenRow with the row's window rect for the expand
  */
 export const TraceTimeline = memo(function TraceTimeline({
@@ -135,6 +137,7 @@ export const TraceTimeline = memo(function TraceTimeline({
   }, [onScrub, rows, snapshot.t0]);
   const scrubEnd = useCallback(() => { setScrub(null); onScrub?.(null); }, [onScrub]);
 
+
   const openIndex = useCallback((itemIndex: number) => {
     const it = items[itemIndex];
     if (!it || it.kind !== "row" || !onOpenRow) return;
@@ -146,6 +149,46 @@ export const TraceTimeline = memo(function TraceTimeline({
       ref.measureInWindow((_x, y, _w, h) => onOpenRow(it.row, { x: wx, y, width: ww, height: h }));
     });
   }, [items, onOpenRow]);
+
+  /* ---- row menu: actions belong to the pressed row, never the whole page ---- */
+  const [menu, setMenu] = useState<{ item: number; top: number } | null>(null);
+  const [hovered, setHovered] = useState(-1);
+  const menuItem = useRef(-1);
+  const menuMode = useSharedValue(0);
+  const menuTop = useSharedValue(0);
+  const hoverIdx = useSharedValue(-1);
+  const MENU_ROW_H = 44;
+  const zoomToRow = useCallback((itemIndex: number) => {
+    const it = items[itemIndex];
+    const w = viewW.value;
+    if (!it || it.kind !== "row" || !w) return;
+    const { s: start, e: end } = summarizeRow(it.row);
+    const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, (span / Math.max(60, end - start)) * 0.8));
+    zoom.value = withTiming(z, { ...snappy, reduceMotion: ReduceMotion.System });
+    const mid = (start + end) / 2;
+    tx.value = withTiming(txForTime(mid, span, w, z, 0.5), { ...snappy, reduceMotion: ReduceMotion.System });
+  }, [items, span, tx, viewW, zoom]);
+  const rowActions = useMemo(() => [
+    { id: "open", label: "Open details", hint: "tap" },
+    { id: "zoom", label: "Zoom to this run", hint: "time" },
+    { id: "copy", label: "Copy summary", hint: "clip" },
+  ] as const, []);
+  const runAction = useCallback((itemArg: number, actionIndex: number) => {
+    const itemIndex = itemArg >= 0 ? itemArg : menuItem.current;
+    const it = items[itemIndex];
+    const action = rowActions[actionIndex];
+    setMenu(null); setHovered(-1);
+    if (!it || it.kind !== "row" || !action) return;
+    haptic.tap();
+    if (action.id === "open") openIndex(itemIndex);
+    else if (action.id === "zoom") zoomToRow(itemIndex);
+    else {
+      const m = summarizeRow(it.row);
+      void Clipboard.setStringAsync(`${it.row.project} · ${it.row.goal}\n${m.workers} workers · ${m.calls} calls · ${m.errors} errors${m.cut ? ` · ${m.cut} cut` : ""}${m.live ? " · live" : ""}`);
+    }
+  }, [items, openIndex, rowActions, zoomToRow]);
+  const openMenu = useCallback((itemIndex: number, top: number) => { haptic.tap(); menuItem.current = itemIndex; setHovered(-1); setMenu({ item: itemIndex, top }); }, []);
+  const hover = useCallback((i: number) => { if (i >= 0) haptic.select(); setHovered(i); }, []);
 
   /** [top, height, isRow] per item: a small array the UI-thread tap handler can copy cheaply. */
   const hit = useMemo(() => items.map((it, i) => [offsets[i] ?? 0, it.h, it.kind === "row" ? 1 : 0] as const), [items, offsets]);
@@ -200,6 +243,15 @@ export const TraceTimeline = memo(function TraceTimeline({
   const scrubG = Gesture.Pan()
     .activateAfterLongPress(320)
     .onStart((e) => {
+      const r = rowAtY(e.y);
+      if (r >= 0) {
+        const h = hit[r];
+        const top = h ? h[0] + h[1] : e.y;
+        menuMode.value = 1; menuTop.value = top + 34; hoverIdx.value = -1;
+        runOnJS(openMenu)(r, top);
+        return;
+      }
+      menuMode.value = 0;
       scrubX.value = e.x;
       scrubOn.value = withTiming(1, { ...fade, reduceMotion: ReduceMotion.System });
       const t = timeAtX(e.x, tx.value, viewW.value, zoom.value, span);
@@ -207,13 +259,25 @@ export const TraceTimeline = memo(function TraceTimeline({
       runOnJS(scrubTo)(t, false, true);
     })
     .onUpdate((e) => {
+      if (menuMode.value === 1) {
+        const i = Math.floor((e.y - menuTop.value) / MENU_ROW_H);
+        const next = i >= 0 && i < rowActions.length ? i : -1;
+        if (next !== hoverIdx.value) { hoverIdx.value = next; runOnJS(hover)(next); }
+        return;
+      }
       const x = Math.min(viewW.value, Math.max(0, e.x));
       scrubX.value = x;
       const t = timeAtX(x, tx.value, viewW.value, zoom.value, span);
       const tick = scrubTick(t, SCRUB_STEP_S);
       if (tick !== lastTick.value) { lastTick.value = tick; runOnJS(scrubTo)(t, tick % 4 === 0, false); }
     })
-    .onFinalize(() => { scrubOn.value = withTiming(0, { ...fade, reduceMotion: ReduceMotion.System }); lastTick.value = -1; runOnJS(scrubEnd)(); });
+    .onEnd(() => {
+      if (menuMode.value === 1 && hoverIdx.value >= 0) runOnJS(runAction)(-1, hoverIdx.value);
+    })
+    .onFinalize(() => {
+      if (menuMode.value === 1) { menuMode.value = 0; return; }
+      scrubOn.value = withTiming(0, { ...fade, reduceMotion: ReduceMotion.System }); lastTick.value = -1; runOnJS(scrubEnd)();
+    });
 
   const tap = Gesture.Tap()
     .maxDuration(300)
@@ -292,6 +356,18 @@ export const TraceTimeline = memo(function TraceTimeline({
           ) : null}
         </View>
       </GestureDetector>
+      {menu ? <>
+        <Pressable accessibilityLabel="Close row menu" onPress={() => { setMenu(null); setHovered(-1); }} style={StyleSheet.absoluteFill} />
+        <View accessibilityRole="menu" style={[styles.rowMenu, { top: menu.top + 4 }]}>
+          {(() => { const it = items[menu.item]; return it && it.kind === "row" ? <Text style={styles.rowMenuTitle} numberOfLines={1}>{it.row.goal}</Text> : null; })()}
+          {rowActions.map((a, k) => (
+            <Pressable key={a.id} accessibilityRole="menuitem" onPress={() => runAction(menu.item, k)}
+              style={[styles.rowMenuItem, hovered === k && styles.rowMenuItemOn]}>
+              <Text style={[styles.rowMenuText, hovered === k && styles.rowMenuTextOn]}>{a.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </> : null}
     </View>
   );
 });
@@ -450,6 +526,12 @@ function EndNote({ w, span, now, y, below }: { w: TraceWorker; span: number; now
 }
 
 const styles = StyleSheet.create({
+  rowMenu: { position: "absolute", left: 12, width: 240, borderRadius: 14, paddingVertical: 4, backgroundColor: "rgba(22,22,20,0.97)", borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hair, shadowColor: "#000", shadowOpacity: 0.5, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
+  rowMenuTitle: { height: 26, fontFamily: fonts.mono, fontSize: 10, lineHeight: 26, color: colors.textTertiary, paddingHorizontal: 14 },
+  rowMenuItem: { height: 44, justifyContent: "center", paddingHorizontal: 14, marginHorizontal: 4, borderRadius: 10 },
+  rowMenuItemOn: { backgroundColor: "rgba(236,232,223,0.10)" },
+  rowMenuText: { fontSize: 15, color: colors.textMuted },
+  rowMenuTextOn: { color: colors.text },
   wrap: { flexDirection: "row", borderTopWidth: 1, borderTopColor: tc.rule },
   labels: { width: `${LABEL_FRAC * 100}%`, borderRightWidth: 1, borderRightColor: tc.rule },
   plot: { flex: 1, overflow: "hidden" },
