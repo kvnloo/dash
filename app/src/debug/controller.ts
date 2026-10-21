@@ -1,3 +1,5 @@
+import { replyText } from "../store/text";
+import type { ThinkingPhase } from "../lib/thinking";
 import type { RootStackParamList } from "../navigation";
 import { setActive, store } from "../store/app";
 import { debugNavigate, debugResetTo, flushPendingDebugNavigation, waitForDebugNavigation } from "./nav";
@@ -18,6 +20,7 @@ export type DebugCommand =
   | { action: "setMainTab"; index: number }
   | { action: "setHarnessPicker"; open: boolean }
   | { action: "setActiveChat"; conversationId: string | null }
+  | { action: "setThinking"; phase: ThinkingPhase }
   | { action: "setConnection"; status: "online" | "offline" | "connecting" | "idle" }
   | { action: "setBridgePull"; open: boolean }
   | { action: "wait"; ms: number }
@@ -78,6 +81,15 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
     case "setActiveChat":
       setActive(cmd.conversationId);
       return { ok: true };
+    case "setThinking": {
+      const current = store.get();
+      const conversation = current.conversations.find(c => c.id === current.activeId);
+      const latest = conversation ? [...conversation.messages].reverse().find(m => m.role === "assistant") : undefined;
+      if (!latest || latest.role !== "assistant") return { ok: false };
+      replyText.clear(latest.turnId);
+      store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id !== conversation?.id ? c : { ...c, messages: c.messages.map(m => m.id !== latest.id || m.role !== "assistant" ? m : { ...m, state: cmd.phase === "idle" ? "done" : "streaming", text: cmd.phase === "streaming" ? "Streaming response…" : "", status: cmd.phase === "tool" ? "Running terminal" : cmd.phase === "waiting-approval" ? "Waiting for approval" : cmd.phase === "thinking" ? "Thinking" : undefined }) }) }));
+      return { ok: true };
+    }
     case "setConnection":
       store.set((s) => ({ ...s, connection: { ...s.connection, status: cmd.status } }));
       return { ok: true };

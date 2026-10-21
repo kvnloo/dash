@@ -7,7 +7,7 @@ import type { AssistantMessage, AssistantState, Message } from "../model";
 import { store } from "../store/app";
 import { replyText, useKeyed } from "../store/text";
 import { colors, fonts, glass, radius, space, type } from "../theme";
-import { messageThinking } from "../lib/thinking";
+import { messageThinking, type Thinking } from "../lib/thinking";
 import { AgentOrb } from "./AgentOrb";
 import { Markdown } from "./Markdown";
 import { StageLinks } from "./artifact-stage/StageLinks";
@@ -16,9 +16,11 @@ import { PressScale } from "./PressScale";
 export const MessageRow = memo(function MessageRow({
   message,
   harnessId,
+  thinking,
 }: {
   message: Message;
   harnessId?: string;
+  thinking?: Thinking;
 }) {
   if (message.role === "user") {
     return (
@@ -37,6 +39,7 @@ export const MessageRow = memo(function MessageRow({
   return (
     <View style={styles.assistantRow}>
       <AssistantBody message={message} harnessId={harnessId} />
+      {thinking && thinking.phase !== "idle" ? <View style={styles.statusRow}><AgentOrb size={20} thinking={thinking} /><Text style={styles.statusText}>working · {thinking.tool ?? "terminal"}</Text></View> : null}
     </View>
   );
 });
@@ -49,11 +52,12 @@ function ThinkingMarker({ turnState, waiting = false }: { harnessId?: string; tu
 
 function AssistantBody({ message, harnessId }: { message: AssistantMessage; harnessId?: string }) {
   const liveText = useKeyed(replyText, message.turnId);
+  const connection = store.use(s => s.connection.status);
   switch (message.state) {
     case "pending":
       return (
         <View style={styles.statusRow}>
-          <AgentOrb size={20} thinking={messageThinking(message)} />
+          <AgentOrb size={20} thinking={messageThinking(message, { connection })} />
           <Text style={styles.statusText} numberOfLines={1}>
             Queued…
           </Text>
@@ -64,7 +68,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
         <>
           {liveText || message.text ? <Markdown text={liveText || message.text} /> : null}
           <View style={styles.statusRow}>
-            <AgentOrb size={20} thinking={messageThinking(message, { liveText })} label={message.handoff === "queued" ? "queued" : "streaming"} />
+            <AgentOrb size={20} thinking={messageThinking(message, { liveText, connection })} label={message.handoff === "queued" ? "queued" : "streaming"} />
             <Text style={styles.statusText} numberOfLines={2}>
               {message.status ?? "Working"}
             </Text>
