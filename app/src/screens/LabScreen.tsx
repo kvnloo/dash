@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Children, memo, useCallback, useEffect, useMemo, useState, type ReactNode, type ReactElement } from "react";
+import { FlashList } from "@shopify/flash-list";
 import { StyleSheet, Text, View } from "react-native";
-import { ScrollView } from "react-native-gesture-handler";
+import { OrbActivity } from "../components/OrbMotion";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
@@ -33,7 +34,7 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
   const snapshot = traceStore.use((s) => s.snapshot);
   const records = feedbackStore.use((s) => s.records);
   const settings = store.use((s) => s.settings);
-  const scrollRef = useRef<ScrollView>(null);
+  const [visible, setVisible] = useState<Set<number>>(new Set([0, 1]));
   const [replay, setReplay] = useState(0);
   const [chipState, setChipState] = useState<Record<string, string>>({});
   const [sent, setSent] = useState(false);
@@ -55,16 +56,13 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
   const st = snapshot.stats;
   const P = (section: Section) => latest(records, "lab_pick", section);
 
-  return (
-    <SafeAreaView style={styles.root} edges={["top"]}>
-      <ScreenHeader title="Component lab" compact onBack={() => navigation.goBack()} onAction={() => navigation.navigate("Trace")} action="Open trace" icon="activity" />
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} testID="lab-scroll">
+  const items = useMemo(() => labItems(<>
         <Text style={styles.intro}>Try each piece by itself and tap Pick on the one that feels right. Picks are saved on this phone.</Text>
 
         <Block title="Timeline" note="pinch · pan with momentum · hold to scrub" testID="lab-timeline">
           {(["bars", "density", "compact"] as RowVariant[]).map((v, i) => (
             <Variant key={v} letter={"ABC"[i] ?? ""} name={v} picked={P("timeline") === v} onPick={() => pick("timeline", v)}>
-              <TraceTimeline snapshot={snapshot} rows={rowsSmall} variant={v} lanes={false} groups={false} scrollRef={scrollRef} testID={`lab-timeline-${v}`} />
+              <TraceTimeline snapshot={snapshot} rows={rowsSmall} variant={v} lanes={false} groups={false} testID={`lab-timeline-${v}`} />
             </Variant>
           ))}
         </Block>
@@ -72,7 +70,7 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
         <Block title="Lane row" note="press for spring · live pulses" testID="lab-lane-row">
           {(["bars", "density", "compact"] as RowVariant[]).map((v, i) => (
             <Variant key={v} letter={"ABC"[i] ?? ""} name={v} picked={P("lane-row") === v} onPick={() => pick("lane-row", v)}>
-              <TraceTimeline snapshot={snapshot} rows={rowsLane} variant={v} lanes={false} groups={false} scrollRef={scrollRef} testID={`lab-lane-${v}`} />
+              <TraceTimeline snapshot={snapshot} rows={rowsLane} variant={v} lanes={false} groups={false} testID={`lab-lane-${v}`} />
             </Variant>
           ))}
         </Block>
@@ -110,8 +108,8 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
           </View>
         </Block>
 
-        <Block title="Orb states" note="thinking-orbs via aodl-views; pick a size for trace rows" testID="lab-orb-states">
-          {[20, 40, 64].map((size, i) => (
+        <Block title="Orb states" note="shared compositor clock · 20-orb stress fixture" testID="lab-orb-states">
+          {[20, 40, 64, 48].map((size, i) => (
             <Variant key={size} letter={"ABC"[i] ?? ""} name={`${size}px`} picked={P("orb-states") === `${size}px`} onPick={() => pick("orb-states", `${size}px`)}>
               <View style={styles.orbRow}>
                 {(["idle", "thinking", "tool", "streaming", "waiting-approval"] as ThinkingPhase[]).map((phase) => (
@@ -134,10 +132,25 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
             </PressScale>
           ) : null}
         </View>
-      </ScrollView>
+      </>), [snapshot, records, chipState, replay, sent, settings, pick, rowsSmall, rowsLane, series]);
+
+  return (
+    <SafeAreaView style={styles.root} edges={["top"]}>
+      <ScreenHeader title="Component lab" compact onBack={() => navigation.goBack()} onAction={() => navigation.navigate("Trace")} action="Open trace" icon="activity" />
+      <FlashList testID="lab-scroll" contentContainerStyle={styles.scroll} drawDistance={915}
+        data={items} getItemType={(_item, index) => index}
+        renderItem={({ item, index }) => <LabCell active={visible.has(index)}>{item}</LabCell>}
+        onViewableItemsChanged={({ viewableItems }) => setVisible(new Set(viewableItems.flatMap(item => item.index === null ? [] : [item.index])))}
+        extraData={visible} />
     </SafeAreaView>
   );
 }
+
+function labItems(fragment: ReactElement<{ children: ReactNode }>) { return Children.toArray(fragment.props.children); }
+
+const LabCell = memo(function LabCell({ active, children }: { active: boolean; children: ReactNode }) {
+  return <OrbActivity active={active}><View style={{ paddingBottom: space.xl }}>{children}</View></OrbActivity>;
+});
 
 function Block({ title, note, action, children, testID }: { title: string; note: string; action?: { label: string; onPress(): void }; children: ReactNode; testID: string }) {
   return (

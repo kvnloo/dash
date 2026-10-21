@@ -1,3 +1,4 @@
+import { OrbMotionProvider } from "./src/components/OrbMotion";
 import { DarkTheme, NavigationContainer, type Theme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
@@ -111,7 +112,7 @@ export default function App() {
   if (!hydrated || !fontsLoaded) return <View style={styles.splash} />;
 
   return (
-    <GestureHandlerRootView style={styles.root}>
+    <GestureHandlerRootView style={styles.root}><OrbMotionProvider>
       {Platform.OS === "web" ? <style>{"input:focus,textarea:focus{outline:none!important}"}</style> : null}
       <SafeAreaProvider>
         <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
@@ -148,7 +149,7 @@ export default function App() {
           <StatusBar style="light" />
         </KeyboardProvider>
       </SafeAreaProvider>
-    </GestureHandlerRootView>
+    </OrbMotionProvider></GestureHandlerRootView>
   );
 }
 
