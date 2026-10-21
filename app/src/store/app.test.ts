@@ -18,6 +18,27 @@ beforeEach(() => {
   app.store.set({ hydrated: true, settings: null, connection: { status: "online", harnesses: [], hosts: [] }, conversations: [], activeId: null });
 });
 
+test("summary toggle and final summaries persist; stale replay cannot overwrite keyed text", async () => {
+  const { replySummaries } = await import("./text");
+  const { parseConversation } = await import("../model");
+  const chat = app.createConversation("omp");
+  const turn = app.beginTurn(chat.id, "Check branch");
+  app.setThinkingSummaries(chat.id, true);
+  const summary = { blockId: "turn", kind: "turn", text: "Checked branch", model: "local/test", durationMs: 42000 } satisfies import("../../../shared/thinking-summary").SummaryInfo;
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 2, text: "", summary });
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 1, text: "", summary: { ...summary, text: "stale" } });
+  expect(replySummaries.get(`${turn.turnId}:turn`)).toContain("Checked branch");
+  expect(replySummaries.get(`${turn.turnId}:turn`)).not.toContain("stale");
+  replyText.set(turn.turnId, "Answer");
+  app.applyTurnEvent({ type: "done", id: turn.turnId, seq: 3, exitCode: 0 });
+  const saved = app.store.get().conversations.find(c => c.id === chat.id);
+  const restored = parseConversation(JSON.parse(JSON.stringify(saved)));
+  expect(restored?.summariesEnabled).toBe(true);
+  expect(restored?.messages.at(-1)).toMatchObject({ state: "done", summaries: [summary] });
+  app.setThinkingSummaries(chat.id, false);
+  expect(app.store.get().conversations.find(c => c.id === chat.id)?.summariesEnabled).toBe(false);
+});
+
 test("actual tool/thinking statuses survive completion and replay cannot duplicate them", () => {
   const chat = app.createConversation("omp");
   const turn = app.beginTurn(chat.id, "Read the file");

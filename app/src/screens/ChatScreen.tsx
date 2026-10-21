@@ -1,6 +1,7 @@
 import { DETAIL_MODES } from "../lib/reply-details";
 import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
+import { setThinkingSummaries } from "../store/app";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -245,6 +246,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} action="Choose harness" icon="sliders" onAction={() => setPickerVisible(true)} />
       <View style={styles.liveRow} accessibilityLabel={`${harnessName} ${caption}`}><AgentOrb size={20} thinking={thinking} /><Text style={styles.liveNote}>{caption}{external ? " · terminal" : ""}</Text></View>
       <ConnectionPill />
+      {conversation ? <PressScale accessibilityRole="switch" accessibilityLabel="Thinking summaries" accessibilityState={{ checked: conversation.summariesEnabled === true }} onPress={() => setThinkingSummaries(conversation.id, !conversation.summariesEnabled)} style={styles.liveRow}><Text style={styles.liveNote}>Thinking summaries · {conversation.summariesEnabled ? "on" : "off"} · next turn</Text></PressScale> : null}
       {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => navigation.navigate("Approvals")} style={styles.approval}>
         <Text style={styles.approvalText}>{approvalCount} approvals to review{approvalDryRun ? " · preview" : ""}</Text>
         <Text style={styles.approvalText}>Review ›</Text>

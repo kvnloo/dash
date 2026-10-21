@@ -4,6 +4,8 @@ import type { ReplyPart } from "../../../shared/protocol";
 import { detailsOf, readDetails, seconds, toolStackLabel, type DetailMode, type ToolView } from "../lib/reply-details";
 import { replyParts, useKeyed } from "../store/text";
 import { colors, type } from "../theme";
+import type { SummaryInfo } from "../../../shared/thinking-summary";
+import { ThinkingSummaryChip } from "./ThinkingSummaryChip";
 
 /** Fixed compact body (3 × 16px) keeps FlashList measurement stable during streaming. */
 function WrappedBlock({ label, text, mode, accent = colors.textMuted, children }: { label: string; text: string; mode: DetailMode; accent?: string; children?: React.ReactNode }) {
@@ -40,7 +42,7 @@ function ToolCall({ tool, full, request }: { tool: ToolView; full: boolean; requ
     </View> : null}
   </View>;
 }
-export const ReplyBlocks = memo(function ReplyBlocks({ turnId, parts, mode = "Compact", request }: { turnId: string; parts?: ReplyPart[]; mode?: DetailMode; request?: (id: string) => void }) {
+export const ReplyBlocks = memo(function ReplyBlocks({ turnId, parts, summaries, mode = "Compact", request }: { turnId: string; parts?: ReplyPart[]; summaries?: SummaryInfo[]; mode?: DetailMode; request?: (id: string) => void }) {
   const raw = useKeyed(replyParts, turnId);
   const started = useRef(new Map<string, number>());
   const [now, setNow] = useState(Date.now);
@@ -56,6 +58,7 @@ export const ReplyBlocks = memo(function ReplyBlocks({ turnId, parts, mode = "Co
   const latest = tools.at(-1);
   const accent = details.tools.some(tool => tool.status === "error") ? colors.danger : details.tools.some(tool => tool.status === "live") ? colors.gold : colors.ok;
   return <View style={styles.blocks}>
+    {summaries?.filter(summary => summary.kind !== "turn").map(summary => <ThinkingSummaryChip key={summary.blockId} turnId={turnId} summary={summary} />)}
     {details.reasoning ? <WrappedBlock key={`${turnId}:reasoning:${mode}`} label="Thinking" text={details.reasoning} mode={mode} /> : null}
     {latest ? <WrappedBlock key={`${turnId}:tools:${mode}`} label={`${toolStackLabel(tools)} · ${latest.name}`} text={`${latest.name} · ${latest.summary}\n${latest.output}`} mode={mode} accent={accent}>
       {tools.map(tool => <ToolCall key={tool.id} tool={tool} full={mode === "Full"} request={request} />)}
