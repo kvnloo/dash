@@ -9,6 +9,7 @@ import { bearerToken, secretMatches } from "./bridge-security";
 import { AttachmentError, type AttachmentStore } from "./attachments";
 import { checkShareable, pickDevice, shareToPhone, type Run } from "./share";
 import { imagePreview } from "./image-preview";
+import { textPreview } from "./text-preview";
 
 export interface FilesHttpOptions {
   token: string;
@@ -31,7 +32,7 @@ export function createFilesHttpHandler(options: FilesHttpOptions) {
     if (!(options.authorize ? await options.authorize(request) : secretMatches(bearerToken(request), options.token))) return json({ error: "unauthorized" }, 401);
     if (url.pathname === "/files") {
       if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
-      try { return await imagePreview(url.searchParams.get("path"), options.shareRoots()); }
+      try { return await (url.searchParams.get("format") === "text" ? textPreview : imagePreview)(url.searchParams.get("path"), options.shareRoots()); }
       catch { return json({ error: "Image unavailable" }, 404); }
     }
     if (request.method !== "POST") return json({ error: "method not allowed" }, 405);

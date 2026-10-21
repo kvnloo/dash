@@ -54,11 +54,15 @@ export function parseHermesHistory(rows: unknown): HistoryMessage[] {
   if (!Array.isArray(rows)) return [];
   const out: HistoryMessage[] = [];
   let current: HistoryMessage | undefined;
-  const emitter = new PartEmitter(part => { if (current) (current.parts ??= []).push(part); });
+  let stampMs = 0;
+  const emitter = new PartEmitter(part => { if (current) (current.parts ??= []).push(part); }, () => stampMs);
   for (const row of rows) {
     if (!record(row) || row.active === 0) continue;
+    stampMs = stamp(row.timestamp);
     if (row.role === "tool") {
-      if (current && typeof row.tool_call_id === "string") hermesParts({ type: "tool_result", tool_call_id: row.tool_call_id, output: text(row.content), is_error: row.is_error === true }, emitter);
+      let failed = row.is_error === true;
+      try { const result: unknown = JSON.parse(text(row.content)); if (record(result)) failed ||= Boolean(result.error) || (typeof result.exit_code === "number" && result.exit_code !== 0) || result.success === false; } catch { /* Plain-text tool result. */ }
+      if (current && typeof row.tool_call_id === "string") hermesParts({ type: "tool_result", tool_call_id: row.tool_call_id, output: text(row.content), is_error: failed }, emitter);
       continue;
     }
     if ((row.role !== "user" && row.role !== "assistant") || (typeof row.id !== "string" && typeof row.id !== "number")) continue;
@@ -305,6 +309,13 @@ export class HermesSessions {
     let wanted: string;
     try { wanted = realpathSync(home); } catch { return undefined; }
     return this.profiles().find(p => { try { return realpathSync(p.home) === wanted; } catch { return false; } })?.id;
+  }
+  /** Native-only snapshot: no API, gateway RPC, credentials, migrations or writes. */
+  nativeActivity(profileId: string, sessionId: string): HistoryMessage[] {
+    const profile = this.profiles(false).find(p => p.id === profileId || hermesSessionAgentId(p.id, sessionId) === profileId);
+    if (!profile) return [];
+    const row = localSession(profile, sessionId);
+    return row && visible(row) ? previewHistory(localHistory(profile, sessionId)) : [];
   }
   phase(profileId: string, sessionId: string): SessionPhase {
     // Observation never needs API credentials. Resolve only a visible local session.
