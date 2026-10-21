@@ -56,11 +56,13 @@ describe("AODL visual encodings", () => {
     expect(() => catalog.inferTopology(mesh.nodes.length, mesh.edges.length)).toThrow(/not inferred|fail closed/i);
   });
 
-  test("Orchestra cards draw TopologyBadge, not HarnessAvatar letters", () => {
+  test("Orchestra uses observed graph evidence; curated detail keeps TopologyBadge", () => {
     const pane = readFileSync(join(import.meta.dir, "../screens/panes/OrchestraPane.tsx"), "utf8");
     const detail = readFileSync(join(import.meta.dir, "../screens/OrchestraDetailScreen.tsx"), "utf8");
     const badge = readFileSync(join(import.meta.dir, "../components/TopologyBadge.tsx"), "utf8");
-    expect(pane).toContain("TopologyBadge");
+    expect(pane).toContain("useOrchestraEvidence");
+    expect(pane).toContain("<OrchestraGraph");
+    expect(pane).not.toContain("TopologyBadge");
     expect(pane).not.toContain("HarnessAvatar");
     expect(detail).toContain("TopologyBadge");
     expect(detail).not.toContain("HarnessAvatar");

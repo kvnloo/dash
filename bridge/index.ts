@@ -69,6 +69,7 @@ import { loadRoles } from "./src/model-roles";
 import { ThinkingSummarizer } from "./src/thinking-summary";
 import { TurnSummaries } from "./src/turn-summaries";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
+import { createOrchestraHttpHandler } from "./src/orchestra-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 
 // ---------------------------------------------------------------------------
@@ -688,6 +689,7 @@ const handleFiles = createFilesHttpHandler({
   onEvent: log,
 });
 
+const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleModels = createModelsHttpHandler({ authorize });
 const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
 
@@ -724,6 +726,8 @@ const server = Bun.serve<SocketData>({
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      const orchestra = await handleOrchestra(request);
+      if (orchestra) return cors(orchestra);
       const models = await handleModels(request);
       if (models) return cors(models);
       const supervision = await handleSupervision(request);
