@@ -172,3 +172,35 @@ was unbound again after the proof. Counts/IDs naturally change as the owner chat
    an Authorization header. Verify the exact owner ID and title above. Reload
    Expo Go after Metro serves the combined app. Open that chat; its profile and
    recent history should appear, and old OMP chats should say ended. No re-pair.
+
+## z0bridge (preferred when running)
+
+When the host runs [z0bridge](https://github.com/kvnloo/z0bridge) (`bun src/cli.ts serve`,
+loopback `127.0.0.1:4787`, token in `~/.config/z0bridge/token`, mode 0600), Dash's bridge uses it
+for Hermes **listing**, **history** and **continuing** existing sessions
+(`bridge/src/z0bridge-hermes.ts`). z0bridge speaks ACP to one `hermes -p <profile> acp` child per
+profile. Those children are viewers of each profile's gateway, the single execution owner, so a
+turn enters Hermes's own per-session FIFO.
+
+- **Fallback.** If the token file is missing, group/other readable, the URL is not loopback, or
+  `GET /v1/health` fails, Dash keeps the native API / read-only SessionDB path above unchanged.
+- **No double sends.** Once z0bridge accepts or refuses a turn, that answer is final. A refusal
+  (`live_elsewhere`, `turn_in_flight`, `cwd_unknown`, ...) is shown to the phone. It never falls
+  back to the native API or a CLI.
+- **Live sessions.** Dash sends `onLive: "queue"`, matching the native API, which also queues
+  behind the live owner. Set `DASH_Z0BRIDGE_ON_LIVE=refuse` to refuse instead.
+- Session events report `transport: "z0bridge"`. Streaming text, tool status and cancel go
+  through z0bridge's SSE and `POST /v1/turns/:id/cancel`.
+- Config: `DASH_Z0BRIDGE=0` disables it. Optional `DASH_Z0BRIDGE_URL` and
+  `DASH_Z0BRIDGE_TOKEN_FILE` set the URL and token file. `bridge/src/z0bridge/{types,client}.ts`
+  are vendored from z0bridge (see the header SHA). Re-copy them when you upgrade.
+- New Hermes sessions from the phone still use the existing ACP supervisor path.
+
+Live proof (owns ports 4790/4798 and one throwaway session, which it archives):
+
+```sh
+Z0BRIDGE_REPO=/path/to/z0bridge TMPDIR=/private/scratch bun scripts/verify-z0bridge-hermes.ts
+```
+
+Observed: roster listed the throwaway session through z0bridge. A WS `chat` replied `pong` with
+`transport: "z0bridge"`, `done` exit 0. History returned 2 messages. Then the session was archived.

@@ -33,6 +33,7 @@ import { runHermesSession } from "./src/hermes-session";
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
 import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, type HandoffState } from "./src/hermes-continue";
 import type { LiveOwner } from "./src/hermes-owner";
+import { z0bridgeHermes } from "./src/z0bridge-hermes";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
 import { acpCommand, AcpSupervisor, type AcpHandle } from "./src/acp/supervisor";
 import {
@@ -95,7 +96,7 @@ class Turn implements Sink {
 
   /** Host profile that owns this Hermes turn's session, once known. */
   private hermesProfile?: string;
-  private hermesTransport?: "api" | "acp";
+  private hermesTransport?: "api" | "acp" | "z0bridge";
 
   start(input: TurnInput): void {
     // A spoken turn is transcribed before it starts, so a cancel can arrive
@@ -175,6 +176,20 @@ class Turn implements Sink {
         });
         if (waited) { this.handoff("sending", waited); log("hermes.handoff", { id: this.id, state: "sending", surface: waited.surface }); }
         if (this.cancelled || this.finished) return;
+        // Prefer the host's z0bridge daemon (ACP to `hermes -p <profile> acp`) once any live
+        // owner has handed off. Fall back only when z0bridge is not running; its answer is final.
+        const z0 = await z0bridgeHermes.ready();
+        if (z0) {
+          this.hermesTransport = "z0bridge";
+          log("hermes.path", { path: "z0bridge" });
+          const outcome = await z0bridgeHermes.continue(z0, { profile: target.profile, sessionId, text: input.text }, this, abort.signal);
+          if (this.finished) return;
+          if (this.cancelled || outcome.exitCode === "cancelled") { this.finish(CANCELLED_EXIT_CODE); return; }
+          if (outcome.exitCode === 1) this.error(outcome.message);
+          this.finish(outcome.exitCode);
+          log("turn.end", { id: this.id, harness: "hermes", exitCode: outcome.exitCode, path: "z0bridge" });
+          return;
+        }
         const route = chooseHermesRoute({ api: target.api, home: hermesSessions.homeOf(target.profile), acpCommand: acpCommand("hermes") });
         if (route.kind === "unavailable") throw new Error(route.reason);
         if (route.kind === "acp") {
@@ -776,7 +791,7 @@ const server = Bun.serve<SocketData>({
           if (message.harness === "hermes") {
             const target = hermesSessions.target(message.profileId, message.sessionId);
             const messages = (!message.hostId || message.hostId === HOST_NAME) && target
-              ? await hermesSessions.history(target.profile, message.sessionId) : [];
+              ? (await z0bridgeHermes.history(target.profile, message.sessionId)) ?? await hermesSessions.history(target.profile, message.sessionId) : [];
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: HOST_NAME, profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages });
             break;
           }

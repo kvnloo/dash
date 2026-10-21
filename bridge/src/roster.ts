@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { isCatalogHarness } from "../../shared/catalog";
 import { hermesSessions } from "./hermes-sessions";
 import { grokDesktopBot, hermesBots, hostBotSources, serviceBots } from "./bots";
+import { z0bridgeHermes } from "./z0bridge-hermes";
 import type { AgentInfo, HarnessInfo, HistoryMessage, HostInfo } from "../../shared/protocol";
 
 export type TailscaleNode = {
@@ -586,7 +587,8 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
       grokBot: grokBotAlive(),
     },
   });
-  const sessions = await hermesSessions.list();
+  // z0bridge when it is running; Dash's own read-only SessionDB/native API listing otherwise.
+  const sessions = (await z0bridgeHermes.list()) ?? await hermesSessions.list();
   const local = hosts.find(h => h.self);
   if (local) {
     local.agents.push(...sessions);
