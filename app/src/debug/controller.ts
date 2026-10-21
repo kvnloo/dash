@@ -11,7 +11,6 @@ import {
   type DebugScenarioId,
 } from "./scenarios";
 import { debugUi } from "./ui-store";
-import { replyText } from "../store/text";
 
 export type DebugCommand =
   | { action: "scenario"; id: DebugScenarioId }

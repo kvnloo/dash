@@ -684,7 +684,7 @@ const server = Bun.serve<SocketData>({
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       const supervision = await handleSupervision(request);
       if (supervision) return cors(supervision);
-      const phase = sessionPhaseHttp(request, secretMatches(bearerToken(request), TOKEN), (profile, session) => hermesSessions.phase(profile, session));
+      const phase = sessionPhaseHttp(request, await authorize(request), (profile, session) => hermesSessions.phase(profile, session));
       if (phase) return cors(phase);
       const suggestions = await handleSuggestions(request);
       if (suggestions) return cors(suggestions);
