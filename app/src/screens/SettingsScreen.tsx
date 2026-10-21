@@ -15,7 +15,7 @@ import { bridge } from "../net/bridge";
 import { forgetEverything, saveSettings, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
-import { toMain } from "../lib/main-nav";
+import { screenBack } from "../lib/screen-back";
 
 export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const insets = useSafeAreaInsets();
@@ -112,7 +112,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
-      <ScreenHeader title="Settings" onBack={() => toMain(navigation)} />
+      <ScreenHeader title="Settings" onBack={() => screenBack(navigation)} />
       <KeyboardAvoidingView style={styles.body} behavior="padding">
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.xxl }]}

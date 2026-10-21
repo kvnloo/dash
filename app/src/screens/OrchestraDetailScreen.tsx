@@ -15,7 +15,7 @@ import type { ScreenProps } from "../navigation";
 import { openAgentConversation, setActive, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { timeAgo } from "../util";
-import { toMain } from "../lib/main-nav";
+import { screenBack } from "../lib/screen-back";
 
 export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"OrchestraDetail">) {
   const insets = useSafeAreaInsets();
@@ -40,7 +40,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
   if (!project) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
-        <Canvas /><ScreenHeader title="Orchestra" onBack={() => toMain(navigation)} />
+        <Canvas /><ScreenHeader title="Orchestra" onBack={() => screenBack(navigation)} />
         <View style={styles.empty}>
           <Text style={styles.emptyText}>Project not found</Text>
         </View>
@@ -73,7 +73,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <Canvas /><ScreenHeader title="Orchestra" onBack={() => toMain(navigation)} />
+      <Canvas /><ScreenHeader title="Orchestra" onBack={() => screenBack(navigation)} />
       <View style={styles.hero}>
         <View style={styles.heroTop}>
           <View style={styles.heroCopy}>

@@ -17,7 +17,7 @@ import { bridge } from "./src/net/bridge";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { ApprovalsScreen } from "./src/screens/ApprovalsScreen";
 import { ArtifactStageScreen } from "./src/screens/ArtifactStageScreen";
-import { parseStageDeepLink } from "./src/lib/stage-link";
+import { createStageLinkRouter } from "./src/lib/stage-router";
 import { MainScreen } from "./src/screens/MainScreen";
 import { OrchestraDetailScreen } from "./src/screens/OrchestraDetailScreen";
 import { PairScreen } from "./src/screens/PairScreen";
@@ -41,6 +41,7 @@ const theme: Theme = {
 const linking = {
   prefixes: ["dash://"],
   config: {
+    initialRouteName: "Main" as const,
     screens: {
       Pair: "connect",
       ArtifactStage: "stage",
@@ -54,6 +55,11 @@ const linking = {
 const deepLinks = createDeepLinkRouter({
   isReady: () => debugNavigationRef.isReady(),
   openPair: (prefill) => debugNavigationRef.navigate("Pair", prefill),
+});
+
+const stageLinks = createStageLinkRouter({
+  isReady: () => debugNavigationRef.isReady(),
+  openStage: url => debugNavigationRef.navigate("ArtifactStage", { url }),
 });
 
 export default function App() {
@@ -76,11 +82,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const openStage = (url: string | null) => {
-      const stage = url ? parseStageDeepLink(url) : null;
-      if (stage && debugNavigationRef.isReady()) debugNavigationRef.navigate("ArtifactStage", { url: stage });
-      return !!stage;
-    };
+    // Web stage URLs belong to NavigationContainer linking, not a second handler.
+    const openStage = (url: string | null) => Platform.OS !== "web" && stageLinks.handle(url);
     void Linking.getInitialURL().then((url) => {
       if (!openStage(url)) deepLinks.handle(url);
     });
@@ -103,7 +106,7 @@ export default function App() {
               ref={debugNavigationRef}
               theme={theme}
               linking={Platform.OS === "web" ? linking : undefined}
-              onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); }}
+              onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); stageLinks.flush(); }}
             >
             <View style={styles.root}>
               <Stack.Navigator

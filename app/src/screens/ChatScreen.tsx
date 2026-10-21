@@ -36,7 +36,7 @@ import {
 } from "../store/app";
 import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, glass, radius, space, type } from "../theme";
-import { toMain } from "../lib/main-nav";
+import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
 
 const EMPTY: Message[] = [];
@@ -193,7 +193,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       haptic.select();
       saveSettings({ ...settings, harness: id });
       // Sessions are harness-specific, so switching mid-conversation starts a fresh chat.
-      if (conversation && conversation.messages.length > 0) setActive(null);
+      if (conversation && conversation.harness !== id) setActive(null);
     },
     [settings, conversation],
   );
@@ -202,7 +202,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
-      <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => toMain(navigation)} action="Choose harness" icon="sliders" onAction={() => setPickerVisible(true)} />
+      <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} action="Choose harness" icon="sliders" onAction={() => setPickerVisible(true)} />
       <ConnectionPill />
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       {!targetError && conversation?.openIn ? (
@@ -243,7 +243,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       </KeyboardInsetView>}
       <KeyboardDock>
         <Composer
-          key={composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}
+          key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
           disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
           streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}

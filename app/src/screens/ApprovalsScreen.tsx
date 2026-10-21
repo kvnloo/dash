@@ -1,3 +1,4 @@
+import { screenBack } from "../lib/screen-back";
 import { Canvas } from "../components/Canvas";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -45,7 +46,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
   const send = (message: Parameters<typeof bridge.send>[0]) => { if (!bridge.send(message)) setLocalError("Disconnected. Reconnect before deciding."); };
   const openEditor = (item: GateItem, reject = false) => { setEditor({ item, reject }); setText(reject || item.policy.requires_human_text && item.state !== "edited" ? "" : item.body); setChanged(false); };
   return <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-    <Canvas /><ScreenHeader title="Approvals" onBack={() => navigation.goBack()} action="Refresh" icon="refresh-cw" onAction={() => send({ type: "gate_list" })} />
+    <Canvas /><ScreenHeader title="Approvals" onBack={() => screenBack(navigation)} action="Refresh" icon="refresh-cw" onAction={() => send({ type: "gate_list" })} />
     <Text style={styles.mode}>{state.dryRun ? "Dry run · Nothing will be posted" : "Live · Approved items can be posted"}</Text>
     <Text style={styles.subtitle}>{state.ownerDecisions ? "Human approvals are recorded on the project coordination thread." : "Rehearsal decisions only. These are not live human approval."}</Text>
     <View testID="approval-metrics" style={styles.metrics}>

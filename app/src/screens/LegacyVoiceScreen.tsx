@@ -17,7 +17,7 @@ import { sendVoiceBegin, sendVoiceChunk, sendVoiceCommit } from "../net/bridge";
 import { beginTurn, createConversation, store } from "../store/app";
 import { replyText } from "../store/text";
 import { colors, radius, space, type } from "../theme";
-import { toMain } from "../lib/main-nav";
+import { screenBack } from "../lib/screen-back";
 
 const ORB = 190;
 
@@ -170,7 +170,7 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.xl }]}>
-      <Canvas /><ScreenHeader title="Voice" onBack={() => toMain(navigation)} />
+      <Canvas /><ScreenHeader title="Voice" onBack={() => screenBack(navigation)} />
 
       <View style={styles.stage}>
         <VoiceOrb preset={presetForHarness(harness)} phase={voiceOrbPhase(phase, started, error)} size={190} />
