@@ -1,6 +1,8 @@
 import { memo, useEffect, useState } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
+import { ShimmerText } from "./ShimmerText";
+import { Tree } from "./Tree";
+import type { TreeNode } from "../lib/tree";
 import type { Settings } from "../model";
 import { colors, fonts } from "../theme";
 import { haptic } from "../haptics";
@@ -55,24 +57,6 @@ function age(ms: number): string {
   return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${Math.round(s / 3600)}h`;
 }
 
-/** Text with a soft highlight sweeping left to right (ChatGPT-style), no orb. */
-const ShimmerText = memo(function ShimmerText({ text, style }: { text: string; style: object }) {
-  const reduced = useReducedMotion();
-  const x = useSharedValue(0);
-  const [w, setW] = useState(0);
-  useEffect(() => {
-    if (reduced) return;
-    x.value = withRepeat(withTiming(1, { duration: 1600, easing: Easing.linear }), -1);
-  }, [reduced, x]);
-  const sweep = useAnimatedStyle(() => ({ transform: [{ translateX: -60 + x.value * (w + 120) }] }));
-  return (
-    <View style={{ overflow: "hidden", flexShrink: 1 }} onLayout={e => setW(e.nativeEvent.layout.width)}>
-      <Text style={style} numberOfLines={1}>{text}</Text>
-      {reduced ? null : <Animated.View pointerEvents="none" style={[styles.sweep, sweep]} />}
-    </View>
-  );
-});
-
 /** Compressed in-chat view of how many subagents are working and on what. Orchestra keeps the full graph. */
 export function WorkersStrip({ workers }: { workers: Worker[] }): React.JSX.Element | null {
   const [open, setOpen] = useState(false);
@@ -85,16 +69,13 @@ export function WorkersStrip({ workers }: { workers: Worker[] }): React.JSX.Elem
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={`${workers.length} subagents working`}
         onPress={() => { haptic.select(); setOpen(v => !v); }} style={styles.head}>
         <Text style={styles.count}>{workers.length} subagent{workers.length === 1 ? "" : "s"}</Text>
-        {first && !open ? <ShimmerText text={`${first.title} · ${doing(first)}${workers.length > 1 ? `  +${workers.length - 1}` : ""}`} style={styles.line} /> : <View style={{ flex: 1 }} />}
+        {first && !open ? <ShimmerText text={`${first.title} · ${doing(first)}${workers.length > 1 ? `  +${workers.length - 1}` : ""}`} size={11} /> : <View style={{ flex: 1 }} />}
         <Text style={styles.chev}>{open ? "▴" : "▾"}</Text>
       </Pressable>
-      {open ? workers.map(w => (
-        <View key={w.id} style={styles.row}>
-          <View style={styles.dot} />
-          <ShimmerText text={w.title} style={styles.title} />
-          <Text style={styles.meta}>{doing(w)} · {age(now - w.startedAt)}</Text>
-        </View>
-      )) : null}
+      {open ? <Tree inline label="Subagents" nodes={workers.map((w): TreeNode => ({
+        id: `worker:${w.id}`, kind: "bot", label: w.title, shimmer: true,
+        meta: `${doing(w)} · ${age(now - w.startedAt)}`, status: "running",
+      }))} /> : null}
     </View>
   );
 }
@@ -109,5 +90,4 @@ const styles = StyleSheet.create({
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.textTertiary },
   title: { fontSize: 13, color: colors.textMuted },
   meta: { fontFamily: fonts.mono, fontSize: 10, color: colors.textTertiary, marginLeft: "auto" },
-  sweep: { position: "absolute", top: 0, bottom: 0, width: 60, backgroundColor: "rgba(255,255,255,0.10)" },
 });
