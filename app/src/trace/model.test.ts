@@ -129,6 +129,8 @@ describe("deep links", () => {
     expect(parseAppRouteLink("exp://100.113.138.100:8097/--/lab")).toBe("Lab");
     expect(parseAppRouteLink("exp://100.113.138.100:8097/--/trace")).toBe("Trace");
     expect(parseAppRouteLink("dash://trace")).toBe("Trace");
+    expect(parseAppRouteLink("exp://100.113.138.100:8097/--/orchestra")).toBe("Orchestra");
+    expect(parseAppRouteLink("dash://orchestra")).toBe("Orchestra");
     expect(parseAppRouteLink("dash://lab/?x=1")).toBe("Lab");
   });
   test("other links are not routes", () => {
@@ -147,6 +149,8 @@ describe("deep links", () => {
     r.flush();
     r.flush();
     expect(opened).toEqual(["Lab"]);
+    expect(r.handle("exp://h:8097/--/orchestra")).toBe(true);
+    expect(opened).toEqual(["Lab", "Orchestra"]);
     expect(r.handle("exp://h:8097/--/connect?code=x")).toBe(false);
   });
 });

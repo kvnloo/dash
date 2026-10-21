@@ -69,7 +69,10 @@ const stageLinks = createStageLinkRouter({
 // Lab / Trace: exp://<metro>/--/lab, exp://<metro>/--/trace (dash://lab, dash://trace in dev builds).
 const appRoutes = createAppRouteRouter({
   isReady: () => debugNavigationRef.isReady(),
-  open: (route) => debugNavigationRef.navigate(route),
+  open: (route) => {
+    if (route === "Orchestra") debugNavigationRef.navigate("Main", { tab: 2 });
+    else debugNavigationRef.navigate(route);
+  },
 });
 
 export default function App() {
