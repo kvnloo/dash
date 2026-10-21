@@ -110,3 +110,16 @@ test("unreachable API falls back to DB; one broken profile does not hide others"
   expect(await sessions.list()).toHaveLength(2);
   expect(await sessions.history("default", "same")).toHaveLength(2);
 });
+
+test("a stray profiles/default directory does not make default sessions ambiguous", async () => {
+  const root = fixture();
+  mkdirSync(join(root, "profiles/default"), { recursive: true });
+  writeFileSync(join(root, "profiles/default/state.db"), "");
+  const sessions = new HermesSessions({ root, env: {} });
+  expect(sessions.target("hermes:session:default:same", "same")?.profile).toBe("default");
+  const listed = await sessions.list();
+  expect(listed.filter(a => a.sessionId === "same" && a.profileId === "default")).toHaveLength(1);
+  // The roster has now named the session; it must still resolve to exactly one profile.
+  expect(sessions.target("hermes:session:default:same", "same")?.profile).toBe("default");
+  expect(sessions.target("default", "same")?.profile).toBe("default");
+});

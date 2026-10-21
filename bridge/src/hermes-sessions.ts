@@ -138,8 +138,10 @@ export class HermesSessions {
     this.processes = options.processes ?? hostProcesses;
   }
   private profiles(): Profile[] {
+    // "default" names the root home. A stray profiles/default directory would be a second
+    // "default" and make every default session ambiguous once the roster has listed it.
     const profiles: Profile[] = [{ id: "default", home: this.root }];
-    try { for (const entry of readdirSync(join(this.root, "profiles"), { withFileTypes: true })) if ((entry.isDirectory() || entry.isSymbolicLink()) && PROFILE_OK.test(entry.name)) profiles.push({ id: entry.name, home: join(this.root, "profiles", entry.name) }); } catch { /* no named profiles */ }
+    try { for (const entry of readdirSync(join(this.root, "profiles"), { withFileTypes: true })) if ((entry.isDirectory() || entry.isSymbolicLink()) && PROFILE_OK.test(entry.name) && entry.name !== "default") profiles.push({ id: entry.name, home: join(this.root, "profiles", entry.name) }); } catch { /* no named profiles */ }
     let overrides: unknown;
     try { overrides = JSON.parse(this.env.DASH_HERMES_APIS ?? "{}"); } catch { /* fail closed */ }
     const seen = new Set<string>();
