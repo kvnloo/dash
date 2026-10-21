@@ -17,5 +17,5 @@ export function NumberTicker({ value, style }: { value: number; style?: StylePro
   });
   const { typeScale } = useDensity();
   const flat = StyleSheet.flatten(style);
-  return <Input editable={false} caretHidden underlineColorAndroid="transparent" pointerEvents="none" accessibilityLabel={String(value)} animatedProps={props} style={[{ padding: 0, borderWidth: 0 }, style, { fontSize: (flat?.fontSize ?? 26) * typeScale, lineHeight: (flat?.lineHeight ?? 32) * typeScale }]} />;
+  return <Input editable={false} focusable={false} accessible={false} caretHidden underlineColorAndroid="transparent" pointerEvents="none" accessibilityLabel={String(value)} animatedProps={props} style={[{ padding: 0, borderWidth: 0 }, style, { fontSize: (flat?.fontSize ?? 26) * typeScale, lineHeight: (flat?.lineHeight ?? 32) * typeScale }]} />;
 }
