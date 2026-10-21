@@ -37,6 +37,7 @@ import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, glass, radius, space, type } from "../theme";
 import { toMain } from "../lib/main-nav";
 import { AgentOrb } from "../components/AgentOrb";
+import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptAnchors, promptOffset } from "../lib/prompt-navigation";
 
@@ -74,6 +75,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     if (isDebugActive()) debugUi.set((s) => ({ ...s, chatHarnessPickerOpen: open }));
   }, []);
 
+  const approvalCount = approvals.use(s => s.items.filter(actionable).length);
+  const approvalDryRun = approvals.use(s => s.dryRun);
   const settings = store.use((s) => s.settings);
   const connection = store.use((s) => s.connection);
   const conversation = store.use((s) => s.conversations.find((c) => c.id === s.activeId));
@@ -83,6 +86,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const jumpPrompt = useCallback((prompt: number) => {
     const anchor = anchors[prompt];
     if (!anchor) return;
+    dragging.current = false;
     setFollow(false);
     const offset = promptOffset(anchors, prompt, index => listRef.current?.getLayout(index));
     if (offset !== null) listRef.current?.scrollToOffset({ offset, animated: false });
@@ -218,6 +222,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       <AppNav navigation={navigation} tab={1} />
       <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => toMain(navigation)} action="Choose harness" icon="sliders" onAction={() => setPickerVisible(true)} />
       <ConnectionPill />
+      {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => navigation.navigate("Approvals")} style={styles.approval}>
+        <Text style={styles.approvalText}>{approvalCount} approvals to review{approvalDryRun ? " · preview" : ""}</Text>
+        <Text style={styles.approvalText}>Review ›</Text>
+      </PressScale> : null}
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       {!targetError && conversation?.openIn ? (
         <Text accessibilityRole="text" style={styles.handoffNote}>
@@ -297,6 +305,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  approval: { minHeight: 44, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: space.lg, borderBottomWidth: 1, borderColor: colors.hair },
+  approvalText: { ...type.small, color: colors.warn },
   targetError: { color: colors.danger, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   handoffNote: { color: colors.textTertiary, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   body: { flex: 1 },
@@ -305,7 +315,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: colors.text, ...type.title },
   emptySubtitle: { color: colors.textMuted, ...type.body, marginTop: 6 },
   liveRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.xs },
-  liveChip: { height: 32, borderRadius: radius.pill, borderWidth: 1, borderColor: glass.hair, backgroundColor: glass.fillChip, paddingHorizontal: space.md, justifyContent: "center" },
+  liveChip: { minHeight: 44, borderRadius: radius.pill, borderWidth: 1, borderColor: glass.hair, backgroundColor: glass.fillChip, paddingHorizontal: space.md, justifyContent: "center" },
   liveChipOn: { borderColor: colors.gold, backgroundColor: glass.fillChipOn },
   liveChipText: { ...type.label, color: colors.textMuted },
   liveChipTextOn: { color: colors.gold },

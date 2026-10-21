@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
+    paddingVertical: 6,
   },
   bubble: {
     maxWidth: "82%",
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   userText: { color: colors.text, ...type.body },
-  assistantRow: { paddingHorizontal: space.lg, paddingVertical: space.sm },
+  assistantRow: { paddingHorizontal: space.lg, paddingVertical: 6 },
   assistantText: { color: colors.text, ...type.body },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, minHeight: 22 },
   statusText: { color: colors.textTertiary, ...type.mono, flexShrink: 1 },
