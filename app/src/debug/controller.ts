@@ -35,6 +35,7 @@ function applyScenarioUi(spec: (typeof DEBUG_SCENARIOS)[DebugScenarioId]): void 
   debugUi.set((s) => ({
     ...s,
     mainSearchQuery: spec.ui?.mainSearchQuery ?? null,
+    orchestraFixture: spec.ui?.orchestraFixture ?? false,
     mainTabIndex: spec.ui?.mainTabIndex ?? null,
     chatHarnessPickerOpen: spec.ui?.chatHarnessPickerOpen ?? null,
     chatComposerAttachments: spec.ui?.chatComposerAttachments ?? null,

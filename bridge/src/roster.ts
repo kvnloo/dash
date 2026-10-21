@@ -355,7 +355,7 @@ function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster
     }));
   return {
     id: name,
-    name,
+    name: node.hostName.trim() || name,
     hostname: node.hostName,
     online: node.online,
     self: node.self,

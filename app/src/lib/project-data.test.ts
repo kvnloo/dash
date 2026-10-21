@@ -18,6 +18,12 @@ const codex: AgentInfo = {
 };
 
 describe("projects from actual bridge data", () => {
+  test("computer hostname is displayed while the DNS routing ID stays unchanged", () => {
+    const project = projectsFromHosts({ hosts: [{ ...host("0", [codex]), hostname: "groot" }], conversations: [], now })[0];
+    expect(project?.hostId).toBe("0");
+    expect(project?.hostName).toBe("groot");
+    expect(project?.subtitle).toBe("groot · /work/weather");
+  });
   test("no evidence produces no projects", () => {
     expect(projectsFromHosts({ hosts: [], conversations: [], now })).toEqual([]);
   });

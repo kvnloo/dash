@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { hostDisplayName } from "../../../shared/host-display";
 import type { ChatAttachment, HistoryMessage, TurnEvent } from "../../../shared/protocol";
 import {
   newId,
@@ -108,7 +109,7 @@ export function saveSettings(settings: Settings): void {
 
 export function setConnection(patch: Partial<Connection>): void {
   store.set((s) => {
-    const connection = { ...s.connection, ...patch };
+    const connection = { ...s.connection, ...patch, hosts: patch.hosts?.map(host => ({ ...host, name: hostDisplayName(host) })) ?? s.connection.hosts };
     if (patch.hosts === undefined) return { ...s, connection };
     const conversations = mergeLiveConversations(s.conversations, connection.hosts, Date.now());
     return conversations === s.conversations ? { ...s, connection } : { ...s, connection, conversations };

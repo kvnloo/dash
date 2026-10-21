@@ -240,13 +240,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
-      <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} action="Choose harness" icon="sliders" onAction={() => setPickerVisible(true)} />
+      <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} />
       <View style={styles.liveRow} accessibilityLabel={`${harnessName} ${caption}`}><AgentOrb size={20} thinking={thinking} /><Text style={styles.liveNote}>{caption}{external ? " · terminal" : ""}</Text></View>
       <ConnectionPill />
-      {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => navigation.navigate("Approvals")} style={styles.approval}>
-        <Text style={styles.approvalText}>{approvalCount} approvals to review{approvalDryRun ? " · preview" : ""}</Text>
-        <Text style={styles.approvalText}>Review ›</Text>
-      </PressScale> : null}
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       {!targetError && conversation?.openIn ? (
         <Text accessibilityRole="text" style={styles.handoffNote}>
@@ -300,6 +296,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onLatest={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
       </KeyboardInsetView>}
       <KeyboardDock>
+        <View style={styles.liveRow}>
+          <PressScale accessibilityRole="button" accessibilityLabel="Choose harness" onPress={() => { haptic.select(); setPickerVisible(true); }} style={styles.liveChip}><Text style={styles.liveChipText}>{harnessName} · Change</Text></PressScale>
+          {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approval}><Text style={styles.approvalText}>{approvalCount} approvals{approvalDryRun ? " · preview" : ""} ›</Text></PressScale> : null}
+        </View>
         <Composer
           key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
