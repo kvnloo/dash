@@ -50,8 +50,9 @@ describe("phone install surface", () => {
   test("Markdown and clipboard are used RN dependencies, not a WebView renderer", () => {
     const md = read("app/src/components/Markdown.tsx");
     const code = read("app/src/components/CodeBlock.tsx");
-    expect(names.has("react-native-markdown-display")).toBe(true);
-    expect(md).toContain("react-native-markdown-display");
+    expect(names.has("react-native-marked")).toBe(true);
+    expect(md).toContain("react-native-marked");
+    expect(md).toContain("useMarkdown(text");
     expect(md).not.toContain("WebView");
     expect(code).toContain("expo-clipboard");
     expect(code).toContain("Prism.tokenize");

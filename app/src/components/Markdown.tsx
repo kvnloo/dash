@@ -1,36 +1,41 @@
-import { memo } from "react";
-import { Linking, ScrollView, StyleSheet, View } from "react-native";
-import NativeMarkdown, { type RenderRules } from "react-native-markdown-display";
+import { memo, useMemo, type ReactNode } from "react";
+import { Linking, StyleSheet, Text, View, type TextStyle } from "react-native";
+import { Renderer, useMarkdown, type MarkedStyles } from "react-native-marked";
 import { colors, fonts, type } from "../theme";
 import { CodeBlock } from "./CodeBlock";
 
-const rules: RenderRules = {
-  fence: node => <CodeBlock key={node.key} code={node.content.replace(/\n$/, "")} language={"sourceInfo" in node && typeof node.sourceInfo === "string" ? node.sourceInfo.trim().split(/\s/)[0] ?? "" : ""} />,
-  code_block: node => <CodeBlock key={node.key} code={node.content.replace(/\n$/, "")} language="" />,
-  table: (node, children) => <ScrollView key={node.key} horizontal><View style={styles.table}>{children}</View></ScrollView>,
-  // Remote images must not leak a private conversation's viewing time to a host.
-  image: () => null,
-};
+class TranscriptRenderer extends Renderer {
+  override code(code: string, language = ""): ReactNode {
+    return <CodeBlock key={this.getKey()} code={code} language={language.trim().toLowerCase().split(/\s/)[0] ?? ""} />;
+  }
+  override link(children: string | ReactNode[], href: string, style?: TextStyle): ReactNode {
+    return <Text key={this.getKey()} selectable accessibilityRole="link" style={style} onPress={() => {
+      if (/^https?:\/\//i.test(href)) void Linking.openURL(href);
+    }}>{children}</Text>;
+  }
+  // Never fetch a remote image just because an untrusted agent named its URL.
+  override image(): ReactNode { return null; }
+  override linkImage(): ReactNode { return null; }
+}
 export const Markdown = memo(function Markdown({ text }: { text: string }) {
-  return <NativeMarkdown style={styles} rules={rules} onLinkPress={url => {
-    if (/^https?:\/\//i.test(url)) void Linking.openURL(url);
-    return false;
-  }}>{text}</NativeMarkdown>;
+  // Reset renderer keys per parse so unchanged code blocks retain their identity.
+  const renderer = useMemo(() => new TranscriptRenderer({ selectable: true }), [text]);
+  const nodes = useMarkdown(text, { renderer, styles, colorScheme: "dark" });
+  // Hook only, not the library's nested FlatList. FlashList owns vertical scroll.
+  return <View>{nodes}</View>;
 });
-const styles = StyleSheet.create({
-  body: { color: colors.text, ...type.body },
-  paragraph: { marginTop: 3, marginBottom: 7 },
-  heading1: { ...type.heading, fontSize: 21, lineHeight: 27, marginTop: 8, marginBottom: 6 },
-  heading2: { ...type.heading, fontSize: 18, lineHeight: 24, marginTop: 8, marginBottom: 6 },
-  heading3: { ...type.heading, marginTop: 6, marginBottom: 4 },
-  strong: { fontFamily: fonts.semibold },
-  code_inline: { fontFamily: fonts.mono, fontSize: 13, color: colors.gold, backgroundColor: colors.surfaceRaised },
-  link: { color: colors.gold, textDecorationLine: "underline" },
-  blockquote: { backgroundColor: colors.surface, borderColor: colors.textTertiary, borderLeftWidth: 2, paddingHorizontal: 10 },
-  bullet_list: { marginVertical: 2 },
-  ordered_list: { marginVertical: 2 },
+const styles: MarkedStyles = StyleSheet.create({
+  text: { color: colors.text, ...type.body },
+  paragraph: { paddingVertical: 3, marginBottom: 4 },
+  h1: { ...type.heading, fontSize: 21, lineHeight: 27, marginVertical: 6, paddingBottom: 0, borderBottomWidth: 0 },
+  h2: { ...type.heading, fontSize: 18, lineHeight: 24, marginVertical: 6, paddingBottom: 0, borderBottomWidth: 0 },
+  h3: { ...type.heading, marginVertical: 4 },
+  strong: { ...type.body, color: colors.text, fontFamily: fonts.semibold },
+  codespan: { fontFamily: fonts.mono, fontSize: 13, fontStyle: "normal", color: colors.gold, backgroundColor: colors.surfaceRaised },
+  link: { ...type.body, color: colors.gold, fontStyle: "normal", textDecorationLine: "underline" },
+  blockquote: { backgroundColor: colors.surface, borderLeftColor: colors.textTertiary, borderLeftWidth: 2, paddingHorizontal: 10 },
+  li: { ...type.body, color: colors.text },
   table: { borderWidth: 1, borderColor: colors.hair, marginVertical: 6 },
-  th: { padding: 8, borderColor: colors.hair },
-  td: { padding: 8, borderColor: colors.hair },
-  hr: { backgroundColor: colors.hair, height: 1, marginVertical: 8 },
+  tableRow: { backgroundColor: colors.surface },
+  hr: { borderBottomColor: colors.hair, borderBottomWidth: 1, marginVertical: 8 },
 });

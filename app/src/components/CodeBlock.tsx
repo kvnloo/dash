@@ -6,9 +6,10 @@ import "prismjs/components/prism-typescript";
 import "prismjs/components/prism-bash";
 import "prismjs/components/prism-json";
 import "prismjs/components/prism-python";
-import "prismjs/components/prism-diff";
 import { colors, fonts, type } from "../theme";
 import { PressScale } from "./PressScale";
+
+const grammars = new Map(["javascript", "typescript", "bash", "json", "python", "css", "markup"].map(name => [name, Prism.languages[name]]));
 
 function tokenText(token: string | Prism.Token, key: string): React.ReactNode {
   if (typeof token === "string") return token;
@@ -20,17 +21,18 @@ function tokenText(token: string | Prism.Token, key: string): React.ReactNode {
   return <Text key={key} style={{ color }}>{content}</Text>;
 }
 export const CodeBlock = memo(function CodeBlock({ code, language }: { code: string; language: string }) {
-  const [copyState, setCopyState] = useState("Copy");
+  const [copyState, setCopyState] = useState({ code: "", label: "Copy" });
   const lang = ({ ts: "typescript", js: "javascript", sh: "bash", py: "python" })[language] ?? language;
   const tokens = useMemo(() => {
-    const grammar = Prism.languages[lang];
+    if (lang === "diff") return code.split("\n").map((line, index, lines) => <Text key={index} style={{ color: line.startsWith("+") ? colors.ok : line.startsWith("-") ? colors.danger : colors.textMuted }}>{line}{index < lines.length - 1 ? "\n" : ""}</Text>);
+    const grammar = code.length <= 50_000 ? grammars.get(lang) : undefined;
     return grammar ? Prism.tokenize(code, grammar).map((t, i) => tokenText(t, String(i))) : code;
   }, [code, lang]);
   return <View style={styles.block}>
     <View style={styles.header}><Text style={styles.language}>{language || "code"}</Text>
       <PressScale accessibilityRole="button" accessibilityLabel={`Copy ${language || "code"} code`} style={styles.copy}
-        onPress={() => { void Clipboard.setStringAsync(code).then(() => setCopyState("Copied"), () => setCopyState("Try again")); }}>
-        <Text accessibilityLiveRegion="polite" style={styles.copyText}>{copyState}</Text>
+        onPress={() => { void Clipboard.setStringAsync(code).then(() => setCopyState({ code, label: "Copied" }), () => setCopyState({ code, label: "Try again" })); }}>
+        <Text accessibilityLiveRegion="polite" style={styles.copyText}>{copyState.code === code ? copyState.label : "Copy"}</Text>
       </PressScale>
     </View>
     <ScrollView horizontal><Text selectable style={styles.code}>{tokens}</Text></ScrollView>
