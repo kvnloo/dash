@@ -1,14 +1,16 @@
-import { memo, type ReactNode } from "react";
+import { memo, useContext, type ReactNode } from "react";
 import { Pressable, StyleSheet, type PressableProps, type ViewStyle } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
 } from "react-native-reanimated";
-import { PRESS_SCALE, SNAP } from "../motion";
+import { PagerGestureContext } from "./pager-gesture";
+import { PRESS_SCALE, press } from "../motion";
 
-const spring = { ...SNAP, reduceMotion: ReduceMotion.System };
+const spring = { ...press, reduceMotion: ReduceMotion.System };
 
 export type PressScaleProps = PressableProps & {
   scaleTo?: number;
@@ -33,30 +35,37 @@ function childLayout(style: PressableProps["style"]): ViewStyle | undefined {
 export const PressScale = memo(function PressScale({
   scaleTo = PRESS_SCALE.row,
   style,
+  onPress,
+  onLongPress,
   onPressIn,
   onPressOut,
   disabled,
   children,
   ...rest
 }: PressScaleProps) {
+  const swiping = useContext(PagerGestureContext);
   const scale = useSharedValue(1);
+  const gesture = Gesture.Manual().enabled(!disabled)
+    .onTouchesDown(() => { scale.value = withTiming(scaleTo, spring); })
+    .onTouchesUp((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); })
+    .onTouchesCancelled((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); });
   const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
-    <Pressable
+    <GestureDetector gesture={gesture}><Pressable
       disabled={disabled}
       {...rest}
       style={style}
+      onPress={e => { if (!swiping?.value) onPress?.(e); }}
+      onLongPress={e => { if (!swiping?.value) onLongPress?.(e); }}
       onPressIn={(e) => {
-        if (!disabled) scale.value = withSpring(scaleTo, spring);
         onPressIn?.(e);
       }}
       onPressOut={(e) => {
-        scale.value = withSpring(1, spring);
         onPressOut?.(e);
       }}
     >
       <Animated.View style={[styles.fill, childLayout(style), anim]}>{children}</Animated.View>
-    </Pressable>
+    </Pressable></GestureDetector>
   );
 });
 

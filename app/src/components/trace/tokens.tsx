@@ -1,8 +1,6 @@
 import { useEffect } from "react";
 import { StyleSheet, type ViewStyle } from "react-native";
 import Animated, {
-  Easing,
-  ReduceMotion,
   cancelAnimation,
   useAnimatedStyle,
   useReducedMotion,
@@ -10,6 +8,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
+import { ambient } from "../../motion-ambient";
 import { colors, glass } from "../../theme";
 
 /** Trace palette: one neutral base and three accents (round 3). */
@@ -41,7 +40,7 @@ export function LivePulse({ size = 6, color = tc.live, style }: { size?: number;
   const p = useSharedValue(0);
   useEffect(() => {
     if (reduced) { p.value = 1; return; }
-    p.value = withRepeat(withTiming(1, { duration: 800, easing: Easing.inOut(Easing.sin), reduceMotion: ReduceMotion.System }), -1, true);
+    p.value = withRepeat(withTiming(1, ambient(800)), -1, true);
     return () => cancelAnimation(p);
   }, [p, reduced]);
   const halo = useAnimatedStyle(() => ({ opacity: 0.35 * (1 - p.value), transform: [{ scale: 1 + p.value * 1.4 }] }));

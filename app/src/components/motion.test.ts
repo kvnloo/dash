@@ -1,19 +1,50 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { GEL, MOTION_MS, PRESS_SCALE, SNAP } from "../motion";
+import { GEL, MOTION_MS, PRESS_SCALE, SNAP, snappy, settle, fade, nav, press, entranceDelay, navDuration, navProgress, settleTiming, criticalProgress } from "../motion";
 
 describe("motion springs", () => {
-  test("press SNAP is snappier than the nav gel", () => {
-    expect(GEL.mass).toBe(0.4);
-    expect(GEL.stiffness).toBe(240);
-    expect(GEL.damping).toBe(13);
-    expect(SNAP.mass).toBe(0.32);
-    expect(SNAP.stiffness).toBe(420);
-    expect(SNAP.damping).toBe(22);
-    expect(SNAP.stiffness).toBeGreaterThan(GEL.stiffness);
-    expect(SNAP.damping).toBeGreaterThan(GEL.damping);
-    expect(SNAP.mass).toBeLessThan(GEL.mass);
+  test("shared tokens bound actual spring duration and forbid layout overshoot", () => {
+    expect(snappy).toEqual({ duration: 150, easing: criticalProgress });
+    expect(settle).toEqual({ duration: 180, easing: criticalProgress });
+    expect(fade).toEqual({ duration: 120 });
+    expect(nav).toEqual({ duration: 160 });
+    expect(press).toEqual({ duration: 70 });
+    expect(GEL).toBe(snappy); expect(SNAP).toBe(snappy);
+    expect(snappy.duration).toBe(150);
+    expect(settle.duration).toBe(180);
+    expect(criticalProgress(0)).toBe(0); expect(criticalProgress(1)).toBe(1);
+    expect(criticalProgress(0.5)).toBeCloseTo(0.94006, 4);
+    for (const i of [0, 11, 12, 200]) expect(entranceDelay(i)).toBe(0);
+  });
+
+  test("velocity-aware navigation is bounded and reversible", () => {
+    const release = settleTiming(1, 10);
+    expect(release.duration).toBe(100); expect(release.easing(0.5)).toBeCloseTo(0.625);
+    expect(navDuration(1, 0)).toBe(160);
+    expect(navDuration(1, -20)).toBe(160);
+    expect(navDuration(0, 20)).toBe(160);
+    expect(navDuration(1, 1)).toBe(160);
+    expect(navDuration(1, 10)).toBe(100);
+    expect(navDuration(-1, -10)).toBe(100);
+    expect(navDuration(1, 100)).toBe(80);
+    expect(navDuration(1, 0, true)).toBe(0);
+    expect(navProgress(0, 1, 10, 100)).toBe(0);
+    expect(navProgress(1, 1, 10, 100)).toBe(1);
+    expect(navProgress(0.5, 1, 10, 100)).toBeCloseTo(0.625);
+    expect(navProgress(0.5, -1, -10, 100)).toBeCloseTo(0.625);
+    expect(navProgress(0.5, 0, 10, 100)).toBeCloseTo(0.5);
+    expect(navProgress(0.5, 1, -10, 100)).toBeCloseTo(0.5);
+    expect(navProgress(0.5, 1, 1000, 100)).toBeCloseTo(0.875);
+    for (const velocity of [-100, 0, 1, 10, 1000]) {
+      let previous = 0;
+      for (let i = 0; i <= 100; i++) {
+        const current = navProgress(i / 100, 1, velocity, 160);
+        expect(current).toBeGreaterThanOrEqual(previous - 1e-9);
+        expect(current).toBeLessThanOrEqual(1);
+        previous = current;
+      }
+    }
   });
 
   test("press scales stay on transform, not layout", () => {
@@ -28,9 +59,9 @@ describe("motion springs", () => {
   });
 
   test("enter/exit stay under 300ms", () => {
-    expect(MOTION_MS.enter).toBe(240);
-    expect(MOTION_MS.exit).toBe(140);
-    expect(MOTION_MS.stagger).toBe(36);
+    expect(MOTION_MS.enter).toBe(150);
+    expect(MOTION_MS.exit).toBe(120);
+    expect(MOTION_MS.stagger).toBe(0);
     expect(MOTION_MS.enter).toBeLessThanOrEqual(300);
     expect(MOTION_MS.exit).toBeLessThanOrEqual(180);
     expect(MOTION_MS.stagger).toBeLessThanOrEqual(50);
@@ -40,10 +71,10 @@ describe("motion springs", () => {
 describe("PressScale wiring", () => {
   test("PressScale springs scale on the UI thread", () => {
     const src = readFileSync(join(import.meta.dir, "PressScale.tsx"), "utf8");
-    expect(src).toContain("withSpring");
+    expect(src).toContain("withTiming");
     expect(src).toContain("transform");
     expect(src).toContain("ReduceMotion.System");
-    expect(src).toContain("SNAP");
+    expect(src).toContain("press");
     expect(src).not.toContain("width:");
   });
 

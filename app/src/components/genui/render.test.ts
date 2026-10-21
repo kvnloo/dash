@@ -12,7 +12,10 @@ test("RN-web renderer (animation stub only): catalog, escaped labels, accessible
     await Bun.write(preload, `import {mock} from "bun:test";
       import * as web from ${JSON.stringify(resolve(import.meta.dir, "../../../node_modules/react-native-web/dist/index.js"))};
       mock.module(${JSON.stringify(Bun.resolveSync("react-native", resolve(import.meta.dir, "../../..")))},()=>web);
-      mock.module(${JSON.stringify(Bun.resolveSync("react-native-reanimated", resolve(import.meta.dir, "../../..")))},()=>({default:{View:web.View},ReduceMotion:{System:0},useSharedValue:value=>({value}),useAnimatedStyle:fn=>fn(),withSpring:value=>value}));`);
+      mock.module(${JSON.stringify(Bun.resolveSync("react-native-reanimated", resolve(import.meta.dir, "../../..")))},()=>({default:{View:web.View},ReduceMotion:{System:0},useSharedValue:value=>({value}),useAnimatedStyle:fn=>fn(),withSpring:value=>value,withTiming:value=>value}));`);
+    await Bun.write(preload, (await Bun.file(preload).text()) + `
+      const gesture = new Proxy({}, {get:()=>()=>gesture});
+      mock.module(${JSON.stringify(Bun.resolveSync("react-native-gesture-handler", resolve(import.meta.dir, "../../..")))},()=>({GestureDetector:({children})=>children,Gesture:{Manual:()=>gesture}}));`);
     const child = Bun.spawn([process.execPath, "--preload", preload, join(import.meta.dir, "render-fixture.tsx")], { stdout: "pipe", stderr: "pipe" });
     const text = await new Response(child.stdout).text();
     const error = await new Response(child.stderr).text();

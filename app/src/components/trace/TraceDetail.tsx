@@ -1,25 +1,26 @@
-import { useEffect } from "react";
+import { useLayoutEffect, useState } from "react";
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Extrapolation,
+  cancelAnimation,
   ReduceMotion,
   interpolate,
   runOnJS,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { snappy, settleTiming, fade } from "../../motion";
 import { haptic } from "../../haptics";
 import { askWord, clock, dur, rowMeta, summarizeRow, type TraceRow, type TraceSnapshot } from "../../trace/model";
 import { fonts, radius, space, type } from "../../theme";
 import { LivePulse, tc } from "./tokens";
 import type { RowRect } from "./TraceTimeline";
 
-const open = { mass: 0.6, stiffness: 240, damping: 24, reduceMotion: ReduceMotion.System };
+const open = { ...fade, easing: snappy.easing, reduceMotion: ReduceMotion.System };
 
 /**
  * Shared-element-style expand: the sheet starts at the tapped row's window rect and springs
@@ -31,21 +32,22 @@ export function TraceDetail({ snapshot, row, origin, onClose }: { snapshot: Trac
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const p = useSharedValue(0);
+  const [ready, setReady] = useState(reduced);
   const drag = useSharedValue(0);
   const top = insets.top + 56;
   const target = { x: 0, y: top, width: W, height: H - top + 24 }; // runs past the bottom edge: no gap, no bottom corners
   const from = origin.width > 0 ? origin : { x: target.x, y: target.y + 40, width: target.width, height: 80 };
 
-  useEffect(() => {
-    p.value = reduced ? withTiming(1, { duration: 160 }) : withSpring(1, open);
+  useLayoutEffect(() => {
+    p.value = withTiming(1, open, finished => { if (finished) runOnJS(setReady)(true); });
   }, [p, reduced]);
 
   const close = () => {
     haptic.tap();
-    p.value = reduced ? withTiming(0, { duration: 140 }, (f) => { if (f) runOnJS(onClose)(); }) : withSpring(0, { ...open, overshootClamping: true }, (f) => { if (f) runOnJS(onClose)(); });
+    p.value = reduced ? withTiming(0, { ...fade, reduceMotion: ReduceMotion.System }, (f) => { if (f) runOnJS(onClose)(); }) : withTiming(0, { ...open }, (f) => { if (f) runOnJS(onClose)(); });
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => { close(); return true; });
     return () => sub.remove();
   });
@@ -53,10 +55,11 @@ export function TraceDetail({ snapshot, row, origin, onClose }: { snapshot: Trac
   const pan = Gesture.Pan()
     .activeOffsetY(12)
     .failOffsetX([-20, 20])
+    .onBegin(() => { cancelAnimation(drag); })
     .onUpdate((e) => { drag.value = Math.max(0, e.translationY); })
     .onEnd((e) => {
-      if (drag.value > 120 || e.velocityY > 900) { drag.value = withSpring(0, open); runOnJS(close)(); }
-      else drag.value = withSpring(0, { ...open, velocity: e.velocityY });
+      if (drag.value > 120 || e.velocityY > 900) { drag.value = withTiming(0, open); runOnJS(close)(); }
+      else drag.value = withTiming(0, { ...settleTiming(-drag.value, e.velocityY), reduceMotion: ReduceMotion.System });
     });
 
   const sheet = useAnimatedStyle(() => {
@@ -99,7 +102,7 @@ export function TraceDetail({ snapshot, row, origin, onClose }: { snapshot: Trac
             <Pressable onPress={close} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close" style={styles.close}><Text style={styles.closeText}>×</Text></Pressable>
           </View>
           <Animated.View style={[styles.flex, body]}>
-            <ScrollView contentContainerStyle={styles.scroll}>
+            {ready ? <ScrollView contentContainerStyle={styles.scroll}>
               <View style={styles.metrics}>
                 <Metric k="workers" v={String(sum.workers)} />
                 <Metric k="calls" v={sum.calls.toLocaleString("en-US")} />
@@ -127,7 +130,7 @@ export function TraceDetail({ snapshot, row, origin, onClose }: { snapshot: Trac
                 );
               })}
               <Text style={styles.foot}>Bundled snapshot · labels are allowlisted, no goals or prompts.</Text>
-            </ScrollView>
+            </ScrollView> : <View accessibilityLabel="Loading detail" style={styles.flex} />}
           </Animated.View>
         </Animated.View>
       </GestureDetector>

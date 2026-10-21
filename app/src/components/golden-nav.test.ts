@@ -389,10 +389,8 @@ describe("top navigation bar wiring", () => {
 
   test("does not snap the pill to the integer tab when a flick settles", () => {
     expect(src).not.toContain("progress.value = clampProgress(tab)");
-    // Web has no scroll progress, so it follows the settled page only there.
-    expect(src).toContain('if (Platform.OS === "web") internal.value = clampSettled(tab)');
-    // ...and never writes the page progress that drives the page-body gel.
-    expect(src).toContain('Platform.OS === "web" ? internal : (progressProp ?? internal)');
+    expect(src).toContain("if (!progressProp) internal.value = clampSettled(tab)");
+    expect(src).toContain("const progress = progressProp ?? internal");
   });
 
   test("dots are circular and the gold pill is not a hardware-texture square", () => {
@@ -422,14 +420,12 @@ describe("top navigation bar wiring", () => {
     expect(tabStyle).not.toContain("transform");
   });
 
-  test("gold pill is a UI-thread gel: spring follow, stretch X, squash Y", () => {
-    expect(src).toContain("useFrameCallback");
-    expect(src).toContain("pillStep");
-    expect(src).toContain("pillStretch");
-    expect(src).toContain("scaleX");
-    expect(src).toContain("scaleY");
-    expect(src).not.toContain("progress.value < 0 ? 0");
-    expect(src).toContain("pillStep(follow.value, vel.value, progress.value");
+  test("gold pill directly follows the pager without lag or stretch", () => {
+    expect(src).not.toContain("useFrameCallback");
+    expect(src).not.toContain("pillStep");
+    expect(src).not.toContain("pillStretch");
+    expect(src).toContain("const n = p");
+    expect(src).toContain("translateX: n * slot");
   });
 
   test("pager outline uses the same squircle radius as the gold pill", () => {
@@ -482,56 +478,27 @@ describe("workspace header under the bar", () => {
 });
 
 describe("MainPager scroll wiring", () => {
-  test("forwards onPageScroll so the pill can track the drag", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    const types = readFileSync(join(import.meta.dir, "MainPager.tsx"), "utf8");
-    expect(types).toContain("onPageScroll");
-    expect(native).toContain("onPageScroll");
+  const pager = readFileSync(join(import.meta.dir, "GesturePager.tsx"), "utf8");
+  test("native and web share bounded UI-thread gesture rendering", () => {
+    for (const platform of ["native", "web"]) expect(readFileSync(join(import.meta.dir, `MainPager.${platform}.tsx`), "utf8")).toContain("./GesturePager");
+    expect(pager).toContain("cancelAnimation(progress)");
+    expect(pager).toContain("start.value - e.translationX / pageWidth");
+    expect(pager).toContain("navDuration(distance, velocity, reduced)");
+    expect(pager).toContain("navProgress(t, distance, velocity, duration)");
+    expect(pager).not.toContain("BOUNCE");
+    expect(pager).not.toContain("onPageScroll");
   });
-
-  test("writes pager offset on the UI thread so a fling is not JS-bridged", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    expect(native).toContain("createAnimatedComponent");
-    expect(native).toContain("useEvent");
-    expect(native).toContain("onPageScroll");
-    expect(native).toContain("worklet");
+  test("heavy unvisited panes mount only after settle; canceled completion does not mount", () => {
+    expect(pager).toContain("if (finished) runOnJS(completed)(index)");
+    expect(pager).toContain("visited.has(index) ? child");
+    expect(pager).toContain('accessibilityLabel="Loading workspace"');
+    expect(pager).toContain("page !== selected.current");
   });
-
-  test("does not call setPage again when onPageSelected reports the flick target", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    expect(native).toContain("fromPager");
-  });
-
-  test("does not keep all three panes in the GPU layer during a fling", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    expect(native).toContain("offscreenPageLimit={1}");
-  });
-
-  test("snaps pill progress on onPageSelected so Android's dummy page-0 scroll cannot stick", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    expect(native).toContain("armed.value === 0");
-    expect(native).toContain("progress.value = real");
-  });
-
-  test("wraps real pages in bounce sentinels so page 0 can overscroll to -1 then snap back", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    expect(native).toContain("bounce-start");
-    expect(native).toContain("bounce-end");
-    expect(native).toContain("e.position + e.offset - BOUNCE");
-    expect(native).toContain("inner.current?.setPage(BOUNCE)");
-    expect(native).toContain('overScrollMode="always"');
-    expect(native).toContain("pageWidth");
-    expect(native).toContain("width: pageWidth");
-    expect(native).not.toContain('overScrollMode="never"');
-  });
-
-  test("main page body follows the pager with heavier gel, not a layout height anim", () => {
-    const src = readFileSync(join(import.meta.dir, "../screens/MainScreen.tsx"), "utf8");
-    expect(src).toContain("pageStep");
-    expect(src).toContain("pageStretch");
-    expect(src).toContain("PAGE_LAG_PX");
-    expect(src).toContain("useFrameCallback");
-    expect(src).toContain("pageWidth={width}");
-    expect(src).not.toContain("height: pagerProgress");
+  test("page body has no second spring simulation", () => {
+    const main = readFileSync(join(import.meta.dir, "../screens/MainScreen.tsx"), "utf8");
+    expect(main).not.toContain("pageStep");
+    expect(main).not.toContain("pageStretch");
+    expect(main).not.toContain("useFrameCallback");
+    expect(main).toContain("pageWidth={width}");
   });
 });

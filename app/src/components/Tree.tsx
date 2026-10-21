@@ -4,11 +4,11 @@ import { useTree } from "@headless-tree/react";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { PanResponder, Platform, Pressable, StyleSheet, Text, View, type ViewProps } from "react-native";
-import Animated, { FadeIn, FadeOut, LinearTransition, ReduceMotion, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, LinearTransition, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { haptic } from "../haptics";
 import { childNodes, treeIndex, type TreeKind, type TreeNode } from "../lib/tree";
-import { SNAP } from "../motion";
-import { colors, controlMin, glass, radius, space, timing, type } from "../theme";
+import { SNAP, MOTION_MS, fade } from "../motion";
+import { colors, controlMin, glass, radius, space, type } from "../theme";
 import { TreeKeyboard } from "./TreeKeyboard";
 import { AgentOrb } from "./AgentOrb";
 
@@ -16,7 +16,7 @@ const icons: Record<TreeKind, ComponentProps<typeof Feather>["name"]> = {
   host: "monitor", bot: "cpu", harness: "terminal", session: "message-circle", repo: "git-branch",
   turn: "corner-down-right", thinking: "feather", tools: "tool", call: "terminal", args: "code", output: "file-text", note: "info",
 };
-const layout = LinearTransition.duration(timing.state).reduceMotion(ReduceMotion.System);
+const layout = LinearTransition.duration(MOTION_MS.enter).reduceMotion(ReduceMotion.System);
 
 // Animate FlashList's positioned cell, not its inner row's global coordinates.
 function TreeCell({ children, ...props }: ViewProps) {
@@ -32,14 +32,14 @@ function Row({ item, selected, activate, toggle, collapse, inline }: {
   const expanded = item.isExpanded();
   const depth = item.getItemMeta().level;
   const rotation = useSharedValue(expanded ? 90 : 0);
-  useEffect(() => { rotation.value = withSpring(expanded ? 90 : 0, { ...SNAP, reduceMotion: ReduceMotion.System }); }, [expanded, rotation]);
+  useEffect(() => { rotation.value = withTiming(expanded ? 90 : 0, { ...SNAP, reduceMotion: ReduceMotion.System }); }, [expanded, rotation]);
   const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }));
   const swipe = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_, g) => g.dx < -space.xxl && Math.abs(g.dy) < space.md,
     onPanResponderRelease: (_, g) => { if (g.dx < -space.xxxl) collapse(); },
   }), [collapse]);
   return (
-    <Animated.View layout={inline ? layout : undefined} entering={FadeIn.delay(timing.state).duration(timing.immediate).reduceMotion(ReduceMotion.System)} exiting={FadeOut.duration(timing.immediate).reduceMotion(ReduceMotion.System)} {...swipe.panHandlers}>
+    <Animated.View layout={inline ? layout : undefined} entering={FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} exiting={FadeOut.duration(fade.duration).reduceMotion(ReduceMotion.System)} {...swipe.panHandlers}>
       <View style={[styles.row, node.dimmed && styles.dimmed]}>
         {Array.from({ length: depth }, (_, level) => <View pointerEvents="none" key={level} style={[styles.guide, { left: space.md + level * space.lg }]} />)}
         <Pressable
