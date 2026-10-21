@@ -36,6 +36,7 @@ import {
 import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, glass, radius, space, type } from "../theme";
 import { toMain } from "../lib/main-nav";
+import { AgentOrb } from "../components/AgentOrb";
 
 const EMPTY: Message[] = [];
 
@@ -226,6 +227,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View style={styles.empty}>
+              <AgentOrb size={64} thinking={{ phase: "idle" }} label={`${harnessName} idle`} />
               <Text style={styles.emptyTitle}>{harnessName}</Text>
               <Text style={styles.emptySubtitle}>
                 {online && connection.host ? `on ${connection.host}` : "Ask anything"}

@@ -7,6 +7,8 @@ import type { AssistantMessage, AssistantState, Message } from "../model";
 import { store } from "../store/app";
 import { replyText, useKeyed } from "../store/text";
 import { colors, fonts, glass, radius, space, type } from "../theme";
+import { messageThinking } from "../lib/thinking";
+import { AgentOrb } from "./AgentOrb";
 import { Markdown } from "./Markdown";
 import { StageLinks } from "./artifact-stage/StageLinks";
 import { PressScale } from "./PressScale";
@@ -51,7 +53,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
     case "pending":
       return (
         <View style={styles.statusRow}>
-          <ThinkingMarker harnessId={harnessId} turnState={message.state} />
+          <AgentOrb size={20} thinking={messageThinking(message)} />
           <Text style={styles.statusText} numberOfLines={1}>
             Queued…
           </Text>
@@ -62,7 +64,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
         <>
           {liveText || message.text ? <Markdown text={liveText || message.text} /> : null}
           <View style={styles.statusRow}>
-            <ThinkingMarker harnessId={harnessId} turnState={message.state} waiting={message.handoff === "queued"} />
+            <AgentOrb size={20} thinking={messageThinking(message, { liveText })} label={message.handoff === "queued" ? "queued" : "streaming"} />
             <Text style={styles.statusText} numberOfLines={2}>
               {message.status ?? "Working"}
             </Text>

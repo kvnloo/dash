@@ -1,9 +1,9 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { effortIdForTurn, lastAssistantState, runtimeStateFromTurn } from "../../catalog/runtime-state";
 import { threadAppearance } from "../../components/thread-appearance";
-import { HarnessAvatar } from "../../components/HarnessAvatar";
+import { AgentOrb } from "../../components/AgentOrb";
+import { conversationThinking } from "../../lib/thinking";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { conversationPreview as preview } from "../../lib/live-sessions";
@@ -38,8 +38,8 @@ const Row = memo(function Row({
 }) {
   const appearance = threadAppearance({ stale: item.stale, live });
   const stale = appearance.stale;
-  const turnState = lastAssistantState(item.messages);
-  const stateId = item.stale ? "stale" : runtimeStateFromTurn({ turnState, connectionStatus });
+  // What the agent is doing now, as a thinking-orbs orb (idle orbs hold still).
+  const thinking = item.stale ? { phase: "idle" as const } : conversationThinking(item.messages, connectionStatus);
   return (
     <PressScale
       onPress={() => onPress(item.id)}
@@ -48,13 +48,7 @@ const Row = memo(function Row({
       style={[styles.row, active && !stale && styles.rowActive]}
       accessibilityRole="button"
     >
-      <HarnessAvatar
-        size={40}
-        name={harnessName}
-        harnessId={item.harness}
-        effortId={effortIdForTurn({ turnState })}
-        stateId={stateId}
-      />
+      <AgentOrb size={40} thinking={thinking} label={`${harnessName} · ${thinking.tool ?? thinking.phase}`} />
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
           <Text style={[styles.rowTitle, stale && styles.stale]} numberOfLines={1}>

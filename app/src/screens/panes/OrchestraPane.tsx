@@ -1,6 +1,6 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../../catalog/runtime-state";
 import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../../catalog/visual";
 import { GlassSurface } from "../../components/GlassSurface";
@@ -16,6 +16,22 @@ import type { ScreenProps } from "../../navigation";
 import { setActive, store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
 import { timeAgo } from "../../util";
+import { aodlGraphFromRoster, aodlGraphView } from "../../lib/aodl";
+import { graphHosts } from "../../lib/orchestra-graph";
+
+const GraphView = aodlGraphView();
+
+/** zerOS orchestration graph (aodl-views): this tailnet's hosts and their live chats. */
+const RosterGraph = memo(function RosterGraph({ width }: { width: number }) {
+  const hosts = store.use((s) => s.connection.hosts);
+  const graph = useMemo(() => aodlGraphFromRoster(graphHosts(hosts)), [hosts]);
+  if (!GraphView || !graph || graph.nodes.length === 0) return null;
+  return (
+    <View style={styles.graph} accessibilityLabel="Orchestration graph">
+      <GraphView graph={graph} width={width} height={360} initialLayout="spine" initialMode="all" testID="orchestra-graph" />
+    </View>
+  );
+});
 
 const Card = memo(function Card({
   item,
@@ -123,9 +139,11 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
     [feedbackOn, onFeedback, open, streamingIds],
   );
 
+  const { width } = useWindowDimensions();
   return (
     <FlashList
       data={projects}
+      ListHeaderComponent={<RosterGraph width={width - space.lg * 2} />}
       renderItem={renderItem}
       keyExtractor={(p) => p.id}
       contentContainerStyle={styles.list}
@@ -141,6 +159,7 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
 
 const styles = StyleSheet.create({
   list: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: 120 },
+  graph: { marginBottom: space.md },
   card: {
     borderRadius: 14,
     alignItems: "stretch",
