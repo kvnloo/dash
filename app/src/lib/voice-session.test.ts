@@ -1,10 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 
-// Native file access is not available in Bun. These lifecycle tests never read captured audio.
+// Native file access is replaced with a tiny captured-audio fixture in Bun.
 mock.module("expo-file-system", () => ({
   File: class {
     async arrayBuffer(): Promise<ArrayBuffer> {
-      throw new Error("Unexpected recording read");
+      return new Uint8Array([1, 2, 3]).buffer;
     }
   },
 }));
@@ -52,6 +52,30 @@ function harness(prepare: () => Promise<void>) {
 }
 
 describe("legacy voice session lifecycle", () => {
+  test("utterance stays thinking through recorder restart and TTS pauses until real turn completion", async () => {
+    const phases: VoicePhase[] = [];
+    let recording = false;
+    let db = -10;
+    const recorder: Recorder = { uri: "fixture.m4a", prepareToRecordAsync: async () => {}, record: () => { recording = true; }, stop: async () => { recording = false; }, getStatus: () => ({ isRecording: recording, metering: db }) };
+    const session = new VoiceSession(recorder, { onPhase: phase => phases.push(phase), onLevel() {}, onUtterance: () => true, onBargeIn() {}, onError: message => { throw new Error(message); } });
+    await session.start();
+    try {
+      await Bun.sleep(600);
+      db = -80;
+      await Bun.sleep(1200);
+      expect(recording).toBe(true);
+      expect(phases.at(-1)).toBe("thinking");
+      session.setReplyActive(true);
+      expect(phases.at(-1)).toBe("speaking");
+      session.setReplyActive(false);
+      expect(phases.at(-1)).toBe("thinking");
+      session.turnSettled();
+      expect(phases.at(-1)).toBe("listening");
+      await session.stop();
+      session.setReplyActive(true);
+      expect(phases.at(-1)).toBe("idle");
+    } finally { await session.stop(); }
+  });
   test("leaving during preparation never starts capture afterward", async () => {
     const preparation = deferred();
     const voice = harness(() => preparation.promise);

@@ -10,6 +10,8 @@ import { presetForHarness } from "../components/orb-html";
 import { haptic } from "../haptics";
 import { ReplySpeaker } from "../lib/speak";
 import { VoiceSession, type Recorder, type VoicePhase } from "../lib/voice-session";
+import { voiceOrbPhase } from "../lib/voice-orb";
+import { onTurnSettled } from "../store/queue";
 import type { ScreenProps } from "../navigation";
 import { sendVoiceBegin, sendVoiceChunk, sendVoiceCommit } from "../net/bridge";
 import { beginTurn, createConversation, store } from "../store/app";
@@ -44,7 +46,7 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const conversationId = store.use((s) => s.activeId);
-  const harness = store.use((s) => s.settings?.harness ?? "omp");
+  const harness = store.use((s) => s.conversations.find(c => c.id === s.activeId)?.harness ?? s.settings?.harness ?? "omp");
   /** The last thing the bridge heard, so the user can see they were understood. */
   const heard = store.use((s) => {
     const messages = s.conversations.find((c) => c.id === s.activeId)?.messages ?? [];
@@ -98,7 +100,7 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
     let active = true;
     const speaker = new ReplySpeaker((speaking) => {
       sessionRef.current?.setReplyActive(speaking);
-      if (!speaking) sessionRef.current?.turnSettled();
+      // Pauses between TTS sentences do not mean the bridge turn has finished.
     });
     speakerRef.current = speaker;
 
@@ -126,6 +128,13 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
       onError: setError,
     });
     sessionRef.current = session;
+    const unsubscribeSettled = onTurnSettled(id => {
+      const conversation = store.get().conversations.find(c => c.id === id);
+      if (!conversation?.messages.some(m => m.role === "assistant" && m.turnId === turnRef.current)) return;
+      if (turnRef.current) speaker.feed(replyText.get(turnRef.current));
+      speaker.flush();
+      session.turnSettled();
+    });
 
     void (async () => {
       try {
@@ -148,6 +157,7 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
 
     return () => {
       active = false;
+      unsubscribeSettled();
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       speaker.stop();
@@ -163,7 +173,7 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
       <Canvas /><ScreenHeader title="Voice" onBack={() => toMain(navigation)} />
 
       <View style={styles.stage}>
-        <VoiceOrb preset={presetForHarness(harness)} phase={!started || error ? "idle" : phase === "hearing" ? "listening" : phase} size={190} />
+        <VoiceOrb preset={presetForHarness(harness)} phase={voiceOrbPhase(phase, started, error)} size={190} />
       </View>
 
       <View style={styles.footer}>
