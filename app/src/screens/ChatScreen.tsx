@@ -37,6 +37,8 @@ import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, glass, radius, space, type } from "../theme";
 import { toMain } from "../lib/main-nav";
 import { AgentOrb } from "../components/AgentOrb";
+import { PromptRail } from "../components/PromptRail";
+import { followsLatest, promptAnchors, promptOffset } from "../lib/prompt-navigation";
 
 const EMPTY: Message[] = [];
 
@@ -56,8 +58,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const composerDraft = route.params?.draft;
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<Message>>(null);
+  const followRef = useRef(true);
+  const dragging = useRef(false);
+  const [following, setFollowing] = useState(true);
+  const setFollow = useCallback((next: boolean) => { followRef.current = next; setFollowing(next); }, []);
   const scrollToNewest = useCallback(() => {
-    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
   }, []);
   const debugPicker = debugUi.use((s) => s.chatHarnessPickerOpen);
   const debugAttachments = debugUi.use((s) => s.chatComposerAttachments);
@@ -72,6 +78,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const connection = store.use((s) => s.connection);
   const conversation = store.use((s) => s.conversations.find((c) => c.id === s.activeId));
   const messages = conversation?.messages ?? EMPTY;
+  const anchors = useMemo(() => promptAnchors(messages), [messages]);
+  useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
+  const jumpPrompt = useCallback((prompt: number) => {
+    const anchor = anchors[prompt];
+    if (!anchor) return;
+    setFollow(false);
+    const offset = promptOffset(anchors, prompt, index => listRef.current?.getLayout(index));
+    if (offset !== null) listRef.current?.scrollToOffset({ offset, animated: false });
+    else void listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
+  }, [anchors, setFollow]);
   const harnessId = conversation?.harness ?? settings?.harness ?? "omp";
   const harness = connection.harnesses.find((h) => h.id === harnessId);
   const harnessName = harness?.name ?? harnessId;
@@ -224,7 +240,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           renderItem={(info) => renderItem(info, harnessId)}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
-          maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.2 }}
+          maintainVisibleContentPosition={{ startRenderingFromBottom: true }}
+          onScrollBeginDrag={() => { dragging.current = true; }}
+          onScroll={event => {
+            if (!dragging.current) return;
+            const { contentSize, layoutMeasurement, contentOffset } = event.nativeEvent;
+            setFollow(followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y));
+          }}
+          scrollEventThrottle={16}
+          onContentSizeChange={scrollToNewest}
           contentContainerStyle={styles.listContent}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
@@ -238,6 +262,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             </View>
           }
         />
+        <PromptRail anchors={anchors} following={following} live={Boolean(streamingMessage)} onJump={jumpPrompt}
+          onLatest={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
       </KeyboardInsetView>}
       <KeyboardDock>
         <Composer
@@ -274,7 +300,7 @@ const styles = StyleSheet.create({
   targetError: { color: colors.danger, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   handoffNote: { color: colors.textTertiary, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   body: { flex: 1 },
-  listContent: { paddingVertical: space.sm },
+  listContent: { paddingVertical: space.sm, paddingRight: 36 },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: "45%" },
   emptyTitle: { color: colors.text, ...type.title },
   emptySubtitle: { color: colors.textMuted, ...type.body, marginTop: 6 },
