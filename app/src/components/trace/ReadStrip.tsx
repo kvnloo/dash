@@ -1,5 +1,6 @@
+import { DensityText as Text, DensityAnimatedText } from "../Density";
 import { useEffect, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -11,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { SNAP, fade, MOTION_MS } from "../../motion";
 import { fonts, space, type } from "../../theme";
+import { useDensity } from "../Density";
 import { tc } from "./tokens";
 
 export type ReadVariant = "slide" | "words" | "shimmer";
@@ -20,9 +22,10 @@ const spring = { ...SNAP, reduceMotion: ReduceMotion.System };
 /** The interpretation strip. Numbers in the text render in tabular mono. */
 export function ReadStrip({ text, variant = "slide", replay = 0 }: { text: string; variant?: ReadVariant; replay?: number }) {
   const reduced = useReducedMotion();
+  const { sizing } = useDensity();
   const sentences = useMemo(() => text.split(/(?<=\.)\s+/).filter(Boolean), [text]);
   return (
-    <View style={styles.strip} testID={`read-strip-${variant}`} accessibilityRole="summary" accessibilityLabel={`Read: ${text}`}>
+    <View style={[styles.strip, { padding: sizing.padding, minWidth: 0, alignSelf: "stretch" }]} testID={`read-strip-${variant}`} accessibilityRole="summary" accessibilityLabel={`Read: ${text}`}>
       <Animated.View entering={reduced ? undefined : FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} style={styles.tagRow} key={`tag-${replay}`}>
         <Text style={styles.tag}>READ</Text>
       </Animated.View>
@@ -42,13 +45,13 @@ function Slide({ sentences, reduced }: { sentences: string[]; reduced: boolean }
   return (
     <View>
       {sentences.map((s, i) => (
-        <Animated.Text
+        <DensityAnimatedText
           key={i}
           entering={reduced ? undefined : FadeInDown.duration(MOTION_MS.enter).reduceMotion(ReduceMotion.System)}
           style={styles.body}
         >
           <Rich s={s} />
-        </Animated.Text>
+        </DensityAnimatedText>
       ))}
     </View>
   );
@@ -58,7 +61,7 @@ function Word({ w, i }: { w: string; i: number }) {
   const p = useSharedValue(0);
   useEffect(() => { p.value = withTiming(1, spring); }, [i, p]);
   const st = useAnimatedStyle(() => ({ opacity: p.value, transform: [{ translateY: (1 - p.value) * 6 }] }));
-  return <Animated.Text style={[styles.body, st]}>{/^\d/.test(w) ? <Text style={styles.num}>{w}</Text> : w}{" "}</Animated.Text>;
+  return <DensityAnimatedText style={[styles.body, st]}>{/^\d/.test(w) ? <Text style={styles.num}>{w}</Text> : w}{" "}</DensityAnimatedText>;
 }
 
 function Words({ text, reduced }: { text: string; reduced: boolean }) {
@@ -68,7 +71,7 @@ function Words({ text, reduced }: { text: string; reduced: boolean }) {
 
 /** Known text is never hidden behind a simulated loading animation. */
 function Shimmer({ text, reduced }: { text: string; reduced: boolean }) {
-  return <Animated.Text entering={reduced ? undefined : FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} style={styles.body}><Rich s={text} /></Animated.Text>;
+  return <DensityAnimatedText entering={reduced ? undefined : FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} style={styles.body}><Rich s={text} /></DensityAnimatedText>;
 }
 
 const styles = StyleSheet.create({

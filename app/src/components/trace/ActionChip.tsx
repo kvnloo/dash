@@ -1,5 +1,6 @@
+import { DensityText as Text, DensityAnimatedText } from "../Density";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   FadeIn,
@@ -17,6 +18,7 @@ import { haptic } from "../../haptics";
 import { SNAP, settleTiming, fade, press as pressMotion, MOTION_MS } from "../../motion";
 import { swipeDecision, type SwipeDecision, type TraceAction } from "../../trace/model";
 import { fonts, radius, space, type } from "../../theme";
+import { useDensity } from "../Density";
 import { tc } from "./tokens";
 
 export type ChipVariant = "card" | "pill" | "buttons";
@@ -36,6 +38,7 @@ export function ActionChip({ action, variant = "card", decision, onDecide }: {
   onDecide(id: string, value: Decision | "undo"): void;
 }) {
   const reduced = useReducedMotion();
+  const { sizing } = useDensity();
   const [w, setW] = useState(320);
   const x = useSharedValue(0);
   const press = useSharedValue(1);
@@ -82,10 +85,10 @@ export function ActionChip({ action, variant = "card", decision, onDecide }: {
 
   return (
     <Animated.View layout={reduced ? undefined : LinearTransition.duration(MOTION_MS.enter).reduceMotion(ReduceMotion.System)} style={styles.outer} onLayout={onLayout} testID={`chip-${action.id}`}>
-      <Animated.View style={[styles.under, styles.underDo, doUnder]}><Animated.Text style={[styles.underText, { color: tc.ok }, doLabel]}>Do</Animated.Text></Animated.View>
-      <Animated.View style={[styles.under, styles.underNot, notUnder]}><Animated.Text style={[styles.underText, { color: tc.text2 }, notLabel]}>Not now</Animated.Text></Animated.View>
+      <Animated.View style={[styles.under, styles.underDo, doUnder]}><DensityAnimatedText style={[styles.underText, { color: tc.ok }, doLabel]}>Do</DensityAnimatedText></Animated.View>
+      <Animated.View style={[styles.under, styles.underNot, notUnder]}><DensityAnimatedText style={[styles.underText, { color: tc.text2 }, notLabel]}>Not now</DensityAnimatedText></Animated.View>
       <GestureDetector gesture={pan}>
-        <Animated.View style={[variant === "pill" ? styles.pill : styles.card, decided && decision === "not_now" && styles.dim, chipStyle]} accessibilityRole="adjustable" accessibilityLabel={`${action.title}. Swipe right for Do, left for Not now.`}
+        <Animated.View style={[variant === "pill" ? styles.pill : styles.card, { minHeight: sizing.rowMin, padding: sizing.padding, alignSelf: "stretch" }, decided && decision === "not_now" && styles.dim, chipStyle]} accessibilityRole="adjustable" accessibilityLabel={`${action.title}. Swipe right for Do, left for Not now.`}
           accessibilityActions={[{ name: "increment", label: "Do" }, { name: "decrement", label: "Not now" }]}
           onAccessibilityAction={(e) => onDecide(action.id, e.nativeEvent.actionName === "increment" ? "do" : "not_now")}
         >

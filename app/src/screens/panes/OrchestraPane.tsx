@@ -6,7 +6,8 @@ import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState,
 import { GlassSurface } from "../../components/GlassSurface";
 import { EffortOrbs } from "../../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../../components/TopologyBadge";
-import { PressScale } from "../../components/PressScale";
+import { InteractiveTile } from "../../components/InteractiveTile";
+import { useDensity } from "../../components/Density";
 import { haptic } from "../../haptics";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
@@ -35,20 +36,21 @@ const Card = memo(function Card({
   onPress(item: LiveProject): void;
   onLongPress?(item: LiveProject): void;
 }) {
+  const { sizing } = useDensity();
   const visual = loadVisualCatalog();
   const topology = resolveTopology(visual, item.topologyId);
   const provider = resolveProvider(visual, item.providerId);
   const state = resolveRuntimeState(visual, runtimeStateFromOrchestra({ status: item.status, streaming }));
   const effort = resolveEffort(visual, effortIdForTurn({ turnState: streaming ? "streaming" : undefined }));
   return (
-    <PressScale
-      onPress={() => onPress(item)}
-      onLongPress={onLongPress ? () => onLongPress(item) : undefined}
-      delayLongPress={350}
+    <InteractiveTile
+      title={item.name}
+      summary={`${item.name}. ${item.subtitle}. ${item.agentRows.length} agents, ${item.chatIds.length} chats.`}
+      onOpen={() => onPress(item)}
+      extraActions={onLongPress ? [{ id: "feedback", label: "Feedback", run: () => onLongPress(item) }] : []}
       style={styles.card}
-      accessibilityRole="button"
     >
-      <GlassSurface borderRadius={14} style={{ alignSelf: "stretch" }} contentStyle={{ padding: 16 }}>
+      <GlassSurface borderRadius={14} style={{ alignSelf: "stretch" }} contentStyle={{ padding: sizing.padding, minHeight: sizing.tileMin }}>
       <View style={styles.cardTop}>
         <View style={styles.cardTitles}>
           <Text style={styles.name} numberOfLines={1}>
@@ -71,7 +73,7 @@ const Card = memo(function Card({
         <Text style={styles.time}>{timeAgo(item.updatedAt)}</Text>
       </View>
       </GlassSurface>
-    </PressScale>
+    </InteractiveTile>
   );
 });
 
