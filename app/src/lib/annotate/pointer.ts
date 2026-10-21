@@ -1,0 +1,35 @@
+// Which pointer draws. Runs inside Gesture Handler callbacks on the UI thread.
+import type { PointerKind } from "./strokes";
+
+/** Gesture Handler's PointerType enum values (TOUCH 0, STYLUS 1, MOUSE 2). */
+export function pointerKind(pointerType: number): PointerKind {
+  "worklet";
+  return pointerType === 0 ? "touch" : pointerType === 1 ? "stylus" : pointerType === 2 ? "mouse" : "other";
+}
+
+export type Route = "draw" | "pass";
+
+/**
+ * Pen mode is palm rejection: only the stylus draws and fingers fall through to
+ * scroll the content. Without pen mode, one finger (or a mouse or a pen) draws;
+ * two fingers never draw.
+ */
+export function routePointer(kind: PointerKind, penMode: boolean, pointers: number): Route {
+  "worklet";
+  if (pointers > 1) return "pass";
+  if (penMode) return kind === "stylus" ? "draw" : "pass";
+  return kind === "other" ? "pass" : "draw";
+}
+
+/** A stylus touching the screen with pen mode on opens annotation mode. */
+export function stylusEnters(kind: PointerKind, penMode: boolean, active: boolean): boolean {
+  "worklet";
+  return !active && penMode && kind === "stylus";
+}
+
+/** Gesture Handler reports pressure only for styluses; others draw at mid pressure. */
+export function pressureOf(kind: PointerKind, pressure: number | undefined): number {
+  "worklet";
+  if (kind !== "stylus" || pressure === undefined || !Number.isFinite(pressure) || pressure <= 0) return 0.5;
+  return Math.min(1, pressure);
+}
