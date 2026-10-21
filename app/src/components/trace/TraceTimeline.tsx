@@ -1,5 +1,6 @@
+import { DensityText as Text, DensityAnimatedText } from "../Density";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, } from "react";
-import { StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   ReduceMotion,
@@ -19,6 +20,8 @@ import {
   scrubTick, softClamp, softZoom, summarizeRow, timeAtX, txForTime, zoomAround,
   type RowGroup, type TraceRow, type TraceSnapshot, type TraceWorker,
 } from "../../trace/model";
+import { useDensity } from "../Density";
+import { InteractiveTile } from "../InteractiveTile";
 import { PressScale } from "../PressScale";
 import { fonts, radius, space, type } from "../../theme";
 import { LivePulse, tc } from "./tokens";
@@ -48,7 +51,7 @@ function rowHeight(variant: RowVariant, nLanes: number): number {
   return Math.max(56, 30 + nLanes * 12);
 }
 
-export function buildItems(rows: TraceRow[], variant: RowVariant, opts: { lanes: boolean; groups: boolean }): Item[] {
+export function buildItems(rows: TraceRow[], variant: RowVariant, opts: { lanes: boolean; groups: boolean; minHeight?: number }): Item[] {
   const items: Item[] = [{ kind: "axis", h: 34 }];
   if (opts.lanes) items.push({ kind: "lane", lane: "cuts", h: 22 }, { kind: "lane", lane: "you", h: 22 });
   let g: RowGroup | null = null;
@@ -59,7 +62,7 @@ export function buildItems(rows: TraceRow[], variant: RowVariant, opts: { lanes:
     }
     const lanes = packLanes(row.workers);
     const nLanes = Math.max(...lanes) + 1;
-    items.push({ kind: "row", row, lanes, nLanes, h: rowHeight(variant, nLanes), index });
+    items.push({ kind: "row", row, lanes, nLanes, h: Math.max(opts.minHeight ?? 0, rowHeight(variant, nLanes)), index });
   });
   return items;
 }
@@ -86,8 +89,10 @@ export const TraceTimeline = memo(function TraceTimeline({
   testID?: string;
 }) {
   const reduced = useReducedMotion();
+  const { sizing, fontScale } = useDensity();
+  const minRowHeight = Math.max(sizing.rowMin, Math.ceil(52 * fontScale));
   const span = snapshot.now + 40 * 60;
-  const items = useMemo(() => buildItems(rows, variant, { lanes, groups }), [rows, variant, lanes, groups]);
+  const items = useMemo(() => buildItems(rows, variant, { lanes, groups, minHeight: minRowHeight }), [rows, variant, lanes, groups, minRowHeight]);
   const offsets = useMemo(() => { let y = 0; return items.map((it) => { const o = y; y += it.h; return o; }); }, [items]);
   const maxDensity = useMemo(() => Math.max(1, ...rows.flatMap((r) => r.workers.flatMap((w) => w.density))), [rows]);
   const cutTimes = useMemo(() => rows.flatMap((r) => r.workers.filter((w) => w.status === "interrupted").map((w) => w.e)), [rows]);
@@ -106,13 +111,17 @@ export const TraceTimeline = memo(function TraceTimeline({
   const onPlotLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
     if (Math.abs(w - viewW.value) < 1) return;
-    const first = viewW.value === 0;
+    const previousWidth = viewW.value;
+    const first = previousWidth === 0;
     viewW.value = w;
     setPlotW(w);
     if (first) {
       const z = initialZoom(span);
       zoom.value = z;
       tx.value = txForTime(snapshot.now, span, w, z, OPEN_FRAC);
+    } else {
+      const [lo, hi] = panBounds(w * zoom.value, w);
+      tx.value = Math.min(hi, Math.max(lo, tx.value * w / previousWidth));
     }
   };
 
@@ -240,8 +249,8 @@ export const TraceTimeline = memo(function TraceTimeline({
           if (it.kind === "lane") return <View key={i} style={[styles.laneLabel, { height: it.h }]}><Text style={styles.laneText} numberOfLines={1}>{it.lane === "cuts" ? "cut moments" : `your messages · ${snapshot.owner.length}`}</Text></View>;
           if (it.kind === "group") return <GroupLabel key={i} group={it.group} n={it.n} h={it.h} />;
           return (
-            <RowLabel key={i} row={it.row} h={it.h} selected={selectedKey === it.row.key} variant={variant}
-              refCb={(r) => { labelRefs.current.set(it.row.key, r); }} onPress={() => openIndex(i)} />
+            <RowLabel key={i} index={it.index} row={it.row} h={it.h} selected={selectedKey === it.row.key} variant={variant}
+              refCb={(r) => { labelRefs.current.set(it.row.key, r); }} onPress={onOpenRow ? () => openIndex(i) : undefined} />
           );
         })}
       </View>
@@ -312,12 +321,12 @@ function GroupLabel({ group, n, h }: { group: RowGroup; n: number; h: number }) 
   );
 }
 
-const RowLabel = memo(function RowLabel({ row, h, selected, onPress, refCb, variant }: { row: TraceRow; h: number; selected: boolean; onPress(): void; refCb(r: View | null): void; variant: RowVariant }) {
+const RowLabel = memo(function RowLabel({ index, row, h, selected, onPress, refCb, variant }: { index: number; row: TraceRow; h: number; selected: boolean; onPress?(): void; refCb(r: View | null): void; variant: RowVariant }) {
   const sum = summarizeRow(row);
   const dim = row.group === "earlier";
   return (
     <View ref={refCb} collapsable={false} style={{ height: h }}>
-      <PressScale onPress={onPress} style={[styles.rowLabel, selected && styles.rowSel]} accessibilityRole="button" accessibilityLabel={`${row.key}, ${rowMeta(sum)}`} testID={`row-${row.key}`}>
+      <InteractiveTile index={index} title={row.key} summary={`${row.key}. ${rowMeta(sum)}`} onOpen={onPress} style={[styles.rowLabel, selected && styles.rowSel]} testID={`row-${row.key}`}>
         <View style={[styles.rowLabelInner, dim && { opacity: 0.55 }]}>
           <Text style={styles.project} numberOfLines={1}>{row.project}{sum.workers > 1 ? <Text style={styles.count}>  ×{sum.workers}</Text> : null}</Text>
           {variant === "compact" ? null : <Text style={styles.goal} numberOfLines={1}>{row.goal}</Text>}
@@ -327,27 +336,28 @@ const RowLabel = memo(function RowLabel({ row, h, selected, onPress, refCb, vari
             </Text>
           ) : null}
         </View>
-      </PressScale>
+      </InteractiveTile>
     </View>
   );
 });
 
 function Axis({ h, hours, span, t0, now, content, viewW, zoom }: { h: number; hours: number[]; span: number; t0: string; now: number; content: ReturnType<typeof useAnimatedStyle>; viewW: SharedValue<number>; zoom: SharedValue<number> }) {
+  const { fontScale } = useDensity();
   const step = useSharedValue(1);
-  useAnimatedReaction(() => hourStep(viewW.value, zoom.value, span), (s) => { step.value = s; });
+  useAnimatedReaction(() => hourStep(viewW.value / fontScale, zoom.value, span), (s) => { step.value = s; });
   return (
     <View style={[styles.rowClip, { height: h, borderBottomWidth: 1, borderBottomColor: tc.rule }]}>
       <Animated.View style={[styles.layer, content]}>
-        {hours.filter((t) => t < now - 900).map((t, i) => <HourLabel key={t} i={i} left={`${(t / span) * 100}%`} text={clock(t0, t)} step={step} />)}
+        {hours.filter((t) => t < now - 900).map((t, i) => <HourLabel key={t} i={i} left={`${(t / span) * 100}%`} text={clock(t0, t)} step={step} t={t} now={now} span={span} viewW={viewW} zoom={zoom} fontScale={fontScale} />)}
         <View style={[styles.nowTag, { right: `${(1 - now / span) * 100}%` }]}><Text style={styles.nowText}>now {clock(t0, now)}</Text></View>
       </Animated.View>
     </View>
   );
 }
 
-function HourLabel({ i, left, text, step }: { i: number; left: `${number}%`; text: string; step: SharedValue<number> }) {
-  const st = useAnimatedStyle(() => ({ opacity: withTiming(i % step.value === 0 ? 1 : 0, { duration: 120 }) }));
-  return <Animated.Text style={[styles.hourText, { left }, st]}>{text}</Animated.Text>;
+function HourLabel({ i, left, text, step, t, now, span, viewW, zoom, fontScale }: { i: number; left: `${number}%`; text: string; step: SharedValue<number>; t: number; now: number; span: number; viewW: SharedValue<number>; zoom: SharedValue<number>; fontScale: number }) {
+  const st = useAnimatedStyle(() => ({ opacity: withTiming(i % step.value === 0 && (now - t) / span * viewW.value * zoom.value > 64 * fontScale ? 1 : 0, { duration: 120 }) }));
+  return <DensityAnimatedText style={[styles.hourText, { left }, st]}>{text}</DensityAnimatedText>;
 }
 
 const PlotRow = memo(function PlotRow({ index, item, span, now, variant, maxDensity, content, pressed, selected, dim }: {
@@ -365,26 +375,26 @@ const PlotRow = memo(function PlotRow({ index, item, span, now, variant, maxDens
         {variant === "density"
           ? <DensityStrip row={item.row} span={span} h={item.h} max={maxDensity} />
           : item.row.workers.map((w, j) => (
-            <WorkerBar key={w.id} w={w} lane={item.lanes[j] ?? 0} span={span} variant={variant} max={maxDensity} />
+            <WorkerBar key={w.id} w={w} lane={item.lanes[j] ?? 0} span={span} variant={variant} max={maxDensity} step={(item.h - 28) / item.nLanes} />
           ))}
-        {last ? <EndNote w={last} span={span} now={now} below={item.h - 17} y={variant === "density" ? 18 : 8 + (item.lanes[item.row.workers.indexOf(last)] ?? 0) * (variant === "compact" ? 6 : 12)} /> : null}
+        {last ? <EndNote w={last} span={span} now={now} below={item.h - 17} y={variant === "density" ? 18 : 8 + (item.lanes[item.row.workers.indexOf(last)] ?? 0) * ((item.h - 28) / item.nLanes)} /> : null}
       </Animated.View>
     </Animated.View>
   );
 });
 
-function WorkerBar({ w, lane, span, variant, max }: { w: TraceWorker; lane: number; span: number; variant: RowVariant; max: number }) {
+function WorkerBar({ w, lane, span, variant, max, step }: { w: TraceWorker; lane: number; span: number; variant: RowVariant; max: number; step: number }) {
   const live = w.status === "running";
   const left = `${(w.s / span) * 100}%` as const;
   const width = `${(Math.max(60, w.e - w.s) / span) * 100}%` as const;
   if (variant === "compact") {
-    return <View style={[styles.line, { left, width, top: 14 + lane * 6, backgroundColor: live ? tc.live : w.status === "interrupted" ? tc.cut : tc.tick }]} />;
+    return <View style={[styles.line, { left, width, top: 10 + lane * step, backgroundColor: live ? tc.live : w.status === "interrupted" ? tc.cut : tc.tick }]} />;
   }
-  const top = 10 + lane * 12;
+  const top = 10 + lane * step;
   const n = w.density.length;
   const len = Math.max(60, w.e - w.s);
   return (
-    <View style={[styles.bar, { left, width, top }, live ? styles.barLive : null]}>
+    <View style={[styles.bar, { left, width, top, height: Math.max(9, step - 3) }, live ? styles.barLive : null]}>
       {w.density.map((d, i) => d === 0 ? null : (
         <View key={i} style={[styles.tick, { left: `${(i / n) * 100}%`, width: `${Math.max(0.6, 70 / n)}%`, height: `${Math.max(14, (d / max) * 100)}%` }]} />
       ))}

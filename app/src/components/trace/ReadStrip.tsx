@@ -1,6 +1,7 @@
+import { DensityText as Text, DensityAnimatedText } from "../Density";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
   FadeIn,
@@ -17,6 +18,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { SNAP } from "../../motion";
 import { fonts, space, type } from "../../theme";
+import { useDensity } from "../Density";
 import { tc } from "./tokens";
 
 export type ReadVariant = "slide" | "words" | "shimmer";
@@ -26,9 +28,10 @@ const spring = { ...SNAP, reduceMotion: ReduceMotion.System };
 /** The interpretation strip. Numbers in the text render in tabular mono. */
 export function ReadStrip({ text, variant = "slide", replay = 0 }: { text: string; variant?: ReadVariant; replay?: number }) {
   const reduced = useReducedMotion();
+  const { sizing } = useDensity();
   const sentences = useMemo(() => text.split(/(?<=\.)\s+/).filter(Boolean), [text]);
   return (
-    <View style={styles.strip} testID={`read-strip-${variant}`} accessibilityRole="summary" accessibilityLabel={`Read: ${text}`}>
+    <View style={[styles.strip, { padding: sizing.padding, minWidth: 0, alignSelf: "stretch" }]} testID={`read-strip-${variant}`} accessibilityRole="summary" accessibilityLabel={`Read: ${text}`}>
       <Animated.View entering={reduced ? undefined : FadeIn.duration(180)} style={styles.tagRow} key={`tag-${replay}`}>
         <Text style={styles.tag}>READ</Text>
       </Animated.View>
@@ -48,13 +51,13 @@ function Slide({ sentences, reduced }: { sentences: string[]; reduced: boolean }
   return (
     <View>
       {sentences.map((s, i) => (
-        <Animated.Text
+        <DensityAnimatedText
           key={i}
           entering={reduced ? undefined : FadeInDown.delay(80 + i * 90).springify().mass(SNAP.mass).stiffness(SNAP.stiffness).damping(SNAP.damping)}
           style={styles.body}
         >
           <Rich s={s} />
-        </Animated.Text>
+        </DensityAnimatedText>
       ))}
     </View>
   );
@@ -64,7 +67,7 @@ function Word({ w, i }: { w: string; i: number }) {
   const p = useSharedValue(0);
   useEffect(() => { p.value = withDelay(60 + i * 28, withSpring(1, spring)); }, [i, p]);
   const st = useAnimatedStyle(() => ({ opacity: p.value, transform: [{ translateY: (1 - p.value) * 6 }] }));
-  return <Animated.Text style={[styles.body, st]}>{/^\d/.test(w) ? <Text style={styles.num}>{w}</Text> : w}{" "}</Animated.Text>;
+  return <DensityAnimatedText style={[styles.body, st]}>{/^\d/.test(w) ? <Text style={styles.num}>{w}</Text> : w}{" "}</DensityAnimatedText>;
 }
 
 function Words({ text, reduced }: { text: string; reduced: boolean }) {
@@ -79,15 +82,15 @@ function Shimmer({ text, reduced }: { text: string; reduced: boolean }) {
   useEffect(() => {
     if (reduced) return;
     sweep.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), -1, false);
-    const t = setTimeout(() => setDone(true), 1300);
+    const t = setTimeout(() => { cancelAnimation(sweep); setDone(true); }, 1300);
     return () => { clearTimeout(t); cancelAnimation(sweep); };
   }, [reduced, sweep]);
   const band = useAnimatedStyle(() => ({ transform: [{ translateX: -140 + sweep.value * 520 }] }));
   if (done) {
     return (
-      <Animated.Text entering={reduced ? undefined : FadeInDown.springify().mass(SNAP.mass).stiffness(SNAP.stiffness).damping(SNAP.damping)} style={styles.body}>
+      <DensityAnimatedText entering={reduced ? undefined : FadeInDown.springify().mass(SNAP.mass).stiffness(SNAP.stiffness).damping(SNAP.damping)} style={styles.body}>
         <Rich s={text} />
-      </Animated.Text>
+      </DensityAnimatedText>
     );
   }
   return (

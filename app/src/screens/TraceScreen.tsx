@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import Animated, { FadeInUp, FadeOutUp, useReducedMotion } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { DensityPicker } from "../components/Density";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { ActionChip } from "../components/trace/ActionChip";
 import { ReadStrip } from "../components/trace/ReadStrip";
@@ -33,6 +34,7 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
       <ScreenHeader title="Trace" compact onBack={() => navigation.goBack()} onAction={() => navigation.navigate("Lab")} action="Component lab" icon="layers" />
+      <DensityPicker />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} testID="trace-scroll">
         <Text style={styles.sub}>
           {clock(snapshot.t0, 0)} to now {clock(snapshot.t0, snapshot.now)} · {st.workers} workers · {origin === "bundled" ? "bundled snapshot" : "live from bridge"}

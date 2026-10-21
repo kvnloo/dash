@@ -1,11 +1,14 @@
+import { DensityText as Text } from "../components/Density";
 import { Children, memo, useCallback, useEffect, useMemo, useState, type ReactNode, type ReactElement } from "react";
 import { FlashList } from "@shopify/flash-list";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { OrbActivity } from "../components/OrbMotion";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
 import { PressScale } from "../components/PressScale";
+import { DensityPicker, useDensity } from "../components/Density";
+import { InteractiveTile } from "../components/InteractiveTile";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { ActionChip, type ChipVariant } from "../components/trace/ActionChip";
 import { ReadStrip, type ReadVariant } from "../components/trace/ReadStrip";
@@ -31,10 +34,12 @@ type Section = (typeof SECTIONS)[number];
  * through the existing in-app feedback path.
  */
 export function LabScreen({ navigation }: ScreenProps<"Lab">) {
+  const { density, sizing } = useDensity();
   const snapshot = traceStore.use((s) => s.snapshot);
   const records = feedbackStore.use((s) => s.records);
   const settings = store.use((s) => s.settings);
   const [visible, setVisible] = useState<Set<number>>(new Set([0, 1]));
+  const [stress, setStress] = useState(false);
   const [replay, setReplay] = useState(0);
   const [chipState, setChipState] = useState<Record<string, string>>({});
   const [sent, setSent] = useState(false);
@@ -57,7 +62,11 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
   const P = (section: Section) => latest(records, "lab_pick", section);
 
   const items = useMemo(() => labItems(<>
-        <Text style={styles.intro}>Try each piece by itself and tap Pick on the one that feels right. Picks are saved on this phone.</Text>
+        <View style={{ gap: 12 }}><Text style={styles.intro}>Compare every component in Compact, Comfortable and Rich. Tap Pick to save a variant on this phone.</Text>
+          <InteractiveTile title="Gesture playground" summary="Tap opens detail. Double tap pins locally in this view. Triple tap copies this summary. Hold, slide and release selects a radial action; release in the centre cancels." testID="gesture-playground" style={{ marginHorizontal: 16, padding: sizing.padding, borderWidth: 1, borderColor: tc.rule, borderRadius: 14, backgroundColor: tc.raised }}>
+            <Text style={styles.blockT}>Gesture playground</Text><Text style={styles.intro}>Tap: detail · 2×: pin locally · 3×: copy
+Hold + slide: action wheel · centre: cancel</Text>
+          </InteractiveTile></View>
 
         <Block title="Timeline" note="pinch · pan with momentum · hold to scrub" testID="lab-timeline">
           {(["bars", "density", "compact"] as RowVariant[]).map((v, i) => (
@@ -108,13 +117,13 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
           </View>
         </Block>
 
-        <Block title="Orb states" note="shared compositor clock · 20-orb stress fixture" testID="lab-orb-states">
+        <Block title="Orb states" note={stress ? "Stress: all 20 animated · shared clock" : "Visible only · at most 6 animated · shared clock"} action={{ label: stress ? "Cap at 6" : "Animate 20", onPress: () => setStress(value => !value) }} testID="lab-orb-states">
           {[20, 40, 64, 48].map((size, i) => (
-            <Variant key={size} letter={"ABC"[i] ?? ""} name={`${size}px`} picked={P("orb-states") === `${size}px`} onPick={() => pick("orb-states", `${size}px`)}>
+            <Variant key={size} letter={"ABCD"[i] ?? ""} name={`${size}px`} picked={P("orb-states") === `${size}px`} onPick={() => pick("orb-states", `${size}px`)}>
               <View style={styles.orbRow}>
                 {(["idle", "thinking", "tool", "streaming", "waiting-approval"] as ThinkingPhase[]).map((phase) => (
                   <View key={phase} style={styles.orbCell}>
-                    <AgentOrb thinking={{ phase, tool: phase === "tool" ? "terminal" : undefined }} size={size} label={phase} />
+                    <AgentOrb thinking={{ phase: stress ? "thinking" : phase, tool: phase === "tool" ? "terminal" : undefined }} animated={stress || i < 2} size={size} label={phase} />
                     <Text style={styles.orbLabel} numberOfLines={1}>{phase === "waiting-approval" ? "approval" : phase}</Text>
                   </View>
                 ))}
@@ -132,11 +141,12 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
             </PressScale>
           ) : null}
         </View>
-      </>), [snapshot, records, chipState, replay, sent, settings, pick, rowsSmall, rowsLane, series]);
+      </>), [snapshot, records, chipState, replay, sent, settings, pick, rowsSmall, rowsLane, series, density, sizing.padding, stress]);
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
       <ScreenHeader title="Component lab" compact onBack={() => navigation.goBack()} onAction={() => navigation.navigate("Trace")} action="Open trace" icon="activity" />
+      <DensityPicker />
       <FlashList testID="lab-scroll" contentContainerStyle={styles.scroll} drawDistance={915}
         data={items} getItemType={(_item, index) => index}
         renderItem={({ item, index }) => <LabCell active={visible.has(index)}>{item}</LabCell>}

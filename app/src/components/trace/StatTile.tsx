@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { DensityText as Text } from "../Density";
+import { useEffect, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import Animated, { FadeIn, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withSpring } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
-import { PressScale } from "../PressScale";
+import { InteractiveTile } from "../InteractiveTile";
+import { NumberTicker } from "../NumberTicker";
+import { useDensity } from "../Density";
 import { haptic } from "../../haptics";
 import { SNAP } from "../../motion";
 import { fonts, radius, space, type } from "../../theme";
@@ -10,26 +13,6 @@ import { tc } from "./tokens";
 
 export type StatVariant = "number" | "meter" | "spark";
 export type Segment = { n: number; color: string; label: string };
-
-/** Ease-out count-up, ~600 ms. Shows the final value at once under reduced motion. */
-export function useCountUp(target: number, reduced: boolean, ms = 600): number {
-  const [v, setV] = useState(reduced ? target : 0);
-  const from = useRef(reduced ? target : 0);
-  useEffect(() => {
-    if (reduced) { setV(target); from.current = target; return; }
-    const start = Date.now(), a = from.current;
-    let raf = 0;
-    const step = () => {
-      const k = Math.min(1, (Date.now() - start) / ms);
-      const e = 1 - Math.pow(1 - k, 3);
-      setV(a + (target - a) * e);
-      if (k < 1) raf = requestAnimationFrame(step); else from.current = target;
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [target, reduced, ms]);
-  return v;
-}
 
 export function StatTile({ label, value, sub, tone = tc.text, variant = "number", segments, series, replay = 0 }: {
   label: string;
@@ -46,27 +29,25 @@ export function StatTile({ label, value, sub, tone = tc.text, variant = "number"
   const reduced = useReducedMotion();
   const [focus, setFocus] = useState<number | null>(null);
   const shown = focus !== null && segments?.[focus] ? segments[focus].n : value;
-  const n = useCountUp(shown, reduced, focus === null ? 600 : 240);
+  const { sizing } = useDensity();
   return (
-    <PressScale
+    <InteractiveTile
       key={replay}
-      scaleTo={0.96}
-      style={styles.tile}
-      onPressIn={() => haptic.tap()}
-      onLongPress={() => { if (segments?.length) { haptic.select(); setFocus((f) => (f === null ? 0 : (f + 1) % segments.length)); } }}
-      onPress={() => setFocus(null)}
-      accessibilityRole="text"
-      accessibilityLabel={`${label} ${value}${sub ? `, ${sub}` : ""}`}
+      extraActions={segments?.length ? [{ id: "segment", label: "Segment", run: () => { haptic.select(); setFocus(f => f === null ? 0 : f + 1 >= segments.length ? null : f + 1); } }] : []}
+      title={label}
+      summary={`${label}: ${value}. ${sub ?? ""}`}
+      style={[styles.tile, { minHeight: sizing.tileMin }]}
       testID={`stat-${variant}-${label}`}
     >
-      <View style={styles.inner}>
+      <View style={[styles.inner, { padding: sizing.padding }]}>
         <Text style={styles.label} numberOfLines={1}>{focus !== null && segments?.[focus] ? segments[focus].label : label}</Text>
-        <Text style={[styles.value, { color: focus !== null && segments?.[focus] ? segments[focus].color : tone }]}>{Math.round(n).toLocaleString("en-US")}</Text>
+        <NumberTicker value={shown} style={[styles.value, { color: focus !== null && segments?.[focus] ? segments[focus].color : tone }]} />
         {variant === "meter" && segments ? <DotMeter segments={segments} focus={focus} reduced={reduced} /> : null}
         {variant === "spark" && series ? <Spark series={series} tone={tone} /> : null}
-        {sub ? <Text style={styles.sub} numberOfLines={1}>{sub}</Text> : null}
+        {sub ? <Text style={styles.sub}>{sub}</Text> : null}
+        {segments?.length ? <Text style={styles.sub}>Hold → Segment</Text> : null}
       </View>
-    </PressScale>
+    </InteractiveTile>
   );
 }
 
