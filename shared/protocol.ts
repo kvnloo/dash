@@ -104,6 +104,8 @@ export type ClientMessage =
   | LiveClientMessage
   | {
       type: "chat";
+      /** Omitted by older clients: queue for the next turn. */
+      mode?: "steer" | "queue";
       summariesEnabled?: boolean;
       /** Client-chosen id for this turn; echoed on every server event for it. */
       id: string;
@@ -181,7 +183,7 @@ export type TurnEvent =
   /** What the bridge heard for a spoken turn. Precedes the reply's deltas. */
   | { type: "transcript"; id: string; seq: number; text: string }
   | { type: "delta"; id: string; seq: number; text: string }
-  | { type: "status"; id: string; seq: number; text: string; part?: ReplyPart; summary?: SummaryInfo; acp?: AcpStatus; handoff?: HandoffInfo }
+  | { type: "status"; id: string; seq: number; text: string; part?: ReplyPart; summary?: SummaryInfo; acp?: AcpStatus; handoff?: HandoffInfo; delivery?: "steered" | "queued" | "started"; deliveryAt?: number }
   | { type: "done"; id: string; seq: number; exitCode: number }
   | { type: "error"; id: string; seq: number; message: string };
 
@@ -267,6 +269,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
     case "live_receipts": return parseLiveClientMessage(raw);
     case "chat": {
       const attachments = parseChatAttachments(raw.attachments);
+      if (raw.mode !== undefined && raw.mode !== "steer" && raw.mode !== "queue") return null;
       if (
         str(raw.id) &&
         str(raw.harness) &&
@@ -279,6 +282,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       ) {
         return {
           type: "chat",
+          ...(raw.mode === "steer" || raw.mode === "queue" ? { mode: raw.mode } : {}),
           ...(typeof raw.summariesEnabled === "boolean" ? { summariesEnabled: raw.summariesEnabled } : {}),
           id: raw.id,
           harness: raw.harness,
@@ -441,6 +445,11 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
         : null;
     case "status": {
       if (!str(raw.id) || !num(raw.seq) || !str(raw.text)) return null;
+      if (raw.delivery !== undefined) {
+        if ((raw.deliveryAt !== undefined && !num(raw.deliveryAt)) || raw.part !== undefined || raw.summary !== undefined || raw.acp !== undefined || raw.handoff !== undefined) return null;
+        if (raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started") return { type: "status", id: raw.id, seq: raw.seq, text: raw.text, delivery: raw.delivery, ...(num(raw.deliveryAt) ? { deliveryAt: raw.deliveryAt } : {}) };
+        return null;
+      }
       if (raw.part !== undefined) {
         const part = parseReplyPart(raw.part);
         return part && raw.summary === undefined && raw.acp === undefined && raw.handoff === undefined ? { type: "status", id: raw.id, seq: raw.seq, text: raw.text, part } : null;

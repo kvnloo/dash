@@ -26,6 +26,9 @@ export interface Settings {
 export type AssistantState = "pending" | "streaming" | "done" | "error" | "interrupted";
 
 export interface UserMessage {
+  delivery?: "steering" | "steered" | "queued" | "started" | "failed";
+  deliveryAt?: number;
+  deliveryNote?: string;
   id: string;
   role: "user";
   text: string;
@@ -35,6 +38,7 @@ export interface UserMessage {
 }
 
 export interface AssistantMessage {
+  delivery?: "steered" | "queued" | "started";
   summaries?: SummaryInfo[];
   id: string;
   role: "assistant";
@@ -130,13 +134,14 @@ function parseMessage(raw: unknown): Message | null {
   }
   if (raw.role === "user") {
     const attachments = Array.isArray(raw.attachments) ? raw.attachments.flatMap(item => { const parsed = parseChatAttachment(item); return parsed ? [parsed] : []; }) : [];
-    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(attachments.length ? { attachments } : {}) };
+    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(attachments.length ? { attachments } : {}), delivery: raw.delivery === "steering" || raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" || raw.delivery === "failed" ? raw.delivery : undefined, deliveryAt: typeof raw.deliveryAt === "number" ? raw.deliveryAt : undefined, deliveryNote: typeof raw.deliveryNote === "string" ? raw.deliveryNote : undefined };
   }
   if (raw.role === "assistant" && isAssistantState(raw.state) && typeof raw.turnId === "string") {
     return {
       id: raw.id,
       role: "assistant",
       text: raw.text,
+      delivery: raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" ? raw.delivery : undefined,
       at: raw.at,
       // A turn that was mid-stream when the app was killed can be re-attached on launch.
       state: raw.state,

@@ -36,7 +36,8 @@ import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
 import { runHermesSession } from "./src/hermes-session";
 import { streamHermesSession } from "./src/hermes-stream";
-import { liveArgv, sendIntoLiveSession } from "./src/hermes-live";
+import { liveArgv } from "./src/hermes-live";
+import { sendGatewayMessage } from "./src/hermes-steer";
 import { sessionPhaseHttp } from "./src/hermes-phase";
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
 import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, liveText, planContinuation, type HandoffState } from "./src/hermes-continue";
@@ -135,6 +136,7 @@ class Turn implements Sink {
   private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
 
   start(input: TurnInput): void {
+    if (input.mode === "steer" && (this.harness.id !== "hermes" || !input.sessionId)) { this.endWithout("Steer requires a gateway-hosted Hermes session."); return; }
     // A spoken turn is transcribed before it starts, so a cancel can arrive
     // while there is no process to kill yet.
     if (this.cancelled || this.finished) return;
@@ -198,7 +200,8 @@ class Turn implements Sink {
     const target = sessionId ? hermesSessions.target(input.profileId, sessionId) : undefined;
     if (!sessionId || !target) { this.endWithout("Unknown or ambiguous Hermes profile/session."); return; }
     this.hermesProfile = target.profile;
-    const release = claimContinuation(target.profile, sessionId);
+    // Steering is a control message into the current turn, not a second continuation.
+    const release = input.mode === "steer" ? () => {} : claimContinuation(target.profile, sessionId);
     if (!release) { this.endWithout("A Dash reply is already queued or running in this Hermes session. Wait for it, or stop it first."); return; }
     const abort = new AbortController();
     this.abort = abort;
@@ -208,6 +211,7 @@ class Turn implements Sink {
       try {
         const hosting = (owner: LiveOwner) => hermesSessions.ownerHosting(target.profile, sessionId, owner);
         const plan = planContinuation(hermesSessions.liveOwner(target.profile, sessionId), hosting, hermesSessions.gatewayHosted(target.profile, sessionId));
+        if (input.mode === "steer" && plan.kind !== "live") throw new Error("This session is not gateway-hosted; steering was not sent.");
         if (plan.kind === "live") {
           if (plan.owner) this.status(liveText(plan.owner.surface, HOST_NAME));
           log("hermes.live", { id: this.id, surface: plan.owner?.surface ?? "none", hosting: "gateway" });
@@ -227,7 +231,10 @@ class Turn implements Sink {
           if (route.kind !== "live") throw new Error(route.kind === "unavailable" ? route.reason : "No live route.");
           this.hermesTransport = "gateway";
           log("hermes.path", { path: "gateway" });
-          const result = await sendIntoLiveSession({ argv: route.argv, home: route.home, sessionId, text: input.text, sink: this, cwd: input.cwd, signal: abort.signal });
+          const result = await sendGatewayMessage({ argv: route.argv, home: route.home, sessionId, text: input.text, mode: input.mode, sink: this, cwd: input.cwd, signal: abort.signal, delivery: (delivery, text) => {
+            this.flush();
+            this.emit({ type: "status", id: this.id, seq: 0, text, delivery, deliveryAt: Date.now() });
+          } });
           if (this.cancelled) { if (!this.finished) this.finish(CANCELLED_EXIT_CODE); return; }
           if (this.finished) return;
           this.session(result.sessionId);
@@ -809,7 +816,7 @@ const server = Bun.serve<SocketData>({
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
           if (message.summariesEnabled) turn.enableSummaries();
-          turn.start({ text: promptWithAttachments(message.text, files), cwd, sessionId: message.sessionId, profileId: message.profileId, ...(files.length ? { attachments: files } : {}) });
+          turn.start({ text: promptWithAttachments(message.text, files), mode: message.mode, cwd, sessionId: message.sessionId, profileId: message.profileId, ...(files.length ? { attachments: files } : {}) });
           break;
         }
         case "voice_begin": {
