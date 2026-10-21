@@ -1,6 +1,7 @@
 // Phone side of attachments: limits, upload to the paired bridge, and the reverse
 // "Send to phone" for host files an agent mentions. Pure helpers take their I/O as
 // parameters so the unit suite can run them under Bun.
+import { executionToken, type AuthSettings } from "./bridge-auth";
 import {
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_TURN,
@@ -95,7 +96,7 @@ function errorFrom(body: unknown, status: number): string {
 
 /** Read the picked file and POST it to the bridge with the execution token. */
 export async function uploadAttachment(
-  settings: { address: string; token: string },
+  settings: { address: string } & AuthSettings,
   file: PickedFile,
   fetchImpl: FetchLike,
 ): Promise<ChatAttachment> {
@@ -106,7 +107,7 @@ export async function uploadAttachment(
   try {
     res = await fetchImpl(uploadUrl(settings.address, file.name), {
       method: "POST",
-      headers: { Authorization: `Bearer ${settings.token}`, "Content-Type": file.mime || "application/octet-stream" },
+      headers: { Authorization: `Bearer ${await executionToken(settings)}`, "Content-Type": file.mime || "application/octet-stream" },
       body: blob,
     });
   } catch {
@@ -122,14 +123,14 @@ export async function uploadAttachment(
 
 /** Ask the bridge to push one of its files to this phone with KDE Connect. */
 export async function sendToPhone(
-  settings: { address: string; token: string },
+  settings: { address: string } & AuthSettings,
   path: string,
   fetchImpl: FetchLike,
 ): Promise<{ ok: boolean; message: string }> {
   try {
     const res = await fetchImpl(`http://${settings.address}/share`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${settings.token}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${await executionToken(settings)}`, "Content-Type": "application/json" },
       body: JSON.stringify({ path }),
     });
     let body: unknown;

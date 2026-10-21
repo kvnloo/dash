@@ -11,6 +11,7 @@ import { checkShareable, pickDevice, shareToPhone, type Run } from "./share";
 
 export interface FilesHttpOptions {
   token: string;
+  authorize?(request: Request): Promise<boolean>;
   store: AttachmentStore;
   shareRoots(): string[];
   device?: string;
@@ -26,7 +27,7 @@ export function createFilesHttpHandler(options: FilesHttpOptions) {
   return async (request: Request): Promise<Response | null> => {
     const url = new URL(request.url);
     if (url.pathname !== "/attachments" && url.pathname !== "/share") return null;
-    if (!secretMatches(bearerToken(request), options.token)) return json({ error: "unauthorized" }, 401);
+    if (!(options.authorize ? await options.authorize(request) : secretMatches(bearerToken(request), options.token))) return json({ error: "unauthorized" }, 401);
     if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
     if (url.pathname === "/attachments") {
       const name = url.searchParams.get("name") ?? "";

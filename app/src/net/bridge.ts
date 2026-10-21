@@ -1,10 +1,12 @@
 import { applyGateMessage } from "../store/approvals";
-import { AppState as RNAppState, type AppStateStatus } from "react-native";
+import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
 import { parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
 import type { LiveIntent } from "../../../shared/live";
 import { isDebugMode } from "../debug/mode";
 import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf } from "../store/live";
 import { fetchRoster } from "../lib/roster";
+import { executionToken, socketUrl } from "../lib/bridge-auth";
+import { headerSocket } from "../lib/native-socket";
 import type { Settings } from "../model";
 import {
   applyDeltas,
@@ -26,11 +28,12 @@ const DELTA_FLUSH_MS = 32;
 const CONNECT_TIMEOUT_MS = 8000;
 
 export function wsUrl(settings: Settings): string {
-  return `ws://${settings.address}/ws?token=${encodeURIComponent(settings.token.trim())}`;
+  return socketUrl(settings);
 }
 
 class Bridge {
   private ws: WebSocket | null = null;
+  private connectEpoch = 0;
   private settings: Settings | null = null;
   private attempt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -108,12 +111,23 @@ class Bridge {
     return true;
   }
 
-  private connectNow(): void {
+  private async connectNow(): Promise<void> {
     if (!this.settings) return;
     this.clearTimers();
     this.teardownSocket();
     setConnection({ status: "connecting", error: undefined });
-    const ws = new WebSocket(wsUrl(this.settings));
+    const settings = this.settings;
+    const epoch = ++this.connectEpoch;
+    let ws: WebSocket;
+    try {
+      if (settings.identity && Platform.OS === "web") throw new Error("z0bridge WebSockets require the native app (header authentication).");
+      const token = settings.identity ? await executionToken(settings) : undefined;
+      if (this.settings !== settings || this.connectEpoch !== epoch) return;
+      ws = token ? headerSocket(wsUrl(settings), token) : new WebSocket(wsUrl(settings));
+    } catch (error) {
+      if (this.settings === settings && this.connectEpoch === epoch) this.onClosed(error instanceof Error ? error.message : "Identity connection failed");
+      return;
+    }
     this.ws = ws;
     this.connectTimer = setTimeout(() => {
       if (this.ws === ws && ws.readyState !== WebSocket.OPEN) {

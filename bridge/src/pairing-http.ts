@@ -12,6 +12,8 @@ const MAX_RATE_CLIENTS = 1024;
 export interface PairingHttpOptions {
   bootstrapToken: string;
   token: string;
+  authorize?(request: Request, queryLegacy?: boolean): Promise<boolean>;
+  legacyEnabled?: boolean;
   hostname: string;
   address: string;
   cwd: string;
@@ -114,13 +116,14 @@ export function createPairingHttpHandler(options: PairingHttpOptions) {
     if (!remote) return json({ error: "remote address unavailable" }, 403);
     if ((pairRoute || url.pathname === "/") && rateLimited(remote)) return json({ error: "too many attempts" }, 429);
     const bearer = bearerToken(request);
-    if (pairRoute && !secretMatches(bearer, options.bootstrapToken)) return unauthorized();
+    if (pairRoute && (options.legacyEnabled === false || !secretMatches(bearer, options.bootstrapToken))) return unauthorized();
     if (url.pathname === "/") {
-      if (!secretMatches(bearer, options.bootstrapToken) && !secretMatches(bearer, options.token)) return unauthorized();
+      const execution = options.authorize ? await options.authorize(request) : secretMatches(bearer, options.token);
+      if (!(options.legacyEnabled !== false && secretMatches(bearer, options.bootstrapToken)) && !execution) return unauthorized();
       return json({ ok: true, host: options.hostname, cwd: options.cwd, harnesses: options.harnesses(), pair: "/pair" });
     }
     if (url.pathname === "/roster") {
-      if (!secretMatches(bearer ?? url.searchParams.get("token"), options.token)) return unauthorized();
+      if (!(options.authorize ? await options.authorize(request, true) : secretMatches(bearer ?? url.searchParams.get("token"), options.token))) return unauthorized();
       return json({ host: options.hostname, hosts: await options.roster() });
     }
     try {

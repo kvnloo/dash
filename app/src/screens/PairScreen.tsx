@@ -22,6 +22,9 @@ import { ScreenHeader } from "../components/ScreenHeader";
 import { GlassSurface } from "../components/GlassSurface";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { haptic } from "../haptics";
+import { parseIdentityPairLink } from "../../../shared/z0bridge-identity";
+import { claimIdentity, identitySecretKey } from "../lib/identity-client";
+import { setSecret } from "../lib/secure";
 import { newClaimKey } from "../lib/pair-crypto";
 import { claimLivePair, claimPairCode, hearPairTones, settingsFromClaim, startSonicPair } from "../lib/pair-api";
 import { connectSettings } from "../lib/settings-flow";
@@ -40,6 +43,8 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
   const [computer, setComputer] = useState(route.params?.address ?? "");
   const [manualCode, setManualCode] = useState(route.params?.code ?? "");
   const [bootstrapToken, setBootstrapToken] = useState("");
+  const [identityLink, setIdentityLink] = useState(route.params?.identityLink ?? "");
+  useEffect(() => { if (route.params?.identityLink) setIdentityLink(route.params.identityLink); }, [route.params?.identityLink]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -184,6 +189,26 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
     }
   }, [busy, computer, bootstrapToken, finishClaim, manualCode]);
 
+  const pairWithIdentity = async () => {
+    if (busy) return;
+    setBusy(true); setError(null);
+    try {
+      if (Platform.OS === "web") throw new Error("Use the native Dash app for z0bridge pairing. Browser WebSockets cannot send authorization headers.");
+      const link = parseIdentityPairLink(identityLink);
+      if (!link) throw new Error("Paste a valid Dash v2 z0bridge pairing link");
+      if (!/^[A-Za-z0-9.-]+:\d{1,5}$/.test(computer.trim())) throw new Error("Enter the Dash bridge address and port (not the identity service)");
+      const claim = await claimIdentity(link);
+      await setSecret(identitySecretKey(claim.enrollment.credentialId), claim.credential);
+      const settings = { address: computer.trim(), token: "", harness: "omp", inAppFeedback: true, identity: claim.enrollment };
+      const attempt = new AbortController();
+      attemptRef.current?.abort(); attemptRef.current = attempt;
+      await connectSettings({ settings, connection: store, save: saveSettings, start: s => bridge.start(s), signal: attempt.signal,
+        onConnected: () => { setIdentityLink(""); haptic.success(); navigation.replace("Main"); },
+      });
+    } catch (error) { setError(error instanceof Error ? error.message : "Identity pairing failed"); }
+    finally { setBusy(false); }
+  };
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}><Canvas />
       <ScreenHeader title="Connect" onBack={() => toMain(navigation)} />
@@ -206,6 +231,12 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
           />
         </GlassSurface>
         <Text style={styles.hint}>Use the Tailscale IPv4 the bridge prints if MagicDNS does not resolve.</Text>
+
+        <Text style={styles.sectionLabel}>Optional: z0bridge identity</Text>
+        <TextInput value={identityLink} onChangeText={setIdentityLink} accessibilityLabel="z0bridge pairing link"
+          placeholder="dash://pair?v=2…" secureTextEntry autoCapitalize="none" autoCorrect={false} style={styles.inputInner} />
+        <Text style={styles.hint}>Opt in only when the host enables identity. Confirming switches this app to a scoped credential in Keychain/Keystore; legacy pairing is not revoked. Bridge address above is still required.</Text>
+        <PrimaryButton onPress={() => void pairWithIdentity()} disabled={busy || !identityLink || !computer.trim()} label="Confirm z0bridge pairing" />
 
         <GlassSurface variant="raised" borderRadius={radius.sm} style={styles.inputWrap}>
           <TextInput

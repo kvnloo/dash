@@ -34,7 +34,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
     normalizeAddress(address) !== (settings?.address ?? "") ||
     token.trim() !== (settings?.token ?? "") ||
     (cwd.trim() || undefined) !== settings?.cwd;
-  const canSave = !saving && normalizeAddress(address).length > 0 && token.trim().length > 0 && (dirty || connection.status !== "online");
+  const identity = settings?.identity && !token.trim() ? settings.identity : undefined;
+  const canSave = !saving && normalizeAddress(address).length > 0 && (token.trim().length > 0 || identity !== undefined) && (dirty || connection.status !== "online");
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("blur", () => attemptRef.current?.abort());
@@ -52,6 +53,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
     setSaving(true);
     setSaveError(null);
     const next = {
+      ...(identity ? { identity } : {}),
       address: normalizeAddress(address),
       token: token.trim(),
       harness: settings?.harness ?? "omp",

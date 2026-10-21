@@ -14,7 +14,9 @@
  * scheme-specific route checks below cannot be delegated to it.
  * A link only prefills enrollment. It never carries or grants a credential.
  */
-export type PairPrefill = { address: string; code: string };
+import { parseIdentityPairLink } from "./z0bridge-identity";
+
+export type PairPrefill = { address: string; code: string; identityLink?: string };
 
 const CODE = /^[A-Z0-9]{6}$/;
 // host or host:port only. Rejects schemes, paths, user info and spaces.
@@ -57,6 +59,7 @@ function routeOf(beforeQuery: string): string | undefined {
 
 export function parseDashConnectUrl(raw: string): PairPrefill | null {
   const text = raw.trim();
+  if (parseIdentityPairLink(text)) return { address: "", code: "", identityLink: text };
   if (!text) return null;
   const hashCut = text.indexOf("#");
   const withoutHash = hashCut >= 0 ? text.slice(0, hashCut) : text;
