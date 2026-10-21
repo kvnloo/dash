@@ -33,6 +33,7 @@ import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
 import { runHermesSession } from "./src/hermes-session";
 import { streamHermesSession } from "./src/hermes-stream";
 import { liveArgv, sendIntoLiveSession } from "./src/hermes-live";
+import { sessionPhaseHttp } from "./src/hermes-phase";
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
 import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, liveText, planContinuation, type HandoffState } from "./src/hermes-continue";
 import type { LiveOwner } from "./src/hermes-owner";
@@ -672,6 +673,8 @@ const server = Bun.serve<SocketData>({
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
       const supervision = await handleSupervision(request);
       if (supervision) return cors(supervision);
+      const phase = sessionPhaseHttp(request, secretMatches(bearerToken(request), TOKEN), (profile, session) => hermesSessions.phase(profile, session));
+      if (phase) return cors(phase);
       const files = await handleFiles(request);
       if (files) return cors(files);
       const http = await handleHttp(request, server.requestIP(request)?.address ?? null);

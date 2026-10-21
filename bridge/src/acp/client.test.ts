@@ -21,7 +21,7 @@ test("real stdio negotiates, creates session, maps chunks and closes owned proce
     expect(await f.client.turn({ text: "hi", cwd: import.meta.dir })).toBe("end_turn");
     expect(f.text).toEqual(["DASH_ACP_OK"]);
     expect(f.sessions).toEqual(["fixture-session"]);
-    expect(f.statuses).toContain("fixture tool");
+    expect(f.statuses).toContain("Running fixture tool");
   } finally { await f.client.close(); }
   expect(f.client.exited).toBe(true);
 });
@@ -73,7 +73,7 @@ test("close kills the owned process group even after the direct agent exits", as
   let child: number | undefined;
   try {
     await f.client.turn({ text: "hi", cwd: import.meta.dir });
-    child = Number(f.statuses.find(value => value.startsWith("child:"))?.slice(6));
+    child = Number(/child:(\d+)/.exec(f.statuses.find(value => value.includes("child:")) ?? "")?.[1]);
     expect(Number.isSafeInteger(child)).toBe(true);
     while (!f.client.exited) await Bun.sleep(5);
     await f.client.close();

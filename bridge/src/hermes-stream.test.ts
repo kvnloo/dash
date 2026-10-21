@@ -71,7 +71,7 @@ describe("streamHermesSession", () => {
       frame("assistant.delta", { delta: "Checking." }), frame("tool.started", { tool_name: "terminal", preview: "ls" }),
       frame("tool.completed", { tool_name: "terminal" }), frame("assistant.delta", { delta: "Done." }), frame("done", {}),
     ])) });
-    expect(s.statuses).toEqual(["Running terminal · ls", ""]);
+    expect(s.statuses).toEqual(["Thinking", "", "Running terminal", "Thinking", ""]);
     expect(s.deltas.join("")).toBe("Checking.\n\nDone.");
   });
 

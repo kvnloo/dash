@@ -1,7 +1,7 @@
 import { Canvas } from "../components/Canvas";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { FlashList, type FlashListRef, type ListRenderItemInfo } from "@shopify/flash-list";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FlashList, type FlashListRef } from "@shopify/flash-list";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
@@ -37,6 +37,9 @@ import {
 import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, glass, radius, space, type } from "../theme";
 import { toMain } from "../lib/main-nav";
+import { conversationThinking, type Thinking } from "../lib/thinking";
+import { useSessionPhase } from "../lib/session-phase";
+import { replyText } from "../store/text";
 import { AgentOrb } from "../components/AgentOrb";
 
 const EMPTY: Message[] = [];
@@ -47,10 +50,6 @@ function keyExtractor(item: Message): string {
 
 function getItemType(item: Message): string {
   return item.role;
-}
-
-function renderItem({ item }: ListRenderItemInfo<Message>, harnessId: string) {
-  return <MessageRow message={item} harnessId={harnessId} />;
 }
 
 export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
@@ -96,6 +95,21 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const streamingMessage = useMemo(() => {
     return messages.find((m) => m.role === "assistant" && m.state === "streaming");
   }, [messages]);
+
+  const replyId = streamingMessage?.role === "assistant" ? streamingMessage.turnId : "";
+  const subscribeText = useCallback((notify: () => void) => replyText.subscribe(replyId, notify), [replyId]);
+  const hasText = useCallback(() => Boolean(replyText.get(replyId)), [replyId]);
+  // Header needs only the first-text edge, not a whole-screen render for every token.
+  const liveText = useSyncExternalStore(subscribeText, hasText, hasText);
+  const observed = useSessionPhase(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
+  const localThinking = conversationThinking(messages, connection.status);
+  const thinking: Thinking = !online ? { phase: "idle" } : localThinking.phase !== "idle"
+    ? (localThinking.phase === "thinking" && liveText && !(streamingMessage?.role === "assistant" && streamingMessage.status) ? { phase: "streaming" } : localThinking)
+    : observed?.observed ? observed : { phase: "idle" };
+  const external = online && localThinking.phase === "idle" && observed?.observed && observed.phase !== "idle" ? observed : undefined;
+  const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
+  const observationUnavailable = online && harnessId === "hermes" && Boolean(conversation?.sessionId) && !observed?.observed;
+  const caption = thinking.phase === "tool" ? `working · ${thinking.tool}` : thinking.phase === "waiting-approval" ? "waiting for approval or clarification" : thinking.phase === "idle" ? (!online ? "offline" : observationUnavailable ? "status unavailable" : "idle") : "working";
 
   const sendTurn = useCallback(
     (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId)) => {
@@ -202,6 +216,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
       <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => toMain(navigation)} action="Choose harness" icon="sliders" onAction={() => setPickerVisible(true)} />
+      <View style={styles.liveRow} accessibilityLabel={`${harnessName} ${caption}`}><AgentOrb size={20} thinking={thinking} /><Text style={styles.liveNote}>{caption}{external ? " · terminal" : ""}</Text></View>
       <ConnectionPill />
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       {!targetError && conversation?.openIn ? (
@@ -222,7 +237,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         <FlashList
           ref={listRef}
           data={messages}
-          renderItem={(info) => renderItem(info, harnessId)}
+          extraData={external}
+          renderItem={({ item }) => <MessageRow message={item} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
           maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.2 }}
@@ -231,7 +247,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View style={styles.empty}>
-              <AgentOrb size={64} thinking={{ phase: "idle" }} label={`${harnessName} idle`} />
+              <AgentOrb size={64} thinking={thinking} label={`${harnessName} ${caption}`} />
               <Text style={styles.emptyTitle}>{harnessName}</Text>
               <Text style={styles.emptySubtitle}>
                 {online && connection.host ? `on ${connection.host}` : "Ask anything"}

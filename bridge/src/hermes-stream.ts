@@ -1,3 +1,4 @@
+import { TurnPhase } from "./turn-phase";
 import type { HermesFetch } from "./hermes-session";
 
 /**
@@ -46,12 +47,6 @@ export function takeSseFrames(buffer: string): { frames: { event: string; data: 
   return { frames, rest };
 }
 
-function toolLabel(data: Record<string, unknown>): string {
-  const name = typeof data.tool_name === "string" ? data.tool_name : "a tool";
-  const preview = typeof data.preview === "string" && data.preview.trim() ? ` · ${data.preview.trim().slice(0, 80)}` : "";
-  return `Running ${name}${preview}`;
-}
-
 export async function streamHermesSession(options: {
   api: { url: string; key: string };
   sessionId: string;
@@ -61,6 +56,8 @@ export async function streamHermesSession(options: {
   signal?: AbortSignal;
   idleMs?: number;
 }): Promise<HermesStreamResult> {
+  const phase = new TurnPhase(text => options.sink.status(text));
+  phase.thinking();
   const fetchFn = options.fetch ?? globalThis.fetch;
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${options.api.key}` };
   const base = `${options.api.url.replace(/\/+$/, "")}/api/sessions/${encodeURIComponent(options.sessionId)}`;
@@ -98,19 +95,23 @@ export async function streamHermesSession(options: {
         const body = record(data) ? data : {};
         switch (event) {
           case "assistant.delta":
-            if (typeof body.delta === "string" && body.delta) { streamed += body.delta; options.sink.delta(body.delta); }
+            if (typeof body.delta === "string" && body.delta) { phase.text(); streamed += body.delta; options.sink.delta(body.delta); }
             break;
           case "tool.started":
             // Text Hermes wrote before a tool call is its own paragraph, not glued to the next.
             if (streamed && !streamed.endsWith("\n\n")) { const gap = streamed.endsWith("\n") ? "\n" : "\n\n"; streamed += gap; options.sink.delta(gap); }
-            options.sink.status(toolLabel(body));
+            phase.start(typeof body.tool_name === "string" ? body.tool_name : "tool", typeof body.tool_call_id === "string" ? body.tool_call_id : undefined);
             break;
           case "tool.progress":
-            if (body.tool_name === "_thinking") options.sink.status("Thinking");
+            if (body.tool_name === "_thinking") phase.thinking();
             break;
           case "tool.completed":
           case "tool.failed":
-            options.sink.status("");
+            phase.complete(typeof body.tool_call_id === "string" ? body.tool_call_id : undefined, typeof body.tool_name === "string" ? body.tool_name : undefined);
+            break;
+          case "approval.request":
+          case "clarification.request":
+            phase.waiting();
             break;
           case "assistant.completed":
             if (typeof body.content === "string") final = body.content;

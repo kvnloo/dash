@@ -29,7 +29,7 @@ test("argv is Hermes's own one-shot gateway client; the text never rides argv", 
 test("stream-json lines map to deltas, tool status and one result", () => {
   expect(parseLiveLine('{"type":"text","text":"po"}')).toEqual({ kind: "text", text: "po" });
   expect(parseLiveLine('{"type":"tool_use","name":"terminal"}')).toEqual({ kind: "tool", name: "terminal" });
-  expect(parseLiveLine('{"type":"tool_result","name":"terminal"}')).toEqual({ kind: "tool-done" });
+  expect(parseLiveLine('{"type":"tool_result","name":"terminal"}')).toEqual({ kind: "tool-done", name: "terminal" });
   expect(parseLiveLine('{"type":"result","exit_code":0,"text":"pong","session_id":"local-1"}')).toEqual({ kind: "result", exitCode: 0, text: "pong", sessionId: "local-1" });
   expect(parseLiveLine("not json")).toEqual({ kind: "other" });
   expect(parseLiveLine('{"type":"system","subtype":"init"}')).toEqual({ kind: "other" });
@@ -41,7 +41,7 @@ test("a live send streams its own reply, uses the profile home and drops an inhe
   const result = await sendIntoLiveSession({ argv: ["hermes"], home: "/p/clean", sessionId: "local-1", text: "reply with just pong", sink: s, spawn, env: { HERMES_TUI_GATEWAY_URL: "ws://elsewhere", PATH: "/bin" } });
   expect(result).toEqual({ text: "pong", sessionId: "local-1", exitCode: 0 });
   expect(out.deltas).toEqual(["po", "ng"]);
-  expect(out.statuses).toEqual(["Running terminal", ""]);
+  expect(out.statuses).toEqual(["Thinking", "Running terminal", "Thinking", ""]);
   expect(seen.stdin).toBe("reply with just pong");
   expect(seen.env?.HERMES_HOME).toBe("/p/clean");
   expect("HERMES_TUI_GATEWAY_URL" in (seen.env ?? {})).toBe(false);

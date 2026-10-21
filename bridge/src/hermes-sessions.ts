@@ -1,3 +1,4 @@
+import { readSessionPhase, UNOBSERVED, type SessionPhase } from "./hermes-phase";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
@@ -140,7 +141,7 @@ export class HermesSessions {
     this.processes = options.processes ?? hostProcesses;
     this.gateways = options.gateways ?? hostGatewayProbe(this.root, pid => this.processes.alive(pid));
   }
-  private profiles(): Profile[] {
+  private profiles(credentials = true): Profile[] {
     // "default" names the root home. A stray profiles/default directory would be a second
     // "default" and make every default session ambiguous once the roster has listed it.
     const profiles: Profile[] = [{ id: "default", home: this.root }];
@@ -150,6 +151,7 @@ export class HermesSessions {
     const seen = new Set<string>();
     return profiles.filter(profile => {
       try { const path = realpathSync(profile.home); if (seen.has(path)) return false; seen.add(path); } catch { return false; }
+      if (!credentials) return true;
       const env = readEnv(join(profile.home, ".env"));
       const url = loopbackUrl(`http://${env.API_SERVER_HOST || "127.0.0.1"}:${env.API_SERVER_PORT || "8642"}`);
       if (url && env.API_SERVER_KEY) profile.api = { url, key: env.API_SERVER_KEY };
@@ -266,6 +268,17 @@ export class HermesSessions {
     let wanted: string;
     try { wanted = realpathSync(home); } catch { return undefined; }
     return this.profiles().find(p => { try { return realpathSync(p.home) === wanted; } catch { return false; } })?.id;
+  }
+  phase(profileId: string, sessionId: string): SessionPhase {
+    // Observation never needs API credentials. Resolve only a visible local session.
+    const profile = this.profiles(false).find(p => (p.id === profileId || hermesSessionAgentId(p.id, sessionId) === profileId) && (() => {
+      const row = localSession(p, sessionId);
+      return row !== undefined && visible(row);
+    })());
+    if (!profile) return UNOBSERVED;
+    const ids = withDb(profile, db => [...lineageIds(db, sessionId)]) ?? [sessionId];
+    const alive = this.gateways.gatewayPids(profile.id, profile.home).length > 0;
+    return readSessionPhase(profile.home, ids, alive);
   }
   homeOf(profileId: string): string | undefined {
     return this.profiles().find(p => p.id === profileId)?.home;
