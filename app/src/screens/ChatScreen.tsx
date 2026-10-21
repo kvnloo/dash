@@ -246,6 +246,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
           streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
           initialText={composerDraft}
+          harness={harnessId}
+          cwd={conversation?.cwd}
           placeholder={liveOn ? (live.askHermes ? "Ask Hermes through the live surface" : "Live surface · quick reply") : composerPlaceholder({
             online,
             streaming: Boolean(streamingMessage),

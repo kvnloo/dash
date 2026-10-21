@@ -20,12 +20,15 @@ import { store } from "../store/app";
 import { colors, fonts, glass, radius, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 import { PressScale } from "./PressScale";
+import { ComposerSuggestions } from "./ComposerSuggestions";
 
 interface Props {
   disabled: boolean;
   streaming: boolean;
   placeholder: string;
   initialText?: string;
+  harness?: string;
+  cwd?: string;
   /** Debug fixtures only: chips to show on first render. */
   initialAttachments?: DraftAttachment[];
   onSend(text: string, attachments: ChatAttachment[]): void;
@@ -35,7 +38,7 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ disabled, streaming, placeholder, initialText, initialAttachments, onSend, onStop, onVoice }: Props) {
+export const Composer = memo(function Composer({ disabled, streaming, placeholder, initialText, harness, cwd, initialAttachments, onSend, onStop, onVoice }: Props) {
   const [text, setText] = useState(initialText ?? "");
   const [drafts, setDrafts] = useState<DraftAttachment[]>(initialAttachments ?? []);
   const mounted = useRef(true);
@@ -98,7 +101,7 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
     onSend(value, refs);
   }, [canSend, drafts, text, onSend]);
 
-  return <View style={styles.wrap}><GlassSurface blur borderRadius={18} contentStyle={styles.sheet}>
+  return <View style={styles.wrap}><ComposerSuggestions text={text} harness={harness} cwd={cwd} onChange={setText} /><GlassSurface blur borderRadius={18} contentStyle={styles.sheet}>
     {drafts.length > 0 ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips} accessibilityLabel="Attachments">
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}
@@ -132,7 +135,7 @@ const AttachmentChip = memo(function AttachmentChip({ draft, onRemove }: { draft
 });
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: 12, paddingTop: 8 },
+  wrap: { paddingHorizontal: 12, paddingTop: 8, gap: 8 },
   sheet: { paddingHorizontal: 8 },
   field: { flexDirection: "row", alignItems: "center", minHeight: 60 },
   input: { flex: 1, minWidth: 0, ...type.body, color: colors.text, paddingLeft: 8, paddingVertical: 12 },
