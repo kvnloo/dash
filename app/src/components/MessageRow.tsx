@@ -8,6 +8,7 @@ import { store } from "../store/app";
 import { replyText, useKeyed } from "../store/text";
 import { colors, fonts, glass, radius, space, type } from "../theme";
 import { Markdown } from "./Markdown";
+import { StageLinks } from "./artifact-stage/StageLinks";
 import { PressScale } from "./PressScale";
 
 export const MessageRow = memo(function MessageRow({
@@ -69,7 +70,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
         </>
       );
     case "done":
-      return <><Markdown text={message.text} />{message.status ? <View style={styles.statusRow}><ThinkingMarker turnState="done" /><Text style={styles.statusText}>Done · {message.status}</Text></View> : null}<HostFiles text={message.text} /></>;
+      return <><Markdown text={message.text} />{message.status ? <View style={styles.statusRow}><ThinkingMarker turnState="done" /><Text style={styles.statusText}>Done · {message.status}</Text></View> : null}<HostFiles text={message.text} /><StageLinks text={message.text} /></>;
     case "interrupted":
       return (
         <>
