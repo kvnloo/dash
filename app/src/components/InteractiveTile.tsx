@@ -4,9 +4,9 @@ import { BackHandler, Pressable, ScrollView, StyleSheet, View, useWindowDimensio
 import { setStringAsync } from "expo-clipboard";
 import { TileTouch } from "./TileTouch";
 import { GestureDetector } from "react-native-gesture-handler";
-import Animated, { FadeInUp, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { FadeInUp, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { colors, fonts } from "../theme";
-import { SNAP } from "../motion";
+import { SNAP, MOTION_MS, fade } from "../motion";
 import { useDensity } from "./Density";
 import { useTileGestures, type TileAction } from "./TileGestures";
 
@@ -23,8 +23,8 @@ function TileDetail({ detail, onClose }: { detail: Detail; onClose(): void }) {
   const { width, height } = useWindowDimensions();
   const reduced = useReducedMotion();
   const progress = useSharedValue(0);
-  useEffect(() => { progress.value = reduced ? withTiming(1, { duration: 120 }) : withSpring(1, SNAP); }, [progress, reduced]);
-  const close = () => { progress.value = withTiming(0, { duration: reduced ? 100 : 180 }, finished => { if (finished) runOnJS(onClose)(); }); };
+  useEffect(() => { progress.value = reduced ? withTiming(1, { duration: 120 }) : withTiming(1, SNAP); }, [progress, reduced]);
+  const close = () => { progress.value = withTiming(0, { duration: reduced ? 100 : fade.duration }, finished => { if (finished) runOnJS(onClose)(); }); };
   useEffect(() => { const sub = BackHandler.addEventListener("hardwareBackPress", () => { close(); return true; }); return () => sub.remove(); });
   const style = useAnimatedStyle(() => {
     const p = reduced ? 1 : progress.value;
@@ -41,8 +41,8 @@ function TileDetail({ detail, onClose }: { detail: Detail; onClose(): void }) {
 }
 
 /** Safe defaults: double tap pins locally for this mount; triple tap copies only on explicit intent. */
-export const InteractiveTile = memo(function InteractiveTile({ title, summary, children, style, onOpen, testID, index = 0, extraActions = [] }: {
-  title: string; summary: string; children: ReactNode; style?: StyleProp<ViewStyle>; onOpen?(): void; testID?: string; index?: number; extraActions?: TileAction[];
+export const InteractiveTile = memo(function InteractiveTile({ title, summary, children, style, onOpen, testID, extraActions = [] }: {
+  title: string; summary: string; children: ReactNode; style?: StyleProp<ViewStyle>; onOpen?(): void; testID?: string; extraActions?: TileAction[];
 }) {
   const ref = useRef<View>(null);
   const detail = useContext(DetailContext);
@@ -61,7 +61,7 @@ export const InteractiveTile = memo(function InteractiveTile({ title, summary, c
     { id: "detail", label: "Detail", run: open }, { id: "pin", label: pinned ? "Unpin" : "Pin locally", run: pin }, { id: "copy", label: "Copy", run: copy }, { id: "density", label: "Density", run: cycleDensity }, ...extraActions.slice(0, 4),
   ] });
   return <TileTouch holding={holding} onOpen={open} onPrimary={pin} onSecondary={copy}><GestureDetector gesture={gesture} touchAction="pan-y"><Animated.View ref={ref} collapsable={false} testID={testID}
-    entering={reduced ? undefined : FadeInUp.duration(180).delay(Math.min(index, 6) * 35)}
+    entering={reduced ? undefined : FadeInUp.duration(MOTION_MS.enter)}
     accessible accessibilityRole="button" accessibilityLabel={`${title}. ${pinned ? "Pinned locally. " : ""}${copyState}`} accessibilityHint="Tap for detail, double tap to pin locally, triple tap to copy, hold and slide for actions."
     accessibilityActions={[{ name: "activate", label: "Open detail" }, { name: "pin", label: "Pin locally" }, { name: "copy", label: "Copy summary" }, { name: "density", label: "Change density" }, ...extraActions.map(action => ({ name: action.id, label: action.label }))]}
     onAccessibilityAction={event => { const name = event.nativeEvent.actionName; if (name === "activate") open(); else if (name === "pin") pin(); else if (name === "copy") copy(); else if (name === "density") cycleDensity(); else extraActions.find(action => action.id === name)?.run(); }}

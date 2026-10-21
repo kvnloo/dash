@@ -316,6 +316,7 @@ function targetForTurn(turnId: string): { hostId?: string; profileId?: string } 
 
 /** Send one chat turn for the active conversation. Returns false if offline. */
 export function sendChat(input: {
+  mode?: "steer" | "queue";
   turnId: string;
   harness: string;
   text: string;
@@ -327,6 +328,7 @@ export function sendChat(input: {
   const cwd = input.cwd ?? store.get().settings?.cwd;
   return bridge.send({
     type: "chat",
+    mode: input.mode,
     summariesEnabled: store.get().conversations.find(c => c.messages.some(m => m.role === "assistant" && m.turnId === input.turnId))?.summariesEnabled === true,
     id: input.turnId,
     ...targetForTurn(input.turnId),

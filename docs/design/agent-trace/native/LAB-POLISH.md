@@ -33,13 +33,13 @@ There is no component named `Profiler` in merged #88's source. The available pro
 - On web, `pan-y` permits ordinary browser scrolling. A non-passive, hold-gated touch listener reserves vertical movement only after activation. This listener is absent from the native implementation; native motion stays on the UI thread.
 - Contextual Orchestra feedback is an explicitly selected radial action, not an automatic long-press side effect. No approval or upstream mutation is attached to double taps.
 
-Motion adds spring press/shadow, measured detail morph, staggered trace-label entrance, direct native-text number tickers, hold tilt and radial bloom. Existing timeline rubber-band/pinch/decay remain. Reduced motion disables geometric transitions and continuous orb motion; detail uses an opacity transition.
+Motion adds bounded spring-response press/shadow, measured detail morph, direct native-text number tickers, hold tilt and radial bloom. The newly integrated fast-first policy keeps all tiles immediately usable: no stagger delay is reintroduced. Existing timeline rubber-band/pinch and its newly bounded velocity settle remain. Reduced motion disables geometric transitions and continuous orb motion; detail uses an opacity transition.
 
 ## Performance
 
 The previous thinking-orbs adapter built pictures and called React `setState` on each JS animation frame for every orb. Dash now renders static depth-banded SVG paths and uses one Reanimated clock with compositor transforms, native raster caching, app-background and screen-focus stops. This preserves the monochrome dotted-sphere language, not exact per-mode geometry parity with the third-party engine. Thinking, tool, streaming and paused/approval states remain distinguishable.
 
-Lab uses FlashList section cells with stable memoized content and viewability-gated orb activity. Normal Lab caps animated state samples at six; `Animate 20` is an explicit all-thinking stress fixture. This is not a claim of a global animation budget for every third-party component elsewhere in Dash. The READ shimmer clock also stops once its text resolves.
+Lab uses FlashList section cells with stable memoized content and viewability-gated orb activity. Normal Lab caps animated state samples at six; `Animate 20` is an explicit all-thinking stress fixture. This is not a claim of a global animation budget for every third-party component elsewhere in Dash. The newly integrated fast-first READ policy removes simulated loading for text that is already known; no shimmer clock is reintroduced.
 
 ## Reproduction
 

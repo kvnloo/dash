@@ -96,6 +96,7 @@ export async function sendIntoLiveSession(options: {
   signal?: AbortSignal;
   env?: Record<string, string | undefined>;
   spawn?: LiveSpawn;
+  onStarted?(): void;
 }): Promise<LiveResult> {
   // The profile's own gateway, discovered from HERMES_HOME. Never an inherited explicit remote URL.
   const env: Record<string, string | undefined> = { ...(options.env ?? process.env), HERMES_HOME: options.home };
@@ -122,6 +123,7 @@ export async function sendIntoLiveSession(options: {
       readLines(child.stdout, line => {
         try { hermesParts(JSON.parse(line), parts); } catch { /* non-JSON diagnostics */ }
         const event = parseLiveLine(line);
+        if (event.kind !== "other" && (event.kind !== "result" || event.text)) options.onStarted?.();
         if (event.kind === "text") { if (event.text) { phase.text(); streamed += event.text; options.sink.delta(event.text); } }
         else if (event.kind === "tool") phase.start(event.name, event.id);
         else if (event.kind === "tool-done") phase.complete(event.id, event.name);

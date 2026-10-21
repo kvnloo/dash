@@ -293,12 +293,12 @@ function updateMessage(
 export function beginTurn(
   conversationId: string,
   text: string,
-  opts?: { pending?: boolean; attachments?: ChatAttachment[] },
+  opts?: { pending?: boolean; attachments?: ChatAttachment[]; mode?: "steer" | "queue" },
 ): { turnId: string; messageId: string } {
   const turnId = newId();
   const messageId = newId();
   const now = Date.now();
-  const user: Message = { id: newId(), role: "user", text, at: now, ...(opts?.attachments?.length ? { attachments: opts.attachments } : {}) };
+  const user: Message = { id: newId(), role: "user", text, at: now, delivery: opts?.mode === "steer" ? "steering" : opts?.pending ? "queued" : undefined, ...(opts?.attachments?.length ? { attachments: opts.attachments } : {}) };
   const assistant: AssistantMessage = {
     id: messageId,
     role: "assistant",
@@ -408,6 +408,16 @@ export function applyTurnEvent(
       updateMessage(where.conversationId, where.messageId, (m) => (event.seq <= m.seq ? m : { ...m, seq: event.seq }));
       return;
     case "status":
+      if (event.delivery) {
+        const delivery = event.delivery;
+        updateConversation(where.conversationId, c => {
+          const index = c.messages.findIndex(m => m.id === where.messageId);
+          const assistant = c.messages[index];
+          if (assistant?.role !== "assistant" || event.seq <= assistant.seq || assistant.state !== "streaming") return c;
+          return { ...c, messages: c.messages.map((m, i) => i === index - 1 && m.role === "user" ? { ...m, delivery, deliveryAt: event.deliveryAt ?? Date.now(), deliveryNote: event.text } : i === index && m.role === "assistant" ? { ...m, delivery, seq: event.seq, status: event.text } : m) };
+        });
+        return;
+      }
       if (event.part) {
         const message = store.get().conversations.find(c => c.id === where.conversationId)?.messages.find(m => m.id === where.messageId);
         if (message?.role !== "assistant") return;
@@ -434,13 +444,17 @@ export function applyTurnEvent(
       updateMessage(where.conversationId, where.messageId, (m) => {
         if (event.seq <= m.seq || m.state === "interrupted") return m;
         const text = replyText.get(event.id) || m.text;
-        const error = m.error ?? (event.exitCode !== 0 ? `Process exited with code ${event.exitCode}` : text ? undefined : "No response");
+        const error = m.error ?? (event.exitCode !== 0 ? `Process exited with code ${event.exitCode}` : text || m.delivery === "steered" ? undefined : "No response");
         return { ...m, text, parts: partsFor(event.id).length ? partsFor(event.id) : m.parts, state: error ? "error" : "done", error, status: undefined, handoff: undefined, seq: event.seq };
       });
       liveSequences.delete(event.id);
       notifyTurnSettled(where.conversationId);
       return;
     case "error":
+      updateConversation(where.conversationId, c => {
+        const index = c.messages.findIndex(m => m.id === where.messageId);
+        return { ...c, messages: c.messages.map((m, i) => i === index - 1 && m.role === "user" && m.delivery ? { ...m, delivery: "failed", deliveryNote: event.message } : m) };
+      });
       updateMessage(where.conversationId, where.messageId, (m) => m.state === "interrupted" ? m : ({
         ...m,
         parts: partsFor(event.id).length ? partsFor(event.id) : m.parts,
@@ -475,6 +489,7 @@ export function promotePendingTurn(turnId: string): { text: string; harness: str
   updateMessage(where.conversationId, where.messageId, (m) =>
     m.state === "pending" ? { ...m, state: "streaming" } : m,
   );
+  updateConversation(where.conversationId, c => ({ ...c, messages: c.messages.map(m => m.id === user.id && m.role === "user" && m.delivery === "queued" ? { ...m, delivery: "started" } : m) }));
   return { text: user.text, harness: conv.harness, sessionId: conv.sessionId, ...(user.attachments?.length ? { attachments: user.attachments } : {}) };
 }
 

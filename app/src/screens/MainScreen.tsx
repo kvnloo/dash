@@ -3,7 +3,7 @@ import { Canvas } from "../components/Canvas";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Animated, { useAnimatedStyle, useFrameCallback, useSharedValue } from "react-native-reanimated";
+import Animated, { useSharedValue } from "react-native-reanimated";
 import { Alert, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
@@ -11,7 +11,6 @@ import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBa
 import { ConnectionPill } from "../components/ConnectionPill";
 import { KeyboardDock } from "../components/KeyboardDock";
 import { AppNav, type AppNavHandle } from "../components/AppNav";
-import { PAGE_LAG_PX, pageStep, pageStretch } from "../components/golden-nav";
 import { SearchResultRow } from "../components/SearchResultRow";
 import { isDebugActive } from "../debug/expose";
 import { debugUi } from "../debug/ui-store";
@@ -113,30 +112,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const pagerRef = useRef<MainPagerRef>(null);
   const navRef = useRef<AppNavHandle>(null);
   const pagerProgress = useSharedValue(DEFAULT_MAIN_TAB);
-  const pageFollow = useSharedValue(DEFAULT_MAIN_TAB);
-  const pageVel = useSharedValue(0);
   const routeTab = route.params?.tab;
-
-  useFrameCallback((info) => {
-    const raw = info.timeSincePreviousFrame;
-    if (raw == null) return;
-    const dt = Math.min(0.033, raw / 1000);
-    if (dt <= 0) return;
-    const next = pageStep(pageFollow.value, pageVel.value, pagerProgress.value, dt);
-    pageFollow.value = next.pos;
-    pageVel.value = next.vel;
-  });
-
-  const pageGelStyle = useAnimatedStyle(() => {
-    const { scaleX, scaleY } = pageStretch(pageFollow.value, pagerProgress.value, pageVel.value);
-    return {
-      transform: [
-        { translateX: (pageFollow.value - pagerProgress.value) * PAGE_LAG_PX },
-        { scaleX },
-        { scaleY },
-      ],
-    };
-  });
 
   const debugSearch = debugUi.use((s) => s.mainSearchQuery);
   const debugTab = debugUi.use((s) => s.mainTabIndex);
@@ -316,7 +292,6 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
         tab={index}
         progress={pagerProgress}
         onTab={(next) => {
-          setIndex(next);
           pagerRef.current?.setPage(next);
         }}
       />
@@ -344,7 +319,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             />
           </>
         ) : (
-          <Animated.View style={[styles.pager, pageGelStyle]} collapsable={false}>
+          <Animated.View style={styles.pager} collapsable={false}>
             <MainPager
               ref={pagerRef}
               style={styles.pager}
@@ -353,7 +328,6 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               onPageSelected={onPage}
               progress={pagerProgress}
               pageWidth={width}
-              overdrag
             >
               <View key="bots" style={{ width, flex: 1 }}>
                 <BotsPane navigation={navigation} />

@@ -1,3 +1,4 @@
+import { fade } from "../motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
@@ -55,7 +56,7 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
         <TraceTimeline snapshot={snapshot} rows={snapshot.rows} onOpenRow={onOpenRow} onScrub={setScrub} scrollRef={scrollRef} selectedKey={open?.row.key ?? null} />
       </ScrollView>
       {scrub ? (
-        <Animated.View entering={reduced ? undefined : FadeInUp.duration(120)} exiting={reduced ? undefined : FadeOutUp.duration(120)} style={styles.float} pointerEvents="none" testID="scrub-float">
+        <Animated.View entering={reduced ? undefined : FadeInUp.duration(fade.duration)} exiting={reduced ? undefined : FadeOutUp.duration(fade.duration)} style={styles.float} pointerEvents="none" testID="scrub-float">
           <Text style={styles.floatT}>{scrub.label}</Text>
           <Text style={styles.floatS}>{scrub.live} live then</Text>
         </Animated.View>

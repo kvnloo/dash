@@ -2,6 +2,7 @@ import { TileDetailProvider } from "./src/components/InteractiveTile";
 import { DensityProvider } from "./src/components/Density";
 import { TileGestureProvider } from "./src/components/TileGestures";
 import { OrbMotionProvider } from "./src/components/OrbMotion";
+import { fade } from "./src/motion";
 import { DarkTheme, NavigationContainer, type Theme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
@@ -131,7 +132,7 @@ export default function App() {
                 initialRouteName={isDebugActive() || hasSettings ? "Main" : "Pair"}
                 // Every screen draws the same nav bar at the same place. A fade keeps it still while the
                 // content changes; a slide carried a second copy of the bar across the screen.
-                screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "fade", animationDuration: 200 }}
+                screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "fade", animationDuration: fade.duration }}
               >
                 <Stack.Screen name="Main" component={MainScreen} />
                 <Stack.Screen name="Approvals" component={ApprovalsScreen} />

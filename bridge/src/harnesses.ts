@@ -8,6 +8,7 @@ import { approvalArgs, type ApprovalEnv } from "./argv-policy";
 import { parseHarnessJsonLine } from "./turn-safety";
 
 export interface TurnInput {
+  mode?: "steer" | "queue";
   /** Prompt text. Attachment paths are already listed in it (see src/attachments.ts). */
   text: string;
   cwd: string;

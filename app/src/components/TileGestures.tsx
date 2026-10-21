@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
-import Animated, { runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { haptic } from "../haptics";
 import { useHandedness } from "../lib/useHandedness";
 import { radialCenter, radialPosition, radialSector } from "../lib/tile-layout";
@@ -30,7 +30,7 @@ export function TileGestureProvider({ children }: { children: ReactNode }) {
 
 function WheelLabel({ action, index, count, left, selected }: { action: TileAction; index: number; count: number; left: boolean; selected: SharedValue<number> }) {
   const pos = radialPosition(index, count, left, 106);
-  const style = useAnimatedStyle(() => ({ backgroundColor: selected.value === index ? colors.accent : colors.surfaceRaised, transform: [{ scale: withSpring(selected.value === index ? 1.1 : 1, SNAP) }] }));
+  const style = useAnimatedStyle(() => ({ backgroundColor: selected.value === index ? colors.accent : colors.surfaceRaised, transform: [{ scale: withTiming(selected.value === index ? 1.1 : 1, SNAP) }] }));
   const text = useAnimatedStyle(() => ({ color: selected.value === index ? colors.bg : colors.text }));
   return <Animated.View style={[styles.action, { left: 140 + pos.x - 36, top: 140 + pos.y - 24 }, style]} testID={`radial-${action.id}`}><Animated.Text style={[styles.label, text]}>{action.label}</Animated.Text></Animated.View>;
 }
@@ -52,8 +52,8 @@ export function useTileGestures({ onOpen, onPrimary, onSecondary, actions }: Til
   const commit = (index: number) => { hide(); if (index >= 0 && actions[index]) { haptic.success(); actions[index].run(); } };
   const armed = useSharedValue(false);
   useEffect(() => () => { if (armed.value) { bloom.value = 0; hide(); } }, [armed, bloom, hide]);
-  const press = () => { "worklet"; scale.value = reduced ? 1 : withSpring(0.975, SNAP); };
-  const release = () => { "worklet"; scale.value = reduced ? 1 : withSpring(1, SNAP); tilt.value = withTiming(0, { duration: reduced ? 0 : 120 }); };
+  const press = () => { "worklet"; scale.value = reduced ? 1 : withTiming(0.975, SNAP); };
+  const release = () => { "worklet"; scale.value = reduced ? 1 : withTiming(1, SNAP); tilt.value = withTiming(0, { duration: reduced ? 0 : 120 }); };
   const tap = (count: number, action: () => void) => Gesture.Tap().numberOfTaps(count).maxDelay(180).maxDuration(220).maxDistance(10)
     .onBegin(press).onEnd((_event, success) => { if (success) runOnJS(action)(); }).onFinalize(release);
   const hold = Gesture.Pan().minPointers(1).maxPointers(1).activateAfterLongPress(350).enabled(valid)
@@ -63,7 +63,7 @@ export function useTileGestures({ onOpen, onPrimary, onSecondary, actions }: Til
       armed.value = true;
       start.value = { x: event.absoluteX, y: event.absoluteY };
       x.value = center.x; y.value = center.y; selected.value = -1;
-      bloom.value = reduced ? 1 : withSpring(1, SNAP);
+      bloom.value = reduced ? 1 : withTiming(1, SNAP);
       runOnJS(showActions)();
     })
     .onUpdate(event => {

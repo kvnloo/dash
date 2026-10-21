@@ -21,12 +21,14 @@ import { PressScale } from "../components/PressScale";
 import { isDebugActive } from "../debug/expose";
 import { debugUi } from "../debug/ui-store";
 import { haptic } from "../haptics";
+import { canSteer, type SendMode } from "../lib/composer-mode";
 import type { ChatAttachment } from "../../../shared/protocol";
 import type { Message } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge, openLiveSurface, sendChat, sendLiveTurn } from "../net/bridge";
 import { EMPTY_LIVE, liveOf, liveStore, setLiveOpen } from "../store/live";
 import {
+  applyTurnEvent,
   beginTurn,
   conversationBusy,
   conversationTargetError,
@@ -43,6 +45,7 @@ import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, glass, radius, space, type } from "../theme";
 import { conversationThinking, type Thinking } from "../lib/thinking";
 import { useSessionPhase } from "../lib/session-phase";
+import { useSessionActivity } from "../lib/session-activity";
 import { replyText } from "../store/text";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
@@ -130,6 +133,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const hasText = useCallback(() => Boolean(replyText.get(replyId)), [replyId]);
   // Header needs only the first-text edge, not a whole-screen render for every token.
   const liveText = useSyncExternalStore(subscribeText, hasText, hasText);
+  useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
   const observed = useSessionPhase(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
   const localThinking = conversationThinking(messages, connection.status);
   const thinking: Thinking = !online ? { phase: "idle" } : localThinking.phase !== "idle"
@@ -141,20 +145,22 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const caption = thinking.phase === "tool" ? `working · ${thinking.tool}` : thinking.phase === "waiting-approval" ? "waiting for approval or clarification" : thinking.phase === "idle" ? (!online ? "offline" : observationUnavailable ? "status unavailable" : "idle") : "working";
 
   const sendTurn = useCallback(
-    (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId)) => {
-      const { turnId } = beginTurn(active.id, text, { attachments });
+    (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId), mode: SendMode = "queue") => {
+      const { turnId } = beginTurn(active.id, text, { attachments, mode });
       haptic.tap();
       const current = store.get().conversations.find((c) => c.id === active.id) ?? active;
       const ok = sendChat({
         turnId,
         harness: current.harness,
+        mode,
         text,
         sessionId: current.sessionId,
         cwd: current.cwd,
         attachments,
       });
       if (!ok) {
-        parkUnsentTurn(turnId);
+        if (mode === "steer") applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Offline: steer was not sent. It will not be retried automatically." });
+        else parkUnsentTurn(turnId);
       }
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
@@ -196,10 +202,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   );
 
   const onSend = useCallback(
-    (text: string, attachments: ChatAttachment[]) => {
+    (text: string, attachments: ChatAttachment[], mode: SendMode = "queue") => {
       dragging.current = false;
       setFollow(true);
       const active = conversation ?? createConversation(harnessId);
+      if (mode === "steer") { sendTurn(text, attachments, active, "steer"); return; }
       if (conversationBusy(active.id)) {
         const { turnId } = beginTurn(active.id, text, { pending: true, attachments });
         enqueue(active.id, turnId);
@@ -317,6 +324,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
           disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
           streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
+          steerBusy={canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn)}
           initialText={composerDraft}
           harness={harnessId}
           blurTarget={liveOn ? undefined : blurTarget}

@@ -36,6 +36,8 @@ export const MessageRow = memo(function MessageRow({
     return (
       <View style={styles.userRow}>
         <View style={styles.bubble}>
+          {message.delivery ? <Text style={styles.statusText} accessibilityLabel={message.deliveryNote}>{message.delivery === "steered" ? `Steered · ${new Date(message.deliveryAt ?? message.at).toLocaleTimeString()}` : message.delivery === "steering" ? "Sending steer…" : message.delivery === "queued" ? "Queued for next turn" : message.delivery === "failed" ? "Delivery failed · check before resending" : "Next turn started"}</Text> : null}
+          {message.deliveryNote?.startsWith("The turn stopped") ? <Text style={styles.statusText}>{message.deliveryNote}</Text> : null}
           {message.attachments?.length ? <SentFiles files={message.attachments} spaced={Boolean(message.text)} /> : null}
           {message.text ? (
             <Text selectable style={styles.userText}>
@@ -46,6 +48,8 @@ export const MessageRow = memo(function MessageRow({
       </View>
     );
   }
+  if (message.delivery === "steered" && message.state !== "error") return null;
+  if (message.delivery === "queued" && message.state === "streaming") return <View style={styles.assistantRow}><Text style={styles.statusText}>Queued for next turn…</Text></View>;
   return (
     <View style={styles.assistantRow}>
       {message.summaries?.filter(summary => summary.kind === "turn").map(summary => <ThinkingSummaryChip key={summary.blockId} turnId={message.turnId} summary={summary} />)}

@@ -4,16 +4,16 @@ import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   ReduceMotion,
+  cancelAnimation,
   runOnJS,
   useAnimatedReaction,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withDecay,
-  withSpring,
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
+import { snappy, settle as release, fade, settleTiming } from "../../motion";
 import { haptic } from "../../haptics";
 import {
   GROUP_LABEL, ZOOM_MAX, askWord, ZOOM_MIN, activeAt, clock, dur, hourStep, initialZoom, packLanes, panBounds, rowMeta,
@@ -33,7 +33,7 @@ export type ScrubState = { t: number; label: string; live: number } | null;
 /** A ref the timeline's scrub and pinch take priority over (the screen's ScrollView). */
 export type ExternalGesture = Parameters<ReturnType<typeof Gesture.Pan>["blocksExternalGesture"]>[0];
 
-const settle = { mass: 0.5, stiffness: 260, damping: 26, reduceMotion: ReduceMotion.System };
+const settle = { ...release, reduceMotion: ReduceMotion.System };
 const SCRUB_STEP_S = 900;
 const LABEL_FRAC = 0.32;
 /** "now" sits at this fraction of the plot on open, leaving room for the live notes after it. */
@@ -166,20 +166,21 @@ export const TraceTimeline = memo(function TraceTimeline({
     .activeOffsetX([-10, 10])
     .failOffsetY([-12, 12])
     .averageTouches(true)
-    .onStart(() => { start.value = { tx: tx.value, z: zoom.value, fx: 0 }; })
+    .onStart(() => { cancelAnimation(tx); cancelAnimation(zoom); start.value = { tx: tx.value, z: zoom.value, fx: 0 }; })
     .onUpdate((e) => {
       const [lo, hi] = panBounds(viewW.value * zoom.value, viewW.value);
       tx.value = softClamp(start.value.tx + e.translationX, lo, hi, viewW.value);
     })
     .onEnd((e) => {
       const [lo, hi] = panBounds(viewW.value * zoom.value, viewW.value);
-      if (tx.value < lo || tx.value > hi) { tx.value = withSpring(tx.value < lo ? lo : hi, { ...settle, velocity: e.velocityX }); return; }
+      if (tx.value < lo || tx.value > hi) { tx.value = withTiming(tx.value < lo ? lo : hi, { ...settleTiming((tx.value < lo ? lo : hi) - tx.value, e.velocityX), reduceMotion: ReduceMotion.System }); return; }
       if (reduced) return;
-      tx.value = withDecay({ velocity: e.velocityX, deceleration: 0.997, clamp: [lo, hi], rubberBandEffect: true, rubberBandFactor: 0.7, reduceMotion: ReduceMotion.System });
+      const target = Math.min(hi, Math.max(lo, tx.value + e.velocityX * 0.08));
+      tx.value = withTiming(target, { ...settleTiming(target - tx.value, e.velocityX), reduceMotion: ReduceMotion.System });
     });
 
   const pinch = Gesture.Pinch()
-    .onStart((e) => { start.value = { tx: tx.value, z: zoom.value, fx: e.focalX }; })
+    .onStart((e) => { cancelAnimation(tx); cancelAnimation(zoom); start.value = { tx: tx.value, z: zoom.value, fx: e.focalX }; })
     .onUpdate((e) => {
       const z = softZoom(start.value.z * e.scale);
       const moved = e.focalX - start.value.fx;
@@ -192,15 +193,15 @@ export const TraceTimeline = memo(function TraceTimeline({
       const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom.value));
       const target = zoomAround(e.focalX, tx.value, zoom.value, z);
       const [lo, hi] = panBounds(viewW.value * z, viewW.value);
-      zoom.value = withSpring(z, settle);
-      tx.value = withSpring(Math.min(hi, Math.max(lo, target)), settle);
+      zoom.value = withTiming(z, settle);
+      tx.value = withTiming(Math.min(hi, Math.max(lo, target)), settle);
     });
 
   const scrubG = Gesture.Pan()
     .activateAfterLongPress(320)
     .onStart((e) => {
       scrubX.value = e.x;
-      scrubOn.value = withTiming(1, { duration: reduced ? 0 : 120 });
+      scrubOn.value = withTiming(1, { ...fade, reduceMotion: ReduceMotion.System });
       const t = timeAtX(e.x, tx.value, viewW.value, zoom.value, span);
       lastTick.value = scrubTick(t, SCRUB_STEP_S);
       runOnJS(scrubTo)(t, false, true);
@@ -212,7 +213,7 @@ export const TraceTimeline = memo(function TraceTimeline({
       const tick = scrubTick(t, SCRUB_STEP_S);
       if (tick !== lastTick.value) { lastTick.value = tick; runOnJS(scrubTo)(t, tick % 4 === 0, false); }
     })
-    .onFinalize(() => { scrubOn.value = withTiming(0, { duration: reduced ? 0 : 160 }); lastTick.value = -1; runOnJS(scrubEnd)(); });
+    .onFinalize(() => { scrubOn.value = withTiming(0, { ...fade, reduceMotion: ReduceMotion.System }); lastTick.value = -1; runOnJS(scrubEnd)(); });
 
   const tap = Gesture.Tap()
     .maxDuration(300)
@@ -230,8 +231,8 @@ export const TraceTimeline = memo(function TraceTimeline({
     haptic.select();
     const w = viewW.value;
     if (!w) return;
-    zoom.value = withSpring(z, settle);
-    tx.value = withSpring(txForTime(snapshot.now, span, w, z, OPEN_FRAC), settle);
+    zoom.value = withTiming(z, { ...snappy, reduceMotion: ReduceMotion.System });
+    tx.value = withTiming(txForTime(snapshot.now, span, w, z, OPEN_FRAC), { ...snappy, reduceMotion: ReduceMotion.System });
   }, [snapshot.now, span, tx, viewW, zoom]);
 
   const content = useAnimatedStyle(() => ({ width: viewW.value * zoom.value, transform: [{ translateX: tx.value }] }));
@@ -249,7 +250,7 @@ export const TraceTimeline = memo(function TraceTimeline({
           if (it.kind === "lane") return <View key={i} style={[styles.laneLabel, { height: it.h }]}><Text style={styles.laneText} numberOfLines={1}>{it.lane === "cuts" ? "cut moments" : `your messages · ${snapshot.owner.length}`}</Text></View>;
           if (it.kind === "group") return <GroupLabel key={i} group={it.group} n={it.n} h={it.h} />;
           return (
-            <RowLabel key={i} index={it.index} row={it.row} h={it.h} selected={selectedKey === it.row.key} variant={variant}
+            <RowLabel key={i} row={it.row} h={it.h} selected={selectedKey === it.row.key} variant={variant}
               refCb={(r) => { labelRefs.current.set(it.row.key, r); }} onPress={onOpenRow ? () => openIndex(i) : undefined} />
           );
         })}
@@ -321,12 +322,12 @@ function GroupLabel({ group, n, h }: { group: RowGroup; n: number; h: number }) 
   );
 }
 
-const RowLabel = memo(function RowLabel({ index, row, h, selected, onPress, refCb, variant }: { index: number; row: TraceRow; h: number; selected: boolean; onPress?(): void; refCb(r: View | null): void; variant: RowVariant }) {
+const RowLabel = memo(function RowLabel({ row, h, selected, onPress, refCb, variant }: { row: TraceRow; h: number; selected: boolean; onPress?(): void; refCb(r: View | null): void; variant: RowVariant }) {
   const sum = summarizeRow(row);
   const dim = row.group === "earlier";
   return (
     <View ref={refCb} collapsable={false} style={{ height: h }}>
-      <InteractiveTile index={index} title={row.key} summary={`${row.key}. ${rowMeta(sum)}`} onOpen={onPress} style={[styles.rowLabel, selected && styles.rowSel]} testID={`row-${row.key}`}>
+      <InteractiveTile title={row.key} summary={`${row.key}. ${rowMeta(sum)}`} onOpen={onPress} style={[styles.rowLabel, selected && styles.rowSel]} testID={`row-${row.key}`}>
         <View style={[styles.rowLabelInner, dim && { opacity: 0.55 }]}>
           <Text style={styles.project} numberOfLines={1}>{row.project}{sum.workers > 1 ? <Text style={styles.count}>  ×{sum.workers}</Text> : null}</Text>
           {variant === "compact" ? null : <Text style={styles.goal} numberOfLines={1}>{row.goal}</Text>}
@@ -356,7 +357,7 @@ function Axis({ h, hours, span, t0, now, content, viewW, zoom }: { h: number; ho
 }
 
 function HourLabel({ i, left, text, step, t, now, span, viewW, zoom, fontScale }: { i: number; left: `${number}%`; text: string; step: SharedValue<number>; t: number; now: number; span: number; viewW: SharedValue<number>; zoom: SharedValue<number>; fontScale: number }) {
-  const st = useAnimatedStyle(() => ({ opacity: withTiming(i % step.value === 0 && (now - t) / span * viewW.value * zoom.value > 64 * fontScale ? 1 : 0, { duration: 120 }) }));
+  const st = useAnimatedStyle(() => ({ opacity: withTiming(i % step.value === 0 && (now - t) / span * viewW.value * zoom.value > 64 * fontScale ? 1 : 0, { ...fade, reduceMotion: ReduceMotion.System }) }));
   return <DensityAnimatedText style={[styles.hourText, { left }, st]}>{text}</DensityAnimatedText>;
 }
 

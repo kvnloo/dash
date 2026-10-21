@@ -3,6 +3,7 @@ import { Children, memo, useCallback, useEffect, useMemo, useState, type ReactNo
 import { FlashList } from "@shopify/flash-list";
 import { StyleSheet, View } from "react-native";
 import { OrbActivity } from "../components/OrbMotion";
+import { fade } from "../motion";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
@@ -191,7 +192,7 @@ function PickBar({ letter, name, picked, onPick, stacked = false }: { letter: st
     <View style={[styles.pickBar, stacked && styles.pickStacked]}>
       <Text style={styles.pickName} numberOfLines={1}><Text style={styles.letter}>{letter}</Text> {name}</Text>
       <PressScale onPress={onPick} scaleTo={0.9} style={[styles.pick, picked && styles.pickOn]} accessibilityRole="button" accessibilityLabel={`Pick ${name}`} accessibilityState={{ selected: picked }}>
-        {picked ? <Animated.Text entering={FadeIn.duration(140)} style={[styles.pickT, { color: colors.bg }]}>Picked</Animated.Text> : <Text style={styles.pickT}>Pick</Text>}
+        {picked ? <Animated.Text entering={FadeIn.duration(fade.duration)} style={[styles.pickT, { color: colors.bg }]}>Picked</Animated.Text> : <Text style={styles.pickT}>Pick</Text>}
       </PressScale>
     </View>
   );
