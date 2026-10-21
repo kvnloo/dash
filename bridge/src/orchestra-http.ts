@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import type { HostInfo } from "../../shared/protocol";
 import type { OrchestraSnapshot, OrchestraState } from "../../shared/orchestra";
 import { parseKevinBatch } from "../../shared/supervision";
-import { buildOrchestra, record, toolPaths, type GraphSession, type RepoEvidence } from "./orchestra-graph";
+import { buildOrchestra, record, toolPaths, reconcileWorkerEvidence, type GraphSession, type RepoEvidence } from "./orchestra-graph";
 import { readSessionPhase } from "./hermes-phase";
 import { DEFAULT_SUPERVISION_DIR } from "./supervision-http";
 import { redact } from "./reply-parts";
@@ -131,12 +131,7 @@ export async function collectOrchestra(hosts: HostInfo[], hours = 24, now = Date
     }
   }
   const supervision = json(join(DEFAULT_SUPERVISION_DIR, "state.json"));
-  if (record(supervision) && Array.isArray(supervision.workers)) for (const worker of supervision.workers) {
-    if (!record(worker) || !record(worker.meta)) continue;
-    const meta = worker.meta, match = sessions.find(s => s.id === worker.id || (Boolean(meta.session) && s.id.endsWith(`:${text(meta.session)}`)) || s.provenance.includes(text(meta.log)));
-    if (match && text(meta.log)) match.provenance.push(text(meta.log));
-    if (match && /stall|overdue|interrupt|fail/i.test(text(worker.phase))) { match.state = "failing"; match.reason = `Supervision: ${text(worker.phase)}`; match.action = "Inspect supervision findings; recover or abandon"; }
-  }
+  if (record(supervision) && Array.isArray(supervision.workers)) reconcileWorkerEvidence(sessions, supervision.workers);
   const batch = parseKevinBatch(json(join(DEFAULT_SUPERVISION_DIR, "needs-kevin.json")));
   if (!batch) warnings.push("Needs Kevin queue unavailable");
   return buildOrchestra({ hosts: fleetHosts, sessions, repos: [...repos.values()], needs: batch?.items, health, now, hours, warnings: [...new Set(warnings)] });
