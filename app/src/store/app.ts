@@ -135,8 +135,20 @@ export function setLiveHistoryRequester(fn: LiveHistoryRequest | undefined): voi
   requestLiveHistory = fn;
 }
 
+/**
+ * The roster id for a host id a bridge reported. An older bridge names itself by OS hostname
+ * ("groot") while the roster keys the same computer by its MagicDNS label ("0").
+ */
+export function rosterHostId(hostId: string | undefined, connection: Pick<Connection, "hosts" | "host">): string | undefined {
+  if (!hostId || connection.hosts.some(h => h.id === hostId)) return hostId;
+  const self = connection.hosts.find(h => h.self);
+  if (self && (self.hostname === hostId || self.name === hostId || connection.host === hostId)) return self.id;
+  return hostId;
+}
+
 export function applyLiveHistory(harness: string, sessionId: string, messages: HistoryMessage[], hostId?: string, profileId?: string): void {
-  const candidates = store.get().conversations.filter(c => c.harness === harness && c.sessionId === sessionId && (!hostId || c.targetHostId === hostId) && (!profileId || c.profileId === profileId));
+  const host = rosterHostId(hostId, store.get().connection);
+  const candidates = store.get().conversations.filter(c => c.harness === harness && c.sessionId === sessionId && (!host || c.targetHostId === host) && (!profileId || c.profileId === profileId));
   const conv = candidates.length === 1 ? candidates[0] : undefined;
   if (!conv) return;
   updateConversation(conv.id, (c) => hydrateLiveConversation(c, messages));
@@ -374,7 +386,7 @@ export function applyTurnEvent(
     case "session":
       // Host-resolved identity: native API turns, and Hermes sessions the bridge names
       // (new ACP chats land in a host profile), so the roster row merges into this chat.
-      updateConversation(where.conversationId, (c) => ({ ...c, sessionId: event.sessionId, ...(event.transport === "api" || event.profileId?.startsWith("hermes:session:") ? { profileId: event.profileId ?? c.profileId, targetHostId: event.hostId ?? c.targetHostId, stale: false } : {}) }));
+      updateConversation(where.conversationId, (c) => ({ ...c, sessionId: event.sessionId, ...(event.transport === "api" || event.profileId?.startsWith("hermes:session:") ? { profileId: event.profileId ?? c.profileId, targetHostId: rosterHostId(event.hostId, store.get().connection) ?? c.targetHostId, stale: false } : {}) }));
       updateMessage(where.conversationId, where.messageId, (m) => (event.seq <= m.seq ? m : { ...m, seq: event.seq }));
       return;
     case "status":

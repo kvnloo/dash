@@ -510,6 +510,36 @@ function refreshHermesList(): void {
 }
 
 let rosterCache: { at: number; key: string; hosts: HostInfo[] } | null = null;
+
+/**
+ * The phone addresses this computer by its roster host id: the Tailscale MagicDNS label
+ * (e.g. "0"), which need not equal the OS hostname (e.g. "groot"). Both name this bridge.
+ */
+export class SelfHost {
+  private ids = new Set<string>();
+  private canonical: string;
+  constructor(private readonly hostname: string) {
+    this.canonical = hostname;
+    this.ids.add(hostname);
+  }
+  /** Learn this computer's names from an assembled roster. */
+  remember(hosts: HostInfo[]): void {
+    const self = hosts.find(h => h.self);
+    if (!self) return;
+    this.ids = new Set([this.hostname, self.id, self.name, self.hostname].filter(id => id.length > 0));
+    this.canonical = self.id;
+  }
+  /** The roster id the phone stores for this computer. */
+  id(): string { return this.canonical; }
+  /** An absent host means "this bridge". */
+  matches(hostId: string | undefined): boolean { return !hostId || this.ids.has(hostId); }
+}
+
+export function selfHostFrom(hosts: HostInfo[], hostname: string): SelfHost {
+  const self = new SelfHost(hostname);
+  self.remember(hosts);
+  return self;
+}
 const ROSTER_TTL_MS = 4000;
 
 export function readTailscaleStatus(): unknown {

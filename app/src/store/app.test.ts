@@ -36,6 +36,20 @@ describe("host roster reconciliation", () => {
     expect(app.store.get().conversations).toHaveLength(1);
     expect(app.store.get().conversations[0]).toMatchObject({ id: first.id, title: "New real title", stale: false, messages: history });
   });
+  test("history from a bridge that names itself by OS hostname lands in the MagicDNS-keyed chat", () => {
+    // groot's tailnet label is "0": the roster keys it "0", an older bridge replies hostId "groot".
+    const renamed = { ...host, id: "0", name: "0", hostname: "groot" };
+    app.setConnection({ host: "groot", hosts: [renamed], harnesses: [{ id: "hermes", name: "Hermes", available: true }] });
+    const chat = app.store.get().conversations[0]!;
+    expect(chat.targetHostId).toBe("0");
+    const history = [{ id: "h1", role: "assistant" as const, text: "real transcript", at: agent.lastActivityAt }];
+    app.applyLiveHistory("hermes", "owner", history, "groot", agent.id);
+    expect(app.store.get().conversations[0]!.messages).toMatchObject([{ id: "h1", role: "assistant", text: "real transcript", state: "done" }]);
+    expect(app.rosterHostId("groot", app.store.get().connection)).toBe("0");
+    expect(app.rosterHostId("0", app.store.get().connection)).toBe("0");
+    expect(app.rosterHostId("mbp", app.store.get().connection)).toBe("mbp");
+    expect(app.conversationTargetError(app.store.get().conversations[0]!)).toBeUndefined();
+  });
   test("old unscoped OMP chat becomes ended and Clear ended preserves new chats", () => {
     const old = app.createConversation("omp", { sessionId: "dead-omp" });
     app.beginTurn(old.id, "saved message");
