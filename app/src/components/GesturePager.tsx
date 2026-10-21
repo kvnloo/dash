@@ -33,7 +33,10 @@ export const MainPager = forwardRef<MainPagerRef, MainPagerProps>(function MainP
     const duration = navDuration(distance, velocity, reduced);
     progress.value = withTiming(index, {
       duration, reduceMotion: ReduceMotion.System,
-      easing: t => navProgress(t, distance, velocity, duration),
+      easing: (t: number) => {
+        "worklet";
+        return navProgress(t, distance, velocity, duration);
+      },
     }, finished => { if (finished) runOnJS(completed)(index); });
   };
   useImperativeHandle(ref, () => ({ setPage(index) { move(index, 0); } }));
