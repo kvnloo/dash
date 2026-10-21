@@ -355,7 +355,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               pageWidth={width}
               overdrag
             >
-              <View key="bots" style={{ width }}>
+              <View key="bots" style={{ width, flex: 1 }}>
                 <BotsPane navigation={navigation} />
               </View>
               <View key="chats" style={{ width }}>

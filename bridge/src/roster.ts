@@ -355,6 +355,7 @@ function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster
     }));
   return {
     id: name,
+    // MagicDNS labels can be numeric ("0"); keep that routing id but show the OS hostname.
     name: node.hostName.trim() || name,
     hostname: node.hostName,
     online: node.online,

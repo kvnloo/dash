@@ -11,6 +11,8 @@
     "@expo-google-fonts/ibm-plex-mono": "0.4.1",
     "@expo/metro-runtime": "~57.0.17",
     "@expo/vector-icons": "^15.0.2",
+    "@headless-tree/core": "^1.8.0",
+    "@headless-tree/react": "^1.8.0",
     "@kvnloo/aodl-views": "git+ssh://git@github.com/kvnloo/aodl-views.git#7bbe46909b4e76557cd2d87c3f5be7b9f957eaec",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/native": "^7.3.18",
