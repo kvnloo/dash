@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { componentSizing, DENSITIES, radialCenter, radialPosition, radialSector } from "./tile-layout";
+import { componentSizing, DENSITIES, radialCenter, radialPosition, radialSector, tileColumns } from "./tile-layout";
 
 describe("component sizing contract", () => {
   test("density grows intrinsic minima; never fixes an aspect ratio", () => {
@@ -17,6 +17,18 @@ describe("component sizing contract", () => {
       expect(componentSizing(density, 0.5)).toEqual(componentSizing(density));
     }
   });
+});
+
+test("stat grids reflow all requested widths before large type becomes character columns", () => {
+  const widths = [360, 412, 480];
+  expect(widths.map(width => tileColumns(width - 16, "compact", 1, 6))).toEqual([3, 3, 3]);
+  expect(widths.map(width => tileColumns(width - 16, "comfortable", 1, 6))).toEqual([2, 3, 3]);
+  expect(widths.map(width => tileColumns(width - 16, "rich", 1, 6))).toEqual([2, 3, 3]);
+  expect(widths.map(width => tileColumns(width - 16, "compact", 1.6, 6))).toEqual([2, 2, 2]);
+  expect(widths.map(width => tileColumns(width - 16, "comfortable", 1.6, 6))).toEqual([1, 2, 2]);
+  expect(widths.map(width => tileColumns(width - 16, "rich", 1.6, 6))).toEqual([1, 1, 2]);
+  expect(tileColumns(0, "rich", 2)).toBe(1);
+  expect(tileColumns(2000, "compact")).toBe(3);
 });
 
 describe("radial wheel geometry", () => {

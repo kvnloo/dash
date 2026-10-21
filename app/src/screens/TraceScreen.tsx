@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import Animated, { FadeInUp, FadeOutUp, useReducedMotion } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { TileGrid } from "../components/TileGrid";
 import { DensityPicker } from "../components/Density";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { ActionChip } from "../components/trace/ActionChip";
@@ -46,12 +47,12 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
             <ActionChip key={a.id} action={a} variant="card" decision={latest(records, "action", a.id)} onDecide={onDecide} />
           ))}
         </View>
-        <View style={styles.tiles}>
+        <TileGrid>
           <StatTile label="live" value={st.live} sub={`of ${st.workers}`} tone={tc.live} variant="number" />
           <StatTile label="cut" value={st.cut} sub={`${st.resumed} resumed`} tone={tc.cut} variant="meter"
             segments={[{ n: st.resumed, color: tc.ok, label: "resumed" }, { n: st.cut - st.resumed, color: tc.cut, label: "not resumed" }]} />
           <StatTile label="active" value={series[series.length - 1] ?? 0} sub={`peak ${Math.max(...series)}`} variant="spark" series={series} />
-        </View>
+        </TileGrid>
         <Text style={styles.hint}>Pinch to zoom · drag to pan · hold to scrub · tap a row</Text>
         <TraceTimeline snapshot={snapshot} rows={snapshot.rows} onOpenRow={onOpenRow} onScrub={setScrub} scrollRef={scrollRef} selectedKey={open?.row.key ?? null} />
       </ScrollView>
@@ -71,7 +72,6 @@ const styles = StyleSheet.create({
   scroll: { paddingBottom: 120, gap: space.md },
   sub: { fontFamily: fonts.mono, fontSize: 11, color: tc.text3, paddingHorizontal: space.lg },
   chips: { paddingHorizontal: space.lg },
-  tiles: { flexDirection: "row", gap: space.sm, paddingHorizontal: space.lg },
   hint: { fontFamily: fonts.mono, fontSize: 10, color: tc.faint, paddingHorizontal: space.lg, marginTop: space.sm },
   float: { position: "absolute", top: 112, alignSelf: "center", flexDirection: "row", gap: 10, alignItems: "baseline", backgroundColor: "rgba(21,22,17,.96)", borderRadius: 999, borderWidth: 1, borderColor: tc.rule, paddingHorizontal: 18, paddingVertical: 10 },
   floatT: { fontFamily: fonts.mono, fontSize: 18, color: tc.text, fontVariant: ["tabular-nums"] },

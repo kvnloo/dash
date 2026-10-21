@@ -9,6 +9,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
 import { PressScale } from "../components/PressScale";
 import { DensityPicker, useDensity } from "../components/Density";
+import { TileGrid } from "../components/TileGrid";
 import { InteractiveTile } from "../components/InteractiveTile";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { ActionChip, type ChipVariant } from "../components/trace/ActionChip";
@@ -106,8 +107,8 @@ Hold + slide: action wheel · centre: cancel</Text>
           </Block>
         ) : null}
 
-        <Block title="Stat tile" note="counts up · hold the meter to cycle segments" action={{ label: "Replay", onPress: () => setReplay((r) => r + 1) }} testID="lab-stat-tile">
-          <View style={styles.side}>
+        <Block title="Stat tile" note="tap for detail · hold → Segment to cycle" action={{ label: "Replay", onPress: () => setReplay((r) => r + 1) }} testID="lab-stat-tile">
+          <TileGrid inset={space.sm} gap={6}>
             {(["number", "meter", "spark"] as StatVariant[]).map((v, i) => (
               <View key={v} style={styles.sideCell}>
                 <StatTile replay={replay} label="cut" value={st.cut} sub={`${st.resumed} resumed`} tone={tc.cut} variant={v}
@@ -115,7 +116,7 @@ Hold + slide: action wheel · centre: cancel</Text>
                 <PickBar letter={"ABC"[i] ?? ""} name={v} picked={P("stat-tile") === v} onPick={() => pick("stat-tile", v)} stacked />
               </View>
             ))}
-          </View>
+          </TileGrid>
         </Block>
 
         <Block title="Orb states" note={stress ? "Stress: all 20 animated · shared clock" : "Visible only · at most 6 animated · shared clock"} action={{ label: stress ? "Cap at 6" : "Animate 20", onPress: () => setStress(value => !value) }} testID="lab-orb-states">
@@ -218,7 +219,6 @@ const styles = StyleSheet.create({
   pick: { minWidth: 64, height: 32, borderRadius: radius.pill, borderWidth: 1, borderColor: tc.barEdge, paddingHorizontal: 10 },
   pickOn: { backgroundColor: tc.text, borderColor: tc.text },
   pickT: { fontFamily: fonts.semibold, fontSize: 12, color: tc.text },
-  side: { flexDirection: "row", gap: 6, paddingHorizontal: space.sm },
   sideCell: { flex: 1, minWidth: 0, borderWidth: 1, borderColor: tc.rule, borderRadius: radius.md, padding: 4, gap: 4 },
   orbRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-around", padding: space.md, rowGap: space.md },
   orbCell: { alignItems: "center", gap: 4, minWidth: 52 },

@@ -12,7 +12,7 @@ The single `DensityProvider` owns Compact / Comfortable / Rich across Lab, Trace
 | Trace profiler / timeline row | Above minima, at least 52 × font scale and enough height for packed lanes | Label and plot use identical item heights; worker bands divide available vertical space, reserving note space |
 | Timeline on resize | Preserve normalized translation and zoom, clamp to new bounds | Plot width follows the actual row, not a stale initial measure |
 | Timeline axis | Intrinsic 34 px | Thin hours using scaled label width; reserve separation before the now-label |
-| Stat tile | 100 / 136 / 176 px minimum, scaled for large type | Equal-height stretched inner surface; labels/subtext wrap; spark width fills its column, intrinsic chart height 28 px |
+| Stat tile | 100 / 136 / 176 px minimum, scaled for large type | Responsive 1–3-column TileGrid reflows before narrow character wrapping; equal-height stretched inner surfaces; spark fills its column, intrinsic chart height 28 px |
 | READ | Intrinsic multiline height; padding 8 / 12 / 18 px | Stretch width; animated and static text share preview scaling |
 | Action chip | Row minimum plus intrinsic title/body/buttons; padding 8 / 12 / 18 px | Stretch width, retain its existing horizontal swipe arbitration |
 | Orb | Explicit 20 / 40 / 64 / 48 px square | No hidden 76 px native box; captions remain outside the orb square |
