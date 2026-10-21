@@ -61,7 +61,7 @@ function Row({ item, selected, activate, toggle, collapse, inline }: {
           <View style={styles.chevronSpace}>{node.children && <Animated.View style={chevron}><Feather name="chevron-right" size={space.md} color={colors.textTertiary} /></Animated.View>}</View>
           {node.thinking ? <AgentOrb thinking={node.thinking} size={20} label={`Session ${node.thinking.phase}`} /> : <Feather name={icons[node.kind]} size={space.lg} color={expanded ? colors.accent : colors.textMuted} />}
           <View style={styles.label}>
-            <Text style={[node.kind === "host" ? type.heading : type.small, styles.text]} numberOfLines={1}>{node.label}</Text>
+            <Text style={[node.kind === "host" ? type.heading : type.small, styles.text]} numberOfLines={node.kind === "call" ? 2 : 1}>{node.label}</Text>
             {node.detail ? <Text style={styles.detail} numberOfLines={node.kind === "args" || node.kind === "output" || node.kind === "thinking" ? undefined : 1} selectable>{node.detail}</Text> : null}
           </View>
           {node.meta ? <Text style={styles.meta}>{node.meta}</Text> : null}

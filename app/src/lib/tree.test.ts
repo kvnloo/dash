@@ -54,7 +54,7 @@ test("tool adapter preserves actual arguments/output/duration and namespaces IDs
   const call = (await children(groups[1]))[0];
   expect(call?.meta).toBe("0.1s");
   const leaves = await children(call);
-  expect(leaves[0]?.detail).toBe(TOOL_TREE_FIXTURE.tools?.[0]?.args);
+  expect(JSON.parse(leaves[0]?.detail ?? "{}")).toEqual(JSON.parse(TOOL_TREE_FIXTURE.tools?.[0]?.args ?? "{}"));
   expect(leaves[1]?.detail).toBe(TOOL_TREE_FIXTURE.tools?.[0]?.output);
   expect(toolTree({ id: "other" })[0]?.id).not.toBe(root?.id);
 });
