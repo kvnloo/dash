@@ -53,6 +53,7 @@ import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptOffset } from "../lib/prompt-navigation";
 import { railTurns } from "../lib/rail-turns";
+import { enterAnnotation, registerSink } from "../store/annotate";
 
 const EMPTY: Message[] = [];
 
@@ -219,6 +220,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     [conversation, harnessId, sendTurn, setFollow],
   );
 
+  // Annotation mode sends into this chat: steer a running Hermes turn, else send/queue.
+  const steerableRef = useRef(false);
+  steerableRef.current = canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn);
+  useEffect(() => {
+    if (liveOn) return;
+    return registerSink({ label: `${harnessName} chat`, steerable: () => steerableRef.current, send: (text, attachments, mode) => onSend(text, attachments, mode) });
+  }, [onSend, harnessName, liveOn]);
+
   useEffect(() => {
     if (!conversation) return;
     return onTurnSettled((id) => {
@@ -316,6 +325,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approval}><Text style={styles.approvalText}>{approvalCount} approvals{approvalDryRun ? " · preview" : ""} ›</Text></PressScale> : null}
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 16, gap: 4 }}>
+          {/* Temporary entry point until the page-aware composer filter menu lands (sol-density-dial). */}
+          <PressScale accessibilityRole="button" accessibilityLabel="Annotate this screen" onPress={() => { haptic.select(); enterAnnotation(); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center", marginRight: "auto" }}><Text style={{ ...type.mono, fontSize: 11, color: colors.gold }}>✎ Annotate</Text></PressScale>
           <Text style={{ ...type.mono, color: colors.textTertiary, fontSize: 10, marginRight: 6 }}>Thinking & tools</Text>
           {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
         </View>
