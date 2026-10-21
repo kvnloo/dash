@@ -69,7 +69,7 @@ export function buildItems(rows: TraceRow[], variant: RowVariant, opts: { lanes:
 
 /**
  * Native trace timeline: label column on the left, a pannable / pinchable plot on the right.
- *  - pan: momentum (withDecay), rubber band past the ends, spring back
+ *  - pan: bounded velocity settle; cancel immediately on the next drag
  *  - pinch: zoom around the focal point, 1× (fit) to 24×, rubber band past the limits
  *  - long-press then drag: scrub playhead with a haptic tick every 15 min (stronger on the hour)
  *  - tap a row (label or plot): onOpenRow with the row's window rect for the expand

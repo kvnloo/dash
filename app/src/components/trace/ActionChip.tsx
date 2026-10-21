@@ -19,6 +19,7 @@ import { SNAP, settleTiming, fade, press as pressMotion, MOTION_MS } from "../..
 import { swipeDecision, type SwipeDecision, type TraceAction } from "../../trace/model";
 import { fonts, radius, space, type } from "../../theme";
 import { useDensity } from "../Density";
+import { PressScale } from "../PressScale";
 import { tc } from "./tokens";
 
 export type ChipVariant = "card" | "pill" | "buttons";
@@ -117,15 +118,10 @@ export function ActionChip({ action, variant = "card", decision, onDecide }: {
 }
 
 function ChipButton({ label, tone, onPress }: { label: string; tone: string; onPress(): void }) {
-  const s = useSharedValue(1);
-  const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
-      onPressIn={() => { s.value = withTiming(0.92, { ...pressMotion, reduceMotion: ReduceMotion.System }); haptic.tap(); }}
-      onPressOut={() => { s.value = withTiming(1, { ...pressMotion, reduceMotion: ReduceMotion.System }); }} hitSlop={6}>
-      <Animated.View style={[styles.btn, { borderColor: tone }, st]}><Text style={[styles.btnText, { color: tone }]}>{label}</Text></Animated.View>
-    </Pressable>
-  );
+  return <PressScale accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
+    scaleTo={0.92} onPressIn={() => haptic.tap()} hitSlop={6} style={[styles.btn, { borderColor: tone }]}>
+    <Text style={[styles.btnText, { color: tone }]}>{label}</Text>
+  </PressScale>;
 }
 
 const styles = StyleSheet.create({
