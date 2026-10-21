@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { uxFixture } from "./ux-fixture";
 import { applyGateMessage } from "../store/approvals";
 import type { Connection, Conversation, Settings } from "../model";
 import { DEMO_CONVERSATIONS } from "../mock/seed";
@@ -104,7 +105,7 @@ export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
   // Saved phone chats first, so the roster below reconciles them and adopts host chats.
   store.set((s) => ({
     ...s,
-    conversations: [...DEMO_CONVERSATIONS, ...([{
+    conversations: [uxFixture(), ...DEMO_CONVERSATIONS, ...([{
       id: "debug-attach", harness: "hermes", title: "What is wrong with these seedlings?", createdAt: Date.now() - 600000, updatedAt: Date.now() - 600000,
       messages: [
         { id: "debug-attach-user", role: "user", text: "What is wrong with these seedlings?", at: Date.now() - 600000, attachments: [{ id: "fedcba9876543210fedcba9876543210", name: "tray-3.jpg", mime: "image/jpeg", size: 1_843_200 }, { id: "00112233445566778899aabbccddeeff", name: "watering-log.txt", mime: "text/plain", size: 2_310 }] },
