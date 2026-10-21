@@ -1,3 +1,4 @@
+import { turboMs } from "./turbo";
 /** Fast first: motion confirms an action, never gates it.
  * A normalized critically damped response has a hard timing deadline.
  * Duration springs are not deadlines: their energy tail can run longer.
@@ -8,13 +9,13 @@ export function criticalProgress(t: number): number {
   "worklet";
   return (1 - (1 + 9 * t) * Math.exp(-9 * t)) / (1 - 10 * Math.exp(-9));
 }
-export const snappy = { duration: 150, easing: criticalProgress };
+export const snappy = { duration: turboMs(150), easing: criticalProgress };
 /** Only for direct-manipulation release; not layout or graph movement. */
-export const settle = { duration: 180, easing: criticalProgress };
-export const fade = { duration: 120 };
+export const settle = { duration: turboMs(180), easing: criticalProgress };
+export const fade = { duration: turboMs(120) };
 /** Reserve two display frames of scheduling headroom inside the 180 ms release budget. */
-export const nav = { duration: 140 };
-export const press = { duration: 70 };
+export const nav = { duration: turboMs(140) };
+export const press = { duration: turboMs(70) };
 
 /** Compatibility names for existing consumers; no elastic nav spring. */
 export const GEL = snappy;
@@ -58,7 +59,7 @@ export const PRESS_SCALE = {
 } as const;
 
 export const MOTION_MS = {
-  enter: 150,
-  exit: 120,
+  enter: turboMs(150),
+  exit: turboMs(120),
   stagger: 0,
 } as const;
