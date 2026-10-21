@@ -358,6 +358,106 @@ test("handedness hook reads the store, quick toggle persists, hydration restores
   expect(app.store.get().settings?.handedness).toBe("left");
 });
 
+describe("editable persisted queue", () => {
+  const current = () => app.store.get().conversations[0]!;
+  test("edit, reorder, delete and clear mutate only pending message pairs", async () => {
+    const { queuedParts } = await import("../lib/pending-queue");
+    const c = app.createConversation("hermes");
+    app.beginTurn(c.id, "running");
+    const a = app.beginTurn(c.id, "a", { pending: true });
+    const b = app.beginTurn(c.id, "b", { pending: true });
+    app.editQueued(c.id, a.turnId, "edited");
+    app.editQueued(c.id, "missing", "ignored");
+    app.moveQueued(c.id, 1, 0);
+    expect(queuedParts(current()).map(p => p.user.text)).toEqual(["b", "edited"]);
+    app.removeQueued(c.id, b.turnId);
+    expect(queuedParts(current()).map(p => p.user.text)).toEqual(["edited"]);
+    app.removeQueued(c.id);
+    expect(queuedParts(current())).toEqual([]);
+    expect(current().messages).toHaveLength(2);
+  });
+  test("three queued messages deliver as one after running turn ends, including after hydration", async () => {
+    const c = app.createConversation("hermes");
+    const running = app.beginTurn(c.id, "running");
+    for (const text of ["one", "two", "three"]) app.beginTurn(c.id, text, { pending: true });
+    const sent: string[] = [];
+    const send: import("./app").ChatSender = input => { sent.push(input.text); return true; };
+    expect(app.flushPendingSends(send)).toBe(0);
+    await new Promise(resolve => setTimeout(resolve, 450));
+    app.store.set(s => ({ ...s, conversations: [] }));
+    await app.hydrate();
+    expect(current().messages).toHaveLength(8);
+    app.applyTurnEvent({ type: "done", id: running.turnId, seq: 1, exitCode: 0 });
+    expect(app.flushPendingSends(send)).toBe(1);
+    expect(sent).toEqual(["one\n\ntwo\n\nthree"]);
+    expect(app.flushPendingSends(send)).toBe(0);
+    expect(current().messages).toHaveLength(4);
+  });
+  test("per-chat opt out delivers FIFO, failed dispatch remains a single pending batch", () => {
+    const c = app.createConversation("hermes");
+    const a = app.beginTurn(c.id, "a", { pending: true });
+    app.beginTurn(c.id, "b", { pending: true });
+    app.setDeliverQueuedAsOne(c.id, false);
+    const sent: string[] = [];
+    expect(app.flushPendingSends(input => { sent.push(input.text); return true; })).toBe(1);
+    expect(sent).toEqual(["a"]);
+    app.applyTurnEvent({ type: "done", id: a.turnId, seq: 1, exitCode: 0 });
+    expect(app.flushPendingSends(input => { sent.push(input.text); return true; })).toBe(1);
+    expect(sent).toEqual(["a", "b"]);
+    const other = app.createConversation("hermes");
+    app.beginTurn(other.id, "x", { pending: true }); app.beginTurn(other.id, "y", { pending: true });
+    expect(app.flushPendingSends(() => false)).toBe(0);
+    expect(app.flushPendingSends(input => { expect(input.text).toBe("x\n\ny"); return true; })).toBe(1);
+  });
+  test("preview survives reload, pauses delivery, cancellation keeps originals; save replaces once", async () => {
+    const c = app.createConversation("hermes");
+    app.beginTurn(c.id, "a", { pending: true }); app.beginTurn(c.id, "b", { pending: true });
+    app.previewQueued(c.id);
+    expect(current().queuePreview).toBe("a\n\nb");
+    app.changeQueuePreview(c.id, "clean instruction");
+    expect(app.flushPendingSends(() => { throw new Error("preview must not dispatch"); })).toBe(0);
+    expect(app.takeQueuedForSteer(c.id)).toBeUndefined();
+    await new Promise(resolve => setTimeout(resolve, 450));
+    await app.hydrate();
+    expect(current().queuePreview).toBe("clean instruction");
+    app.cancelQueuePreview(c.id);
+    expect(current().messages.filter(m => m.role === "user").map(m => m.text)).toEqual(["a", "b"]);
+    app.previewQueued(c.id); app.changeQueuePreview(c.id, "edited merge"); app.saveQueuePreview(c.id);
+    expect(current().queuePreview).toBeUndefined();
+    expect(app.flushPendingSends(input => { expect(input.text).toBe("edited merge"); return true; })).toBe(1);
+  });
+  test("new parts appended during preview are retained; empty preview cannot replace the queue", () => {
+    const c = app.createConversation("hermes");
+    app.beginTurn(c.id, "a", { pending: true });
+    app.previewQueued(c.id);
+    app.changeQueuePreview(c.id, "edited");
+    app.beginTurn(c.id, "new part", { pending: true });
+    expect(current().queuePreview).toBe("edited\n\nnew part");
+    app.saveQueuePreview(c.id);
+    expect(current().messages.filter(m => m.role === "user").map(m => m.text)).toEqual(["edited\n\nnew part"]);
+    app.previewQueued(c.id); app.changeQueuePreview(c.id, "  "); app.saveQueuePreview(c.id);
+    expect(current().queuePreview).toBe("  ");
+    app.stopConversation(c.id, () => {});
+    expect(current().queuePreview).toBeUndefined();
+    expect(current().queueWaitForIdle).toBe(false);
+    expect(app.flushPendingSends(() => true)).toBe(0);
+  });
+  test("external busy observation gates auto delivery; steer consumes the ordered batch once", () => {
+    const c = app.createConversation("hermes");
+    app.beginTurn(c.id, "a", { pending: true }); app.beginTurn(c.id, "b", { pending: true });
+    app.setQueueWaiting(c.id, true);
+    expect(app.flushPendingSends(() => true)).toBe(0);
+    app.moveQueued(c.id, 1, 0);
+    expect(app.takeQueuedForSteer(c.id)).toEqual({ text: "b\n\na", attachments: [] });
+    expect(app.takeQueuedForSteer(c.id)).toBeUndefined();
+    expect(app.takeQueuedForSteer("missing")).toBeUndefined();
+    expect(app.flushPendingSends(() => true)).toBe(0);
+    app.beginTurn(c.id, "next", { pending: true });
+    app.setQueueWaiting(c.id, false);
+    expect(app.flushPendingSends(() => true)).toBe(1);
+  });
+});
+
 describe("outbound target boundary", () => {
   test("voice rejection does not report an opened utterance", async () => {
     mock.module("react-native", () => ({ Platform: { OS: "android" }, AppState: { currentState: "active", addEventListener() { return { remove() {} }; } } }));

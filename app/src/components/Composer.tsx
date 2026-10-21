@@ -31,6 +31,9 @@ interface Props {
   steerBusy?: boolean;
   placeholder: string;
   initialText?: string;
+  queuePreview?: string;
+  onQueuePreviewChange?(text: string): void;
+  onSaveQueuePreview?(): void;
   harness?: string;
   cwd?: string;
   blurTarget?: RefObject<View | null>;
@@ -43,7 +46,7 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ disabled, streaming, steerBusy = false, placeholder, initialText, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice }: Props) {
+export const Composer = memo(function Composer({ disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice }: Props) {
   const thumb = useHandedness();
   const [choice, setChoice] = useState<SendMode>("steer");
   useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
@@ -54,7 +57,10 @@ export const Composer = memo(function Composer({ disabled, streaming, steerBusy 
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
 
-  const canSend = canSendDrafts(text, drafts) && !disabled;
+  const editingQueue = queuePreview !== undefined;
+  const draftText = queuePreview ?? text;
+  const changeText = editingQueue ? onQueuePreviewChange ?? setText : setText;
+  const canSend = editingQueue ? Boolean(draftText.trim()) : canSendDrafts(draftText, drafts) && !disabled;
 
   const update = useCallback((key: string, patch: Partial<DraftAttachment>) => {
     if (!mounted.current) return;
@@ -104,27 +110,28 @@ export const Composer = memo(function Composer({ disabled, streaming, steerBusy 
 
   const submit = useCallback(() => {
     if (!canSend) return;
+    if (queuePreview !== undefined) { onSaveQueuePreview?.(); return; }
     const refs = readyRefs(drafts);
     const value = text.trim();
     setText("");
     setDrafts([]);
     onSend(value, refs, sendMode.mode);
-  }, [canSend, drafts, text, onSend, sendMode.mode]);
+  }, [canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
 
-  return <View style={styles.wrap}><ComposerSuggestions text={text} harness={harness} cwd={cwd} onChange={setText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
+  return <View style={styles.wrap}><ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
     {drafts.length > 0 ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips} accessibilityLabel="Attachments">
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}
       </ScrollView>
     ) : null}
-    {steerBusy ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
-    <View style={[styles.field, thumb.row]}>
-      <TextInput style={styles.input} value={text} onChangeText={setText} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline={false} numberOfLines={1} keyboardAppearance="dark" autoCapitalize="sentences" onSubmitEditing={submit} accessibilityLabel="Message" />
-      <View style={[styles.controls, thumb.row]}>
-        <PressScale accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttach} disabled={disabled} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale>
+    {steerBusy && !editingQueue ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
+    <View style={[styles.field, thumb.row, editingQueue && styles.previewField]}>
+      <TextInput style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={changeText} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline={editingQueue} numberOfLines={editingQueue ? 6 : 1} keyboardAppearance="dark" autoCapitalize="sentences" onSubmitEditing={submit} accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
+      <View style={[styles.controls, thumb.row, editingQueue && thumb.align]}>
+        <PressScale accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttach} disabled={disabled || editingQueue} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale>
         <PressScale accessibilityRole="button" accessibilityLabel="Voice input" accessibilityHint="Long press to switch thumb side" onLongPress={toggleHandedness} onPress={onVoice} style={styles.hit}><Feather name="mic" size={18} color={colors.textMuted} /></PressScale>
         {streaming ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale> : null}
-        {steerBusy || !streaming ? <PressScale accessibilityRole="button" accessibilityLabel={sendMode.action} accessibilityHint={sendMode.label} onPress={submit} disabled={!canSend} style={styles.hit}><View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View></PressScale> : null}
+        <PressScale accessibilityRole="button" accessibilityLabel={editingQueue ? "Save queued merge" : streaming && !steerBusy ? "Queue" : sendMode.action} accessibilityHint={editingQueue ? "Keep this merged message queued for the next turn" : sendMode.label} onPress={submit} disabled={!canSend} style={[styles.hit, editingQueue && styles.previewSave]}>{editingQueue ? <Text style={styles.chipName}>Save queued</Text> : <View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View>}</PressScale>
       </View>
     </View>
   </GlassSurface></View>;
@@ -150,6 +157,9 @@ const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 12, paddingTop: 8, gap: 8 },
   sheet: { paddingHorizontal: 8 },
   field: { flexDirection: "row", alignItems: "center", minHeight: 60 },
+  previewField: { flexDirection: "column", alignItems: "stretch" },
+  previewInput: { flex: 0, minHeight: 168, maxHeight: 192 },
+  previewSave: { width: 100 },
   input: { flex: 1, minWidth: 0, ...type.body, color: colors.text, paddingLeft: 8, paddingVertical: 12 },
   controls: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
   modeRow: { alignItems: "center", justifyContent: "space-between", paddingHorizontal: 8 },

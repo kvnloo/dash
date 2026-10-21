@@ -18,6 +18,7 @@ import { hydrateLiveConversation, mergeLiveConversations, shouldRequestHistory }
 import { createStore } from "./createStore";
 import { dequeue, enqueue, notifyTurnSettled } from "./queue";
 import { nextPendingSend, parkMessage } from "./offline-send";
+import { combineQueued, mergedQueue, queuedParts, reorderQueued, queueMergeError } from "../lib/pending-queue";
 import { replyText, replySummaries } from "./text";
 import { appendActivity } from "../lib/message-details";
 import type { AgentTarget } from "../mock/agents";
@@ -312,6 +313,7 @@ export function beginTurn(
     ...c,
     title: c.messages.length === 0 && !c.sessionId ? titleFrom(text || opts?.attachments?.[0]?.name || "") : c.title,
     messages: [...c.messages, user, assistant],
+    queuePreview: opts?.pending && c.queuePreview !== undefined ? `${c.queuePreview}\n\n${text}` : c.queuePreview,
     updatedAt: now,
   }));
   // Move to top of the list.
@@ -505,6 +507,8 @@ export function stopConversation(conversationId: string, cancel: (turnId: string
   const running: string[] = [];
   updateConversation(conversationId, (c) => ({
     ...c,
+    queuePreview: undefined,
+    queueWaitForIdle: false,
     messages: c.messages.map((m) => {
       if (m.role !== "assistant" || (m.state !== "streaming" && m.state !== "pending")) return m;
       if (m.state === "streaming") running.push(m.turnId);
@@ -547,13 +551,75 @@ export type ChatSender = (input: {
   attachments?: ChatAttachment[];
 }) => boolean;
 
-/** After reconnect, send parked turns that never reached the laptop. */
+/** Queue operations mutate persisted message pairs, not a second volatile FIFO. */
+export function setQueueWaiting(id: string, waiting: boolean): void {
+  updateConversation(id, c => ({ ...c, queueWaitForIdle: waiting }));
+}
+
+export function setDeliverQueuedAsOne(id: string, enabled: boolean): void {
+  updateConversation(id, c => ({ ...c, deliverQueuedAsOne: enabled }));
+}
+
+export function editQueued(id: string, turnId: string, text: string): void {
+  updateConversation(id, c => {
+    const part = queuedParts(c).find(item => item.assistant.turnId === turnId);
+    if (!part) return c;
+    return { ...c, messages: c.messages.map(m => m.id === part.user.id ? { ...part.user, text } : m) };
+  });
+}
+
+export function removeQueued(id: string, turnId?: string): void {
+  updateConversation(id, c => {
+    const removed = new Set(queuedParts(c).filter(part => turnId === undefined || part.assistant.turnId === turnId).flatMap(part => [part.user.id, part.assistant.id]));
+    return { ...c, queuePreview: undefined, queueWaitForIdle: turnId === undefined ? false : c.queueWaitForIdle, messages: c.messages.filter(m => !removed.has(m.id)) };
+  });
+}
+
+export function moveQueued(id: string, from: number, to: number): void {
+  updateConversation(id, c => reorderQueued(c, from, to));
+}
+
+export function previewQueued(id: string): void {
+  updateConversation(id, c => queuedParts(c).length && !queueMergeError(c) ? { ...c, queuePreview: mergedQueue(queuedParts(c)) } : c);
+}
+
+export function changeQueuePreview(id: string, text: string): void {
+  updateConversation(id, c => c.queuePreview === undefined ? c : { ...c, queuePreview: text });
+}
+
+export function cancelQueuePreview(id: string): void {
+  updateConversation(id, c => ({ ...c, queuePreview: undefined }));
+  notifyTurnSettled(id);
+}
+
+export function saveQueuePreview(id: string): void {
+  updateConversation(id, c => c.queuePreview?.trim() ? combineQueued(c, c.queuePreview.trim()) : c);
+  notifyTurnSettled(id);
+}
+
+/** Claim all parts synchronously before transport; refusal stays visible, never auto-retries. */
+export function takeQueuedForSteer(id: string): { text: string; attachments: ChatAttachment[] } | undefined {
+  const c = store.get().conversations.find(item => item.id === id);
+  if (!c || queueMergeError(c) || c.queuePreview !== undefined) return undefined;
+  const parts = queuedParts(c);
+  if (!parts.length) return undefined;
+  const payload = { text: mergedQueue(parts), attachments: parts.flatMap(part => part.user.attachments ?? []) };
+  removeQueued(id);
+  return payload;
+}
+
+/** After reconnect or settlement, deliver one batch per idle conversation. */
 export function flushPendingSends(send: ChatSender): number {
   let sent = 0;
-  for (const conv of store.get().conversations) {
+  for (const snapshot of store.get().conversations) {
+    if (snapshot.queueWaitForIdle || snapshot.queuePreview !== undefined || !nextPendingSend(snapshot)) continue;
+    if (snapshot.deliverQueuedAsOne !== false && queueMergeError(snapshot)) continue;
+    if (snapshot.deliverQueuedAsOne !== false) updateConversation(snapshot.id, combineQueued);
+    const conv = store.get().conversations.find(c => c.id === snapshot.id);
+    if (!conv) continue;
     const pending = nextPendingSend(conv);
     if (!pending) continue;
-    dequeue(conv.id);
+    while (dequeue(conv.id)) { /* Legacy queue ids are superseded by persisted pairs. */ }
     const payload = promotePendingTurn(pending.turnId);
     if (!payload) continue;
     const ok = send({
