@@ -21,6 +21,11 @@ PAGES = ["index.html", "a-trace.html", "b-lanes.html", "c-stats.html", "d-pocket
 
 
 def main():
+    import runpy
+    import sys
+    if "--r1" not in sys.argv:
+        runpy.run_path(str(ROOT / "tools/build_r2.py"), run_name="__main__")
+        return
     css = (SRC / "shared.css").read_text()
     for k, f in FONT_KEYS.items():
         css = css.replace(k, base64.b64encode((FONTS / f).read_bytes()).decode())

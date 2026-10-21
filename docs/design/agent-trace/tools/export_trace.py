@@ -7,16 +7,16 @@ Reads (read-only):
   - a read-only COPY of omp stats.db (per-model/tool aggregates)
   - burn-pace --json (lane quota pace)
 
-Writes JSON with NO goal text, prompts, summaries, args or outputs. Labels are synthetic
-(domain tag + letter); phases, stalls and needs-owner categories are keyword heuristics run
-locally over private text whose words never leave this script.
+Writes JSON with NO raw goal text, prompts, summaries, paths, args or outputs.
+Labels use allowlisted project + short-goal vocabulary derived locally from goals and paths.
+Phases, stalls and needs-owner categories are keyword heuristics over private text.
 """
 import collections, datetime as dt, glob, json, os, re, sqlite3, subprocess, sys
 
 LIVE = os.path.expanduser("~/.hermes/profiles/clean/cache/delegation/live")
 STATE = os.path.expanduser("~/.hermes/profiles/clean/state.db")
 OMP = sys.argv[2] if len(sys.argv) > 2 else None
-OUT = sys.argv[1]
+OUT = sys.argv[1] if len(sys.argv) > 1 else "trace.json"
 DAY0 = dt.datetime(2026, 10, 20, 0, 0)
 DAY1 = dt.datetime(2026, 10, 21, 6, 0)
 
@@ -51,6 +51,45 @@ def domain(goal):
         if re.search(rx, g):
             return name
     return "misc"
+
+
+# Only allowlisted project/outcome vocabulary may cross the privacy boundary.
+# Paths and goals are classification input, never output labels or free-text excerpts.
+PROJECTS = [
+    ("NOOP", r"\bnoop\b|oura|hrv", "health feedback"),
+    ("z0live", r"z0live|z0-live", "voice relay"),
+    ("Dash", r"\bdash\b|z0bridge", "control plane"),
+    ("Phone", r"s25|s22|android|lawnchair|omalauncher|\badb\b", "device supervision"),
+    ("Sim", r"\bace\b|badminton|pickleball|physics", "simulation checks"),
+    ("Garden", r"garden", "room planning"),
+    ("Video", r"fframe|cinetic|comfy|video|film", "media workflow"),
+    ("Hermes", r"hermes|tern|\bomp\b|harness|\bacp\b", "agent runtime"),
+    ("Infrastructure", r"k3s|fleet|company.os|integration.debt|oss.factory|promot", "integration checks"),
+    ("Bend", r"\bbend\b|\bfsm\b|statechart", "state proofs"),
+]
+GOALS = [
+    ("ring double-tap", r"\bring\b|double.tap"),
+    ("trace prototypes", r"agent.trace|trace.proto|timeline.proto"),
+    ("S25 supervisor", r"supervis|s25"),
+    ("voice relay", r"relay|z0live"),
+    ("approval flow", r"approv"),
+    ("session bridge", r"session|z0bridge|\bacp\b"),
+    ("integration debt", r"integration.debt|promot|reconcil|upstream"),
+    ("runtime verification", r"qualif|verif|smoke|benchmark"),
+]
+
+
+def public_labels(goal, path_context=""):
+    # Prefer explicit repo/worktree paths over incidental project mentions in a goal.
+    paths = " ".join(re.findall(r"(?:/[^\s\"']*)?(?:products|worktrees|z0-wt)/[^\s\"']+", path_context))
+    project, default = "Research", "workflow study"
+    for source in (paths, goal):
+        found = next(((p, d) for p, rx, d in PROJECTS if re.search(rx, source, re.I)), None)
+        if found:
+            project, default = found
+            break
+    short = next((label for label, rx in GOALS if re.search(rx, goal, re.I)), default)
+    return {"project": project, "short_goal": short, "label": f"{project} · {short}"}
 
 
 def ts(day, hms):
@@ -206,7 +245,8 @@ def main():
             ]
             think = [round((e["t"] - started).total_seconds(), 1) for e in evs if not e["tool"]]
             task = {
-                "id": tid, "run": run["id"], "label": f"{dom} {letters[t['index']].lower()}", "domain": dom,
+                "id": tid, "run": run["id"], "domain": dom,
+                **public_labels(goal, open(lp, errors="replace").read()),
                 "role": ("opus" if "opus" in (m.get("model") or "") else "sol" if "sol" in (m.get("model") or "") else (m.get("model") or "unknown")), "model": m.get("model"), "status": status,
                 "start": started.isoformat(), "end": end.isoformat(), "dur_s": round((end - started).total_seconds()),
                 "resume_of": None, "is_resume": goal.lower().startswith("resume"),
@@ -218,6 +258,11 @@ def main():
             }
             run["tasks"].append(tid)
             tasks.append(task)
+        if run["tasks"]:
+            members = [t for t in tasks if t["id"] in run["tasks"]]
+            lead = collections.Counter(t["label"] for t in members).most_common(1)[0][0]
+            lead_task = next(t for t in members if t["label"] == lead)
+            run.update({k: lead_task[k] for k in ("project", "short_goal", "label")})
         runs.append(run)
     # resume links: a resume task -> latest earlier interrupted task with the best word overlap
     words = lambda g: set(re.findall(r"[a-z0-9]{4,}", g.lower())) - {"resume", "continue", "from", "with", "that", "this", "your"}
@@ -261,7 +306,7 @@ def main():
         "schema": "dash.agent-trace.proto/v0",
         "generated": dt.datetime.now().isoformat(timespec="seconds"),
         "window": [DAY0.isoformat(), DAY1.isoformat()],
-        "privacy": "counts, durations, tool names and synthetic labels only; no goals, prompts, args, outputs or summaries",
+        "privacy": "counts, durations, tool names and allowlisted project/outcome labels only; no raw goals, paths, prompts, args, outputs or summaries",
         "heuristics": {
             "phase": "per tool call from tool name + args keywords (explore/implement/verify/pr/delegate); bands = weighted majority per 3-minute bucket",
             "stall": "gap > 150 s between consecutive transcript events while the worker was alive",
@@ -279,4 +324,5 @@ def main():
     print(f"runs={len(runs)} tasks={len(tasks)} status={dict(c)} matched_sessions={len(used_sess)} owner_turns={len(owner)} resumes={sum(1 for t in tasks if t['resume_of'])} bytes={os.path.getsize(OUT)}")
 
 
-main()
+if __name__ == "__main__":
+    main()

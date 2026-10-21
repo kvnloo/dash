@@ -1,5 +1,9 @@
 # Agent trace for Dash: four prototypes (design brainstorm)
 
+Round 2 is the default build and served view. See [ROUND2.md](ROUND2.md) for the per-view changes, real model-generation provenance, local feedback/optional endpoint contract, and verification commands. Original built pages are retained byte-for-byte as `out/*-r1.html`; original sources remain under `src/` alongside the new `r2.*` shell.
+
+The remainder of this document records round 1; its synthetic-label descriptions and default UI behavior are historical, not the current R2 contract.
+
 Status: draft prototypes for discussion, 2026-10-21. Not wired into the app. Nothing here
 changes Dash's chat or navigation.
 
