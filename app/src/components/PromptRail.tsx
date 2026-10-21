@@ -94,7 +94,7 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
           choose(next); commit(next);
         }} style={styles.ticks}>
         <RailTicks anchors={anchors} />
-        <Animated.View pointerEvents="none" style={[styles.cursor, cursor]} />
+        <Animated.View pointerEvents="none" style={[styles.cursor, thumb.edge(6), cursor]} />
       </View>
     </GestureDetector>
     <Pressable accessibilityRole="button" accessibilityLabel={live ? "Latest live reply" : "Latest reply"}
@@ -116,7 +116,7 @@ const RailTicks = memo(function RailTicks({ anchors }: { anchors: readonly RailT
 });
 const styles = StyleSheet.create({
   tickLayer: { flex: 1, alignSelf: "stretch" },
-  cursor: { position: "absolute", top: 0, right: 6, width: 32, height: 2, backgroundColor: colors.gold },
+  cursor: { position: "absolute", top: 0, width: 32, height: 2, backgroundColor: colors.gold },
   rail: { position: "absolute", top: "18%", bottom: "12%", width: 44, alignItems: "center" },
   ticks: { flex: 1, width: 44 },
   slot: { flex: 1, justifyContent: "center", alignItems: "flex-end", paddingRight: 6 },

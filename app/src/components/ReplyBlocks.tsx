@@ -6,6 +6,8 @@ import { replyParts, useKeyed } from "../store/text";
 import { colors, type } from "../theme";
 import type { SummaryInfo } from "../../../shared/thinking-summary";
 import { ThinkingSummaryChip } from "./ThinkingSummaryChip";
+import { Tree } from "./Tree";
+import { toolTree } from "../lib/tool-tree";
 
 /** Fixed compact body (3 × 16px) keeps FlashList measurement stable during streaming. */
 function WrappedBlock({ label, text, mode, accent = colors.textMuted, children }: { label: string; text: string; mode: DetailMode; accent?: string; children?: React.ReactNode }) {
@@ -47,6 +49,7 @@ export const ReplyBlocks = memo(function ReplyBlocks({ turnId, parts, summaries,
   const started = useRef(new Map<string, number>());
   const [now, setNow] = useState(Date.now);
   const details = useMemo(() => raw ? readDetails(raw) : detailsOf(parts), [raw, parts]);
+  const nodes = useMemo(() => toolTree({ tools: details.tools, turnId }), [details, turnId]);
   const live = details.tools.some(tool => tool.status === "live");
   useEffect(() => { if (!live) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [live]);
   const tools = details.tools.map(tool => {
@@ -61,7 +64,10 @@ export const ReplyBlocks = memo(function ReplyBlocks({ turnId, parts, summaries,
     {summaries?.filter(summary => summary.kind !== "turn").map(summary => <ThinkingSummaryChip key={summary.blockId} turnId={turnId} summary={summary} />)}
     {details.reasoning ? <WrappedBlock key={`${turnId}:reasoning:${mode}`} label="Thinking" text={details.reasoning} mode={mode} /> : null}
     {latest ? <WrappedBlock key={`${turnId}:tools:${mode}`} label={`${toolStackLabel(tools)} · ${latest.name}`} text={`${latest.name} · ${latest.summary}\n${latest.output}`} mode={mode} accent={accent}>
-      {tools.map(tool => <ToolCall key={tool.id} tool={tool} full={mode === "Full"} request={request} />)}
+      {mode === "Full" ? <>
+        <Tree inline nodes={nodes} label="Turn details" initialExpanded={[`${turnId}:turn`, `${turnId}:tools`]} />
+        {tools.filter(tool => tool.truncated).map(tool => tool.detailLoaded ? <Text key={tool.id} style={styles.summary}>{tool.name}: retained output capped at 1 MiB.</Text> : <Pressable key={tool.id} accessibilityRole="button" onPress={() => request?.(tool.id)}><Text style={styles.more}>{tool.name}: Load retained output (up to 1 MiB)</Text></Pressable>)}
+      </> : tools.map(tool => <ToolCall key={tool.id} tool={tool} full={false} request={request} />)}
     </WrappedBlock> : null}
   </View>;
 });

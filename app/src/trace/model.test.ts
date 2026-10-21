@@ -131,6 +131,10 @@ describe("deep links", () => {
     expect(parseAppRouteLink("dash://trace")).toBe("Trace");
     expect(parseAppRouteLink("exp://100.113.138.100:8097/--/orchestra")).toBe("Orchestra");
     expect(parseAppRouteLink("dash://orchestra")).toBe("Orchestra");
+    for (const [path, route] of [["settings", "Settings"], ["bots", "Bots"]] as const) {
+      expect(parseAppRouteLink(`exp://100.113.138.100:8097/--/${path}`)).toBe(route);
+      expect(parseAppRouteLink(`dash://${path}`)).toBe(route);
+    }
     expect(parseAppRouteLink("dash://lab/?x=1")).toBe("Lab");
   });
   test("other links are not routes", () => {

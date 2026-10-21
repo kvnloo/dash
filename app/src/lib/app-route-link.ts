@@ -4,9 +4,9 @@
  *   Dev build:  dash://lab             dash://trace
  * They open screens only and carry no parameters.
  */
-export type AppRoute = "Lab" | "Trace" | "Orchestra";
+export type AppRoute = "Lab" | "Trace" | "Orchestra" | "Settings" | "Bots";
 
-const ROUTES: Record<string, AppRoute> = { lab: "Lab", trace: "Trace", orchestra: "Orchestra" };
+const ROUTES: Record<string, AppRoute> = { lab: "Lab", trace: "Trace", orchestra: "Orchestra", settings: "Settings", bots: "Bots" };
 
 export function parseAppRouteLink(raw: string | null | undefined): AppRoute | null {
   if (!raw) return null;

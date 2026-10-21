@@ -4,6 +4,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withRepeat, withSpring, withTiming } from "react-native-reanimated";
 import Svg, { Circle, Line } from "react-native-svg";
 import { haptic } from "../haptics";
+import { useHandedness } from "../lib/useHandedness";
 import { colors, controlMin, radius, space, type } from "../theme";
 import { mapPositions, matchesFilter, projectMap, type MapEdge, type MapFilter, type MapKind, type MapLayout, type MapNode, type MapRelation, type OrchestraMap, type Point } from "../lib/orchestra-map";
 import { AgentOrb } from "./AgentOrb";
@@ -73,6 +74,7 @@ function Control({ label, selected = false, onPress, onLongPress }: { label: str
 }
 
 export function OrchestraGraph({ graph, width, children, actions, fixture = false }: { graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode; fixture?: boolean }) {
+  const thumb = useHandedness();
   const [layout, setLayout] = useState<MapLayout>("spine");
   const [filter, setFilter] = useState<MapFilter | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -134,7 +136,7 @@ export function OrchestraGraph({ graph, width, children, actions, fixture = fals
         </PressScale>)}
       </ScrollView>
       <View style={styles.controls}>{layouts.map(mode => <Control key={mode} label={mode[0]?.toUpperCase() + mode.slice(1)} selected={layout === mode} onPress={() => { reset(); setLayout(mode); }} />)}</View>
-      <View style={styles.controls}><Control label={focusOnly ? "Focus" : "All"} selected={focusOnly} onPress={() => setFocusOnly(!focusOnly)} /><Control label="Reset" onPress={() => { reset(); setFilter(null); setFocusOnly(false); }} />{actions}</View>
+      <View style={[styles.controls, thumb.row]}><Control label={focusOnly ? "Focus" : "All"} selected={focusOnly} onPress={() => setFocusOnly(!focusOnly)} /><Control label="Reset" onPress={() => { reset(); setFilter(null); setFocusOnly(false); }} />{actions}</View>
     </View>
   </View>;
 }
