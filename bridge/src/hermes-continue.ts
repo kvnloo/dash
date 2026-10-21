@@ -1,27 +1,67 @@
+import type { OwnerHosting } from "./hermes-gateway-host";
 import type { LiveOwner } from "./hermes-owner";
 import { surfaceLabel } from "./hermes-owner";
 import type { HermesApi } from "./hermes-sessions";
 
 /**
  * How Dash continues an existing Hermes session. This is the single seam for
- * continuation transports: z0bridge (Hermes ACP bridge, built separately) plugs
- * in here as another `HermesRoute` kind once it can take a live owner's turn
- * itself. Until then Dash never writes beside a live owner; it waits for the
- * owner to close (ordered handoff) and then uses Hermes's own transports:
+ * continuation transports (z0bridge, the host's Hermes ACP daemon, plugs in here too).
  *
- * 1. native API `/api/sessions/{id}/chat` when the profile has one (host-only key);
- * 2. otherwise Hermes's own ACP server (`hermes acp`, `session/load` + prompt)
- *    under that profile's HERMES_HOME. Never a second classic CLI `--resume`.
+ * Who holds the session decides when Dash sends (`planContinuation`):
+ *
+ * - nobody: send now;
+ * - a gateway-hosted session or owner (`live`): current Hermes runs CLI and TUI turns inside the
+ *   profile's gateway, and the terminal is one viewer of many. Dash sends now, into that
+ *   gateway, exactly as Desktop/TUI/ACP clients do: `prompt.submit` on the gateway's
+ *   durable FIFO, so an idle session runs it as the next turn and a running turn gets it
+ *   queued behind it. The CLI/TUI shows the turn because it watches the same session;
+ * - a standalone process that runs its own agent (`handoff`): Dash never writes beside
+ *   it; the reply waits for the owner to close (ordered handoff).
+ *
+ * Transports are Hermes's own:
+ * - `live`: Hermes's thin gateway client, `hermes chat --resume <id> --format stream-json`
+ *   (see src/hermes-live.ts). It follows only its own admission; the gateway's ACP
+ *   projection would also forward the terminal's own turns into Dash's reply;
+ * - otherwise the native API `/api/sessions/{id}/chat` when the profile has one (host-only key);
+ * - otherwise Hermes's ACP server (`hermes acp`, `session/load` + prompt) under that
+ *   profile's HERMES_HOME.
+ * Never a classic CLI that runs its own agent beside a live owner.
  */
 export type HermesRoute =
+  | { kind: "live"; argv: string[]; home: string }
   | { kind: "api"; api: HermesApi }
   | { kind: "acp"; command: string[]; home: string }
   | { kind: "unavailable"; reason: string };
 
-export function chooseHermesRoute(input: { api?: HermesApi; home?: string; acpCommand: string[] | null }): HermesRoute {
+export function chooseHermesRoute(input: { api?: HermesApi; home?: string; acpCommand: string[] | null; liveArgv?: string[] | null }): HermesRoute {
+  // Into a live gateway-hosted session: Hermes's own thin client on the gateway FIFO the owner's
+  // terminal uses. Nothing else is tried for it: a missing `hermes` is reported, not worked around.
+  if (input.liveArgv !== undefined) {
+    return input.liveArgv && input.home ? { kind: "live", argv: input.liveArgv, home: input.home }
+      : { kind: "unavailable", reason: "The session is open on the host and the hermes command is not installed for Dash. Nothing was sent." };
+  }
   if (input.api) return { kind: "api", api: input.api };
   if (input.acpCommand && input.home) return { kind: "acp", command: input.acpCommand, home: input.home };
   return { kind: "unavailable", reason: "Hermes ACP is not installed on this host and the profile has no native API. Nothing was sent." };
+}
+
+export type ContinuationPlan =
+  | { kind: "free" }
+  | { kind: "live"; owner?: LiveOwner }
+  | { kind: "handoff"; owner: LiveOwner };
+
+/**
+ * When and where a Dash reply is sent. `gatewayHosted`: the session runs in its profile's gateway
+ * (a TUI or Desktop showing it writes no lease, so this is checked even with no owner).
+ */
+export function planContinuation(owner: LiveOwner | undefined, hosting: (owner: LiveOwner) => OwnerHosting, gatewayHosted: boolean): ContinuationPlan {
+  if (owner) return hosting(owner) === "gateway" ? { kind: "live", owner } : { kind: "handoff", owner };
+  return gatewayHosted ? { kind: "live" } : { kind: "free" };
+}
+
+/** Status for a reply sent into a session another surface has open through the same gateway. */
+export function liveText(surface: string, host: string): string {
+  return `Open in ${surfaceLabel(surface)} on ${host} · sending into the live session`;
 }
 
 export type HandoffState = "queued" | "sending";
