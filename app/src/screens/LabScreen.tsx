@@ -1,3 +1,4 @@
+import { fade } from "../motion";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
@@ -168,7 +169,7 @@ function PickBar({ letter, name, picked, onPick, stacked = false }: { letter: st
     <View style={[styles.pickBar, stacked && styles.pickStacked]}>
       <Text style={styles.pickName} numberOfLines={1}><Text style={styles.letter}>{letter}</Text> {name}</Text>
       <PressScale onPress={onPick} scaleTo={0.9} style={[styles.pick, picked && styles.pickOn]} accessibilityRole="button" accessibilityLabel={`Pick ${name}`} accessibilityState={{ selected: picked }}>
-        {picked ? <Animated.Text entering={FadeIn.duration(140)} style={[styles.pickT, { color: colors.bg }]}>Picked</Animated.Text> : <Text style={styles.pickT}>Pick</Text>}
+        {picked ? <Animated.Text entering={FadeIn.duration(fade.duration)} style={[styles.pickT, { color: colors.bg }]}>Picked</Animated.Text> : <Text style={styles.pickT}>Pick</Text>}
       </PressScale>
     </View>
   );

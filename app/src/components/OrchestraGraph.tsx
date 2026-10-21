@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withRepeat, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { cancelAnimation, ReduceMotion, useAnimatedProps, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import Svg, { Circle, Line } from "react-native-svg";
+import { ambient } from "../motion-ambient";
+import { snappy } from "../motion";
 import { haptic } from "../haptics";
 import { useHandedness } from "../lib/useHandedness";
 import { colors, controlMin, radius, space, type } from "../theme";
@@ -12,7 +14,7 @@ import { PressScale } from "./PressScale";
 
 const ALine = Animated.createAnimatedComponent(Line);
 const ACircle = Animated.createAnimatedComponent(Circle);
-const spring = { damping: 22, stiffness: 160, reduceMotion: ReduceMotion.System };
+const spring = { ...snappy, reduceMotion: ReduceMotion.System };
 const kindColor: Record<MapKind, string> = { chat: colors.gold, subagent: colors.orchestraSubagent, repo: colors.gold, host: colors.textMuted };
 const stateColor = { idle: colors.textMuted, live: colors.information, "needs-you": colors.warn, failing: colors.danger };
 const relationColor: Record<MapRelation, string> = { delegated: colors.gold, touched: colors.information, hosted: colors.textFaint, workspace: colors.provenance };
@@ -23,13 +25,13 @@ function legendColor(kind: MapKind | MapRelation): string {
 }
 
 function MapLink({ edge, a, b, reduced, dim }: { edge: MapEdge; a: Point; b: Point; reduced: boolean; dim: boolean }) {
-  const x1 = useDerivedValue(() => withSpring(a.x, spring), [a.x]);
-  const y1 = useDerivedValue(() => withSpring(a.y, spring), [a.y]);
-  const x2 = useDerivedValue(() => withSpring(b.x, spring), [b.x]);
-  const y2 = useDerivedValue(() => withSpring(b.y, spring), [b.y]);
+  const x1 = useDerivedValue(() => withTiming(a.x, spring), [a.x]);
+  const y1 = useDerivedValue(() => withTiming(a.y, spring), [a.y]);
+  const x2 = useDerivedValue(() => withTiming(b.x, spring), [b.x]);
+  const y2 = useDerivedValue(() => withTiming(b.y, spring), [b.y]);
   const flow = useSharedValue(0);
-  useEffect(() => {
-    if (edge.active && edge.relation === "delegated" && !reduced) flow.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.linear, reduceMotion: ReduceMotion.System }), -1, false);
+  useLayoutEffect(() => {
+    if (edge.active && edge.relation === "delegated" && !reduced) flow.value = withRepeat(withTiming(1, ambient(2400, true)), -1, false);
     else { cancelAnimation(flow); flow.value = 0; }
     return () => cancelAnimation(flow);
   }, [edge.active, edge.relation, reduced, flow]);
@@ -46,13 +48,13 @@ function MapDot({ node, point, selected, dim, reduced, onPress }: { node: MapNod
   const y = useSharedValue(point.y);
   const appear = useSharedValue(reduced ? 1 : 0.2);
   const pulse = useSharedValue(1);
-  useEffect(() => {
-    x.value = withSpring(point.x, spring);
-    y.value = withSpring(point.y, spring);
-    appear.value = withSpring(1, spring);
+  useLayoutEffect(() => {
+    x.value = withTiming(point.x, spring);
+    y.value = withTiming(point.y, spring);
+    appear.value = withTiming(1, spring);
   }, [point.x, point.y, x, y, appear]);
-  useEffect(() => {
-    if (node.state === "live" && !reduced) pulse.value = withRepeat(withTiming(1.2, { duration: 1700, reduceMotion: ReduceMotion.System }), -1, true);
+  useLayoutEffect(() => {
+    if (node.state === "live" && !reduced) pulse.value = withRepeat(withTiming(1.2, ambient(1700)), -1, true);
     else { cancelAnimation(pulse); pulse.value = 1; }
     return () => cancelAnimation(pulse);
   }, [node.state, reduced, pulse]);
@@ -91,21 +93,21 @@ export function OrchestraGraph({ graph, width, children, actions, fixture = fals
   const savedX = useSharedValue(0);
   const savedY = useSharedValue(0);
   const sheet = useSharedValue(200);
-  useEffect(() => { sheet.value = withSpring(selected ? 0 : 200, spring); }, [selected, sheet]);
+  useLayoutEffect(() => { sheet.value = withTiming(selected ? 0 : 200, spring); }, [selected, sheet]);
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: sheet.value }] }));
-  const pan = Gesture.Pan().minDistance(10).onStart(() => { savedX.value = tx.value; savedY.value = ty.value; }).onUpdate(e => { tx.value = Math.max(-width, Math.min(width, savedX.value + e.translationX)); ty.value = Math.max(-height, Math.min(height, savedY.value + e.translationY)); });
-  const pinch = Gesture.Pinch().onStart(() => { savedScale.value = scale.value; }).onUpdate(e => { scale.value = Math.min(3, Math.max(0.7, savedScale.value * e.scale)); });
+  const pan = Gesture.Pan().minDistance(10).onStart(() => { cancelAnimation(tx); cancelAnimation(ty); savedX.value = tx.value; savedY.value = ty.value; }).onUpdate(e => { tx.value = Math.max(-width, Math.min(width, savedX.value + e.translationX)); ty.value = Math.max(-height, Math.min(height, savedY.value + e.translationY)); });
+  const pinch = Gesture.Pinch().onStart(() => { cancelAnimation(scale); savedScale.value = scale.value; }).onUpdate(e => { scale.value = Math.min(3, Math.max(0.7, savedScale.value * e.scale)); });
   const transform = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }, { translateY: ty.value }, { scale: scale.value }] }));
-  function reset() { scale.value = withSpring(1, spring); tx.value = withSpring(0, spring); ty.value = withSpring(0, spring); setFocusId(null); }
+  function reset() { scale.value = withTiming(1, spring); tx.value = withTiming(0, spring); ty.value = withTiming(0, spring); setFocusId(null); }
   function focus(node: MapNode) {
     haptic.select();
     if (focusId === node.id) { reset(); return; }
     setFocusId(node.id);
     const point = positions.get(node.id);
     if (!point) return;
-    scale.value = withSpring(1.35, spring);
-    tx.value = withSpring((width / 2 - point.x) * 1.35, spring);
-    ty.value = withSpring((height / 2 - point.y) * 1.35 - 35, spring);
+    scale.value = withTiming(1.35, spring);
+    tx.value = withTiming((width / 2 - point.x) * 1.35, spring);
+    ty.value = withTiming((height / 2 - point.y) * 1.35 - 35, spring);
   }
   return <View style={styles.root} testID="orchestra-graph">
     <View style={styles.status}><Text style={styles.hint}>{fixture ? "Fixture · not live" : "Tap to inspect · pinch & pan"}</Text><Text accessibilityLiveRegion="polite" style={styles.hint}>{projected.nodes.length} shown{filter && !filter.only ? ` · ${projected.nodes.filter(n => matchesFilter(n, graph, filter)).length} highlighted` : ""}</Text></View>
