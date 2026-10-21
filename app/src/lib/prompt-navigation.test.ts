@@ -4,7 +4,8 @@ import { promptAnchors, promptOffset, railTarget, followsLatest } from "./prompt
 test("prompt index maps to message index and measured offset, not estimated row height", () => {
   const anchors = promptAnchors([{ id: "u1", role: "user", text: "First" }, { id: "a1", role: "assistant", text: "Long answer" }, { id: "u2", role: "user", text: "Second" }]);
   expect(anchors.map(a => a.index)).toEqual([0, 2]);
-  expect(promptOffset(anchors, 1, i => ({ y: i === 2 ? 984 : 8 }))).toBe(984);
+  expect(promptOffset(anchors, 1, i => ({ y: i === 2 ? 984 : 8, isHeightMeasured: true }))).toBe(984);
+  expect(promptOffset(anchors, 1, i => ({ y: i * 90, isHeightMeasured: i > 0 }))).toBeNull();
   expect(promptOffset(anchors, 9, () => undefined)).toBeNull();
   expect(promptOffset(anchors, 0, () => undefined)).toBeNull();
 });
