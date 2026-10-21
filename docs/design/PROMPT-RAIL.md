@@ -41,7 +41,7 @@ Display-rate worklet selection; ordinal-change preview/haptics; memoized tick su
 
 Neutral done, red reported error, blue streaming and amber explicit waiting-for-approval/clarification status. Labels accompany colours. Historical question-ending answers get a tiny dot; diff-fence/PR references get a tiny diamond. Neither is a resolved-decision tracker or a count of applied changes.
 
-Popover: prompt first line, cached final-answer first-line excerpt (reasoning stripped), stored-answer character count, honestly labelled activity-update count, file references and PR when present. Jump, Copy, Open PR, Copy file path and Continue are contextual controls. Continue explicitly confirms draft replacement and sends nothing; it does not branch or rewind the session. Latest is always a separate 44px target. Mouse hover previews without navigation. Native selection haptics tick at crossed anchors; amber/red use an impact tick. Actual physical feedback remains unverified.
+Popover: prompt first line, cached final-answer first-line excerpt (reasoning stripped; explicit failures take precedence over partial success text), stored-answer character count, honestly labelled activity-update count, file references and PR when present. Jump, Copy, Open PR, Copy file path and Continue are contextual controls. Continue explicitly confirms draft replacement and sends nothing; it does not branch or rewind the session. Latest is always a separate 44px target. Mouse hover previews without navigation. Native selection haptics tick at crossed anchors; amber/red use an impact tick. Actual physical feedback remains unverified.
 
 ## Deliberately not faked
 

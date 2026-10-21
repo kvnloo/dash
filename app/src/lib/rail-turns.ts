@@ -32,6 +32,11 @@ export class RailSummaryCache {
   get(message: Message): string {
     const cached = this.entries.get(message);
     if (cached !== undefined) return cached;
+    if (message.role === "assistant" && message.state === "error") {
+      const failure = message.error?.trim().slice(0, 200) || "Turn failed; open transcript for details";
+      this.entries.set(message, failure);
+      return failure;
+    }
     const answer = splitThinking(message.text).text;
     const summary = answer.split("\n").map(line => line.replace(/^\s*[#>*-]+\s*/, "").trim()).find(Boolean)?.slice(0, 200) ?? "No result text yet";
     this.entries.set(message, summary);
@@ -51,7 +56,7 @@ export function railTurns(messages: readonly Message[]): RailTurn[] {
       if (reply) replies.push(reply);
     }
     const answer = replies.filter(m => m.role === "assistant").map(m => splitThinking(m.text).text).join("\n");
-    const last = replies.at(-1);
+    const last = replies.find(m => m.role === "assistant" && m.state === "error") ?? replies.at(-1);
     turns.push({ id: prompt.id, index, text: prompt.text || "Attached files",
       summary: last ? summaries.get(last) : "No result text yet",
       characters: answer.length, state: railState(replies),

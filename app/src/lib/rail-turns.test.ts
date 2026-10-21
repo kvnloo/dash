@@ -30,6 +30,11 @@ test("summary cache reads once per immutable message and invalidates new revisio
   expect(cache.get(reply("Updated"))).toBe("Updated");
   expect(cache.get(reply(""))).toBe("No result text yet");
   expect(cache.get(reply("x".repeat(201)))).toHaveLength(200);
+  expect(cache.get(reply("Tests passed", { state: "error", error: "  Build failed  " }))).toBe("Build failed");
+  const failure = reply("partial output", { state: "error" });
+  expect(cache.get(failure)).toBe("Turn failed; open transcript for details");
+  expect(cache.get(failure)).toBe("Turn failed; open transcript for details");
+  expect(railTurns([prompt, failure, reply("Later text")])[0]?.summary).toBe("Turn failed; open transcript for details");
 });
 test("turn metadata is scoped, deduplicated, and does not pretend activity equals tools", () => {
   const answer = "```diff\n+ fix\n```\n/home/user/file.ts /home/user/file.ts https://github.com/kvnloo/dash/pull/77\nWhich option?";
@@ -38,6 +43,7 @@ test("turn metadata is scoped, deduplicated, and does not pretend activity equal
   expect(turns[0]).toEqual({ id: "u", index: 1, text: "Fix\nDetails", summary: "```diff", characters: answer.length, state: "done", question: true, code: true, activityUpdates: 2, files: ["/home/user/file.ts"], pr: "https://github.com/kvnloo/dash/pull/77" });
   expect(turns[1]).toEqual({ id: "u2", index: 3, text: "Attached files", summary: "No result text yet", characters: 0, state: "done", question: false, code: false, activityUpdates: 0, files: [], pr: undefined });
   expect(railTurns([prompt, reply("No code", { status: "Read file" }), reply("Final")])[0]?.activityUpdates).toBe(1);
+  expect(railTurns([prompt, reply("First"), reply("Final")])[0]?.summary).toBe("Final");
   expect(railTurns([prompt, reply("No code")])[0]?.question).toBe(false);
   expect(railTurns([prompt, reply("No code")])[0]?.code).toBe(false);
 });
