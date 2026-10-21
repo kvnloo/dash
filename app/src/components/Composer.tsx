@@ -22,10 +22,13 @@ import { colors, fonts, glass, radius, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 import { PressScale } from "./PressScale";
 import { ComposerSuggestions } from "./ComposerSuggestions";
+import { composerMode, type SendMode } from "../lib/composer-mode";
+import { haptic } from "../haptics";
 
 interface Props {
   disabled: boolean;
   streaming: boolean;
+  steerBusy?: boolean;
   placeholder: string;
   initialText?: string;
   harness?: string;
@@ -33,15 +36,19 @@ interface Props {
   blurTarget?: RefObject<View | null>;
   /** Debug fixtures only: chips to show on first render. */
   initialAttachments?: DraftAttachment[];
-  onSend(text: string, attachments: ChatAttachment[]): void;
+  onSend(text: string, attachments: ChatAttachment[], mode?: SendMode): void;
   onStop(): void;
   onVoice(): void;
 }
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ disabled, streaming, placeholder, initialText, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice }: Props) {
+export const Composer = memo(function Composer({ disabled, streaming, steerBusy = false, placeholder, initialText, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice }: Props) {
   const thumb = useHandedness();
+  const [choice, setChoice] = useState<SendMode>("steer");
+  useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
+  const sendMode = composerMode(steerBusy, choice);
+  const switchMode = () => { setChoice(value => value === "steer" ? "queue" : "steer"); haptic.select(); };
   const [text, setText] = useState(initialText ?? "");
   const [drafts, setDrafts] = useState<DraftAttachment[]>(initialAttachments ?? []);
   const mounted = useRef(true);
@@ -101,8 +108,8 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
     const value = text.trim();
     setText("");
     setDrafts([]);
-    onSend(value, refs);
-  }, [canSend, drafts, text, onSend]);
+    onSend(value, refs, sendMode.mode);
+  }, [canSend, drafts, text, onSend, sendMode.mode]);
 
   return <View style={styles.wrap}><ComposerSuggestions text={text} harness={harness} cwd={cwd} onChange={setText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
     {drafts.length > 0 ? (
@@ -110,12 +117,14 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}
       </ScrollView>
     ) : null}
+    {steerBusy ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
     <View style={[styles.field, thumb.row]}>
       <TextInput style={styles.input} value={text} onChangeText={setText} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline={false} numberOfLines={1} keyboardAppearance="dark" autoCapitalize="sentences" onSubmitEditing={submit} accessibilityLabel="Message" />
       <View style={[styles.controls, thumb.row]}>
         <PressScale accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttach} disabled={disabled} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale>
         <PressScale accessibilityRole="button" accessibilityLabel="Voice input" accessibilityHint="Long press to switch thumb side" onLongPress={toggleHandedness} onPress={onVoice} style={styles.hit}><Feather name="mic" size={18} color={colors.textMuted} /></PressScale>
-        <PressScale accessibilityRole="button" accessibilityLabel={streaming ? "Stop" : "Send"} onPress={streaming ? onStop : submit} disabled={!streaming && !canSend} style={styles.hit}><View style={[styles.send, streaming && styles.stop, !streaming && !canSend && styles.disabled]}>{streaming ? <View style={styles.square} /> : <Feather name="arrow-up" size={20} color={colors.onAccent} />}</View></PressScale>
+        {streaming ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale> : null}
+        {steerBusy || !streaming ? <PressScale accessibilityRole="button" accessibilityLabel={sendMode.action} accessibilityHint={sendMode.label} onPress={submit} disabled={!canSend} style={styles.hit}><View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View></PressScale> : null}
       </View>
     </View>
   </GlassSurface></View>;
@@ -143,6 +152,8 @@ const styles = StyleSheet.create({
   field: { flexDirection: "row", alignItems: "center", minHeight: 60 },
   input: { flex: 1, minWidth: 0, ...type.body, color: colors.text, paddingLeft: 8, paddingVertical: 12 },
   controls: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
+  modeRow: { alignItems: "center", justifyContent: "space-between", paddingHorizontal: 8 },
+  modeToggle: { minHeight: 44, paddingHorizontal: 8 },
   hit: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   send: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.gold, alignItems: "center", justifyContent: "center" },
   stop: { backgroundColor: colors.text },

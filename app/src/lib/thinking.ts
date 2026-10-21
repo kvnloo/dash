@@ -14,7 +14,7 @@ const TOOL = /^Running ([\w.:-]+(?:, [\w.:-]+)*)/;
 export function messageThinking(message: AssistantMessage, opts: { liveText?: string; connection?: ConnectionStatus } = {}): Thinking {
   if (message.state !== "streaming" && message.state !== "pending") return { phase: "idle" };
   if (opts.connection === "offline") return { phase: "idle" };
-  if (message.state === "pending" || message.handoff === "queued") return { phase: "idle" };
+  if (message.state === "pending" || message.handoff === "queued" || message.delivery === "queued" || message.delivery === "steered") return { phase: "idle" };
   const tool = message.status ? TOOL.exec(message.status)?.[1] : undefined;
   if (tool) return { phase: "tool", tool };
   if (message.status && /^Waiting for (approval|clarification)|^Approval required|^Clarification required/i.test(message.status)) return { phase: "waiting-approval" };
@@ -27,7 +27,7 @@ export function messageThinking(message: AssistantMessage, opts: { liveText?: st
 export function conversationThinking(messages: Message[], connection?: ConnectionStatus): Thinking {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
-    if (message?.role === "assistant" && message.state === "streaming") return messageThinking(message, { connection });
+    if (message?.role === "assistant" && message.state === "streaming" && message.delivery !== "queued" && message.delivery !== "steered") return messageThinking(message, { connection });
   }
   return { phase: "idle" };
 }
