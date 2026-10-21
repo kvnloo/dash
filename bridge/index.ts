@@ -25,7 +25,8 @@ import {
   type TurnEvent,
 } from "../shared/protocol";
 import { claimSession, currentOrCreateSession, startBoundSession } from "./pair";
-import { bearerToken, isTailnetIPv4, loadBridgeSecrets, resolveBridgeHost, secretMatches } from "./src/bridge-security";
+import { isTailnetIPv4, loadBridgeSecrets, resolveBridgeHost } from "./src/bridge-security";
+import { BridgeAuth, configuredIdentity, type BridgePrincipal } from "./src/z0bridge-identity";
 import { createPairingHttpHandler } from "./src/pairing-http";
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
@@ -67,6 +68,8 @@ import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 type Socket = Bun.ServerWebSocket<SocketData>;
 
 interface SocketData {
+  principal: BridgePrincipal;
+  stopIdentityWatch?: () => void;
   /** Turn ids this socket is subscribed to. */
   turns: Set<string>;
   gateSend?: (message: GateServerMessage) => void;
@@ -612,9 +615,13 @@ const HOST = resolveBridgeHost({
   allowLoopback: process.env.DASH_ALLOW_LOOPBACK === "1",
 });
 const { token: TOKEN, bootstrapToken: BOOTSTRAP_TOKEN } = loadBridgeSecrets(process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash"));
+const bridgeAuth = new BridgeAuth(TOKEN, configuredIdentity(), process.env.DASH_LEGACY_TOKEN !== "0");
+const authorize = async (request: Request, queryLegacy = false) => Boolean(await bridgeAuth.authenticate(request, queryLegacy));
 let bridgeAddress = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${PORT}`;
 const handleHttp = createPairingHttpHandler({
   bootstrapToken: BOOTSTRAP_TOKEN,
+  authorize,
+  legacyEnabled: process.env.DASH_LEGACY_TOKEN !== "0",
   token: TOKEN,
   hostname: HOST_NAME,
   get address() { return bridgeAddress; },
@@ -634,6 +641,7 @@ const attachments = new AttachmentStore(process.env.DASH_ATTACHMENT_DIR?.trim() 
 const handleFiles = createFilesHttpHandler({
   token: TOKEN,
   store: attachments,
+  authorize,
   shareRoots: () => shareRoots(defaultShareDirs(DEFAULT_CWD, attachments.root, homedir()), process.env.DASH_SHARE_DIRS, homedir()),
   device: process.env.DASH_KDECONNECT_DEVICE,
   run: bunRun,
@@ -685,15 +693,17 @@ const server = Bun.serve<SocketData>({
       const http = await handleHttp(request, server.requestIP(request)?.address ?? null);
       return cors(http ?? new Response("not found", { status: 404 }));
     }
-    if (!secretMatches(bearerToken(request) ?? url.searchParams.get("token"), TOKEN)) {
+    const principal = await bridgeAuth.authenticate(request, true, true);
+    if (!principal) {
       return new Response("unauthorized", { status: 401 });
     }
-    if (server.upgrade(request, { data: { turns: new Set() } })) return;
+    if (server.upgrade(request, { data: { turns: new Set(), principal } })) return;
     return new Response("upgrade failed", { status: 400 });
   },
   websocket: {
     idleTimeout: 0,
     async open(ws) {
+      ws.data.stopIdentityWatch = bridgeAuth.identity?.watch(ws.data.principal, () => ws.close(1008, "Identity authorization expired or revoked"));
       log("ws.open", { remote: ws.remoteAddress });
       const harnesses = harnessList();
       sendTo(ws, {
@@ -706,6 +716,10 @@ const server = Bun.serve<SocketData>({
       });
     },
     async message(ws, raw) {
+      if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) {
+        ws.close(1008, "Identity authorization expired");
+        return;
+      }
       const message = parseClientMessage(parseJson(raw));
       if (!message) {
         log("ws.bad_message", { remote: ws.remoteAddress });
@@ -865,6 +879,7 @@ const server = Bun.serve<SocketData>({
       }
     },
     close(ws) {
+      ws.data.stopIdentityWatch?.();
       if (ws.data.gateSend) gate?.unsubscribe(ws.data.gateSend);
       detachSocket(ws.data.turns, (id) => turns.get(id), ws);
       for (const id of pruneStaleUtterances(utterances, Date.now())) {

@@ -1,6 +1,7 @@
 import { TurnPhase } from "./turn-phase";
 import { acpToolPhase } from "./acp/phase";
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { readLocalCredential } from "./z0bridge-identity";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentInfo, HistoryMessage } from "../../shared/protocol";
@@ -56,6 +57,12 @@ export class Z0BridgeHermes {
     if (this.options.client) return this.options.client;
     if (this.env.DASH_Z0BRIDGE === "0") return undefined;
     const base = loopback(this.env.DASH_Z0BRIDGE_URL || "http://127.0.0.1:4787");
+    // Explicit enrollment selection never falls back to the owner credential.
+    if (this.env.DASH_Z0BRIDGE_CREDENTIAL_FILE) {
+      const enrollment = readLocalCredential(this.env.DASH_Z0BRIDGE_CREDENTIAL_FILE, ["hermes:sessions.read", "hermes:turns"]);
+      if (!base || !enrollment) return undefined;
+      return new Z0BridgeClient({ baseUrl: base, token: enrollment.credential, fetch: this.options.fetch, timeoutMs: 4_000 });
+    }
     const path = z0bridgeTokenPath(this.env);
     if (!base || !existsSync(path)) return undefined;
     try {

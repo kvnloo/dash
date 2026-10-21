@@ -116,6 +116,14 @@ export function setConnection(patch: Partial<Connection>): void {
 }
 
 export async function forgetEverything(): Promise<void> {
+  const enrollment = store.get().settings?.identity;
+  if (enrollment) {
+    const { setSecret } = await import("../lib/secure");
+    const { identitySecretKey } = await import("../lib/identity-client");
+    await setSecret(identitySecretKey(enrollment.credentialId), "");
+    const { clearIdentityTokens } = await import("../lib/bridge-auth");
+    clearIdentityTokens();
+  }
   await AsyncStorage.multiRemove([KEYS.settings, KEYS.conversations, KEYS.activeId]);
   store.set((s) => ({
     ...s,

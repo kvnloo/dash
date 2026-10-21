@@ -277,7 +277,7 @@ describe("project agent actions", () => {
 
 describe("outbound target boundary", () => {
   test("voice rejection does not report an opened utterance", async () => {
-    mock.module("react-native", () => ({ AppState: { currentState: "active", addEventListener() { return { remove() {} }; } } }));
+    mock.module("react-native", () => ({ Platform: { OS: "android" }, AppState: { currentState: "active", addEventListener() { return { remove() {} }; } } }));
     const { sendVoiceBegin } = await import("../net/bridge");
     const c = app.createConversation("omp", { targetHostId: "gone", profileId: "agent" });
     const t = app.beginTurn(c.id, "");

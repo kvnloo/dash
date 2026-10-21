@@ -1,6 +1,10 @@
 import { parseChatAttachment, type ChatAttachment, type HarnessInfo, type HostInfo } from "../../shared/protocol";
 
+import { parseIdentityEnrollment, type IdentityEnrollment } from "./lib/identity-client";
+
 export interface Settings {
+  /** Opt-in metadata only; the credential is held separately in SecureStore. */
+  identity?: IdentityEnrollment;
   /** `host:port` of the bridge, no scheme. */
   address: string;
   token: string;
@@ -88,7 +92,10 @@ export function parseSettings(raw: unknown): Settings | null {
   if (typeof raw.address !== "string" || typeof raw.token !== "string" || typeof raw.harness !== "string") {
     return null;
   }
+  const identity = parseIdentityEnrollment(raw.identity);
+  if (raw.identity !== undefined && !identity) return null;
   return {
+    ...(identity ? { identity } : {}),
     address: raw.address,
     token: raw.token,
     harness: raw.harness,

@@ -7,7 +7,7 @@ export type RootStackParamList = {
   Voice: undefined;
   Approvals: undefined;
   ArtifactStage: { url: string; title?: string };
-  Pair: { address?: string; code?: string } | undefined;
+  Pair: { address?: string; code?: string; identityLink?: string } | undefined;
   Settings: { firstRun?: boolean } | undefined;
 };
 
