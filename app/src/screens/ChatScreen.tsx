@@ -5,7 +5,7 @@ import { Canvas } from "../components/Canvas";
 import { setThinkingSummaries } from "../store/app";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
@@ -43,10 +43,10 @@ import {
 } from "../store/app";
 import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, glass, radius, space, type } from "../theme";
-import { conversationThinking, type Thinking } from "../lib/thinking";
-import { useSessionPhase } from "../lib/session-phase";
+import { useLiveThinking } from "../lib/live-thinking";
+import { mergeVoicePhase } from "../lib/orb-phase";
+import { useZ0LiveState } from "../lib/z0live-state";
 import { useSessionActivity } from "../lib/session-activity";
-import { replyText } from "../store/text";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
 import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
@@ -125,27 +125,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     if (conversation) { haptic.tap(); sendLiveTurn(conversation.id, text); }
   }, [conversation]);
 
-  const streamingMessage = useMemo(() => {
-    return messages.find((m) => m.role === "assistant" && m.state === "streaming");
-  }, [messages]);
-
-  const replyId = streamingMessage?.role === "assistant" ? streamingMessage.turnId : "";
-  const subscribeText = useCallback((notify: () => void) => replyText.subscribe(replyId, notify), [replyId]);
-  const hasText = useCallback(() => Boolean(replyText.get(replyId)), [replyId]);
-  // Header needs only the first-text edge, not a whole-screen render for every token.
-  const liveText = useSyncExternalStore(subscribeText, hasText, hasText);
+  const { thinking, caption, external, streamingMessage } = useLiveThinking(conversation);
   useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
-  const observed = useSessionPhase(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
   const workers = useSessionWorkers(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
   const [chatOptions, setChatOptions] = useState(false);
-  const localThinking = conversationThinking(messages, connection.status);
-  const thinking: Thinking = !online ? { phase: "idle" } : localThinking.phase !== "idle"
-    ? (localThinking.phase === "thinking" && liveText && !(streamingMessage?.role === "assistant" && streamingMessage.status) ? { phase: "streaming" } : localThinking)
-    : observed?.observed ? observed : { phase: "idle" };
-  const external = online && localThinking.phase === "idle" && observed?.observed && observed.phase !== "idle" ? observed : undefined;
   const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
-  const observationUnavailable = online && harnessId === "hermes" && Boolean(conversation?.sessionId) && !observed?.observed;
-  const caption = thinking.phase === "tool" ? `working · ${thinking.tool}` : thinking.phase === "waiting-approval" ? "waiting for approval or clarification" : thinking.phase === "idle" ? (!online ? "offline" : observationUnavailable ? "status unavailable" : "idle") : "working";
+  const callFixture = debugUi.use((s) => s.z0liveFixture ?? null);
+  const call = useZ0LiveState(settings, online && callFixture === null, 3000);
+  const liveCall = callFixture ?? call;
+  const voiceCall = liveCall?.live ? mergeVoicePhase(liveCall, thinking) : undefined;
 
   const sendTurn = useCallback(
     (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId), mode: SendMode = "queue") => {
@@ -348,6 +336,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onSend={liveOn ? onLiveSend : onSend}
           onStop={onStop}
           onVoice={() => navigation.navigate("Voice")}
+          voiceCall={voiceCall}
         />
       </KeyboardDock>
       <HarnessPicker

@@ -30,6 +30,9 @@ export const TARGETS: readonly Target[] = [
   { file: "app/src/components/bridge-pull.ts", tests: ["app/src/components/bridge-pull.test.ts"] },
   { file: "app/src/motion.ts", tests: ["app/src/components/motion.test.ts"] },
   { file: "shared/protocol.ts", tests: ["shared/protocol.test.ts", "shared/protocol-boundary.test.ts", "shared/protocol-attachments.test.ts", "shared/reply-parts.test.ts", "bridge/src/thinking-summary.test.ts"] },
+  { file: "shared/z0live-state.ts", tests: ["bridge/src/z0live-state.test.ts"] },
+  { file: "bridge/src/z0live-state.ts", tests: ["bridge/src/z0live-state.test.ts"] },
+  { file: "app/src/lib/orb-phase.ts", tests: ["app/src/lib/orb-phase.test.ts"] },
   { file: "bridge/src/roster.ts", tests: ["bridge/src/roster.test.ts", "bridge/src/roster-boundary.test.ts"] },
 ];
 

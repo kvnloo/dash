@@ -1,6 +1,7 @@
 import type { DraftAttachment } from "../lib/attachments";
 import type { RootStackParamList } from "../navigation";
 import type { DebugSeedVariant } from "./seed";
+import type { Z0LiveState } from "../../../shared/z0live-state";
 
 export type DebugScenarioId =
   | "main"
@@ -12,6 +13,9 @@ export type DebugScenarioId =
   | "orchestra-motion"
   | "chat"
   | "voice"
+  | "voice-listening"
+  | "voice-speaking"
+  | "voice-tool"
   | "approvals"
   | "main-files"
   | "ux-long"
@@ -35,6 +39,7 @@ export interface DebugScenario {
     chatHarnessPickerOpen?: boolean;
     activeConversationId?: string;
     chatComposerAttachments?: DraftAttachment[];
+    z0liveFixture?: Z0LiveState;
   };
 }
 
@@ -45,6 +50,9 @@ export const DEBUG_SCENARIOS: Record<DebugScenarioId, DebugScenario> = {
   "main-orchestra": { id: "main-orchestra", label: "Orchestra", seed: "paired", route: { name: "Main" }, ui: { mainSearchQuery: "", mainTabIndex: 2 } },
   chat: { id: "chat", label: "Chat", seed: "paired", route: { name: "Chat" }, ui: { activeConversationId: "demo-omp" } },
   voice: { id: "voice", label: "Voice — microphone off", seed: "paired", route: { name: "Voice" } },
+  "voice-listening": { id: "voice-listening", label: "Voice — live call listening", seed: "paired", route: { name: "Voice" }, ui: { z0liveFixture: { live: true, sessionId: "fixture", phase: "listening", muted: false, updated: 0, transcript: [{ role: "user", text: "Can you check whether the gesture recording change went through?" }, { role: "assistant", text: "Yes, it went to the Debug Hermes session. Want me to send it again?" }] } } },
+  "voice-speaking": { id: "voice-speaking", label: "Voice — live call speaking", seed: "paired", route: { name: "Voice" }, ui: { z0liveFixture: { live: true, sessionId: "fixture", phase: "speaking", muted: false, updated: 0, transcript: [{ role: "user", text: "Send it again and ask for an ETA." }, { role: "assistant", text: "Sent. I asked Hermes for an ETA and will tell you when it replies." }] } } },
+  "voice-tool": { id: "voice-tool", label: "Voice — live call running a tool", seed: "paired", route: { name: "Voice" }, ui: { z0liveFixture: { live: true, sessionId: "fixture", phase: "tool", tool: "ask_z0", muted: false, updated: 0, transcript: [{ role: "assistant", text: "Checking." }, { role: "user", text: "What changed in Dash today?" }] } } },
   approvals: { id: "approvals", label: "Approvals — dry-run fixtures", seed: "paired", route: { name: "Approvals" } },
   main: {
     id: "main",

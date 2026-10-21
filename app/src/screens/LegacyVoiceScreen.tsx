@@ -5,8 +5,7 @@ import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Canvas } from "../components/Canvas";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { VoiceOrb } from "../components/VoiceOrb";
-import { presetForHarness } from "../components/orb-html";
+import { AgentOrb } from "../components/AgentOrb";
 import { haptic } from "../haptics";
 import { ReplySpeaker } from "../lib/speak";
 import { VoiceSession, type Recorder, type VoicePhase } from "../lib/voice-session";
@@ -173,7 +172,7 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
       <Canvas /><ScreenHeader title="Voice" onBack={() => screenBack(navigation)} />
 
       <View style={styles.stage}>
-        <VoiceOrb preset={presetForHarness(harness)} phase={voiceOrbPhase(phase, started, error)} size={190} />
+        <AgentOrb size="hero" thinking={{ phase: voiceOrbPhase(phase, started, error) }} label={`Legacy voice ${voiceOrbPhase(phase, started, error)}`} />
       </View>
 
       <View style={styles.footer}>
