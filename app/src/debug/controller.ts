@@ -76,7 +76,7 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
       const summary = parseSummary(cmd.summary);
       if (!summary) return { ok: false };
       const active = store.get().activeId;
-      store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id !== active ? c : { ...c, messages: c.messages.map((m, i) => m.role === "assistant" && i === c.messages.length - 1 ? { ...m, summaries: [summary] } : m) }) }));
+      store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id !== active ? c : { ...c, messages: c.messages.map((m, i) => m.role === "assistant" && i === c.messages.length - 1 ? { ...m, summaries: [...(m.summaries ?? []).filter(item => item.blockId !== summary.blockId), summary] } : m) }) }));
       return { ok: true, fixture: true };
     }
     case "uxOutput": {

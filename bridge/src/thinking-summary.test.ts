@@ -69,6 +69,9 @@ test("protocol summary fields are validated and old status remains compatible", 
   expect(parseServerMessage(event)).toEqual(event);
   for (const [key, value] of Object.entries({ blockId: "", kind: "other", text: "x".repeat(281), model: 1, durationMs: -1 })) expect(parseServerMessage({ ...event, summary: { ...event.summary, [key]: value } })).toBeNull();
   expect(parseServerMessage({ ...event, acp: {} })).toBeNull();
+  expect(parseServerMessage({ ...event, part: { kind: "reasoning", text: "both" } })).toBeNull();
+  expect(parseClientMessage({ type: "voice_begin", id: "v", harness: "omp", mime: "audio/m4a", summariesEnabled: true })).toMatchObject({ summariesEnabled: true });
+  expect(parseClientMessage({ type: "voice_begin", id: "v", harness: "omp", mime: "audio/m4a", summariesEnabled: "yes" })).toBeNull();
   expect(parseServerMessage({ type: "status", id: "t", seq: 1, text: "Thinking" })).not.toBeNull();
   expect(parseClientMessage({ type: "chat", id: "t", harness: "omp", text: "hi", summariesEnabled: true })).toMatchObject({ summariesEnabled: true });
   expect(parseClientMessage({ type: "chat", id: "t", harness: "omp", text: "hi", summariesEnabled: "yes" })).toBeNull();
