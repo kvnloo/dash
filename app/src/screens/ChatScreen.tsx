@@ -45,6 +45,7 @@ import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, glass, radius, space, type } from "../theme";
 import { conversationThinking, type Thinking } from "../lib/thinking";
 import { useSessionPhase } from "../lib/session-phase";
+import { useSessionActivity } from "../lib/session-activity";
 import { replyText } from "../store/text";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
@@ -132,6 +133,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const hasText = useCallback(() => Boolean(replyText.get(replyId)), [replyId]);
   // Header needs only the first-text edge, not a whole-screen render for every token.
   const liveText = useSyncExternalStore(subscribeText, hasText, hasText);
+  useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
   const observed = useSessionPhase(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
   const localThinking = conversationThinking(messages, connection.status);
   const thinking: Thinking = !online ? { phase: "idle" } : localThinking.phase !== "idle"

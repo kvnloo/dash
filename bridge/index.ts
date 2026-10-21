@@ -39,6 +39,8 @@ import { streamHermesSession } from "./src/hermes-stream";
 import { liveArgv } from "./src/hermes-live";
 import { sendGatewayMessage } from "./src/hermes-steer";
 import { sessionPhaseHttp } from "./src/hermes-phase";
+import { activityHttp } from "./src/hermes-activity";
+const nativeActivityHttp = activityHttp((profile, session) => hermesSessions.nativeActivity(profile, session));
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
 import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, liveText, planContinuation, type HandoffState } from "./src/hermes-continue";
 import type { LiveOwner } from "./src/hermes-owner";
@@ -714,7 +716,8 @@ const server = Bun.serve<SocketData>({
           response.headers.set("Access-Control-Allow-Origin", origin);
           response.headers.set("Vary", "Origin");
           response.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-          response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+          response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, If-None-Match");
+          response.headers.set("Access-Control-Expose-Headers", "ETag");
         }
         return response;
       };
@@ -725,6 +728,8 @@ const server = Bun.serve<SocketData>({
       if (models) return cors(models);
       const supervision = await handleSupervision(request);
       if (supervision) return cors(supervision);
+      const activity = nativeActivityHttp(request, await authorize(request));
+      if (activity) return cors(activity);
       const phase = sessionPhaseHttp(request, await authorize(request), (profile, session) => hermesSessions.phase(profile, session));
       if (phase) return cors(phase);
       const suggestions = await handleSuggestions(request);
