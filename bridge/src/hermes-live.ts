@@ -13,13 +13,17 @@
  * Only used when `ownerHosting` proved a gateway serves the session; a standalone owner still
  * gets the ordered handoff. The text goes on stdin, not argv.
  */
+import { TurnPhase } from "./turn-phase";
+
 export type LiveSink = { delta(text: string): void; status(text: string): void };
 export type LiveResult = { text: string; sessionId: string; exitCode: number };
 
 export type LiveEvent =
   | { kind: "text"; text: string }
-  | { kind: "tool"; name: string }
-  | { kind: "tool-done" }
+  | { kind: "tool"; name: string; id?: string }
+  | { kind: "tool-done"; name?: string; id?: string }
+  | { kind: "thinking" }
+  | { kind: "waiting" }
   | { kind: "result"; exitCode: number; text: string; sessionId?: string; error?: string; replayGap?: boolean }
   | { kind: "other" };
 
@@ -38,8 +42,12 @@ export function parseLiveLine(line: string): LiveEvent {
   if (!record(value)) return { kind: "other" };
   switch (value.type) {
     case "text": return typeof value.text === "string" ? { kind: "text", text: value.text } : { kind: "other" };
-    case "tool_use": return { kind: "tool", name: typeof value.name === "string" && value.name ? value.name : "a tool" };
-    case "tool_result": return { kind: "tool-done" };
+    case "reasoning":
+    case "thinking": return { kind: "thinking" };
+    case "approval.request":
+    case "clarification.request": return { kind: "waiting" };
+    case "tool_use": return { kind: "tool", name: typeof value.name === "string" && value.name ? value.name : "a_tool", ...(typeof value.tool_call_id === "string" ? { id: value.tool_call_id } : {}) };
+    case "tool_result": return { kind: "tool-done", ...(typeof value.name === "string" ? { name: value.name } : {}), ...(typeof value.tool_call_id === "string" ? { id: value.tool_call_id } : {}) };
     case "result": {
       const exitCode = typeof value.exit_code === "number" ? value.exit_code : 1;
       const error = typeof value.error === "string" ? value.error : undefined;
@@ -93,6 +101,8 @@ export async function sendIntoLiveSession(options: {
   const child = (options.spawn ?? bunSpawn)(options.argv, { cwd: options.cwd, env });
   child.stdin.write(options.text);
   child.stdin.end();
+  const phase = new TurnPhase(text => options.sink.status(text));
+  phase.thinking();
   let streamed = "";
   let result: Extract<LiveEvent, { kind: "result" }> | undefined;
   let stderrTail = "";
@@ -106,9 +116,11 @@ export async function sendIntoLiveSession(options: {
     await Promise.all([
       readLines(child.stdout, line => {
         const event = parseLiveLine(line);
-        if (event.kind === "text") { if (event.text) { streamed += event.text; options.sink.delta(event.text); } }
-        else if (event.kind === "tool") options.sink.status(`Running ${event.name}`);
-        else if (event.kind === "tool-done") options.sink.status("");
+        if (event.kind === "text") { if (event.text) { phase.text(); streamed += event.text; options.sink.delta(event.text); } }
+        else if (event.kind === "tool") phase.start(event.name, event.id);
+        else if (event.kind === "tool-done") phase.complete(event.id, event.name);
+        else if (event.kind === "thinking") phase.thinking();
+        else if (event.kind === "waiting") phase.waiting();
         else if (event.kind === "result") result = event;
       }),
       readLines(child.stderr, line => { if (line.trim()) stderrTail = line.trim().slice(0, 240); }),

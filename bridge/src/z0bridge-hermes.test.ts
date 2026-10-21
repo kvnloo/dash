@@ -99,7 +99,7 @@ test("continue streams deltas and tool status, queues behind live owners by defa
   expect(outcome).toEqual({ exitCode: 0 });
   expect(out.text).toBe("pong");
   expect(out.sessions).toEqual(["c1"]);
-  expect(out.statuses.find(([t]) => t === "read_file")?.[1]).toMatchObject({ sessionId: "c1", update: { toolCallId: "t1", status: "completed" } });
+  expect(out.statuses.find(([t]) => t === "Thinking")?.[1]).toMatchObject({ sessionId: "c1", update: { toolCallId: "t1", status: "completed" } });
   expect(seen.find(s => s.path.endsWith("/turns"))?.body).toEqual({ text: "hello", onLive: "queue" });
 });
 

@@ -1,3 +1,5 @@
+import { TurnPhase } from "./turn-phase";
+import { acpToolPhase } from "./acp/phase";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -126,6 +128,8 @@ export class Z0BridgeHermes {
     sink.session(input.sessionId);
     const cancel = () => { void client.cancelTurn(started.turnId).catch(() => {}); };
     signal.addEventListener("abort", cancel, { once: true });
+    let phaseUpdate: Record<string, unknown> | undefined;
+    const phase = new TurnPhase(text => sink.status(text, phaseUpdate ? { sessionId: input.sessionId, update: phaseUpdate } : undefined));
     let after = 0;
     try {
       // Reconnect the stream (never the turn) a few times if the SSE connection drops.
@@ -134,10 +138,12 @@ export class Z0BridgeHermes {
           for await (const event of client.events(started.turnId, { after })) {
             after = event.seq;
             switch (event.type) {
-              case "delta": sink.delta(event.text); break;
+              case "delta": phase.text(); sink.delta(event.text); break;
               case "status": sink.status(event.text === "running" || event.text === "starting" ? "" : event.text); break;
               case "tool":
-                sink.status(event.title ?? `Tool ${event.status ?? "update"}`, { sessionId: input.sessionId, update: { sessionUpdate: "tool_call_update", toolCallId: event.toolCallId, title: event.title, status: event.status, kind: event.kind } });
+                phaseUpdate = { sessionUpdate: "tool_call_update", toolCallId: event.toolCallId, title: event.title, status: event.status, kind: event.kind };
+                acpToolPhase(phase, phaseUpdate);
+                phaseUpdate = undefined;
                 break;
               case "done": return event.stopReason === "cancelled" ? { exitCode: "cancelled" } : { exitCode: 0 };
               case "error": return { exitCode: 1, message: event.message };

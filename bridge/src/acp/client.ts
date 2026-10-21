@@ -1,3 +1,5 @@
+import { TurnPhase } from "../turn-phase";
+import { acpToolPhase } from "./phase";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -45,6 +47,8 @@ export class AcpClient {
   private sequence = 0;
   private sessionId?: string;
   private prompting = false;
+  private phaseUpdate?: Record<string, unknown>;
+  private thinking = new TurnPhase(text => this.options.sink.status(text, this.phaseUpdate && this.sessionId ? { sessionId: this.sessionId, update: this.phaseUpdate } : undefined));
   private used = false;
   private failure?: Error;
   private timer: ReturnType<typeof setTimeout>;
@@ -137,7 +141,7 @@ export class AcpClient {
       if (message.id !== undefined) {
         if (message.method === "session/request_permission") {
           this.send({ jsonrpc: "2.0", id: message.id, result: { outcome: { outcome: "cancelled" } } });
-          this.options.sink.status("Permission denied by bridge policy");
+          this.options.sink.status("Thinking");
         } else {
           this.send({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Client capability unavailable" } });
         }
@@ -148,13 +152,16 @@ export class AcpClient {
         switch (update.sessionUpdate) {
           case "agent_message_chunk":
             if (record(update.content) && update.content.type === "text" && typeof update.content.text === "string") {
+              this.thinking.text();
               this.options.sink.delta(update.content.text);
             }
             break;
-          case "agent_thought_chunk": this.options.sink.status("Thinking"); break;
+          case "agent_thought_chunk": this.thinking.thinking(); break;
           case "tool_call":
           case "tool_call_update":
-            this.options.sink.status(typeof update.title === "string" ? update.title : `Tool ${String(update.status ?? "update")}`, { sessionId: this.sessionId, update });
+            this.phaseUpdate = update;
+            acpToolPhase(this.thinking, update);
+            this.phaseUpdate = undefined;
             break;
           case "plan": this.options.sink.status("Plan updated", { sessionId: this.sessionId, update }); break;
         }

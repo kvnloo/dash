@@ -80,7 +80,7 @@ test("canonical bridge auth, stdio response, replay and routing rejection work t
     expect(await connection.until(value => value.type === "done" && value.id === "turn")).toMatchObject({ exitCode: 0 });
     expect(connection.messages.find(value => value.type === "delta")).toMatchObject({ text: "DASH_ACP_OK" });
     expect(connection.messages.find(value => value.type === "session")).toMatchObject({ hostId: hostname(), transport: "acp", sessionId: "fixture-session" });
-    expect(connection.messages.find(value => value.type === "status" && value.text === "fixture tool")).toMatchObject({ acp: { sessionId: "fixture-session", update: { sessionUpdate: "tool_call", title: "fixture tool", status: "pending" } } });
+    expect(connection.messages.find(value => value.type === "status" && value.text === "Running fixture tool")).toMatchObject({ acp: { sessionId: "fixture-session", update: { sessionUpdate: "tool_call", title: "fixture tool", status: "pending" } } });
     connection.socket.close();
     connection = await connect(f.port, f.token);
     connection.send({ type: "attach", turns: [{ id: "turn", seq: 1 }] });
