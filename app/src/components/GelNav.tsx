@@ -1,3 +1,4 @@
+import { useHandedness } from "../lib/useHandedness";
 import { Feather } from "@expo/vector-icons";
 import { forwardRef, memo, useEffect, useImperativeHandle, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
@@ -63,6 +64,7 @@ export const AppNav = memo(
       progress?: SharedValue<number>;
     }
   >(function AppNav({ navigation, tab, onTab, progress: progressProp }, ref) {
+    const thumb = useHandedness();
     const internal = useSharedValue(clampProgress(tab));
     // The web pager reports no scroll progress, and writing the shared page progress there would
     // drive the page-body gel (FlashList then measures a stretched width). Web moves only its
@@ -132,7 +134,7 @@ export const AppNav = memo(
 
     return drag(
       <View style={styles.wrap} pointerEvents="box-none" collapsable={false}>
-        <View style={styles.row}>
+        <View style={[styles.row, thumb.row]}>
           <PressScale
             accessibilityRole="button"
             accessibilityLabel="Expand"

@@ -287,6 +287,35 @@ describe("project agent actions", () => {
   });
 });
 
+test("handedness hook reads the store, quick toggle persists, hydration restores", async () => {
+  const { createElement } = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { useHandedness, setHandedness, toggleHandedness } = await import("../lib/useHandedness");
+  function Probe() {
+    const thumb = useHandedness();
+    return createElement("span", null, `${thumb.preference}:${thumb.side}:${thumb.row.flexDirection}`);
+  }
+  const render = () => renderToStaticMarkup(createElement(Probe));
+  expect(render()).toContain("right:right:row");
+  setHandedness("left");
+  expect(app.store.get().settings).toBeNull(); // never fabricate pairing credentials
+  app.saveSettings({ address: "fixture:4747", token: "", harness: "hermes", inAppFeedback: false });
+  setHandedness("left");
+  expect(render()).toContain("left:left:row-reverse");
+  expect(app.store.get().settings?.inAppFeedback).toBe(false);
+  app.store.set(s => ({ ...s, settings: null }));
+  await app.hydrate();
+  expect(render()).toContain("left:left:row-reverse");
+  toggleHandedness();
+  expect(render()).toContain("right:right:row");
+  setHandedness("auto");
+  expect(render()).toContain("auto:right:row");
+  toggleHandedness();
+  expect(render()).toContain("left:left:row-reverse");
+  await app.hydrate();
+  expect(app.store.get().settings?.handedness).toBe("left");
+});
+
 describe("outbound target boundary", () => {
   test("voice rejection does not report an opened utterance", async () => {
     mock.module("react-native", () => ({ Platform: { OS: "android" }, AppState: { currentState: "active", addEventListener() { return { remove() {} }; } } }));

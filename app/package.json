@@ -50,6 +50,7 @@
   "devDependencies": {
     "@types/prismjs": "^1.26.6",
     "@types/react": "~19.2.2",
+    "@types/react-dom": "~19.2.3",
     "typescript": "~6.0.3"
   },
   "scripts": {

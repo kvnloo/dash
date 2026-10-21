@@ -1,3 +1,4 @@
+import { useHandedness } from "../lib/useHandedness";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -11,6 +12,7 @@ export function PromptRail({ anchors, following, live, onJump, onLatest }: {
   anchors: readonly PromptAnchor[]; following: boolean; live: boolean;
   onJump(prompt: number): void; onLatest(): void;
 }) {
+  const thumb = useHandedness();
   const [selected, setSelected] = useState<number | null>(null);
   const height = useSharedValue(240);
   const last = useSharedValue(-1);
@@ -41,8 +43,8 @@ export function PromptRail({ anchors, following, live, onJump, onLatest }: {
       .onFinalize(() => { last.set(-1); scheduleOnRN(clear); });
   }, [choose, clear, count, height, last]);
   if (!anchors.length) return null;
-  return <View style={styles.rail} pointerEvents="box-none">
-    {selected !== null ? <View pointerEvents="none" style={styles.preview}>
+  return <View style={[styles.rail, thumb.edge(0)]} pointerEvents="box-none">
+    {selected !== null ? <View pointerEvents="none" style={[styles.preview, thumb.edge(48)]}>
       <Text style={styles.previewLabel}>{selected === anchors.length ? "Latest reply" : `Prompt ${selected + 1} of ${anchors.length}`}</Text>
       <Text style={styles.previewText} numberOfLines={3}>{anchors[selected]?.text ?? "Follow new output"}</Text>
     </View> : null}
@@ -67,7 +69,7 @@ export function PromptRail({ anchors, following, live, onJump, onLatest }: {
   </View>;
 }
 const styles = StyleSheet.create({
-  rail: { position: "absolute", right: 0, top: "18%", bottom: "12%", width: 44, alignItems: "center" },
+  rail: { position: "absolute", top: "18%", bottom: "12%", width: 44, alignItems: "center" },
   ticks: { flex: 1, width: 44, paddingVertical: 8, justifyContent: "space-around" },
   slot: { flex: 1, justifyContent: "center", alignItems: "center" },
   tick: { width: 9, height: 2, backgroundColor: colors.textTertiary, borderRadius: 1 },
@@ -76,7 +78,7 @@ const styles = StyleSheet.create({
   arrow: { color: colors.text, fontSize: 22, lineHeight: 24 },
   following: { color: colors.gold },
   latestLabel: { color: colors.textMuted, fontSize: 9, lineHeight: 12 },
-  preview: { position: "absolute", right: 48, top: "35%", width: 238, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.hair, backgroundColor: colors.surfaceRaised },
+  preview: { position: "absolute", top: "35%", width: 238, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.hair, backgroundColor: colors.surfaceRaised },
   previewLabel: { ...type.small, color: colors.textMuted, marginBottom: 4 },
   previewText: { ...type.body, color: colors.text },
 });

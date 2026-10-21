@@ -1,3 +1,4 @@
+import { useHandedness } from "../lib/useHandedness";
 import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -57,6 +58,7 @@ function getItemType(item: Message): string {
 }
 
 export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
+  const thumb = useHandedness();
   const composerDraft = route.params?.draft;
   const insets = useSafeAreaInsets();
   const blurTarget = useRef<View>(null);
@@ -283,7 +285,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           }}
           scrollEventThrottle={16}
           onContentSizeChange={scrollToNewest}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, thumb.railPadding(44)]}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
@@ -340,7 +342,7 @@ const styles = StyleSheet.create({
   targetError: { color: colors.danger, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   handoffNote: { color: colors.textTertiary, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   body: { flex: 1 },
-  listContent: { paddingVertical: space.sm, paddingRight: 36 },
+  listContent: { paddingVertical: space.sm },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: "45%" },
   emptyTitle: { color: colors.text, ...type.title },
   emptySubtitle: { color: colors.textMuted, ...type.body, marginTop: 6 },

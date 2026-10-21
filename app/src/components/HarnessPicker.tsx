@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useHandedness } from "../lib/useHandedness";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { HarnessInfo } from "../../../shared/protocol";
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose }: Props) {
+  const thumb = useHandedness();
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
@@ -32,7 +34,7 @@ export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose 
                     onSelect(h.id);
                     onClose();
                   }}
-                  style={styles.row}
+                  style={[styles.row, thumb.row]}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active, disabled: !h.available }}
                 >
@@ -66,6 +68,7 @@ const styles = StyleSheet.create({
   label: { color: colors.gold, ...type.cardTitle, marginBottom: space.sm, marginLeft: space.sm },
   row: {
     flexDirection: "row",
+    gap: space.sm,
     alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: space.sm,

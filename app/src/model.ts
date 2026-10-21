@@ -2,7 +2,10 @@ import { parseChatAttachment, type ChatAttachment, type HarnessInfo, type HostIn
 
 import { parseIdentityEnrollment, type IdentityEnrollment } from "./lib/identity-client";
 
+import { parseHandedness, type Handedness } from "./lib/handedness";
+
 export interface Settings {
+  handedness?: Handedness;
   /** Opt-in metadata only; the credential is held separately in SecureStore. */
   identity?: IdentityEnrollment;
   /** `host:port` of the bridge, no scheme. */
@@ -103,6 +106,7 @@ export function parseSettings(raw: unknown): Settings | null {
     harness: raw.harness,
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
     inAppFeedback: raw.inAppFeedback !== false,
+    handedness: parseHandedness(raw.handedness),
   };
 }
 
