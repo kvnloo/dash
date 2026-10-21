@@ -293,7 +293,7 @@ function HoldToTalk(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  frame: { ...StyleSheet.absoluteFillObject, borderWidth: 2, borderColor: colors.accent, borderRadius: 2 },
+  frame: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderWidth: 2, borderColor: colors.accent, borderRadius: 2 },
   tray: { position: "absolute", left: space.xs, right: space.xs, padding: space.xs, gap: 2, borderRadius: radius.md, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.hair },
   toast: { bottom: 120 },
   row: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 2 },
