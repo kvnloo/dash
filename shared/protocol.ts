@@ -4,6 +4,8 @@
 
 import { isGateItem, parseGateDecision, type GateItem, type GateDecision } from "./gate";
 import { parseLiveClientMessage, parseLiveServerMessage, type LiveClientMessage, type LiveServerMessage } from "./live";
+import { parseReplyPart, parseReplyParts, type ReplyPart } from "./reply-parts";
+export type { ReplyPart } from "./reply-parts";
 export const PROTOCOL_VERSION = 1;
 
 export interface HarnessInfo {
@@ -135,6 +137,7 @@ export type ClientMessage =
   /** End of utterance: transcribe what arrived and start the turn. */
   | { type: "voice_commit"; id: string }
   | { type: "cancel"; id: string }
+  | { type: "tool_detail"; id: string; callId: string; messageId?: string; sessionId?: string; profileId?: string; hostId?: string }
   /**
    * Re-subscribe to turns that were in flight when the socket dropped.
    * `seq` is the last event sequence number the client has for that turn;
@@ -146,6 +149,7 @@ export type ClientMessage =
 
 /** One user or assistant turn from a harness session file. */
 export interface HistoryMessage {
+  parts?: ReplyPart[];
   id: string;
   role: "user" | "assistant";
   text: string;
@@ -174,7 +178,7 @@ export type TurnEvent =
   /** What the bridge heard for a spoken turn. Precedes the reply's deltas. */
   | { type: "transcript"; id: string; seq: number; text: string }
   | { type: "delta"; id: string; seq: number; text: string }
-  | { type: "status"; id: string; seq: number; text: string; acp?: AcpStatus; handoff?: HandoffInfo }
+  | { type: "status"; id: string; seq: number; text: string; part?: ReplyPart; acp?: AcpStatus; handoff?: HandoffInfo }
   | { type: "done"; id: string; seq: number; exitCode: number }
   | { type: "error"; id: string; seq: number; message: string };
 
@@ -241,7 +245,7 @@ function isHistoryMessage(value: unknown): value is HistoryMessage {
     str(value.id) &&
     (value.role === "user" || value.role === "assistant") &&
     str(value.text) &&
-    num(value.at)
+    num(value.at) && (value.parts === undefined || parseReplyParts(value.parts) !== undefined)
   );
 }
 
@@ -301,6 +305,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return str(raw.id) && str(raw.data) ? { type: "voice_chunk", id: raw.id, data: raw.data } : null;
     case "voice_commit":
       return str(raw.id) ? { type: "voice_commit", id: raw.id } : null;
+    case "tool_detail": return str(raw.id) && str(raw.callId) && optStr(raw.messageId) && optStr(raw.sessionId) && optStr(raw.profileId) && optStr(raw.hostId) ? { type: "tool_detail", id: raw.id, callId: raw.callId, ...(raw.messageId ? { messageId: raw.messageId } : {}), ...(raw.sessionId ? { sessionId: raw.sessionId } : {}), ...(raw.profileId ? { profileId: raw.profileId } : {}), ...(raw.hostId ? { hostId: raw.hostId } : {}) } : null;
     case "cancel":
       return str(raw.id) ? { type: "cancel", id: raw.id } : null;
     case "attach":
@@ -430,6 +435,10 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
         : null;
     case "status": {
       if (!str(raw.id) || !num(raw.seq) || !str(raw.text)) return null;
+      if (raw.part !== undefined) {
+        const part = parseReplyPart(raw.part);
+        return part && raw.acp === undefined && raw.handoff === undefined ? { type: "status", id: raw.id, seq: raw.seq, text: raw.text, part } : null;
+      }
       if (raw.handoff !== undefined) {
         const h = raw.handoff;
         if (!isRecord(h) || (h.state !== "queued" && h.state !== "sending") || !str(h.surface) || !str(h.host) || raw.acp !== undefined) return null;
