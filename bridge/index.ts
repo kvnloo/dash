@@ -686,6 +686,7 @@ const handleFiles = createFilesHttpHandler({
   device: process.env.DASH_KDECONNECT_DEVICE,
   run: bunRun,
   onEvent: log,
+  ...(speechAvailable().ok ? { transcribe } : {}),
 });
 
 const handleModels = createModelsHttpHandler({ authorize });
