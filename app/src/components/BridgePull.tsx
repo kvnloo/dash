@@ -64,7 +64,10 @@ function snapTo(progress: SharedValue<number>, next: 0 | 1, velocity: number) {
   "worklet";
   const distance = next - progress.value;
   const duration = navDuration(distance, velocity);
-  progress.value = withTiming(next, { duration, easing: t => navProgress(t, distance, velocity, duration), reduceMotion: ReduceMotion.System });
+  progress.value = withTiming(next, { duration, easing: (t: number) => {
+    "worklet";
+    return navProgress(t, distance, velocity, duration);
+  }, reduceMotion: ReduceMotion.System });
 }
 
 export function useBridgePullPan() {
