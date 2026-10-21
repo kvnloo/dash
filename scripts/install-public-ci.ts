@@ -12,8 +12,12 @@ try {
   const manifest = JSON.parse(originalManifest.toString());
   delete manifest.dependencies["@kvnloo/aodl-views"];
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  // Bun's text lock has one workspace declaration and one package record for
+  // this dependency. Keep every public resolution and integrity hash intact.
+  const publicLock = originalLock.toString().replace(/^.*"@kvnloo\/aodl-views":.*\n/gm, "");
+  writeFileSync(lockPath, publicLock);
   console.log("Public CI: private AODL renderer excluded; native/private-renderer coverage is not claimed.");
-  const install = Bun.spawnSync([process.execPath, "install", "--ignore-scripts"], { cwd: app, stdout: "inherit", stderr: "inherit" });
+  const install = Bun.spawnSync([process.execPath, "install", "--frozen-lockfile", "--ignore-scripts"], { cwd: app, stdout: "inherit", stderr: "inherit" });
   if (install.exitCode !== 0) process.exitCode = install.exitCode;
 } finally {
   writeFileSync(manifestPath, originalManifest);
