@@ -22,7 +22,7 @@ export function TileGestureProvider({ children }: { children: ReactNode }) {
   const style = useAnimatedStyle(() => ({ opacity: bloom.value, transform: [{ translateX: x.value - 140 }, { translateY: y.value - 140 }, { scale: 0.6 + bloom.value * 0.4 }] }));
   return <Wheel.Provider value={value}><View style={styles.root}>{children}
     {actions.length ? <Animated.View pointerEvents="none" style={[styles.wheel, style]} testID="radial-wheel">
-      <View style={styles.center}><Text style={styles.cancel}>Release here{ "\n" }to cancel</Text></View>
+      <View style={styles.center}><Text style={styles.cancel}>Cancel</Text></View>
       {actions.map((action, index) => <WheelLabel key={action.id} action={action} index={index} count={actions.length} left={thumb.isLeft} selected={selected} />)}
     </Animated.View> : null}
   </View></Wheel.Provider>;

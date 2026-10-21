@@ -12,7 +12,7 @@ export function NumberTicker({ value, style }: { value: number; style?: StylePro
   useEffect(() => { n.value = withTiming(value, { duration: reduced ? 0 : 500, easing: Easing.out(Easing.cubic) }); }, [n, reduced, value]);
   const props = useAnimatedProps(() => {
     const text = `${Math.round(n.value)}`;
-    return { text, value: text, defaultValue: text };
+    return { text, value: text };
   });
   const { typeScale } = useDensity();
   const flat = StyleSheet.flatten(style);
