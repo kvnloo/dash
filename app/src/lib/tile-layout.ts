@@ -14,6 +14,12 @@ export function componentSizing(density: Density, fontScale = 1) {
   };
 }
 
+/** Keep enough readable width for padding and large-type labels before choosing columns. */
+export function tileColumns(availableWidth: number, density: Density, fontScale = 1, gap = 8): number {
+  const minimum = density === "compact" ? 96 : density === "rich" ? 128 : 112;
+  return Math.max(1, Math.min(3, Math.floor((availableWidth + gap) / (minimum * Math.max(1, fontScale) + gap))));
+}
+
 export function radialCenter(x: number, y: number, width: number, height: number, radius = 140) {
   "worklet";
   const inset = radius + 12;
