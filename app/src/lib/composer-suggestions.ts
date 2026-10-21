@@ -6,11 +6,11 @@ export interface ComposerTrigger { prefix: "/" | "@"; query: string; start: numb
 export interface ComposerSuggestion { id: string; label: string; detail: string; insert: string }
 
 export function composerTrigger(text: string, cursor = text.length): ComposerTrigger | null {
-  const match = /(^|\s)([@/])([^\s@/]*)$/.exec(text.slice(0, cursor));
+  const match = /(^|\s)([@/])([^\s@]*)$/.exec(text.slice(0, cursor));
   if (!match || (match[2] !== "@" && match[2] !== "/")) return null;
   const start = match.index + (match[1]?.length ?? 0);
   // Slash commands belong at the start, not inside prose or paths.
-  if (match[2] === "/" && text.slice(0, start).trim()) return null;
+  if (match[2] === "/" && (text.slice(0, start).trim() || match[3]?.includes("/"))) return null;
   return { prefix: match[2], query: (match[3] ?? "").toLowerCase(), start, end: cursor };
 }
 

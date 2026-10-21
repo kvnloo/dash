@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   panel: { backgroundColor: colors.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: radius.md, padding: space.md, gap: space.sm },
   heading: { ...type.label, color: colors.gold },
   list: { maxHeight: 240 },
-  row: { minHeight: 48, justifyContent: "center", paddingVertical: space.xs },
+  row: { minHeight: 48, alignItems: "flex-start", justifyContent: "center", paddingVertical: space.xs },
   label: { ...type.body, color: colors.text },
   detail: { ...type.small, color: colors.textMuted },
   loading: { flexDirection: "row", alignItems: "center", gap: space.sm },

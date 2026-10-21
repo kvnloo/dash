@@ -7,6 +7,8 @@ describe("shared composer suggestions", () => {
     expect(composerTrigger("/")?.prefix).toBe("/");
     expect(composerTrigger("@")?.prefix).toBe("@");
     expect(composerTrigger("read @App")?.query).toBe("app");
+    expect(composerTrigger("@app/App")?.query).toBe("app/app");
+    expect(composerTrigger("/tmp/file")).toBeNull();
     expect(composerTrigger("read /tmp")).toBeNull();
     expect(composerTrigger("https://host/path")).toBeNull();
     expect(composerTrigger("/help ")).toBeNull();
