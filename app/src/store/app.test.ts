@@ -30,6 +30,27 @@ test("actual tool/thinking statuses survive completion and replay cannot duplica
   expect(reply).toMatchObject({ state: "done", status: undefined, activity: ["Read app/src/model.ts", "Checking the result"] });
 });
 
+test("interleaved reasoning/tools bypass conversation updates, dedupe replay and checkpoint on done", async () => {
+  const { partsFor } = await import("./text");
+  const chat = app.createConversation("hermes"); const turn = app.beginTurn(chat.id, "check");
+  const before = app.store.get();
+  let seq = 0;
+  for (const callId of ["a", "b", "c"]) app.applyTurnEvent({ type: "status", id: turn.turnId, seq: ++seq, text: "", part: { kind: "tool_start", callId, name: "terminal", summary: "sample", args: "{}" } });
+  for (let tick = 0; tick < 180; tick++) {
+    app.applyTurnEvent({ type: "status", id: turn.turnId, seq: ++seq, text: "", part: { kind: "reasoning", text: "." } });
+    for (const callId of ["a", "b", "c"]) app.applyTurnEvent({ type: "status", id: turn.turnId, seq: ++seq, text: "", part: { kind: "tool_output", callId, text: "x", truncated: false } });
+  }
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq, text: "", part: { kind: "reasoning", text: "REPLAY" } });
+  expect(app.store.get()).toBe(before);
+  expect(partsFor(turn.turnId)).toHaveLength(7);
+  expect(partsFor(turn.turnId).filter(p => p.kind === "tool_start")).toHaveLength(3);
+  expect(partsFor(turn.turnId).find(p => p.kind === "reasoning")).toMatchObject({ text: ".".repeat(180) });
+  app.applyDeltas(new Map([[turn.turnId, { seq: ++seq, text: "answer" }]]));
+  app.applyTurnEvent({ type: "done", id: turn.turnId, seq: ++seq, exitCode: 0 });
+  const reply = app.store.get().conversations.find(c => c.id === chat.id)?.messages.find(m => m.id === turn.messageId);
+  expect(reply).toMatchObject({ state: "done", text: "answer", parts: partsFor(turn.turnId) });
+});
+
 describe("host roster reconciliation", () => {
   const agent = { id: "hermes:session:clean:owner", name: "Debug Hermes crashing", kind: "hermes", status: "available" as const, sessionId: "owner", profileId: "clean", cwd: "/project", lastActivityAt: 1700000000000, messageCount: 3 };
   const host = { id: "groot", name: "groot", hostname: "groot", online: true, self: true, agents: [agent] };

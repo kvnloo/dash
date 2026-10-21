@@ -9,6 +9,9 @@
 // reconnect it sends `attach` with the last seq it saw and the bridge replays
 // the rest. Finished turns are kept for RETAIN_MS so late reattaches still work.
 
+import { ToolDetails } from "./src/tool-details";
+import { redact, statusUpdate } from "./src/reply-parts";
+import type { ReplyPart } from "../shared/protocol";
 import { GateService } from "./src/gate/service";
 import { GateStore } from "./src/gate/store";
 import type { GateServerMessage } from "../shared/protocol";
@@ -87,6 +90,14 @@ class Turn implements Sink {
   readonly events: TurnEvent[] = [];
   readonly listeners = new Set<Socket>();
   finished = false;
+
+  readonly details = new ToolDetails();
+  part(part: ReplyPart): void {
+    const preview = this.details.preview(part);
+    if (!preview) return;
+    this.flush();
+    this.emit({ type: "status", id: this.id, seq: 0, text: "", part: preview });
+  }
 
   private buffer = "";
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -409,7 +420,7 @@ class Turn implements Sink {
   status(text: string, acp?: AcpStatus): void {
     this.flush();
     if (text && this.textTail) this.breakPending = true;
-    this.emit({ type: "status", id: this.id, seq: 0, text, ...(acp ? { acp } : {}) });
+    this.emit({ type: "status", id: this.id, seq: 0, text: redact(text), ...(acp ? { acp: { sessionId: acp.sessionId, update: statusUpdate(acp.update) } } : {}) });
   }
 
   error(message: string): void {
@@ -837,6 +848,21 @@ const server = Bun.serve<SocketData>({
           if (voiceTurn) void runVoiceTurn(voiceTurn, pending);
           break;
         }
+        case "tool_detail": {
+          if (message.sessionId) {
+            if (!(await isSelfHost(message.hostId))) break;
+            const target = hermesSessions.target(message.profileId, message.sessionId);
+            const part = target ? hermesSessions.toolDetail(target.profile, message.sessionId, message.messageId ?? message.id, message.callId) : undefined;
+            if (part) sendTo(ws, { type: "status", id: message.id, seq: 0, text: "", part });
+            break;
+          }
+          const turn = turns.get(message.id);
+          // A detail request never grants a subscription to another socket's turn.
+          if (!turn || !ws.data.turns.has(message.id)) break;
+          const part = turn.details.get(message.callId);
+          if (part) sendTo(ws, { type: "status", id: turn.id, seq: turn.events.length, text: "", part });
+          break;
+        }
         case "cancel": {
           utterances.delete(message.id);
           turns.get(message.id)?.cancel();
@@ -858,7 +884,7 @@ const server = Bun.serve<SocketData>({
           if (message.harness === "hermes") {
             const target = hermesSessions.target(message.profileId, message.sessionId);
             const messages = (await isSelfHost(message.hostId)) && target
-              ? (await z0bridgeHermes.history(target.profile, message.sessionId)) ?? await hermesSessions.history(target.profile, message.sessionId) : [];
+              ? await hermesSessions.history(target.profile, message.sessionId) : [];
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: SELF.id(), profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages });
             break;
           }

@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { hostDisplayName } from "../../../shared/host-display";
+import { appendReplyPart, partsFor, replyParts } from "./text";
+import type { DetailMode } from "../lib/reply-details";
 import type { ChatAttachment, HistoryMessage, TurnEvent } from "../../../shared/protocol";
 import {
   newId,
@@ -56,7 +58,7 @@ function scheduleSave(): void {
     const { conversations, activeId } = store.get();
     const snapshots = conversations.map((c) => ({ ...c, messages: c.messages.map((m) =>
       m.role === "assistant" && m.state === "streaming"
-        ? { ...m, text: replyText.get(m.turnId) || m.text, seq: Math.max(m.seq, liveSequences.get(m.turnId) ?? 0) }
+        ? { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, seq: Math.max(m.seq, liveSequences.get(m.turnId) ?? 0) }
         : m,
     ) }));
     void AsyncStorage.multiSet([
@@ -163,6 +165,8 @@ export function applyLiveHistory(harness: string, sessionId: string, messages: H
   if (!conv) return;
   updateConversation(conv.id, (c) => hydrateLiveConversation(c, messages));
 }
+
+export function setDetailMode(id: string, detailMode: DetailMode): void { updateConversation(id, c => ({ ...c, detailMode })); }
 
 export function setActive(id: string | null): void {
   store.set((s) => ({ ...s, activeId: id }));
@@ -400,6 +404,16 @@ export function applyTurnEvent(
       updateMessage(where.conversationId, where.messageId, (m) => (event.seq <= m.seq ? m : { ...m, seq: event.seq }));
       return;
     case "status":
+      if (event.part) {
+        const message = store.get().conversations.find(c => c.id === where.conversationId)?.messages.find(m => m.id === where.messageId);
+        if (message?.role !== "assistant") return;
+        if (event.part.kind !== "tool_detail" && (message.state !== "streaming" || event.seq <= Math.max(message.seq, liveSequences.get(event.id) ?? 0))) return;
+        if (!replyParts.get(event.id) && message.parts) replyParts.set(event.id, JSON.stringify(message.parts));
+        appendReplyPart(event.id, event.part);
+        scheduleSave();
+        if (event.part.kind !== "tool_detail") liveSequences.set(event.id, event.seq);
+        return;
+      }
       updateMessage(where.conversationId, where.messageId, (m) =>
         event.seq <= m.seq || m.state !== "streaming" ? m : { ...m, status: event.text, activity: event.handoff ? m.activity : appendActivity(m.activity, event.text), seq: event.seq, handoff: event.handoff?.state },
       );
@@ -409,7 +423,7 @@ export function applyTurnEvent(
         if (event.seq <= m.seq || m.state === "interrupted") return m;
         const text = replyText.get(event.id) || m.text;
         const error = m.error ?? (event.exitCode !== 0 ? `Process exited with code ${event.exitCode}` : text ? undefined : "No response");
-        return { ...m, text, state: error ? "error" : "done", error, status: undefined, handoff: undefined, seq: event.seq };
+        return { ...m, text, parts: partsFor(event.id).length ? partsFor(event.id) : m.parts, state: error ? "error" : "done", error, status: undefined, handoff: undefined, seq: event.seq };
       });
       liveSequences.delete(event.id);
       notifyTurnSettled(where.conversationId);
@@ -417,6 +431,7 @@ export function applyTurnEvent(
     case "error":
       updateMessage(where.conversationId, where.messageId, (m) => m.state === "interrupted" ? m : ({
         ...m,
+        parts: partsFor(event.id).length ? partsFor(event.id) : m.parts,
         text: replyText.get(event.id) || m.text,
         state: "error",
         error: event.message,
@@ -467,7 +482,7 @@ export function stopConversation(conversationId: string, cancel: (turnId: string
       if (m.role !== "assistant" || (m.state !== "streaming" && m.state !== "pending")) return m;
       if (m.state === "streaming") running.push(m.turnId);
       liveSequences.delete(m.turnId);
-      return { ...m, text: replyText.get(m.turnId) || m.text, state: "interrupted", status: "Stopped" };
+      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", status: "Stopped" };
     }),
   }));
   while (dequeue(conversationId)) { /* Drain canceled turns before settlement listeners run. */ }
@@ -480,7 +495,7 @@ export function markTurnLost(turnId: string): void {
   const where = locateTurn(turnId);
   if (!where) return;
   updateMessage(where.conversationId, where.messageId, (m) =>
-    m.state === "streaming" ? { ...m, text: replyText.get(turnId) || m.text, state: "interrupted", status: undefined } : m,
+    m.state === "streaming" ? { ...m, parts: partsFor(turnId).length ? partsFor(turnId) : m.parts, text: replyText.get(turnId) || m.text, state: "interrupted", status: undefined } : m,
   );
   notifyTurnSettled(where.conversationId);
 }

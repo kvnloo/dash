@@ -1,4 +1,6 @@
-import { replyText } from "../store/text";
+import type { ReplyPart } from "../../../shared/protocol";
+import { applyDeltas, applyTurnEvent } from "../store/app";
+import { replyParts, replyText } from "../store/text";
 import type { ThinkingPhase } from "../lib/thinking";
 import type { RootStackParamList } from "../navigation";
 import { setActive, store } from "../store/app";
@@ -24,6 +26,7 @@ export type DebugCommand =
   | { action: "setConnection"; status: "online" | "offline" | "connecting" | "idle" }
   | { action: "setBridgePull"; open: boolean }
   | { action: "wait"; ms: number }
+  | { action: "replyFixture"; reset?: boolean; part?: ReplyPart; text?: string; seq: number }
   | { action: "uxOutput"; text: string }
   | { action: "genuiReply"; text: string }
   | { action: "listScenarios" };
@@ -65,6 +68,16 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
         { id: "genui-user", role: "user", text: "Show an inline UI · test fixture", at: 1 },
         { id: "genui-reply", role: "assistant", text: cmd.text.slice(0, 200000), at: 2, state: "done", turnId: "genui-turn", seq: 1 },
       ] }) }));
+      return { ok: true };
+    }
+    case "replyFixture": {
+      if (cmd.reset) {
+        replyText.clear("detail-fixture-turn"); replyParts.clear("detail-fixture-turn");
+        store.set(s => ({ ...s, activeId: "detail-fixture", conversations: [{ id: "detail-fixture", harness: "hermes", title: "Wrapped thinking & tools", createdAt: 1, updatedAt: 1, messages: [{ id: "detail-fixture-user", role: "user", text: "Check the streaming pipeline", at: 1 }, { id: "detail-fixture-answer", role: "assistant", text: "", at: 2, turnId: "detail-fixture-turn", state: "streaming", seq: 0 }] }] }));
+        debugResetTo("Chat", {}); flushPendingDebugNavigation();
+      }
+      if (cmd.part) applyTurnEvent({ type: "status", id: "detail-fixture-turn", seq: cmd.seq, text: "", part: cmd.part });
+      if (cmd.text) applyDeltas(new Map([["detail-fixture-turn", { seq: cmd.seq, text: cmd.text }]]));
       return { ok: true };
     }
     case "uxOutput": {

@@ -13,9 +13,11 @@
  * Only used when `ownerHosting` proved a gateway serves the session; a standalone owner still
  * gets the ordered handoff. The text goes on stdin, not argv.
  */
+import { PartEmitter, hermesParts } from "./reply-parts";
+import type { ReplyPart } from "../../shared/protocol";
 import { TurnPhase } from "./turn-phase";
 
-export type LiveSink = { delta(text: string): void; status(text: string): void };
+export type LiveSink = { part?(part: ReplyPart): void; delta(text: string): void; status(text: string): void };
 export type LiveResult = { text: string; sessionId: string; exitCode: number };
 
 export type LiveEvent =
@@ -103,6 +105,7 @@ export async function sendIntoLiveSession(options: {
   child.stdin.end();
   const phase = new TurnPhase(text => options.sink.status(text));
   phase.thinking();
+  const parts = new PartEmitter(part => options.sink.part?.(part));
   let streamed = "";
   let result: Extract<LiveEvent, { kind: "result" }> | undefined;
   let stderrTail = "";
@@ -117,6 +120,7 @@ export async function sendIntoLiveSession(options: {
   try {
     await Promise.all([
       readLines(child.stdout, line => {
+        try { hermesParts(JSON.parse(line), parts); } catch { /* non-JSON diagnostics */ }
         const event = parseLiveLine(line);
         if (event.kind === "text") { if (event.text) { phase.text(); streamed += event.text; options.sink.delta(event.text); } }
         else if (event.kind === "tool") phase.start(event.name, event.id);

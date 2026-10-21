@@ -3,6 +3,9 @@ import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { ToolDetails } from "./tool-details";
+import type { ReplyPart } from "../../shared/protocol";
+import { PartEmitter, hermesParts, redact, record as partRecord } from "./reply-parts";
 import type { AgentInfo, HistoryMessage } from "../../shared/protocol";
 import { parseHermesEnvFile, type EnvMap, type HermesFetch } from "./hermes-session";
 import { hostProcesses, ownerOf, readLiveOwners, surfaceLabel, type LiveOwner } from "./hermes-owner";
@@ -49,12 +52,30 @@ function toAgent(row: Row, profile: Profile, owner?: LiveOwner): AgentInfo | und
 }
 export function parseHermesHistory(rows: unknown): HistoryMessage[] {
   if (!Array.isArray(rows)) return [];
-  return rows.flatMap((row): HistoryMessage[] => {
-    if (!record(row) || (row.role !== "user" && row.role !== "assistant") || row.active === 0) return [];
+  const out: HistoryMessage[] = [];
+  let current: HistoryMessage | undefined;
+  const emitter = new PartEmitter(part => { if (current) (current.parts ??= []).push(part); });
+  for (const row of rows) {
+    if (!record(row) || row.active === 0) continue;
+    if (row.role === "tool") {
+      if (current && typeof row.tool_call_id === "string") hermesParts({ type: "tool_result", tool_call_id: row.tool_call_id, output: text(row.content), is_error: row.is_error === true }, emitter);
+      continue;
+    }
+    if ((row.role !== "user" && row.role !== "assistant") || (typeof row.id !== "string" && typeof row.id !== "number")) continue;
     const content = text(row.content);
-    if (!content.trim() || (typeof row.id !== "string" && typeof row.id !== "number")) return [];
-    return [{ id: String(row.id), role: row.role, text: content, at: stamp(row.timestamp) }];
-  });
+    if (row.role === "user") { current = undefined; if (content.trim()) out.push({ id: String(row.id), role: "user", text: content, at: stamp(row.timestamp) }); continue; }
+    if (current && !current.parts?.length) current = undefined;
+    if (!current) { current = { id: String(row.id), role: "assistant", text: "", at: stamp(row.timestamp) }; out.push(current); }
+    if (content) current.text += (current.text ? "\n\n" : "") + content;
+    emitter.reasoning(row.reasoning_content || row.reasoning);
+    let calls: unknown = row.tool_calls;
+    if (typeof calls === "string") try { calls = JSON.parse(calls); } catch { calls = []; }
+    if (Array.isArray(calls)) for (const call of calls) {
+      if (!partRecord(call) || !partRecord(call.function) || typeof call.id !== "string" || typeof call.function.name !== "string") continue;
+      emitter.start(call.id, call.function.name, call.function.arguments);
+    }
+  }
+  return out.filter(message => message.text.trim() || message.parts?.length).map(message => ({ ...message, text: redact(message.text) }));
 }
 function withDb<T>(profile: Profile, fn: (db: Database) => T): T | undefined {
   if (!existsSync(join(profile.home, "state.db"))) return undefined;
@@ -118,13 +139,17 @@ export function ownerSessionIds(db: Database, owner: LiveOwner): Set<string> {
 function localHistory(profile: Profile, id: string): HistoryMessage[] {
   return withDb(profile, db => {
     const args = [...lineageIds(db, id)];
-    const rows = db.query<Row, string[]>(`SELECT id,role,content,timestamp FROM messages WHERE session_id IN (${args.map(() => "?").join(",")})
-      AND active=1 AND role IN ('user','assistant') AND length(trim(coalesce(content,'')))>0 ORDER BY timestamp DESC,id DESC LIMIT 200`).all(...args);
+    const rows = db.query<Row, string[]>(`SELECT * FROM messages WHERE session_id IN (${args.map(() => "?").join(",")})
+      AND active=1 AND role IN ('user','assistant','tool') ORDER BY timestamp DESC,id DESC LIMIT 600`).all(...args);
     return parseHermesHistory(rows.reverse());
   }) ?? [];
 }
 function loopbackUrl(raw: string): string | undefined {
   try { const url = new URL(raw); return url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) && !url.username && !url.password && !url.search && !url.hash ? raw.replace(/\/+$/, "") : undefined; } catch { return undefined; }
+}
+
+function previewHistory(messages: HistoryMessage[]): HistoryMessage[] {
+  return messages.map(message => { const cache = new ToolDetails(); return { ...message, ...(message.parts ? { parts: message.parts.flatMap(part => { const preview = cache.preview(part); return preview ? [preview] : []; }) } : {}) }; });
 }
 
 export class HermesSessions {
@@ -208,11 +233,23 @@ export class HermesSessions {
     for (const agent of agents) this.known.add(agent.id);
     return agents;
   }
+  toolDetail(profileId: string, sessionId: string, messageId: string, callId: string): ReplyPart | undefined {
+    const profile = this.profiles(false).find(p => p.id === profileId);
+    if (!profile) return undefined;
+    const row = localSession(profile, sessionId);
+    if (!row || !visible(row)) return undefined;
+    const message = localHistory(profile, sessionId).find(message => message.id === messageId);
+    const cache = new ToolDetails();
+    for (const part of message?.parts ?? []) cache.preview(part);
+    return cache.get(callId);
+  }
   async history(profileId: string, sessionId: string): Promise<HistoryMessage[]> {
     const profile = this.profiles().find(p => p.id === profileId);
     if (!profile) return [];
     const row = localSession(profile, sessionId);
     if (row && !visible(row)) return [];
+    // Native rows retain reasoning/tool columns missing from older API projections.
+    if (row) { const native = localHistory(profile, sessionId); if (native.some(message => message.parts?.length)) return previewHistory(native); }
     try {
       if (profile.id !== "default" && row) {
         const identity = await this.get(profile, `/api/sessions/${encodeURIComponent(sessionId)}`);
@@ -224,8 +261,8 @@ export class HermesSessions {
       }
       const body = await this.get(profile, `/api/sessions/${encodeURIComponent(sessionId)}/messages?limit=200&order=latest`);
       if (!record(body) || !Array.isArray(body.data)) throw new Error("Invalid history");
-      return parseHermesHistory(body.data);
-    } catch { return row ? localHistory(profile, sessionId) : []; }
+      return previewHistory(parseHermesHistory(body.data));
+    } catch { return row ? previewHistory(localHistory(profile, sessionId)) : []; }
   }
   /**
    * A live CLI/TUI that holds this session (or any id in its compression lineage).

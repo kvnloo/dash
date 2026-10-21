@@ -1,3 +1,4 @@
+import { acpParts, PartEmitter } from "../reply-parts";
 import { TurnPhase } from "../turn-phase";
 import { acpToolPhase } from "./phase";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -49,6 +50,7 @@ export class AcpClient {
   private sessionId?: string;
   private prompting = false;
   private phaseUpdate?: Record<string, unknown>;
+  private parts = new PartEmitter(part => this.options.sink.part?.(part));
   private thinking = new TurnPhase(text => this.options.sink.status(text, this.phaseUpdate && this.sessionId ? { sessionId: this.sessionId, update: this.phaseUpdate } : undefined));
   private used = false;
   private catalogOnly = false;
@@ -165,6 +167,7 @@ export class AcpClient {
         }
         if (!this.prompting || !this.sessionId || params.sessionId !== this.sessionId || !record(params.update)) return;
         const update = params.update;
+        acpParts(update, this.parts);
         switch (update.sessionUpdate) {
           case "agent_message_chunk":
             if (record(update.content) && update.content.type === "text" && typeof update.content.text === "string") {
