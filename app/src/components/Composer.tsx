@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
 import { pickFiles, pickPhotos } from "../lib/attachment-picker";
@@ -29,6 +29,7 @@ interface Props {
   initialText?: string;
   harness?: string;
   cwd?: string;
+  blurTarget?: RefObject<View | null>;
   /** Debug fixtures only: chips to show on first render. */
   initialAttachments?: DraftAttachment[];
   onSend(text: string, attachments: ChatAttachment[]): void;
@@ -38,7 +39,7 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ disabled, streaming, placeholder, initialText, harness, cwd, initialAttachments, onSend, onStop, onVoice }: Props) {
+export const Composer = memo(function Composer({ disabled, streaming, placeholder, initialText, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice }: Props) {
   const [text, setText] = useState(initialText ?? "");
   const [drafts, setDrafts] = useState<DraftAttachment[]>(initialAttachments ?? []);
   const mounted = useRef(true);
@@ -101,7 +102,7 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
     onSend(value, refs);
   }, [canSend, drafts, text, onSend]);
 
-  return <View style={styles.wrap}><ComposerSuggestions text={text} harness={harness} cwd={cwd} onChange={setText} /><GlassSurface blur borderRadius={18} contentStyle={styles.sheet}>
+  return <View style={styles.wrap}><ComposerSuggestions text={text} harness={harness} cwd={cwd} onChange={setText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
     {drafts.length > 0 ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips} accessibilityLabel="Attachments">
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}

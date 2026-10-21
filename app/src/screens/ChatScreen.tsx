@@ -1,3 +1,4 @@
+import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef, type ListRenderItemInfo } from "@shopify/flash-list";
@@ -55,6 +56,7 @@ function renderItem({ item }: ListRenderItemInfo<Message>, harnessId: string) {
 export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const composerDraft = route.params?.draft;
   const insets = useSafeAreaInsets();
+  const blurTarget = useRef<View>(null);
   const listRef = useRef<FlashListRef<Message>>(null);
   const scrollToNewest = useCallback(() => {
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
@@ -218,7 +220,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         </View>
       ) : null}
       {liveOn && conversation ? <KeyboardInsetView style={styles.body}><LiveSurface conversationId={conversation.id} /></KeyboardInsetView> : <KeyboardInsetView style={styles.body} onOpen={scrollToNewest}>
-        <FlashList
+        <BlurTargetView ref={blurTarget} style={styles.body}><FlashList
           ref={listRef}
           data={messages}
           renderItem={(info) => renderItem(info, harnessId)}
@@ -237,7 +239,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
               </Text>
             </View>
           }
-        />
+        /></BlurTargetView>
       </KeyboardInsetView>}
       <KeyboardDock>
         <Composer
@@ -247,6 +249,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
           initialText={composerDraft}
           harness={harnessId}
+          blurTarget={liveOn ? undefined : blurTarget}
           cwd={conversation?.cwd}
           placeholder={liveOn ? (live.askHermes ? "Ask Hermes through the live surface" : "Live surface · quick reply") : composerPlaceholder({
             online,

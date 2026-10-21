@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { memo, useRef, useState } from "react";
+import { type RefObject, memo, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { applyScopePrefix } from "../lib/global-search";
@@ -12,6 +12,7 @@ import { ComposerSuggestions } from "./ComposerSuggestions";
 
 interface Props {
   value: string;
+  blurTarget?: RefObject<View | null>;
   onChange(value: string): void;
   onScope(label: string): void;
   onClear?(): void;
@@ -24,6 +25,7 @@ interface Props {
 
 export const GlobalSearchBar = memo(function GlobalSearchBar({
   value,
+  blurTarget,
   onChange,
   onScope,
   onClear,
@@ -46,7 +48,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
     <View style={[styles.wrap, dock === "bottom" && styles.wrapBottom]}>
       <ComposerSuggestions text={value} onChange={onChange} />
 
-      <GlassSurface blur borderRadius={radius.pill} style={[styles.shell, focused && { borderWidth: 1, borderColor: colors.gold }]} contentStyle={styles.field}>
+      <GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={radius.pill} style={[styles.shell, focused && { borderWidth: 1, borderColor: colors.gold }]} contentStyle={styles.field}>
         <PressScale
           onPress={insertMention}
           scaleTo={PRESS_SCALE.control}

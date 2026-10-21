@@ -1,3 +1,4 @@
+import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
@@ -108,6 +109,7 @@ function chatDraftForResult(item: SearchResult): string | undefined {
 export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const blurTarget = useRef<View>(null);
   const pagerRef = useRef<MainPagerRef>(null);
   const navRef = useRef<AppNavHandle>(null);
   const pagerProgress = useSharedValue(DEFAULT_MAIN_TAB);
@@ -320,7 +322,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       />
       <WorkspaceHeader navigation={navigation} tab={index} />
       <ConnectionPill />
-      <View style={styles.body}>
+      <BlurTargetView ref={blurTarget} style={styles.body}>
         {searchActive ? (
           <>
             {hint ? (
@@ -365,11 +367,12 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             </MainPager>
           </Animated.View>
         )}
-      </View>
+      </BlurTargetView>
 
       <KeyboardDock style={styles.searchDock}>
         <GlobalSearchBar
           value={query}
+          blurTarget={blurTarget}
           onChange={setQuery}
           onScope={onScope}
           dock="bottom"
