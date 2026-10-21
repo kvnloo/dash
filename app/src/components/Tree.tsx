@@ -1,3 +1,4 @@
+import { TURBO } from "../turbo";
 import { Feather } from "@expo/vector-icons";
 import { syncDataLoaderFeature, type ItemInstance } from "@headless-tree/core";
 import { useTree } from "@headless-tree/react";
@@ -22,7 +23,7 @@ const layout = LinearTransition.duration(MOTION_MS.enter).reduceMotion(ReduceMot
 function TreeCell({ children, ...props }: ViewProps) {
   // RN Web's positioned cells already move when FlashList reflows; a second
   // global-coordinate layout transition double-translates them. Fade rows on web.
-  return <Animated.View {...props} layout={Platform.OS === "web" ? undefined : layout}>{children}</Animated.View>;
+  return <Animated.View {...props} layout={Platform.OS === "web" || TURBO ? undefined : layout}>{children}</Animated.View>;
 }
 
 function Row({ item, selected, activate, toggle, collapse, inline }: {
@@ -39,7 +40,7 @@ function Row({ item, selected, activate, toggle, collapse, inline }: {
     onPanResponderRelease: (_, g) => { if (g.dx < -space.xxxl) collapse(); },
   }), [collapse]);
   return (
-    <Animated.View layout={inline ? layout : undefined} entering={FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} exiting={FadeOut.duration(fade.duration).reduceMotion(ReduceMotion.System)} {...swipe.panHandlers}>
+    <Animated.View layout={inline && !TURBO ? layout : undefined} entering={FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} exiting={FadeOut.duration(fade.duration).reduceMotion(ReduceMotion.System)} {...swipe.panHandlers}>
       <View style={[styles.row, node.dimmed && styles.dimmed]}>
         {Array.from({ length: depth }, (_, level) => <View pointerEvents="none" key={level} style={[styles.guide, { left: space.md + level * space.lg }]} />)}
         <Pressable
