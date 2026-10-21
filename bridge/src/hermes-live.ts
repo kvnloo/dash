@@ -106,10 +106,12 @@ export async function sendIntoLiveSession(options: {
   let streamed = "";
   let result: Extract<LiveEvent, { kind: "result" }> | undefined;
   let stderrTail = "";
+  let terminateTimer: ReturnType<typeof setTimeout> | undefined;
   const onAbort = () => {
     // Ctrl-C: the thin client withdraws its own still-queued admission; a running turn is the gateway's.
     child.kill("SIGINT");
-    setTimeout(() => child.kill("SIGTERM"), 5_000).unref?.();
+    terminateTimer = setTimeout(() => child.kill("SIGTERM"), 5_000);
+    terminateTimer.unref?.();
   };
   options.signal?.addEventListener("abort", onAbort, { once: true });
   try {
@@ -136,6 +138,7 @@ export async function sendIntoLiveSession(options: {
     if (!text.trim()) throw new Error("Hermes finished without a reply.");
     return { text, sessionId: result.sessionId ?? options.sessionId, exitCode: 0 };
   } finally {
+    clearTimeout(terminateTimer);
     options.signal?.removeEventListener("abort", onAbort);
   }
 }

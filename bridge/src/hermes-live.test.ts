@@ -79,4 +79,6 @@ test("stopping the Dash turn interrupts only the thin client (SIGINT), and repor
   live.abort();
   await expect(run).rejects.toThrow("Cancelled");
   expect(killed[0]).toBe("SIGINT");
-});
+  await Bun.sleep(5100);
+  expect(killed).toEqual(["SIGINT"]);
+}, 7000);

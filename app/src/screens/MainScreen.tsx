@@ -1,3 +1,4 @@
+import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
@@ -24,6 +25,7 @@ import {
 import { FEEDBACK_CONVERSATION_ID, inAppFeedbackEnabled, type FeedbackAction } from "../lib/feedback";
 import { submitInAppFeedback } from "../lib/feedback-submit";
 import { DEFAULT_MAIN_TAB } from "../lib/home";
+import { composerTrigger } from "../lib/composer-suggestions";
 import type { AgentTarget } from "../mock/agents";
 import type { ScreenProps } from "../navigation";
 import { createConversation, openAgentConversation, saveSettings, setActive, setConnection, store } from "../store/app";
@@ -107,6 +109,7 @@ function chatDraftForResult(item: SearchResult): string | undefined {
 export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const blurTarget = useRef<View>(null);
   const pagerRef = useRef<MainPagerRef>(null);
   const navRef = useRef<AppNavHandle>(null);
   const pagerProgress = useSharedValue(DEFAULT_MAIN_TAB);
@@ -185,7 +188,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const settings = store.use((s) => s.settings);
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
-  const searchActive = parsed.mode !== "discover";
+  const searchActive = parsed.mode !== "discover" && parsed.scope !== "unknown" && composerTrigger(query) === null;
 
   const results = useMemo(
     () => runGlobalSearch({ query, conversations, harnesses, hosts, cwd }),
@@ -319,7 +322,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       />
       <WorkspaceHeader navigation={navigation} tab={index} />
       <ConnectionPill />
-      <View style={styles.body}>
+      <BlurTargetView ref={blurTarget} style={styles.body}>
         {searchActive ? (
           <>
             {hint ? (
@@ -364,11 +367,12 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             </MainPager>
           </Animated.View>
         )}
-      </View>
+      </BlurTargetView>
 
       <KeyboardDock style={styles.searchDock}>
         <GlobalSearchBar
           value={query}
+          blurTarget={blurTarget}
           onChange={setQuery}
           onScope={onScope}
           dock="bottom"

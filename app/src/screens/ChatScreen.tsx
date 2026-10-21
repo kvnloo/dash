@@ -1,3 +1,4 @@
+import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
@@ -36,10 +37,10 @@ import {
 } from "../store/app";
 import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
 import { colors, glass, radius, space, type } from "../theme";
-import { toMain } from "../lib/main-nav";
 import { conversationThinking, type Thinking } from "../lib/thinking";
 import { useSessionPhase } from "../lib/session-phase";
 import { replyText } from "../store/text";
+import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
 
 const EMPTY: Message[] = [];
@@ -55,6 +56,7 @@ function getItemType(item: Message): string {
 export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const composerDraft = route.params?.draft;
   const insets = useSafeAreaInsets();
+  const blurTarget = useRef<View>(null);
   const listRef = useRef<FlashListRef<Message>>(null);
   const scrollToNewest = useCallback(() => {
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
@@ -206,7 +208,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       haptic.select();
       saveSettings({ ...settings, harness: id });
       // Sessions are harness-specific, so switching mid-conversation starts a fresh chat.
-      if (conversation && conversation.messages.length > 0) setActive(null);
+      if (conversation && conversation.harness !== id) setActive(null);
     },
     [settings, conversation],
   );
@@ -215,7 +217,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
-      <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => toMain(navigation)} action="Choose harness" icon="sliders" onAction={() => setPickerVisible(true)} />
+      <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} action="Choose harness" icon="sliders" onAction={() => setPickerVisible(true)} />
       <View style={styles.liveRow} accessibilityLabel={`${harnessName} ${caption}`}><AgentOrb size={20} thinking={thinking} /><Text style={styles.liveNote}>{caption}{external ? " · terminal" : ""}</Text></View>
       <ConnectionPill />
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
@@ -234,7 +236,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         </View>
       ) : null}
       {liveOn && conversation ? <KeyboardInsetView style={styles.body}><LiveSurface conversationId={conversation.id} /></KeyboardInsetView> : <KeyboardInsetView style={styles.body} onOpen={scrollToNewest}>
-        <FlashList
+        <BlurTargetView ref={blurTarget} style={styles.body}><FlashList
           ref={listRef}
           data={messages}
           extraData={external}
@@ -254,15 +256,18 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
               </Text>
             </View>
           }
-        />
+        /></BlurTargetView>
       </KeyboardInsetView>}
       <KeyboardDock>
         <Composer
-          key={composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}
+          key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
           disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
           streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
           initialText={composerDraft}
+          harness={harnessId}
+          blurTarget={liveOn ? undefined : blurTarget}
+          cwd={conversation?.cwd}
           placeholder={liveOn ? (live.askHermes ? "Ask Hermes through the live surface" : "Live surface · quick reply") : composerPlaceholder({
             online,
             streaming: Boolean(streamingMessage),

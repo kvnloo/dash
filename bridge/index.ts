@@ -55,6 +55,7 @@ import {
 import { speechAvailable, transcribe, warmup } from "./speech";
 import { AttachmentError, AttachmentStore, promptWithAttachments, type StoredAttachment } from "./src/attachments";
 import { createFilesHttpHandler } from "./src/files-http";
+import { createSuggestionsHttpHandler } from "./src/suggestions-http";
 import { LiveSurface } from "./src/live-surface";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
@@ -639,6 +640,8 @@ const handleFiles = createFilesHttpHandler({
   onEvent: log,
 });
 
+const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
+
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
 const liveSurface = new LiveSurface({ log });
 const handleSupervision = createSupervisionHttpHandler({ token: TOKEN, directory: process.env.DASH_SUPERVISION_DIR });
@@ -675,6 +678,8 @@ const server = Bun.serve<SocketData>({
       if (supervision) return cors(supervision);
       const phase = sessionPhaseHttp(request, secretMatches(bearerToken(request), TOKEN), (profile, session) => hermesSessions.phase(profile, session));
       if (phase) return cors(phase);
+      const suggestions = await handleSuggestions(request);
+      if (suggestions) return cors(suggestions);
       const files = await handleFiles(request);
       if (files) return cors(files);
       const http = await handleHttp(request, server.requestIP(request)?.address ?? null);
