@@ -6,7 +6,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
 import { composerPlaceholder } from "./composer-placeholder";
-import { KeyboardDock } from "../components/KeyboardDock";
+import { KeyboardDock, KeyboardInsetView } from "../components/KeyboardDock";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { HarnessPicker } from "../components/HarnessPicker";
 import { AppNav } from "../components/AppNav";
@@ -56,6 +56,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const composerDraft = route.params?.draft;
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlashListRef<Message>>(null);
+  const scrollToNewest = useCallback(() => {
+    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+  }, []);
   const debugPicker = debugUi.use((s) => s.chatHarnessPickerOpen);
   const debugAttachments = debugUi.use((s) => s.chatComposerAttachments);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -214,7 +217,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           <Text style={styles.liveNote} numberOfLines={1}>{liveOn ? "fast lane · Hermes stays in charge" : "Hermes chat"}</Text>
         </View>
       ) : null}
-      {liveOn && conversation ? <View style={styles.body}><LiveSurface conversationId={conversation.id} /></View> : <View style={styles.body}>
+      {liveOn && conversation ? <KeyboardInsetView style={styles.body}><LiveSurface conversationId={conversation.id} /></KeyboardInsetView> : <KeyboardInsetView style={styles.body} onOpen={scrollToNewest}>
         <FlashList
           ref={listRef}
           data={messages}
@@ -235,7 +238,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             </View>
           }
         />
-      </View>}
+      </KeyboardInsetView>}
       <KeyboardDock>
         <Composer
           key={composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}
