@@ -31,6 +31,7 @@ import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
 import { runHermesSession } from "./src/hermes-session";
+import { streamHermesSession } from "./src/hermes-stream";
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
 import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, type HandoffState } from "./src/hermes-continue";
 import type { LiveOwner } from "./src/hermes-owner";
@@ -200,14 +201,14 @@ class Turn implements Sink {
           return;
         }
         this.hermesTransport = "api";
-        const result = await runHermesSession({ input, api: route.api, env: process.env, log, signal: abort.signal });
+        // Native SSE: deltas and tool steps reach the phone live, and a long turn is bounded by
+        // silence rather than a total timeout (the plain /chat call gave up after 120 s).
+        const result = await streamHermesSession({ api: route.api, sessionId, text: input.text, sink: this, signal: abort.signal });
         if (this.cancelled) { if (!this.finished) this.finish(CANCELLED_EXIT_CODE); return; }
         if (this.finished) return;
-        if (result.path === "cli") throw new Error("Hermes CLI resume is never used for an existing session.");
-        if (result.sessionId) this.session(result.sessionId);
-        if (result.text) this.delta(result.text);
+        this.session(result.sessionId);
         this.finish(0);
-        log("turn.end", { id: this.id, harness: "hermes", exitCode: 0, path: result.path });
+        log("turn.end", { id: this.id, harness: "hermes", exitCode: 0, path: "api-stream", streamed: result.streamed });
       } catch (error) {
         if (this.cancelled) { if (!this.finished) this.finish(CANCELLED_EXIT_CODE); return; }
         if (this.finished) return;
