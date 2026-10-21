@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { startActivityAsync } from "expo-intent-launcher";
 import { RECOGNIZE_SPEECH, parseRecognizerResult } from "./mic-gesture";
 
 export type DictationResult =
@@ -10,8 +11,8 @@ export type DictationResult =
 export async function dictate(language?: string): Promise<DictationResult> {
   const t0 = Date.now();
   if (Platform.OS !== "android") return { ok: false, reason: "unsupported", message: "System dictation is Android-only here.", ms: 0 };
+  if (__DEV__) console.log("[dictation] start");
   try {
-    const { startActivityAsync } = await import("expo-intent-launcher");
     const extra: Record<string, unknown> = {
       "android.speech.extra.LANGUAGE_MODEL": "free_form",
       "android.speech.extra.MAX_RESULTS": 3,

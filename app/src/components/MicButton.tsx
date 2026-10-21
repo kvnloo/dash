@@ -52,6 +52,13 @@ export const MicButton = memo(function MicButton({ onDictate, onLive, side, chil
     }
   }, [onTap, preferred, run]);
 
+  const tapNow = useCallback(() => {
+    state.current = MIC_IDLE; setPicker(MIC_IDLE);
+    haptic.tap();
+    if (__DEV__) console.log("[mic] tap", onTap ? "onTap" : preferred);
+    onTap ? onTap() : run(preferred);
+  }, [onTap, preferred, run]);
+
   const pan = Gesture.Pan()
     .activateAfterLongPress(HOLD_MS)
     .onBegin(() => { runOnJS(send)({ type: "down" }); })
@@ -66,10 +73,12 @@ export const MicButton = memo(function MicButton({ onDictate, onLive, side, chil
     .onFinalize((_e, success) => {
       open.value = withTiming(0, snappy);
       dyShared.value = 0;
-      if (!success) runOnJS(send)({ type: "up" });
+      if (!success) runOnJS(send)({ type: "cancel" });
     });
-  // Pan fails if the finger lifts before HOLD_MS; onFinalize(success=false) then reports "up" from the holding phase = tap.
-  const gesture = pan;
+  // A quick tap is its own gesture: relying on the long-press pan failing (onFinalize success=false) never fired
+  // on device, so the mic did nothing. Exclusive: the hold-pan wins once it activates, otherwise the tap fires.
+  const tap = Gesture.Tap().maxDuration(HOLD_MS).onEnd((_e, success) => { if (success) runOnJS(tapNow)(); });
+  const gesture = Gesture.Exclusive(pan, tap);
 
   const bloom = useAnimatedStyle(() => ({ opacity: open.value, transform: [{ scale: 0.85 + open.value * 0.15 }] }));
   const hover = picker.hover;
