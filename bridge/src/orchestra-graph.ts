@@ -38,14 +38,14 @@ export function buildOrchestra(input: { hosts: HostInfo[]; sessions: GraphSessio
     const hostId = hostIds.get(s.hostId) ?? `host:${s.hostId}`;
     if (!nodes.some(n => n.id === hostId)) nodes.push({ id: hostId, hostId, label: s.hostId, kind: "host", state: "idle", online: true, provenance: ["local collector"] });
     nodes.push({ id: s.id, hostId, label: s.title || "Untitled session", kind: s.delegated ? "subagent" : "chat", state: s.state, reason: s.reason, action: s.action, parentId: s.parent, path: s.repo || s.cwd, branch: s.branch, sessionId: s.sessionId, profileId: s.profileId, harness: s.harness, model: s.model, updatedAt: s.updatedAt, provenance: s.provenance });
-    addEdge(hostId, s.id, "hosted", false, s.provenance);
+    addEdge(hostId, s.id, "hosted", s.state === "live", s.provenance);
     for (const path of new Set([s.repo, ...s.touched].filter((v): v is string => Boolean(v)))) {
       const id = `repo:${s.hostId}:${path}`;
       if (!nodes.some(n => n.id === id)) {
         const repo = input.repos?.find(r => r.path === path);
         nodes.push({ id, hostId, label: path.split("/").filter(Boolean).at(-1) || path, kind: "repo", state: "idle", path, branch: repo?.branch ?? s.branch, dirty: repo?.dirty, provenance: ["git rev-parse --show-toplevel", ...s.provenance] });
       }
-      if (s.repo === path) addEdge(s.id, id, "workspace", false, ["sessions.git_repo_root"]);
+      if (s.repo === path) addEdge(s.id, id, "workspace", s.state === "live", ["sessions.git_repo_root"]);
       if (s.touched.includes(path)) addEdge(s.id, id, "touched", s.state === "live", ["messages.tool_calls"]);
     }
   }
