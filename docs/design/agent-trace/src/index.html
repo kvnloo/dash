@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Agent trace for Dash · four bets</title>
+<style>
+/*__SHARED_CSS__*/
+html { overflow-x: hidden; }
+body { padding: 22px 18px 60px; }
+.wrap { max-width: 1060px; margin: 0 auto; }
+h1 { margin: 4px 0 8px; font: 500 36px/1.05 var(--serif); }
+.lede { color: var(--muted); max-width: 64ch; font-size: 15px; margin: 0 0 18px; }
+.learn { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0 26px; }
+.learn > div { padding: 14px 16px; }
+.learn h2 { margin: 0 0 8px; font: 600 14px var(--sans); }
+.learn ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; }
+.learn li { margin: 5px 0; }
+.bets { display: grid; gap: 14px; }
+.bet { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; padding: 16px 18px; }
+.bet .k { font: 500 44px/1 var(--serif); color: var(--gold); }
+.bet h3 { margin: 0; font: 600 17px/1.3 var(--sans); }
+.bet .q { color: var(--text); font: 500 19px/1.3 var(--serif); margin: 6px 0 10px; }
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; font-size: 13px; color: var(--muted); }
+.cols b { display: block; font: 500 10.5px/1.2 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--tertiary); margin-bottom: 4px; }
+.cols ul { margin: 0; padding-left: 16px; } .cols li { margin: 3px 0; }
+.how { margin-top: 22px; padding: 14px 16px; font-size: 13.5px; color: var(--muted); }
+.how b { color: var(--text); }
+@media (max-width: 760px) { .learn, .cols { grid-template-columns: 1fr; } .bet { grid-template-columns: 1fr; gap: 4px; } .bet .k { font-size: 32px; } h1 { font-size: 30px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="cap">Dash · agent trace · design brainstorm · 2026-10-21</div>
+  <h1>Four ways to see what the agents did</h1>
+  <p class="lede">Each prototype is a different bet on the question you open it with. All four read the same real export of yesterday's Hermes runs (<span class="mono" id="n"></span>) and show only counts, times, tool names and synthetic worker labels. Mark what you like or hate on each one; I will merge the winners.</p>
+
+  <div class="learn">
+    <div class="bracket"><h2>Why omp's trace and stats feel intentional</h2><ul>
+      <li>Every page opens with one sentence of purpose and a strip of numbers that split the whole (wall = model + tool + idle, each as a share).</li>
+      <li>Defaults do the editing: idle gaps are compressed, deep tracks start collapsed, the newest sessions sort first, a 24h range is preselected.</li>
+      <li>One selection drives the canvas, the transcript and the drawer, and the keyboard contract is printed under the chart.</li>
+      <li>Numbers are mono and tabular, colour means one thing (model, tool, error), and failures are a badge in a column, not a colour wash.</li>
+      <li>It is honest about method: frustration says when it is regex versus a judge verdict.</li>
+    </ul></div>
+    <div class="bracket"><h2>What Arc's timeline adds (captured, not copied)</h2><ul>
+      <li>Replay as explanation: a 26 s clock, a square leading edge on the live span, 350 ms connector draws and a status line that settles into one summary.</li>
+      <li>Handoffs as elbows from the orchestrator, so parallelism and waiting read at a glance.</li>
+      <li>Pin a span and everything off its path drops to 28% opacity.</li>
+      <li>Where it falls short for us: it shows a 26 s demo, never hours, interruptions, stalls, cost against a quota or anything waiting on a person.</li>
+    </ul></div>
+  </div>
+
+  <div class="bets">
+    <div class="bracket bet"><div class="k">A</div><div>
+      <h3>Event trace</h3><div class="q">What exactly happened, and where did it go wrong?</div>
+      <div class="cols">
+        <div><b>Emphasises</b><ul><li>every tool call on one canvas, coloured by phase</li><li>failures, stalls, compressed idle</li><li>keyboard: J/K step, E next error, X next stall</li><li>sortable workers and tools with cost</li></ul></div>
+        <div><b>Hides</b><ul><li>replay and motion</li><li>runs start folded to one row each</li><li>anything you can't act on from a desk</li></ul></div>
+        <div><b>Open questions</b><ul><li>Is the day the right default, or the latest run?</li><li>Should errors and stalls be on by default or filtered?</li><li>Do you want the transcript text in Dash (private, local only)?</li></ul></div>
+      </div></div></div>
+    <div class="bracket bet"><div class="k">B</div><div>
+      <h3>Run replay with state bands</h3><div class="q">Who did what, when, and who never came back?</div>
+      <div class="cols">
+        <div><b>Emphasises</b><ul><li>one run, one row per worker, Hermes on top</li><li>dispatch and report elbows; interrupted ends in a cross</li><li>FSM band under each row (Dispatched, Running, Stalled, Verifying, DraftPR)</li><li>replay at 60x to 960x, scrub, pin to dim</li></ul></div>
+        <div><b>Hides</b><ul><li>individual calls inside a span</li><li>other runs (pick from the menu)</li><li>tokens per call: totals are spread by calls (≈)</li></ul></div>
+        <div><b>Open questions</b><ul><li>Is replay useful after the fact, or only live?</li><li>Should a resumed worker draw a bridge from the cut one?</li><li>Do your steering messages belong on the Hermes row?</li></ul></div>
+      </div></div></div>
+    <div class="bracket bet"><div class="k">C</div><div>
+      <h3>Stats</h3><div class="q">Is the system healthy, on budget, and what is blocking it?</div>
+      <div class="cols">
+        <div><b>Emphasises</b><ul><li>three headline numbers: Opus pace, workers cut, items waiting on you</li><li>burn vs even pace per lane</li><li>roles from ROLES-v0, with "no source" where we lack data</li><li>ranked bottlenecks with evidence</li></ul></div>
+        <div><b>Hides</b><ul><li>individual runs and calls</li><li>per-hour cost charts</li><li>frustration (needs your message text; off by design)</li></ul></div>
+        <div><b>Open questions</b><ul><li>Which bottleneck should Kerdoios act on by itself?</li><li>Should "verified" mean tests ran, or that a checker agent agreed?</li><li>Do you want deep-work blocks (calendar, ActivityWatch) on the attention chart?</li></ul></div>
+      </div></div></div>
+    <div class="bracket bet"><div class="k">D</div><div>
+      <h3>Pocket</h3><div class="q">Do I need to do anything right now?</div>
+      <div class="cols">
+        <div><b>Emphasises</b><ul><li>live workers with state and quiet time first</li><li>Needs you, batched by kind of decision</li><li>a dot per worker for the whole day</li><li>one-thumb dock, 44 px targets, bottom sheet per worker</li></ul></div>
+        <div><b>Hides</b><ul><li>timelines and tables</li><li>all tool names except the last one</li><li>controls (Steer, Stop, Resume) are shown but disabled</li></ul></div>
+        <div><b>Open questions</b><ul><li>Should this be Dash's home tab or a pull-down?</li><li>Which of Steer, Stop and Resume do you want first?</li><li>Is "quiet 4m" the right alarm, or a per-task deadline?</li></ul></div>
+      </div></div></div>
+  </div>
+
+  <div class="bracket how"><b>How to review.</b> In Dash, the stage shows one prototype at a time: <span class="kbd">]</span> next, <span class="kbd">[</span> previous, or the artifact list. Leave a note on any of them, or approve / request changes; notes land in the stage's agent queue for me. On a desktop the same link works in a browser.</div>
+  <p class="provenance" id="prov"></p>
+</div>
+<div class="stamp">__BUILD__</div>
+<script id="trace-data" type="application/json">__TRACE_DATA__</script>
+<script>/*__SHARED_JS__*/</script>
+<script>
+const s = TR.summary(TR.tasks);
+document.getElementById("n").textContent = `${TR.tasks.length} workers, ${s.calls.toLocaleString()} tool calls, ${TR.runs.length} delegations`;
+document.getElementById("prov").innerHTML = `<b>Data</b> exported ${TR.D.generated}. ${TR.D.privacy}. Arc capture: our own screen recording of the public preview, kept as reference only.`;
+</script>
+</body>
+</html>
