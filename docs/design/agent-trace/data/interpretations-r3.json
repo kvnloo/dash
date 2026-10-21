@@ -1,0 +1,87 @@
+{
+  "schema": "dash.trace.interpretations/v2",
+  "author": "claude-opus-5.5 (round-3 design agent), written from data/facts-r3.json",
+  "note": "Replaces interpretations-r2.json, whose reads were generic ('Historical activity lacks outcome verification'). Every number below is checked against trace-r3.json by tools/build_r3.py.",
+  "outcomes": {
+    "control": "Dash as control plane",
+    "ring": "Ring to z0live",
+    "debt": "Integration debt",
+    "burn": "Burn on pace"
+  },
+  "views": {
+    "a": {
+      "read": "18 workers were cut at only 5 moments; 14:58 and 21:31 took 5 each. Just 2 were resumed, both at 20:32. Phone lost 6 of its 10 workers between 18:35 and 21:31.",
+      "checks": {"interrupted": 18, "interrupt_instants": 5, "cut_14_58": 5, "cut_21_31": 5, "resumed": 2, "phone_interrupted": 6, "phone_workers": 10},
+      "actions": [
+        {"id": "a-resume", "outcome": "control", "title": "Show cut batches with one-tap resume", "why": "16 of 18 interrupted workers never came back"},
+        {"id": "a-triage", "outcome": "debt", "title": "Triage the 16 unresumed: resume, fold or drop", "why": "Oldest is Sim · ACE, cut 14:58 after 5h 03m"},
+        {"id": "a-ring", "outcome": "ring", "title": "Run the device test ring tap asks for", "why": "Ring tap finished 00:49; 2 of 3 ring workers end on a device request"}
+      ]
+    },
+    "b": {
+      "batches": {
+        "run-44": {
+          "read": "6 Video workers from 22:51. 2 were cut together at 23:21, 30m in, and never resumed. Of the 4 that finished, 3 want a PR review and 2 say they are blocked.",
+          "actions": [
+            {"id": "b44-review", "outcome": "debt", "title": "Review the 3 fframestudio PRs", "why": "Workers D, E, F finished 23:43 to 00:20"},
+            {"id": "b44-cut", "outcome": "control", "title": "Resume or drop the 2 cut workers", "why": "B and C stopped at 23:21 with no successor"}
+          ]
+        },
+        "run-34": {
+          "read": "The resume batch. z0live relay and Dash dogfood both finished (46 m, 14 m) after the 20:32 cut. Its third worker, Phone harness, was cut at 21:31 after 59 m and not resumed.",
+          "actions": [
+            {"id": "b34-ring", "outcome": "ring", "title": "Device-test the z0live relay fix", "why": "Relay worker finished 21:19 asking for a device check"},
+            {"id": "b34-phone", "outcome": "debt", "title": "Resume Phone harness or drop it", "why": "Cut 21:31, no successor"}
+          ]
+        },
+        "run-32": {
+          "read": "Both workers were cut together at 20:32 after 37 m, with 23 errors in 382 calls (6.0%, against 3.5% overall). Both were resumed in the next batch, the same minute.",
+          "actions": [
+            {"id": "b32-errors", "outcome": "control", "title": "Flag error rate above 5% while live", "why": "This batch ran at 6.0% before the cut"}
+          ]
+        },
+        "run-36": {
+          "read": "The integration-debt audit and the factory worker were both cut at 21:31 after 18 m and 72 calls. Neither was resumed, so the debt audit has no result.",
+          "actions": [
+            {"id": "b36-rerun", "outcome": "debt", "title": "Re-run the integration-debt audit", "why": "Cut at 18 m, never resumed"}
+          ]
+        },
+        "run-20": {
+          "read": "All 4 Tern workers finished (36 m to 1h 55m), 22 errors in 795 calls. 3 of the 4 end asking for an approval or a PR review.",
+          "actions": [
+            {"id": "b20-review", "outcome": "debt", "title": "Clear the 3 Tern approvals and reviews", "why": "Finished 15:48 to 17:08"}
+          ]
+        },
+        "run-16": {
+          "read": "41 m of stalls across 4 glyph workers, the most of any batch. One was cut at 14:58 with 18 m of its own stalls.",
+          "actions": [
+            {"id": "b16-stall", "outcome": "control", "title": "Alert on stalls over 10 m while live", "why": "3 of 4 workers here stalled 7 m or more"}
+          ]
+        },
+        "run-07": {
+          "read": "The largest batch: 7 workers across z0live, Dash and Infra, all finished, 1,205 calls. 3 end on a device request and 2 on a PR review.",
+          "actions": [
+            {"id": "b07-device", "outcome": "ring", "title": "Batch the 3 device requests into one S25 session", "why": "z0live relay, Dash phone app, Infra factory"}
+          ]
+        }
+      }
+    },
+    "c": {
+      "read": "Claude is 92% used with 26.1 h to reset, burning 2.12× the sustainable rate; Codex is at 7% with 144.6 h left (0.47×). terminal caused 328 of 395 tool errors (83%).",
+      "checks": {"claude_used": 92, "claude_reset_h": 26.1, "claude_pace": 2.12, "codex_used": 7, "codex_reset_h": 144.6, "codex_pace": 0.47, "terminal_errors": 328, "errors": 395},
+      "actions": [
+        {"id": "c-codex", "outcome": "burn", "title": "Route the next batches to Codex", "why": "Codex has 0.34 %/h of headroom before it reaches pace"},
+        {"id": "c-claude", "outcome": "burn", "title": "Hold Claude to review-only until reset", "why": "At 0.648 %/h it hits 100% in about 12 h, 14 h before reset"}
+      ]
+    },
+    "d": {
+      "read": "12 workers finished in the last 3 h asking for you: 5 are NOOP device tests (4 meditation, 1 ring tap) and 7 are PR reviews. 4 workers are live and none has asked yet.",
+      "checks": {"recent_asks": 12, "noop_device": 5, "pr_reviews": 7, "live": 4},
+      "actions": [
+        {"id": "d-noop", "outcome": "ring", "title": "One S25 session for the 5 NOOP device tests", "why": "Ring tap 00:49, meditation ×4 since 23:36"},
+        {"id": "d-prs", "outcome": "debt", "title": "Review the 7 waiting PRs", "why": "Video ×3, Bend ×2, Research, NOOP"},
+        {"id": "d-codex", "outcome": "burn", "title": "Start the next batch on Codex", "why": "Claude at 92%, 2.12× pace"}
+      ]
+    }
+  }
+}

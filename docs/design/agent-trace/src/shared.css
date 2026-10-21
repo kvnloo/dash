@@ -1,0 +1,70 @@
+/* Dash agent-trace prototypes: shared tokens.
+ * Colours: zerOS Living Night as ported in app/src/theme.ts (tokens.json @ 5cf5101).
+ * Grammar: HUD micro-labels (mono caps), hairlines, corner brackets, diamonds for owner. */
+@font-face { font-family: "Hanken Grotesk"; font-weight: 400; font-display: swap; src: url(data:font/woff2;base64,__FONT_HANKEN_400__) format("woff2"); }
+@font-face { font-family: "Hanken Grotesk"; font-weight: 600; font-display: swap; src: url(data:font/woff2;base64,__FONT_HANKEN_600__) format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-display: swap; src: url(data:font/woff2;base64,__FONT_PLEX_400__) format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; font-display: swap; src: url(data:font/woff2;base64,__FONT_PLEX_500__) format("woff2"); }
+@font-face { font-family: "Cormorant Garamond"; font-weight: 500; font-display: swap; src: url(data:font/woff2;base64,__FONT_CORMORANT_500__) format("woff2"); }
+
+:root {
+  color-scheme: dark;
+  --bg: #0c0c0a; --raised: #151611; --sunk: #090908;
+  --text: #ece8df; --muted: #b4afa3; --tertiary: #837f74; --faint: #5e5b52;
+  --gold: #d7b986; --gold-hi: #eccd8c; --gold-lo: #99835c;
+  --ok: #98cf8b; --info: #81b9da; --warn: #e7a875; --danger: #e37f65; --prov: #b098cd;
+  --hair: rgba(236,232,223,.10); --hair2: rgba(236,232,223,.16); --quiet: rgba(236,232,223,.06);
+  --glass: rgba(24,26,23,.46); --glass-hi: rgba(20,22,19,.82);
+  /* phase colours: what a worker is doing */
+  --ph-explore: #81b9da; --ph-implement: #b098cd; --ph-verify: #98cf8b; --ph-pr: #d7b986; --ph-delegate: #b4afa3;
+  --sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --serif: "Cormorant Garamond", Georgia, serif;
+  --r-sm: 6px; --r-card: 8px; --r-md: 14px;
+  --ease: cubic-bezier(.2,.75,.2,1);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+body { min-height: 100dvh; }
+button { font: inherit; color: inherit; }
+.mono, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.num { font-size: 12px; }
+.cap { font: 500 10.5px/1.2 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--tertiary); }
+.muted { color: var(--muted); } .dim { color: var(--tertiary); } .faint { color: var(--faint); }
+.gold { color: var(--gold); } .bad { color: var(--danger); } .good { color: var(--ok); } .warn { color: var(--warn); }
+.serif { font-family: var(--serif); font-weight: 500; font-variant-numeric: lining-nums tabular-nums; }
+h1, h3, .big { font-variant-numeric: lining-nums; }
+
+/* bracketed panel: thin corner brackets, no extra DOM */
+.bracket {
+  position: relative; border: 1px solid var(--hair); border-radius: 2px; background: rgba(21,22,17,.55);
+  background-image:
+    linear-gradient(var(--hair2), var(--hair2)), linear-gradient(var(--hair2), var(--hair2)),
+    linear-gradient(var(--hair2), var(--hair2)), linear-gradient(var(--hair2), var(--hair2)),
+    linear-gradient(var(--hair2), var(--hair2)), linear-gradient(var(--hair2), var(--hair2)),
+    linear-gradient(var(--hair2), var(--hair2)), linear-gradient(var(--hair2), var(--hair2));
+  background-repeat: no-repeat;
+  background-size: 10px 1px, 1px 10px, 10px 1px, 1px 10px, 10px 1px, 1px 10px, 10px 1px, 1px 10px;
+  background-position: -1px -1px, -1px -1px, calc(100% + 1px) -1px, calc(100% + 1px) -1px, -1px calc(100% + 1px), -1px calc(100% + 1px), calc(100% + 1px) calc(100% + 1px), calc(100% + 1px) calc(100% + 1px);
+}
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--hair); background: var(--glass); color: var(--muted); font: 500 12px/1 var(--sans); cursor: pointer; white-space: nowrap; }
+.chip[aria-pressed="true"] { color: var(--text); border-color: var(--hair2); background: var(--glass-hi); box-shadow: inset 0 1px 0 rgba(255,255,255,.08); }
+.chip:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 1.5px solid var(--gold); outline-offset: 2px; }
+.seg { display: inline-flex; border: 1px solid var(--hair); border-radius: 999px; padding: 2px; background: var(--sunk); }
+.seg button { border: 0; background: none; padding: 5px 11px; border-radius: 999px; color: var(--tertiary); font: 500 12px/1 var(--sans); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--glass-hi); color: var(--text); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 0 0 1px var(--hair2); }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; }
+.diamond { display: inline-block; width: 8px; height: 8px; transform: rotate(45deg); background: var(--gold); vertical-align: 0; }
+.kbd { font: 500 10.5px/1 var(--mono); border: 1px solid var(--hair2); border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; color: var(--muted); }
+.provenance { font: 11px/1.4 var(--mono); color: var(--faint); }
+.provenance b { color: var(--tertiary); font-weight: 500; }
+table { border-collapse: collapse; width: 100%; }
+th { text-align: left; font: 500 10.5px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--tertiary); padding: 8px 10px; border-bottom: 1px solid var(--hair); white-space: nowrap; position: sticky; top: 0; background: var(--bg); cursor: default; }
+th[data-sort] { cursor: pointer; } th[aria-sort] { color: var(--text); }
+td { padding: 6px 10px; border-bottom: 1px solid var(--quiet); vertical-align: middle; }
+td.r, th.r { text-align: right; }
+tr[data-sel="true"] td { background: rgba(215,185,134,.07); }
+tbody tr { cursor: pointer; } tbody tr:hover td { background: rgba(236,232,223,.035); }
+.meter { display: inline-block; height: 4px; border-radius: 2px; background: var(--warn); vertical-align: middle; }
+.stamp { position: fixed; right: 10px; bottom: 8px; font: 10px/1 var(--mono); color: var(--faint); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

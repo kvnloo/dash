@@ -1,0 +1,402 @@
+{
+  "schema": "dash.trace.interpretations/v1",
+  "provider": "openai-codex",
+  "model": "gpt-6.1-sol",
+  "generated": "2026-10-21T08:36:47.235194+00:00",
+  "source_sha256": "7c164dc137139f0c404c26c5a249876e2a5532a108a561c81ae7a38bb74a70dd",
+  "prompt_sha256": "e5624924ba7fa461bf3105fff5302e187459c847700ba147c102da0bad8c6c82",
+  "insights": {
+    "views": {
+      "a": {
+        "headline": "Historical activity lacks outcome verification",
+        "read": "October 20 dispatches progressed from control-plane and simulation work to relay, integration, and ring work. Completed statuses establish recorded endings, not verified behavior or merges.",
+        "confidence": "high",
+        "actions": [
+          {
+            "title": "Check control-plane acceptance evidence",
+            "why": "Completed Dash work lacks supplied acceptance results, leaving control-plane usability unestablished.",
+            "goal": "Dash usable as control plane",
+            "confidence": "high"
+          },
+          {
+            "title": "Define ring-to-relay acceptance check",
+            "why": "Completed ring and relay workers do not establish an end-to-end double-tap result.",
+            "goal": "NOOP ring double-tap to z0live working",
+            "confidence": "high"
+          },
+          {
+            "title": "Reconcile interrupted integration work",
+            "why": "Interrupted integration workers leave completion evidence missing, preventing a defensible debt-reduction assessment.",
+            "goal": "integration debt down",
+            "confidence": "high"
+          }
+        ]
+      },
+      "b": {
+        "headline": "Dispatch continuity needs report-level confirmation",
+        "read": "Batches mixed project labels, and two completed workers have heuristic resume links. Keyword owner flags suggest review candidates, not confirmed requests or accepted handoffs.",
+        "confidence": "high",
+        "actions": [
+          {
+            "title": "Validate inferred resume handoffs",
+            "why": "Two resume links use goal-word matching; confirming transferred artifacts would clarify control-plane continuity.",
+            "goal": "Dash usable as control plane",
+            "confidence": "medium"
+          },
+          {
+            "title": "Triage keyword flags against reports",
+            "why": "Approval and review keywords alone cannot establish unresolved integration obligations.",
+            "goal": "integration debt down",
+            "confidence": "high"
+          },
+          {
+            "title": "Assemble ring and relay evidence",
+            "why": "Separate ring and relay reports need a shared acceptance record before judging the complete interaction.",
+            "goal": "NOOP ring double-tap to z0live working",
+            "confidence": "medium"
+          }
+        ]
+      },
+      "c": {
+        "headline": "Historical pace diverged across paid lanes",
+        "read": "Claude showed 92% usage and 2.12 pace; Codex showed 7% and 0.47. Unpriced workers and seven-day tool errors limit cost and bottleneck conclusions.",
+        "confidence": "high",
+        "actions": [
+          {
+            "title": "Refresh quotas before routing",
+            "why": "Historical lane imbalance suggests a routing review, but stale quota readings cannot justify present dispatch choices.",
+            "goal": "paid plans used ~100% on pace",
+            "confidence": "high"
+          },
+          {
+            "title": "Inspect bash and eval failures",
+            "why": "Seven-day bash and eval errors warrant transport and invocation checks before attributing integration delays to tests.",
+            "goal": "integration debt down",
+            "confidence": "medium"
+          },
+          {
+            "title": "Separate unpriced work from spend",
+            "why": "Null worker prices prevent complete cost accounting and cannot support zero-cost capacity assumptions.",
+            "goal": "paid plans used ~100% on pace",
+            "confidence": "high"
+          }
+        ]
+      },
+      "d": {
+        "headline": "Choose evidence gates before further dispatch",
+        "read": "The snapshot supports prioritizing acceptance evidence, interrupted-work reconciliation, and quota refresh. It does not establish device readiness, confirmed owner requests, or product success.",
+        "confidence": "high",
+        "actions": [
+          {
+            "title": "Choose a control-plane acceptance gate",
+            "why": "Completed Dash workers and a historically running trace worker provide activity evidence, not a usability verdict.",
+            "goal": "Dash usable as control plane",
+            "confidence": "high"
+          },
+          {
+            "title": "Request an authorized ring-check plan",
+            "why": "Ring workers completed, but device keywords do not prove access requirements or double-tap behavior.",
+            "goal": "NOOP ring double-tap to z0live working",
+            "confidence": "medium"
+          },
+          {
+            "title": "Prioritize unresolved integration artifacts",
+            "why": "Completed and interrupted integration work needs artifact reconciliation before choosing additional implementation.",
+            "goal": "integration debt down",
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    "sections": {
+      "timeline": {
+        "read": "This historical snapshot spans October 20 through early October 21; four workers were recorded running, without subsequent outcomes.",
+        "action": "Compare dispatch order with final reports and acceptance records.",
+        "confidence": "high"
+      },
+      "handoffs": {
+        "read": "Two completed workers have inferred resume links; mixed-label batches and keyword flags do not establish accepted handoffs.",
+        "action": "Confirm predecessor artifacts, successor scope, and report acknowledgments.",
+        "confidence": "high"
+      },
+      "capacity": {
+        "read": "Historical Claude usage was 92% versus Codex 7%; quota age prevents present routing conclusions, and null costs remain unpriced.",
+        "action": "Refresh both quotas and reset windows before proposing routing.",
+        "confidence": "high"
+      },
+      "tools": {
+        "read": "Seven-day bash errors were 6/14 and eval 3/5; these do not establish test failures or individual run causes.",
+        "action": "Inspect error records to separate transport, invocation, and test outcomes.",
+        "confidence": "high"
+      },
+      "decisions": {
+        "read": "Acceptance evidence and unresolved artifacts are missing; owner keywords and stall gaps remain heuristics, not confirmed requests or causes.",
+        "action": "Choose acceptance gates and confirm actual blockers before assigning follow-up.",
+        "confidence": "medium"
+      },
+      "archive": {
+        "read": "Preserve this snapshot as historical evidence with quota timestamps, unpriced values, heuristic definitions, and status limitations.",
+        "action": "Store subsequent verification separately rather than rewriting historical statuses.",
+        "confidence": "high"
+      }
+    },
+    "runs": {
+      "run-01": {
+        "read": "Two workers completed with 14 errors combined; both were unpriced, and one carried approval/review keyword flags.",
+        "action": "Check both final reports for control-plane acceptance evidence and actual review needs.",
+        "confidence": "high"
+      },
+      "run-02": {
+        "read": "The relay worker completed with 213 tool calls and nine errors; blocked/device flags were keyword-derived, and cost was unpriced.",
+        "action": "Inspect the relay report for demonstrated behavior and substantiated dependencies.",
+        "confidence": "high"
+      },
+      "run-03": {
+        "read": "Three simulation workers completed; one had a 158-second heuristic stall gap, and all costs were unpriced.",
+        "action": "Compare simulation outputs with expected results and inspect the recorded gap.",
+        "confidence": "high"
+      },
+      "run-04": {
+        "read": "Two workers completed with 17 errors combined; one had a verify keyword flag, without supplied verification results.",
+        "action": "Inspect simulation and runtime reports for explicit checks and their outcomes.",
+        "confidence": "high"
+      },
+      "run-05": {
+        "read": "The simulation worker completed with one error, 62 tool calls, and a 321-second heuristic stall measure; cost was unpriced.",
+        "action": "Check the final result and events surrounding the recorded gap.",
+        "confidence": "high"
+      },
+      "run-06": {
+        "read": "The simulation worker completed with 85 tool calls and zero recorded errors; its cost was unpriced.",
+        "action": "Confirm expected simulation assertions rather than treating zero errors as verification.",
+        "confidence": "high"
+      },
+      "run-07": {
+        "read": "Seven workers completed across integration, relay, and approval labels; several had owner keywords, and one recorded a 308-second stall measure.",
+        "action": "Reconcile all seven reports with artifacts, checks, and confirmed follow-up requirements.",
+        "confidence": "high"
+      },
+      "run-08": {
+        "read": "The simulation worker completed after 10,521 seconds with three errors, a 290-second stall measure, and $14.86 recorded cost.",
+        "action": "Review simulation results and whether the long duration produced actionable evidence.",
+        "confidence": "high"
+      },
+      "run-09": {
+        "read": "Three relay, health-feedback, and approval workers completed; two carried approval, device, or review keyword flags.",
+        "action": "Check report dependencies and whether outputs share a verified interaction contract.",
+        "confidence": "high"
+      },
+      "run-10": {
+        "read": "The simulation worker was interrupted after 18,196 seconds, with 13 errors, a 795-second stall measure, and $30.70 cost.",
+        "action": "Inspect interruption evidence and recoverable simulation artifacts before proposing a retry.",
+        "confidence": "high"
+      },
+      "run-11": {
+        "read": "The runtime-verification worker completed with 228 tool calls, 14 errors, and $18.47 cost; no check outcomes were supplied.",
+        "action": "Separate tool errors from explicit runtime check outcomes in the report.",
+        "confidence": "high"
+      },
+      "run-12": {
+        "read": "The control-plane worker completed in 2,898 seconds with 216 tool calls, four errors, and $17.40 cost.",
+        "action": "Check the final report against a defined control-plane acceptance scenario.",
+        "confidence": "high"
+      },
+      "run-13": {
+        "read": "The workflow-study worker completed in 905 seconds with 33 tool calls, one error, and $1.17 cost.",
+        "action": "Check whether the report identifies concrete, evidence-backed integration follow-ups.",
+        "confidence": "high"
+      },
+      "run-14": {
+        "read": "The Dash approval-flow worker completed with 204 tool calls and 11 errors, without owner keyword flags.",
+        "action": "Inspect approval-flow checks and classify the recorded errors.",
+        "confidence": "high"
+      },
+      "run-15": {
+        "read": "Room-planning work was interrupted while runtime-labeled work completed; both recorded heuristic stall measures, and neither establishes verified outcomes.",
+        "action": "Compare partial and final artifacts for unresolved dependencies before further allocation.",
+        "confidence": "high"
+      },
+      "run-16": {
+        "read": "Three workers completed and one was interrupted across ring, approval, and research labels; all four recorded heuristic stall measures.",
+        "action": "Separate ring acceptance evidence from unrelated research outputs and interrupted work.",
+        "confidence": "high"
+      },
+      "run-17": {
+        "read": "The approval-flow worker was interrupted with seven errors, a 570-second stall measure, and an approve keyword flag.",
+        "action": "Check interruption context and whether approval was actually outstanding.",
+        "confidence": "high"
+      },
+      "run-18": {
+        "read": "The session-bridge worker was interrupted after 675 seconds with zero errors and a 353-second heuristic stall measure.",
+        "action": "Inspect its last recorded event and any saved bridge artifacts.",
+        "confidence": "high"
+      },
+      "run-19": {
+        "read": "Three workers completed across runtime, approval, and bridge labels; approval/review keywords appeared, but no explicit resume links were recorded.",
+        "action": "Confirm artifact continuity and actual review obligations from the final reports.",
+        "confidence": "high"
+      },
+      "run-20": {
+        "read": "Four Hermes workers completed across debt, runtime, bridge, and verification labels; three carried approval or review keywords.",
+        "action": "Match integration artifacts to checks, merge evidence, and confirmed remaining work.",
+        "confidence": "high"
+      },
+      "run-21": {
+        "read": "The Dash session-bridge worker completed with 213 tool calls, two errors, and a 153-second heuristic stall measure.",
+        "action": "Check bridge behavior evidence and overlap with other completed bridge work.",
+        "confidence": "high"
+      },
+      "run-22": {
+        "read": "The relay worker completed with 281 tool calls, seven errors, a 179-second stall measure, and $21 recorded cost.",
+        "action": "Inspect relay acceptance evidence and classify errors before proposing more work.",
+        "confidence": "high"
+      },
+      "run-23": {
+        "read": "The workflow-study worker completed with 112 tool calls, four errors, and $6.57 cost.",
+        "action": "Check the report for actionable recommendations tied to supplied evidence.",
+        "confidence": "high"
+      },
+      "run-24": {
+        "read": "The NOOP ring worker completed with 99 tool calls and three errors; approval, device, and review flags were keyword-derived.",
+        "action": "Check ring-to-relay evidence and confirm whether flagged dependencies remained unresolved.",
+        "confidence": "high"
+      },
+      "run-25": {
+        "read": "Relay and phone-supervisor workers completed; the relay worker carried approval/review keywords, and combined recorded cost was $7.33.",
+        "action": "Compare relay and supervisor reports for a documented handoff and acceptance result.",
+        "confidence": "high"
+      },
+      "run-26": {
+        "read": "The phone-supervisor worker completed in 1,649 seconds with 64 tool calls, two errors, and $4.87 cost.",
+        "action": "Check documented supervisor behavior without inferring device readiness from completion.",
+        "confidence": "high"
+      },
+      "run-27": {
+        "read": "The phone-supervisor worker completed with 69 tool calls and six errors, with no recorded owner flags.",
+        "action": "Classify the errors and compare its reported checks with adjacent supervisor work.",
+        "confidence": "high"
+      },
+      "run-28": {
+        "read": "The phone integration-debt worker completed with 139 tool calls, eight errors, and $8.93 cost.",
+        "action": "Identify changed artifacts and check verification and merge evidence before crediting debt reduction.",
+        "confidence": "high"
+      },
+      "run-29": {
+        "read": "The phone-supervisor worker was interrupted with 162 tool calls, eight errors, and a review-pr keyword flag.",
+        "action": "Inspect partial artifacts and confirm whether an actual reviewable change exists.",
+        "confidence": "high"
+      },
+      "run-30": {
+        "read": "The workflow-study worker was interrupted after 1,140 seconds with 53 tool calls, three errors, and $2.98 cost.",
+        "action": "Check saved findings and interruption context before proposing continuation.",
+        "confidence": "high"
+      },
+      "run-31": {
+        "read": "The workflow-study worker was interrupted after 730 seconds with 60 tool calls and four errors; no resume link was recorded.",
+        "action": "Compare partial findings with earlier study artifacts to avoid duplicate follow-up.",
+        "confidence": "high"
+      },
+      "run-32": {
+        "read": "Both z0live and Dash relay workers were interrupted, with 23 errors and $23.22 recorded cost combined.",
+        "action": "Compare interruption events and saved artifacts with the inferred successor reports.",
+        "confidence": "high"
+      },
+      "run-33": {
+        "read": "The device-supervision worker was interrupted after eight seconds with zero tool calls; its null cost was unpriced.",
+        "action": "Inspect startup and interruption records before proposing another supervision dispatch.",
+        "confidence": "high"
+      },
+      "run-34": {
+        "read": "Two heuristically linked relay/control-plane successors completed; a separate phone-supervision worker was interrupted, and one completed worker had a device keyword.",
+        "action": "Validate inferred predecessor links and inspect successor acceptance evidence.",
+        "confidence": "high"
+      },
+      "run-35": {
+        "read": "The agent-runtime worker was interrupted after 1,916 seconds with 73 tool calls, seven errors, and $4.25 cost.",
+        "action": "Inspect runtime artifacts and the interruption record for recoverable work.",
+        "confidence": "high"
+      },
+      "run-36": {
+        "read": "Both integration workers were interrupted after roughly 1,130 seconds, with nine errors and $2.80 cost combined.",
+        "action": "Compare interruption records and identify incomplete integration checks before retrying.",
+        "confidence": "high"
+      },
+      "run-37": {
+        "read": "The phone-supervisor worker was interrupted after 442 seconds with 21 tool calls, four errors, and $0.57 cost.",
+        "action": "Check startup progress and error categories against the interruption record.",
+        "confidence": "high"
+      },
+      "run-38": {
+        "read": "The control-plane worker completed after 9,204 seconds with four errors, a 206-second stall measure, and a review-pr keyword flag.",
+        "action": "Inspect the reported change, acceptance checks, and actual review status.",
+        "confidence": "high"
+      },
+      "run-39": {
+        "read": "The NOOP ring worker completed with 126 tool calls, three errors, and $7.24 cost, without owner keyword flags.",
+        "action": "Check for explicit double-tap-to-z0live results rather than relying on absent flags.",
+        "confidence": "high"
+      },
+      "run-40": {
+        "read": "The NOOP supervisor worker completed with five errors, a 462-second heuristic stall measure, and a device keyword flag.",
+        "action": "Check reported supervisor behavior and substantiate any device-related dependency.",
+        "confidence": "high"
+      },
+      "run-41": {
+        "read": "The agent-runtime worker completed with eight errors, a 361-second stall measure, and device/verify keyword flags.",
+        "action": "Inspect runtime check outcomes and confirm whether verification remained outstanding.",
+        "confidence": "high"
+      },
+      "run-42": {
+        "read": "The health-feedback worker completed with five errors, a 604-second heuristic stall measure, and a review-pr keyword flag.",
+        "action": "Inspect feedback acceptance evidence and confirm the actual review state.",
+        "confidence": "high"
+      },
+      "run-43": {
+        "read": "The Dash supervisor worker completed with 196 tool calls, eight errors, a 460-second stall measure, and a device keyword flag.",
+        "action": "Check supervisor-to-control-plane evidence and clarify any documented device dependency.",
+        "confidence": "high"
+      },
+      "run-44": {
+        "read": "Four workers completed and two were interrupted across video and garden labels; blocked/review keywords appeared in completed reports.",
+        "action": "Separate artifacts by scope and confirm blockers before allocating additional capacity.",
+        "confidence": "high"
+      },
+      "run-45": {
+        "read": "The health-feedback worker completed with 92 tool calls and two errors; device/review keyword flags do not establish pending requests.",
+        "action": "Check feedback behavior evidence and substantiate any remaining review or device dependency.",
+        "confidence": "high"
+      },
+      "run-46": {
+        "read": "The Dash supervisor worker completed with three errors, a 240-second stall measure, and approval/review keyword flags.",
+        "action": "Inspect final artifacts and confirm actual approval, review, and acceptance states.",
+        "confidence": "high"
+      },
+      "run-47": {
+        "read": "The trace-prototype worker was running at snapshot time, with 177 tool calls, six errors, and $15.67 recorded cost.",
+        "action": "Locate a subsequent final report and control-plane acceptance evidence.",
+        "confidence": "high"
+      },
+      "run-48": {
+        "read": "The NOOP ring worker completed with 109 tool calls, six errors, and a device keyword flag; recorded cost was $5.53.",
+        "action": "Check the double-tap acceptance record and any substantiated device dependency.",
+        "confidence": "high"
+      },
+      "run-49": {
+        "read": "The runtime-verification worker was running at snapshot time, with three errors, a 159-second heuristic stall measure, and $6.15 cost.",
+        "action": "Locate subsequent check results and distinguish tool errors from verification outcomes.",
+        "confidence": "high"
+      },
+      "run-50": {
+        "read": "The workflow-study worker was running at snapshot time, with 76 tool calls, three errors, and $3.31 recorded cost.",
+        "action": "Locate a subsequent report and assess whether findings justify further allocation.",
+        "confidence": "high"
+      },
+      "run-51": {
+        "read": "The Bend approval-flow worker was running at snapshot time, with 111 tool calls, seven errors, and $5.88 recorded cost.",
+        "action": "Locate its subsequent report and explicit approval-flow check outcomes.",
+        "confidence": "high"
+      }
+    }
+  },
+  "content_sha256": "a18f6b1397fd4b17efae215f5bf6b86fed3cb558675b5655b06990252304d6c3"
+}

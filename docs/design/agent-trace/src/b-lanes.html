@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>B · Run replay · Dash agent-trace prototype</title>
+<style>
+/*__SHARED_CSS__*/
+body { padding: 18px 16px 40px; }
+.wrap { max-width: 1120px; margin: 0 auto; }
+.top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.top h1 { margin: 2px 0 0; font: 500 30px/1.05 var(--serif); }
+select { background: var(--sunk); color: var(--text); border: 1px solid var(--hair2); border-radius: 8px; height: 32px; padding: 0 8px; font: 13px var(--sans); max-width: 100%; }
+.card { padding: 16px 18px 14px; }
+.title { font: 600 15px/1.3 var(--sans); }
+.status { display: flex; align-items: center; gap: 8px; min-height: 22px; margin-top: 4px; font: 13px/1.4 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.status .live { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 3px rgba(215,185,134,.15); }
+.status .done { color: var(--ok); }
+.status b { color: var(--text); font-weight: 500; }
+.body { display: grid; grid-template-columns: var(--lw) minmax(0, 1fr); margin-top: 14px; position: relative; }
+:root { --lw: 170px; --row: 40px; }
+.labels { position: relative; }
+.lab { height: var(--row); display: flex; flex-direction: column; justify-content: center; padding-right: 10px; min-width: 0; transition: opacity .2s; }
+.lab .n { font: 600 13px/1.2 var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 7px; }
+.lab .m { font: 11px/1.3 var(--mono); color: var(--tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 15px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.plotwrap { position: relative; overflow-x: auto; overflow-y: visible; }
+svg#plot { display: block; overflow: visible; }
+.dim-off .row:not(.on) { opacity: .26; }
+.row { transition: opacity .2s; }
+.seg { cursor: pointer; }
+.seg:focus { outline: none; }
+.seg:focus-visible + .focusring, .seg.kfocus { stroke: var(--gold); stroke-width: 1.5px; }
+.conn { fill: none; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; transition: stroke-dashoffset .36s cubic-bezier(.2,.75,.2,1), opacity .2s; }
+.port { transform-box: fill-box; transform-origin: center; transition: transform .26s cubic-bezier(.3,.8,.3,1.5), opacity .2s; }
+.axis { display: grid; grid-template-columns: var(--lw) minmax(0, 1fr); margin-top: 6px; }
+.track { position: relative; height: 28px; cursor: pointer; touch-action: none; }
+.track .rail { position: absolute; left: 0; right: 0; top: 0; border-top: 1px solid var(--hair); }
+.tick { position: absolute; top: 6px; transform: translateX(-50%); font: 10.5px var(--mono); color: var(--tertiary); white-space: nowrap; }
+.knob { position: absolute; top: -5px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 3px rgba(12,12,10,.9); }
+.knob:focus-visible { outline: 1.5px solid var(--gold); outline-offset: 3px; }
+.foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.ibtn { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--hair2); background: var(--glass); display: grid; place-items: center; cursor: pointer; }
+.ibtn svg { width: 14px; height: 14px; fill: var(--text); }
+.legend { margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+html { overflow-x: hidden; }
+.card-pop { position: absolute; z-index: 4; width: min(290px, calc(100% - 4px)); padding: 11px 13px; border-radius: 10px; border: 1px solid var(--hair2); background: rgba(18,19,16,.96); box-shadow: 0 14px 34px rgba(0,0,0,.5); pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity .16s, transform .22s cubic-bezier(.3,.8,.3,1.2), left .24s cubic-bezier(.3,.8,.3,1.1), top .24s cubic-bezier(.3,.8,.3,1.1); font-size: 12.5px; }
+.card-pop.show { opacity: 1; transform: none; }
+.card-pop .h { display: flex; align-items: center; gap: 7px; font-weight: 600; }
+.card-pop .h .mm { font: 11px var(--mono); color: var(--tertiary); font-weight: 400; }
+.card-pop .w { margin-top: 6px; font-size: 13.5px; }
+.card-pop .x { margin-top: 6px; font: 11px/1.5 var(--mono); color: var(--tertiary); }
+.card-pop .bad { margin-top: 6px; }
+.notes { margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.note { padding: 12px 14px; font-size: 13px; color: var(--muted); }
+.note b { color: var(--text); font-weight: 600; display: block; margin-bottom: 4px; }
+@media (max-width: 760px) { .notes { grid-template-columns: 1fr; } }
+@media (max-width: 520px) {
+  :root { --lw: 92px; --row: 38px; }
+  body { padding: 12px 8px 40px; }
+  .card { padding: 12px 10px; }
+  .lab .m { display: none; }
+  .legend { margin-left: 0; width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div><div class="cap">Dash · prototype B · run replay</div><h1>Who did what, when</h1></div>
+  <label class="cap" style="display:flex;flex-direction:column;gap:5px">Run<select id="run" aria-label="Run"></select></label>
+</header>
+<section class="bracket card" id="root" aria-label="Run replay">
+  <div class="title" id="title"></div>
+  <div class="status" id="status" aria-hidden="true"></div>
+  <div class="sr" aria-live="polite" id="live" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></div>
+  <div class="body" id="body">
+    <div class="labels" id="labels"></div>
+    <div class="plotwrap" id="pw"><svg id="plot" role="group" aria-label="Workers on a shared time axis"></svg></div>
+    <div class="card-pop" id="pop" aria-hidden="true"></div>
+  </div>
+  <div class="axis"><div></div><div class="track" id="track"><div class="rail"></div><div class="knob" id="knob" role="slider" tabindex="0" aria-label="Run time"></div></div></div>
+  <div class="foot">
+    <button class="ibtn" id="play" aria-label="Pause"><svg viewBox="0 0 14 14" id="play-g"></svg></button>
+    <button class="ibtn" id="restart" aria-label="Restart"><svg viewBox="0 0 14 14"><path d="M7 2a5 5 0 1 1-4.6 3h1.7A3.5 3.5 0 1 0 7 3.5V6L3.5 3 7 0z"/></svg></button>
+    <div class="seg" role="group" aria-label="Speed" id="speeds"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+</section>
+<div class="notes">
+  <div class="bracket note"><b>Bands under each worker</b>Supervision state from the z0 FSM vocabulary: Dispatched or Resumed, Running, Stalled, Verifying, DraftPR, then Completed or Interrupted. Verifying and DraftPR are read from tool calls, so they are estimates.</div>
+  <div class="bracket note"><b>Elbows</b>A dispatch drops from the orchestrator into the worker's first call. A report rises from a worker's last call. An interrupted worker never reports back, so it ends in a cross with no return line.</div>
+  <div class="bracket note"><b>Counters</b>Calls are exact. Tokens and cost are per-worker totals from Hermes, spread over the replay in proportion to calls, so mid-run values are approximate (≈).</div>
+</div>
+<p class="provenance" id="prov"></p>
+</div>
+<div class="stamp">__BUILD__</div>
+<script id="trace-data" type="application/json">__TRACE_DATA__</script>
+<script>/*__SHARED_JS__*/</script>
+<script>
+(() => {
+const { D, runs, owner, dur, usd, tok, clock, clockS, totalTok, states, STATE_COLOR, signals, el, svg, store, NEED, reduced } = TR;
+const PH_COLORS = { explore: "#81b9da", implement: "#b098cd", verify: "#98cf8b", pr: "#d7b986", delegate: "#b4afa3" };
+const multi = runs.filter((r) => r.tasks.length >= 2).sort((a, b) => b.s - a.s);
+const DEFAULT = (multi.find((r) => r.tasks.length >= 5 && r.tasks.some((t) => t.status === "interrupted")) || multi[0]).id;
+const sel = document.getElementById("run");
+for (const r of multi) sel.append(el("option", { value: r.id }, `${r.id} · ${clock(r.s)} · ${r.tasks.length} workers${r.tasks.some((t) => t.status === "interrupted") ? " · interrupted" : ""}`));
+let runId = store.get("b.run", DEFAULT); if (!multi.some((r) => r.id === runId)) runId = DEFAULT;
+sel.value = runId;
+const SPEEDS = [60, 240, 960];
+let speed = store.get("b.speed", 240);
+
+let R, T0, T1, rows, x, W, now, playing, pinned = null, lastFrame = 0, conns = [], ports = [], fins = [], edges = [], counters;
+const plot = document.getElementById("plot"), pop = document.getElementById("pop"), body = document.getElementById("body");
+
+function segmentsOf(t) {
+  // cluster calls separated by < 45 s into one span; colour = phase with most tool time
+  const out = []; let cur = null;
+  for (const e of t.events) {
+    const a = e.t, b = e.t + Math.max(e.dur, 2);
+    if (cur && a - cur.e < 45) { cur.e = Math.max(cur.e, b); cur.ev.push(e); }
+    else { cur = { s: a, e: b, ev: [e] }; out.push(cur); }
+  }
+  for (const s of out) {
+    // what the span was FOR: a PR push or a verification pass outranks the reads around it
+    const c = {}; for (const e of s.ev) c[e.ph] = (c[e.ph] || 0) + 1;
+    const n = s.ev.length, share = (k) => (c[k] || 0) / n;
+    s.ph = c.pr ? "pr" : share("verify") >= 0.2 ? "verify" : share("implement") >= 0.2 ? "implement" : share("delegate") >= 0.5 ? "delegate" : "explore";
+    s.err = s.ev.filter((e) => e.ok === 0).length;
+    s.tools = [...new Set(s.ev.map((e) => e.tool))];
+  }
+  return out;
+}
+
+function load(id) {
+  runId = id; store.set("b.run", id);
+  R = runs.find((r) => r.id === id);
+  T0 = R.s; T1 = R.e;
+  const order = [...R.tasks].sort((a, b) => a.e - b.e); // first to report sits right under the orchestrator
+  rows = [{ kind: "orch" }, ...order.map((t) => ({ kind: "task", t, segs: segmentsOf(t), fsm: states(t) }))];
+  pinned = null; body.classList.remove("dim-off");
+  const s = TR.summary(R.tasks);
+  document.getElementById("title").textContent = `${R.id}: ${R.tasks.length} parallel workers, dispatched ${clock(R.s)}`;
+  counters = { s, cut: R.tasks.filter((t) => t.status === "interrupted").length, needs: R.tasks.filter((t) => t.needs_owner.length).length };
+  document.getElementById("prov").innerHTML = `<b>Source</b> Hermes delegation log ${R.id} (${s.calls} tool calls) and state.db token accounting. <b>Privacy</b> worker labels are synthetic (domain + letter); no goals, prompts or outputs. Exported ${D.generated}.`;
+  build();
+  now = reduced ? T1 : T0; playing = !reduced;
+  update(true);
+}
+
+function build() {
+  const lab = document.getElementById("labels"); lab.innerHTML = "";
+  plot.innerHTML = "";
+  const pw = document.getElementById("pw");
+  W = Math.max(220, pw.clientWidth);
+  const RH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row")) || 40;
+  const H = rows.length * RH;
+  plot.setAttribute("width", W); plot.setAttribute("height", H); plot.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const pad = 6;
+  const padR = 22; // room for end glyphs (cross, need-you diamond)
+  x = (t) => pad + ((t - T0) / Math.max(1, T1 - T0)) * (W - pad - padR);
+  const defs = svg("defs");
+  defs.innerHTML = `<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="rgba(231,168,117,.10)"/><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(231,168,117,.65)" stroke-width="1.3"/></pattern>
+  <pattern id="wait" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(236,232,223,.22)" stroke-width="1"/></pattern>
+  <clipPath id="reveal"><rect id="revealRect" x="0" y="-20" width="0" height="${H + 40}"/></clipPath>
+  <linearGradient id="shine" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".35"/></linearGradient>`;
+  plot.append(defs);
+  // grid
+  const grid = svg("g");
+  const span = T1 - T0, steps = [60e3, 120e3, 300e3, 600e3, 900e3, 1800e3, 3600e3];
+  const step = steps.find((s) => span / s <= Math.max(3, W / 110)) || 3600e3;
+  const track = document.getElementById("track"); for (const t of track.querySelectorAll(".tick")) t.remove();
+  for (let t = 0; t <= span + 1; t += step) {
+    const xx = x(T0 + t);
+    grid.append(svg("line", { x1: xx, x2: xx, y1: 0, y2: H, stroke: "rgba(236,232,223,.05)" }));
+    track.append(el("span", { class: "tick", style: `left:${xx}px` }, t === 0 ? clock(T0) : `+${dur(t / 1000).replace(/ 00s$/, "")}`));
+  }
+  plot.append(grid);
+  // background lanes
+  const lanes = svg("g"), content = svg("g", { "clip-path": "url(#reveal)" }), over = svg("g");
+  plot.append(lanes, content, over);
+  conns = []; ports = []; fins = []; edges = [];
+  const orchY = RH / 2;
+  rows.forEach((row, i) => {
+    const y0 = i * RH, mid = y0 + RH / 2 - 3;
+    const g = svg("g", { class: "row", "data-i": i });
+    content.append(g);
+    row.g = g; row.y0 = y0; row.mid = mid;
+    if (row.kind === "orch") {
+      lab.append(el("div", { class: "lab", "data-i": i }, el("div", { class: "n" }, el("span", { class: "dot", style: "background:var(--muted)" }), `Hermes`), el("div", { class: "m" }, `${R.orchestrator} · orchestrator`)));
+      // waiting bar: the orchestrator waits on workers between dispatch and last report
+      g.append(svg("rect", { x: x(T0), y: mid - 6, width: Math.max(1, x(T1) - x(T0)), height: 12, rx: 3, fill: "url(#wait)", stroke: "rgba(236,232,223,.12)" }));
+      // owner turns during the run: steering
+      for (const o of owner) {
+        if (o.at < T0 || o.at > T1 || o.kind !== "owner") continue;
+        const d = svg("rect", { x: x(o.at) - 3.5, y: mid - 3.5, width: 7, height: 7, fill: "#d7b986", transform: `rotate(45 ${x(o.at)} ${mid})` });
+        d.append(svg("title")); d.firstChild.textContent = `You · ${clockS(o.at)}`;
+        over.append(d); d.dataset.at = o.at; d.style.opacity = 0; fins.push({ el: d, at: o.at, kind: "owner" });
+      }
+      lanes.append(svg("line", { x1: 0, x2: W, y1: y0 + RH - 0.5, y2: y0 + RH - 0.5, stroke: "rgba(236,232,223,.06)" }));
+      return;
+    }
+    const t = row.t;
+    const colorDot = t.status === "interrupted" ? "var(--danger)" : t.status === "running" ? "var(--gold)" : "var(--ok)";
+    lab.append(el("div", { class: "lab", "data-i": i }, el("div", { class: "n" }, el("span", { class: "dot", style: `background:${colorDot}` }), t.label, t.needs_owner.length ? el("span", { class: "diamond", title: "needs you", style: "width:6px;height:6px" }) : null), el("div", { class: "m" }, `${t.model.replace("claude-", "")} · ${dur((t.e - t.s) / 1000)}`)));
+    lanes.append(svg("line", { x1: 0, x2: W, y1: y0 + RH - 0.5, y2: y0 + RH - 0.5, stroke: "rgba(236,232,223,.06)" }));
+    // thinking tint across the worker's life, then spans on top
+    g.append(svg("rect", { x: x(t.s), y: mid - 6, width: Math.max(1, x(t.e) - x(t.s)), height: 12, rx: 3, fill: "rgba(236,232,223,.07)" }));
+    for (const st of t.stalls) g.append(svg("rect", { x: x(t.s + st.s * 1000), y: mid - 6, width: Math.max(1, x(t.s + st.e * 1000) - x(t.s + st.s * 1000)), height: 12, fill: "url(#hatch)" }));
+    row.segs.forEach((s, j) => {
+      const a = x(t.s + s.s * 1000), b = x(t.s + s.e * 1000);
+      const r = svg("rect", { class: "seg", x: a, y: mid - 6, width: Math.max(1.5, b - a), height: 12, rx: 2.5, fill: PH_COLORS[s.ph], tabindex: -1, role: "button", "data-i": i, "data-j": j });
+      r.setAttribute("aria-label", `${t.label}, ${s.ph}, ${s.ev.length} calls, ${dur(s.e - s.s)}${s.err ? `, ${s.err} failed` : ""}, from ${clockS(t.s + s.s * 1000)}`);
+      g.append(r); s.el = r;
+      if (s.err) { const ex = x(t.s + s.ev.find((e) => e.ok === 0).t * 1000); g.append(svg("rect", { x: ex - 0.75, y: mid - 9, width: 1.5, height: 3, fill: "#e37f65" })); }
+    });
+    // FSM band
+    const total = (t.e - t.s) / 1000;
+    for (const sgm of row.fsm.segs) g.append(svg("rect", { x: x(t.s + sgm.s * 1000), y: mid + 10, width: Math.max(1, x(t.s + sgm.e * 1000) - x(t.s + sgm.s * 1000)), height: 3, fill: STATE_COLOR[sgm.state], opacity: sgm.state === "Running" ? 0.35 : 0.9 }));
+    // leading edge (square, live) + shine
+    const edge = svg("g", { opacity: 0 });
+    edge.append(svg("rect", { x: -14, y: mid - 6, width: 14, height: 12, fill: "url(#shine)" }), svg("rect", { x: -2, y: mid - 7, width: 2, height: 14, fill: "#ece8df" }));
+    over.append(edge); edges.push({ el: edge, t });
+    // dispatch elbow: orchestrator -> first call
+    const xs = x(t.s), first = row.segs[0] ? x(t.s + row.segs[0].s * 1000) : xs + 6, r2 = 5;
+    const dPath = `M${xs},${orchY + 6} L${xs},${mid - r2} Q${xs},${mid} ${xs + r2},${mid} L${Math.max(xs + r2, first)},${mid}`;
+    const dp = svg("path", { class: "conn", d: dPath, stroke: "rgba(129,185,218,.55)" });
+    over.append(dp); conns.push({ el: dp, at: t.s, i, kind: "dispatch" });
+    const pd = svg("circle", { class: "port", cx: xs, cy: orchY + 3, r: 3, fill: t.resume_of ? "#b098cd" : "#81b9da" });
+    over.append(pd); ports.push({ el: pd, at: t.s, i });
+    // report or interruption
+    const xe = x(t.e);
+    if (t.status === "completed") {
+      const last = row.segs.length ? x(t.s + row.segs[row.segs.length - 1].e * 1000) : xe;
+      const rp = svg("path", { class: "conn", d: `M${Math.min(last, xe)},${mid} L${xe - r2},${mid} Q${xe},${mid} ${xe},${mid - r2} L${xe},${orchY + 6}`, stroke: "rgba(152,207,139,.6)" });
+      over.append(rp); conns.push({ el: rp, at: t.e, i, kind: "report" });
+      const pr = svg("circle", { class: "port", cx: xe, cy: orchY + 3, r: 3, fill: "#98cf8b" });
+      over.append(pr); ports.push({ el: pr, at: t.e, i });
+    } else if (t.status === "interrupted") {
+      const c = svg("g", { opacity: 0 });
+      c.append(svg("path", { d: `M${xe - 4},${mid - 4} L${xe + 4},${mid + 4} M${xe + 4},${mid - 4} L${xe - 4},${mid + 4}`, stroke: "#e37f65", "stroke-width": 1.8, "stroke-linecap": "round" }));
+      const lt = svg("text", { x: xe + 8, y: mid + 4, fill: "#e37f65", "font-size": 10.5, "font-family": "IBM Plex Mono" }); lt.textContent = "interrupted";
+      if (xe + 80 > W) { lt.setAttribute("x", xe - 8); lt.setAttribute("text-anchor", "end"); lt.setAttribute("y", mid - 9); }
+      c.append(lt); over.append(c); fins.push({ el: c, at: t.e, kind: "cut" });
+    }
+    if (t.needs_owner.length && t.status !== "interrupted") {
+      const dmd = svg("rect", { x: xe + 7, y: mid - 3.5, width: 7, height: 7, fill: "none", stroke: "#d7b986", "stroke-width": 1.4, transform: `rotate(45 ${xe + 10.5} ${mid})`, opacity: 0 });
+      over.append(dmd); fins.push({ el: dmd, at: t.e, kind: "need" });
+    }
+  });
+  for (const c of conns) { const L = c.el.getTotalLength(); c.L = L; c.el.style.strokeDasharray = L; c.el.style.strokeDashoffset = L; c.drawn = false; }
+  for (const p of ports) { p.el.style.transform = "scale(0)"; p.el.style.opacity = 0; }
+  // speeds
+  const sp = document.getElementById("speeds"); sp.innerHTML = "";
+  for (const v of SPEEDS) { const b = el("button", { "aria-pressed": v === speed }, `${v}x`); b.onclick = () => { speed = v; store.set("b.speed", v); for (const q of sp.children) q.setAttribute("aria-pressed", q === b); }; sp.append(b); }
+  const lg = document.getElementById("legend"); lg.innerHTML = "";
+  for (const [k, c] of Object.entries(PH_COLORS)) if (k !== "delegate") lg.append(el("span", {}, el("span", { class: "sw", style: `background:${c}` }), k));
+  lg.append(el("span", {}, el("span", { class: "sw", style: "background:repeating-linear-gradient(135deg,#e7a875 0 2px,transparent 2px 4px)" }), "stalled"),
+    el("span", {}, el("span", { class: "sw", style: "background:rgba(236,232,223,.12)" }), "thinking"),
+    el("span", {}, el("span", { class: "bad", style: "font:600 12px var(--mono)" }, "✕"), "interrupted"),
+    el("span", {}, el("span", { class: "diamond" }), "you"));
+  bindRows();
+}
+
+// ---------- clock
+function frame(ts) {
+  if (playing) {
+    const dt = lastFrame ? Math.min(100, ts - lastFrame) : 16;
+    now = Math.min(T1, now + dt * speed);
+    if (now >= T1) { playing = false; announce(true); }
+    update(false);
+  }
+  lastFrame = ts;
+  requestAnimationFrame(frame);
+}
+let lastCount = 0;
+function update(force) {
+  const xr = x(now);
+  document.getElementById("revealRect").setAttribute("width", Math.max(0, xr + 0.5));
+  for (const c of conns) { const d = now >= c.at; if (d !== c.drawn || force) { c.drawn = d; c.el.style.transition = force || reduced ? "none" : ""; c.el.style.strokeDashoffset = d ? 0 : c.L; } }
+  for (const p of ports) { const d = now >= p.at; p.el.style.transform = d ? "scale(1)" : "scale(0)"; p.el.style.opacity = d ? 1 : 0; }
+  for (const f of fins) f.el.setAttribute("opacity", now >= f.at ? 1 : 0);
+  for (const e of edges) { const on = now > e.t.s && now < e.t.e && now < T1; e.el.setAttribute("opacity", on ? 1 : 0); if (on) e.el.setAttribute("transform", `translate(${xr},0)`); }
+  // playhead knob
+  const knob = document.getElementById("knob");
+  knob.style.left = xr + "px";
+  knob.setAttribute("aria-valuetext", `${dur((now - T0) / 1000)} of ${dur((T1 - T0) / 1000)}`);
+  knob.setAttribute("aria-valuemin", 0); knob.setAttribute("aria-valuemax", Math.round((T1 - T0) / 1000)); knob.setAttribute("aria-valuenow", Math.round((now - T0) / 1000));
+  let ph = plot.querySelector("#ph");
+  if (!ph) { ph = svg("line", { id: "ph", y1: 0, stroke: "rgba(236,232,223,.5)", "stroke-width": 1 }); plot.append(ph); }
+  ph.setAttribute("x1", xr); ph.setAttribute("x2", xr); ph.setAttribute("y2", plot.getAttribute("height"));
+  ph.style.transition = "opacity .2s"; ph.style.opacity = now >= T1 ? 0 : 1;
+  // counters ~20 Hz
+  const ts = performance.now();
+  if (force || ts - lastCount > 50 || now >= T1) { lastCount = ts; status(); }
+  document.getElementById("play").setAttribute("aria-label", playing ? "Pause" : "Play");
+  document.getElementById("play-g").innerHTML = playing ? '<rect x="3" y="2" width="3" height="10" rx="1"/><rect x="8" y="2" width="3" height="10" rx="1"/>' : '<path d="M3.5 2.2v9.6a.6.6 0 0 0 .9.5l7.4-4.8a.6.6 0 0 0 0-1L4.4 1.7a.6.6 0 0 0-.9.5z"/>';
+}
+function status() {
+  const st = document.getElementById("status");
+  const s = counters.s;
+  if (now >= T1) {
+    const par = s.agent / Math.max(1, (T1 - T0) / 1000);
+    st.innerHTML = `<span class="done">✓</span><b>${R.tasks.length} workers</b> · ${dur((T1 - T0) / 1000)} · ${par.toFixed(1)}x parallel · ${usd(s.cost)}${counters.cut ? ` · <span class="bad">${counters.cut} interrupted</span>` : ""}${counters.needs ? ` · <span class="gold">◆ ${counters.needs} need you</span>` : ""}`;
+    return;
+  }
+  let calls = 0, cost = 0, tokens = 0, working = 0;
+  for (const t of R.tasks) {
+    const off = (now - t.s) / 1000; if (off < 0) continue;
+    const n = t.events.filter((e) => e.t <= off).length; calls += n;
+    const f = t.events.length ? n / t.events.length : 0; cost += (t.cost_usd || 0) * f; tokens += totalTok(t) * f;
+    if (now < t.e) working++;
+  }
+  st.innerHTML = `<span class="live"></span>${playing ? "Replaying" : "Paused"} · <b>${dur((now - T0) / 1000)}</b> · ${calls.toLocaleString()} calls · ≈${tok(tokens)} tokens · ≈${usd(cost)} · ${working} working`;
+}
+function announce(done) { document.getElementById("live").textContent = done ? document.getElementById("status").textContent : playing ? "Replaying" : "Paused"; }
+requestAnimationFrame(frame);
+
+// ---------- controls
+document.getElementById("play").onclick = () => { if (now >= T1) now = T0; playing = !playing; lastFrame = 0; announce(false); update(false); };
+document.getElementById("restart").onclick = () => { now = T0; playing = true; lastFrame = 0; update(true); };
+const track = document.getElementById("track"), knob = document.getElementById("knob");
+function scrubTo(clientX) { const r = track.getBoundingClientRect(); const f = Math.max(0, Math.min(1, (clientX - r.left - 6) / (r.width - 28))); now = T0 + f * (T1 - T0); playing = false; update(true); }
+track.addEventListener("pointerdown", (ev) => { scrubTo(ev.clientX); track.setPointerCapture(ev.pointerId); track.onpointermove = (e) => scrubTo(e.clientX); track.onpointerup = () => { track.onpointermove = null; }; });
+knob.addEventListener("keydown", (ev) => {
+  const span = T1 - T0, small = span / 100, big = span / 10;
+  const m = { ArrowRight: small, ArrowLeft: -small, PageUp: big, PageDown: -big };
+  if (ev.key in m) now += (ev.shiftKey ? 10 : 1) * m[ev.key];
+  else if (ev.key === "Home") now = T0; else if (ev.key === "End") now = T1; else return;
+  ev.preventDefault(); now = Math.max(T0, Math.min(T1, now)); playing = false; update(true);
+});
+addEventListener("keydown", (ev) => {
+  if (ev.target.matches("select, input")) return;
+  if (ev.key === " " && ev.target === document.body) { ev.preventDefault(); document.getElementById("play").click(); }
+  if (ev.key === "r" || ev.key === "R") document.getElementById("restart").click();
+  if (ev.key === "Escape") unpin();
+});
+sel.onchange = () => load(sel.value);
+
+// ---------- hover / pin / roving focus over spans
+function bindRows() {
+  const segEls = [...plot.querySelectorAll(".seg")];
+  if (segEls[0]) segEls[0].setAttribute("tabindex", 0);
+  for (const r of segEls) {
+    r.addEventListener("pointerenter", () => show(r));
+    r.addEventListener("pointerleave", () => { if (!pinned) hide(); else show(pinned); });
+    r.addEventListener("focus", () => show(r));
+    r.addEventListener("blur", () => { if (!pinned) hide(); });
+    r.addEventListener("click", (ev) => { ev.stopPropagation(); togglePin(r); });
+    r.addEventListener("keydown", (ev) => {
+      const i = +r.dataset.i, j = +r.dataset.j, row = rows[i];
+      let n = null;
+      if (ev.key === "ArrowRight") n = row.segs[j + 1]?.el; else if (ev.key === "ArrowLeft") n = row.segs[j - 1]?.el;
+      else if (ev.key === "Home") n = row.segs[0]?.el; else if (ev.key === "End") n = row.segs[row.segs.length - 1]?.el;
+      else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+        const k = ev.key === "ArrowDown" ? 1 : -1; let q = i + k;
+        while (rows[q] && (rows[q].kind !== "task" || !rows[q].segs.length)) q += k;
+        if (rows[q]) { const at = row.segs[j].s * 1000 + row.t.s; n = rows[q].segs.reduce((b, s) => (Math.abs(rows[q].t.s + s.s * 1000 - at) < Math.abs(rows[q].t.s + b.s * 1000 - at) ? s : b)).el; }
+      } else if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); togglePin(r); return; }
+      else if (ev.key === "Escape") { unpin(); return; }
+      else return;
+      ev.preventDefault();
+      if (n) { r.setAttribute("tabindex", -1); n.setAttribute("tabindex", 0); n.focus(); }
+    });
+  }
+  document.getElementById("root").addEventListener("click", (ev) => { if (!ev.target.closest(".seg") && !ev.target.closest(".foot") && !ev.target.closest(".track")) unpin(); });
+}
+function show(r) {
+  const i = +r.dataset.i, j = +r.dataset.j, row = rows[i], t = row.t, s = row.segs[j];
+  const at = t.s + s.s * 1000, stateAt = row.fsm.segs.find((q) => s.s >= q.s && s.s < q.e)?.state || "Running";
+  const top = [...s.tools].slice(0, 3).join(", ");
+  pop.innerHTML = `<div class="h"><span class="dot" style="background:${PH_COLORS[s.ph]}"></span>${t.label}<span class="mm">${t.model} · ${t.run}</span></div>
+    <div class="w">${s.ev.length} ${s.ph} call${s.ev.length > 1 ? "s" : ""}: ${top}${s.tools.length > 3 ? " …" : ""}</div>
+    <div class="x">${clockS(at)} · ${dur(s.e - s.s)} · state ${stateAt}${t.tokens ? ` · worker ${tok(totalTok(t))} tok · ${usd(t.cost_usd)}` : ""}</div>
+    ${s.err ? `<div class="bad">✕ ${s.err} failed call${s.err > 1 ? "s" : ""} in this span; the worker ${t.status === "interrupted" ? "was later interrupted" : "kept going"}</div>` : ""}
+    ${t.needs_owner.length ? `<div class="gold" style="margin-top:6px">◆ ${t.needs_owner.map((c) => NEED[c]?.text).filter(Boolean).join(" · ")}</div>` : ""}`;
+  const br = body.getBoundingClientRect(), rr = r.getBoundingClientRect();
+  const pw2 = pop.offsetWidth || 290;
+  let left = rr.left - br.left + rr.width / 2 - pw2 / 2; left = Math.max(0, Math.min(br.width - pw2, left));
+  let top2 = rr.top - br.top - pop.offsetHeight - 10; if (top2 < 0) top2 = rr.bottom - br.top + 10;
+  pop.style.left = left + "px"; pop.style.top = top2 + "px"; pop.classList.add("show");
+}
+function hide() { pop.classList.remove("show"); }
+function togglePin(r) {
+  if (pinned === r) { unpin(); return; }
+  for (const p of plot.querySelectorAll(".seg[aria-pressed]")) p.removeAttribute("aria-pressed");
+  pinned = r; r.setAttribute("aria-pressed", "true");
+  const i = +r.dataset.i;
+  body.classList.add("dim-off");
+  for (const g of plot.querySelectorAll(".row")) g.classList.toggle("on", +g.dataset.i === i || +g.dataset.i === 0);
+  for (const l of document.querySelectorAll(".lab")) l.style.opacity = +l.dataset.i === i || +l.dataset.i === 0 ? 1 : 0.3;
+  for (const c of conns) c.el.style.opacity = c.i === i ? 1 : 0.12;
+  for (const p of ports) p.el.style.opacity = now >= p.at ? (p.i === i ? 1 : 0.15) : 0;
+  show(r);
+}
+function unpin() {
+  if (!pinned) return;
+  pinned.removeAttribute("aria-pressed"); pinned = null; body.classList.remove("dim-off");
+  for (const l of document.querySelectorAll(".lab")) l.style.opacity = 1;
+  for (const c of conns) c.el.style.opacity = 1;
+  update(true); hide();
+}
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { build(); update(true); }, 120); });
+load(runId);
+})();
+</script>
+</body>
+</html>
