@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
@@ -14,18 +14,22 @@ export function PromptRail({ anchors, following, live, onJump, onLatest }: {
   const [selected, setSelected] = useState<number | null>(null);
   const height = useSharedValue(240);
   const last = useSharedValue(-1);
+  const count = useSharedValue(anchors.length);
+  useEffect(() => { count.set(anchors.length); }, [anchors.length, count]);
+  const actions = useRef({ count: anchors.length, onJump, onLatest });
+  actions.current = { count: anchors.length, onJump, onLatest };
   const choose = useCallback((index: number) => {
     setSelected(index);
     haptic.select();
-    if (index === anchors.length) onLatest(); else onJump(index);
-  }, [anchors.length, onJump, onLatest]);
+    const current = actions.current;
+    if (index >= current.count) current.onLatest(); else current.onJump(index);
+  }, []);
   const clear = useCallback(() => setSelected(null), []);
   const pan = useMemo(() => {
-    const count = anchors.length;
     const update = (y: number) => {
       "worklet";
       const size = height.get();
-      const index = railTarget(y, size, count);
+      const index = railTarget(y, size, count.get());
       if (index === last.get()) return;
       last.set(index);
       // Only cross runtimes when a prompt boundary changes, never every frame.
@@ -35,7 +39,7 @@ export function PromptRail({ anchors, following, live, onJump, onLatest }: {
       .onBegin(event => { update(event.y); })
       .onUpdate(event => { update(event.y); })
       .onFinalize(() => { last.set(-1); scheduleOnRN(clear); });
-  }, [anchors.length, choose, clear, height, last]);
+  }, [choose, clear, count, height, last]);
   if (!anchors.length) return null;
   return <View style={styles.rail} pointerEvents="box-none">
     {selected !== null ? <View pointerEvents="none" style={styles.preview}>

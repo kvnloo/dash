@@ -48,6 +48,8 @@ await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.29, { steps:
 await page.waitForTimeout(900);
 await page.getByText('Prompt 7 of 24', { exact: true }).waitFor();
 await page.screenshot({ path: `${out}/after-scrub-preview.png` });
+await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.8, { steps: 24 });
+await page.getByText('Prompt 20 of 24', { exact: true }).waitFor();
 await page.mouse.up();
 // Explicit reasoning is hidden until the owner opens it.
 await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.48);
