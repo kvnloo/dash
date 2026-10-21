@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { AgentInfo, HistoryMessage } from "../../shared/protocol";
 import { parseHermesEnvFile, type EnvMap, type HermesFetch } from "./hermes-session";
 import { hostProcesses, ownerOf, readLiveOwners, surfaceLabel, type LiveOwner } from "./hermes-owner";
+import { hostGatewayProbe, ownerHosting, type GatewayHostProbe, type OwnerHosting } from "./hermes-gateway-host";
 
 // Deliberate allowlist: interactive surfaces and messaging platforms, never kitchen,
 // cron, oneshot, kanban, tool or delegated workers. `local` is native session authority CLI.
@@ -131,11 +132,13 @@ export class HermesSessions {
   private readonly env: EnvMap;
   private readonly fetch: HermesFetch;
   private readonly processes: typeof hostProcesses;
-  constructor(options: { root?: string; env?: EnvMap; fetch?: HermesFetch; processes?: typeof hostProcesses } = {}) {
+  private readonly gateways: GatewayHostProbe;
+  constructor(options: { root?: string; env?: EnvMap; fetch?: HermesFetch; processes?: typeof hostProcesses; gateways?: GatewayHostProbe } = {}) {
     this.env = options.env ?? process.env;
     this.root = options.root ?? this.env.DASH_HERMES_ROOT ?? join(homedir(), ".hermes");
     this.fetch = options.fetch ?? globalThis.fetch;
     this.processes = options.processes ?? hostProcesses;
+    this.gateways = options.gateways ?? hostGatewayProbe(this.root, pid => this.processes.alive(pid));
   }
   private profiles(): Profile[] {
     // "default" names the root home. A stray profiles/default directory would be a second
@@ -235,6 +238,28 @@ export class HermesSessions {
       const target = lineageIds(db, sessionId);
       return owners.find(owner => [...ownerSessionIds(db, owner)].some(id => target.has(id)));
     }) ?? ownerOf(owners, new Set([sessionId]));
+  }
+  /**
+   * Where `owner`'s agent runs. `gateway`: the profile's gateway hosts the session and the owner
+   * is one of its viewers (or the gateway itself), so Dash sends into that gateway like any other
+   * client. `standalone`: a separate process may write the session; Dash waits for the handoff.
+   */
+  ownerHosting(profileId: string, sessionId: string, owner: LiveOwner): OwnerHosting {
+    const profile = this.profiles().find(p => p.id === profileId);
+    if (!profile) return "standalone";
+    return ownerHosting(owner, profile.id, profile.home, this.gateways, this.authoritySession(profile, sessionId));
+  }
+  /**
+   * The session runs in a gateway even when no terminal holds a lease (the TUI and Desktop write
+   * none): a native session-authority chat whose profile gateway is running.
+   */
+  gatewayHosted(profileId: string, sessionId: string): boolean {
+    const profile = this.profiles().find(p => p.id === profileId);
+    if (!profile || !this.authoritySession(profile, sessionId)) return false;
+    try { return this.gateways.gatewayPids(profile.id, profile.home).length > 0; } catch { return false; }
+  }
+  private authoritySession(profile: Profile, sessionId: string): boolean {
+    return withDb(profile, db => [...lineageIds(db, sessionId)].some(id => db.query<Row, [string]>("SELECT source FROM sessions WHERE id=?").get(id)?.source === "local")) ?? false;
   }
   /** Profile id whose home is `home` (e.g. the bridge's own HERMES_HOME). */
   profileForHome(home: string): string | undefined {

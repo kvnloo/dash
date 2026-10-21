@@ -32,8 +32,9 @@ import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
 import { runHermesSession } from "./src/hermes-session";
 import { streamHermesSession } from "./src/hermes-stream";
+import { liveArgv, sendIntoLiveSession } from "./src/hermes-live";
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
-import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, type HandoffState } from "./src/hermes-continue";
+import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, liveText, planContinuation, type HandoffState } from "./src/hermes-continue";
 import type { LiveOwner } from "./src/hermes-owner";
 import { z0bridgeHermes } from "./src/z0bridge-hermes";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
@@ -98,7 +99,7 @@ class Turn implements Sink {
 
   /** Host profile that owns this Hermes turn's session, once known. */
   private hermesProfile?: string;
-  private hermesTransport?: "api" | "acp" | "z0bridge";
+  private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
 
   start(input: TurnInput): void {
     // A spoken turn is transcribed before it starts, so a cancel can arrive
@@ -154,9 +155,10 @@ class Turn implements Sink {
   }
 
   /**
-   * Reply into an existing Hermes session. A live CLI/TUI owner keeps the session:
-   * the reply waits (queued, nothing sent) until that owner closes, then goes through
-   * Hermes's own native API or ACP. See src/hermes-continue.ts for the transport seam.
+   * Reply into an existing Hermes session. A gateway-hosted CLI/TUI owner is one viewer of the
+   * gateway that runs the session: the reply goes into that gateway now (next turn, or queued
+   * behind a running one). Only a standalone owner that runs its own agent keeps the session:
+   * then the reply waits (queued, nothing sent) until it closes. See src/hermes-continue.ts.
    */
   private continueHermes(input: TurnInput): void {
     const sessionId = input.sessionId;
@@ -171,13 +173,35 @@ class Turn implements Sink {
     void (async () => {
       let handedOff = false;
       try {
-        const waited = await awaitHandoff({
-          owner: () => hermesSessions.liveOwner(target.profile, sessionId),
+        const hosting = (owner: LiveOwner) => hermesSessions.ownerHosting(target.profile, sessionId, owner);
+        const plan = planContinuation(hermesSessions.liveOwner(target.profile, sessionId), hosting, hermesSessions.gatewayHosted(target.profile, sessionId));
+        if (plan.kind === "live") {
+          if (plan.owner) this.status(liveText(plan.owner.surface, HOST_NAME));
+          log("hermes.live", { id: this.id, surface: plan.owner?.surface ?? "none", hosting: "gateway" });
+        }
+        const waited = plan.kind !== "handoff" ? undefined : await awaitHandoff({
+          // Only an owner that runs its own agent blocks; a gateway viewer that appears meanwhile does not.
+          owner: () => { const owner = hermesSessions.liveOwner(target.profile, sessionId); return owner && hosting(owner) === "standalone" ? owner : undefined; },
           signal: abort.signal,
           onQueued: owner => { this.handoff("queued", owner); log("hermes.handoff", { id: this.id, state: "queued", surface: owner.surface }); },
         });
         if (waited) { this.handoff("sending", waited); log("hermes.handoff", { id: this.id, state: "sending", surface: waited.surface }); }
         if (this.cancelled || this.finished) return;
+        if (plan.kind === "live") {
+          // Into the owning gateway, as one more client of the live session (src/hermes-live.ts).
+          const hermesBin = Bun.which("hermes");
+          const route = chooseHermesRoute({ home: hermesSessions.homeOf(target.profile), acpCommand: null, liveArgv: hermesBin ? liveArgv(hermesBin, sessionId) : null });
+          if (route.kind !== "live") throw new Error(route.kind === "unavailable" ? route.reason : "No live route.");
+          this.hermesTransport = "gateway";
+          log("hermes.path", { path: "gateway" });
+          const result = await sendIntoLiveSession({ argv: route.argv, home: route.home, sessionId, text: input.text, sink: this, cwd: input.cwd, signal: abort.signal });
+          if (this.cancelled) { if (!this.finished) this.finish(CANCELLED_EXIT_CODE); return; }
+          if (this.finished) return;
+          this.session(result.sessionId);
+          this.finish(0);
+          log("turn.end", { id: this.id, harness: "hermes", exitCode: 0, path: "gateway" });
+          return;
+        }
         // Prefer the host's z0bridge daemon (ACP to `hermes -p <profile> acp`) once any live
         // owner has handed off. Fall back only when z0bridge is not running; its answer is final.
         const z0 = await z0bridgeHermes.ready();
@@ -194,8 +218,10 @@ class Turn implements Sink {
         }
         const route = chooseHermesRoute({ api: target.api, home: hermesSessions.homeOf(target.profile), acpCommand: acpCommand("hermes") });
         if (route.kind === "unavailable") throw new Error(route.reason);
+        if (route.kind === "live") throw new Error("Live route chosen without a live owner. Nothing was sent.");
         if (route.kind === "acp") {
           this.hermesTransport = "acp";
+          log("hermes.path", { path: "acp" });
           handedOff = true;
           this.runAcp(route.command, input, { HERMES_HOME: route.home }, release);
           return;
