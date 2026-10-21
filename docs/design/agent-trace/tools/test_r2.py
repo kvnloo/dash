@@ -14,11 +14,11 @@ exporter=importlib.util.module_from_spec(spec);spec.loader.exec_module(exporter)
 class TraceR2Tests(unittest.TestCase):
     def test_allowlisted_labels(self):
         for goal,path,expected in [
-            ('Improve the double-tap ring interaction for NOOP.','/repo/products/noop/app.py',('NOOP','ring double-tap')),
+            ('Improve the double-tap ring interaction for NOOP.','/repo/products/noop/app.py',('NOOP','ring tap')),
             ('Build Dash agent-trace prototypes.','/repo/products/dash/.worktrees/agent-trace',('Dash','trace prototypes')),
-            ('Check physics during string conversion.','/repo/products/ace/x',('Sim','simulation checks')),
-            ('Private unrelated text x7secret','',('Research','workflow study')),
-            ('Integrate relay','/repo/products/z0live/relay.py',('z0live','voice relay')),
+            ('Check physics during string conversion.','/repo/products/ace/x',('Sim','ACE')),
+            ('Private unrelated text x7secret','',('Research','study')),
+            ('Integrate the z0live relay','/repo/products/garden/x.py',('z0live','relay')),
         ]:
             label=exporter.public_labels(goal,path)
             self.assertEqual((label['project'],label['short_goal']),expected)
