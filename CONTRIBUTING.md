@@ -69,6 +69,8 @@ Contribute code, docs, or skills by pairing with an agent on a focused branch. T
 
 **PR workflow:**
 
+Answer the concrete surface and feedback checklist in [Design principles](docs/design/PRINCIPLES.md) for every Dash PR that changes an interaction. Name unavailable telemetry instead of implying that the accept/reject learning pipeline already exists.
+
 1. Fork or branch from `nightly` (`worker_base`). Day-pass PRs target `preview`. Overnight PRs target `nightly`. Do not pile PRs onto `main`.
 2. Work in small, focused commits.
 3. Write or update tests if applicable. Fill the evidence receipt in `.github/PULL_REQUEST_TEMPLATE.md`.
