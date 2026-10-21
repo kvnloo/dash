@@ -1,4 +1,5 @@
 import { Canvas } from "../components/Canvas";
+import { NeedsKevin } from "../components/NeedsKevin";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { useEffect, useMemo, useState } from "react";
@@ -60,6 +61,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
     </View>
     <View style={{ paddingHorizontal: 16, marginBottom: 8 }}><PrimaryButton label={`Approve selected (${selected.length})`} onPress={() => askApprove(selected)} disabled={!online || !selected.length} /></View>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <NeedsKevin />
       {groups.map(repo => {
         const items = visible.filter(i => i.target.repo === repo), ids = items.filter(bulkEligible).map(i => i.id);
         return <View key={repo} style={styles.group}>
