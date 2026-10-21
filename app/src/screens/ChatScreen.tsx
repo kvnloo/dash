@@ -1,3 +1,4 @@
+import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
 import { useHandedness } from "../lib/useHandedness";
 import { BlurTargetView } from "expo-blur";
@@ -139,6 +140,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const thinking: Thinking = !online ? { phase: "idle" } : localThinking.phase !== "idle"
     ? (localThinking.phase === "thinking" && liveText && !(streamingMessage?.role === "assistant" && streamingMessage.status) ? { phase: "streaming" } : localThinking)
     : observed?.observed ? observed : { phase: "idle" };
+  const context = useContextView(settings, online && (!conversation?.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)), harnessId, conversation?.profileId, conversation?.sessionId, thinking.phase !== "idle");
   const external = online && localThinking.phase === "idle" && observed?.observed && observed.phase !== "idle" ? observed : undefined;
   const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
   const observationUnavailable = online && harnessId === "hermes" && Boolean(conversation?.sessionId) && !observed?.observed;
@@ -320,6 +322,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
         </View>
         <Composer
+          context={context}
           key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
           disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
