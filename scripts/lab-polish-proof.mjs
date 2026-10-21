@@ -14,7 +14,7 @@ const page = await context.newPage();
 const errors = [];
 const checks = [];
 page.on('pageerror', error => errors.push(error.message));
-page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+page.on('console', message => { if (message.type() === 'error' || (message.type() === 'warning' && message.text().includes('may be overwritten by a layout animation'))) errors.push(message.text()); });
 const cdp = await context.newCDPSession(page);
 const tile = () => page.getByTestId('gesture-playground').last();
 const shot = name => page.screenshot({ path: path.join(out, `${name}.png`) });
@@ -37,7 +37,7 @@ try {
   }
   assert.equal(await page.getByTestId('tile-detail').count(), 1); await close(); checks.push({ single: true, frames });
   await taps(2); await page.waitForTimeout(400); assert.match(await tile().innerText(), /Pinned/);
-  await taps(3); await page.waitForTimeout(400); assert.match(await tile().innerText(), /Copied/); checks.push({ doublePins: true, tripleCopies: true });
+  await taps(3); await page.waitForTimeout(400); assert.match(await tile().innerText(), /Copied/); assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'Tap opens detail. Double tap pins locally in this view. Triple tap copies this summary. Hold, slide and release selects a radial action; release in the centre cancels.'); checks.push({ doublePins: true, tripleCopies: true });
   let p = await point(); await touch('touchStart', p.x, p.y); await page.waitForTimeout(375); await shot('wheel-bloom-375'); await page.waitForTimeout(125); await shot('wheel-bloom-500');
   await move(p, 106, 0); await shot('wheel-selected'); await touch('touchEnd'); await page.waitForTimeout(300); assert.doesNotMatch(await tile().innerText(), /Pinned/);
   await hold(); await touch('touchEnd'); await page.waitForTimeout(300); assert.equal(await page.getByTestId('tile-detail').count(), 0); checks.push({ radialCommit: true, centreCancel: true });

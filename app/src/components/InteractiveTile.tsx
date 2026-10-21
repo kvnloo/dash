@@ -4,9 +4,9 @@ import { BackHandler, Pressable, ScrollView, StyleSheet, View, useWindowDimensio
 import { setStringAsync } from "expo-clipboard";
 import { TileTouch } from "./TileTouch";
 import { GestureDetector } from "react-native-gesture-handler";
-import Animated, { FadeInUp, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { colors, fonts } from "../theme";
-import { SNAP, MOTION_MS, fade } from "../motion";
+import { SNAP, fade } from "../motion";
 import { useDensity } from "./Density";
 import { useTileGestures, type TileAction } from "./TileGestures";
 
@@ -46,7 +46,6 @@ export const InteractiveTile = memo(function InteractiveTile({ title, summary, c
 }) {
   const ref = useRef<View>(null);
   const detail = useContext(DetailContext);
-  const reduced = useReducedMotion();
   const { sizing, setDensity, density } = useDensity();
   const [pinned, setPinned] = useState(false);
   const [copyState, setCopyState] = useState("");
@@ -61,7 +60,6 @@ export const InteractiveTile = memo(function InteractiveTile({ title, summary, c
     { id: "detail", label: "Detail", run: open }, { id: "pin", label: pinned ? "Unpin" : "Pin locally", run: pin }, { id: "copy", label: "Copy", run: copy }, { id: "density", label: "Density", run: cycleDensity }, ...extraActions.slice(0, 4),
   ] });
   return <TileTouch holding={holding} onOpen={open} onPrimary={pin} onSecondary={copy}><GestureDetector gesture={gesture} touchAction="pan-y"><Animated.View ref={ref} collapsable={false} testID={testID}
-    entering={reduced ? undefined : FadeInUp.duration(MOTION_MS.enter)}
     accessible accessibilityRole="button" accessibilityLabel={`${title}. ${pinned ? "Pinned locally. " : ""}${copyState}`} accessibilityHint="Tap for detail, double tap to pin locally, triple tap to copy, hold and slide for actions."
     accessibilityActions={[{ name: "activate", label: "Open detail" }, { name: "pin", label: "Pin locally" }, { name: "copy", label: "Copy summary" }, { name: "density", label: "Change density" }, ...extraActions.map(action => ({ name: action.id, label: action.label }))]}
     onAccessibilityAction={event => { const name = event.nativeEvent.actionName; if (name === "activate") open(); else if (name === "pin") pin(); else if (name === "copy") copy(); else if (name === "density") cycleDensity(); else extraActions.find(action => action.id === name)?.run(); }}
