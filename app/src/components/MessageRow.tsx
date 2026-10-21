@@ -110,13 +110,7 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
     case "interrupted":
       return (
         <>
-<<<<<<< HEAD
-          {message.text ? <Answer text={message.text} turnId={message.turnId} /> : null}
-||||||| 9003c30
-          {message.text ? <Answer text={message.text} /> : null}
-=======
-          {message.text ? <Answer detailMode={detailMode} text={message.text} /> : null}
->>>>>>> origin/sol/dash-thinking-tools-20261021
+          {message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text style={styles.noteText}>{message.status ?? "Connection to the bridge was lost mid-reply."}</Text>
@@ -126,13 +120,7 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
     case "error":
       return (
         <>
-<<<<<<< HEAD
-          {message.text ? <Answer text={message.text} turnId={message.turnId} /> : null}
-||||||| 9003c30
-          {message.text ? <Answer text={message.text} /> : null}
-=======
-          {message.text ? <Answer detailMode={detailMode} text={message.text} /> : null}
->>>>>>> origin/sol/dash-thinking-tools-20261021
+          {message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text selectable style={styles.errorText}>
