@@ -9,10 +9,11 @@ export function composerPlaceholder(state: {
   queued: number;
   openIn?: string;
   harnessName: string;
+  harness?: string;
 }): string {
   if (!state.online) return "Waiting for the bridge…";
   if (state.streaming) return state.queued > 0 ? `Queue another (${state.queued})…` : "Queue next message…";
-  if (state.openIn) return "Queue a reply…";
+  if (state.openIn) return state.harness === "hermes" ? "Reply to session…" : "Queue a reply…";
   const full = `Message ${state.harnessName}`;
   return full.length <= COMPOSER_PLACEHOLDER_MAX ? full : "Message…";
 }

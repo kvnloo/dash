@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
 import { pickFiles, pickPhotos } from "../lib/attachment-picker";
+import { uploadPickedFile } from "../lib/attachment-upload";
 import {
   LIMIT_LABEL,
   MAX_ATTACHMENTS_PER_TURN,
@@ -12,7 +13,6 @@ import {
   readyRefs,
   rejectReason,
   remainingSlots,
-  uploadAttachment,
   type DraftAttachment,
   type PickedFile,
 } from "../lib/attachments";
@@ -59,7 +59,7 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
     picked.forEach((file, i) => {
       const draft = added[i];
       if (!draft || draft.state === "error") return;
-      uploadAttachment(settings, file, fetch).then(
+      uploadPickedFile(settings, file).then(
         ref => update(draft.key, { state: "ready", ref, size: ref.size }),
         (error: unknown) => update(draft.key, { state: "error", error: error instanceof Error ? error.message : "Upload failed." }),
       );

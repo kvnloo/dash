@@ -51,6 +51,26 @@ export function sanitizeMime(raw: string | null | undefined): string {
   return /^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/.test(value) && value.length <= 100 ? value : "application/octet-stream";
 }
 
+function imageExtension(name: string): string | undefined {
+  const ext = name.toLowerCase().split(".").at(-1) ?? "";
+  const types: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", heic: "image/heic", heif: "image/heif" };
+  return types[ext];
+}
+
+/** Signature check, not a decoder: prevents provider error bodies posing as images. */
+function imageMime(data: Buffer): string | undefined {
+  if (data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return "image/png";
+  if (data[0] === 255 && data[1] === 216 && data[2] === 255) return "image/jpeg";
+  if (/^GIF8[79]a$/.test(data.subarray(0, 6).toString("ascii"))) return "image/gif";
+  if (data.subarray(0, 4).toString() === "RIFF" && data.subarray(8, 12).toString() === "WEBP") return "image/webp";
+  if (data.subarray(4, 8).toString() === "ftyp") {
+    const brand = data.subarray(8, 12).toString();
+    if (["heic", "heix", "hevc", "hevx"].includes(brand)) return "image/heic";
+    if (["mif1", "msf1"].includes(brand)) return "image/heif";
+  }
+  return undefined;
+}
+
 /** Turn ids are client-chosen; the directory name derived from one must stay a plain component. */
 export function turnDirName(turnId: string): string {
   const safe = turnId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64);
@@ -131,7 +151,15 @@ export class AttachmentStore {
         chunks.push(chunk.value);
       }
     } finally { reader.releaseLock(); }
-    return this.put(rawName, rawMime, Buffer.concat(chunks));
+    const data = Buffer.concat(chunks);
+    if (!data.byteLength) throw new AttachmentError(400, "The selected file is empty. Select it again.");
+    const detected = imageMime(data);
+    const declared = sanitizeMime(rawMime);
+    const expected = imageExtension(rawName);
+    if ((isImageMime(declared) || expected) && (!detected || (expected && detected !== expected) || (isImageMime(declared) && detected !== declared))) {
+      throw new AttachmentError(415, "The selected image could not be read. Select it again from Files or Photos.");
+    }
+    return this.put(rawName, declared === "application/octet-stream" && detected ? detected : declared, data);
   }
 
   put(rawName: string, rawMime: string | null, data: Uint8Array): ChatAttachment {

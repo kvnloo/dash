@@ -15,6 +15,9 @@ export function ArtifactStage({ url, title, fallback }: { url: string; title?: s
       <WebView
         accessibilityLabel={title ?? "artifact stage"}
         source={{ uri: url }}
+        // Reviews are rebuilt in place; never retain yesterday's toolbar bundle.
+        cacheEnabled={false}
+        cacheMode="LOAD_NO_CACHE"
         style={styles.fill}
         containerStyle={styles.fill}
         allowsInlineMediaPlayback
