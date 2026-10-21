@@ -3,12 +3,13 @@ import { WebView } from "react-native-webview";
 import ArtifactStageDom from "./ArtifactStageDom";
 
 /**
- * The artifact-stage review surface. Default: an Expo DOM component (Expo Go,
- * no native module). `EXPO_PUBLIC_STAGE_WEBVIEW=1` or `fallback="webview"`
- * uses react-native-webview directly, for builds where DOM components are off.
+ * The artifact-stage review surface. Native default: react-native-webview, which
+ * ships in Expo Go. The installed Expo Go lacks the DOM-component native module
+ * (`ExpoDomWebViewModule`), so the DOM path crashed with a red screen on the S25.
+ * Opt into the Expo DOM component with `EXPO_PUBLIC_STAGE_DOM=1`. Web always uses DOM.
  */
 export function ArtifactStage({ url, title, fallback }: { url: string; title?: string; fallback?: "webview" }) {
-  const webview = fallback === "webview" || process.env.EXPO_PUBLIC_STAGE_WEBVIEW === "1";
+  const webview = fallback === "webview" || process.env.EXPO_PUBLIC_STAGE_DOM !== "1";
   if (webview && Platform.OS !== "web") {
     return (
       <WebView
