@@ -1,6 +1,7 @@
 import type { ReplyPart } from "../../../shared/protocol";
 import { applyDeltas, applyTurnEvent } from "../store/app";
 import { replyParts, replyText } from "../store/text";
+import { parseSummary, type SummaryInfo } from "../../../shared/thinking-summary";
 import type { ThinkingPhase } from "../lib/thinking";
 import type { RootStackParamList } from "../navigation";
 import { setActive, store } from "../store/app";
@@ -27,6 +28,7 @@ export type DebugCommand =
   | { action: "setBridgePull"; open: boolean }
   | { action: "wait"; ms: number }
   | { action: "replyFixture"; reset?: boolean; part?: ReplyPart; text?: string; seq: number }
+  | { action: "thinkingSummary"; summary: SummaryInfo }
   | { action: "uxOutput"; text: string }
   | { action: "listScenarios" };
 
@@ -69,6 +71,13 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
       if (cmd.part) applyTurnEvent({ type: "status", id: "detail-fixture-turn", seq: cmd.seq, text: "", part: cmd.part });
       if (cmd.text) applyDeltas(new Map([["detail-fixture-turn", { seq: cmd.seq, text: cmd.text }]]));
       return { ok: true };
+    }
+    case "thinkingSummary": {
+      const summary = parseSummary(cmd.summary);
+      if (!summary) return { ok: false };
+      const active = store.get().activeId;
+      store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id !== active ? c : { ...c, messages: c.messages.map((m, i) => m.role === "assistant" && i === c.messages.length - 1 ? { ...m, summaries: [...(m.summaries ?? []).filter(item => item.blockId !== summary.blockId), summary] } : m) }) }));
+      return { ok: true, fixture: true };
     }
     case "uxOutput": {
       // Local fixture only; exercise per-reply rAF subscriptions without a host.

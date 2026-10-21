@@ -1,3 +1,4 @@
+import { ModelsPanel } from "../components/ModelsPanel";
 import { Canvas } from "../components/Canvas";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { useEffect, useRef, useState } from "react";
@@ -26,6 +27,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const [address, setAddress] = useState(settings?.address ?? "");
   const [token, setToken] = useState(settings?.token ?? "");
   const [cwd, setCwd] = useState(settings?.cwd ?? "");
+  const [modelsOpen, setModelsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const attemptRef = useRef<AbortController | null>(null);
@@ -132,6 +134,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             </Text>
           ) : null}
 
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: modelsOpen }} onPress={() => setModelsOpen(!modelsOpen)} style={styles.secondary}><Text style={styles.secondaryText}>Models {modelsOpen ? "−" : "+"}</Text></Pressable>
+          {modelsOpen ? <ModelsPanel /> : null}
           <Text style={styles.label}>Bridge</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field

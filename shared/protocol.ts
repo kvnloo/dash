@@ -6,6 +6,7 @@ import { isGateItem, parseGateDecision, type GateItem, type GateDecision } from 
 import { parseLiveClientMessage, parseLiveServerMessage, type LiveClientMessage, type LiveServerMessage } from "./live";
 import { parseReplyPart, parseReplyParts, type ReplyPart } from "./reply-parts";
 export type { ReplyPart } from "./reply-parts";
+import { parseSummary, type SummaryInfo } from "./thinking-summary";
 export const PROTOCOL_VERSION = 1;
 
 export interface HarnessInfo {
@@ -103,6 +104,7 @@ export type ClientMessage =
   | LiveClientMessage
   | {
       type: "chat";
+      summariesEnabled?: boolean;
       /** Client-chosen id for this turn; echoed on every server event for it. */
       id: string;
       harness: string;
@@ -123,6 +125,7 @@ export type ClientMessage =
    */
   | {
       type: "voice_begin";
+      summariesEnabled?: boolean;
       id: string;
       harness: string;
       sessionId?: string;
@@ -178,7 +181,7 @@ export type TurnEvent =
   /** What the bridge heard for a spoken turn. Precedes the reply's deltas. */
   | { type: "transcript"; id: string; seq: number; text: string }
   | { type: "delta"; id: string; seq: number; text: string }
-  | { type: "status"; id: string; seq: number; text: string; part?: ReplyPart; acp?: AcpStatus; handoff?: HandoffInfo }
+  | { type: "status"; id: string; seq: number; text: string; part?: ReplyPart; summary?: SummaryInfo; acp?: AcpStatus; handoff?: HandoffInfo }
   | { type: "done"; id: string; seq: number; exitCode: number }
   | { type: "error"; id: string; seq: number; message: string };
 
@@ -271,10 +274,12 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
         optStr(raw.hostId) && optStr(raw.profileId) &&
         optStr(raw.sessionId) &&
         optStr(raw.cwd) &&
+        (raw.summariesEnabled === undefined || typeof raw.summariesEnabled === "boolean") &&
         attachments !== null
       ) {
         return {
           type: "chat",
+          ...(typeof raw.summariesEnabled === "boolean" ? { summariesEnabled: raw.summariesEnabled } : {}),
           id: raw.id,
           harness: raw.harness,
           text: raw.text,
@@ -288,9 +293,10 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return null;
     }
     case "voice_begin":
-      if (str(raw.id) && str(raw.harness) && str(raw.mime) && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.sessionId) && optStr(raw.cwd)) {
+      if ((raw.summariesEnabled === undefined || typeof raw.summariesEnabled === "boolean") && str(raw.id) && str(raw.harness) && str(raw.mime) && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.sessionId) && optStr(raw.cwd)) {
         return {
           type: "voice_begin",
+          ...(typeof raw.summariesEnabled === "boolean" ? { summariesEnabled: raw.summariesEnabled } : {}),
           id: raw.id,
           harness: raw.harness,
           mime: raw.mime,
@@ -437,7 +443,11 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
       if (!str(raw.id) || !num(raw.seq) || !str(raw.text)) return null;
       if (raw.part !== undefined) {
         const part = parseReplyPart(raw.part);
-        return part && raw.acp === undefined && raw.handoff === undefined ? { type: "status", id: raw.id, seq: raw.seq, text: raw.text, part } : null;
+        return part && raw.summary === undefined && raw.acp === undefined && raw.handoff === undefined ? { type: "status", id: raw.id, seq: raw.seq, text: raw.text, part } : null;
+      }
+      if (raw.summary !== undefined) {
+        const summary = parseSummary(raw.summary);
+        return summary && raw.part === undefined && raw.acp === undefined && raw.handoff === undefined ? { type: "status", id: raw.id, seq: raw.seq, text: raw.text, summary } : null;
       }
       if (raw.handoff !== undefined) {
         const h = raw.handoff;

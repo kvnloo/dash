@@ -327,6 +327,7 @@ export function sendChat(input: {
   const cwd = input.cwd ?? store.get().settings?.cwd;
   return bridge.send({
     type: "chat",
+    summariesEnabled: store.get().conversations.find(c => c.messages.some(m => m.role === "assistant" && m.turnId === input.turnId))?.summariesEnabled === true,
     id: input.turnId,
     ...targetForTurn(input.turnId),
     harness: input.harness,
@@ -349,6 +350,7 @@ export function sendVoiceBegin(input: {
   const cwd = input.cwd ?? store.get().settings?.cwd;
   const sent = bridge.send({
     type: "voice_begin",
+    summariesEnabled: store.get().conversations.find(c => c.messages.some(m => m.role === "assistant" && m.turnId === input.turnId))?.summariesEnabled === true,
     id: input.turnId,
     ...targetForTurn(input.turnId),
     harness: input.harness,

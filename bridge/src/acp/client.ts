@@ -175,7 +175,9 @@ export class AcpClient {
               this.options.sink.delta(update.content.text);
             }
             break;
-          case "agent_thought_chunk": this.thinking.thinking(); break;
+          case "agent_thought_chunk":
+            this.thinking.thinking();
+            break;
           case "tool_call":
           case "tool_call_update":
             this.phaseUpdate = update;

@@ -10,6 +10,7 @@ import { colors, fonts, glass, radius, space, type } from "../theme";
 import { messageThinking, type Thinking } from "../lib/thinking";
 import { splitThinking } from "../lib/message-details";
 import { AgentOrb } from "./AgentOrb";
+import { ThinkingSummaryChip } from "./ThinkingSummaryChip";
 import { Markdown } from "./Markdown";
 import { ReplyBlocks } from "./ReplyBlocks";
 import type { DetailMode } from "../lib/reply-details";
@@ -44,7 +45,8 @@ export const MessageRow = memo(function MessageRow({
   }
   return (
     <View style={styles.assistantRow}>
-      <ReplyBlocks turnId={message.turnId} parts={message.parts} mode={detailMode} request={callId => {
+      {message.summaries?.filter(summary => summary.kind === "turn").map(summary => <ThinkingSummaryChip key={summary.blockId} turnId={message.turnId} summary={summary} />)}
+      <ReplyBlocks turnId={message.turnId} summaries={message.summaries} parts={message.parts} mode={detailMode} request={callId => {
         const chat = store.get().conversations.find(c => c.messages.some(m => m.id === message.id));
         const history = message.seq === 0 && chat?.harness === "hermes";
         bridge.send({ type: "tool_detail", id: message.turnId, callId, ...(history ? { messageId: message.id, sessionId: chat?.sessionId, profileId: chat?.profileId, hostId: chat?.targetHostId } : {}) });

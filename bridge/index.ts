@@ -61,6 +61,10 @@ import { AttachmentError, AttachmentStore, promptWithAttachments, type StoredAtt
 import { createFilesHttpHandler } from "./src/files-http";
 import { createSuggestionsHttpHandler } from "./src/suggestions-http";
 import { LiveSurface } from "./src/live-surface";
+import { createModelsHttpHandler } from "./src/models-http";
+import { loadRoles } from "./src/model-roles";
+import { ThinkingSummarizer } from "./src/thinking-summary";
+import { TurnSummaries } from "./src/turn-summaries";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 
@@ -93,11 +97,23 @@ class Turn implements Sink {
 
   readonly details = new ToolDetails();
   part(part: ReplyPart): void {
+    if (part.kind === "reasoning") this.reasoning(part.text);
+    else if (part.kind === "tool_start") this.summaries?.action(`${part.name} · ${part.summary}`);
     const preview = this.details.preview(part);
     if (!preview) return;
     this.flush();
     this.emit({ type: "status", id: this.id, seq: 0, text: "", part: preview });
   }
+  private summaries: TurnSummaries | undefined;
+  enableSummaries(): void {
+    try {
+      const roles = loadRoles();
+      this.summaries = new TurnSummaries(this.id, new ThinkingSummarizer(() => roles), summary => {
+        this.emit({ type: "status", id: this.id, seq: 0, text: "", summary });
+      });
+    } catch { /* Invalid role config disables summaries, never the user's turn. */ }
+  }
+  reasoning(text: string): void { this.summaries?.reasoning(text); }
 
   private buffer = "";
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -407,6 +423,7 @@ class Turn implements Sink {
 
   delta(text: string): void {
     if (!text) return;
+    this.summaries?.endBlock();
     if (this.breakPending) {
       // Prose resumed after a tool call. Models rarely emit the separator themselves.
       this.breakPending = false;
@@ -418,6 +435,7 @@ class Turn implements Sink {
   }
 
   status(text: string, acp?: AcpStatus): void {
+    if (text && text !== "Thinking") this.summaries?.action(text);
     this.flush();
     if (text && this.textTail) this.breakPending = true;
     this.emit({ type: "status", id: this.id, seq: 0, text: redact(text), ...(acp ? { acp: { sessionId: acp.sessionId, update: statusUpdate(acp.update) } } : {}) });
@@ -432,7 +450,9 @@ class Turn implements Sink {
     if (this.finished) return;
     this.flush();
     this.finished = true;
-    this.emit({ type: "done", id: this.id, seq: 0, exitCode });
+    const done = () => this.emit({ type: "done", id: this.id, seq: 0, exitCode });
+    if (this.summaries) void this.summaries.finish().then(done, done);
+    else done();
     setTimeout(() => turns.delete(this.id), RETAIN_MS);
     pruneTurns();
   }
@@ -659,6 +679,7 @@ const handleFiles = createFilesHttpHandler({
   onEvent: log,
 });
 
+const handleModels = createModelsHttpHandler({ authorize });
 const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
 
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
@@ -693,6 +714,8 @@ const server = Bun.serve<SocketData>({
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      const models = await handleModels(request);
+      if (models) return cors(models);
       const supervision = await handleSupervision(request);
       if (supervision) return cors(supervision);
       const phase = sessionPhaseHttp(request, await authorize(request), (profile, session) => hermesSessions.phase(profile, session));
@@ -785,6 +808,7 @@ const server = Bun.serve<SocketData>({
           turn.listeners.add(ws);
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
+          if (message.summariesEnabled) turn.enableSummaries();
           turn.start({ text: promptWithAttachments(message.text, files), cwd, sessionId: message.sessionId, profileId: message.profileId, ...(files.length ? { attachments: files } : {}) });
           break;
         }
@@ -817,6 +841,7 @@ const server = Bun.serve<SocketData>({
           turn.listeners.add(ws);
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
+          if (message.summariesEnabled) turn.enableSummaries();
           utterances.set(message.id, {
             chunks: [],
             bytes: 0,
