@@ -10,6 +10,8 @@ test("real sanitised parent_session_id sample produces gold delegation, hosted a
   const graph = buildOrchestra({ hosts, sessions: sessions(), now });
   expect(graph.edges.find(e => e.relation === "delegated")).toMatchObject({ from: "parent", to: "worker", active: true });
   expect(graph.nodes.find(n => n.id === "worker")?.kind).toBe("subagent");
+  expect(graph.edges.filter(e => e.relation === "hosted").every(e => e.active)).toBe(true);
+  expect(graph.edges.filter(e => e.relation === "workspace").every(e => e.active)).toBe(true);
   expect(new Set(graph.edges.map(e => e.relation))).toEqual(new Set(["hosted", "delegated", "workspace", "touched"]));
   expect(parseOrchestra(graph)?.nodes.length).toBe(graph.nodes.length);
 });
