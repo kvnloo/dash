@@ -12,7 +12,7 @@ export const snappy = { duration: 150, easing: criticalProgress };
 /** Only for direct-manipulation release; not layout or graph movement. */
 export const settle = { duration: 180, easing: criticalProgress };
 export const fade = { duration: 120 };
-export const nav = { duration: 160 };
+export const nav = { duration: 150 };
 export const press = { duration: 70 };
 
 /** Compatibility names for existing consumers; no elastic nav spring. */

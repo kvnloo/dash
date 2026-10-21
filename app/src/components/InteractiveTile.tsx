@@ -1,10 +1,10 @@
 import { DensityText as Text } from "./Density";
-import { createContext, memo, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, memo, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { BackHandler, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
 import { setStringAsync } from "expo-clipboard";
 import { TileTouch } from "./TileTouch";
 import { GestureDetector } from "react-native-gesture-handler";
-import Animated, { runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { ReduceMotion, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { colors, fonts } from "../theme";
 import { SNAP, fade } from "../motion";
 import { useDensity } from "./Density";
@@ -23,8 +23,8 @@ function TileDetail({ detail, onClose }: { detail: Detail; onClose(): void }) {
   const { width, height } = useWindowDimensions();
   const reduced = useReducedMotion();
   const progress = useSharedValue(0);
-  useEffect(() => { progress.value = reduced ? withTiming(1, { duration: 120 }) : withTiming(1, SNAP); }, [progress, reduced]);
-  const close = () => { progress.value = withTiming(0, { duration: reduced ? 100 : fade.duration }, finished => { if (finished) runOnJS(onClose)(); }); };
+  useLayoutEffect(() => { progress.value = withTiming(1, { ...SNAP, reduceMotion: ReduceMotion.System }); }, [progress]);
+  const close = () => { progress.value = withTiming(0, { ...fade, reduceMotion: ReduceMotion.System }, finished => { if (finished) runOnJS(onClose)(); }); };
   useEffect(() => { const sub = BackHandler.addEventListener("hardwareBackPress", () => { close(); return true; }); return () => sub.remove(); });
   const style = useAnimatedStyle(() => {
     const p = reduced ? 1 : progress.value;

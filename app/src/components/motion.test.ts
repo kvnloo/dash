@@ -8,7 +8,7 @@ describe("motion springs", () => {
     expect(snappy).toEqual({ duration: 150, easing: criticalProgress });
     expect(settle).toEqual({ duration: 180, easing: criticalProgress });
     expect(fade).toEqual({ duration: 120 });
-    expect(nav).toEqual({ duration: 160 });
+    expect(nav).toEqual({ duration: 150 });
     expect(press).toEqual({ duration: 70 });
     expect(GEL).toBe(snappy); expect(SNAP).toBe(snappy);
     expect(snappy.duration).toBe(150);
@@ -21,10 +21,10 @@ describe("motion springs", () => {
   test("velocity-aware navigation is bounded and reversible", () => {
     const release = settleTiming(1, 10);
     expect(release.duration).toBe(100); expect(release.easing(0.5)).toBeCloseTo(0.625);
-    expect(navDuration(1, 0)).toBe(160);
-    expect(navDuration(1, -20)).toBe(160);
-    expect(navDuration(0, 20)).toBe(160);
-    expect(navDuration(1, 1)).toBe(160);
+    expect(navDuration(1, 0)).toBe(150);
+    expect(navDuration(1, -20)).toBe(150);
+    expect(navDuration(0, 20)).toBe(150);
+    expect(navDuration(1, 1)).toBe(150);
     expect(navDuration(1, 10)).toBe(100);
     expect(navDuration(-1, -10)).toBe(100);
     expect(navDuration(1, 100)).toBe(80);
@@ -110,5 +110,24 @@ describe("PressScale wiring", () => {
     expect(nav).toContain("styles.circle");
     expect(nav).not.toContain("GOLD_GLOW");
     expect(nav).not.toContain("styles.glow");
+  });
+});
+
+
+describe("post-Lab motion contracts", () => {
+  test("new finite animations use shared system-reduced tokens", () => {
+    for (const file of ["InteractiveTile.tsx", "TileGestures.tsx", "NumberTicker.tsx"]) {
+      const source = readFileSync(join(import.meta.dir, file), "utf8");
+      expect(source).toContain("ReduceMotion.System");
+      expect(source).not.toMatch(/duration:\s*\d/);
+      expect(source).not.toContain("withSpring");
+    }
+    const ambient = readFileSync(join(import.meta.dir, "OrbMotion.tsx"), "utf8");
+    expect(ambient).toContain("ambient(6000, true)");
+  });
+  test("native-stack does not rely on an iOS-only duration cap for Android", () => {
+    const app = readFileSync(join(import.meta.dir, "../../App.tsx"), "utf8");
+    expect(app).toContain('animation: "none"');
+    expect(app).not.toContain("animationDuration:");
   });
 });
