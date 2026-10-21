@@ -3,7 +3,7 @@ import { Canvas } from "../components/Canvas";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
 import { composerPlaceholder } from "./composer-placeholder";
@@ -42,6 +42,9 @@ import { useSessionPhase } from "../lib/session-phase";
 import { replyText } from "../store/text";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
+import { approvals, actionable } from "../store/approvals";
+import { PromptRail } from "../components/PromptRail";
+import { followsLatest, promptAnchors, promptOffset } from "../lib/prompt-navigation";
 
 const EMPTY: Message[] = [];
 
@@ -58,8 +61,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const insets = useSafeAreaInsets();
   const blurTarget = useRef<View>(null);
   const listRef = useRef<FlashListRef<Message>>(null);
+  const followRef = useRef(true);
+  const dragging = useRef(false);
+  const previousOffset = useRef(0);
+  const [following, setFollowing] = useState(true);
+  const setFollow = useCallback((next: boolean) => { followRef.current = next; setFollowing(next); }, []);
   const scrollToNewest = useCallback(() => {
-    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
   }, []);
   const debugPicker = debugUi.use((s) => s.chatHarnessPickerOpen);
   const debugAttachments = debugUi.use((s) => s.chatComposerAttachments);
@@ -70,10 +78,23 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     if (isDebugActive()) debugUi.set((s) => ({ ...s, chatHarnessPickerOpen: open }));
   }, []);
 
+  const approvalCount = approvals.use(s => s.items.filter(actionable).length);
+  const approvalDryRun = approvals.use(s => s.dryRun);
   const settings = store.use((s) => s.settings);
   const connection = store.use((s) => s.connection);
   const conversation = store.use((s) => s.conversations.find((c) => c.id === s.activeId));
   const messages = conversation?.messages ?? EMPTY;
+  const anchors = useMemo(() => promptAnchors(messages), [messages]);
+  useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
+  const jumpPrompt = useCallback((prompt: number) => {
+    const anchor = anchors[prompt];
+    if (!anchor) return;
+    dragging.current = false;
+    setFollow(false);
+    const offset = promptOffset(anchors, prompt, index => listRef.current?.getLayout(index));
+    if (offset !== null) listRef.current?.scrollToOffset({ offset, animated: false });
+    else void listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
+  }, [anchors, setFollow]);
   const harnessId = conversation?.harness ?? settings?.harness ?? "omp";
   const harness = connection.harnesses.find((h) => h.id === harnessId);
   const harnessName = harness?.name ?? harnessId;
@@ -163,13 +184,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         parkUnsentTurn(turnId);
         return;
       }
-      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+      if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
     [online],
   );
 
   const onSend = useCallback(
     (text: string, attachments: ChatAttachment[]) => {
+      dragging.current = false;
+      setFollow(true);
       const active = conversation ?? createConversation(harnessId);
       if (conversationBusy(active.id)) {
         const { turnId } = beginTurn(active.id, text, { pending: true, attachments });
@@ -180,7 +203,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       }
       sendTurn(text, attachments, active);
     },
-    [conversation, harnessId, sendTurn],
+    [conversation, harnessId, sendTurn, setFollow],
   );
 
   useEffect(() => {
@@ -220,6 +243,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} action="Choose harness" icon="sliders" onAction={() => setPickerVisible(true)} />
       <View style={styles.liveRow} accessibilityLabel={`${harnessName} ${caption}`}><AgentOrb size={20} thinking={thinking} /><Text style={styles.liveNote}>{caption}{external ? " · terminal" : ""}</Text></View>
       <ConnectionPill />
+      {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => navigation.navigate("Approvals")} style={styles.approval}>
+        <Text style={styles.approvalText}>{approvalCount} approvals to review{approvalDryRun ? " · preview" : ""}</Text>
+        <Text style={styles.approvalText}>Review ›</Text>
+      </PressScale> : null}
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       {!targetError && conversation?.openIn ? (
         <Text accessibilityRole="text" style={styles.handoffNote}>
@@ -243,7 +270,19 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           renderItem={({ item }) => <MessageRow message={item} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
-          maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.2 }}
+          maintainVisibleContentPosition={{ startRenderingFromBottom: true }}
+          onScrollBeginDrag={() => { dragging.current = true; }}
+          onScroll={event => {
+            const { contentSize, layoutMeasurement, contentOffset } = event.nativeEvent;
+            const moved = Math.abs(contentOffset.y - previousOffset.current) > 1;
+            previousOffset.current = contentOffset.y;
+            // Web wheel scrolling has no onScrollBeginDrag. A content resize alone
+            // must not detach following before onContentSizeChange can scroll.
+            if (!moved || (!dragging.current && Platform.OS !== "web")) return;
+            setFollow(followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y));
+          }}
+          scrollEventThrottle={16}
+          onContentSizeChange={scrollToNewest}
           contentContainerStyle={styles.listContent}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
@@ -257,6 +296,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             </View>
           }
         /></BlurTargetView>
+        <PromptRail anchors={anchors} following={following} live={Boolean(streamingMessage)} onJump={jumpPrompt}
+          onLatest={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
       </KeyboardInsetView>}
       <KeyboardDock>
         <Composer
@@ -294,15 +335,17 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  approval: { minHeight: 44, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: space.lg, borderBottomWidth: 1, borderColor: colors.hair },
+  approvalText: { ...type.small, color: colors.warn },
   targetError: { color: colors.danger, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   handoffNote: { color: colors.textTertiary, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   body: { flex: 1 },
-  listContent: { paddingVertical: space.sm },
+  listContent: { paddingVertical: space.sm, paddingRight: 36 },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: "45%" },
   emptyTitle: { color: colors.text, ...type.title },
   emptySubtitle: { color: colors.textMuted, ...type.body, marginTop: 6 },
   liveRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.xs },
-  liveChip: { height: 32, borderRadius: radius.pill, borderWidth: 1, borderColor: glass.hair, backgroundColor: glass.fillChip, paddingHorizontal: space.md, justifyContent: "center" },
+  liveChip: { minHeight: 44, borderRadius: radius.pill, borderWidth: 1, borderColor: glass.hair, backgroundColor: glass.fillChip, paddingHorizontal: space.md, justifyContent: "center" },
   liveChipOn: { borderColor: colors.gold, backgroundColor: glass.fillChipOn },
   liveChipText: { ...type.label, color: colors.textMuted },
   liveChipTextOn: { color: colors.gold },

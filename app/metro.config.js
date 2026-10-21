@@ -5,7 +5,7 @@ const config = getDefaultConfig(__dirname);
 // `shared/protocol.ts` lives one level up and is imported by both app and server.
 config.watchFolders = [...(config.watchFolders ?? []), path.resolve(__dirname, "..", "shared")];
 // markdown-it pulls Node's `punycode`; polyfill it for React Native.
-const punycodePath = require.resolve("punycode");
+const punycodePath = require.resolve("punycode/");
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules ?? {}),
   punycode: punycodePath,

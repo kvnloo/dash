@@ -16,6 +16,7 @@ import { createStore } from "./createStore";
 import { dequeue, enqueue, notifyTurnSettled } from "./queue";
 import { nextPendingSend, parkMessage } from "./offline-send";
 import { replyText } from "./text";
+import { appendActivity } from "../lib/message-details";
 import type { AgentTarget } from "../mock/agents";
 import { chatKind } from "../lib/roster";
 
@@ -399,7 +400,7 @@ export function applyTurnEvent(
       return;
     case "status":
       updateMessage(where.conversationId, where.messageId, (m) =>
-        event.seq <= m.seq || m.state !== "streaming" ? m : { ...m, status: event.text, seq: event.seq, handoff: event.handoff?.state },
+        event.seq <= m.seq || m.state !== "streaming" ? m : { ...m, status: event.text, activity: event.handoff ? m.activity : appendActivity(m.activity, event.text), seq: event.seq, handoff: event.handoff?.state },
       );
       return;
     case "done":

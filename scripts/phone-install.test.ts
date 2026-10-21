@@ -39,8 +39,6 @@ describe("phone install surface", () => {
     const dead = [
       "expo-av",
       "expo-camera",
-      "expo-clipboard",
-      "react-native-markdown-display",
       "@types/punycode",
       "playwright",
     ];
@@ -49,11 +47,16 @@ describe("phone install surface", () => {
     }
   });
 
-  test("Markdown stays a Text node, not markdown-it", () => {
+  test("Markdown and clipboard are used RN dependencies, not a WebView renderer", () => {
     const md = read("app/src/components/Markdown.tsx");
-    expect(md).toContain("Plain-text renderer");
-    expect(md).not.toContain("react-native-markdown-display");
-    expect(md).not.toContain("markdown-it");
+    const code = read("app/src/components/CodeBlock.tsx");
+    expect(names.has("react-native-marked")).toBe(true);
+    expect(md).toContain("react-native-marked");
+    expect(md).toContain("useMarkdown(text");
+    expect(md).not.toContain("WebView");
+    expect(code).toContain("expo-clipboard");
+    expect(code).toContain("Prism.tokenize");
+    expect(read("app/metro.config.js")).toContain('require.resolve("punycode/")');
   });
 
   test("punycode stays a direct dep while metro.config.js polyfills it", () => {

@@ -13,6 +13,7 @@ export type DebugScenarioId =
   | "voice"
   | "approvals"
   | "main-files"
+  | "ux-long"
   | "chat-omp"
   | "chat-streaming"
   | "chat-picker"
@@ -36,6 +37,7 @@ export interface DebugScenario {
 }
 
 export const DEBUG_SCENARIOS: Record<DebugScenarioId, DebugScenario> = {
+  "ux-long": { id: "ux-long", label: "UX qualification transcript", seed: "paired", route: { name: "Chat" }, ui: { activeConversationId: "ux-long" } },
   "main-chats-search": { id: "main-chats-search", label: "Chats — focused search", seed: "paired", route: { name: "Main" }, ui: { mainSearchQuery: "", mainTabIndex: 1 } },
   "main-orchestra": { id: "main-orchestra", label: "Orchestra", seed: "paired", route: { name: "Main" }, ui: { mainSearchQuery: "", mainTabIndex: 2 } },
   chat: { id: "chat", label: "Chat", seed: "paired", route: { name: "Chat" }, ui: { activeConversationId: "demo-omp" } },

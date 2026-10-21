@@ -11,6 +11,7 @@ import {
   type DebugScenarioId,
 } from "./scenarios";
 import { debugUi } from "./ui-store";
+import { replyText } from "../store/text";
 
 export type DebugCommand =
   | { action: "scenario"; id: DebugScenarioId }
@@ -24,6 +25,7 @@ export type DebugCommand =
   | { action: "setConnection"; status: "online" | "offline" | "connecting" | "idle" }
   | { action: "setBridgePull"; open: boolean }
   | { action: "wait"; ms: number }
+  | { action: "uxOutput"; text: string }
   | { action: "listScenarios" };
 
 function sleep(ms: number): Promise<void> {
@@ -56,6 +58,17 @@ export async function runScenario(id: DebugScenarioId): Promise<void> {
 
 export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
   switch (cmd.action) {
+    case "uxOutput": {
+      // Local fixture only; exercise per-reply rAF subscriptions without a host.
+      store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id !== "ux-long" ? c : {
+        ...c, messages: c.messages.map(m => m.id === "ux-a-24" && m.role === "assistant" ? { ...m, state: "streaming" } : m),
+      }) }));
+      const chat = store.get().conversations.find(c => c.id === "ux-long");
+      const message = chat?.messages.find(m => m.id === "ux-a-24");
+      const current = replyText.get("ux-t-24") || message?.text || "";
+      replyText.set("ux-t-24", current + cmd.text);
+      return { ok: true };
+    }
     case "listScenarios":
       return DEBUG_SCENARIO_IDS.map((id) => ({ id, label: DEBUG_SCENARIOS[id].label }));
     case "scenario":
