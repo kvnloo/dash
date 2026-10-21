@@ -1,3 +1,4 @@
+import { toggleHandedness, useHandedness } from "../lib/useHandedness";
 import { Feather } from "@expo/vector-icons";
 import { type RefObject, memo, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
@@ -34,6 +35,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
   placeholder = "Message Dash",
   dock = "top",
 }: Props) {
+  const thumb = useHandedness();
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
   const canSend = value.trim().length > 0;
@@ -48,7 +50,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
     <View style={[styles.wrap, dock === "bottom" && styles.wrapBottom]}>
       <ComposerSuggestions text={value} onChange={onChange} />
 
-      <GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={radius.pill} style={[styles.shell, focused && { borderWidth: 1, borderColor: colors.gold }]} contentStyle={styles.field}>
+      <GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={radius.pill} style={[styles.shell, focused && { borderWidth: 1, borderColor: colors.gold }]} contentStyle={[styles.field, thumb.row]}>
         <PressScale
           onPress={insertMention}
           scaleTo={PRESS_SCALE.control}
@@ -97,6 +99,8 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
         ) : (
           <PressScale
             onPress={onVoice}
+            onLongPress={toggleHandedness}
+            accessibilityHint="Long press to switch thumb side"
             scaleTo={PRESS_SCALE.control}
             style={styles.sideIcon}
             accessibilityRole="button"

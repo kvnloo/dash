@@ -1,3 +1,4 @@
+import { useHandedness } from "../lib/useHandedness";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
@@ -13,6 +14,7 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
   anchors: readonly RailTurn[]; following: boolean; live: boolean;
   onJump(prompt: number): void; onLatest(): void; onContinue(prompt: number): void;
 }) {
+  const thumb = useHandedness();
   const [selected, setSelected] = useState<number | null>(null);
   const [copyState, setCopyState] = useState("");
   const [confirmContinue, setConfirmContinue] = useState(false);
@@ -54,8 +56,8 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
   }, [choose, clear, commit, count, height, last]);
   const turn = selected === null ? undefined : anchors[selected];
   if (!anchors.length) return null;
-  return <View style={styles.rail} pointerEvents="box-none">
-    {selected !== null ? <View style={styles.preview} accessibilityLabel="Turn preview">
+  return <View style={[styles.rail, thumb.edge(0)]} pointerEvents="box-none">
+    {selected !== null ? <View style={[styles.preview, thumb.edge(48)]} accessibilityLabel="Turn preview">
       <View style={styles.heading}>
         <Text style={styles.previewLabel}>{turn ? `Prompt ${selected + 1}/${anchors.length} · ${turn.state}${turn.question ? " · question" : ""}` : "Latest reply"}</Text>
         <Pressable accessibilityLabel="Close turn preview" accessibilityRole="button" onPress={clear} style={styles.close}><Text style={styles.previewLabel}>×</Text></Pressable>
@@ -115,7 +117,7 @@ const RailTicks = memo(function RailTicks({ anchors }: { anchors: readonly RailT
 const styles = StyleSheet.create({
   tickLayer: { flex: 1, alignSelf: "stretch" },
   cursor: { position: "absolute", top: 0, right: 6, width: 32, height: 2, backgroundColor: colors.gold },
-  rail: { position: "absolute", right: 0, top: "18%", bottom: "12%", width: 44, alignItems: "center" },
+  rail: { position: "absolute", top: "18%", bottom: "12%", width: 44, alignItems: "center" },
   ticks: { flex: 1, width: 44 },
   slot: { flex: 1, justifyContent: "center", alignItems: "flex-end", paddingRight: 6 },
   tick: { height: 1, borderRadius: 1 },
@@ -125,7 +127,7 @@ const styles = StyleSheet.create({
   arrow: { color: colors.text, fontSize: 22, lineHeight: 24 },
   following: { color: colors.gold },
   latestLabel: { color: colors.textMuted, fontSize: 9, lineHeight: 12 },
-  preview: { position: "absolute", right: 48, top: "10%", width: 276, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.hair, backgroundColor: colors.surfaceRaised },
+  preview: { position: "absolute", top: "10%", width: 276, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.hair, backgroundColor: colors.surfaceRaised },
   heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   close: { minWidth: 44, minHeight: 44, justifyContent: "center", alignItems: "center" },
   previewLabel: { ...type.small, color: colors.textMuted, flexShrink: 1 },

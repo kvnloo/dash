@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { toggleHandedness, useHandedness } from "../lib/useHandedness";
 import { type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
@@ -40,6 +41,7 @@ interface Props {
 let draftSeq = 0;
 
 export const Composer = memo(function Composer({ disabled, streaming, placeholder, initialText, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice }: Props) {
+  const thumb = useHandedness();
   const [text, setText] = useState(initialText ?? "");
   const [drafts, setDrafts] = useState<DraftAttachment[]>(initialAttachments ?? []);
   const mounted = useRef(true);
@@ -108,11 +110,11 @@ export const Composer = memo(function Composer({ disabled, streaming, placeholde
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}
       </ScrollView>
     ) : null}
-    <View style={styles.field}>
+    <View style={[styles.field, thumb.row]}>
       <TextInput style={styles.input} value={text} onChangeText={setText} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline={false} numberOfLines={1} keyboardAppearance="dark" autoCapitalize="sentences" onSubmitEditing={submit} accessibilityLabel="Message" />
-      <View style={styles.controls}>
+      <View style={[styles.controls, thumb.row]}>
         <PressScale accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttach} disabled={disabled} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale>
-        <PressScale accessibilityRole="button" accessibilityLabel="Voice input" onPress={onVoice} style={styles.hit}><Feather name="mic" size={18} color={colors.textMuted} /></PressScale>
+        <PressScale accessibilityRole="button" accessibilityLabel="Voice input" accessibilityHint="Long press to switch thumb side" onLongPress={toggleHandedness} onPress={onVoice} style={styles.hit}><Feather name="mic" size={18} color={colors.textMuted} /></PressScale>
         <PressScale accessibilityRole="button" accessibilityLabel={streaming ? "Stop" : "Send"} onPress={streaming ? onStop : submit} disabled={!streaming && !canSend} style={styles.hit}><View style={[styles.send, streaming && styles.stop, !streaming && !canSend && styles.disabled]}>{streaming ? <View style={styles.square} /> : <Feather name="arrow-up" size={20} color={colors.onAccent} />}</View></PressScale>
       </View>
     </View>

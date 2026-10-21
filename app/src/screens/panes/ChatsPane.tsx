@@ -1,3 +1,4 @@
+import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -76,6 +77,7 @@ const SectionHeader = memo(function SectionHeader({ title, count }: { title: str
 });
 
 export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
+  const thumb = useHandedness();
   const conversations = store.use((s) => s.conversations);
   const activeId = store.use((s) => s.activeId);
   const harnesses = store.use((s) => s.connection.harnesses);
@@ -153,7 +155,7 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
   return (
     <View style={styles.wrap}>
       {conversations.some(c => c.stale) && (
-        <PressScale onPress={() => confirmDestructive("Clear ended chats?", "Saved history is removed from this phone only.", "Clear ended", clearEndedConversations)} accessibilityRole="button" style={styles.clearEnded}>
+        <PressScale onPress={() => confirmDestructive("Clear ended chats?", "Saved history is removed from this phone only.", "Clear ended", clearEndedConversations)} accessibilityRole="button" style={[styles.clearEnded, thumb.align]}>
           <Text style={styles.clearEndedText}>Clear ended</Text>
         </PressScale>
       )}
@@ -184,7 +186,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { color: colors.textMuted, ...type.label },
   attention: { color: colors.danger },
-  clearEnded: { alignSelf: "flex-end", paddingHorizontal: space.lg, paddingTop: space.sm, minHeight: 44, justifyContent: "center" },
+  clearEnded: { paddingHorizontal: space.lg, paddingTop: space.sm, minHeight: 44, justifyContent: "center" },
   clearEndedText: { color: colors.gold, ...type.label },
   row: {
     flexDirection: "row",

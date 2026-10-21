@@ -1,4 +1,6 @@
 import { ModelsPanel } from "../components/ModelsPanel";
+import { setHandedness, useHandedness } from "../lib/useHandedness";
+import type { Handedness } from "../lib/handedness";
 import { Canvas } from "../components/Canvas";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +21,7 @@ import { confirmDestructive } from "../util";
 import { screenBack } from "../lib/screen-back";
 
 export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
+  const thumb = useHandedness();
   const insets = useSafeAreaInsets();
   const settings = store.use((s) => s.settings);
   const connection = store.use((s) => s.connection);
@@ -55,7 +58,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
     setSaving(true);
     setSaveError(null);
     const next = {
-      ...(identity ? { identity } : {}),
+      ...store.get().settings,
+      identity,
       address: normalizeAddress(address),
       token: token.trim(),
       harness: settings?.harness ?? "omp",
@@ -136,6 +140,21 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
 
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: modelsOpen }} onPress={() => setModelsOpen(!modelsOpen)} style={styles.secondary}><Text style={styles.secondaryText}>Models {modelsOpen ? "−" : "+"}</Text></Pressable>
           {modelsOpen ? <ModelsPanel /> : null}
+          <Text style={styles.label}>Display</Text>
+          <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+            <View style={styles.harnessRow}><Text style={styles.harnessName}>Thumb side</Text></View>
+            <View style={{ flexDirection: "row", paddingHorizontal: space.md, gap: space.sm }}>
+              {(["right", "left", "auto"] satisfies Handedness[]).map(value => <Pressable key={value}
+                accessibilityRole="radio" accessibilityLabel={`${value[0]?.toUpperCase()}${value.slice(1)} handedness`}
+                accessibilityState={{ checked: thumb.preference === value, disabled: !settings }}
+                aria-checked={thumb.preference === value} disabled={!settings}
+                onPress={() => { setHandedness(value); haptic.select(); }}
+                style={{ flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, borderWidth: 1, borderColor: thumb.preference === value ? colors.gold : colors.border }}>
+                <Text style={{ ...type.body, color: thumb.preference === value ? colors.gold : colors.textMuted }}>{value[0]?.toUpperCase()}{value.slice(1)}</Text>
+              </Pressable>)}
+            </View>
+            <Text style={[styles.help, { padding: space.md }]}>{settings ? "Auto follows a system preference when available; otherwise Right. This platform exposes no handedness signal. Long-press the composer mic to switch hands." : "Pair a bridge to save display preferences."}</Text>
+          </GlassSurface>
           <Text style={styles.label}>Bridge</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field
