@@ -60,13 +60,21 @@ export function attachmentNames(createdAt: number): { image: string; json: strin
   return { image: `annotation-${stamp}.png`, json: `annotation-${stamp}.json` };
 }
 
+/** Center of a stroke as whole percentages of the screen. */
+export function strokeCenter(points: readonly { x: number; y: number }[]): [number, number] {
+  const xs = points.map(p => p.x), ys = points.map(p => p.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  return [Math.round(cx * 100), Math.round(cy * 100)];
+}
+
 /** One line per stroke so the agent can map markers to what was drawn and where. */
 export function strokeLegend(strokes: readonly Stroke[]): string {
   return strokes.map(s => {
-    const xs = s.points.map(p => p.x), ys = s.points.map(p => p.y);
-    const at = `${Math.round(((Math.min(...xs) + Math.max(...xs)) / 2) * 100)}%,${Math.round(((Math.min(...ys) + Math.max(...ys)) / 2) * 100)}%`;
-    const on = s.targets?.length ? ` on ${s.targets.join(", ")}` : "";
-    return `${marker(s.id)} ${s.tool}${s.color === "red" ? " (red)" : ""} at ${at}${on}`;
+    const [x, y] = strokeCenter(s.points);
+    const red = s.color === "red" ? " (red)" : "";
+    const on = s.targets?.length ? " on " + s.targets.join(", ") : "";
+    return marker(s.id) + " " + s.tool + red + " at " + x + "%," + y + "%" + on;
   }).join("\n");
 }
 
@@ -75,9 +83,12 @@ export function composeMessage(input: { strokes: readonly Stroke[]; segments: re
   const { text, unspoken } = annotateTranscript(input.strokes, input.segments);
   const said = [input.typed?.trim(), text].filter(Boolean).join("\n");
   const count = input.strokes.length;
-  const head = `Annotated ${input.screen.route} (${count} stroke${count === 1 ? "" : "s"}). Screenshot with the marks and the strokes JSON are attached.`;
-  const body = said ? `${said}${unspoken.length ? `\nAlso marked without speaking: ${unspoken.map(marker).join(" ")}` : ""}` : "";
-  return [head, body, count ? strokeLegend(input.strokes) : ""].filter(Boolean).join("\n\n");
+  const plural = count === 1 ? "" : "s";
+  const head = "Annotated " + input.screen.route + " (" + count + " stroke" + plural + "). Screenshot with the marks and the strokes JSON are attached.";
+  const silent = unspoken.length > 0 ? "\nAlso marked without speaking: " + unspoken.map(marker).join(" ") : "";
+  const body = said ? said + silent : "";
+  const legend = count > 0 ? strokeLegend(input.strokes) : "";
+  return [head, body, legend].filter(Boolean).join("\n\n");
 }
 
 /** Mid-turn Hermes sessions take the annotation as a steer; otherwise it is a normal send. */

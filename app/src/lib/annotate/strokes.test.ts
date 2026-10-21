@@ -45,6 +45,7 @@ describe("drawing edits", () => {
     let d: Drawing = EMPTY_DRAWING;
     for (let i = 0; i < MAX_UNDO + 5; i++) d = addStroke(d, pen(pts([0, 0], [1, 1])));
     expect(d.past).toHaveLength(MAX_UNDO);
+    expect(MAX_UNDO).toBe(50);
   });
 
   test("eraser removes only strokes it touches, as one undo step", () => {

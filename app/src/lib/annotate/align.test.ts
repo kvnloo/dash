@@ -51,6 +51,9 @@ describe("annotateTranscript", () => {
   test("several strokes on one word keep drawing order", () => {
     expect(annotateTranscript([stroke(1, 10), stroke(2, 20)], [seg("a", "here", 0, 100)]).text).toBe(`here ${marker(1)} ${marker(2)}`);
   });
+  test("slack is three seconds", () => {
+    expect(ALIGN_SLACK_MS).toBe(3000);
+  });
   test("marker format", () => {
     expect(marker(7)).toBe("⟦stroke 7⟧");
   });

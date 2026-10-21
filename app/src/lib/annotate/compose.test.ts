@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ANNOTATION_SCHEMA, annotationDoc, annotationSendMode, attachmentNames, composeMessage, strokeLegend } from "./compose";
+import { ANNOTATION_SCHEMA, annotationDoc, annotationSendMode, attachmentNames, composeMessage, strokeCenter, strokeLegend } from "./compose";
 import type { Segment } from "./align";
 import type { Stroke } from "./strokes";
 
@@ -55,4 +55,9 @@ test("attachment names are filesystem-safe and paired", () => {
 test("steer only when the running turn can take it", () => {
   expect(annotationSendMode(true)).toBe("steer");
   expect(annotationSendMode(false)).toBe("queue");
+});
+
+test("stroke center is the bbox middle in whole percent", () => {
+  expect(strokeCenter([{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.9 }, { x: 0.2, y: 0.5 }])).toEqual([20, 55]);
+  expect(strokeCenter([{ x: 0.004, y: 0.006 }])).toEqual([0, 1]);
 });
