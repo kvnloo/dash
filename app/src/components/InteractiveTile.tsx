@@ -60,7 +60,7 @@ export const InteractiveTile = memo(function InteractiveTile({ title, summary, c
     { id: "detail", label: "Detail", run: open }, { id: "pin", label: pinned ? "Unpin" : "Pin locally", run: pin }, { id: "copy", label: "Copy", run: copy }, { id: "density", label: "Density", run: cycleDensity }, ...extraActions.slice(0, 4),
   ] });
   return <TileTouch holding={holding} onOpen={open} onPrimary={pin} onSecondary={copy}><GestureDetector gesture={gesture} touchAction="pan-y"><Animated.View ref={ref} collapsable={false} testID={testID}
-    accessible accessibilityRole="button" accessibilityLabel={`${title}. ${pinned ? "Pinned locally. " : ""}${copyState}`} accessibilityHint="Tap for detail, double tap to pin locally, triple tap to copy, hold and slide for actions."
+    accessible accessibilityRole="button" accessibilityLabel={`${title}. ${summary} ${pinned ? "Pinned locally. " : ""}${copyState}`} accessibilityHint="Tap for detail, double tap to pin locally, triple tap to copy, hold and slide for actions."
     accessibilityActions={[{ name: "activate", label: "Open detail" }, { name: "pin", label: "Pin locally" }, { name: "copy", label: "Copy summary" }, { name: "density", label: "Change density" }, ...extraActions.map(action => ({ name: action.id, label: action.label }))]}
     onAccessibilityAction={event => { const name = event.nativeEvent.actionName; if (name === "activate") open(); else if (name === "pin") pin(); else if (name === "copy") copy(); else if (name === "density") cycleDensity(); else extraActions.find(action => action.id === name)?.run(); }}
     style={[{ minWidth: 0, alignSelf: "stretch", minHeight: sizing.rowMin, shadowColor: "#000" }, style, animatedStyle]}>

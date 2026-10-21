@@ -26,7 +26,7 @@ async function move(p, dx, dy) { for (let i = 1; i <= 6; i++) { await touch('tou
 async function close() { await page.getByRole('button', { name: 'Close tile detail', exact: true }).click(); await page.getByTestId('tile-detail').waitFor({ state: 'detached' }); }
 try {
   await page.goto(`${base}/lab`);
-  await tile().waitFor(); await page.waitForTimeout(1000);
+  await tile().waitFor(); await page.waitForTimeout(1000); assert.match(await tile().getAttribute("aria-label"), /Tap opens detail/);
   await taps(1);
   const frames = [];
   let previous = 0;
