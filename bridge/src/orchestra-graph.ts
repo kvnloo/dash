@@ -97,4 +97,28 @@ export function toolPaths(raw: unknown, cwd?: string): string[] {
   }
   return [...new Set(paths.filter(Boolean))];
 }
+/** Join a manifest worker to its native session only on the supervisor's recorded
+ * session identity. Goal text and timestamps are never identity evidence. */
+export function reconcileWorkerEvidence(sessions: GraphSession[], workers: unknown[]): void {
+  for (const worker of workers) {
+    if (!record(worker) || !record(worker.meta)) continue;
+    const meta = worker.meta;
+    const native = typeof meta.session === "string" && meta.session ? sessions.find(s => s.sessionId === meta.session) : undefined;
+    const manifest = sessions.find(s => s.id === worker.id && !s.sessionId);
+    if (native && manifest && native !== manifest) {
+      native.provenance.push(...manifest.provenance.filter(p => !native.provenance.includes(p)));
+      native.parent ??= manifest.parent;
+      native.delegated = true;
+      sessions.splice(sessions.indexOf(manifest), 1);
+    }
+    const match = native ?? manifest ?? sessions.find(s => s.provenance.includes(typeof meta.log === "string" ? meta.log : ""));
+    if (!match) continue;
+    if (typeof meta.log === "string" && meta.log && !match.provenance.includes(meta.log)) match.provenance.push(meta.log);
+    if (typeof worker.phase === "string" && /stall|overdue|interrupt|fail/i.test(worker.phase)) {
+      match.state = "failing";
+      match.reason = `Supervision: ${worker.phase}`;
+      match.action = "Inspect supervision findings; recover or abandon";
+    }
+  }
+}
 export function record(v: unknown): v is Record<string, unknown> { return typeof v === "object" && v !== null && !Array.isArray(v); }

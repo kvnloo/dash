@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import fixture from "./fixtures/orchestra-sanitised.json";
-import { buildOrchestra, toolPaths, type GraphSession } from "./orchestra-graph";
+import { buildOrchestra, toolPaths, reconcileWorkerEvidence, type GraphSession } from "./orchestra-graph";
 import { parseOrchestra } from "../../shared/orchestra";
 import { createOrchestraHttpHandler } from "./orchestra-http";
 const now = 1792600000000;
@@ -54,6 +54,17 @@ test("graph endpoint authenticates before reading; GET only and unrelated paths 
   expect(await denied(new Request("http://local/other"))).toBeNull();
   const allowed = createOrchestraHttpHandler({ authorize: async () => true, roster: async () => hosts });
   expect((await allowed(new Request("http://local/orchestra/graph", { method: "POST" })))?.status).toBe(405);
+});
+test("native and manifest evidence count a worker once only with recorded session identity", () => {
+  const rows = sessions(); rows[1]!.sessionId = "worker-session";
+  rows.push({ ...rows[1]!, id: "deleg/task-0", sessionId: undefined, parent: "orchestrator", provenance: ["/worker.log", "/manifest.json"] });
+  reconcileWorkerEvidence(rows, [{ id: "deleg/task-0", phase: "Overdue", meta: { session: "worker-session", log: "/worker.log" } }]);
+  expect(rows).toHaveLength(2);
+  expect(rows[1]).toMatchObject({ id: "worker", state: "failing", parent: "parent", reason: "Supervision: Overdue" });
+  expect(rows[1]!.provenance).toContain("/manifest.json");
+  const unlinked = sessions(); unlinked.push({ ...unlinked[1]!, id: "unlinked-worker" });
+  reconcileWorkerEvidence(unlinked, [{ id: "unlinked-worker", phase: "Completed", meta: {} }]);
+  expect(unlinked).toHaveLength(3);
 });
 test("wire parser rejects unknown types, duplicate IDs and dangling edges", () => {
   const graph = buildOrchestra({ hosts, sessions: sessions(), now });
