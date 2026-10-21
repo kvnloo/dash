@@ -123,7 +123,7 @@ export const Composer = memo(function Composer({ disabled, streaming, steerBusy 
     ) : null}
     {steerBusy ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
     <View style={[styles.field, thumb.row]}>
-      <TextInput style={styles.input} value={text} onChangeText={setText} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline={false} numberOfLines={1} keyboardAppearance="dark" autoCapitalize="sentences" onSubmitEditing={submit} accessibilityLabel="Message" />
+      <TextInput style={styles.input} value={text} onChangeText={setText} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel="Message" />
       <View style={[styles.controls, thumb.row]}>
         <PressScale accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttach} disabled={disabled} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale>
         <PressScale accessibilityRole="button" accessibilityLabel={voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : "Voice input"} accessibilityHint="Long press to switch thumb side" onLongPress={toggleHandedness} onPress={onVoice} style={styles.hit}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : <Feather name="mic" size={18} color={colors.textMuted} />}</PressScale>
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 12, paddingTop: 8, gap: 8 },
   sheet: { paddingHorizontal: 8 },
   field: { flexDirection: "row", alignItems: "center", minHeight: 60 },
-  input: { flex: 1, minWidth: 0, ...type.body, color: colors.text, paddingLeft: 8, paddingVertical: 12 },
+  input: { flex: 1, minWidth: 0, maxHeight: 148, ...type.body, color: colors.text, paddingLeft: 8, paddingTop: 12, paddingBottom: 12 },
   controls: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
   modeRow: { alignItems: "center", justifyContent: "space-between", paddingHorizontal: 8 },
   modeToggle: { minHeight: 44, paddingHorizontal: 8 },
