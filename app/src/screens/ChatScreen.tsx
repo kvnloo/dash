@@ -81,6 +81,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, []);
   const debugPicker = debugUi.use((s) => s.chatHarnessPickerOpen);
   const debugAttachments = debugUi.use((s) => s.chatComposerAttachments);
+  const [displayOpen, setDisplayOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerVisible = debugPicker ?? pickerOpen;
   const setPickerVisible = useCallback((open: boolean) => {
@@ -255,10 +256,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
-      <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} />
+      <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} onAction={() => setDisplayOpen(v => !v)} action="Chat display settings" icon="sliders" />
+      {displayOpen ? <View accessibilityLabel="Chat display settings" style={{ paddingHorizontal: 16, paddingBottom: 8, gap: 4 }}>
+        <Text style={styles.liveChipText}>Thinking & tools</Text>
+        <View style={{ flexDirection: "row", gap: 8 }}>{DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={styles.liveChip}><Text style={[styles.liveChipText, (conversation?.detailMode ?? "Compact") === mode && styles.liveChipTextOn]}>{mode}</Text></PressScale>)}</View>
+        <PressScale accessibilityRole="switch" accessibilityLabel="Thinking summaries" accessibilityState={{ checked: conversation?.summariesEnabled === true }} onPress={() => { const active = conversation ?? createConversation(harnessId); setThinkingSummaries(active.id, !active.summariesEnabled); }} style={styles.liveRow}><Text style={styles.liveNote}>Thinking summaries · {conversation?.summariesEnabled ? "on" : "off"} · next turn</Text></PressScale>
+      </View> : null}
       <View style={styles.liveRow} accessibilityLabel={`${harnessName} ${caption}`}><AgentOrb size={20} thinking={thinking} /><Text style={styles.liveNote}>{caption}{external ? " · terminal" : ""}</Text></View>
       <ConnectionPill />
-      {conversation ? <PressScale accessibilityRole="switch" accessibilityLabel="Thinking summaries" accessibilityState={{ checked: conversation.summariesEnabled === true }} onPress={() => setThinkingSummaries(conversation.id, !conversation.summariesEnabled)} style={styles.liveRow}><Text style={styles.liveNote}>Thinking summaries · {conversation.summariesEnabled ? "on" : "off"} · next turn</Text></PressScale> : null}
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       {!targetError && conversation?.openIn ? (
         <Text accessibilityRole="text" style={styles.handoffNote}>
@@ -316,10 +321,6 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         <View style={styles.liveRow}>
           <PressScale accessibilityRole="button" accessibilityLabel="Choose harness" onPress={() => { haptic.select(); setPickerVisible(true); }} style={styles.liveChip}><Text style={styles.liveChipText}>{harnessName} · Change</Text></PressScale>
           {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approval}><Text style={styles.approvalText}>{approvalCount} approvals{approvalDryRun ? " · preview" : ""} ›</Text></PressScale> : null}
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 16, gap: 4 }}>
-          <Text style={{ ...type.mono, color: colors.textTertiary, fontSize: 10, marginRight: 6 }}>Thinking & tools</Text>
-          {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
         </View>
         <Composer
           context={context}
