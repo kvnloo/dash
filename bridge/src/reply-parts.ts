@@ -4,11 +4,8 @@ export const PREVIEW_BYTES = 8192;
 export const DETAIL_BYTES = 1024 * 1024;
 export function record(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 export function stringify(value: unknown): string { return typeof value === "string" ? value : JSON.stringify(value ?? "") ?? ""; }
-export function redact(text: string): string {
-  return text.replace(/\b(?:sk-[\w-]{12,}|gh[pousr]_[\w]{12,}|github_pat_[\w]{12,}|xox[baprs]-[\w-]{10,}|eyJ[\w-]+\.[\w-]+\.[\w-]+)\b/g, "[REDACTED]")
-    .replace(/((?:["']?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret|authorization)["']?)\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,}\n]+)/gi, "$1[REDACTED]")
-    .replace(/\bBearer\s+[\w.+/=-]+/gi, "Bearer [REDACTED]");
-}
+import { formatTool, object, redactTool } from "../../shared/tool-format";
+export const redact = redactTool;
 export function redactValue(value: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) out[key] = /^(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|secret|authorization)$/i.test(key) ? "[REDACTED]" : typeof item === "string" ? redact(item) : record(item) ? redactValue(item) : Array.isArray(item) ? item.map(entry => record(entry) ? redactValue(entry) : typeof entry === "string" ? redact(entry) : entry) : item;
@@ -35,14 +32,20 @@ export class PartEmitter {
   private names = new Map<string, string>();
   private pending = new Map<string, string>();
   private sent = new Map<string, number>();
+  private envCalls = new Set<string>();
   constructor(private emit: (part: ReplyPart) => void, private now = Date.now) {}
   reasoning(text: unknown): void { if (typeof text === "string" && text) this.emit({ kind: "reasoning", text: redact(text) }); }
   start(id: string, name: string, args: unknown): void {
     if (!this.starts.has(id) && this.starts.size >= 128) return;
     if (!this.starts.has(id)) this.starts.set(id, this.now());
     this.names.set(id, name);
-    const clean = cap(redact(stringify(args)), DETAIL_BYTES);
-    this.emit({ kind: "tool_start", callId: id, name: redact(name), summary: clean.replace(/\s+/g, " ").slice(0, 110), args: clean });
+    const raw = stringify(args);
+    let parsed: Record<string, unknown> = {};
+    try { parsed = object(JSON.parse(raw)); } catch { /* ACP command text */ }
+    if (/(^|\/)\.env(?:\.|$)/.test(String(parsed.path ?? parsed.file_path ?? ""))) this.envCalls.add(id);
+    const formatted = formatTool({ name, args: raw, output: "", status: "live", durationMs: 0 });
+    const clean = cap(this.envCalls.has(id) ? formatted.args : redact(raw), DETAIL_BYTES);
+    this.emit({ kind: "tool_start", callId: id, name: redact(name), summary: formatted.title, args: clean });
   }
   args(id: string, value: unknown): void { const name = this.names.get(id); if (name) this.start(id, name, value); }
   output(id: string, value: unknown, final = false): void {
@@ -51,7 +54,7 @@ export class PartEmitter {
     const boundary = final ? pending.length : pending.lastIndexOf("\n") + 1;
     if (!boundary) { this.pending.set(id, pending); return; }
     this.pending.set(id, pending.slice(boundary));
-    const clean = redact(pending.slice(0, boundary));
+    const clean = this.envCalls.has(id) ? "[REDACTED .env values]" : redact(pending.slice(0, boundary));
     const used = this.sent.get(id) ?? 0;
     const text = cap(clean, Math.max(0, DETAIL_BYTES - used));
     this.sent.set(id, used + new TextEncoder().encode(text).length);
