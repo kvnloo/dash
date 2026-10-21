@@ -62,5 +62,12 @@
     "thinking_and_activity": "Initial test failed: module missing; implementation passed."
   },
   "known_baseline": "Bare bun test discovers four pre-existing docs/design/ai-ui-patterns/decisions.test.ts failures. Confirmed in detached effd9a2 worktree: 587 pass, 4 fail. Configured bun run test excludes that historical documentation suite.",
-  "incomplete_trials": "One browser run reported a network error, then /tmp exhaustion stopped Metro and caused 30 test write failures. Bridge integration fixtures had copied roughly 838MiB each per test run. Retained fixtures moved to ~/work/dash-ux-research/test-fixtures and subsequent tests used disk-backed TMPDIR. Final configured tests and browser qualification passed."
+  "incomplete_trials": "One browser run reported a network error, then /tmp exhaustion stopped Metro and caused 30 test write failures. Bridge integration fixtures had copied roughly 838MiB each per test run. Retained fixtures moved to ~/work/dash-ux-research/test-fixtures and subsequent tests used disk-backed TMPDIR. Final configured tests and browser qualification passed.",
+  "github_ci": {
+    "status": "BLOCKED before gates at Install locked dependencies",
+    "dependency": "@kvnloo/aodl-views",
+    "run": "https://github.com/kvnloo/dash/actions/runs/39538861932",
+    "observed_head": "5de4e54d7beeafc490a868410ab6d454df21ed47",
+    "action": "Maintainer must provide cross-repository access for the existing private dependency. No credentials added and no gate bypassed."
+  }
 }
