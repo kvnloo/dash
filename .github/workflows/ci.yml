@@ -30,8 +30,8 @@ jobs:
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'app/bun.lock', 'bridge/bun.lock') }}
-      - name: Install locked dependencies
-        run: bun install --frozen-lockfile && bun install --frozen-lockfile --cwd app && bun install --frozen-lockfile --cwd bridge
+      - name: Install locked root and bridge dependencies; public app without private renderer
+        run: bun install --frozen-lockfile && bun scripts/install-public-ci.ts && bun install --frozen-lockfile --cwd bridge
       - name: Typecheck app, bridge, shared and scripts
         if: matrix.gate == 'typecheck'
         run: bun run typecheck
