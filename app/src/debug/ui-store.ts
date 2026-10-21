@@ -10,6 +10,7 @@ export interface DebugUiState {
   chatComposerAttachments: DraftAttachment[] | null;
   /** Set true once debug bootstrap + optional scenario finished. */
   ready: boolean;
+  orchestraFixture?: boolean;
 }
 
 export const debugUi = createStore<DebugUiState>({

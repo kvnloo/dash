@@ -74,7 +74,8 @@ describe("PressScale wiring", () => {
 
   test("header icons use the shared glass press feedback, not a glow overlay", () => {
     const nav = readFileSync(join(import.meta.dir, "ScreenHeader.tsx"), "utf8");
-    expect(nav).toContain("pressed ? colors.gold");
+    expect(nav).toContain("<PressScale");
+    expect(nav).toContain("haptic.select()");
     expect(nav).toContain("styles.circle");
     expect(nav).not.toContain("GOLD_GLOW");
     expect(nav).not.toContain("styles.glow");

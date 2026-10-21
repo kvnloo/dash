@@ -16,22 +16,12 @@ import type { ScreenProps } from "../../navigation";
 import { setActive, store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
 import { timeAgo } from "../../util";
-import { aodlGraphFromRoster, aodlGraphView } from "../../lib/aodl";
-import { graphHosts } from "../../lib/orchestra-graph";
-
-const GraphView = aodlGraphView();
-
-/** zerOS orchestration graph (aodl-views): this tailnet's hosts and their live chats. */
-const RosterGraph = memo(function RosterGraph({ width }: { width: number }) {
-  const hosts = store.use((s) => s.connection.hosts);
-  const graph = useMemo(() => aodlGraphFromRoster(graphHosts(hosts)), [hosts]);
-  if (!GraphView || !graph || graph.nodes.length === 0) return null;
-  return (
-    <View style={styles.graph} accessibilityLabel="Orchestration graph">
-      <GraphView graph={graph} width={width} height={360} initialLayout="spine" initialMode="all" testID="orchestra-graph" />
-    </View>
-  );
-});
+import { orchestraMap } from "../../lib/orchestra-map";
+import { debugUi } from "../../debug/ui-store";
+import { isDebugActive } from "../../debug/expose";
+import { orchestraMotionFixture } from "../../debug/orchestra-fixture";
+import { OrchestraGraph } from "../../components/OrchestraGraph";
+import { WorkspaceActions } from "../../components/WorkspaceHeader";
 
 const Card = memo(function Card({
   item,
@@ -140,10 +130,14 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
   );
 
   const { width } = useWindowDimensions();
+  const fixture = debugUi.use(s => s.orchestraFixture);
+  const fixtureOn = isDebugActive() && fixture === true;
+  const graph = useMemo(() => fixtureOn ? orchestraMotionFixture() : orchestraMap(hosts, conversations), [hosts, conversations, fixtureOn]);
   return (
+    <OrchestraGraph graph={graph} width={width} fixture={fixtureOn} actions={<WorkspaceActions navigation={navigation} />}>
+    <View style={styles.projects}>
     <FlashList
       data={projects}
-      ListHeaderComponent={<RosterGraph width={width - space.lg * 2} />}
       renderItem={renderItem}
       keyExtractor={(p) => p.id}
       contentContainerStyle={styles.list}
@@ -154,12 +148,14 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
         </View>
       }
     />
+    </View>
+    </OrchestraGraph>
   );
 }
 
 const styles = StyleSheet.create({
-  list: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: 120 },
-  graph: { marginBottom: space.md },
+  projects: { height: 136 },
+  list: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.sm },
   card: {
     borderRadius: 14,
     alignItems: "stretch",

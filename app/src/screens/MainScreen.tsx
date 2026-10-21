@@ -320,7 +320,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           pagerRef.current?.setPage(next);
         }}
       />
-      <WorkspaceHeader navigation={navigation} tab={index} />
+      <WorkspaceHeader navigation={navigation} tab={index} titleOnly={index === 2} />
       <ConnectionPill />
       <BlurTargetView ref={blurTarget} style={styles.body}>
         {searchActive ? (
@@ -361,7 +361,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               <View key="chats" style={{ width }}>
                 <ChatsPane navigation={navigation} />
               </View>
-              <View key="orchestra" style={{ width }}>
+              <View key="orchestra" style={{ width, flex: 1 }}>
                 <OrchestraPane navigation={navigation} />
               </View>
             </MainPager>

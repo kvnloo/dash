@@ -9,6 +9,7 @@ export type DebugScenarioId =
   | "main-products"
   | "main-chats-search"
   | "main-orchestra"
+  | "orchestra-motion"
   | "chat"
   | "voice"
   | "approvals"
@@ -29,6 +30,7 @@ export interface DebugScenario {
   route: { name: keyof RootStackParamList; params?: RootStackParamList[keyof RootStackParamList] };
   ui?: {
     mainSearchQuery?: string;
+    orchestraFixture?: boolean;
     mainTabIndex?: number;
     chatHarnessPickerOpen?: boolean;
     activeConversationId?: string;
@@ -37,6 +39,7 @@ export interface DebugScenario {
 }
 
 export const DEBUG_SCENARIOS: Record<DebugScenarioId, DebugScenario> = {
+  "orchestra-motion": { id: "orchestra-motion", label: "Orchestra · local motion fixture", seed: "paired", route: { name: "Main" }, ui: { mainSearchQuery: "", mainTabIndex: 2, orchestraFixture: true } },
   "ux-long": { id: "ux-long", label: "UX qualification transcript", seed: "paired", route: { name: "Chat" }, ui: { activeConversationId: "ux-long" } },
   "main-chats-search": { id: "main-chats-search", label: "Chats — focused search", seed: "paired", route: { name: "Main" }, ui: { mainSearchQuery: "", mainTabIndex: 1 } },
   "main-orchestra": { id: "main-orchestra", label: "Orchestra", seed: "paired", route: { name: "Main" }, ui: { mainSearchQuery: "", mainTabIndex: 2 } },
