@@ -7,6 +7,9 @@ import { fade } from "../motion";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
+import type { OrbPhase } from "../lib/orb-phase";
+
+const HERO_PHASES: OrbPhase[] = ["listening", "speaking", "thinking", "tool", "connecting", "idle"];
 import { PressScale } from "../components/PressScale";
 import { DensityPicker, useDensity } from "../components/Density";
 import { TileGrid } from "../components/TileGrid";
@@ -20,7 +23,6 @@ import { LivePulse, tc } from "../components/trace/tokens";
 import { haptic } from "../haptics";
 import { inAppFeedbackEnabled } from "../lib/feedback";
 import { submitInAppFeedback } from "../lib/feedback-submit";
-import type { ThinkingPhase } from "../lib/thinking";
 import type { ScreenProps } from "../navigation";
 import { store } from "../store/app";
 import { activeSeries } from "../trace/model";
@@ -42,6 +44,7 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
   const settings = store.use((s) => s.settings);
   const [visible, setVisible] = useState<Set<number>>(new Set([0, 1]));
   const [stress, setStress] = useState(false);
+  const [heroPhase, setHeroPhase] = useState<OrbPhase>("listening");
   const [replay, setReplay] = useState(0);
   const [chipState, setChipState] = useState<Record<string, string>>({});
   const [sent, setSent] = useState(false);
@@ -123,7 +126,7 @@ Hold + slide: action wheel · centre: cancel</Text>
           {[20, 40, 64, 48].map((size, i) => (
             <Variant key={size} letter={"ABCD"[i] ?? ""} name={`${size}px`} picked={P("orb-states") === `${size}px`} onPick={() => pick("orb-states", `${size}px`)}>
               <View style={styles.orbRow}>
-                {(["idle", "thinking", "tool", "streaming", "waiting-approval"] as ThinkingPhase[]).map((phase) => (
+                {(["idle", "thinking", "tool", "streaming", "waiting-approval", "listening", "speaking", "connecting"] satisfies OrbPhase[]).map((phase) => (
                   <View key={phase} style={styles.orbCell}>
                     <AgentOrb thinking={{ phase: stress ? "thinking" : phase, tool: phase === "tool" ? "terminal" : undefined }} animated={stress || i < 2} size={size} label={stress ? "thinking stress orb" : phase} />
                     <Text style={styles.orbLabel} numberOfLines={1}>{stress ? "thinking" : phase === "waiting-approval" ? "approval" : phase}</Text>
@@ -133,6 +136,10 @@ Hold + slide: action wheel · centre: cancel</Text>
               </View>
             </Variant>
           ))}
+        </Block>
+
+        <Block title="Voice orb · hero" note="Live call phases at hero size · tap to cycle" action={{ label: heroPhase, onPress: () => setHeroPhase(p => HERO_PHASES[(HERO_PHASES.indexOf(p) + 1) % HERO_PHASES.length] ?? "listening") }} testID="lab-orb-hero">
+          <View style={styles.heroOrb}><AgentOrb size="hero" thinking={{ phase: heroPhase, tool: heroPhase === "tool" ? "ask_z0" : undefined }} label={`hero ${heroPhase}`} /></View>
         </Block>
 
         <View style={styles.footer} testID="lab-picks">
@@ -220,6 +227,7 @@ const styles = StyleSheet.create({
   pickOn: { backgroundColor: tc.text, borderColor: tc.text },
   pickT: { fontFamily: fonts.semibold, fontSize: 12, color: tc.text },
   sideCell: { flex: 1, minWidth: 0, borderWidth: 1, borderColor: tc.rule, borderRadius: radius.md, padding: 4, gap: 4 },
+  heroOrb: { alignItems: "center", paddingVertical: space.lg },
   orbRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-around", padding: space.md, rowGap: space.md },
   orbCell: { alignItems: "center", gap: 4, minWidth: 52 },
   orbLabel: { fontFamily: fonts.mono, fontSize: 9, color: tc.text3 },
