@@ -1,7 +1,8 @@
 // One adapter per agent CLI. Each adapter knows two things: how to build the
 // argv for a turn, and how to turn the CLI's stdout into protocol events.
 
-import type { AcpStatus } from "../../shared/protocol";
+import type { ReplyPart, AcpStatus } from "../../shared/protocol";
+import { PartEmitter, contentText } from "./reply-parts";
 import { hermesCliArgv } from "./hermes-session";
 import { approvalArgs, type ApprovalEnv } from "./argv-policy";
 import { parseHarnessJsonLine } from "./turn-safety";
@@ -17,6 +18,7 @@ export interface TurnInput {
 }
 
 export interface Sink {
+  part?(part: ReplyPart): void;
   session(sessionId: string): void;
   delta(text: string): void;
   /** Short line describing what the agent is doing right now. Empty string clears it. */
@@ -78,6 +80,8 @@ function describeTool(name: string, args: unknown): string {
 
 // omp and pi share Pi's `--mode json` event stream (session, text_delta, tools).
 function sessionNdjsonParser(sink: Sink): TurnParser {
+  const outputs = new Map<string, string>();
+  const parts = new PartEmitter(part => sink.part?.(part));
   return {
     line(line) {
       const ev = parseJsonLine(line, sink);
@@ -89,12 +93,29 @@ function sessionNdjsonParser(sink: Sink): TurnParser {
         case "message_update": {
           const e = ev.assistantMessageEvent;
           if (isRecord(e) && e.type === "text_delta" && str(e.delta)) sink.delta(e.delta);
+          if (isRecord(e) && e.type === "thinking_delta") parts.reasoning(e.delta);
           break;
         }
         case "tool_execution_start":
+          if (str(ev.toolCallId) && str(ev.toolName)) parts.start(ev.toolCallId, ev.toolName, ev.args);
           if (str(ev.toolName)) sink.status(describeTool(ev.toolName, ev.args));
           break;
+        case "tool_execution_update":
+          // Pi updates carry a cumulative partialResult; emit only its new suffix.
+          if (str(ev.toolCallId)) {
+            const text = contentText(ev.partialResult);
+            const previous = outputs.get(ev.toolCallId) ?? "";
+            parts.output(ev.toolCallId, text.startsWith(previous) ? text.slice(previous.length) : text);
+            outputs.set(ev.toolCallId, text);
+          }
+          break;
         case "tool_execution_end":
+          if (str(ev.toolCallId)) {
+            const text = contentText(ev.result);
+            const previous = outputs.get(ev.toolCallId) ?? "";
+            parts.output(ev.toolCallId, text.startsWith(previous) ? text.slice(previous.length) : text, true);
+            parts.finish(ev.toolCallId, ev.isError === true);
+          }
           sink.status("");
           break;
       }
@@ -135,6 +156,9 @@ const codex: Harness = {
   },
   parser(sink) {
     let emitted = false;
+    const parts = new PartEmitter(part => sink.part?.(part));
+    const outputs = new Map<string, string>();
+    const started = new Set<string>();
     return {
       line(line) {
         const ev = parseJsonLine(line, sink);
@@ -145,6 +169,24 @@ const codex: Harness = {
         }
         const item = ev.item;
         if (!isRecord(item)) return;
+        if (str(item.id)) {
+          if (item.type === "reasoning" && ev.type === "item.completed") parts.reasoning(item.text);
+          if (["command_execution", "mcp_tool_call", "web_search", "file_change"].includes(String(item.type))) {
+            if (!started.has(item.id)) {
+              parts.start(item.id, str(item.tool) ? item.tool : String(item.type), item.command ?? item.arguments ?? item.query ?? item.changes);
+              started.add(item.id);
+            }
+            if (str(item.aggregated_output)) {
+              const previous = outputs.get(item.id) ?? "";
+              parts.output(item.id, item.aggregated_output.startsWith(previous) ? item.aggregated_output.slice(previous.length) : item.aggregated_output, ev.type === "item.completed");
+              outputs.set(item.id, item.aggregated_output);
+            }
+            if (ev.type === "item.completed") {
+              if (item.result !== undefined) parts.output(item.id, item.result, true);
+              parts.finish(item.id, item.status === "failed" || (typeof item.exit_code === "number" && item.exit_code !== 0));
+            }
+          }
+        }
         if (ev.type === "item.started" || ev.type === "item.updated") {
           switch (item.type) {
             case "command_execution":
@@ -176,6 +218,8 @@ const codex: Harness = {
 // grok and claude both speak the Anthropic Messages wire format over NDJSON.
 function anthropicStreamParser(sink: Sink): TurnParser {
   let sawDelta = false;
+  const parts = new PartEmitter(part => sink.part?.(part));
+  let sawThought = false;
   return {
     line(line) {
       const ev = parseJsonLine(line, sink);
@@ -189,6 +233,7 @@ function anthropicStreamParser(sink: Sink): TurnParser {
           if (!isRecord(e)) return;
           if (e.type === "content_block_delta") {
             const d = e.delta;
+            if (isRecord(d) && d.type === "thinking_delta") { sawThought = true; parts.reasoning(d.thinking); }
             if (isRecord(d) && d.type === "text_delta" && str(d.text)) {
               sawDelta = true;
               sink.delta(d.text);
@@ -204,7 +249,9 @@ function anthropicStreamParser(sink: Sink): TurnParser {
           if (!isRecord(m) || !Array.isArray(m.content)) return;
           for (const block of m.content) {
             if (!isRecord(block)) continue;
+            if (block.type === "thinking" && !sawThought) parts.reasoning(block.thinking);
             if (block.type === "tool_use" && str(block.name)) {
+              if (str(block.id)) parts.start(block.id, block.name, block.input);
               sink.status(describeTool(block.name, block.input));
             } else if (block.type === "text" && str(block.text) && !sawDelta) {
               // CLI built without partial-message support: fall back to whole messages.
@@ -214,6 +261,9 @@ function anthropicStreamParser(sink: Sink): TurnParser {
           break;
         }
         case "user":
+          if (isRecord(ev.message) && Array.isArray(ev.message.content)) for (const block of ev.message.content) {
+            if (isRecord(block) && block.type === "tool_result" && str(block.tool_use_id)) { parts.output(block.tool_use_id, block.content, true); parts.finish(block.tool_use_id, block.is_error === true); }
+          }
           // Tool results come back as user messages; the tool is finished.
           sink.status("");
           break;
