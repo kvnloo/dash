@@ -17,6 +17,8 @@ export interface PickedFile {
   mime: string;
   size?: number;
   blob?: Blob;
+  /** Native bytes read through Expo File, never through RN's URI fetch. */
+  bytes?: ArrayBuffer;
 }
 
 export type DraftState = "uploading" | "ready" | "error";
@@ -81,7 +83,7 @@ export function uploadUrl(address: string, name: string): string {
   return `http://${address}/attachments?name=${encodeURIComponent(name)}`;
 }
 
-type FetchLike = (input: string, init?: { method?: string; headers?: Record<string, string>; body?: Blob | string }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown>; blob(): Promise<Blob> }>;
+type FetchLike = (input: string, init?: { method?: string; headers?: Record<string, string>; body?: Blob | ArrayBuffer | string }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown>; blob(): Promise<Blob> }>;
 
 function errorFrom(body: unknown, status: number): string {
   if (typeof body === "object" && body !== null) {
@@ -99,8 +101,15 @@ export async function uploadAttachment(
   file: PickedFile,
   fetchImpl: FetchLike,
 ): Promise<ChatAttachment> {
-  const blob = file.blob ?? (await (await fetchImpl(file.uri)).blob());
-  const tooBig = rejectReason({ name: file.name, size: blob.size });
+  let blob = file.bytes ?? file.blob;
+  if (!blob) {
+    const source = await fetchImpl(file.uri);
+    if (!source.ok) throw new Error("Could not read the selected file. Select it again from Files or Photos.");
+    blob = await source.blob();
+  }
+  const size = blob instanceof ArrayBuffer ? blob.byteLength : blob.size;
+  if (file.size !== undefined && file.size !== size) throw new Error("The selected file changed or could not be read completely. Select it again.");
+  const tooBig = rejectReason({ name: file.name, size });
   if (tooBig) throw new Error(tooBig);
   let res: Awaited<ReturnType<FetchLike>>;
   try {

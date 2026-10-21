@@ -6,6 +6,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
 import { composerPlaceholder } from "./composer-placeholder";
+import { sessionViewerLabel } from "./session-viewer-label";
 import { KeyboardDock, KeyboardInsetView } from "../components/KeyboardDock";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { HarnessPicker } from "../components/HarnessPicker";
@@ -205,7 +206,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       {!targetError && conversation?.openIn ? (
         <Text accessibilityRole="text" style={styles.handoffNote}>
-          Open in {conversation.openIn} on {connection.hosts.find((h) => h.id === conversation.targetHostId)?.name ?? connection.host ?? "the host"}. Replies wait until it closes there.
+          {sessionViewerLabel(conversation.openIn, conversation.targetHostId, connection)}
         </Text>
       ) : null}
       {harnessId === "hermes" ? (
@@ -251,6 +252,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             streaming: Boolean(streamingMessage),
             queued: conversation ? queueLength(conversation.id) : 0,
             openIn: conversation?.openIn,
+            harness: harnessId,
             harnessName,
           })}
           onSend={liveOn ? onLiveSend : onSend}
