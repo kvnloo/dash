@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion } from "react-native-reanimated";
-import Svg, { Circle } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 import type { Thinking } from "../lib/thinking";
 import { colors, fonts } from "../theme";
 import { useOrbMotion } from "./OrbMotion";
@@ -23,14 +23,15 @@ export const AgentOrb = memo(function AgentOrb({ thinking, size = 64, caption = 
     const z = Math.sin(a) * r;
     return { x: 32 + Math.cos(a) * r * 26, y: 32 + y * 26, r: 0.55 + (z + 1) * 0.35, opacity: 0.2 + (z + 1) * 0.35 };
   }), [size]);
+  const paths = useMemo(() => [0, 1, 2, 3].map(band => dots.filter(dot => Math.min(3, Math.floor(dot.opacity * 4)) === band).map(dot => `M${dot.x - dot.r},${dot.y}a${dot.r},${dot.r} 0 1,0 ${dot.r * 2},0a${dot.r},${dot.r} 0 1,0 ${-dot.r * 2},0`).join(" ")), [dots]);
   const motion = useAnimatedStyle(() => {
     const p = running && clock ? clock.value : 0;
     const direction = thinking.phase === "tool" ? -1 : 1;
-    return { transform: [{ rotate: `${p * 360 * direction}deg` }, { scale: 0.96 + 0.04 * Math.cos(p * Math.PI * 4) }] };
+    return { transform: [{ perspective: 1000 }, { rotate: `${p * 360 * direction}deg` }, { scale: 0.96 + 0.04 * Math.cos(p * Math.PI * 4) }] };
   });
   return <View accessibilityRole="image" accessibilityLabel={label ?? thinking.phase} testID="agent-orb" style={{ alignItems: "center", gap: 4 }}>
-    <Animated.View style={[{ width: size, height: size, borderRadius: size, borderWidth: thinking.phase === "waiting-approval" ? 1 : 0, borderColor: color }, motion]}>
-      <Svg width="100%" height="100%" viewBox="0 0 64 64">{dots.map((d, i) => <Circle key={i} cx={d.x} cy={d.y} r={d.r} opacity={d.opacity} fill={color} />)}</Svg>
+    <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={[{ width: size, height: size, borderRadius: size, borderWidth: thinking.phase === "waiting-approval" ? 1 : 0, borderColor: color }, motion]}>
+      <Svg width="100%" height="100%" viewBox="0 0 64 64">{paths.map((d, i) => <Path key={i} d={d} opacity={(i + 0.5) / 4} fill={color} />)}</Svg>
     </Animated.View>
     {caption ? <Text style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.textMuted }}>{thinking.tool ?? thinking.phase}</Text> : null}
   </View>;
