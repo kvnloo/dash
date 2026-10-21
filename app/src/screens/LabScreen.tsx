@@ -124,8 +124,8 @@ Hold + slide: action wheel · centre: cancel</Text>
               <View style={styles.orbRow}>
                 {(["idle", "thinking", "tool", "streaming", "waiting-approval"] as ThinkingPhase[]).map((phase) => (
                   <View key={phase} style={styles.orbCell}>
-                    <AgentOrb thinking={{ phase: stress ? "thinking" : phase, tool: phase === "tool" ? "terminal" : undefined }} animated={stress || i < 2} size={size} label={phase} />
-                    <Text style={styles.orbLabel} numberOfLines={1}>{phase === "waiting-approval" ? "approval" : phase}</Text>
+                    <AgentOrb thinking={{ phase: stress ? "thinking" : phase, tool: phase === "tool" ? "terminal" : undefined }} animated={stress || i < 2} size={size} label={stress ? "thinking stress orb" : phase} />
+                    <Text style={styles.orbLabel} numberOfLines={1}>{stress ? "thinking" : phase === "waiting-approval" ? "approval" : phase}</Text>
                   </View>
                 ))}
                 <View style={styles.orbCell}><LivePulse size={Math.max(6, size / 5)} /><Text style={styles.orbLabel}>pulse</Text></View>

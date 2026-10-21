@@ -5,7 +5,7 @@ import Animated, { runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMot
 import { haptic } from "../haptics";
 import { useHandedness } from "../lib/useHandedness";
 import { radialCenter, radialPosition, radialSector } from "../lib/tile-layout";
-import { SNAP } from "../motion";
+import { SNAP, press as pressMotion } from "../motion";
 import { colors, fonts } from "../theme";
 
 export type TileAction = { id: string; label: string; run(): void };
@@ -52,8 +52,8 @@ export function useTileGestures({ onOpen, onPrimary, onSecondary, actions }: Til
   const commit = (index: number) => { hide(); if (index >= 0 && actions[index]) { haptic.success(); actions[index].run(); } };
   const armed = useSharedValue(false);
   useEffect(() => () => { if (armed.value) { bloom.value = 0; hide(); } }, [armed, bloom, hide]);
-  const press = () => { "worklet"; scale.value = reduced ? 1 : withTiming(0.975, SNAP); };
-  const release = () => { "worklet"; scale.value = reduced ? 1 : withTiming(1, SNAP); tilt.value = withTiming(0, { duration: reduced ? 0 : 120 }); };
+  const press = () => { "worklet"; scale.value = reduced ? 1 : withTiming(0.975, pressMotion); };
+  const release = () => { "worklet"; scale.value = reduced ? 1 : withTiming(1, pressMotion); tilt.value = withTiming(0, { duration: reduced ? 0 : 120 }); };
   const tap = (count: number, action: () => void) => Gesture.Tap().numberOfTaps(count).maxDelay(180).maxDuration(220).maxDistance(10)
     .onBegin(press).onEnd((_event, success) => { if (success) runOnJS(action)(); }).onFinalize(release);
   const hold = Gesture.Pan().minPointers(1).maxPointers(1).activateAfterLongPress(350).enabled(valid)
