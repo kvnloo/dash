@@ -1,6 +1,8 @@
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArtifactStage } from "../components/artifact-stage/ArtifactStage";
+import { LiveArtifactFrame } from "../components/LiveArtifactFrame";
+import { sandboxHTML } from "../lib/genui";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { forDash, isStageUrl, stageLabel } from "../lib/stage-link";
 import type { ScreenProps } from "../navigation";
@@ -16,7 +18,7 @@ export function ArtifactStageScreen({ navigation, route }: ScreenProps<"Artifact
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScreenHeader compact title={route.params?.title ?? (ok ? `Stage · ${stageLabel(url)}` : "Stage")} onBack={back} />
-      {ok ? (
+      {route.params?.html !== undefined ? <View style={styles.stage}><LiveArtifactFrame html={sandboxHTML(route.params.html.slice(0, 200000))} version={1} height={700} onIntent={() => {}} staticOnly /></View> : ok ? (
         <View style={[styles.stage, { paddingBottom: insets.bottom }]}>
           <ArtifactStage url={forDash(url)} title={route.params?.title} />
         </View>

@@ -8,6 +8,7 @@
 import { bearerToken, secretMatches } from "./bridge-security";
 import { AttachmentError, type AttachmentStore } from "./attachments";
 import { checkShareable, pickDevice, shareToPhone, type Run } from "./share";
+import { imagePreview } from "./image-preview";
 
 export interface FilesHttpOptions {
   token: string;
@@ -26,8 +27,13 @@ export function createFilesHttpHandler(options: FilesHttpOptions) {
   let sharing = false;
   return async (request: Request): Promise<Response | null> => {
     const url = new URL(request.url);
-    if (url.pathname !== "/attachments" && url.pathname !== "/share") return null;
+    if (url.pathname !== "/attachments" && url.pathname !== "/share" && url.pathname !== "/files") return null;
     if (!(options.authorize ? await options.authorize(request) : secretMatches(bearerToken(request), options.token))) return json({ error: "unauthorized" }, 401);
+    if (url.pathname === "/files") {
+      if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
+      try { return await imagePreview(url.searchParams.get("path"), options.shareRoots()); }
+      catch { return json({ error: "Image unavailable" }, 404); }
+    }
     if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
     if (url.pathname === "/attachments") {
       const name = url.searchParams.get("name") ?? "";

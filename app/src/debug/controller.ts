@@ -25,6 +25,7 @@ export type DebugCommand =
   | { action: "setBridgePull"; open: boolean }
   | { action: "wait"; ms: number }
   | { action: "uxOutput"; text: string }
+  | { action: "genuiReply"; text: string }
   | { action: "listScenarios" };
 
 function sleep(ms: number): Promise<void> {
@@ -58,6 +59,14 @@ export async function runScenario(id: DebugScenarioId): Promise<void> {
 
 export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
   switch (cmd.action) {
+    case "genuiReply": {
+      // Offline deterministic renderer fixture; never starts an agent or changes a paired host.
+      store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id !== s.activeId ? c : { ...c, messages: [
+        { id: "genui-user", role: "user", text: "Show an inline UI · test fixture", at: 1 },
+        { id: "genui-reply", role: "assistant", text: cmd.text.slice(0, 200000), at: 2, state: "done", turnId: "genui-turn", seq: 1 },
+      ] }) }));
+      return { ok: true };
+    }
     case "uxOutput": {
       // Local fixture only; exercise per-reply rAF subscriptions without a host.
       store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id !== "ux-long" ? c : {

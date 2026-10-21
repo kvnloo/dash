@@ -27,6 +27,60 @@ See the [README](README.md) for more details.
 
 ## Contributing to Dash
 
+### Opt-in inline generative UI
+
+Dash renders Mermaid flowcharts/state diagrams, images, declarative components and
+static HTML directly in ordinary Hermes/omp reply Markdown. No command or live-mode
+switch is needed to render a reply that contains these blocks. See
+`.cursor/skills/dash-genui/SKILL.md` for the exact catalog and examples.
+
+Agent emission is opt-in, not globally enabled by this PR:
+
+- Hermes: copy `.cursor/skills/dash-genui/` into the chosen profile's
+  `$HERMES_HOME/skills/dash-genui/` (for Kevin's clean profile, explicitly
+  `/home/kvn/.hermes/profiles/clean/skills/dash-genui/`). Start a new session and
+  ask “Load dash-genui and use inline UI when useful for this conversation.”
+  Do not copy into other profiles or edit AGENTS.md. A discovered skill is not a
+  promise it has been loaded; explicitly loading it opts in for the conversation.
+- OMP: start the selected OMP session with
+  `omp --append-system-prompt /absolute/path/to/dash/docs/genui/omp-system-prompt.md`.
+  This flag was verified with the installed OMP help. Keep it in that profile's
+  launcher only if you want it on each session; no launcher/profile is changed here.
+
+Use `mermaid`, `genui` (or `openui` JSON alias), and `html` fenced blocks;
+`![description](https://host/image.png)` or an absolute shared host image path
+renders a thumbnail. Tap to expand; pinch or use zoom/reset. Mermaid uses locally
+bundled @xyflow/react + Dagre through Expo DOM (Expo Go's WebView), no CDN.
+Unsupported Mermaid syntax and invalid specs remain copyable source. `openui`
+does not evaluate the legacy OpenUI language or claim `.hvisual.json` compatibility.
+
+Choice taps are source-turn-owned LiveIntents. Existing libfx workers retain their
+live_intent receipt channel; ordinary Hermes and omp receive the same validated
+intent as a visible user turn in the original session. Busy/offline/stale targets
+refuse the tap with visible feedback. This is never an approval or tool-execution API.
+
+Model HTML gets a restrictive CSP (no scripts, forms, network or embedding); stage
+expansion is an unverified local preview, not a publication. Component data is a
+bounded catalog with no evaluator. Remote image hosts see the client's request;
+use trusted URLs. Local images use authenticated `GET /files?path=...`, existing
+share roots/hidden-secret restrictions, byte sniffing, and a 12 MiB limit. Tokens
+stay in headers, never model HTML or URLs. Local paths refer to the paired bridge,
+not an arbitrary remote harness host. Use a reachable URL for remote-host images.
+
+Verification (host only; never touch the owner's phone):
+
+    bun test app/src bridge/src shared
+    bun app/node_modules/typescript/bin/tsc -p app --noEmit
+    cd app && EXPO_PUBLIC_DEBUG=1 bunx expo export --platform web && cd ..
+    node scripts/genui-qualify.mjs
+
+The last command owns an ephemeral loopback HTTP port and isolated headless
+Chromium at 412×915 with touch emulation. It tests actual Markdown-rendered chat
+fixtures, node taps/zoom, image pinch, cards/table/choices, checklist/timeline,
+script blocking, stage expansion and readable fallback. Override `GENUI_WEB_DIR`
+and `GENUI_REPORT_DIR` to keep the web export and screenshots outside the repo.
+These fixtures do not claim a real model turn or native-device acceptance.
+
 ### Autodevelop (agents)
 
 If you are a coding agent told to **autodevelop**, read

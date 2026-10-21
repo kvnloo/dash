@@ -7,6 +7,7 @@ interface Props {
   height: number;
   onIntent: (intent: LiveIntent) => void;
   onPainted?: () => void;
+  staticOnly?: boolean;
 }
 
 // In a WebView the document is the top window, so fx0's parent.postMessage lands on itself.
@@ -14,7 +15,7 @@ interface Props {
 const FORWARD = `window.addEventListener("message",function(e){var d=e.data;if(d&&d.type==="fx-intent"&&window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify(d))}});true;`;
 
 /** Native: the fx0 document in a WebView with no navigation, no file access and no third-party cookies. */
-export function LiveArtifactFrame({ html, version, height, onIntent, onPainted }: Props) {
+export function LiveArtifactFrame({ html, version, height, onIntent, onPainted, staticOnly = false }: Props) {
   return (
     <WebView
       key={version}
@@ -22,13 +23,14 @@ export function LiveArtifactFrame({ html, version, height, onIntent, onPainted }
       originWhitelist={["about:blank"]}
       style={{ height, borderRadius: 14, backgroundColor: "#0c0c0a" }}
       injectedJavaScriptBeforeContentLoaded={FORWARD}
-      javaScriptEnabled
+      javaScriptEnabled={!staticOnly}
       allowFileAccess={false}
       thirdPartyCookiesEnabled={false}
       setSupportMultipleWindows={false}
-      onShouldStartLoadWithRequest={(request) => request.url === "about:blank" || request.url.startsWith("data:")}
+      onShouldStartLoadWithRequest={(request) => request.url === "about:blank" || (!staticOnly && request.url.startsWith("data:"))}
       onLoadEnd={onPainted}
       onMessage={(event) => {
+        if (staticOnly) return;
         try {
           const data = JSON.parse(event.nativeEvent.data) as { controlId?: unknown; value?: unknown; label?: unknown };
           if (typeof data.controlId !== "string") return;

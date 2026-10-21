@@ -5,6 +5,7 @@
   "version": "57.0.23",
   "main": "index.ts",
   "dependencies": {
+    "@dagrejs/dagre": "^3.1.1",
     "@expo-google-fonts/cormorant-garamond": "0.4.1",
     "@expo-google-fonts/hanken-grotesk": "0.4.3",
     "@expo-google-fonts/ibm-plex-mono": "0.4.1",
@@ -16,6 +17,7 @@
     "@react-navigation/native-stack": "^7.18.10",
     "@shopify/flash-list": "2.0.2",
     "@shopify/react-native-skia": "2.6.2",
+    "@xyflow/react": "^12.12.0",
     "expo": "~57.0.21",
     "expo-audio": "~57.0.4",
     "expo-blur": "^57.0.2",
@@ -50,6 +52,7 @@
   "devDependencies": {
     "@types/prismjs": "^1.26.6",
     "@types/react": "~19.2.2",
+    "@types/react-dom": "~19.2.3",
     "typescript": "~6.0.3"
   },
   "scripts": {
