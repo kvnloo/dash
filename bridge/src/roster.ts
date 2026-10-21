@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { isCatalogHarness } from "../../shared/catalog";
 import { hermesSessions } from "./hermes-sessions";
 import { grokDesktopBot, hermesBots, hostBotSources, serviceBots } from "./bots";
+import { z0bridgeHermes } from "./z0bridge-hermes";
 import type { AgentInfo, HarnessInfo, HistoryMessage, HostInfo } from "../../shared/protocol";
 
 export type TailscaleNode = {
@@ -354,7 +355,8 @@ function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster
     }));
   return {
     id: name,
-    name,
+    // MagicDNS labels can be numeric ("0"); keep that routing id but show the OS hostname.
+    name: node.hostName.trim() || name,
     hostname: node.hostName,
     online: node.online,
     self: node.self,
@@ -509,6 +511,36 @@ function refreshHermesList(): void {
 }
 
 let rosterCache: { at: number; key: string; hosts: HostInfo[] } | null = null;
+
+/**
+ * The phone addresses this computer by its roster host id: the Tailscale MagicDNS label
+ * (e.g. "0"), which need not equal the OS hostname (e.g. "groot"). Both name this bridge.
+ */
+export class SelfHost {
+  private ids = new Set<string>();
+  private canonical: string;
+  constructor(private readonly hostname: string) {
+    this.canonical = hostname;
+    this.ids.add(hostname);
+  }
+  /** Learn this computer's names from an assembled roster. */
+  remember(hosts: HostInfo[]): void {
+    const self = hosts.find(h => h.self);
+    if (!self) return;
+    this.ids = new Set([this.hostname, self.id, self.name, self.hostname].filter(id => id.length > 0));
+    this.canonical = self.id;
+  }
+  /** The roster id the phone stores for this computer. */
+  id(): string { return this.canonical; }
+  /** An absent host means "this bridge". */
+  matches(hostId: string | undefined): boolean { return !hostId || this.ids.has(hostId); }
+}
+
+export function selfHostFrom(hosts: HostInfo[], hostname: string): SelfHost {
+  const self = new SelfHost(hostname);
+  self.remember(hosts);
+  return self;
+}
 const ROSTER_TTL_MS = 4000;
 
 export function readTailscaleStatus(): unknown {
@@ -586,7 +618,8 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
       grokBot: grokBotAlive(),
     },
   });
-  const sessions = await hermesSessions.list();
+  // z0bridge when it is running; Dash's own read-only SessionDB/native API listing otherwise.
+  const sessions = (await z0bridgeHermes.list()) ?? await hermesSessions.list();
   const local = hosts.find(h => h.self);
   if (local) {
     local.agents.push(...sessions);

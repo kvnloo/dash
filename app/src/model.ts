@@ -1,6 +1,17 @@
+import { parseReplyParts } from "../../shared/reply-parts";
+import type { ReplyPart } from "../../shared/protocol";
+import type { DetailMode } from "./lib/reply-details";
 import { parseChatAttachment, type ChatAttachment, type HarnessInfo, type HostInfo } from "../../shared/protocol";
 
+import { parseSummary, type SummaryInfo } from "../../shared/thinking-summary";
+import { parseIdentityEnrollment, type IdentityEnrollment } from "./lib/identity-client";
+
+import { parseHandedness, type Handedness } from "./lib/handedness";
+
 export interface Settings {
+  handedness?: Handedness;
+  /** Opt-in metadata only; the credential is held separately in SecureStore. */
+  identity?: IdentityEnrollment;
   /** `host:port` of the bridge, no scheme. */
   address: string;
   token: string;
@@ -15,6 +26,9 @@ export interface Settings {
 export type AssistantState = "pending" | "streaming" | "done" | "error" | "interrupted";
 
 export interface UserMessage {
+  delivery?: "steering" | "steered" | "queued" | "started" | "failed";
+  deliveryAt?: number;
+  deliveryNote?: string;
   id: string;
   role: "user";
   text: string;
@@ -24,6 +38,8 @@ export interface UserMessage {
 }
 
 export interface AssistantMessage {
+  delivery?: "steered" | "queued" | "started";
+  summaries?: SummaryInfo[];
   id: string;
   role: "assistant";
   text: string;
@@ -31,6 +47,9 @@ export interface AssistantMessage {
   state: AssistantState;
   /** Latest tool/thinking status from the harness while streaming. */
   status?: string;
+  /** Actual bridge tool/thinking statuses, retained for collapsed activity details. */
+  activity?: string[];
+  parts?: ReplyPart[];
   /**
    * The host holds this session open elsewhere (CLI/TUI). `queued`: nothing sent yet;
    * `sending`: the owner closed and the reply is going out. Never shown as work.
@@ -47,6 +66,8 @@ export interface AssistantMessage {
 export type Message = UserMessage | AssistantMessage;
 
 export interface Conversation {
+  detailMode?: DetailMode;
+  summariesEnabled?: boolean;
   id: string;
   harness: string;
   title: string;
@@ -88,12 +109,16 @@ export function parseSettings(raw: unknown): Settings | null {
   if (typeof raw.address !== "string" || typeof raw.token !== "string" || typeof raw.harness !== "string") {
     return null;
   }
+  const identity = parseIdentityEnrollment(raw.identity);
+  if (raw.identity !== undefined && !identity) return null;
   return {
+    ...(identity ? { identity } : {}),
     address: raw.address,
     token: raw.token,
     harness: raw.harness,
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
     inAppFeedback: raw.inAppFeedback !== false,
+    handedness: parseHandedness(raw.handedness),
   };
 }
 
@@ -109,17 +134,21 @@ function parseMessage(raw: unknown): Message | null {
   }
   if (raw.role === "user") {
     const attachments = Array.isArray(raw.attachments) ? raw.attachments.flatMap(item => { const parsed = parseChatAttachment(item); return parsed ? [parsed] : []; }) : [];
-    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(attachments.length ? { attachments } : {}) };
+    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(attachments.length ? { attachments } : {}), delivery: raw.delivery === "steering" || raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" || raw.delivery === "failed" ? raw.delivery : undefined, deliveryAt: typeof raw.deliveryAt === "number" ? raw.deliveryAt : undefined, deliveryNote: typeof raw.deliveryNote === "string" ? raw.deliveryNote : undefined };
   }
   if (raw.role === "assistant" && isAssistantState(raw.state) && typeof raw.turnId === "string") {
     return {
       id: raw.id,
       role: "assistant",
       text: raw.text,
+      delivery: raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" ? raw.delivery : undefined,
       at: raw.at,
       // A turn that was mid-stream when the app was killed can be re-attached on launch.
       state: raw.state,
       status: typeof raw.status === "string" ? raw.status : undefined,
+      parts: parseReplyParts(raw.parts),
+      summaries: Array.isArray(raw.summaries) ? raw.summaries.flatMap(item => { const summary = parseSummary(item); return summary ? [summary] : []; }).slice(-64) : undefined,
+      activity: Array.isArray(raw.activity) ? raw.activity.filter((item): item is string => typeof item === "string").slice(-32) : undefined,
       handoff: raw.handoff === "queued" || raw.handoff === "sending" ? raw.handoff : undefined,
       error: typeof raw.error === "string" ? raw.error : undefined,
       turnId: raw.turnId,
@@ -149,7 +178,9 @@ export function parseConversation(raw: unknown): Conversation | null {
   return {
     id: raw.id,
     harness: raw.harness,
+    detailMode: raw.detailMode === "Hide" || raw.detailMode === "Compact" || raw.detailMode === "Full" ? raw.detailMode : undefined,
     title: raw.title,
+    summariesEnabled: raw.summariesEnabled === true,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     sessionId: typeof raw.sessionId === "string" ? raw.sessionId : undefined,

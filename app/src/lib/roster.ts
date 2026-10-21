@@ -2,6 +2,7 @@ import type { AgentInfo, HostInfo } from "../../../shared/protocol";
 import { parseHosts } from "../../../shared/protocol";
 import type { AgentTarget } from "../mock/agents";
 import type { Settings } from "../model";
+import { executionToken } from "./bridge-auth";
 
 export function chatKind(agent: { id: string; kind: string }): string {
   if (agent.kind !== "a2a") return agent.kind;
@@ -64,8 +65,8 @@ export function profileFromAgent(host: HostInfo, agent: AgentInfo): AgentTarget 
 
 export async function fetchRoster(settings: Settings): Promise<HostInfo[] | undefined> {
   try {
-    const res = await fetch(`http://${settings.address}/roster?token=${encodeURIComponent(settings.token)}`, {
-      method: "GET",
+    const res = await fetch(`http://${settings.address}/roster`, {
+      method: "GET", headers: { Authorization: `Bearer ${await executionToken(settings)}` },
     });
     if (!res.ok) return undefined;
     const raw: unknown = await res.json();

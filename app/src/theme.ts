@@ -36,7 +36,7 @@ export const glass = {
   sat: 1.7, bright: 1.08, blurIos: 32, blurAndroid: 22, blurWeb: 16, blurNav: 24, blurCircle: 18,
 } as const;
 export const colors = {
-  ...palette, surface: glass.fill, border: glass.hair, onAccent: palette.bg, bubble: glass.fillNavStrong,
+  ...palette, orchestraSubagent: mono ? palette.textMuted : "#63bfae", surface: glass.fill, border: glass.hair, onAccent: palette.bg, bubble: glass.fillNavStrong,
   gold: palette.accent, goldHi: palette.actionStrong, goldLo: palette.actionMuted,
   goldGlow: palette.actionMuted, goldGlass: palette.accent, gold68: palette.actionMuted,
   goldRim: palette.actionStrong, ink: palette.text, ink2: palette.textMuted,

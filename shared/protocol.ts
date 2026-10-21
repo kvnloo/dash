@@ -3,6 +3,10 @@
 // Imported by both `bridge/` and `app/`, so it must stay dependency-free.
 
 import { isGateItem, parseGateDecision, type GateItem, type GateDecision } from "./gate";
+import { parseLiveClientMessage, parseLiveServerMessage, type LiveClientMessage, type LiveServerMessage } from "./live";
+import { parseReplyPart, parseReplyParts, type ReplyPart } from "./reply-parts";
+export type { ReplyPart } from "./reply-parts";
+import { parseSummary, type SummaryInfo } from "./thinking-summary";
 export const PROTOCOL_VERSION = 1;
 
 export interface HarnessInfo {
@@ -97,8 +101,12 @@ export type GateServerMessage =
 
 export type ClientMessage =
   | GateClientMessage
+  | LiveClientMessage
   | {
       type: "chat";
+      /** Omitted by older clients: queue for the next turn. */
+      mode?: "steer" | "queue";
+      summariesEnabled?: boolean;
       /** Client-chosen id for this turn; echoed on every server event for it. */
       id: string;
       harness: string;
@@ -119,6 +127,7 @@ export type ClientMessage =
    */
   | {
       type: "voice_begin";
+      summariesEnabled?: boolean;
       id: string;
       harness: string;
       sessionId?: string;
@@ -133,6 +142,7 @@ export type ClientMessage =
   /** End of utterance: transcribe what arrived and start the turn. */
   | { type: "voice_commit"; id: string }
   | { type: "cancel"; id: string }
+  | { type: "tool_detail"; id: string; callId: string; messageId?: string; sessionId?: string; profileId?: string; hostId?: string }
   /**
    * Re-subscribe to turns that were in flight when the socket dropped.
    * `seq` is the last event sequence number the client has for that turn;
@@ -144,6 +154,7 @@ export type ClientMessage =
 
 /** One user or assistant turn from a harness session file. */
 export interface HistoryMessage {
+  parts?: ReplyPart[];
   id: string;
   role: "user" | "assistant";
   text: string;
@@ -172,12 +183,13 @@ export type TurnEvent =
   /** What the bridge heard for a spoken turn. Precedes the reply's deltas. */
   | { type: "transcript"; id: string; seq: number; text: string }
   | { type: "delta"; id: string; seq: number; text: string }
-  | { type: "status"; id: string; seq: number; text: string; acp?: AcpStatus; handoff?: HandoffInfo }
+  | { type: "status"; id: string; seq: number; text: string; part?: ReplyPart; summary?: SummaryInfo; acp?: AcpStatus; handoff?: HandoffInfo; delivery?: "steered" | "queued" | "started"; deliveryAt?: number }
   | { type: "done"; id: string; seq: number; exitCode: number }
   | { type: "error"; id: string; seq: number; message: string };
 
 export type ServerMessage =
   | GateServerMessage
+  | LiveServerMessage
   | {
       type: "hello";
       version: number;
@@ -238,7 +250,7 @@ function isHistoryMessage(value: unknown): value is HistoryMessage {
     str(value.id) &&
     (value.role === "user" || value.role === "assistant") &&
     str(value.text) &&
-    num(value.at)
+    num(value.at) && (value.parts === undefined || parseReplyParts(value.parts) !== undefined)
   );
 }
 
@@ -251,8 +263,13 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return decision ? { type: "gate_decide", decision } : null;
     }
     case "gate_post": return str(raw.id) && /^[a-f0-9-]{36}$/.test(raw.id) ? { type: "gate_post", id: raw.id } : null;
+    case "live_open":
+    case "live_turn":
+    case "live_intent":
+    case "live_receipts": return parseLiveClientMessage(raw);
     case "chat": {
       const attachments = parseChatAttachments(raw.attachments);
+      if (raw.mode !== undefined && raw.mode !== "steer" && raw.mode !== "queue") return null;
       if (
         str(raw.id) &&
         str(raw.harness) &&
@@ -260,10 +277,13 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
         optStr(raw.hostId) && optStr(raw.profileId) &&
         optStr(raw.sessionId) &&
         optStr(raw.cwd) &&
+        (raw.summariesEnabled === undefined || typeof raw.summariesEnabled === "boolean") &&
         attachments !== null
       ) {
         return {
           type: "chat",
+          ...(raw.mode === "steer" || raw.mode === "queue" ? { mode: raw.mode } : {}),
+          ...(typeof raw.summariesEnabled === "boolean" ? { summariesEnabled: raw.summariesEnabled } : {}),
           id: raw.id,
           harness: raw.harness,
           text: raw.text,
@@ -277,9 +297,10 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return null;
     }
     case "voice_begin":
-      if (str(raw.id) && str(raw.harness) && str(raw.mime) && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.sessionId) && optStr(raw.cwd)) {
+      if ((raw.summariesEnabled === undefined || typeof raw.summariesEnabled === "boolean") && str(raw.id) && str(raw.harness) && str(raw.mime) && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.sessionId) && optStr(raw.cwd)) {
         return {
           type: "voice_begin",
+          ...(typeof raw.summariesEnabled === "boolean" ? { summariesEnabled: raw.summariesEnabled } : {}),
           id: raw.id,
           harness: raw.harness,
           mime: raw.mime,
@@ -294,6 +315,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       return str(raw.id) && str(raw.data) ? { type: "voice_chunk", id: raw.id, data: raw.data } : null;
     case "voice_commit":
       return str(raw.id) ? { type: "voice_commit", id: raw.id } : null;
+    case "tool_detail": return str(raw.id) && str(raw.callId) && optStr(raw.messageId) && optStr(raw.sessionId) && optStr(raw.profileId) && optStr(raw.hostId) ? { type: "tool_detail", id: raw.id, callId: raw.callId, ...(raw.messageId ? { messageId: raw.messageId } : {}), ...(raw.sessionId ? { sessionId: raw.sessionId } : {}), ...(raw.profileId ? { profileId: raw.profileId } : {}), ...(raw.hostId ? { hostId: raw.hostId } : {}) } : null;
     case "cancel":
       return str(raw.id) ? { type: "cancel", id: raw.id } : null;
     case "attach":
@@ -382,6 +404,10 @@ function isHostInfo(value: unknown): value is HostInfo {
 export function parseServerMessage(raw: unknown): ServerMessage | null {
   if (!isRecord(raw)) return null;
   switch (raw.type) {
+    case "live_opened":
+    case "live_event":
+    case "live_receipts":
+    case "live_error": return parseLiveServerMessage(raw);
     case "gate_snapshot": return Array.isArray(raw.items) && raw.items.every(isGateItem) && typeof raw.dry_run === "boolean" ? { type: "gate_snapshot", items: raw.items, dry_run: raw.dry_run, owner_decisions: raw.owner_decisions === true } : null;
     case "gate_status": return str(raw.id) && str(raw.message) ? { type: "gate_status", id: raw.id, message: raw.message } : null;
     case "gate_error": return str(raw.message) ? { type: "gate_error", message: raw.message } : null;
@@ -419,6 +445,19 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
         : null;
     case "status": {
       if (!str(raw.id) || !num(raw.seq) || !str(raw.text)) return null;
+      if (raw.delivery !== undefined) {
+        if ((raw.deliveryAt !== undefined && !num(raw.deliveryAt)) || raw.part !== undefined || raw.summary !== undefined || raw.acp !== undefined || raw.handoff !== undefined) return null;
+        if (raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started") return { type: "status", id: raw.id, seq: raw.seq, text: raw.text, delivery: raw.delivery, ...(num(raw.deliveryAt) ? { deliveryAt: raw.deliveryAt } : {}) };
+        return null;
+      }
+      if (raw.part !== undefined) {
+        const part = parseReplyPart(raw.part);
+        return part && raw.summary === undefined && raw.acp === undefined && raw.handoff === undefined ? { type: "status", id: raw.id, seq: raw.seq, text: raw.text, part } : null;
+      }
+      if (raw.summary !== undefined) {
+        const summary = parseSummary(raw.summary);
+        return summary && raw.part === undefined && raw.acp === undefined && raw.handoff === undefined ? { type: "status", id: raw.id, seq: raw.seq, text: raw.text, summary } : null;
+      }
       if (raw.handoff !== undefined) {
         const h = raw.handoff;
         if (!isRecord(h) || (h.state !== "queued" && h.state !== "sending") || !str(h.surface) || !str(h.host) || raw.acp !== undefined) return null;

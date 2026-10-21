@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { applyMutant, collectMutants, ROOT, TARGETS, runMutation } from "./mutate";
 
  test("default mutation plan exercises parser and roster branches, not only constants", async () => {
-  const report = await runMutation({ dryRun: true, max: 200 });
+  const report = await runMutation({ dryRun: true, max: 400 });
   for (const file of ["shared/protocol.ts", "bridge/src/roster.ts"]) {
     const branches = report.results.filter((row) => row.file === file && (row.operator === "eq" || row.operator === "logic"));
     expect(branches.length).toBeGreaterThanOrEqual(12);
@@ -48,6 +48,13 @@ describe("collectMutants", () => {
 describe("targets", () => {
   test("covers the modules that accidentally mutated UI or protocol", () => {
     expect(TARGETS.map((t) => t.file)).toEqual([
+      "bridge/src/model-health.ts",
+      "bridge/src/model-roles.ts",
+      "shared/model-roles.ts",
+      "bridge/src/thinking-summary.ts",
+      "shared/thinking-summary.ts",
+      "bridge/src/turn-summaries.ts",
+      "app/src/lib/rail-turns.ts",
       "app/src/components/golden-nav.ts",
       "app/src/components/bridge-pull.ts",
       "app/src/motion.ts",

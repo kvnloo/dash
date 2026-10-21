@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { keyboardInset } from "../lib/keyboard-inset";
 
 describe("KeyboardDock", () => {
   test("sticks the dock to KeyboardController instead of a static bottom inset", () => {
@@ -36,5 +37,18 @@ describe("KeyboardDock", () => {
     expect(composer).not.toContain("KeyboardAvoidingView");
     expect(dock).toContain('stick: { width: "100%" }');
     expect(dock).toContain("translateY: height.value");
+  });
+
+  test("an open keyboard pads the chat content by its height; a closed one adds nothing", () => {
+    expect(keyboardInset(-912)).toBe(912);
+    expect(keyboardInset(0)).toBe(0);
+    expect(keyboardInset(4)).toBe(0);
+  });
+
+  test("Chat content shrinks above the open IME so the sent message and reply stay visible", () => {
+    const chat = readFileSync(join(import.meta.dir, "../screens/ChatScreen.tsx"), "utf8");
+    expect(chat).toContain("<KeyboardInsetView style={styles.body} onOpen={scrollToNewest}>");
+    expect(chat).toContain("<KeyboardInsetView style={styles.body}><LiveSurface");
+    expect(chat).not.toMatch(/<View style=\{styles\.body\}>/);
   });
 });

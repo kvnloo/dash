@@ -11,6 +11,7 @@ import { launchSharedVoice, type VoiceLaunchResult } from "../lib/voice-launch";
 import type { ScreenProps } from "../navigation";
 import { colors, radius, space, type } from "../theme";
 import { LegacyVoiceScreen } from "./LegacyVoiceScreen";
+import { screenBack } from "../lib/screen-back";
 
 type VoiceView =
   | { kind: "shared"; result?: VoiceLaunchResult }
@@ -45,7 +46,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.xl }]}>
-      <Canvas /><ScreenHeader title="Voice" onBack={() => props.navigation.navigate("Main")} />
+      <Canvas /><ScreenHeader title="Voice" onBack={() => screenBack(props.navigation)} />
       <View style={styles.content}>
         <Text style={styles.title}>{harnessName}</Text>
         <VoiceOrb preset={preset ?? presetForHarness(harness)} phase="idle" size={190} />

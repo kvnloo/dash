@@ -1,11 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { PressScale } from "./PressScale";
+import { haptic } from "../haptics";
 import { colors, glass, type } from "../theme";
 export function IconButton({ icon, label, onPress }: { icon: ComponentProps<typeof Feather>["name"]; label: string; onPress(): void }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.hit}>
-    {({ pressed }) => <View style={[styles.circle, pressed && { transform: [{ scale: .98 }] }]}><Feather name={icon} size={18} color={pressed ? colors.gold : colors.textMuted} /></View>}
-  </Pressable>;
+  return <PressScale accessibilityRole="button" accessibilityLabel={label} onPress={() => { haptic.select(); onPress(); }} style={styles.hit}>
+    <View style={styles.circle}><Feather name={icon} size={18} color={colors.textMuted} /></View>
+  </PressScale>;
 }
 export function ScreenHeader({ title, onBack, onAction, action = "Settings", icon = "settings", compact = false }: { title: string; onBack(): void; onAction?(): void; action?: string; icon?: ComponentProps<typeof Feather>["name"]; compact?: boolean }) {
   return <View style={styles.row}><IconButton icon="arrow-left" label="Back" onPress={onBack} /><Text numberOfLines={1} style={[styles.title, !compact && type.title]}>{title}</Text>{onAction ? <IconButton icon={icon} label={action} onPress={onAction} /> : <View style={styles.hit} />}</View>;

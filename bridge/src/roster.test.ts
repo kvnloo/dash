@@ -88,7 +88,8 @@ describe("roster", () => {
       ],
       selfFallback: { hostname: "mbp", address: "100.64.0.1" },
     });
-    expect(hosts.map((h) => h.id)).toEqual(["mbp", "0", "cursor"]);
+    expect(hosts.map((h) => h.id)).toEqual(["mbp", "cursor", "0"]);
+    expect(hosts.find((h) => h.id === "0")?.name).toBe("groot");
     expect(hosts.find((h) => h.id === "0")?.hostname).toBe("groot");
     expect(hosts.find((h) => h.id === "0")?.online).toBe(true);
     expect(hosts.find((h) => h.id === "0")?.agents).toEqual([]);

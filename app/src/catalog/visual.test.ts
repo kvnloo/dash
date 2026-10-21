@@ -133,7 +133,8 @@ describe("AODL visual encodings", () => {
     expect(orbs).toContain("useAnimatedStyle");
     expect(orbs).toContain("transform");
     expect(orbs).toContain("opacity");
-    expect(orbs).toContain("ReduceMotion.System");
+    expect(orbs).toContain("ambient(");
+    expect(readFileSync(join(import.meta.dir, "../motion-ambient.ts"), "utf8")).toContain("ReduceMotion.System");
     expect(orbs).not.toContain("OpenAvatar");
     expect(orbs).not.toContain("fetch(");
     expect(existsSync(join(import.meta.dir, "../components/PulseDot.tsx"))).toBe(false);

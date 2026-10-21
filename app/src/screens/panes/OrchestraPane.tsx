@@ -1,12 +1,13 @@
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { conversationStreaming, effortIdForTurn, runtimeStateFromOrchestra } from "../../catalog/runtime-state";
 import { loadVisualCatalog, resolveEffort, resolveProvider, resolveRuntimeState, resolveTopology } from "../../catalog/visual";
 import { GlassSurface } from "../../components/GlassSurface";
 import { EffortOrbs } from "../../components/EffortOrbs";
 import { OrchestraCore, TopologyBadge } from "../../components/TopologyBadge";
-import { PressScale } from "../../components/PressScale";
+import { InteractiveTile } from "../../components/InteractiveTile";
+import { useDensity } from "../../components/Density";
 import { haptic } from "../../haptics";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
@@ -16,6 +17,13 @@ import type { ScreenProps } from "../../navigation";
 import { setActive, store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
 import { timeAgo } from "../../util";
+import { orchestraMap } from "../../lib/orchestra-map";
+import { debugUi } from "../../debug/ui-store";
+import { isDebugActive } from "../../debug/expose";
+import { orchestraMotionFixture } from "../../debug/orchestra-fixture";
+import { OrchestraGraph } from "../../components/OrchestraGraph";
+import { WorkspaceActions } from "../../components/WorkspaceHeader";
+import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
 
 const Card = memo(function Card({
   item,
@@ -28,20 +36,21 @@ const Card = memo(function Card({
   onPress(item: LiveProject): void;
   onLongPress?(item: LiveProject): void;
 }) {
+  const { sizing } = useDensity();
   const visual = loadVisualCatalog();
   const topology = resolveTopology(visual, item.topologyId);
   const provider = resolveProvider(visual, item.providerId);
   const state = resolveRuntimeState(visual, runtimeStateFromOrchestra({ status: item.status, streaming }));
   const effort = resolveEffort(visual, effortIdForTurn({ turnState: streaming ? "streaming" : undefined }));
   return (
-    <PressScale
-      onPress={() => onPress(item)}
-      onLongPress={onLongPress ? () => onLongPress(item) : undefined}
-      delayLongPress={350}
+    <InteractiveTile
+      title={item.name}
+      summary={`${item.name}. ${item.subtitle}. ${item.agentRows.length} agents, ${item.chatIds.length} chats.`}
+      onOpen={() => onPress(item)}
+      extraActions={onLongPress ? [{ id: "feedback", label: "Feedback", run: () => onLongPress(item) }] : []}
       style={styles.card}
-      accessibilityRole="button"
     >
-      <GlassSurface borderRadius={14} style={{ alignSelf: "stretch" }} contentStyle={{ padding: 16 }}>
+      <GlassSurface borderRadius={14} style={{ alignSelf: "stretch" }} contentStyle={{ padding: sizing.padding, minHeight: sizing.tileMin }}>
       <View style={styles.cardTop}>
         <View style={styles.cardTitles}>
           <Text style={styles.name} numberOfLines={1}>
@@ -64,7 +73,7 @@ const Card = memo(function Card({
         <Text style={styles.time}>{timeAgo(item.updatedAt)}</Text>
       </View>
       </GlassSurface>
-    </PressScale>
+    </InteractiveTile>
   );
 });
 
@@ -123,9 +132,16 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
     [feedbackOn, onFeedback, open, streamingIds],
   );
 
+  const { width } = useWindowDimensions();
+  const fixture = debugUi.use(s => s.orchestraFixture);
+  const fixtureOn = isDebugActive() && fixture === true;
+  const graph = useMemo(() => fixtureOn ? orchestraMotionFixture() : orchestraMap(hosts, conversations), [hosts, conversations, fixtureOn]);
   return (
+    <OrchestraGraph graph={graph} width={width} fixture={fixtureOn} actions={<WorkspaceActions navigation={navigation} />}>
+    <View style={styles.projects}>
     <FlashList
       data={projects}
+      ListHeaderComponent={<TraceEntryCard onOpen={() => navigation.navigate("Trace")} />}
       renderItem={renderItem}
       keyExtractor={(p) => p.id}
       contentContainerStyle={styles.list}
@@ -136,11 +152,14 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
         </View>
       }
     />
+    </View>
+    </OrchestraGraph>
   );
 }
 
 const styles = StyleSheet.create({
-  list: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: 120 },
+  projects: { height: 136 },
+  list: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.sm },
   card: {
     borderRadius: 14,
     alignItems: "stretch",

@@ -9,6 +9,9 @@
 // reconnect it sends `attach` with the last seq it saw and the bridge replays
 // the rest. Finished turns are kept for RETAIN_MS so late reattaches still work.
 
+import { ToolDetails } from "./src/tool-details";
+import { redact, statusUpdate } from "./src/reply-parts";
+import type { ReplyPart } from "../shared/protocol";
 import { GateService } from "./src/gate/service";
 import { GateStore } from "./src/gate/store";
 import type { GateServerMessage } from "../shared/protocol";
@@ -19,20 +22,30 @@ import {
   PROTOCOL_VERSION,
   parseClientMessage,
   type HarnessInfo,
+  type HostInfo,
   type AcpStatus,
   type ServerMessage,
   type TurnEvent,
 } from "../shared/protocol";
 import { claimSession, currentOrCreateSession, startBoundSession } from "./pair";
-import { bearerToken, isTailnetIPv4, loadBridgeSecrets, resolveBridgeHost, secretMatches } from "./src/bridge-security";
+import { isTailnetIPv4, loadBridgeSecrets, resolveBridgeHost } from "./src/bridge-security";
+import { BridgeAuth, configuredIdentity, type BridgePrincipal } from "./src/z0bridge-identity";
 import { createPairingHttpHandler } from "./src/pairing-http";
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
-import { collectRoster, readLiveTranscript } from "./src/roster";
+import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
 import { runHermesSession } from "./src/hermes-session";
+import { streamHermesSession } from "./src/hermes-stream";
+import { liveArgv } from "./src/hermes-live";
+import { sendGatewayMessage } from "./src/hermes-steer";
+import { sessionPhaseHttp } from "./src/hermes-phase";
+import { sessionWorkersHttp } from "./src/hermes-workers";
+import { activityHttp } from "./src/hermes-activity";
+const nativeActivityHttp = activityHttp((profile, session) => hermesSessions.nativeActivity(profile, session));
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
-import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, type HandoffState } from "./src/hermes-continue";
+import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, liveText, planContinuation, type HandoffState } from "./src/hermes-continue";
 import type { LiveOwner } from "./src/hermes-owner";
+import { z0bridgeHermes } from "./src/z0bridge-hermes";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
 import { acpCommand, AcpSupervisor, type AcpHandle } from "./src/acp/supervisor";
 import {
@@ -50,6 +63,13 @@ import {
 import { speechAvailable, transcribe, warmup } from "./speech";
 import { AttachmentError, AttachmentStore, promptWithAttachments, type StoredAttachment } from "./src/attachments";
 import { createFilesHttpHandler } from "./src/files-http";
+import { createSuggestionsHttpHandler } from "./src/suggestions-http";
+import { LiveSurface } from "./src/live-surface";
+import { createModelsHttpHandler } from "./src/models-http";
+import { loadRoles } from "./src/model-roles";
+import { ThinkingSummarizer } from "./src/thinking-summary";
+import { TurnSummaries } from "./src/turn-summaries";
+import { createSupervisionHttpHandler } from "./src/supervision-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 
 // ---------------------------------------------------------------------------
@@ -59,6 +79,8 @@ import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 type Socket = Bun.ServerWebSocket<SocketData>;
 
 interface SocketData {
+  principal: BridgePrincipal;
+  stopIdentityWatch?: () => void;
   /** Turn ids this socket is subscribed to. */
   turns: Set<string>;
   gateSend?: (message: GateServerMessage) => void;
@@ -77,6 +99,26 @@ class Turn implements Sink {
   readonly listeners = new Set<Socket>();
   finished = false;
 
+  readonly details = new ToolDetails();
+  part(part: ReplyPart): void {
+    if (part.kind === "reasoning") this.reasoning(part.text);
+    else if (part.kind === "tool_start") this.summaries?.action(`${part.name} · ${part.summary}`);
+    const preview = this.details.preview(part);
+    if (!preview) return;
+    this.flush();
+    this.emit({ type: "status", id: this.id, seq: 0, text: "", part: preview });
+  }
+  private summaries: TurnSummaries | undefined;
+  enableSummaries(): void {
+    try {
+      const roles = loadRoles();
+      this.summaries = new TurnSummaries(this.id, new ThinkingSummarizer(() => roles), summary => {
+        this.emit({ type: "status", id: this.id, seq: 0, text: "", summary });
+      });
+    } catch { /* Invalid role config disables summaries, never the user's turn. */ }
+  }
+  reasoning(text: string): void { this.summaries?.reasoning(text); }
+
   private buffer = "";
   private timer: ReturnType<typeof setTimeout> | null = null;
   private cancelled = false;
@@ -94,9 +136,10 @@ class Turn implements Sink {
 
   /** Host profile that owns this Hermes turn's session, once known. */
   private hermesProfile?: string;
-  private hermesTransport?: "api" | "acp";
+  private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
 
   start(input: TurnInput): void {
+    if (input.mode === "steer" && (this.harness.id !== "hermes" || !input.sessionId)) { this.endWithout("Steer requires a gateway-hosted Hermes session."); return; }
     // A spoken turn is transcribed before it starts, so a cancel can arrive
     // while there is no process to kill yet.
     if (this.cancelled || this.finished) return;
@@ -150,16 +193,18 @@ class Turn implements Sink {
   }
 
   /**
-   * Reply into an existing Hermes session. A live CLI/TUI owner keeps the session:
-   * the reply waits (queued, nothing sent) until that owner closes, then goes through
-   * Hermes's own native API or ACP. See src/hermes-continue.ts for the transport seam.
+   * Reply into an existing Hermes session. A gateway-hosted CLI/TUI owner is one viewer of the
+   * gateway that runs the session: the reply goes into that gateway now (next turn, or queued
+   * behind a running one). Only a standalone owner that runs its own agent keeps the session:
+   * then the reply waits (queued, nothing sent) until it closes. See src/hermes-continue.ts.
    */
   private continueHermes(input: TurnInput): void {
     const sessionId = input.sessionId;
     const target = sessionId ? hermesSessions.target(input.profileId, sessionId) : undefined;
     if (!sessionId || !target) { this.endWithout("Unknown or ambiguous Hermes profile/session."); return; }
     this.hermesProfile = target.profile;
-    const release = claimContinuation(target.profile, sessionId);
+    // Steering is a control message into the current turn, not a second continuation.
+    const release = input.mode === "steer" ? () => {} : claimContinuation(target.profile, sessionId);
     if (!release) { this.endWithout("A Dash reply is already queued or running in this Hermes session. Wait for it, or stop it first."); return; }
     const abort = new AbortController();
     this.abort = abort;
@@ -167,30 +212,72 @@ class Turn implements Sink {
     void (async () => {
       let handedOff = false;
       try {
-        const waited = await awaitHandoff({
-          owner: () => hermesSessions.liveOwner(target.profile, sessionId),
+        const hosting = (owner: LiveOwner) => hermesSessions.ownerHosting(target.profile, sessionId, owner);
+        const plan = planContinuation(hermesSessions.liveOwner(target.profile, sessionId), hosting, hermesSessions.gatewayHosted(target.profile, sessionId));
+        if (input.mode === "steer" && plan.kind !== "live") throw new Error("This session is not gateway-hosted; steering was not sent.");
+        if (plan.kind === "live") {
+          if (plan.owner) this.status(liveText(plan.owner.surface, HOST_NAME));
+          log("hermes.live", { id: this.id, surface: plan.owner?.surface ?? "none", hosting: "gateway" });
+        }
+        const waited = plan.kind !== "handoff" ? undefined : await awaitHandoff({
+          // Only an owner that runs its own agent blocks; a gateway viewer that appears meanwhile does not.
+          owner: () => { const owner = hermesSessions.liveOwner(target.profile, sessionId); return owner && hosting(owner) === "standalone" ? owner : undefined; },
           signal: abort.signal,
           onQueued: owner => { this.handoff("queued", owner); log("hermes.handoff", { id: this.id, state: "queued", surface: owner.surface }); },
         });
         if (waited) { this.handoff("sending", waited); log("hermes.handoff", { id: this.id, state: "sending", surface: waited.surface }); }
         if (this.cancelled || this.finished) return;
+        if (plan.kind === "live") {
+          // Into the owning gateway, as one more client of the live session (src/hermes-live.ts).
+          const hermesBin = Bun.which("hermes");
+          const route = chooseHermesRoute({ home: hermesSessions.homeOf(target.profile), acpCommand: null, liveArgv: hermesBin ? liveArgv(hermesBin, sessionId) : null });
+          if (route.kind !== "live") throw new Error(route.kind === "unavailable" ? route.reason : "No live route.");
+          this.hermesTransport = "gateway";
+          log("hermes.path", { path: "gateway" });
+          const result = await sendGatewayMessage({ argv: route.argv, home: route.home, sessionId, text: input.text, mode: input.mode, sink: this, cwd: input.cwd, signal: abort.signal, delivery: (delivery, text) => {
+            this.flush();
+            this.emit({ type: "status", id: this.id, seq: 0, text, delivery, deliveryAt: Date.now() });
+          } });
+          if (this.cancelled) { if (!this.finished) this.finish(CANCELLED_EXIT_CODE); return; }
+          if (this.finished) return;
+          this.session(result.sessionId);
+          this.finish(0);
+          log("turn.end", { id: this.id, harness: "hermes", exitCode: 0, path: "gateway" });
+          return;
+        }
+        // Prefer the host's z0bridge daemon (ACP to `hermes -p <profile> acp`) once any live
+        // owner has handed off. Fall back only when z0bridge is not running; its answer is final.
+        const z0 = await z0bridgeHermes.ready();
+        if (z0) {
+          this.hermesTransport = "z0bridge";
+          log("hermes.path", { path: "z0bridge" });
+          const outcome = await z0bridgeHermes.continue(z0, { profile: target.profile, sessionId, text: input.text }, this, abort.signal);
+          if (this.finished) return;
+          if (this.cancelled || outcome.exitCode === "cancelled") { this.finish(CANCELLED_EXIT_CODE); return; }
+          if (outcome.exitCode === 1) this.error(outcome.message);
+          this.finish(outcome.exitCode);
+          log("turn.end", { id: this.id, harness: "hermes", exitCode: outcome.exitCode, path: "z0bridge" });
+          return;
+        }
         const route = chooseHermesRoute({ api: target.api, home: hermesSessions.homeOf(target.profile), acpCommand: acpCommand("hermes") });
         if (route.kind === "unavailable") throw new Error(route.reason);
+        if (route.kind === "live") throw new Error("Live route chosen without a live owner. Nothing was sent.");
         if (route.kind === "acp") {
           this.hermesTransport = "acp";
+          log("hermes.path", { path: "acp" });
           handedOff = true;
           this.runAcp(route.command, input, { HERMES_HOME: route.home }, release);
           return;
         }
         this.hermesTransport = "api";
-        const result = await runHermesSession({ input, api: route.api, env: process.env, log, signal: abort.signal });
+        // Native SSE: deltas and tool steps reach the phone live, and a long turn is bounded by
+        // silence rather than a total timeout (the plain /chat call gave up after 120 s).
+        const result = await streamHermesSession({ api: route.api, sessionId, text: input.text, sink: this, signal: abort.signal });
         if (this.cancelled) { if (!this.finished) this.finish(CANCELLED_EXIT_CODE); return; }
         if (this.finished) return;
-        if (result.path === "cli") throw new Error("Hermes CLI resume is never used for an existing session.");
-        if (result.sessionId) this.session(result.sessionId);
-        if (result.text) this.delta(result.text);
+        this.session(result.sessionId);
         this.finish(0);
-        log("turn.end", { id: this.id, harness: "hermes", exitCode: 0, path: result.path });
+        log("turn.end", { id: this.id, harness: "hermes", exitCode: 0, path: "api-stream", streamed: result.streamed });
       } catch (error) {
         if (this.cancelled) { if (!this.finished) this.finish(CANCELLED_EXIT_CODE); return; }
         if (this.finished) return;
@@ -329,7 +416,7 @@ class Turn implements Sink {
 
   session(sessionId: string): void {
     this.flush();
-    this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: HOST_NAME, harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesTransport ?? (this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp") });
+    this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: SELF.id(), harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesTransport ?? (this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp") });
   }
 
   /** What we heard, for a turn the user spoke rather than typed. */
@@ -346,6 +433,7 @@ class Turn implements Sink {
 
   delta(text: string): void {
     if (!text) return;
+    this.summaries?.endBlock();
     if (this.breakPending) {
       // Prose resumed after a tool call. Models rarely emit the separator themselves.
       this.breakPending = false;
@@ -357,9 +445,10 @@ class Turn implements Sink {
   }
 
   status(text: string, acp?: AcpStatus): void {
+    if (text && text !== "Thinking") this.summaries?.action(text);
     this.flush();
     if (text && this.textTail) this.breakPending = true;
-    this.emit({ type: "status", id: this.id, seq: 0, text, ...(acp ? { acp } : {}) });
+    this.emit({ type: "status", id: this.id, seq: 0, text: redact(text), ...(acp ? { acp: { sessionId: acp.sessionId, update: statusUpdate(acp.update) } } : {}) });
   }
 
   error(message: string): void {
@@ -371,7 +460,9 @@ class Turn implements Sink {
     if (this.finished) return;
     this.flush();
     this.finished = true;
-    this.emit({ type: "done", id: this.id, seq: 0, exitCode });
+    const done = () => this.emit({ type: "done", id: this.id, seq: 0, exitCode });
+    if (this.summaries) void this.summaries.finish().then(done, done);
+    else done();
     setTimeout(() => turns.delete(this.id), RETAIN_MS);
     pruneTurns();
   }
@@ -434,6 +525,19 @@ async function readLines(
 const PORT = Number(process.env.DASH_PORT ?? "4747");
 const DEFAULT_CWD = process.env.DASH_CWD ?? process.cwd();
 const HOST_NAME = hostname();
+const SELF = new SelfHost(HOST_NAME);
+/** Roster for this bridge, remembering the id the phone uses for this computer. */
+async function selfRoster(harnesses: HarnessInfo[], address?: string): Promise<HostInfo[]> {
+  const hosts = await collectRoster(harnesses, { hostname: HOST_NAME, address });
+  SELF.remember(hosts);
+  return hosts;
+}
+/** True when a phone-supplied host id names this computer (refreshing the roster once if unknown). */
+async function isSelfHost(hostId: string | undefined): Promise<boolean> {
+  if (SELF.matches(hostId)) return true;
+  await selfRoster(harnessList(), HOST);
+  return SELF.matches(hostId);
+}
 
 function log(event: string, fields: Record<string, unknown> = {}): void {
   const time = new Date().toISOString().slice(11, 19);
@@ -552,15 +656,19 @@ const HOST = resolveBridgeHost({
   allowLoopback: process.env.DASH_ALLOW_LOOPBACK === "1",
 });
 const { token: TOKEN, bootstrapToken: BOOTSTRAP_TOKEN } = loadBridgeSecrets(process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash"));
+const bridgeAuth = new BridgeAuth(TOKEN, configuredIdentity(), process.env.DASH_LEGACY_TOKEN !== "0");
+const authorize = async (request: Request, queryLegacy = false) => Boolean(await bridgeAuth.authenticate(request, queryLegacy));
 let bridgeAddress = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${PORT}`;
 const handleHttp = createPairingHttpHandler({
   bootstrapToken: BOOTSTRAP_TOKEN,
+  authorize,
+  legacyEnabled: process.env.DASH_LEGACY_TOKEN !== "0",
   token: TOKEN,
   hostname: HOST_NAME,
   get address() { return bridgeAddress; },
   cwd: DEFAULT_CWD,
   harnesses: harnessList,
-  roster: () => collectRoster(harnessList(), { hostname: HOST_NAME, address: HOST }),
+  roster: () => selfRoster(harnessList(), HOST),
   pairing: { currentOrCreateSession, startBoundSession, claimSession },
   playCode: queuePairPlayback,
   decodeAudio: decodePairAudio,
@@ -574,13 +682,19 @@ const attachments = new AttachmentStore(process.env.DASH_ATTACHMENT_DIR?.trim() 
 const handleFiles = createFilesHttpHandler({
   token: TOKEN,
   store: attachments,
+  authorize,
   shareRoots: () => shareRoots(defaultShareDirs(DEFAULT_CWD, attachments.root, homedir()), process.env.DASH_SHARE_DIRS, homedir()),
   device: process.env.DASH_KDECONNECT_DEVICE,
   run: bunRun,
   onEvent: log,
 });
 
+const handleModels = createModelsHttpHandler({ authorize });
+const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
+
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
+const liveSurface = new LiveSurface({ log });
+const handleSupervision = createSupervisionHttpHandler({ token: TOKEN, directory: process.env.DASH_SUPERVISION_DIR });
 const gatePoll = gate ? setInterval(() => { try { gate.refresh(); } catch { /* Explicit next request returns corruption error. */ } }, 2000) : null;
 
 const server = Bun.serve<SocketData>({
@@ -603,27 +717,42 @@ const server = Bun.serve<SocketData>({
           response.headers.set("Access-Control-Allow-Origin", origin);
           response.headers.set("Vary", "Origin");
           response.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-          response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+          response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, If-None-Match");
+          response.headers.set("Access-Control-Expose-Headers", "ETag");
         }
         return response;
       };
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      const models = await handleModels(request);
+      if (models) return cors(models);
+      const supervision = await handleSupervision(request);
+      if (supervision) return cors(supervision);
+      const activity = nativeActivityHttp(request, await authorize(request));
+      if (activity) return cors(activity);
+      const phase = sessionPhaseHttp(request, await authorize(request), (profile, session) => hermesSessions.phase(profile, session));
+      if (phase) return cors(phase);
+      const workers = sessionWorkersHttp(request, await authorize(request), (profile, session) => hermesSessions.workers(profile, session));
+      if (workers) return cors(workers);
+      const suggestions = await handleSuggestions(request);
+      if (suggestions) return cors(suggestions);
       const files = await handleFiles(request);
       if (files) return cors(files);
       const http = await handleHttp(request, server.requestIP(request)?.address ?? null);
       return cors(http ?? new Response("not found", { status: 404 }));
     }
-    if (!secretMatches(bearerToken(request) ?? url.searchParams.get("token"), TOKEN)) {
+    const principal = await bridgeAuth.authenticate(request, true, true);
+    if (!principal) {
       return new Response("unauthorized", { status: 401 });
     }
-    if (server.upgrade(request, { data: { turns: new Set() } })) return;
+    if (server.upgrade(request, { data: { turns: new Set(), principal } })) return;
     return new Response("upgrade failed", { status: 400 });
   },
   websocket: {
     idleTimeout: 0,
     async open(ws) {
+      ws.data.stopIdentityWatch = bridgeAuth.identity?.watch(ws.data.principal, () => ws.close(1008, "Identity authorization expired or revoked"));
       log("ws.open", { remote: ws.remoteAddress });
       const harnesses = harnessList();
       sendTo(ws, {
@@ -632,10 +761,14 @@ const server = Bun.serve<SocketData>({
         host: HOST_NAME,
         cwd: DEFAULT_CWD,
         harnesses,
-        hosts: await collectRoster(harnesses, { hostname: HOST_NAME, address: tailscaleIp ?? undefined }),
+        hosts: await selfRoster(harnesses, tailscaleIp ?? undefined),
       });
     },
     async message(ws, raw) {
+      if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) {
+        ws.close(1008, "Identity authorization expired");
+        return;
+      }
       const message = parseClientMessage(parseJson(raw));
       if (!message) {
         log("ws.bad_message", { remote: ws.remoteAddress });
@@ -650,12 +783,20 @@ const server = Bun.serve<SocketData>({
           void gate.handle(message, ws.data.gateSend);
           break;
         }
+        case "live_open":
+        case "live_turn":
+        case "live_intent":
+        case "live_receipts": {
+          // Fast lane of a Hermes chat: a libfx worker behind z0bridge on this host. Hermes stays in charge.
+          void liveSurface.handle(message, event => sendTo(ws, event));
+          break;
+        }
         case "chat": {
-          if (message.hostId && message.hostId !== HOST_NAME) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
+          if (!(await isSelfHost(message.hostId))) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
           if (message.harness === "hermes" && message.sessionId) {
             if (!hermesSessions.target(message.profileId, message.sessionId)) return rejectTurn(ws, message.id, "Unknown or ambiguous Hermes profile/session.");
           } else if (message.harness === "omp" && message.profileId?.startsWith("omp:")) {
-            const hosts = await collectRoster(harnessList(), { hostname: HOST_NAME, address: HOST });
+            const hosts = await selfRoster(harnessList(), HOST);
             if (!hosts.some(h => h.self && h.agents.some(a => a.id === message.profileId && a.sessionId === message.sessionId && a.status === "running"))) return rejectTurn(ws, message.id, "This OMP session has ended on the host.");
           } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !(message.harness === "hermes" && message.profileId === "hermes:default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
           if (turns.has(message.id)) return;
@@ -682,15 +823,16 @@ const server = Bun.serve<SocketData>({
           turn.listeners.add(ws);
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
-          turn.start({ text: promptWithAttachments(message.text, files), cwd, sessionId: message.sessionId, profileId: message.profileId, ...(files.length ? { attachments: files } : {}) });
+          if (message.summariesEnabled) turn.enableSummaries();
+          turn.start({ text: promptWithAttachments(message.text, files), mode: message.mode, cwd, sessionId: message.sessionId, profileId: message.profileId, ...(files.length ? { attachments: files } : {}) });
           break;
         }
         case "voice_begin": {
-          if (message.hostId && message.hostId !== HOST_NAME) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
+          if (!(await isSelfHost(message.hostId))) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
           if (message.harness === "hermes" && message.sessionId) {
             if (!hermesSessions.target(message.profileId, message.sessionId)) return rejectTurn(ws, message.id, "Unknown or ambiguous Hermes profile/session.");
           } else if (message.harness === "omp" && message.profileId?.startsWith("omp:")) {
-            const hosts = await collectRoster(harnessList(), { hostname: HOST_NAME, address: HOST });
+            const hosts = await selfRoster(harnessList(), HOST);
             if (!hosts.some(h => h.self && h.agents.some(a => a.id === message.profileId && a.sessionId === message.sessionId && a.status === "running"))) return rejectTurn(ws, message.id, "This OMP session has ended on the host.");
           } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !(message.harness === "hermes" && message.profileId === "hermes:default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
           if (turns.has(message.id) || utterances.has(message.id)) return;
@@ -714,6 +856,7 @@ const server = Bun.serve<SocketData>({
           turn.listeners.add(ws);
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
+          if (message.summariesEnabled) turn.enableSummaries();
           utterances.set(message.id, {
             chunks: [],
             bytes: 0,
@@ -745,6 +888,21 @@ const server = Bun.serve<SocketData>({
           if (voiceTurn) void runVoiceTurn(voiceTurn, pending);
           break;
         }
+        case "tool_detail": {
+          if (message.sessionId) {
+            if (!(await isSelfHost(message.hostId))) break;
+            const target = hermesSessions.target(message.profileId, message.sessionId);
+            const part = target ? hermesSessions.toolDetail(target.profile, message.sessionId, message.messageId ?? message.id, message.callId) : undefined;
+            if (part) sendTo(ws, { type: "status", id: message.id, seq: 0, text: "", part });
+            break;
+          }
+          const turn = turns.get(message.id);
+          // A detail request never grants a subscription to another socket's turn.
+          if (!turn || !ws.data.turns.has(message.id)) break;
+          const part = turn.details.get(message.callId);
+          if (part) sendTo(ws, { type: "status", id: turn.id, seq: turn.events.length, text: "", part });
+          break;
+        }
         case "cancel": {
           utterances.delete(message.id);
           turns.get(message.id)?.cancel();
@@ -765,12 +923,12 @@ const server = Bun.serve<SocketData>({
         case "history": {
           if (message.harness === "hermes") {
             const target = hermesSessions.target(message.profileId, message.sessionId);
-            const messages = (!message.hostId || message.hostId === HOST_NAME) && target
+            const messages = (await isSelfHost(message.hostId)) && target
               ? await hermesSessions.history(target.profile, message.sessionId) : [];
-            sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: HOST_NAME, profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages });
+            sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: SELF.id(), profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages });
             break;
           }
-          if ((message.hostId && message.hostId !== HOST_NAME) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && !message.profileId.startsWith("omp:"))) {
+          if (!(await isSelfHost(message.hostId)) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && !message.profileId.startsWith("omp:"))) {
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, messages: [] });
             break;
           }
@@ -787,6 +945,7 @@ const server = Bun.serve<SocketData>({
       }
     },
     close(ws) {
+      ws.data.stopIdentityWatch?.();
       if (ws.data.gateSend) gate?.unsubscribe(ws.data.gateSend);
       detachSocket(ws.data.turns, (id) => turns.get(id), ws);
       for (const id of pruneStaleUtterances(utterances, Date.now())) {

@@ -41,42 +41,90 @@ are `available`, **not** advertised as running processes.
   do not trigger another transport or a CLI resume. Existing-session sends do
   not depend on `DASH_ENABLE_LEGACY_CLI`.
 
-Native Hermes still owns admission and model selection. Do not launch a second
-classic CLI with `--resume`, take over another live writer or retry an ambiguous
-send. No owner turn was sent during the read-only proof below.
+Native Hermes still owns admission and model selection. Do not run a second
+agent beside a live writer (a classic in-process CLI `--resume`), take over another
+live writer or retry an ambiguous send. Hermes's thin gateway client is a viewer,
+not a writer (see below). No owner turn was sent during the read-only proof below.
 
-## Replying from Dash (ordered handoff)
+## Replying from Dash (live gateway sessions, ordered handoff otherwise)
 
 `bridge/src/hermes-continue.ts` is the only place that picks how Dash continues
-an existing Hermes session. In order:
+an existing Hermes session (`planContinuation`, then `chooseHermesRoute`).
 
-1. **Live owner check.** `bridge/src/hermes-owner.ts` reads Hermes's own lease
-   registry, `<profile home>/runtime/active_sessions.json` (written by the classic
-   CLI and TUI). It never takes the registry lock and never writes it. A lease
-   counts only while its PID is alive and its start time matches. Leases cover the
-   session's compression lineage. The roster marks such rows `openIn: "CLI"`, and
-   the phone shows "Open in CLI on groot. Replies wait until it closes there."
-2. **Held session: the reply waits.** The bridge emits a `status` event with
-   `handoff: { state: "queued" }` ("Open in CLI on groot · reply queued until it
-   closes") and writes nothing. It polls every 2 s. When the CLI exits normally
-   (`/exit`), it emits `handoff: { state: "sending" }` and sends. Stop on the phone
-   cancels the queued reply before anything is sent. A wait over 12 h ends with an
-   explicit "not sent" error. A bridge restart drops queued replies (the phone shows
-   them as interrupted); nothing is sent.
-3. **Transport.** Native API (`/api/sessions/{id}/chat`) when the profile has a
-   host-only key, otherwise Hermes's own ACP server (`hermes acp`, `session/load`
-   then `session/prompt`) under that profile's `HERMES_HOME`. Never a classic CLI.
-4. One Dash continuation per profile session at a time, queued or running.
+Current Hermes runs every classic CLI and TUI turn inside the profile's gateway.
+The terminal is a thin viewer (`hermes_cli/gateway_agent.py`): the CLI writes a
+`cli` lease under its own pid and holds a loopback WebSocket to the gateway; the
+TUI writes no lease; the gateway's own `gateway:local` lease (gateway pid) appears
+while a turn runs. All of them are clients of one gateway FIFO per session.
+
+1. **Live owner check.** `bridge/src/hermes-owner.ts` reads Hermes's lease
+   registry, `<profile home>/runtime/active_sessions.json`, without its lock and
+   without writing. A lease counts only while its PID is alive and its start time
+   matches. Leases cover the session's compression lineage. The roster marks such
+   rows `openIn: "CLI"`.
+2. **Where the owner's agent runs** (`bridge/src/hermes-gateway-host.ts`, read-only
+   `/proc` and `gateway_state.json`). `gateway` when a running gateway serves the
+   profile (`served_profiles` or its own `hermes_home`) and the lease pid is that
+   gateway, or holds an established loopback TCP connection to a port it listens
+   on, or the session is a native session-authority chat (`source = 'local'`).
+   Anything else is `standalone`.
+3. **Gateway-hosted (`live`): send now, into that gateway.** Also for a `local`
+   session with no lease (an open TUI or Desktop). The bridge shows "Open in CLI on
+   groot · sending into the live session" when a lease exists, and runs Hermes's
+   own thin client, `hermes chat --resume <id> --query-file - --format stream-json`
+   (`bridge/src/hermes-live.ts`, text on stdin, `HERMES_HOME` = profile home,
+   `HERMES_TUI_GATEWAY_URL` dropped). It attaches as one more viewer and
+   `prompt.submit`s on the session's durable FIFO: an idle session runs it as the
+   next turn, a running turn gets it queued behind it (Hermes's own multi-client
+   behaviour; mid-turn steering stays the typing user's `/steer`). It follows only
+   its own admission, so the terminal's turns never leak into Dash's reply. The
+   gateway ACP projection (`hermes acp`) is not used here: it forwards every
+   viewer's deltas into the prompt's stream. The TUI paints Dash's turn live; the
+   classic prompt_toolkit CLI renders only its own turns, but its next turn has
+   Dash's turn in context. Stop on the phone sends SIGINT to the thin client; a
+   turn the gateway already started keeps running there.
+4. **Standalone owner: the reply waits.** Only a process that runs its own agent
+   (no serving gateway, no link to it) keeps the ordered handoff: a `status` event
+   with `handoff: { state: "queued" }` ("Open in CLI on groot · reply queued until
+   it closes"), nothing written, a 2 s poll, `handoff: { state: "sending" }` once it
+   exits. Stop cancels before anything is sent; a wait over 12 h ends with an
+   explicit "not sent" error; a bridge restart drops queued replies, sending nothing.
+5. **Other transports.** Native API (`/api/sessions/{id}/chat`) when the profile has a
+   host-only key, otherwise Hermes's ACP server (`hermes acp`, `session/load` then
+   `session/prompt`) under that profile's `HERMES_HOME`. Never a classic CLI that
+   runs its own agent.
+6. One Dash continuation per profile session at a time, queued or running.
 
 New Hermes chats start through Hermes ACP in the bridge's own `HERMES_HOME`. Their
 `session` event carries `hermes:session:<profile>:<id>`, so the next roster refresh
 merges into the same phone chat instead of adding a duplicate row.
 
 **z0bridge seam.** The Hermes ACP bridge (`kvnloo/z0bridge`, built separately) plugs
-in as another `HermesRoute` kind in `chooseHermesRoute`. Only z0bridge could take a
-turn *into* a live owner; until it exists, Dash waits for the owner to close.
+in as another `HermesRoute` kind in `chooseHermesRoute`. Live gateway sessions do not
+use it (it is ACP, with the same foreign-delta projection).
 
-Proof on a throwaway session (never the owner's sessions):
+**Upstream gap (hermes-tern lane).** Hermes has the client half of "attach a second
+terminal to a live session" (`hermes_cli/shared_session_attach.py`, lease
+`metadata.shared_runtime_url` + `/api/session-attach`), but no runtime advertises
+`shared_runtime_url` or serves that handshake, the classic CLI does not paint other
+viewers' turns, and the ACP projection does not tag deltas by admission.
+
+Live proof against scratch sessions in a private tmux socket (never the owner's):
+
+```sh
+TMPDIR=<scratch> HERMES_HOME=~/.hermes/profiles/clean \
+DASH_PROOF_TARGETS='[{"sessionId":"local-…","tmux":"dashproof","pane":"tui:cli","paints":false,"busy":true},{"sessionId":"local-…","tmux":"dashproof","pane":"tui:1","busy":true}]' \
+bun scripts/verify-hermes-gateway-live.ts
+```
+
+Observed 2026-10-21 on groot (gateway pid 351541 serving `clean`): CLI-leased
+session idle and mid-turn, TUI session idle and mid-turn; all `transport: gateway`,
+exit 0, reply `pong` in the bridge stream and as the session's newest assistant
+row, no handoff queued, no foreign text; the TUI's newest reply became `pong`
+(mid-turn: after its own `sleep 20` turn finished, 21-26 s).
+
+Standalone-owner handoff proof (an owner that runs its own agent; with current
+gateway-hosted Hermes its CLI leg now goes live instead of queueing):
 
 ```sh
 TMPDIR=<scratch> HERMES_HOME=~/.hermes/profiles/clean bun scripts/verify-hermes-handoff.ts
@@ -172,3 +220,35 @@ was unbound again after the proof. Counts/IDs naturally change as the owner chat
    an Authorization header. Verify the exact owner ID and title above. Reload
    Expo Go after Metro serves the combined app. Open that chat; its profile and
    recent history should appear, and old OMP chats should say ended. No re-pair.
+
+## z0bridge (preferred when running)
+
+When the host runs [z0bridge](https://github.com/kvnloo/z0bridge) (`bun src/cli.ts serve`,
+loopback `127.0.0.1:4787`, token in `~/.config/z0bridge/token`, mode 0600), Dash's bridge uses it
+for Hermes **listing**, **history** and **continuing** existing sessions
+(`bridge/src/z0bridge-hermes.ts`). z0bridge speaks ACP to one `hermes -p <profile> acp` child per
+profile. Those children are viewers of each profile's gateway, the single execution owner, so a
+turn enters Hermes's own per-session FIFO.
+
+- **Fallback.** If the token file is missing, group/other readable, the URL is not loopback, or
+  `GET /v1/health` fails, Dash keeps the native API / read-only SessionDB path above unchanged.
+- **No double sends.** Once z0bridge accepts or refuses a turn, that answer is final. A refusal
+  (`live_elsewhere`, `turn_in_flight`, `cwd_unknown`, ...) is shown to the phone. It never falls
+  back to the native API or a CLI.
+- **Live sessions.** Dash sends `onLive: "queue"`, matching the native API, which also queues
+  behind the live owner. Set `DASH_Z0BRIDGE_ON_LIVE=refuse` to refuse instead.
+- Session events report `transport: "z0bridge"`. Streaming text, tool status and cancel go
+  through z0bridge's SSE and `POST /v1/turns/:id/cancel`.
+- Config: `DASH_Z0BRIDGE=0` disables it. Optional `DASH_Z0BRIDGE_URL` and
+  `DASH_Z0BRIDGE_TOKEN_FILE` set the URL and token file. `bridge/src/z0bridge/{types,client}.ts`
+  are vendored from z0bridge (see the header SHA). Re-copy them when you upgrade.
+- New Hermes sessions from the phone still use the existing ACP supervisor path.
+
+Live proof (owns ports 4790/4798 and one throwaway session, which it archives):
+
+```sh
+Z0BRIDGE_REPO=/path/to/z0bridge TMPDIR=/private/scratch bun scripts/verify-z0bridge-hermes.ts
+```
+
+Observed: roster listed the throwaway session through z0bridge. A WS `chat` replied `pong` with
+`transport: "z0bridge"`, `done` exit 0. History returned 2 messages. Then the session was archived.

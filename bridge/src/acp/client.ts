@@ -1,6 +1,10 @@
+import { acpParts, PartEmitter } from "../reply-parts";
+import { TurnPhase } from "../turn-phase";
+import { acpToolPhase } from "./phase";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { parseCommands, type CommandSuggestion } from "../../../shared/suggestions";
 import type { Sink, TurnInput } from "../harnesses";
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -45,7 +49,20 @@ export class AcpClient {
   private sequence = 0;
   private sessionId?: string;
   private prompting = false;
+  private phaseUpdate?: Record<string, unknown>;
+  private parts = new PartEmitter(part => this.options.sink.part?.(part));
+  private thinking = new TurnPhase(text => this.options.sink.status(text, this.phaseUpdate && this.sessionId ? { sessionId: this.sessionId, update: this.phaseUpdate } : undefined));
   private used = false;
+  private catalogOnly = false;
+  private catalogs = new Map<string, CommandSuggestion[]>();
+  private commandReady?: () => void;
+
+  /** Metadata only: never sends a prompt or accepts client tool capabilities. */
+  async discoverCommands(cwd: string): Promise<CommandSuggestion[]> {
+    this.catalogOnly = true;
+    await this.turn({ text: "", cwd });
+    return this.catalogs.get(this.sessionId ?? "") ?? [];
+  }
   private failure?: Error;
   private timer: ReturnType<typeof setTimeout>;
   private exit: Promise<void>;
@@ -137,24 +154,35 @@ export class AcpClient {
       if (message.id !== undefined) {
         if (message.method === "session/request_permission") {
           this.send({ jsonrpc: "2.0", id: message.id, result: { outcome: { outcome: "cancelled" } } });
-          this.options.sink.status("Permission denied by bridge policy");
+          this.options.sink.status("Thinking");
         } else {
           this.send({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Client capability unavailable" } });
         }
-      } else if (message.method === "session/update" && this.prompting && record(message.params)) {
+      } else if (message.method === "session/update" && record(message.params)) {
         const params = message.params;
-        if (!this.sessionId || params.sessionId !== this.sessionId || !record(params.update)) return;
+        if (record(params.update) && params.update.sessionUpdate === "available_commands_update" && typeof params.sessionId === "string") {
+          this.catalogs.set(params.sessionId, parseCommands(params.update.availableCommands));
+          if (params.sessionId === this.sessionId) this.commandReady?.();
+          return;
+        }
+        if (!this.prompting || !this.sessionId || params.sessionId !== this.sessionId || !record(params.update)) return;
         const update = params.update;
+        acpParts(update, this.parts);
         switch (update.sessionUpdate) {
           case "agent_message_chunk":
             if (record(update.content) && update.content.type === "text" && typeof update.content.text === "string") {
+              this.thinking.text();
               this.options.sink.delta(update.content.text);
             }
             break;
-          case "agent_thought_chunk": this.options.sink.status("Thinking"); break;
+          case "agent_thought_chunk":
+            this.thinking.thinking();
+            break;
           case "tool_call":
           case "tool_call_update":
-            this.options.sink.status(typeof update.title === "string" ? update.title : `Tool ${String(update.status ?? "update")}`, { sessionId: this.sessionId, update });
+            this.phaseUpdate = update;
+            acpToolPhase(this.thinking, update);
+            this.phaseUpdate = undefined;
             break;
           case "plan": this.options.sink.status("Plan updated", { sessionId: this.sessionId, update }); break;
         }
@@ -201,6 +229,17 @@ export class AcpClient {
         throw new Error("ACP agent did not provide a session id");
       }
       this.sessionId = session.sessionId;
+    }
+    if (this.catalogOnly) {
+      if (!this.catalogs.has(this.sessionId)) {
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, 3000);
+          this.commandReady = () => { clearTimeout(timer); resolve(); };
+        });
+        this.commandReady = undefined;
+      }
+      if (!this.catalogs.has(this.sessionId)) throw new Error("The harness did not advertise commands over ACP.");
+      return "metadata";
     }
     this.options.sink.session(this.sessionId);
     this.prompting = true;

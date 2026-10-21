@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { HermesSessions } from "./hermes-sessions";
@@ -109,4 +109,34 @@ test("unreachable API falls back to DB; one broken profile does not hide others"
   const sessions = new HermesSessions({ root, env: {}, fetch: async () => { throw new TypeError("connection refused"); } });
   expect(await sessions.list()).toHaveLength(2);
   expect(await sessions.history("default", "same")).toHaveLength(2);
+});
+
+test("native history previews and on-demand details leave the exact database bytes unchanged", async () => {
+  const root = fixture(); const path = join(root, "profiles/clean/state.db"); const db = new Database(path);
+  db.exec("ALTER TABLE messages ADD COLUMN reasoning_content TEXT; ALTER TABLE messages ADD COLUMN tool_calls TEXT; ALTER TABLE messages ADD COLUMN tool_call_id TEXT;");
+  db.run("UPDATE messages SET reasoning_content=?,tool_calls=? WHERE id=2", ["inspect native session", JSON.stringify([{ id: "a", function: { name: "terminal", arguments: '{\"command\":\"printf sample\"}' } }])]);
+  db.run("UPDATE messages SET content=?,tool_call_id='a' WHERE id=3", ["x".repeat(10000)]); db.close();
+  const before = readFileSync(path); const sessions = new HermesSessions({ root, env: {} });
+  const history = await sessions.history("clean", "same");
+  const output = history[1]?.parts?.find(part => part.kind === "tool_output");
+  expect(output?.kind === "tool_output" ? output.text.length : 0).toBe(8192);
+  expect(output).toMatchObject({ truncated: true });
+  const detail = sessions.toolDetail("clean", "same", "2", "a");
+  expect(detail?.kind === "tool_detail" ? detail.text.length : 0).toBe(10000);
+  expect(sessions.toolDetail("clean", "hidden", "2", "a")).toBeUndefined();
+  expect(sessions.toolDetail("clean", "same", "missing", "a")).toBeUndefined();
+  expect(readFileSync(path).equals(before)).toBe(true);
+});
+
+test("a stray profiles/default directory does not make default sessions ambiguous", async () => {
+  const root = fixture();
+  mkdirSync(join(root, "profiles/default"), { recursive: true });
+  writeFileSync(join(root, "profiles/default/state.db"), "");
+  const sessions = new HermesSessions({ root, env: {} });
+  expect(sessions.target("hermes:session:default:same", "same")?.profile).toBe("default");
+  const listed = await sessions.list();
+  expect(listed.filter(a => a.sessionId === "same" && a.profileId === "default")).toHaveLength(1);
+  // The roster has now named the session; it must still resolve to exactly one profile.
+  expect(sessions.target("hermes:session:default:same", "same")?.profile).toBe("default");
+  expect(sessions.target("default", "same")?.profile).toBe("default");
 });

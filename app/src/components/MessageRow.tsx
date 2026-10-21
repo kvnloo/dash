@@ -7,20 +7,37 @@ import type { AssistantMessage, AssistantState, Message } from "../model";
 import { store } from "../store/app";
 import { replyText, useKeyed } from "../store/text";
 import { colors, fonts, glass, radius, space, type } from "../theme";
+import { messageThinking, type Thinking } from "../lib/thinking";
+import { splitThinking } from "../lib/message-details";
+import { AgentOrb } from "./AgentOrb";
+import { ThinkingSummaryChip } from "./ThinkingSummaryChip";
 import { Markdown } from "./Markdown";
+import { sendInlineIntent } from "../lib/inline-intent";
+import { InlineImage } from "./genui/InlineImage";
+import { isImageRef } from "../lib/genui";
+import { ReplyBlocks } from "./ReplyBlocks";
+import type { DetailMode } from "../lib/reply-details";
+import { bridge } from "../net/bridge";
+import { StageLinks } from "./artifact-stage/StageLinks";
 import { PressScale } from "./PressScale";
 
 export const MessageRow = memo(function MessageRow({
   message,
   harnessId,
+  thinking,
+  detailMode = "Compact",
 }: {
   message: Message;
   harnessId?: string;
+  thinking?: Thinking;
+  detailMode?: DetailMode;
 }) {
   if (message.role === "user") {
     return (
       <View style={styles.userRow}>
         <View style={styles.bubble}>
+          {message.delivery ? <Text style={styles.statusText} accessibilityLabel={message.deliveryNote}>{message.delivery === "steered" ? `Steered · ${new Date(message.deliveryAt ?? message.at).toLocaleTimeString()}` : message.delivery === "steering" ? "Sending steer…" : message.delivery === "queued" ? "Queued for next turn" : message.delivery === "failed" ? "Delivery failed · check before resending" : "Next turn started"}</Text> : null}
+          {message.deliveryNote?.startsWith("The turn stopped") ? <Text style={styles.statusText}>{message.deliveryNote}</Text> : null}
           {message.attachments?.length ? <SentFiles files={message.attachments} spaced={Boolean(message.text)} /> : null}
           {message.text ? (
             <Text selectable style={styles.userText}>
@@ -31,12 +48,37 @@ export const MessageRow = memo(function MessageRow({
       </View>
     );
   }
+  if (message.delivery === "steered" && message.state !== "error") return null;
+  if (message.delivery === "queued" && message.state === "streaming") return <View style={styles.assistantRow}><Text style={styles.statusText}>Queued for next turn…</Text></View>;
   return (
     <View style={styles.assistantRow}>
-      <AssistantBody message={message} harnessId={harnessId} />
+      {message.summaries?.filter(summary => summary.kind === "turn").map(summary => <ThinkingSummaryChip key={summary.blockId} turnId={message.turnId} summary={summary} />)}
+      <ReplyBlocks turnId={message.turnId} summaries={message.summaries} parts={message.parts} mode={detailMode} request={callId => {
+        const chat = store.get().conversations.find(c => c.messages.some(m => m.id === message.id));
+        const history = message.seq === 0 && chat?.harness === "hermes";
+        bridge.send({ type: "tool_detail", id: message.turnId, callId, ...(history ? { messageId: message.id, sessionId: chat?.sessionId, profileId: chat?.profileId, hostId: chat?.targetHostId } : {}) });
+      }} />
+      <AssistantBody key={message.id} message={message} harnessId={harnessId} detailMode={detailMode} />
+      {thinking && thinking.phase !== "idle" ? <View style={styles.statusRow}><AgentOrb size={20} thinking={thinking} /><Text style={styles.statusText}>working · {thinking.tool ?? "terminal"}</Text></View> : null}
+      {!message.parts?.length && detailMode !== "Hide" && (message.activity?.length || (message.state === "done" && message.status)) ? <Disclosure key={`${message.id}:activity`} label={`Activity · ${message.activity?.length ?? 1} ${(message.activity?.length ?? 1) === 1 ? "update" : "updates"}`} text={(message.activity ?? [message.status ?? ""]).join("\n")} /> : null}
     </View>
   );
 });
+
+function Disclosure({ label, text }: { label: string; text: string }) {
+  const [open, setOpen] = useState(false);
+  return <View style={styles.disclosure}>
+    <PressScale accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} aria-expanded={open} onPress={() => setOpen(!open)} style={styles.disclosureButton}>
+      <Feather name={open ? "chevron-down" : "chevron-right"} size={14} color={colors.textMuted} />
+      <Text numberOfLines={1} style={styles.disclosureLabel}>{label} · {text.split("\n")[0]}</Text>
+    </PressScale>
+    {open ? <Text selectable style={styles.detailText}>{text}</Text> : null}
+  </View>;
+}
+function Answer({ text, turnId, detailMode }: { text: string; turnId: string; detailMode: DetailMode }) {
+  const parts = splitThinking(text);
+  return <>{parts.thinking ? <ReplyBlocks turnId={turnId} parts={[{ kind: "reasoning", text: parts.thinking }]} mode={detailMode} /> : null}{parts.text ? <Markdown text={parts.text} onIntent={intent => sendInlineIntent(turnId, intent)} /> : null}</>;
+}
 
 function ThinkingMarker({ turnState, waiting = false }: { harnessId?: string; turnState: AssistantState; waiting?: boolean }) {
   // A reply held for a host handoff is not work in progress: faint, never gold.
@@ -44,13 +86,14 @@ function ThinkingMarker({ turnState, waiting = false }: { harnessId?: string; tu
   return <View accessibilityLabel={waiting ? "queued" : turnState} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: color }} />;
 }
 
-function AssistantBody({ message, harnessId }: { message: AssistantMessage; harnessId?: string }) {
+function AssistantBody({ message, harnessId, detailMode }: { message: AssistantMessage; harnessId?: string; detailMode: DetailMode }) {
   const liveText = useKeyed(replyText, message.turnId);
+  const connection = store.use(s => s.connection.status);
   switch (message.state) {
     case "pending":
       return (
         <View style={styles.statusRow}>
-          <ThinkingMarker harnessId={harnessId} turnState={message.state} />
+          <AgentOrb size={20} thinking={messageThinking(message, { connection })} />
           <Text style={styles.statusText} numberOfLines={1}>
             Queued…
           </Text>
@@ -59,21 +102,21 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
     case "streaming":
       return (
         <>
-          {liveText || message.text ? <Markdown text={liveText || message.text} /> : null}
+          {liveText || message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={liveText || message.text} /> : null}
           <View style={styles.statusRow}>
-            <ThinkingMarker harnessId={harnessId} turnState={message.state} waiting={message.handoff === "queued"} />
-            <Text style={styles.statusText} numberOfLines={2}>
+            <AgentOrb size={20} thinking={messageThinking(message, { liveText, connection })} label={message.handoff === "queued" ? "queued" : "streaming"} />
+            <Text style={styles.statusText} numberOfLines={1}>
               {message.status ?? "Working"}
             </Text>
           </View>
         </>
       );
     case "done":
-      return <><Markdown text={message.text} />{message.status ? <View style={styles.statusRow}><ThinkingMarker turnState="done" /><Text style={styles.statusText}>Done · {message.status}</Text></View> : null}<HostFiles text={message.text} /></>;
+      return <><Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /><HostFiles text={message.text} /><StageLinks text={message.text} /></>;
     case "interrupted":
       return (
         <>
-          {message.text ? <Markdown text={message.text} /> : null}
+          {message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text style={styles.noteText}>{message.status ?? "Connection to the bridge was lost mid-reply."}</Text>
@@ -83,7 +126,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
     case "error":
       return (
         <>
-          {message.text ? <Markdown text={message.text} /> : null}
+          {message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text selectable style={styles.errorText}>
@@ -134,16 +177,20 @@ function HostFiles({ text }: { text: string }) {
       { text: "Send", onPress: () => void send(path) },
     ]);
   };
-  return <View style={styles.hostFiles}>
+  return <><View>{paths.filter(path => isImageRef(path) && !text.includes(`](${path})`)).map(path => <InlineImage key={path} href={path} label={baseName(path)} />)}</View><View style={styles.hostFiles}>
     {paths.map(path => <PressScale key={path} accessibilityRole="button" accessibilityLabel={`Send ${baseName(path)} to phone`} onPress={() => confirm(path)} disabled={busy !== null} style={styles.hostFile}>
       <Feather name={busy === path ? "loader" : "smartphone"} size={13} color={colors.gold} />
       <Text style={styles.hostFileName} numberOfLines={1}>{baseName(path)}</Text>
       <Text style={styles.hostFileAction}>Send to phone</Text>
     </PressScale>)}
-  </View>;
+  </View></>;
 }
 
 const styles = StyleSheet.create({
+  disclosure: { borderLeftWidth: 1, borderColor: colors.hair, marginTop: 2 },
+  disclosureButton: { flexDirection: "row", alignItems: "center", minHeight: 44, gap: 6, paddingHorizontal: 6 },
+  disclosureLabel: { ...type.small, color: colors.textMuted, flexShrink: 1 },
+  detailText: { ...type.mono, color: colors.textMuted, padding: 8 },
   sentFiles: { gap: 6 },
   sentFilesSpaced: { marginBottom: 8 },
   sentFile: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 260 },
@@ -157,7 +204,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
+    paddingVertical: 6,
   },
   bubble: {
     maxWidth: "82%",
@@ -171,7 +218,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   userText: { color: colors.text, ...type.body },
-  assistantRow: { paddingHorizontal: space.lg, paddingVertical: space.sm },
+  assistantRow: { paddingHorizontal: space.lg, paddingVertical: 6 },
   assistantText: { color: colors.text, ...type.body },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, minHeight: 22 },
   statusText: { color: colors.textTertiary, ...type.mono, flexShrink: 1 },

@@ -80,7 +80,7 @@ test("canonical bridge auth, stdio response, replay and routing rejection work t
     expect(await connection.until(value => value.type === "done" && value.id === "turn")).toMatchObject({ exitCode: 0 });
     expect(connection.messages.find(value => value.type === "delta")).toMatchObject({ text: "DASH_ACP_OK" });
     expect(connection.messages.find(value => value.type === "session")).toMatchObject({ hostId: hostname(), transport: "acp", sessionId: "fixture-session" });
-    expect(connection.messages.find(value => value.type === "status" && value.text === "fixture tool")).toMatchObject({ acp: { sessionId: "fixture-session", update: { sessionUpdate: "tool_call", title: "fixture tool", status: "pending" } } });
+    expect(connection.messages.find(value => value.type === "status" && value.text === "Running fixture tool")).toMatchObject({ acp: { sessionId: "fixture-session", update: { sessionUpdate: "tool_call", title: "fixture tool", status: "pending" } } });
     connection.socket.close();
     connection = await connect(f.port, f.token);
     connection.send({ type: "attach", turns: [{ id: "turn", seq: 1 }] });
@@ -93,6 +93,26 @@ test("canonical bridge auth, stdio response, replay and routing rejection work t
     expect(f.stderr().includes(f.token)).toBe(false);
     expect(f.stderr().includes(f.bootstrap)).toBe(false);
   } finally { connection?.socket.close(); await f.close(); }
+});
+
+test("canonical wire redacts tool data, caps previews, and fetches full output only for a subscribed turn", async () => {
+  const f = await bridgeFixture("parts"); const connection = await connect(f.port, f.token); const stranger = await connect(f.port, f.token);
+  try {
+    connection.send({ type: "chat", id: "details", harness: "omp", text: "sample" });
+    await connection.until(value => value.type === "done" && value.id === "details");
+    expect(JSON.stringify(connection.messages)).not.toContain("fixture-private-value");
+    const output = connection.messages.find(value => value.type === "status" && value.part?.kind === "tool_output");
+    expect(output?.type === "status" && output.part?.kind === "tool_output" ? output.part.text.length : 0).toBe(8192);
+    expect(output).toMatchObject({ part: { truncated: true } });
+    const legacy = connection.messages.filter(value => value.type === "status" && value.acp);
+    expect(JSON.stringify(legacy)).not.toContain("sample output");
+    stranger.send({ type: "tool_detail", id: "details", callId: "sample-tool" }); await Bun.sleep(80);
+    expect(stranger.messages.some(value => value.type === "status" && value.part?.kind === "tool_detail")).toBe(false);
+    connection.send({ type: "tool_detail", id: "details", callId: "sample-tool" });
+    const detail = await connection.until(value => value.type === "status" && value.part?.kind === "tool_detail");
+    expect(detail?.type === "status" && detail.part?.kind === "tool_detail" ? detail.part.text.length : 0).toBe(10014);
+    expect(JSON.stringify(detail)).not.toContain("fixture-private-value");
+  } finally { connection.socket.close(); stranger.socket.close(); await f.close(); }
 });
 
 test("canonical bridge cancels a live ACP turn and emits one terminal result", async () => {

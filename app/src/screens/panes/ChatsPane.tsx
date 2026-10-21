@@ -1,9 +1,11 @@
+import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { effortIdForTurn, lastAssistantState, runtimeStateFromTurn } from "../../catalog/runtime-state";
+import { chatAttention, chatPriority } from "../../lib/chat-attention";
 import { threadAppearance } from "../../components/thread-appearance";
-import { HarnessAvatar } from "../../components/HarnessAvatar";
+import { AgentOrb } from "../../components/AgentOrb";
+import { conversationThinking } from "../../lib/thinking";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { conversationPreview as preview } from "../../lib/live-sessions";
@@ -16,7 +18,7 @@ import { colors, space, type } from "../../theme";
 import { confirmDestructive, dateGroupLabel, timeAgo } from "../../util";
 
 type ChatsListItem =
-  | { kind: "section"; id: string; title: string }
+  | { kind: "section"; id: string; title: string; count: number }
   | { kind: "conversation"; id: string; conversation: Conversation };
 
 const Row = memo(function Row({
@@ -38,8 +40,8 @@ const Row = memo(function Row({
 }) {
   const appearance = threadAppearance({ stale: item.stale, live });
   const stale = appearance.stale;
-  const turnState = lastAssistantState(item.messages);
-  const stateId = item.stale ? "stale" : runtimeStateFromTurn({ turnState, connectionStatus });
+  // What the agent is doing now, as a thinking-orbs orb (idle orbs hold still).
+  const thinking = item.stale ? { phase: "idle" as const } : conversationThinking(item.messages, connectionStatus);
   return (
     <PressScale
       onPress={() => onPress(item.id)}
@@ -48,13 +50,7 @@ const Row = memo(function Row({
       style={[styles.row, active && !stale && styles.rowActive]}
       accessibilityRole="button"
     >
-      <HarnessAvatar
-        size={40}
-        name={harnessName}
-        harnessId={item.harness}
-        effortId={effortIdForTurn({ turnState })}
-        stateId={stateId}
-      />
+      <AgentOrb size={28} thinking={thinking} label={`${harnessName} · ${thinking.tool ?? thinking.phase}`} />
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
           <Text style={[styles.rowTitle, stale && styles.stale]} numberOfLines={1}>
@@ -63,8 +59,8 @@ const Row = memo(function Row({
           {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
           <Text style={styles.rowTime} numberOfLines={1}>{stale ? "ended" : item.openIn ? `${item.openIn} · ${timeAgo(item.updatedAt)}` : timeAgo(item.updatedAt)}</Text>
         </View>
-          <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
-            {item.profileName ? `${item.profileName} · ` : ""}{preview(item)}
+          <Text style={[styles.rowPreview, stale && styles.stale, chatAttention(item) === "Needs attention" && styles.attention]} numberOfLines={1}>
+            {chatAttention(item) ? `${chatAttention(item)} · ` : ""}{preview(item)}
         </Text>
       </View>
       <View style={styles.hairline} />
@@ -81,6 +77,7 @@ const SectionHeader = memo(function SectionHeader({ title, count }: { title: str
 });
 
 export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
+  const thumb = useHandedness();
   const conversations = store.use((s) => s.conversations);
   const activeId = store.use((s) => s.activeId);
   const harnesses = store.use((s) => s.connection.harnesses);
@@ -88,13 +85,13 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
   const hosts = store.use((s) => s.connection.hosts);
 
   const items = useMemo((): ChatsListItem[] => {
-    const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
+    const sorted = [...conversations].sort((a, b) => chatPriority(a) - chatPriority(b) || b.updatedAt - a.updatedAt);
     const out: ChatsListItem[] = [];
     let lastGroup = "";
     for (const c of sorted) {
-      const group = dateGroupLabel(c.updatedAt);
+      const group = chatAttention(c) ?? (c.stale ? "Ended" : dateGroupLabel(c.updatedAt));
       if (group !== lastGroup) {
-        out.push({ kind: "section", id: `sec-${group}`, title: group });
+        out.push({ kind: "section", id: `sec-${group}`, title: group, count: sorted.filter(item => (chatAttention(item) ?? (item.stale ? "Ended" : dateGroupLabel(item.updatedAt))) === group).length });
         lastGroup = group;
       }
       out.push({ kind: "conversation", id: c.id, conversation: c });
@@ -136,7 +133,7 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<ChatsListItem>) => {
-      if (item.kind === "section") return <SectionHeader title={item.title} count={conversations.filter(c => dateGroupLabel(c.updatedAt) === item.title).length} />;
+      if (item.kind === "section") return <SectionHeader title={item.title} count={item.count} />;
       const c = item.conversation;
       return (
         <Row
@@ -158,7 +155,7 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
   return (
     <View style={styles.wrap}>
       {conversations.some(c => c.stale) && (
-        <PressScale onPress={() => confirmDestructive("Clear ended chats?", "Saved history is removed from this phone only.", "Clear ended", clearEndedConversations)} accessibilityRole="button" style={styles.clearEnded}>
+        <PressScale onPress={() => confirmDestructive("Clear ended chats?", "Saved history is removed from this phone only.", "Clear ended", clearEndedConversations)} accessibilityRole="button" style={[styles.clearEnded, thumb.align]}>
           <Text style={styles.clearEndedText}>Clear ended</Text>
         </PressScale>
       )}
@@ -184,18 +181,20 @@ const styles = StyleSheet.create({
   section: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: space.lg,
-    paddingTop: space.lg,
-    paddingBottom: space.sm,
+    paddingTop: space.sm,
+    paddingBottom: space.xs,
   },
-  sectionTitle: { color: colors.text, ...type.section },
-  clearEnded: { alignSelf: "flex-end", paddingHorizontal: space.lg, paddingTop: space.sm, minHeight: 44, justifyContent: "center" },
+  sectionTitle: { color: colors.textMuted, ...type.label },
+  attention: { color: colors.danger },
+  clearEnded: { paddingHorizontal: space.lg, paddingTop: space.sm, minHeight: 44, justifyContent: "center" },
   clearEndedText: { color: colors.gold, ...type.label },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.md,
     paddingHorizontal: space.lg,
-    paddingVertical: 14,
+    minHeight: 68,
+    paddingVertical: 10,
 
   },
   rowActive: { backgroundColor: "rgba(215,185,134,.035)" },
@@ -203,7 +202,7 @@ const styles = StyleSheet.create({
   liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.gold },
   // PressScale applies padding on its outer Pressable and lays children out in an inner view,
   // so the divider must sit below that padding, not on the inner view's bottom edge.
-  hairline: { position: "absolute", left: 52, right: 0, bottom: -14, height: StyleSheet.hairlineWidth, backgroundColor: colors.hair },
+  hairline: { position: "absolute", left: 52, right: 0, bottom: -10, height: StyleSheet.hairlineWidth, backgroundColor: colors.hair },
   rowMain: { flex: 1, minWidth: 0 },
   rowTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
   rowTitle: { color: colors.text, ...type.heading, flex: 1 },

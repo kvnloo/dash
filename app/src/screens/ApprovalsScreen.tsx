@@ -1,4 +1,6 @@
+import { screenBack } from "../lib/screen-back";
 import { Canvas } from "../components/Canvas";
+import { NeedsKevin } from "../components/NeedsKevin";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { useEffect, useMemo, useState } from "react";
@@ -11,12 +13,15 @@ import { bridge } from "../net/bridge";
 import { store } from "../store/app";
 import { actionable, approvals, bulkEligible, itemTitle } from "../store/approvals";
 import { colors, fonts, radius, space, type } from "../theme";
+import { StageLinks } from "../components/artifact-stage/StageLinks";
+import { isStageUrl } from "../lib/stage-link";
 
 // `.z-btn` ghost: glass tint, hairline rim, pill, 44 px touch target.
 function Button({ label, onPress, disabled = false }: { label: string; onPress(): void; disabled?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, disabled && styles.buttonDisabled, pressed && styles.buttonPressed]}><Text style={styles.buttonText}>{label}</Text></Pressable>;
 }
 function Link({ label, url }: { label: string; url: string }) {
+  if (isStageUrl(url)) return <StageLinks text={url} label={label} />;
   return /^https:\/\//.test(url) ? <Pressable accessibilityRole="link" hitSlop={6} onPress={() => void Linking.openURL(url)} style={styles.link}><Text style={styles.linkText} numberOfLines={2}>{label}</Text></Pressable> : <Text selectable style={styles.small}>{label}: {url}</Text>;
 }
 export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
@@ -42,7 +47,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
   const send = (message: Parameters<typeof bridge.send>[0]) => { if (!bridge.send(message)) setLocalError("Disconnected. Reconnect before deciding."); };
   const openEditor = (item: GateItem, reject = false) => { setEditor({ item, reject }); setText(reject || item.policy.requires_human_text && item.state !== "edited" ? "" : item.body); setChanged(false); };
   return <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-    <Canvas /><ScreenHeader title="Approvals" onBack={() => navigation.goBack()} action="Refresh" icon="refresh-cw" onAction={() => send({ type: "gate_list" })} />
+    <Canvas /><ScreenHeader title="Approvals" onBack={() => screenBack(navigation)} action="Refresh" icon="refresh-cw" onAction={() => send({ type: "gate_list" })} />
     <Text style={styles.mode}>{state.dryRun ? "Dry run · Nothing will be posted" : "Live · Approved items can be posted"}</Text>
     <Text style={styles.subtitle}>{state.ownerDecisions ? "Human approvals are recorded on the project coordination thread." : "Rehearsal decisions only. These are not live human approval."}</Text>
     <View testID="approval-metrics" style={styles.metrics}>
@@ -57,6 +62,7 @@ export function ApprovalsScreen({ navigation }: ScreenProps<"Approvals">) {
     </View>
     <View style={{ paddingHorizontal: 16, marginBottom: 8 }}><PrimaryButton label={`Approve selected (${selected.length})`} onPress={() => askApprove(selected)} disabled={!online || !selected.length} /></View>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <NeedsKevin />
       {groups.map(repo => {
         const items = visible.filter(i => i.target.repo === repo), ids = items.filter(bulkEligible).map(i => i.id);
         return <View key={repo} style={styles.group}>

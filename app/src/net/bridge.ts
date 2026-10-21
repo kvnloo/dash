@@ -1,8 +1,12 @@
 import { applyGateMessage } from "../store/approvals";
-import { AppState as RNAppState, type AppStateStatus } from "react-native";
+import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
 import { parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
+import type { LiveIntent } from "../../../shared/live";
 import { isDebugMode } from "../debug/mode";
+import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf } from "../store/live";
 import { fetchRoster } from "../lib/roster";
+import { executionToken, socketUrl } from "../lib/bridge-auth";
+import { headerSocket } from "../lib/native-socket";
 import type { Settings } from "../model";
 import {
   applyDeltas,
@@ -24,11 +28,12 @@ const DELTA_FLUSH_MS = 32;
 const CONNECT_TIMEOUT_MS = 8000;
 
 export function wsUrl(settings: Settings): string {
-  return `ws://${settings.address}/ws?token=${encodeURIComponent(settings.token.trim())}`;
+  return socketUrl(settings);
 }
 
 class Bridge {
   private ws: WebSocket | null = null;
+  private connectEpoch = 0;
   private settings: Settings | null = null;
   private attempt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -106,12 +111,23 @@ class Bridge {
     return true;
   }
 
-  private connectNow(): void {
+  private async connectNow(): Promise<void> {
     if (!this.settings) return;
     this.clearTimers();
     this.teardownSocket();
     setConnection({ status: "connecting", error: undefined });
-    const ws = new WebSocket(wsUrl(this.settings));
+    const settings = this.settings;
+    const epoch = ++this.connectEpoch;
+    let ws: WebSocket;
+    try {
+      if (settings.identity && Platform.OS === "web") throw new Error("z0bridge WebSockets require the native app (header authentication).");
+      const token = settings.identity ? await executionToken(settings) : undefined;
+      if (this.settings !== settings || this.connectEpoch !== epoch) return;
+      ws = token ? headerSocket(wsUrl(settings), token) : new WebSocket(wsUrl(settings));
+    } catch (error) {
+      if (this.settings === settings && this.connectEpoch === epoch) this.onClosed(error instanceof Error ? error.message : "Identity connection failed");
+      return;
+    }
     this.ws = ws;
     this.connectTimer = setTimeout(() => {
       if (this.ws === ws && ws.readyState !== WebSocket.OPEN) {
@@ -207,6 +223,12 @@ class Bridge {
       case "history":
         applyLiveHistory(message.harness, message.sessionId, message.messages, message.hostId, message.profileId);
         return;
+      case "live_opened":
+      case "live_event":
+      case "live_receipts":
+      case "live_error":
+        applyLiveMessage(message);
+        return;
       default: {
         const _exhaustive: never = message;
         return _exhaustive;
@@ -294,6 +316,7 @@ function targetForTurn(turnId: string): { hostId?: string; profileId?: string } 
 
 /** Send one chat turn for the active conversation. Returns false if offline. */
 export function sendChat(input: {
+  mode?: "steer" | "queue";
   turnId: string;
   harness: string;
   text: string;
@@ -305,6 +328,8 @@ export function sendChat(input: {
   const cwd = input.cwd ?? store.get().settings?.cwd;
   return bridge.send({
     type: "chat",
+    mode: input.mode,
+    summariesEnabled: store.get().conversations.find(c => c.messages.some(m => m.role === "assistant" && m.turnId === input.turnId))?.summariesEnabled === true,
     id: input.turnId,
     ...targetForTurn(input.turnId),
     harness: input.harness,
@@ -327,6 +352,7 @@ export function sendVoiceBegin(input: {
   const cwd = input.cwd ?? store.get().settings?.cwd;
   const sent = bridge.send({
     type: "voice_begin",
+    summariesEnabled: store.get().conversations.find(c => c.messages.some(m => m.role === "assistant" && m.turnId === input.turnId))?.summariesEnabled === true,
     id: input.turnId,
     ...targetForTurn(input.turnId),
     harness: input.harness,
@@ -345,4 +371,37 @@ export function sendVoiceChunk(turnId: string, data: string): boolean {
 /** End of utterance: the bridge transcribes and runs the turn. */
 export function sendVoiceCommit(turnId: string): boolean {
   return bridge.send({ type: "voice_commit", id: turnId });
+}
+
+/** Live surface (fast lane of a Hermes chat): open the worker for this conversation. */
+export function openLiveSurface(conversationId: string, target: { profileId?: string; sessionId?: string }): boolean {
+  const id = beginOpen(conversationId);
+  const ok = bridge.send({ type: "live_open", id, ...(target.profileId ? { profileId: target.profileId } : {}), ...(target.sessionId ? { sessionId: target.sessionId } : {}) });
+  if (!ok) applyLiveMessage({ type: "live_error", id, message: "Not connected to the bridge." });
+  return ok;
+}
+
+export function sendLiveTurn(conversationId: string, text: string): boolean {
+  const live = liveOf(conversationId);
+  if (!live.workerId || !live.profileId) return false;
+  const id = beginLiveTurn(conversationId, text, live.askHermes);
+  const ok = bridge.send({ type: "live_turn", id, workerId: live.workerId, profileId: live.profileId, text, ...(live.askHermes ? { askHermes: true } : {}) });
+  if (!ok) applyLiveMessage({ type: "live_error", id, message: "Not connected to the bridge." });
+  return ok;
+}
+
+/** The owner's tap on an fx0 control or a native fast control: recorded in Hermes, then the worker reacts. */
+export function sendLiveIntent(conversationId: string, intent: LiveIntent): boolean {
+  const live = liveOf(conversationId);
+  if (!live.workerId || !live.profileId) return false;
+  const id = beginIntent(conversationId, intent);
+  const ok = bridge.send({ type: "live_intent", id, workerId: live.workerId, profileId: live.profileId, intent, continue: true });
+  if (!ok) applyLiveMessage({ type: "live_error", id, message: "Not connected to the bridge." });
+  return ok;
+}
+
+export function refreshLiveReceipts(conversationId: string): boolean {
+  const live = liveOf(conversationId);
+  if (!live.workerId || !live.profileId) return false;
+  return bridge.send({ type: "live_receipts", id: beginReceipts(conversationId), workerId: live.workerId, profileId: live.profileId });
 }

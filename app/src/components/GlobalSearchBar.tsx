@@ -1,20 +1,19 @@
+import { toggleHandedness, useHandedness } from "../lib/useHandedness";
 import { Feather } from "@expo/vector-icons";
-import { memo, useMemo, useRef, useState } from "react";
+import { type RefObject, memo, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { LinearTransition } from "react-native-reanimated";
-import {
-  applyScopePrefix,
-  filterScopeSuggestions,
-  parseSearchQuery,
-} from "../lib/global-search";
-import { PRESS_SCALE, SNAP } from "../motion";
+import Animated from "react-native-reanimated";
+import { applyScopePrefix } from "../lib/global-search";
+import { PRESS_SCALE } from "../motion";
 import { colors, radius, space, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 import { fadeOut, popIn, popOut, staggerUp } from "./motion-enter";
 import { PressScale } from "./PressScale";
+import { ComposerSuggestions } from "./ComposerSuggestions";
 
 interface Props {
   value: string;
+  blurTarget?: RefObject<View | null>;
   onChange(value: string): void;
   onScope(label: string): void;
   onClear?(): void;
@@ -27,6 +26,7 @@ interface Props {
 
 export const GlobalSearchBar = memo(function GlobalSearchBar({
   value,
+  blurTarget,
   onChange,
   onScope,
   onClear,
@@ -35,12 +35,9 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
   placeholder = "Message Dash",
   dock = "top",
 }: Props) {
+  const thumb = useHandedness();
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
-  const parsed = useMemo(() => parseSearchQuery(value), [value]);
-  const suggestions = useMemo(() => value.trim() ? filterScopeSuggestions(value) : [...filterScopeSuggestions("@").filter(x => x.scope !== "product"), ...filterScopeSuggestions("/").filter(x => x.scope === "file")], [value]);
-  const composingScope = parsed.mode === "mention" || parsed.mode === "slash";
-  const showScopes = focused && (composingScope || suggestions.length > 0);
   const canSend = value.trim().length > 0;
 
   const insertMention = () => {
@@ -51,29 +48,9 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
 
   return (
     <View style={[styles.wrap, dock === "bottom" && styles.wrapBottom]}>
-      {showScopes && suggestions.length > 0 ? (
-        <Animated.View
-          style={styles.suggestions}
-          accessibilityRole="list"
-          layout={LinearTransition.springify().mass(SNAP.mass).stiffness(SNAP.stiffness).damping(SNAP.damping)}
-        >
-          {suggestions.map(({ label }, i) => (
-            <Animated.View key={label} entering={staggerUp(i)} exiting={fadeOut}>
-              <PressScale
-                onPress={() => onScope(label)}
-                scaleTo={PRESS_SCALE.control}
-                accessibilityRole="button"
-              >
-                <GlassSurface variant="raised" blur={false} borderRadius={radius.pill} style={styles.suggestion}>
-                  <Text style={styles.suggestionText}>{label === "@bots" ? "@bot" : label === "@conversation" ? "@chat" : label === "/file" ? "@file" : label}</Text>
-                </GlassSurface>
-              </PressScale>
-            </Animated.View>
-          ))}
-        </Animated.View>
-      ) : null}
+      <ComposerSuggestions text={value} onChange={onChange} />
 
-      <GlassSurface blur borderRadius={radius.pill} style={[styles.shell, focused && { borderWidth: 1, borderColor: colors.gold }]} contentStyle={styles.field}>
+      <GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={radius.pill} style={[styles.shell, focused && { borderWidth: 1, borderColor: colors.gold }]} contentStyle={[styles.field, thumb.row]}>
         <PressScale
           onPress={insertMention}
           scaleTo={PRESS_SCALE.control}
@@ -122,6 +99,8 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
         ) : (
           <PressScale
             onPress={onVoice}
+            onLongPress={toggleHandedness}
+            accessibilityHint="Long press to switch thumb side"
             scaleTo={PRESS_SCALE.control}
             style={styles.sideIcon}
             accessibilityRole="button"

@@ -1,3 +1,6 @@
+import { ModelsPanel } from "../components/ModelsPanel";
+import { setHandedness, useHandedness } from "../lib/useHandedness";
+import type { Handedness } from "../lib/handedness";
 import { Canvas } from "../components/Canvas";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { useEffect, useRef, useState } from "react";
@@ -15,8 +18,10 @@ import { bridge } from "../net/bridge";
 import { forgetEverything, saveSettings, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
+import { screenBack } from "../lib/screen-back";
 
 export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
+  const thumb = useHandedness();
   const insets = useSafeAreaInsets();
   const settings = store.use((s) => s.settings);
   const connection = store.use((s) => s.connection);
@@ -25,6 +30,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const [address, setAddress] = useState(settings?.address ?? "");
   const [token, setToken] = useState(settings?.token ?? "");
   const [cwd, setCwd] = useState(settings?.cwd ?? "");
+  const [modelsOpen, setModelsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const attemptRef = useRef<AbortController | null>(null);
@@ -33,7 +39,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
     normalizeAddress(address) !== (settings?.address ?? "") ||
     token.trim() !== (settings?.token ?? "") ||
     (cwd.trim() || undefined) !== settings?.cwd;
-  const canSave = !saving && normalizeAddress(address).length > 0 && token.trim().length > 0 && (dirty || connection.status !== "online");
+  const identity = settings?.identity && !token.trim() ? settings.identity : undefined;
+  const canSave = !saving && normalizeAddress(address).length > 0 && (token.trim().length > 0 || identity !== undefined) && (dirty || connection.status !== "online");
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("blur", () => attemptRef.current?.abort());
@@ -51,6 +58,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
     setSaving(true);
     setSaveError(null);
     const next = {
+      ...store.get().settings,
+      identity,
       address: normalizeAddress(address),
       token: token.trim(),
       harness: settings?.harness ?? "omp",
@@ -111,7 +120,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
-      <ScreenHeader title="Settings" onBack={() => navigation.navigate("Main")} />
+      <ScreenHeader title="Settings" onBack={() => screenBack(navigation)} />
       <KeyboardAvoidingView style={styles.body} behavior="padding">
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.xxl }]}
@@ -129,6 +138,23 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             </Text>
           ) : null}
 
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: modelsOpen }} onPress={() => setModelsOpen(!modelsOpen)} style={styles.secondary}><Text style={styles.secondaryText}>Models {modelsOpen ? "−" : "+"}</Text></Pressable>
+          {modelsOpen ? <ModelsPanel /> : null}
+          <Text style={styles.label}>Display</Text>
+          <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+            <View style={styles.harnessRow}><Text style={styles.harnessName}>Thumb side</Text></View>
+            <View style={{ flexDirection: "row", paddingHorizontal: space.md, gap: space.sm }}>
+              {(["right", "left", "auto"] satisfies Handedness[]).map(value => <Pressable key={value}
+                accessibilityRole="radio" accessibilityLabel={`${value[0]?.toUpperCase()}${value.slice(1)} handedness`}
+                accessibilityState={{ checked: thumb.preference === value, disabled: !settings }}
+                aria-checked={thumb.preference === value} disabled={!settings}
+                onPress={() => { setHandedness(value); haptic.select(); }}
+                style={{ flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, borderWidth: 1, borderColor: thumb.preference === value ? colors.gold : colors.border }}>
+                <Text style={{ ...type.body, color: thumb.preference === value ? colors.gold : colors.textMuted }}>{value[0]?.toUpperCase()}{value.slice(1)}</Text>
+              </Pressable>)}
+            </View>
+            <Text style={[styles.help, { padding: space.md }]}>{settings ? "Auto follows a system preference when available; otherwise Right. This platform exposes no handedness signal. Long-press the composer mic to switch hands." : "Pair a bridge to save display preferences."}</Text>
+          </GlassSurface>
           <Text style={styles.label}>Bridge</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field
@@ -191,6 +217,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           ) : null}
 
           <Pressable accessibilityRole="button" accessibilityLabel="Approvals" onPress={() => navigation.navigate("Approvals")} style={styles.secondary}><Text style={styles.secondaryText}>Review approvals</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Component lab" onPress={() => navigation.navigate("Lab")} style={styles.secondary}><Text style={styles.secondaryText}>Component lab</Text></Pressable>
           <Text style={styles.label}>On your computer</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Text style={styles.mono}>cd bridge && bun run start</Text>

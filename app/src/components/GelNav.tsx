@@ -1,3 +1,4 @@
+import { useHandedness } from "../lib/useHandedness";
 import { Feather } from "@expo/vector-icons";
 import { forwardRef, memo, useEffect, useImperativeHandle, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
@@ -5,7 +6,6 @@ import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   type SharedValue,
   useAnimatedStyle,
-  useFrameCallback,
   useSharedValue,
 } from "react-native-reanimated";
 import type { NavigationProp } from "@react-navigation/native";
@@ -34,23 +34,22 @@ import {
   clampSettled,
   clampTab,
   indicatorTranslateX,
-  pillStep,
-  pillStretch,
 } from "./golden-nav";
+import { toMain } from "../lib/main-nav";
 
 const RIPPLE = { color: "transparent" as const };
 
 export type AppNavHandle = {
-  /** Drive the gold pill with PagerView position+offset. UI-thread shared value; no React render. */
+  /** Drive the gold pill with pager position. UI-thread shared value; no React render. */
   setProgress(progress: number): void;
 };
 
 /**
  * The top navigation bar: Expand (Voice) · three-dot pager with the gold gel pill · Bridge details.
  * One Reanimated renderer for native and web, not a WebView.
- * The pill tracks a shared value written on the UI thread by PagerView.
+ * The pill tracks a shared value written on the UI thread by the pager.
  * Living Night chrome: glass fill, rim highlight, cream hair, inset spec/shade on the gold.
- * The gold pill is a gel: UI-thread spring follow, stretch on travel, squash on Y.
+ * The gold pill follows the pager 1:1, with no second animation.
  */
 export const AppNav = memo(
   forwardRef<
@@ -62,11 +61,10 @@ export const AppNav = memo(
       progress?: SharedValue<number>;
     }
   >(function AppNav({ navigation, tab, onTab, progress: progressProp }, ref) {
+    const thumb = useHandedness();
     const internal = useSharedValue(clampProgress(tab));
-    // The web pager reports no scroll progress, and writing the shared page progress there would
-    // drive the page-body gel (FlashList then measures a stretched width). Web moves only its
-    // own pill, by the settled page.
-    const progress = Platform.OS === "web" ? internal : (progressProp ?? internal);
+    // A single source of truth: no second spring between the finger and indicator.
+    const progress = progressProp ?? internal;
 
     useImperativeHandle(
       ref,
@@ -79,26 +77,13 @@ export const AppNav = memo(
     );
 
     useEffect(() => {
-      if (Platform.OS === "web") internal.value = clampSettled(tab);
-    }, [internal, tab]);
-
-    const follow = useSharedValue(clampProgress(tab));
-    const vel = useSharedValue(0);
-
-    useFrameCallback((info) => {
-      const raw = info.timeSincePreviousFrame;
-      if (raw == null) return;
-      const dt = Math.min(0.033, raw / 1000);
-      if (dt <= 0) return;
-      const next = pillStep(follow.value, vel.value, progress.value, dt);
-      follow.value = next.pos;
-      vel.value = next.vel;
-    });
+      if (!progressProp) internal.value = clampSettled(tab);
+    }, [internal, progressProp, tab]);
 
     const pillStyle = useAnimatedStyle(() => {
       const p = progress.value;
-      const n = follow.value;
-      const { scaleX, scaleY } = pillStretch(n, p, vel.value);
+      const n = p;
+      const scaleX = 1, scaleY = 1;
       const slot = NAV_SLOT_WIDTH;
       return {
         transform: [
@@ -115,7 +100,7 @@ export const AppNav = memo(
     const goTab = (next: number) => {
       haptic.tap();
       if (onTab) onTab(next);
-      else navigation.navigate("Main", { tab: next });
+      else toMain(navigation, next);
     };
 
     const active = clampTab(tab);
@@ -131,7 +116,7 @@ export const AppNav = memo(
 
     return drag(
       <View style={styles.wrap} pointerEvents="box-none" collapsable={false}>
-        <View style={styles.row}>
+        <View style={[styles.row, thumb.row]}>
           <PressScale
             accessibilityRole="button"
             accessibilityLabel="Expand"

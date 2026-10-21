@@ -18,6 +18,60 @@ beforeEach(() => {
   app.store.set({ hydrated: true, settings: null, connection: { status: "online", harnesses: [], hosts: [] }, conversations: [], activeId: null });
 });
 
+test("summary toggle and final summaries persist; stale replay cannot overwrite keyed text", async () => {
+  const { replySummaries } = await import("./text");
+  const { parseConversation } = await import("../model");
+  const chat = app.createConversation("omp");
+  const turn = app.beginTurn(chat.id, "Check branch");
+  app.setThinkingSummaries(chat.id, true);
+  const summary = { blockId: "turn", kind: "turn", text: "Checked branch", model: "local/test", durationMs: 42000 } satisfies import("../../../shared/thinking-summary").SummaryInfo;
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 2, text: "", summary });
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 1, text: "", summary: { ...summary, text: "stale" } });
+  expect(replySummaries.get(`${turn.turnId}:turn`)).toContain("Checked branch");
+  expect(replySummaries.get(`${turn.turnId}:turn`)).not.toContain("stale");
+  replyText.set(turn.turnId, "Answer");
+  app.applyTurnEvent({ type: "done", id: turn.turnId, seq: 3, exitCode: 0 });
+  const saved = app.store.get().conversations.find(c => c.id === chat.id);
+  const restored = parseConversation(JSON.parse(JSON.stringify(saved)));
+  expect(restored?.summariesEnabled).toBe(true);
+  expect(restored?.messages.at(-1)).toMatchObject({ state: "done", summaries: [summary] });
+  app.setThinkingSummaries(chat.id, false);
+  expect(app.store.get().conversations.find(c => c.id === chat.id)?.summariesEnabled).toBe(false);
+});
+
+test("actual tool/thinking statuses survive completion and replay cannot duplicate them", () => {
+  const chat = app.createConversation("omp");
+  const turn = app.beginTurn(chat.id, "Read the file");
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 1, text: "Read app/src/model.ts" });
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 1, text: "Replay must not appear" });
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 2, text: "Checking the result" });
+  replyText.set(turn.turnId, "The test passed.");
+  app.applyTurnEvent({ type: "done", id: turn.turnId, seq: 3, exitCode: 0 });
+  const reply = app.store.get().conversations.find(c => c.id === chat.id)?.messages.find(m => m.id === turn.messageId);
+  expect(reply).toMatchObject({ state: "done", status: undefined, activity: ["Read app/src/model.ts", "Checking the result"] });
+});
+
+test("interleaved reasoning/tools bypass conversation updates, dedupe replay and checkpoint on done", async () => {
+  const { partsFor } = await import("./text");
+  const chat = app.createConversation("hermes"); const turn = app.beginTurn(chat.id, "check");
+  const before = app.store.get();
+  let seq = 0;
+  for (const callId of ["a", "b", "c"]) app.applyTurnEvent({ type: "status", id: turn.turnId, seq: ++seq, text: "", part: { kind: "tool_start", callId, name: "terminal", summary: "sample", args: "{}" } });
+  for (let tick = 0; tick < 180; tick++) {
+    app.applyTurnEvent({ type: "status", id: turn.turnId, seq: ++seq, text: "", part: { kind: "reasoning", text: "." } });
+    for (const callId of ["a", "b", "c"]) app.applyTurnEvent({ type: "status", id: turn.turnId, seq: ++seq, text: "", part: { kind: "tool_output", callId, text: "x", truncated: false } });
+  }
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq, text: "", part: { kind: "reasoning", text: "REPLAY" } });
+  expect(app.store.get()).toBe(before);
+  expect(partsFor(turn.turnId)).toHaveLength(7);
+  expect(partsFor(turn.turnId).filter(p => p.kind === "tool_start")).toHaveLength(3);
+  expect(partsFor(turn.turnId).find(p => p.kind === "reasoning")).toMatchObject({ text: ".".repeat(180) });
+  app.applyDeltas(new Map([[turn.turnId, { seq: ++seq, text: "answer" }]]));
+  app.applyTurnEvent({ type: "done", id: turn.turnId, seq: ++seq, exitCode: 0 });
+  const reply = app.store.get().conversations.find(c => c.id === chat.id)?.messages.find(m => m.id === turn.messageId);
+  expect(reply).toMatchObject({ state: "done", text: "answer", parts: partsFor(turn.turnId) });
+});
+
 describe("host roster reconciliation", () => {
   const agent = { id: "hermes:session:clean:owner", name: "Debug Hermes crashing", kind: "hermes", status: "available" as const, sessionId: "owner", profileId: "clean", cwd: "/project", lastActivityAt: 1700000000000, messageCount: 3 };
   const host = { id: "groot", name: "groot", hostname: "groot", online: true, self: true, agents: [agent] };
@@ -35,6 +89,20 @@ describe("host roster reconciliation", () => {
     app.setConnection({ hosts: [{ ...host, agents: [{ ...agent, name: "New real title", lastActivityAt: agent.lastActivityAt + 10000 }] }] });
     expect(app.store.get().conversations).toHaveLength(1);
     expect(app.store.get().conversations[0]).toMatchObject({ id: first.id, title: "New real title", stale: false, messages: history });
+  });
+  test("history from a bridge that names itself by OS hostname lands in the MagicDNS-keyed chat", () => {
+    // groot's tailnet label is "0": the roster keys it "0", an older bridge replies hostId "groot".
+    const renamed = { ...host, id: "0", name: "0", hostname: "groot" };
+    app.setConnection({ host: "groot", hosts: [renamed], harnesses: [{ id: "hermes", name: "Hermes", available: true }] });
+    const chat = app.store.get().conversations[0]!;
+    expect(chat.targetHostId).toBe("0");
+    const history = [{ id: "h1", role: "assistant" as const, text: "real transcript", at: agent.lastActivityAt }];
+    app.applyLiveHistory("hermes", "owner", history, "groot", agent.id);
+    expect(app.store.get().conversations[0]!.messages).toMatchObject([{ id: "h1", role: "assistant", text: "real transcript", state: "done" }]);
+    expect(app.rosterHostId("groot", app.store.get().connection)).toBe("0");
+    expect(app.rosterHostId("0", app.store.get().connection)).toBe("0");
+    expect(app.rosterHostId("mbp", app.store.get().connection)).toBe("mbp");
+    expect(app.conversationTargetError(app.store.get().conversations[0]!)).toBeUndefined();
   });
   test("old unscoped OMP chat becomes ended and Clear ended preserves new chats", () => {
     const old = app.createConversation("omp", { sessionId: "dead-omp" });
@@ -261,9 +329,38 @@ describe("project agent actions", () => {
   });
 });
 
+test("handedness hook reads the store, quick toggle persists, hydration restores", async () => {
+  const { createElement } = await import("react");
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { useHandedness, setHandedness, toggleHandedness } = await import("../lib/useHandedness");
+  function Probe() {
+    const thumb = useHandedness();
+    return createElement("span", null, `${thumb.preference}:${thumb.side}:${thumb.row.flexDirection}`);
+  }
+  const render = () => renderToStaticMarkup(createElement(Probe));
+  expect(render()).toContain("right:right:row");
+  setHandedness("left");
+  expect(app.store.get().settings).toBeNull(); // never fabricate pairing credentials
+  app.saveSettings({ address: "fixture:4747", token: "", harness: "hermes", inAppFeedback: false });
+  setHandedness("left");
+  expect(render()).toContain("left:left:row-reverse");
+  expect(app.store.get().settings?.inAppFeedback).toBe(false);
+  app.store.set(s => ({ ...s, settings: null }));
+  await app.hydrate();
+  expect(render()).toContain("left:left:row-reverse");
+  toggleHandedness();
+  expect(render()).toContain("right:right:row");
+  setHandedness("auto");
+  expect(render()).toContain("auto:right:row");
+  toggleHandedness();
+  expect(render()).toContain("left:left:row-reverse");
+  await app.hydrate();
+  expect(app.store.get().settings?.handedness).toBe("left");
+});
+
 describe("outbound target boundary", () => {
   test("voice rejection does not report an opened utterance", async () => {
-    mock.module("react-native", () => ({ AppState: { currentState: "active", addEventListener() { return { remove() {} }; } } }));
+    mock.module("react-native", () => ({ Platform: { OS: "android" }, AppState: { currentState: "active", addEventListener() { return { remove() {} }; } } }));
     const { sendVoiceBegin } = await import("../net/bridge");
     const c = app.createConversation("omp", { targetHostId: "gone", profileId: "agent" });
     const t = app.beginTurn(c.id, "");

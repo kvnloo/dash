@@ -36,6 +36,11 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       return;
     }
     if (mode === "fs") { send({ jsonrpc: "2.0", id: "fs", method: "fs/read_text_file", params: { path: "/etc/passwd" } }); return; }
+    if (mode === "parts") {
+      update({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "inspect protocol" } });
+      update({ sessionUpdate: "tool_call", toolCallId: "sample-tool", title: "terminal", status: "in_progress", rawInput: { command: "printf sample", api_key: "fixture-private-value" } });
+      update({ sessionUpdate: "tool_call_update", toolCallId: "sample-tool", status: "completed", rawOutput: "sample output\n" + "x".repeat(10000) });
+    }
     update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "DASH_ACP_OK" } });
     update({ sessionUpdate: "tool_call", title: "fixture tool", status: "pending" });
     if (mode === "orphan") {

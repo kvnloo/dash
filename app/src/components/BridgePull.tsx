@@ -11,16 +11,17 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   ReduceMotion,
+  cancelAnimation,
   runOnJS,
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
   type SharedValue,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { haptic } from "../haptics";
-import { GEL, PRESS_SCALE } from "../motion";
+import { GEL, PRESS_SCALE, navDuration, navProgress } from "../motion";
 import type { Connection } from "../model";
 import type { RootStackParamList } from "../navigation";
 import { bridge } from "../net/bridge";
@@ -59,9 +60,14 @@ export function useBridgePullOptional(): BridgePullApi | null {
   return useContext(BridgePullContext);
 }
 
-function snapTo(progress: SharedValue<number>, next: 0 | 1) {
+function snapTo(progress: SharedValue<number>, next: 0 | 1, velocity: number) {
   "worklet";
-  progress.value = withSpring(next, gel);
+  const distance = next - progress.value;
+  const duration = navDuration(distance, velocity);
+  progress.value = withTiming(next, { duration, easing: (t: number) => {
+    "worklet";
+    return navProgress(t, distance, velocity, duration);
+  }, reduceMotion: ReduceMotion.System });
 }
 
 export function useBridgePullPan() {
@@ -74,6 +80,7 @@ export function useBridgePullPan() {
     .failOffsetX([-24, 24])
     .onBegin(() => {
       if (!api) return;
+      cancelAnimation(api.progress);
       const p = api.progress.value;
       start.value = p > 1 ? 1 : p < 0 ? 0 : p;
     })
@@ -85,7 +92,7 @@ export function useBridgePullPan() {
     .onEnd((e) => {
       if (!api) return;
       const next = settlePull(api.progress.value, e.velocityY, api.height.value);
-      snapTo(api.progress, next);
+      snapTo(api.progress, next, e.velocityY / api.height.value);
       runOnJS(haptic.select)();
     });
 }
@@ -102,13 +109,13 @@ export function BridgePullProvider({ children }: { children: ReactNode }) {
   const height = useSharedValue(280);
 
   const open = useCallback(() => {
-    progress.value = withSpring(1, gel);
+    progress.value = withTiming(1, gel);
   }, [progress]);
   const close = useCallback(() => {
-    progress.value = withSpring(0, gel);
+    progress.value = withTiming(0, gel);
   }, [progress]);
   const toggle = useCallback(() => {
-    progress.value = withSpring(progress.value >= 0.5 ? 0 : 1, gel);
+    progress.value = withTiming(progress.value >= 0.5 ? 0 : 1, gel);
   }, [progress]);
 
   const api = useMemo<BridgePullApi>(

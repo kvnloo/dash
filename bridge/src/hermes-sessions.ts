@@ -1,10 +1,16 @@
+import { readSessionPhase, UNOBSERVED, type SessionPhase } from "./hermes-phase";
+import { readSessionWorkers, type SessionWorker } from "./hermes-workers";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { ToolDetails } from "./tool-details";
+import type { ReplyPart } from "../../shared/protocol";
+import { PartEmitter, hermesParts, redact, record as partRecord } from "./reply-parts";
 import type { AgentInfo, HistoryMessage } from "../../shared/protocol";
 import { parseHermesEnvFile, type EnvMap, type HermesFetch } from "./hermes-session";
 import { hostProcesses, ownerOf, readLiveOwners, surfaceLabel, type LiveOwner } from "./hermes-owner";
+import { hostGatewayProbe, ownerHosting, type GatewayHostProbe, type OwnerHosting } from "./hermes-gateway-host";
 
 // Deliberate allowlist: interactive surfaces and messaging platforms, never kitchen,
 // cron, oneshot, kanban, tool or delegated workers. `local` is native session authority CLI.
@@ -47,12 +53,34 @@ function toAgent(row: Row, profile: Profile, owner?: LiveOwner): AgentInfo | und
 }
 export function parseHermesHistory(rows: unknown): HistoryMessage[] {
   if (!Array.isArray(rows)) return [];
-  return rows.flatMap((row): HistoryMessage[] => {
-    if (!record(row) || (row.role !== "user" && row.role !== "assistant") || row.active === 0) return [];
+  const out: HistoryMessage[] = [];
+  let current: HistoryMessage | undefined;
+  let stampMs = 0;
+  const emitter = new PartEmitter(part => { if (current) (current.parts ??= []).push(part); }, () => stampMs);
+  for (const row of rows) {
+    if (!record(row) || row.active === 0) continue;
+    stampMs = stamp(row.timestamp);
+    if (row.role === "tool") {
+      let failed = row.is_error === true;
+      try { const result: unknown = JSON.parse(text(row.content)); if (record(result)) failed ||= Boolean(result.error) || (typeof result.exit_code === "number" && result.exit_code !== 0) || result.success === false; } catch { /* Plain-text tool result. */ }
+      if (current && typeof row.tool_call_id === "string") hermesParts({ type: "tool_result", tool_call_id: row.tool_call_id, output: text(row.content), is_error: failed }, emitter);
+      continue;
+    }
+    if ((row.role !== "user" && row.role !== "assistant") || (typeof row.id !== "string" && typeof row.id !== "number")) continue;
     const content = text(row.content);
-    if (!content.trim() || (typeof row.id !== "string" && typeof row.id !== "number")) return [];
-    return [{ id: String(row.id), role: row.role, text: content, at: stamp(row.timestamp) }];
-  });
+    if (row.role === "user") { current = undefined; if (content.trim()) out.push({ id: String(row.id), role: "user", text: content, at: stamp(row.timestamp) }); continue; }
+    if (current && !current.parts?.length) current = undefined;
+    if (!current) { current = { id: String(row.id), role: "assistant", text: "", at: stamp(row.timestamp) }; out.push(current); }
+    if (content) current.text += (current.text ? "\n\n" : "") + content;
+    emitter.reasoning(row.reasoning_content || row.reasoning);
+    let calls: unknown = row.tool_calls;
+    if (typeof calls === "string") try { calls = JSON.parse(calls); } catch { calls = []; }
+    if (Array.isArray(calls)) for (const call of calls) {
+      if (!partRecord(call) || !partRecord(call.function) || typeof call.id !== "string" || typeof call.function.name !== "string") continue;
+      emitter.start(call.id, call.function.name, call.function.arguments);
+    }
+  }
+  return out.filter(message => message.text.trim() || message.parts?.length).map(message => ({ ...message, text: redact(message.text) }));
 }
 function withDb<T>(profile: Profile, fn: (db: Database) => T): T | undefined {
   if (!existsSync(join(profile.home, "state.db"))) return undefined;
@@ -116,13 +144,17 @@ export function ownerSessionIds(db: Database, owner: LiveOwner): Set<string> {
 function localHistory(profile: Profile, id: string): HistoryMessage[] {
   return withDb(profile, db => {
     const args = [...lineageIds(db, id)];
-    const rows = db.query<Row, string[]>(`SELECT id,role,content,timestamp FROM messages WHERE session_id IN (${args.map(() => "?").join(",")})
-      AND active=1 AND role IN ('user','assistant') AND length(trim(coalesce(content,'')))>0 ORDER BY timestamp DESC,id DESC LIMIT 200`).all(...args);
+    const rows = db.query<Row, string[]>(`SELECT * FROM messages WHERE session_id IN (${args.map(() => "?").join(",")})
+      AND active=1 AND role IN ('user','assistant','tool') ORDER BY timestamp DESC,id DESC LIMIT 600`).all(...args);
     return parseHermesHistory(rows.reverse());
   }) ?? [];
 }
 function loopbackUrl(raw: string): string | undefined {
   try { const url = new URL(raw); return url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) && !url.username && !url.password && !url.search && !url.hash ? raw.replace(/\/+$/, "") : undefined; } catch { return undefined; }
+}
+
+function previewHistory(messages: HistoryMessage[]): HistoryMessage[] {
+  return messages.map(message => { const cache = new ToolDetails(); return { ...message, ...(message.parts ? { parts: message.parts.flatMap(part => { const preview = cache.preview(part); return preview ? [preview] : []; }) } : {}) }; });
 }
 
 export class HermesSessions {
@@ -131,20 +163,25 @@ export class HermesSessions {
   private readonly env: EnvMap;
   private readonly fetch: HermesFetch;
   private readonly processes: typeof hostProcesses;
-  constructor(options: { root?: string; env?: EnvMap; fetch?: HermesFetch; processes?: typeof hostProcesses } = {}) {
+  private readonly gateways: GatewayHostProbe;
+  constructor(options: { root?: string; env?: EnvMap; fetch?: HermesFetch; processes?: typeof hostProcesses; gateways?: GatewayHostProbe } = {}) {
     this.env = options.env ?? process.env;
     this.root = options.root ?? this.env.DASH_HERMES_ROOT ?? join(homedir(), ".hermes");
     this.fetch = options.fetch ?? globalThis.fetch;
     this.processes = options.processes ?? hostProcesses;
+    this.gateways = options.gateways ?? hostGatewayProbe(this.root, pid => this.processes.alive(pid));
   }
-  private profiles(): Profile[] {
+  private profiles(credentials = true): Profile[] {
+    // "default" names the root home. A stray profiles/default directory would be a second
+    // "default" and make every default session ambiguous once the roster has listed it.
     const profiles: Profile[] = [{ id: "default", home: this.root }];
-    try { for (const entry of readdirSync(join(this.root, "profiles"), { withFileTypes: true })) if ((entry.isDirectory() || entry.isSymbolicLink()) && PROFILE_OK.test(entry.name)) profiles.push({ id: entry.name, home: join(this.root, "profiles", entry.name) }); } catch { /* no named profiles */ }
+    try { for (const entry of readdirSync(join(this.root, "profiles"), { withFileTypes: true })) if ((entry.isDirectory() || entry.isSymbolicLink()) && PROFILE_OK.test(entry.name) && entry.name !== "default") profiles.push({ id: entry.name, home: join(this.root, "profiles", entry.name) }); } catch { /* no named profiles */ }
     let overrides: unknown;
     try { overrides = JSON.parse(this.env.DASH_HERMES_APIS ?? "{}"); } catch { /* fail closed */ }
     const seen = new Set<string>();
     return profiles.filter(profile => {
       try { const path = realpathSync(profile.home); if (seen.has(path)) return false; seen.add(path); } catch { return false; }
+      if (!credentials) return true;
       const env = readEnv(join(profile.home, ".env"));
       const url = loopbackUrl(`http://${env.API_SERVER_HOST || "127.0.0.1"}:${env.API_SERVER_PORT || "8642"}`);
       if (url && env.API_SERVER_KEY) profile.api = { url, key: env.API_SERVER_KEY };
@@ -201,11 +238,23 @@ export class HermesSessions {
     for (const agent of agents) this.known.add(agent.id);
     return agents;
   }
+  toolDetail(profileId: string, sessionId: string, messageId: string, callId: string): ReplyPart | undefined {
+    const profile = this.profiles(false).find(p => p.id === profileId);
+    if (!profile) return undefined;
+    const row = localSession(profile, sessionId);
+    if (!row || !visible(row)) return undefined;
+    const message = localHistory(profile, sessionId).find(message => message.id === messageId);
+    const cache = new ToolDetails();
+    for (const part of message?.parts ?? []) cache.preview(part);
+    return cache.get(callId);
+  }
   async history(profileId: string, sessionId: string): Promise<HistoryMessage[]> {
     const profile = this.profiles().find(p => p.id === profileId);
     if (!profile) return [];
     const row = localSession(profile, sessionId);
     if (row && !visible(row)) return [];
+    // Native rows retain reasoning/tool columns missing from older API projections.
+    if (row) { const native = localHistory(profile, sessionId); if (native.some(message => message.parts?.length)) return previewHistory(native); }
     try {
       if (profile.id !== "default" && row) {
         const identity = await this.get(profile, `/api/sessions/${encodeURIComponent(sessionId)}`);
@@ -217,8 +266,8 @@ export class HermesSessions {
       }
       const body = await this.get(profile, `/api/sessions/${encodeURIComponent(sessionId)}/messages?limit=200&order=latest`);
       if (!record(body) || !Array.isArray(body.data)) throw new Error("Invalid history");
-      return parseHermesHistory(body.data);
-    } catch { return row ? localHistory(profile, sessionId) : []; }
+      return previewHistory(parseHermesHistory(body.data));
+    } catch { return row ? previewHistory(localHistory(profile, sessionId)) : []; }
   }
   /**
    * A live CLI/TUI that holds this session (or any id in its compression lineage).
@@ -234,11 +283,60 @@ export class HermesSessions {
       return owners.find(owner => [...ownerSessionIds(db, owner)].some(id => target.has(id)));
     }) ?? ownerOf(owners, new Set([sessionId]));
   }
+  /**
+   * Where `owner`'s agent runs. `gateway`: the profile's gateway hosts the session and the owner
+   * is one of its viewers (or the gateway itself), so Dash sends into that gateway like any other
+   * client. `standalone`: a separate process may write the session; Dash waits for the handoff.
+   */
+  ownerHosting(profileId: string, sessionId: string, owner: LiveOwner): OwnerHosting {
+    const profile = this.profiles().find(p => p.id === profileId);
+    if (!profile) return "standalone";
+    return ownerHosting(owner, profile.id, profile.home, this.gateways, this.authoritySession(profile, sessionId));
+  }
+  /**
+   * The session runs in a gateway even when no terminal holds a lease (the TUI and Desktop write
+   * none): a native session-authority chat whose profile gateway is running.
+   */
+  gatewayHosted(profileId: string, sessionId: string): boolean {
+    const profile = this.profiles().find(p => p.id === profileId);
+    if (!profile || !this.authoritySession(profile, sessionId)) return false;
+    try { return this.gateways.gatewayPids(profile.id, profile.home).length > 0; } catch { return false; }
+  }
+  private authoritySession(profile: Profile, sessionId: string): boolean {
+    return withDb(profile, db => [...lineageIds(db, sessionId)].some(id => db.query<Row, [string]>("SELECT source FROM sessions WHERE id=?").get(id)?.source === "local")) ?? false;
+  }
   /** Profile id whose home is `home` (e.g. the bridge's own HERMES_HOME). */
   profileForHome(home: string): string | undefined {
     let wanted: string;
     try { wanted = realpathSync(home); } catch { return undefined; }
     return this.profiles().find(p => { try { return realpathSync(p.home) === wanted; } catch { return false; } })?.id;
+  }
+  /** Native-only snapshot: no API, gateway RPC, credentials, migrations or writes. */
+  nativeActivity(profileId: string, sessionId: string): HistoryMessage[] {
+    const profile = this.profiles(false).find(p => p.id === profileId || hermesSessionAgentId(p.id, sessionId) === profileId);
+    if (!profile) return [];
+    const row = localSession(profile, sessionId);
+    return row && visible(row) ? previewHistory(localHistory(profile, sessionId)) : [];
+  }
+  phase(profileId: string, sessionId: string): SessionPhase {
+    // Observation never needs API credentials. Resolve only a visible local session.
+    const profile = this.profiles(false).find(p => (p.id === profileId || hermesSessionAgentId(p.id, sessionId) === profileId) && (() => {
+      const row = localSession(p, sessionId);
+      return row !== undefined && visible(row);
+    })());
+    if (!profile) return UNOBSERVED;
+    const ids = withDb(profile, db => [...lineageIds(db, sessionId)]) ?? [sessionId];
+    const alive = this.gateways.gatewayPids(profile.id, profile.home).length > 0;
+    return readSessionPhase(profile.home, ids, alive);
+  }
+  workers(profileId: string, sessionId: string): SessionWorker[] {
+    const profile = this.profiles(false).find(p => (p.id === profileId || hermesSessionAgentId(p.id, sessionId) === profileId) && (() => {
+      const row = localSession(p, sessionId);
+      return row !== undefined && visible(row);
+    })());
+    if (!profile) return [];
+    const ids = withDb(profile, db => [...lineageIds(db, sessionId)]) ?? [sessionId];
+    return readSessionWorkers(profile.home, ids);
   }
   homeOf(profileId: string): string | undefined {
     return this.profiles().find(p => p.id === profileId)?.home;

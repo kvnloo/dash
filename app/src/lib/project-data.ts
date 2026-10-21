@@ -1,4 +1,5 @@
 import type { HostInfo } from "../../../shared/protocol";
+import { hostDisplayName } from "../../../shared/host-display";
 import type { OrchestraProject } from "../catalog/orchestra";
 import type { AgentTarget } from "../mock/agents";
 import type { Conversation } from "../model";
@@ -34,7 +35,7 @@ export function projectsFromHosts(input: {
     const existing = projects.get(id);
     if (existing) return existing;
     const host = input.hosts.find((item) => item.id === hostId);
-    const hostName = host?.name ?? hostId ?? "Paired computer";
+    const hostName = host ? hostDisplayName(host) : hostId ?? "Paired computer";
     const project: LiveProject = {
       id,
       name: cwd.split("/").filter(Boolean).at(-1) ?? cwd,

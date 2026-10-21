@@ -1,4 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { hostDisplayName } from "../../../shared/host-display";
+import { appendReplyPart, partsFor, replyParts } from "./text";
+import type { DetailMode } from "../lib/reply-details";
 import type { ChatAttachment, HistoryMessage, TurnEvent } from "../../../shared/protocol";
 import {
   newId,
@@ -15,7 +18,8 @@ import { hydrateLiveConversation, mergeLiveConversations, shouldRequestHistory }
 import { createStore } from "./createStore";
 import { dequeue, enqueue, notifyTurnSettled } from "./queue";
 import { nextPendingSend, parkMessage } from "./offline-send";
-import { replyText } from "./text";
+import { replyText, replySummaries } from "./text";
+import { appendActivity } from "../lib/message-details";
 import type { AgentTarget } from "../mock/agents";
 import { chatKind } from "../lib/roster";
 
@@ -54,7 +58,7 @@ function scheduleSave(): void {
     const { conversations, activeId } = store.get();
     const snapshots = conversations.map((c) => ({ ...c, messages: c.messages.map((m) =>
       m.role === "assistant" && m.state === "streaming"
-        ? { ...m, text: replyText.get(m.turnId) || m.text, seq: Math.max(m.seq, liveSequences.get(m.turnId) ?? 0) }
+        ? { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, seq: Math.max(m.seq, liveSequences.get(m.turnId) ?? 0) }
         : m,
     ) }));
     void AsyncStorage.multiSet([
@@ -107,7 +111,7 @@ export function saveSettings(settings: Settings): void {
 
 export function setConnection(patch: Partial<Connection>): void {
   store.set((s) => {
-    const connection = { ...s.connection, ...patch };
+    const connection = { ...s.connection, ...patch, hosts: patch.hosts?.map(host => ({ ...host, name: hostDisplayName(host) })) ?? s.connection.hosts };
     if (patch.hosts === undefined) return { ...s, connection };
     const conversations = mergeLiveConversations(s.conversations, connection.hosts, Date.now());
     return conversations === s.conversations ? { ...s, connection } : { ...s, connection, conversations };
@@ -116,6 +120,14 @@ export function setConnection(patch: Partial<Connection>): void {
 }
 
 export async function forgetEverything(): Promise<void> {
+  const enrollment = store.get().settings?.identity;
+  if (enrollment) {
+    const { setSecret } = await import("../lib/secure");
+    const { identitySecretKey } = await import("../lib/identity-client");
+    await setSecret(identitySecretKey(enrollment.credentialId), "");
+    const { clearIdentityTokens } = await import("../lib/bridge-auth");
+    clearIdentityTokens();
+  }
   await AsyncStorage.multiRemove([KEYS.settings, KEYS.conversations, KEYS.activeId]);
   store.set((s) => ({
     ...s,
@@ -135,12 +147,26 @@ export function setLiveHistoryRequester(fn: LiveHistoryRequest | undefined): voi
   requestLiveHistory = fn;
 }
 
+/**
+ * The roster id for a host id a bridge reported. An older bridge names itself by OS hostname
+ * ("groot") while the roster keys the same computer by its MagicDNS label ("0").
+ */
+export function rosterHostId(hostId: string | undefined, connection: Pick<Connection, "hosts" | "host">): string | undefined {
+  if (!hostId || connection.hosts.some(h => h.id === hostId)) return hostId;
+  const self = connection.hosts.find(h => h.self);
+  if (self && (self.hostname === hostId || self.name === hostId || connection.host === hostId)) return self.id;
+  return hostId;
+}
+
 export function applyLiveHistory(harness: string, sessionId: string, messages: HistoryMessage[], hostId?: string, profileId?: string): void {
-  const candidates = store.get().conversations.filter(c => c.harness === harness && c.sessionId === sessionId && (!hostId || c.targetHostId === hostId) && (!profileId || c.profileId === profileId));
+  const host = rosterHostId(hostId, store.get().connection);
+  const candidates = store.get().conversations.filter(c => c.harness === harness && c.sessionId === sessionId && (!host || c.targetHostId === host) && (!profileId || c.profileId === profileId));
   const conv = candidates.length === 1 ? candidates[0] : undefined;
   if (!conv) return;
   updateConversation(conv.id, (c) => hydrateLiveConversation(c, messages));
 }
+
+export function setDetailMode(id: string, detailMode: DetailMode): void { updateConversation(id, c => ({ ...c, detailMode })); }
 
 export function setActive(id: string | null): void {
   store.set((s) => ({ ...s, activeId: id }));
@@ -228,6 +254,10 @@ export function setConversationHarness(id: string, harness: string): void {
   updateConversation(id, (c) => ({ ...c, harness }));
 }
 
+export function setThinkingSummaries(id: string, enabled: boolean): void {
+  updateConversation(id, c => ({ ...c, summariesEnabled: enabled }));
+}
+
 function updateConversation(id: string, fn: (c: Conversation) => Conversation): void {
   store.set((s) => {
     const index = s.conversations.findIndex((c) => c.id === id);
@@ -263,12 +293,12 @@ function updateMessage(
 export function beginTurn(
   conversationId: string,
   text: string,
-  opts?: { pending?: boolean; attachments?: ChatAttachment[] },
+  opts?: { pending?: boolean; attachments?: ChatAttachment[]; mode?: "steer" | "queue" },
 ): { turnId: string; messageId: string } {
   const turnId = newId();
   const messageId = newId();
   const now = Date.now();
-  const user: Message = { id: newId(), role: "user", text, at: now, ...(opts?.attachments?.length ? { attachments: opts.attachments } : {}) };
+  const user: Message = { id: newId(), role: "user", text, at: now, delivery: opts?.mode === "steer" ? "steering" : opts?.pending ? "queued" : undefined, ...(opts?.attachments?.length ? { attachments: opts.attachments } : {}) };
   const assistant: AssistantMessage = {
     id: messageId,
     role: "assistant",
@@ -374,27 +404,60 @@ export function applyTurnEvent(
     case "session":
       // Host-resolved identity: native API turns, and Hermes sessions the bridge names
       // (new ACP chats land in a host profile), so the roster row merges into this chat.
-      updateConversation(where.conversationId, (c) => ({ ...c, sessionId: event.sessionId, ...(event.transport === "api" || event.profileId?.startsWith("hermes:session:") ? { profileId: event.profileId ?? c.profileId, targetHostId: event.hostId ?? c.targetHostId, stale: false } : {}) }));
+      updateConversation(where.conversationId, (c) => ({ ...c, sessionId: event.sessionId, ...(event.transport === "api" || event.profileId?.startsWith("hermes:session:") ? { profileId: event.profileId ?? c.profileId, targetHostId: rosterHostId(event.hostId, store.get().connection) ?? c.targetHostId, stale: false } : {}) }));
       updateMessage(where.conversationId, where.messageId, (m) => (event.seq <= m.seq ? m : { ...m, seq: event.seq }));
       return;
     case "status":
+      if (event.delivery) {
+        const delivery = event.delivery;
+        updateConversation(where.conversationId, c => {
+          const index = c.messages.findIndex(m => m.id === where.messageId);
+          const assistant = c.messages[index];
+          if (assistant?.role !== "assistant" || event.seq <= assistant.seq || assistant.state !== "streaming") return c;
+          return { ...c, messages: c.messages.map((m, i) => i === index - 1 && m.role === "user" ? { ...m, delivery, deliveryAt: event.deliveryAt ?? Date.now(), deliveryNote: event.text } : i === index && m.role === "assistant" ? { ...m, delivery, seq: event.seq, status: event.text } : m) };
+        });
+        return;
+      }
+      if (event.part) {
+        const message = store.get().conversations.find(c => c.id === where.conversationId)?.messages.find(m => m.id === where.messageId);
+        if (message?.role !== "assistant") return;
+        if (event.part.kind !== "tool_detail" && (message.state !== "streaming" || event.seq <= Math.max(message.seq, liveSequences.get(event.id) ?? 0))) return;
+        if (!replyParts.get(event.id) && message.parts) replyParts.set(event.id, JSON.stringify(message.parts));
+        appendReplyPart(event.id, event.part);
+        scheduleSave();
+        if (event.part.kind !== "tool_detail") liveSequences.set(event.id, event.seq);
+        return;
+      }
+      if (event.summary) {
+        const current = store.get().conversations.find(c => c.id === where.conversationId)?.messages.find(m => m.id === where.messageId);
+        if (current?.role !== "assistant" || event.seq <= current.seq) return;
+        const summary = event.summary;
+        replySummaries.set(`${event.id}:${summary.kind === "turn" ? "turn" : summary.blockId}`, JSON.stringify(summary));
+        updateMessage(where.conversationId, where.messageId, m => event.seq <= m.seq ? m : ({ ...m, seq: event.seq, summaries: [...(m.summaries ?? []).filter(item => item.blockId !== summary.blockId), summary].slice(-64) }));
+        return;
+      }
       updateMessage(where.conversationId, where.messageId, (m) =>
-        event.seq <= m.seq || m.state !== "streaming" ? m : { ...m, status: event.text, seq: event.seq, handoff: event.handoff?.state },
+        event.seq <= m.seq || m.state !== "streaming" ? m : { ...m, status: event.text, activity: event.handoff ? m.activity : appendActivity(m.activity, event.text), seq: event.seq, handoff: event.handoff?.state },
       );
       return;
     case "done":
       updateMessage(where.conversationId, where.messageId, (m) => {
         if (event.seq <= m.seq || m.state === "interrupted") return m;
         const text = replyText.get(event.id) || m.text;
-        const error = m.error ?? (event.exitCode !== 0 ? `Process exited with code ${event.exitCode}` : text ? undefined : "No response");
-        return { ...m, text, state: error ? "error" : "done", error, status: undefined, handoff: undefined, seq: event.seq };
+        const error = m.error ?? (event.exitCode !== 0 ? `Process exited with code ${event.exitCode}` : text || m.delivery === "steered" ? undefined : "No response");
+        return { ...m, text, parts: partsFor(event.id).length ? partsFor(event.id) : m.parts, state: error ? "error" : "done", error, status: undefined, handoff: undefined, seq: event.seq };
       });
       liveSequences.delete(event.id);
       notifyTurnSettled(where.conversationId);
       return;
     case "error":
+      updateConversation(where.conversationId, c => {
+        const index = c.messages.findIndex(m => m.id === where.messageId);
+        return { ...c, messages: c.messages.map((m, i) => i === index - 1 && m.role === "user" && m.delivery ? { ...m, delivery: "failed", deliveryNote: event.message } : m) };
+      });
       updateMessage(where.conversationId, where.messageId, (m) => m.state === "interrupted" ? m : ({
         ...m,
+        parts: partsFor(event.id).length ? partsFor(event.id) : m.parts,
         text: replyText.get(event.id) || m.text,
         state: "error",
         error: event.message,
@@ -426,6 +489,7 @@ export function promotePendingTurn(turnId: string): { text: string; harness: str
   updateMessage(where.conversationId, where.messageId, (m) =>
     m.state === "pending" ? { ...m, state: "streaming" } : m,
   );
+  updateConversation(where.conversationId, c => ({ ...c, messages: c.messages.map(m => m.id === user.id && m.role === "user" && m.delivery === "queued" ? { ...m, delivery: "started" } : m) }));
   return { text: user.text, harness: conv.harness, sessionId: conv.sessionId, ...(user.attachments?.length ? { attachments: user.attachments } : {}) };
 }
 
@@ -445,7 +509,7 @@ export function stopConversation(conversationId: string, cancel: (turnId: string
       if (m.role !== "assistant" || (m.state !== "streaming" && m.state !== "pending")) return m;
       if (m.state === "streaming") running.push(m.turnId);
       liveSequences.delete(m.turnId);
-      return { ...m, text: replyText.get(m.turnId) || m.text, state: "interrupted", status: "Stopped" };
+      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", status: "Stopped" };
     }),
   }));
   while (dequeue(conversationId)) { /* Drain canceled turns before settlement listeners run. */ }
@@ -458,7 +522,7 @@ export function markTurnLost(turnId: string): void {
   const where = locateTurn(turnId);
   if (!where) return;
   updateMessage(where.conversationId, where.messageId, (m) =>
-    m.state === "streaming" ? { ...m, text: replyText.get(turnId) || m.text, state: "interrupted", status: undefined } : m,
+    m.state === "streaming" ? { ...m, parts: partsFor(turnId).length ? partsFor(turnId) : m.parts, text: replyText.get(turnId) || m.text, state: "interrupted", status: undefined } : m,
   );
   notifyTurnSettled(where.conversationId);
 }
