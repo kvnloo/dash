@@ -23,8 +23,11 @@ PAGES = ["index.html", "a-trace.html", "b-lanes.html", "c-stats.html", "d-pocket
 def main():
     import runpy
     import sys
-    if "--r1" not in sys.argv:
+    if "--r2" in sys.argv:
         runpy.run_path(str(ROOT / "tools/build_r2.py"), run_name="__main__")
+        return
+    if "--r1" not in sys.argv:
+        runpy.run_path(str(ROOT / "tools/build_r3.py"), run_name="__main__")
         return
     css = (SRC / "shared.css").read_text()
     for k, f in FONT_KEYS.items():
