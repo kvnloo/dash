@@ -44,7 +44,8 @@ import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
 import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
-import { followsLatest, promptAnchors, promptOffset } from "../lib/prompt-navigation";
+import { followsLatest, promptOffset } from "../lib/prompt-navigation";
+import { railTurns } from "../lib/rail-turns";
 
 const EMPTY: Message[] = [];
 
@@ -84,7 +85,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const connection = store.use((s) => s.connection);
   const conversation = store.use((s) => s.conversations.find((c) => c.id === s.activeId));
   const messages = conversation?.messages ?? EMPTY;
-  const anchors = useMemo(() => promptAnchors(messages), [messages]);
+  const anchors = useMemo(() => railTurns(messages), [messages]);
   useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
   const jumpPrompt = useCallback((prompt: number) => {
     const anchor = anchors[prompt];
@@ -297,6 +298,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           }
         /></BlurTargetView>
         <PromptRail anchors={anchors} following={following} live={Boolean(streamingMessage)} onJump={jumpPrompt}
+          onContinue={prompt => { const anchor = anchors[prompt]; if (anchor) navigation.setParams({ draft: `Continue from prompt ${prompt + 1}: ${anchor.text.split("\n")[0]}\nResult: ${anchor.summary}\n\n` }); }}
           onLatest={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
       </KeyboardInsetView>}
       <KeyboardDock>
