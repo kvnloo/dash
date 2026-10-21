@@ -33,6 +33,7 @@ import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
 import { runHermesSession } from "./src/hermes-session";
 import { streamHermesSession } from "./src/hermes-stream";
 import { liveArgv, sendIntoLiveSession } from "./src/hermes-live";
+import { sessionPhaseHttp } from "./src/hermes-phase";
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
 import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, liveText, planContinuation, type HandoffState } from "./src/hermes-continue";
 import type { LiveOwner } from "./src/hermes-owner";
@@ -668,6 +669,8 @@ const server = Bun.serve<SocketData>({
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      const phase = sessionPhaseHttp(request, secretMatches(bearerToken(request), TOKEN), (profile, session) => hermesSessions.phase(profile, session));
+      if (phase) return cors(phase);
       const files = await handleFiles(request);
       if (files) return cors(files);
       const http = await handleHttp(request, server.requestIP(request)?.address ?? null);
