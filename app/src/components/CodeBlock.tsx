@@ -14,7 +14,7 @@ function tokenText(token: string | Prism.Token, key: string): React.ReactNode {
   if (typeof token === "string") return token;
   const content = typeof token.content === "string" ? token.content : Array.isArray(token.content)
     ? token.content.map((t, i) => tokenText(t, `${key}-${i}`)) : tokenText(token.content, `${key}-nested`);
-  const color = token.type === "deleted" ? colors.danger : token.type === "inserted" ? colors.ok
+  const color = token.type.startsWith("deleted") ? colors.danger : token.type.startsWith("inserted") ? colors.ok
     : ["keyword", "boolean", "number"].includes(token.type) ? colors.gold
     : ["string", "function"].includes(token.type) ? colors.text : colors.textMuted;
   return <Text key={key} style={{ color }}>{content}</Text>;

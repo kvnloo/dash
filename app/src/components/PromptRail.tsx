@@ -1,5 +1,8 @@
-import { useMemo, useRef, useState } from "react";
-import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useSharedValue } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import { haptic } from "../haptics";
 import { railTarget, type PromptAnchor } from "../lib/prompt-navigation";
 import { colors, type } from "../theme";
@@ -9,47 +12,49 @@ export function PromptRail({ anchors, following, live, onJump, onLatest }: {
   onJump(prompt: number): void; onLatest(): void;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
-  const height = useRef(240);
-  const last = useRef(-1);
-  const props = useRef({ anchors, onJump, onLatest });
-  props.current = { anchors, onJump, onLatest };
+  const height = useSharedValue(240);
+  const last = useSharedValue(-1);
+  const choose = useCallback((index: number) => {
+    setSelected(index);
+    haptic.select();
+    if (index === anchors.length) onLatest(); else onJump(index);
+  }, [anchors.length, onJump, onLatest]);
+  const clear = useCallback(() => setSelected(null), []);
   const pan = useMemo(() => {
-    const choose = (y: number) => {
-      const current = props.current;
-      const index = railTarget(y, height.current, current.anchors.length);
-      setSelected(index);
-      if (last.current === index) return;
-      last.current = index;
-      haptic.select();
-      if (index === current.anchors.length) current.onLatest();
-      else current.onJump(index);
+    const count = anchors.length;
+    const update = (y: number) => {
+      "worklet";
+      const size = height.get();
+      const index = railTarget(y, size, count);
+      if (index === last.get()) return;
+      last.set(index);
+      // Only cross runtimes when a prompt boundary changes, never every frame.
+      scheduleOnRN(choose, index);
     };
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: event => choose(event.nativeEvent.locationY),
-      onPanResponderMove: event => choose(event.nativeEvent.locationY),
-      onPanResponderRelease: () => { setSelected(null); last.current = -1; },
-      onPanResponderTerminate: () => { setSelected(null); last.current = -1; },
-    });
-  }, []);
+    return Gesture.Pan().minDistance(0)
+      .onBegin(event => { update(event.y); })
+      .onUpdate(event => { update(event.y); })
+      .onFinalize(() => { last.set(-1); scheduleOnRN(clear); });
+  }, [anchors.length, choose, clear, height, last]);
   if (!anchors.length) return null;
   return <View style={styles.rail} pointerEvents="box-none">
     {selected !== null ? <View pointerEvents="none" style={styles.preview}>
       <Text style={styles.previewLabel}>{selected === anchors.length ? "Latest reply" : `Prompt ${selected + 1} of ${anchors.length}`}</Text>
       <Text style={styles.previewText} numberOfLines={3}>{anchors[selected]?.text ?? "Follow new output"}</Text>
     </View> : null}
-    <View {...pan.panHandlers} onLayout={e => { height.current = e.nativeEvent.layout.height; }}
-      accessibilityRole="adjustable" accessibilityLabel="Prompt navigator"
-      accessibilityHint="Swipe up or down to select a prompt. Latest resumes following."
-      accessibilityValue={{ min: 1, max: anchors.length, now: (selected ?? 0) + 1 }}
-      accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
-      onAccessibilityAction={e => {
-        const next = Math.max(0, Math.min(anchors.length - 1, (selected ?? 0) + (e.nativeEvent.actionName === "increment" ? 1 : -1)));
-        setSelected(next); onJump(next); haptic.select();
-      }} style={styles.ticks}>
-      {anchors.map((anchor, i) => <View key={anchor.id} style={styles.slot}><View style={[styles.tick, selected === i && styles.selected]} /></View>)}
-    </View>
+    <GestureDetector gesture={pan}>
+      <View onLayout={e => { height.set(e.nativeEvent.layout.height); }}
+        accessibilityRole="adjustable" accessibilityLabel="Prompt navigator"
+        accessibilityHint="Swipe up or down to select a prompt. Latest resumes following."
+        accessibilityValue={{ min: 1, max: anchors.length + 1, now: (selected ?? 0) + 1 }}
+        accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
+        onAccessibilityAction={e => {
+          const next = Math.max(0, Math.min(anchors.length, (selected ?? 0) + (e.nativeEvent.actionName === "increment" ? 1 : -1)));
+          choose(next);
+        }} style={styles.ticks}>
+        {anchors.map((anchor, i) => <View key={anchor.id} style={styles.slot}><View style={[styles.tick, selected === i && styles.selected]} /></View>)}
+      </View>
+    </GestureDetector>
     <Pressable accessibilityRole="button" accessibilityLabel={live ? "Latest live reply" : "Latest reply"}
       onPress={onLatest} style={styles.latest}>
       <Text style={[styles.arrow, following && styles.following]}>↓</Text>

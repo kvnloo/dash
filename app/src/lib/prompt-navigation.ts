@@ -9,6 +9,7 @@ export function promptOffset(anchors: readonly PromptAnchor[], prompt: number, l
 }
 /** Prompt ticks occupy the rail above the separate 44px Latest target. */
 export function railTarget(y: number, tickHeight: number, count: number): number {
+  "worklet";
   if (count === 0 || tickHeight <= 0 || y >= tickHeight) return count;
   return Math.min(count - 1, Math.max(0, Math.floor(y / tickHeight * count)));
 }
