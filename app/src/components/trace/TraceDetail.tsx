@@ -129,7 +129,7 @@ export function TraceDetail({ snapshot, row, origin, onClose }: { snapshot: Trac
                       {clock(snapshot.t0, w.s)} · ran {dur(w.e - w.s)} · {w.calls} calls · {w.errors} failed{stall ? ` · stalled ${dur(stall)}` : ""}
                     </Text>
                     <Text style={styles.wModel} numberOfLines={1}>{w.model}</Text>
-                    {w.asks.length ? <Text style={styles.wAsk}>asks {w.asks.map(askWord).join(", ")}</Text> : null}
+                    {w.asks.length ? <Text style={styles.wAsk}>asked your OK: {w.asks.map(askWord).join(", ")}</Text> : null}
                   </View>
                 );
               })}
