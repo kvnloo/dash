@@ -328,6 +328,14 @@ export class HermesSessions {
     const alive = this.gateways.gatewayPids(profile.id, profile.home).length > 0;
     return readSessionPhase(profile.home, ids, alive);
   }
+  /** Read-only identity lookup; deliberately never reads API credentials or probes a gateway. */
+  nativeHome(profileId: string, sessionId: string): string | undefined {
+    const matches = this.profiles(false).filter(p => (p.id === profileId || hermesSessionAgentId(p.id, sessionId) === profileId) && (() => {
+      const row = localSession(p, sessionId);
+      return row !== undefined && visible(row);
+    })());
+    return matches.length === 1 ? matches[0]?.home : undefined;
+  }
   homeOf(profileId: string): string | undefined {
     return this.profiles().find(p => p.id === profileId)?.home;
   }
