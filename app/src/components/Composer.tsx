@@ -1,7 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import { AgentOrb } from "./AgentOrb";
 import type { OrbState } from "../lib/orb-phase";
-import { toggleHandedness, useHandedness } from "../lib/useHandedness";
+import { useHandedness } from "../lib/useHandedness";
+import { MicButton } from "./MicButton";
+import { dictate } from "../lib/dictation";
+import { insertAtCursor, type Selection } from "../lib/mic-gesture";
 import { type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
@@ -56,6 +59,28 @@ export const Composer = memo(function Composer({ disabled, streaming, steerBusy 
   const [text, setText] = useState(initialText ?? "");
   const [drafts, setDrafts] = useState<DraftAttachment[]>(initialAttachments ?? []);
   const mounted = useRef(true);
+  const inputRef = useRef<TextInput>(null);
+  const selection = useRef<Selection | null>(null);
+  const [cursor, setCursor] = useState<Selection | undefined>(undefined);
+  /** While dictating, focus the field without raising the keyboard; a tap on the field restores normal typing. */
+  const [dictating, setDictating] = useState(false);
+  const onDictate = useCallback(async () => {
+    setDictating(true);
+    const result = await dictate();
+    if (!mounted.current) return;
+    if (result.ok) {
+      setText(current => {
+        const next = insertAtCursor(current, selection.current, result.text);
+        const sel = { start: next.cursor, end: next.cursor };
+        selection.current = sel;
+        setCursor(sel);
+        return next.text;
+      });
+      requestAnimationFrame(() => inputRef.current?.focus());
+    } else if (result.reason !== "canceled") {
+      Alert.alert("Dictation", result.message ? `System speech recognizer unavailable: ${result.message}` : "System speech recognizer unavailable.");
+    }
+  }, []);
   useEffect(() => () => { mounted.current = false; }, []);
 
   const canSend = canSendDrafts(text, drafts) && !disabled;
@@ -123,10 +148,10 @@ export const Composer = memo(function Composer({ disabled, streaming, steerBusy 
     ) : null}
     {steerBusy ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
     <View style={[styles.field, thumb.row]}>
-      <TextInput style={styles.input} value={text} onChangeText={setText} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel="Message" />
+      <TextInput ref={inputRef} style={styles.input} value={text} onChangeText={setText} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel="Message" />
       <View style={[styles.controls, thumb.row]}>
         <PressScale accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttach} disabled={disabled} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale>
-        <PressScale accessibilityRole="button" accessibilityLabel={voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : "Voice input"} accessibilityHint="Long press to switch thumb side" onLongPress={toggleHandedness} onPress={onVoice} style={styles.hit}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : <Feather name="mic" size={18} color={colors.textMuted} />}</PressScale>
+        <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onTap={voiceCall ? onVoice : undefined} accessibilityLabel={voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
         {streaming ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale> : null}
         {steerBusy || !streaming ? <PressScale accessibilityRole="button" accessibilityLabel={sendMode.action} accessibilityHint={sendMode.label} onPress={submit} disabled={!canSend} style={styles.hit}><View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View></PressScale> : null}
       </View>
