@@ -6,7 +6,7 @@ import { setThinkingSummaries } from "../store/app";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
 import { composerPlaceholder } from "./composer-placeholder";
@@ -49,6 +49,7 @@ import { useSessionActivity } from "../lib/session-activity";
 import { replyText } from "../store/text";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
+import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
 import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptOffset } from "../lib/prompt-navigation";
@@ -135,6 +136,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const liveText = useSyncExternalStore(subscribeText, hasText, hasText);
   useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
   const observed = useSessionPhase(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
+  const workers = useSessionWorkers(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
+  const [chatOptions, setChatOptions] = useState(false);
   const localThinking = conversationThinking(messages, connection.status);
   const thinking: Thinking = !online ? { phase: "idle" } : localThinking.phase !== "idle"
     ? (localThinking.phase === "thinking" && liveText && !(streamingMessage?.role === "assistant" && streamingMessage.status) ? { phase: "streaming" } : localThinking)
@@ -254,8 +257,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
       <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} />
-      <View style={styles.liveRow} accessibilityLabel={`${harnessName} ${caption}`}><AgentOrb size={20} thinking={thinking} /><Text style={styles.liveNote}>{caption}{external ? " · terminal" : ""}</Text></View>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: chatOptions }} accessibilityLabel="Chat options" onPress={() => setChatOptions(v => !v)} style={styles.optionsToggle}><Text style={styles.optionsToggleText}>{chatOptions ? "Hide options" : "Options"}</Text></Pressable>
       <ConnectionPill />
+      {chatOptions ? <View>
       {conversation ? <PressScale accessibilityRole="switch" accessibilityLabel="Thinking summaries" accessibilityState={{ checked: conversation.summariesEnabled === true }} onPress={() => setThinkingSummaries(conversation.id, !conversation.summariesEnabled)} style={styles.liveRow}><Text style={styles.liveNote}>Thinking summaries · {conversation.summariesEnabled ? "on" : "off"} · next turn</Text></PressScale> : null}
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       {!targetError && conversation?.openIn ? (
@@ -272,6 +276,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           <Text style={styles.liveNote} numberOfLines={1}>{liveOn ? "fast lane · Hermes stays in charge" : "Hermes chat"}</Text>
         </View>
       ) : null}
+      </View> : null}
       {liveOn && conversation ? <KeyboardInsetView style={styles.body}><LiveSurface conversationId={conversation.id} /></KeyboardInsetView> : <KeyboardInsetView style={styles.body} onOpen={scrollToNewest}>
         <BlurTargetView ref={blurTarget} style={styles.body}><FlashList
           ref={listRef}
@@ -311,14 +316,17 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onLatest={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
       </KeyboardInsetView>}
       <KeyboardDock>
+        <WorkersStrip workers={workers} />
         <View style={styles.liveRow}>
           <PressScale accessibilityRole="button" accessibilityLabel="Choose harness" onPress={() => { haptic.select(); setPickerVisible(true); }} style={styles.liveChip}><Text style={styles.liveChipText}>{harnessName} · Change</Text></PressScale>
           {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approval}><Text style={styles.approvalText}>{approvalCount} approvals{approvalDryRun ? " · preview" : ""} ›</Text></PressScale> : null}
         </View>
+        {chatOptions ? <>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 16, gap: 4 }}>
           <Text style={{ ...type.mono, color: colors.textTertiary, fontSize: 10, marginRight: 6 }}>Thinking & tools</Text>
           {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
         </View>
+        </> : null}
         <Composer
           key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
@@ -354,6 +362,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
 }
 
 const styles = StyleSheet.create({
+  optionsToggle: { alignSelf: "flex-start", marginLeft: 20, marginTop: -2, marginBottom: 4, paddingVertical: 4 },
+  optionsToggleText: { ...type.mono, fontSize: 10, color: colors.textFaint },
   screen: { flex: 1, backgroundColor: colors.bg },
   approval: { minHeight: 44, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: space.lg, borderBottomWidth: 1, borderColor: colors.hair },
   approvalText: { ...type.small, color: colors.warn },
