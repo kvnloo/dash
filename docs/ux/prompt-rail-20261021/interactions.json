@@ -1,0 +1,19 @@
+{
+  "status": "pass",
+  "viewport": {
+    "width": 412,
+    "height": 915
+  },
+  "anchors": 220,
+  "distinctWidths": 10,
+  "assertions": [
+    "drag preserves transcript offset",
+    "release commits seek",
+    "copy reads back actual clipboard",
+    "continue confirms replacement and creates unsent draft",
+    "Latest returns to end",
+    "hover previews error state",
+    "close dismisses preview"
+  ],
+  "errors": []
+}

@@ -1,0 +1,47 @@
+{
+  "variant": "after",
+  "viewport": {
+    "width": 412,
+    "height": 915
+  },
+  "fixture": {
+    "prompts": 220,
+    "messages": 1100
+  },
+  "trials": [
+    {
+      "frames": 253,
+      "p50": 16.699999999999818,
+      "p95": 16.800000000000182,
+      "max": 116.69999999999982,
+      "droppedFrames": 6,
+      "longTasks": 1,
+      "longTaskMs": 85,
+      "scriptMs": 923.4689999999999,
+      "taskMs": 2505.83
+    },
+    {
+      "frames": 277,
+      "p50": 16.69999999999891,
+      "p95": 16.700000000000728,
+      "max": 16.80000000000109,
+      "droppedFrames": 0,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "scriptMs": 975.662,
+      "taskMs": 2875.781
+    },
+    {
+      "frames": 239,
+      "p50": 16.69999999999709,
+      "p95": 16.799999999999272,
+      "max": 16.80000000000291,
+      "droppedFrames": 0,
+      "longTasks": 0,
+      "longTaskMs": 0,
+      "scriptMs": 556.4309999999999,
+      "taskMs": 1713.984
+    }
+  ],
+  "errors": []
+}

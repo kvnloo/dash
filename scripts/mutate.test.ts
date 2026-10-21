@@ -48,6 +48,7 @@ describe("collectMutants", () => {
 describe("targets", () => {
   test("covers the modules that accidentally mutated UI or protocol", () => {
     expect(TARGETS.map((t) => t.file)).toEqual([
+      "app/src/lib/rail-turns.ts",
       "app/src/components/golden-nav.ts",
       "app/src/components/bridge-pull.ts",
       "app/src/motion.ts",

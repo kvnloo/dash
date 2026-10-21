@@ -25,6 +25,7 @@ export const TARGETS: readonly Target[] = [
   { file: "bridge/src/thinking-summary.ts", tests: ["bridge/src/thinking-summary.test.ts"] },
   { file: "shared/thinking-summary.ts", tests: ["bridge/src/thinking-summary.test.ts"] },
   { file: "bridge/src/turn-summaries.ts", tests: ["bridge/src/thinking-summary.test.ts"] },
+  { file: "app/src/lib/rail-turns.ts", tests: ["app/src/lib/rail-turns.test.ts"] },
   { file: "app/src/components/golden-nav.ts", tests: ["app/src/components/golden-nav.test.ts"] },
   { file: "app/src/components/bridge-pull.ts", tests: ["app/src/components/bridge-pull.test.ts"] },
   { file: "app/src/motion.ts", tests: ["app/src/components/motion.test.ts"] },
