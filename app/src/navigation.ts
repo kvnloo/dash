@@ -6,7 +6,7 @@ export type RootStackParamList = {
   OrchestraDetail: { orchestraId: string };
   Voice: undefined;
   Approvals: undefined;
-  ArtifactStage: { url: string; title?: string };
+  ArtifactStage: { url?: string; html?: string; title?: string };
   Pair: { address?: string; code?: string; identityLink?: string } | undefined;
   Settings: { firstRun?: boolean } | undefined;
 };

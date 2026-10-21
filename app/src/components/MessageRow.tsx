@@ -11,6 +11,9 @@ import { messageThinking, type Thinking } from "../lib/thinking";
 import { splitThinking } from "../lib/message-details";
 import { AgentOrb } from "./AgentOrb";
 import { Markdown } from "./Markdown";
+import { sendInlineIntent } from "../lib/inline-intent";
+import { InlineImage } from "./genui/InlineImage";
+import { isImageRef } from "../lib/genui";
 import { StageLinks } from "./artifact-stage/StageLinks";
 import { PressScale } from "./PressScale";
 
@@ -56,9 +59,9 @@ function Disclosure({ label, text }: { label: string; text: string }) {
     {open ? <Text selectable style={styles.detailText}>{text}</Text> : null}
   </View>;
 }
-function Answer({ text }: { text: string }) {
+function Answer({ text, turnId }: { text: string; turnId: string }) {
   const parts = splitThinking(text);
-  return <>{parts.thinking ? <Disclosure label="Thinking" text={parts.thinking} /> : null}{parts.text ? <Markdown text={parts.text} /> : null}</>;
+  return <>{parts.thinking ? <Disclosure label="Thinking" text={parts.thinking} /> : null}{parts.text ? <Markdown text={parts.text} onIntent={intent => sendInlineIntent(turnId, intent)} /> : null}</>;
 }
 
 function ThinkingMarker({ turnState, waiting = false }: { harnessId?: string; turnState: AssistantState; waiting?: boolean }) {
@@ -83,7 +86,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
     case "streaming":
       return (
         <>
-          {liveText || message.text ? <Answer text={liveText || message.text} /> : null}
+          {liveText || message.text ? <Answer text={liveText || message.text} turnId={message.turnId} /> : null}
           <View style={styles.statusRow}>
             <AgentOrb size={20} thinking={messageThinking(message, { liveText, connection })} label={message.handoff === "queued" ? "queued" : "streaming"} />
             <Text style={styles.statusText} numberOfLines={1}>
@@ -93,11 +96,11 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
         </>
       );
     case "done":
-      return <><Answer text={message.text} /><HostFiles text={message.text} /><StageLinks text={message.text} /></>;
+      return <><Answer text={message.text} turnId={message.turnId} /><HostFiles text={message.text} /><StageLinks text={message.text} /></>;
     case "interrupted":
       return (
         <>
-          {message.text ? <Answer text={message.text} /> : null}
+          {message.text ? <Answer text={message.text} turnId={message.turnId} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text style={styles.noteText}>{message.status ?? "Connection to the bridge was lost mid-reply."}</Text>
@@ -107,7 +110,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
     case "error":
       return (
         <>
-          {message.text ? <Answer text={message.text} /> : null}
+          {message.text ? <Answer text={message.text} turnId={message.turnId} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text selectable style={styles.errorText}>
@@ -158,13 +161,13 @@ function HostFiles({ text }: { text: string }) {
       { text: "Send", onPress: () => void send(path) },
     ]);
   };
-  return <View style={styles.hostFiles}>
+  return <><View>{paths.filter(path => isImageRef(path) && !text.includes(`](${path})`)).map(path => <InlineImage key={path} href={path} label={baseName(path)} />)}</View><View style={styles.hostFiles}>
     {paths.map(path => <PressScale key={path} accessibilityRole="button" accessibilityLabel={`Send ${baseName(path)} to phone`} onPress={() => confirm(path)} disabled={busy !== null} style={styles.hostFile}>
       <Feather name={busy === path ? "loader" : "smartphone"} size={13} color={colors.gold} />
       <Text style={styles.hostFileName} numberOfLines={1}>{baseName(path)}</Text>
       <Text style={styles.hostFileAction}>Send to phone</Text>
     </PressScale>)}
-  </View>;
+  </View></>;
 }
 
 const styles = StyleSheet.create({

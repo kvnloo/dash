@@ -1,4 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../navigation";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import type { LiveControl, LiveIntent } from "../../../shared/live";
 import { refreshLiveReceipts, sendLiveIntent } from "../net/bridge";
@@ -14,6 +17,7 @@ import { PressScale } from "./PressScale";
  * receipts; "Ask Hermes" routes a question through the worker to the owning Hermes session.
  */
 export const LiveSurface = memo(function LiveSurface({ conversationId }: { conversationId: string }) {
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const live = liveStore.use(all => all[conversationId] ?? EMPTY_LIVE);
   const scroll = useRef<ScrollView>(null);
   const [receiptsOpen, setReceiptsOpen] = useState(false);
@@ -51,10 +55,11 @@ export const LiveSurface = memo(function LiveSurface({ conversationId }: { conve
               ))}
             </View>
             <LiveArtifactFrame html={shown.html} version={shown.version} height={300} onIntent={onIntent} />
+            <PressScale accessibilityRole="button" accessibilityLabel="Open live artifact in stage" onPress={() => nav.navigate("ArtifactStage", { html: shown.html, title: shown.title ?? "Live artifact · unverified" })} style={{ minHeight: 44, justifyContent: "center" }}><Text style={styles.chipTextOn}>Open in stage ↗ · static preview</Text></PressScale>
           </View>
         ) : null}
         {live.controls.map(control => <NativeControl key={control.id} control={control} onIntent={onIntent} />)}
-        {live.lines.map(line => <Line key={line.id} line={line} />)}
+        {live.lines.map(line => <Line key={line.id} line={line} conversationId={conversationId} />)}
       </ScrollView>
       <PressScale accessibilityRole="button" accessibilityLabel={`Receipts in Hermes: ${live.receipts.length}`} onPress={() => setReceiptsOpen(o => !o)} style={styles.receipts}>
         <Text style={styles.label}>In Hermes · {live.receipts.length} receipt{live.receipts.length === 1 ? "" : "s"}</Text>
@@ -87,18 +92,18 @@ function Timing({ live }: { live: LiveState }) {
   return <Text style={styles.mono} numberOfLines={1} testID="live-timing">{parts.join(" · ")}</Text>;
 }
 
-function Line({ line }: { line: LiveLine }) {
+function Line({ line, conversationId }: { line: LiveLine; conversationId: string }) {
   if (line.role === "owner") return <View style={styles.ownerBubble}><Text style={styles.body}>{line.text}</Text></View>;
   if (line.role === "hermes") {
     return (
       <View style={styles.hermes} accessibilityLabel={`Hermes: ${line.text}`}>
         <Text style={[styles.mono, line.state === "error" && { color: colors.danger }]}>Hermes</Text>
-        {line.state === "error" ? <Text style={styles.body}>{line.text}</Text> : <Markdown text={line.text} />}
+        {line.state === "error" ? <Text style={styles.body}>{line.text}</Text> : <Markdown text={line.text} onIntent={intent => sendLiveIntent(conversationId, intent)} />}
       </View>
     );
   }
   if (line.state === "error" || !line.text) return <Text style={[styles.body, styles.worker, line.state === "error" && { color: colors.danger }]}>{line.text || (line.state === "streaming" ? "…" : "")}</Text>;
-  return <Markdown text={line.text} />;
+  return <Markdown text={line.text} onIntent={intent => sendLiveIntent(conversationId, intent)} />;
 }
 
 function NativeControl({ control, onIntent }: { control: LiveControl; onIntent: (intent: LiveIntent) => void }) {
