@@ -1,3 +1,6 @@
+import { TileDetailProvider } from "./src/components/InteractiveTile";
+import { DensityProvider } from "./src/components/Density";
+import { TileGestureProvider } from "./src/components/TileGestures";
 import { OrbMotionProvider } from "./src/components/OrbMotion";
 import { DarkTheme, NavigationContainer, type Theme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -112,7 +115,7 @@ export default function App() {
   if (!hydrated || !fontsLoaded) return <View style={styles.splash} />;
 
   return (
-    <GestureHandlerRootView style={styles.root}><OrbMotionProvider>
+    <GestureHandlerRootView style={styles.root}><DensityProvider><OrbMotionProvider><TileGestureProvider><TileDetailProvider>
       {Platform.OS === "web" ? <style>{"input:focus,textarea:focus{outline:none!important}"}</style> : null}
       <SafeAreaProvider>
         <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
@@ -149,7 +152,7 @@ export default function App() {
           <StatusBar style="light" />
         </KeyboardProvider>
       </SafeAreaProvider>
-    </OrbMotionProvider></GestureHandlerRootView>
+    </TileDetailProvider></TileGestureProvider></OrbMotionProvider></DensityProvider></GestureHandlerRootView>
   );
 }
 
