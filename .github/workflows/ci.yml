@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, preview, nightly, dev, integrate/dash-v2]
+    branches: [main, preview, nightly, dev, integrate/dash-v2, integrate/dash-20261020]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
