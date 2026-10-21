@@ -9,6 +9,8 @@ export type RootStackParamList = {
   ArtifactStage: { url: string; title?: string };
   Pair: { address?: string; code?: string; identityLink?: string } | undefined;
   Settings: { firstRun?: boolean } | undefined;
+  Trace: undefined;
+  Lab: undefined;
 };
 
 export type ScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

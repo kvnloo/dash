@@ -22,6 +22,7 @@ import { isDebugActive } from "../../debug/expose";
 import { orchestraMotionFixture } from "../../debug/orchestra-fixture";
 import { OrchestraGraph } from "../../components/OrchestraGraph";
 import { WorkspaceActions } from "../../components/WorkspaceHeader";
+import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
 
 const Card = memo(function Card({
   item,
@@ -138,6 +139,7 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
     <View style={styles.projects}>
     <FlashList
       data={projects}
+      ListHeaderComponent={<TraceEntryCard onOpen={() => navigation.navigate("Trace")} />}
       renderItem={renderItem}
       keyExtractor={(p) => p.id}
       contentContainerStyle={styles.list}
