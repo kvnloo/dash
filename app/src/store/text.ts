@@ -84,6 +84,7 @@ export function appendReplyPart(id: string, part: ReplyPart): void {
   else parts.push(part);
   replyParts.set(id, JSON.stringify(parts));
 }
+export const replySummaries = createKeyedStore();
 
 export function useKeyed(store: KeyedStore, id: string): string {
   const subscribe = useCallback(

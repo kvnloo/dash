@@ -3,6 +3,7 @@ import type { ReplyPart } from "../../shared/protocol";
 import type { DetailMode } from "./lib/reply-details";
 import { parseChatAttachment, type ChatAttachment, type HarnessInfo, type HostInfo } from "../../shared/protocol";
 
+import { parseSummary, type SummaryInfo } from "../../shared/thinking-summary";
 import { parseIdentityEnrollment, type IdentityEnrollment } from "./lib/identity-client";
 
 export interface Settings {
@@ -31,6 +32,7 @@ export interface UserMessage {
 }
 
 export interface AssistantMessage {
+  summaries?: SummaryInfo[];
   id: string;
   role: "assistant";
   text: string;
@@ -58,6 +60,7 @@ export type Message = UserMessage | AssistantMessage;
 
 export interface Conversation {
   detailMode?: DetailMode;
+  summariesEnabled?: boolean;
   id: string;
   harness: string;
   title: string;
@@ -135,6 +138,7 @@ function parseMessage(raw: unknown): Message | null {
       state: raw.state,
       status: typeof raw.status === "string" ? raw.status : undefined,
       parts: parseReplyParts(raw.parts),
+      summaries: Array.isArray(raw.summaries) ? raw.summaries.flatMap(item => { const summary = parseSummary(item); return summary ? [summary] : []; }).slice(-64) : undefined,
       activity: Array.isArray(raw.activity) ? raw.activity.filter((item): item is string => typeof item === "string").slice(-32) : undefined,
       handoff: raw.handoff === "queued" || raw.handoff === "sending" ? raw.handoff : undefined,
       error: typeof raw.error === "string" ? raw.error : undefined,
@@ -167,6 +171,7 @@ export function parseConversation(raw: unknown): Conversation | null {
     harness: raw.harness,
     detailMode: raw.detailMode === "Hide" || raw.detailMode === "Compact" || raw.detailMode === "Full" ? raw.detailMode : undefined,
     title: raw.title,
+    summariesEnabled: raw.summariesEnabled === true,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     sessionId: typeof raw.sessionId === "string" ? raw.sessionId : undefined,

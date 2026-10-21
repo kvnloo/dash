@@ -19,10 +19,16 @@ export const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 export type Target = { file: string; tests: readonly string[] };
 
 export const TARGETS: readonly Target[] = [
+  { file: "bridge/src/model-health.ts", tests: ["bridge/src/model-health.test.ts"] },
+  { file: "bridge/src/model-roles.ts", tests: ["bridge/src/model-roles.test.ts"] },
+  { file: "shared/model-roles.ts", tests: ["bridge/src/model-roles.test.ts"] },
+  { file: "bridge/src/thinking-summary.ts", tests: ["bridge/src/thinking-summary.test.ts"] },
+  { file: "shared/thinking-summary.ts", tests: ["bridge/src/thinking-summary.test.ts"] },
+  { file: "bridge/src/turn-summaries.ts", tests: ["bridge/src/thinking-summary.test.ts"] },
   { file: "app/src/components/golden-nav.ts", tests: ["app/src/components/golden-nav.test.ts"] },
   { file: "app/src/components/bridge-pull.ts", tests: ["app/src/components/bridge-pull.test.ts"] },
   { file: "app/src/motion.ts", tests: ["app/src/components/motion.test.ts"] },
-  { file: "shared/protocol.ts", tests: ["shared/protocol.test.ts", "shared/protocol-boundary.test.ts", "shared/protocol-attachments.test.ts"] },
+  { file: "shared/protocol.ts", tests: ["shared/protocol.test.ts", "shared/protocol-boundary.test.ts", "shared/protocol-attachments.test.ts", "shared/reply-parts.test.ts", "bridge/src/thinking-summary.test.ts"] },
   { file: "bridge/src/roster.ts", tests: ["bridge/src/roster.test.ts", "bridge/src/roster-boundary.test.ts"] },
 ];
 

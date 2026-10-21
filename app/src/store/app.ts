@@ -18,7 +18,7 @@ import { hydrateLiveConversation, mergeLiveConversations, shouldRequestHistory }
 import { createStore } from "./createStore";
 import { dequeue, enqueue, notifyTurnSettled } from "./queue";
 import { nextPendingSend, parkMessage } from "./offline-send";
-import { replyText } from "./text";
+import { replyText, replySummaries } from "./text";
 import { appendActivity } from "../lib/message-details";
 import type { AgentTarget } from "../mock/agents";
 import { chatKind } from "../lib/roster";
@@ -254,6 +254,10 @@ export function setConversationHarness(id: string, harness: string): void {
   updateConversation(id, (c) => ({ ...c, harness }));
 }
 
+export function setThinkingSummaries(id: string, enabled: boolean): void {
+  updateConversation(id, c => ({ ...c, summariesEnabled: enabled }));
+}
+
 function updateConversation(id: string, fn: (c: Conversation) => Conversation): void {
   store.set((s) => {
     const index = s.conversations.findIndex((c) => c.id === id);
@@ -412,6 +416,14 @@ export function applyTurnEvent(
         appendReplyPart(event.id, event.part);
         scheduleSave();
         if (event.part.kind !== "tool_detail") liveSequences.set(event.id, event.seq);
+        return;
+      }
+      if (event.summary) {
+        const current = store.get().conversations.find(c => c.id === where.conversationId)?.messages.find(m => m.id === where.messageId);
+        if (current?.role !== "assistant" || event.seq <= current.seq) return;
+        const summary = event.summary;
+        replySummaries.set(`${event.id}:${summary.kind === "turn" ? "turn" : summary.blockId}`, JSON.stringify(summary));
+        updateMessage(where.conversationId, where.messageId, m => event.seq <= m.seq ? m : ({ ...m, seq: event.seq, summaries: [...(m.summaries ?? []).filter(item => item.blockId !== summary.blockId), summary].slice(-64) }));
         return;
       }
       updateMessage(where.conversationId, where.messageId, (m) =>
