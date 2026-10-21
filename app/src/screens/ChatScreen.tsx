@@ -2,7 +2,7 @@ import { Canvas } from "../components/Canvas";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
 import { composerPlaceholder } from "./composer-placeholder";
@@ -61,6 +61,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const listRef = useRef<FlashListRef<Message>>(null);
   const followRef = useRef(true);
   const dragging = useRef(false);
+  const previousOffset = useRef(0);
   const [following, setFollowing] = useState(true);
   const setFollow = useCallback((next: boolean) => { followRef.current = next; setFollowing(next); }, []);
   const scrollToNewest = useCallback(() => {
@@ -166,13 +167,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         parkUnsentTurn(turnId);
         return;
       }
-      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+      if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
     [online],
   );
 
   const onSend = useCallback(
     (text: string, attachments: ChatAttachment[]) => {
+      dragging.current = false;
+      setFollow(true);
       const active = conversation ?? createConversation(harnessId);
       if (conversationBusy(active.id)) {
         const { turnId } = beginTurn(active.id, text, { pending: true, attachments });
@@ -183,7 +186,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       }
       sendTurn(text, attachments, active);
     },
-    [conversation, harnessId, sendTurn],
+    [conversation, harnessId, sendTurn, setFollow],
   );
 
   useEffect(() => {
@@ -251,8 +254,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           maintainVisibleContentPosition={{ startRenderingFromBottom: true }}
           onScrollBeginDrag={() => { dragging.current = true; }}
           onScroll={event => {
-            if (!dragging.current) return;
             const { contentSize, layoutMeasurement, contentOffset } = event.nativeEvent;
+            const moved = Math.abs(contentOffset.y - previousOffset.current) > 1;
+            previousOffset.current = contentOffset.y;
+            // Web wheel scrolling has no onScrollBeginDrag. A content resize alone
+            // must not detach following before onContentSizeChange can scroll.
+            if (!moved || (!dragging.current && Platform.OS !== "web")) return;
             setFollow(followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y));
           }}
           scrollEventThrottle={16}

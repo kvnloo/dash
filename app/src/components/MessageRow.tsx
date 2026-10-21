@@ -37,8 +37,8 @@ export const MessageRow = memo(function MessageRow({
   }
   return (
     <View style={styles.assistantRow}>
-      <AssistantBody message={message} harnessId={harnessId} />
-      {message.activity?.length || (message.state === "done" && message.status) ? <Disclosure label={`Activity · ${message.activity?.length ?? 1} updates`} text={(message.activity ?? [message.status ?? ""]).join("\n")} /> : null}
+      <AssistantBody key={message.id} message={message} harnessId={harnessId} />
+      {message.activity?.length || (message.state === "done" && message.status) ? <Disclosure key={`${message.id}:activity`} label={`Activity · ${message.activity?.length ?? 1} ${(message.activity?.length ?? 1) === 1 ? "update" : "updates"}`} text={(message.activity ?? [message.status ?? ""]).join("\n")} /> : null}
     </View>
   );
 });
@@ -46,7 +46,7 @@ export const MessageRow = memo(function MessageRow({
 function Disclosure({ label, text }: { label: string; text: string }) {
   const [open, setOpen] = useState(false);
   return <View style={styles.disclosure}>
-    <PressScale accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)} style={styles.disclosureButton}>
+    <PressScale accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} aria-expanded={open} onPress={() => setOpen(!open)} style={styles.disclosureButton}>
       <Feather name={open ? "chevron-down" : "chevron-right"} size={14} color={colors.textMuted} />
       <Text numberOfLines={1} style={styles.disclosureLabel}>{label} · {text.split("\n")[0]}</Text>
     </PressScale>
@@ -82,7 +82,7 @@ function AssistantBody({ message, harnessId }: { message: AssistantMessage; harn
           {liveText || message.text ? <Answer text={liveText || message.text} /> : null}
           <View style={styles.statusRow}>
             <AgentOrb size={20} thinking={messageThinking(message, { liveText })} label={message.handoff === "queued" ? "queued" : "streaming"} />
-            <Text style={styles.statusText} numberOfLines={2}>
+            <Text style={styles.statusText} numberOfLines={1}>
               {message.status ?? "Working"}
             </Text>
           </View>

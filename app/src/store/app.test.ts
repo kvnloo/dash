@@ -18,6 +18,18 @@ beforeEach(() => {
   app.store.set({ hydrated: true, settings: null, connection: { status: "online", harnesses: [], hosts: [] }, conversations: [], activeId: null });
 });
 
+test("actual tool/thinking statuses survive completion and replay cannot duplicate them", () => {
+  const chat = app.createConversation("omp");
+  const turn = app.beginTurn(chat.id, "Read the file");
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 1, text: "Read app/src/model.ts" });
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 1, text: "Replay must not appear" });
+  app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 2, text: "Checking the result" });
+  replyText.set(turn.turnId, "The test passed.");
+  app.applyTurnEvent({ type: "done", id: turn.turnId, seq: 3, exitCode: 0 });
+  const reply = app.store.get().conversations.find(c => c.id === chat.id)?.messages.find(m => m.id === turn.messageId);
+  expect(reply).toMatchObject({ state: "done", status: undefined, activity: ["Read app/src/model.ts", "Checking the result"] });
+});
+
 describe("host roster reconciliation", () => {
   const agent = { id: "hermes:session:clean:owner", name: "Debug Hermes crashing", kind: "hermes", status: "available" as const, sessionId: "owner", profileId: "clean", cwd: "/project", lastActivityAt: 1700000000000, messageCount: 3 };
   const host = { id: "groot", name: "groot", hostname: "groot", online: true, self: true, agents: [agent] };
