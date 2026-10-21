@@ -92,6 +92,23 @@ describe("uploadAttachment", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.init?.headers?.["Content-Type"]).toBe("application/octet-stream");
   });
+  test("never uploads an unreadable content URI's error response", async () => {
+    const calls: string[] = [];
+    const impl = async (url: string) => {
+      calls.push(url);
+      return { ok: false, status: 404, json: async () => ({}), blob: async () => new Blob(["File not found"]) };
+    };
+    await expect(uploadAttachment(settings, { uri: "content://media/25486", name: "25486.png", mime: "application/octet-stream" }, impl)).rejects.toThrow("Could not read the selected file");
+    expect(calls).toEqual(["content://media/25486"]);
+  });
+  test("uploads native bytes without fetching a content URI and checks picker size", async () => {
+    const { calls, impl } = fakeFetch({ ok: true, status: 200, body: ref });
+    const bytes = new Uint8Array([1, 2, 3, 4]).buffer;
+    await uploadAttachment(settings, { uri: "content://media/1", name: "p.png", mime: "image/png", size: 4, bytes }, impl);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.init?.body).toBe(bytes);
+    await expect(uploadAttachment(settings, { uri: "x", name: "p.png", mime: "image/png", size: 100, bytes }, impl)).rejects.toThrow("could not be read completely");
+  });
   test("refuses an oversize file before uploading", async () => {
     const { calls, impl } = fakeFetch({ ok: true, status: 200, body: ref }, MAX_ATTACHMENT_BYTES + 1);
     await expect(uploadAttachment(settings, { uri: "file:///big", name: "big.mov", mime: "video/mp4" }, impl)).rejects.toThrow("The limit is 25.0 MB per file.");
