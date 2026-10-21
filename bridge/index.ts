@@ -39,6 +39,7 @@ import { streamHermesSession } from "./src/hermes-stream";
 import { liveArgv } from "./src/hermes-live";
 import { sendGatewayMessage } from "./src/hermes-steer";
 import { sessionPhaseHttp } from "./src/hermes-phase";
+import { z0liveStateHttp } from "./src/z0live-state";
 import { activityHttp } from "./src/hermes-activity";
 const nativeActivityHttp = activityHttp((profile, session) => hermesSessions.nativeActivity(profile, session));
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
@@ -732,6 +733,8 @@ const server = Bun.serve<SocketData>({
       if (activity) return cors(activity);
       const phase = sessionPhaseHttp(request, await authorize(request), (profile, session) => hermesSessions.phase(profile, session));
       if (phase) return cors(phase);
+      const z0live = z0liveStateHttp(request, await authorize(request));
+      if (z0live) return cors(z0live);
       const suggestions = await handleSuggestions(request);
       if (suggestions) return cors(suggestions);
       const files = await handleFiles(request);
