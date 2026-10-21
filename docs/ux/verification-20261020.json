@@ -1,0 +1,66 @@
+{
+  "configured_tests": {
+    "command": "bun run test",
+    "result": [
+      "581 pass",
+      "0 fail",
+      "2787 expect() calls"
+    ]
+  },
+  "unit_tests": {
+    "command": "bun test app/src bridge/src shared",
+    "result": [
+      "547 pass",
+      "0 fail",
+      "2657 expect() calls"
+    ]
+  },
+  "typecheck": "PASS",
+  "lint": "PASS",
+  "diff_check": "PASS",
+  "mutation": {
+    "score": 95,
+    "killed": 83,
+    "survived": 4,
+    "timeout": 0,
+    "invalid": 0,
+    "total": 87,
+    "threshold": 80,
+    "survivors": [
+      {
+        "file": "app/src/components/golden-nav.ts",
+        "operator": "logic",
+        "from": "||",
+        "to": "&&"
+      },
+      {
+        "file": "app/src/components/golden-nav.ts",
+        "operator": "logic",
+        "from": "&&",
+        "to": "||"
+      },
+      {
+        "file": "bridge/src/roster.ts",
+        "operator": "eq",
+        "from": "!==",
+        "to": "==="
+      },
+      {
+        "file": "bridge/src/roster.ts",
+        "operator": "logic",
+        "from": "&&",
+        "to": "||"
+      }
+    ]
+  },
+  "runtime": {
+    "bridge_doctor": "Unavailable at 127.0.0.1:4747; no real model turn or phone verification",
+    "expo_web": "Playwright qualification PASS; see screens-20261020/qualification.json"
+  },
+  "red_green": {
+    "prompt_anchor_and_follow": "Initial test failed: module missing; implementation passed. Estimated-layout regression then failed 180 != null before the measured-prefix guard, and passed afterward.",
+    "thinking_and_activity": "Initial test failed: module missing; implementation passed."
+  },
+  "known_baseline": "Bare bun test discovers four pre-existing docs/design/ai-ui-patterns/decisions.test.ts failures. Confirmed in detached effd9a2 worktree: 587 pass, 4 fail. Configured bun run test excludes that historical documentation suite.",
+  "incomplete_trials": "One browser run reported a network error, then /tmp exhaustion stopped Metro and caused 30 test write failures. Bridge integration fixtures had copied roughly 838MiB each per test run. Retained fixtures moved to ~/work/dash-ux-research/test-fixtures and subsequent tests used disk-backed TMPDIR. Final configured tests and browser qualification passed."
+}

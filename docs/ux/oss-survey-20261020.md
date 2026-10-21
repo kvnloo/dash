@@ -14,6 +14,8 @@ Application rows below say **not embeddable** when they are complete web/desktop
 
 RN package sizes below are npm `dist.unpackedSize`, rounded to KiB, excluding dependencies. They are install-size evidence, **not Metro bundle sizes**. Costs for rejected packages were not measured in a Dash build. Shiki's grammar/theme packages and react-syntax-highlighter's engines must be counted separately; comparing only their wrapper sizes would be misleading. The source snapshot lists dependencies for that reason.
 
+A standalone minified browser build of the selected marked lexer and Prism imports measured **75,283 bytes**, or **25,420 bytes gzip**. This excludes RN renderer components, table/list helpers, React, Expo and platform bytecode. It is an engine-only cost measurement, not an asserted full-app Metro delta. The exact package lock is committed; a native release-size comparison remains unmeasured.
+
 ## Agent applications and web libraries
 
 All are active, non-archived at the inspected head unless stated otherwise. The source snapshot has exact push dates.
