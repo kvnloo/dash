@@ -1,0 +1,382 @@
+{
+ "interrupt_instants": [
+  [
+   "2026-10-20T14:58",
+   5
+  ],
+  [
+   "2026-10-20T21:31",
+   5
+  ],
+  [
+   "2026-10-20T19:46",
+   3
+  ],
+  [
+   "2026-10-20T20:32",
+   2
+  ],
+  [
+   "2026-10-20T23:21",
+   2
+  ],
+  [
+   "2026-10-20T20:31",
+   1
+  ]
+ ],
+ "workers": 82,
+ "runs": 51,
+ "status": {
+  "completed": 60,
+  "interrupted": 18,
+  "running": 4
+ },
+ "interrupted": 18,
+ "interrupted_18_21": {
+  "n": 11,
+  "labels": {
+   "Phone \u00b7 S25": 2,
+   "Phone \u00b7 harness": 3,
+   "Phone \u00b7 mirroring": 1,
+   "z0live \u00b7 relay": 1,
+   "Dash \u00b7 dogfood": 1,
+   "Hermes \u00b7 Tern": 1,
+   "Infra \u00b7 integration debt": 1,
+   "Infra \u00b7 factory": 1
+  },
+  "projects": {
+   "Phone": 6,
+   "z0live": 1,
+   "Dash": 1,
+   "Hermes": 1,
+   "Infra": 2
+  }
+ },
+ "interrupted_resumed": 2,
+ "interrupted_never_resumed": 16,
+ "stall_total_s": 10568,
+ "stall_top": [
+  [
+   "Research \u00b7 AODL glyphs",
+   2508
+  ],
+  [
+   "Sim \u00b7 ACE",
+   1564
+  ],
+  [
+   "Video \u00b7 fframestudio",
+   1418
+  ],
+  [
+   "NOOP \u00b7 meditation",
+   1283
+  ],
+  [
+   "Bend \u00b7 FSM proofs",
+   844
+  ]
+ ],
+ "tool_calls": 11307,
+ "errors": 395,
+ "tool_errors_top": [
+  [
+   "terminal",
+   328,
+   7428
+  ],
+  [
+   "write_file",
+   23,
+   847
+  ],
+  [
+   "skill_manage",
+   18,
+   90
+  ],
+  [
+   "process_manage",
+   7,
+   490
+  ],
+  [
+   "execute_code",
+   6,
+   468
+  ]
+ ],
+ "needs_owner": {
+  "approve": 12,
+  "review-pr": 16,
+  "blocked": 3,
+  "device": 12,
+  "verify": 2,
+  "credential": 1
+ },
+ "needs_owner_workers": 32,
+ "by_label": {
+  "Sim \u00b7 ACE": {
+   "workers": 10,
+   "completed": 9,
+   "errors": 60,
+   "calls": 1552,
+   "stall_s": 1564,
+   "wall_s": 52522,
+   "interrupted": 1
+  },
+  "z0live \u00b7 relay": {
+   "workers": 6,
+   "completed": 5,
+   "errors": 35,
+   "calls": 1099,
+   "stall_s": 308,
+   "wall_s": 29243,
+   "interrupted": 1
+  },
+  "Video \u00b7 fframestudio": {
+   "workers": 6,
+   "completed": 4,
+   "errors": 20,
+   "calls": 565,
+   "stall_s": 1418,
+   "wall_s": 16064,
+   "interrupted": 2
+  },
+  "Infra \u00b7 factory": {
+   "workers": 5,
+   "completed": 4,
+   "errors": 22,
+   "calls": 656,
+   "stall_s": 0,
+   "wall_s": 25163,
+   "interrupted": 1
+  },
+  "Research \u00b7 AODL glyphs": {
+   "workers": 5,
+   "completed": 4,
+   "errors": 10,
+   "calls": 528,
+   "stall_s": 2508,
+   "wall_s": 26132,
+   "interrupted": 1
+  },
+  "Hermes \u00b7 Tern": {
+   "workers": 5,
+   "completed": 4,
+   "errors": 29,
+   "calls": 868,
+   "stall_s": 0,
+   "wall_s": 20915,
+   "interrupted": 1
+  },
+  "Phone \u00b7 harness": {
+   "workers": 5,
+   "completed": 2,
+   "errors": 22,
+   "calls": 414,
+   "stall_s": 0,
+   "wall_s": 8109,
+   "interrupted": 3
+  },
+  "Dash \u00b7 phone app": {
+   "workers": 4,
+   "completed": 4,
+   "errors": 16,
+   "calls": 930,
+   "stall_s": 153,
+   "wall_s": 17387
+  },
+  "Phone \u00b7 S25": {
+   "workers": 4,
+   "completed": 2,
+   "errors": 18,
+   "calls": 314,
+   "stall_s": 0,
+   "wall_s": 7055,
+   "interrupted": 2
+  },
+  "NOOP \u00b7 meditation": {
+   "workers": 4,
+   "completed": 4,
+   "errors": 23,
+   "calls": 637,
+   "stall_s": 1283,
+   "wall_s": 20222
+  },
+  "Research \u00b7 GraphRAG": {
+   "workers": 3,
+   "completed": 2,
+   "errors": 17,
+   "calls": 408,
+   "stall_s": 842,
+   "wall_s": 15694,
+   "interrupted": 1
+  },
+  "NOOP \u00b7 ring tap": {
+   "workers": 3,
+   "completed": 3,
+   "errors": 12,
+   "calls": 334,
+   "stall_s": 0,
+   "wall_s": 7245
+  },
+  "Dash \u00b7 session bridge": {
+   "workers": 2,
+   "completed": 2,
+   "errors": 11,
+   "calls": 260,
+   "stall_s": 0,
+   "wall_s": 3556
+  },
+  "Dash \u00b7 artifact stage": {
+   "workers": 2,
+   "interrupted": 1,
+   "errors": 9,
+   "calls": 361,
+   "stall_s": 570,
+   "wall_s": 14510,
+   "completed": 1
+  },
+  "Dash \u00b7 fx surface": {
+   "workers": 2,
+   "interrupted": 1,
+   "errors": 5,
+   "calls": 259,
+   "stall_s": 353,
+   "wall_s": 4929,
+   "completed": 1
+  },
+  "Garden \u00b7 AR placement": {
+   "workers": 2,
+   "completed": 2,
+   "errors": 10,
+   "calls": 373,
+   "stall_s": 179,
+   "wall_s": 6712
+  },
+  "Dash \u00b7 dogfood": {
+   "workers": 2,
+   "interrupted": 1,
+   "errors": 15,
+   "calls": 277,
+   "stall_s": 0,
+   "wall_s": 3095,
+   "completed": 1
+  },
+  "Bend \u00b7 FSM proofs": {
+   "workers": 2,
+   "completed": 2,
+   "errors": 8,
+   "calls": 232,
+   "stall_s": 844,
+   "wall_s": 6064
+  },
+  "Infra \u00b7 nightly verify": {
+   "workers": 1,
+   "completed": 1,
+   "errors": 6,
+   "calls": 208,
+   "stall_s": 0,
+   "wall_s": 3710
+  },
+  "Dash \u00b7 zerOS views": {
+   "workers": 1,
+   "completed": 1,
+   "errors": 11,
+   "calls": 204,
+   "stall_s": 0,
+   "wall_s": 3423
+  },
+  "Infra \u00b7 fleet": {
+   "workers": 1,
+   "completed": 1,
+   "errors": 4,
+   "calls": 112,
+   "stall_s": 0,
+   "wall_s": 2224
+  },
+  "Phone \u00b7 mirroring": {
+   "workers": 1,
+   "interrupted": 1,
+   "errors": 4,
+   "calls": 60,
+   "stall_s": 0,
+   "wall_s": 730
+  },
+  "Infra \u00b7 integration debt": {
+   "workers": 1,
+   "interrupted": 1,
+   "errors": 5,
+   "calls": 27,
+   "stall_s": 0,
+   "wall_s": 1130
+  },
+  "Research \u00b7 harness A/B": {
+   "workers": 1,
+   "completed": 1,
+   "errors": 4,
+   "calls": 158,
+   "stall_s": 206,
+   "wall_s": 9204
+  },
+  "Dash \u00b7 trace prototypes": {
+   "workers": 1,
+   "running": 1,
+   "errors": 6,
+   "calls": 177,
+   "stall_s": 181,
+   "wall_s": 2798
+  },
+  "Hermes \u00b7 fx on MBP": {
+   "workers": 1,
+   "running": 1,
+   "errors": 3,
+   "calls": 107,
+   "stall_s": 159,
+   "wall_s": 1782
+  },
+  "Research \u00b7 Archil study": {
+   "workers": 1,
+   "running": 1,
+   "errors": 3,
+   "calls": 76,
+   "stall_s": 0,
+   "wall_s": 1119
+  },
+  "Hermes \u00b7 worker cleanup": {
+   "workers": 1,
+   "running": 1,
+   "errors": 7,
+   "calls": 111,
+   "stall_s": 0,
+   "wall_s": 920
+  }
+ },
+ "running": [
+  "Dash \u00b7 trace prototypes",
+  "Hermes \u00b7 fx on MBP",
+  "Research \u00b7 Archil study",
+  "Hermes \u00b7 worker cleanup"
+ ],
+ "recent_3h": 19,
+ "lanes": {
+  "claude": {
+   "weekly_used_pct": 92.0,
+   "hours_to_reset": 26.1,
+   "pace_ratio": 2.12,
+   "band": "hard-throttle",
+   "sustainable_pct_per_h": 0.306,
+   "observed_pct_per_h": 0.648
+  },
+  "codex": {
+   "weekly_used_pct": 7.0,
+   "hours_to_reset": 144.6,
+   "pace_ratio": 0.47,
+   "band": "under-burn",
+   "sustainable_pct_per_h": 0.643,
+   "observed_pct_per_h": 0.3
+  }
+ }
+}

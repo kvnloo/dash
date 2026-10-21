@@ -54,42 +54,48 @@ def domain(goal):
 
 
 # Only allowlisted project/outcome vocabulary may cross the privacy boundary.
-# Paths and goals are classification input, never output labels or free-text excerpts.
-PROJECTS = [
-    ("NOOP", r"\bnoop\b|oura|hrv", "health feedback"),
-    ("z0live", r"z0live|z0-live", "voice relay"),
-    ("Dash", r"\bdash\b|z0bridge", "control plane"),
-    ("Phone", r"s25|s22|android|lawnchair|omalauncher|\badb\b", "device supervision"),
-    ("Sim", r"\bace\b|badminton|pickleball|physics", "simulation checks"),
-    ("Garden", r"garden", "room planning"),
-    ("Video", r"fframe|cinetic|comfy|video|film", "media workflow"),
-    ("Hermes", r"hermes|tern|\bomp\b|harness|\bacp\b", "agent runtime"),
-    ("Infrastructure", r"k3s|fleet|company.os|integration.debt|oss.factory|promot", "integration checks"),
-    ("Bend", r"\bbend\b|\bfsm\b|statechart", "state proofs"),
-]
-GOALS = [
-    ("ring double-tap", r"\bring\b|double.tap"),
-    ("trace prototypes", r"agent.trace|trace.proto|timeline.proto"),
-    ("S25 supervisor", r"supervis|s25"),
-    ("voice relay", r"relay|z0live"),
-    ("approval flow", r"approv"),
-    ("session bridge", r"session|z0bridge|\bacp\b"),
-    ("integration debt", r"integration.debt|promot|reconcil|upstream"),
-    ("runtime verification", r"qualif|verif|smoke|benchmark"),
+# The goal is classification input, never an output label or free-text excerpt.
+# Ordered, goal-first: the first rule whose pattern matches names the project and outcome.
+# (R2 preferred worktree paths seen in the transcript; that mislabelled workers that merely
+# visited another repo, e.g. a privacy classifier shown as "Garden".)
+LABEL_RULES = [
+    (r"actions for the \d+ dropped workers", "Hermes", "worker cleanup"),
+    (r"agent.trace|trace/stats", "Dash", "trace prototypes"),
+    (r"\boura\b|\bring\b.{0,40}(double.tap|gesture)|double.tap.{0,40}\bring\b", "NOOP", "ring tap"),
+    (r"\bnoop\b|\bhrv\b|breath phase", "NOOP", "meditation"),
+    (r"harness speed", "Research", "harness A/B"),
+    (r"libfx \+ fx0 to dash", "Dash", "fx surface"),
+    (r"\bfx\b.*\bmbp\b", "Hermes", "fx on MBP"),
+    (r"garden os|garden_room", "Garden", "AR placement"),
+    (r"\bace\b|badminton|pickleball|physics", "Sim", "ACE"),
+    (r"artifact.stage", "Dash", "artifact stage"),
+    (r"zeros orchestration views", "Dash", "zerOS views"),
+    (r"create kvnloo/z0bridge|current hermes sessions", "Dash", "session bridge"),
+    (r"dogfood", "Dash", "dogfood"),
+    (r"\bz0live\b", "z0live", "relay"),
+    (r"\bdash\b", "Dash", "phone app"),
+    (r"hermes-tern|ui-tsp|tern surface|ripple for tern", "Hermes", "Tern"),
+    (r"phone_goal|phone-harness|gui scripting", "Phone", "harness"),
+    (r"omaremote|scrcpy", "Phone", "mirroring"),
+    (r"\bs25\b|\bs22|both phones|omalauncher", "Phone", "S25"),
+    (r"fframe|comfyui|cinetic|video generation|ff-unmute", "Video", "fframestudio"),
+    (r"integration debt", "Infra", "integration debt"),
+    (r"statechart|\bfsm\b|\bbend\b", "Bend", "FSM proofs"),
+    (r"factory|kueue|role ledger|usage telemetry", "Infra", "factory"),
+    (r"verify everything", "Infra", "nightly verify"),
+    (r"tailscale|\bmbp\b", "Infra", "fleet"),
+    (r"graphrag", "Research", "GraphRAG"),
+    (r"privacy|sensitivity tier", "Research", "data tiers"),
+    (r"prototype id|glyph", "Research", "AODL glyphs"),
+    (r"archil", "Research", "Archil study"),
 ]
 
 
 def public_labels(goal, path_context=""):
-    # Prefer explicit repo/worktree paths over incidental project mentions in a goal.
-    paths = " ".join(re.findall(r"(?:/[^\s\"']*)?(?:products|worktrees|z0-wt)/[^\s\"']+", path_context))
-    project, default = "Research", "workflow study"
-    for source in (paths, goal):
-        found = next(((p, d) for p, rx, d in PROJECTS if re.search(rx, source, re.I)), None)
-        if found:
-            project, default = found
-            break
-    short = next((label for label, rx in GOALS if re.search(rx, goal, re.I)), default)
-    return {"project": project, "short_goal": short, "label": f"{project} · {short}"}
+    for rx, project, short in LABEL_RULES:
+        if re.search(rx, goal, re.I):
+            return {"project": project, "short_goal": short, "label": f"{project} · {short}"}
+    return {"project": "Research", "short_goal": "study", "label": "Research · study"}
 
 
 def ts(day, hms):
