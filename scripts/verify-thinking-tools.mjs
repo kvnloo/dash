@@ -35,7 +35,7 @@ try {
       const path = `${output}/${mode.toLowerCase()}-${tick}.png`;
       await page.screenshot({ path });
       const block = page.getByRole('button', { name: 'Thinking', exact: true });
-      frames.push({ mode, tick, screenshot: path, reasoning: await block.boundingBox(), answerVisible: await page.getByText(/The reply streams independently/).first().isVisible() });
+      frames.push({ mode, tick, screenshot: path, reasoning: await block.locator('..').boundingBox(), answerVisible: await page.getByText(/The reply streams independently/).first().isVisible() });
     }
     for (let index = 0; index < 3; index++) await part({ kind: 'tool_finish', callId: `tool-${index}`, status: index === 2 ? 'error' : 'ok', durationMs: [1200, 4400, 6400][index] });
     await page.waitForTimeout(150);
