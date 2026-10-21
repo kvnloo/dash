@@ -1,8 +1,6 @@
 import { memo, type ReactNode, useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
-  Easing,
-  ReduceMotion,
   cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
@@ -13,7 +11,7 @@ import Animated, {
 } from "react-native-reanimated";
 import type { VisualEffort, VisualRuntimeState } from "../catalog/visual";
 
-const reduce = ReduceMotion.System;
+import { ambient } from "../motion-ambient";
 
 function Orbit({
   angle,
@@ -72,7 +70,7 @@ export const EffortOrbs = memo(function EffortOrbs({
     if (cadence.rotate) {
       const duration = Math.max(280, Math.round(cadence.periodMs * (1.15 - 0.55 * effort.energy)));
       spin.value = 0;
-      spin.value = withRepeat(withTiming(1, { duration, easing: Easing.linear, reduceMotion: reduce }), -1, false);
+      spin.value = withRepeat(withTiming(1, ambient(duration, true)), -1, false);
     } else {
       cancelAnimation(spin);
       spin.value = 0;
@@ -82,8 +80,8 @@ export const EffortOrbs = memo(function EffortOrbs({
       pulse.value = cadence.opacityMin;
       pulse.value = withRepeat(
         withSequence(
-          withTiming(cadence.opacityMax, { duration: half, easing: Easing.inOut(Easing.quad), reduceMotion: reduce }),
-          withTiming(cadence.opacityMin, { duration: half, easing: Easing.inOut(Easing.quad), reduceMotion: reduce }),
+          withTiming(cadence.opacityMax, ambient(half)),
+          withTiming(cadence.opacityMin, ambient(half)),
         ),
         -1,
       );

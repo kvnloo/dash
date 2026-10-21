@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, { FadeIn, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withSpring } from "react-native-reanimated";
+import Animated, { FadeIn, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 import { PressScale } from "../PressScale";
 import { haptic } from "../../haptics";
-import { SNAP } from "../../motion";
+import { SNAP, fade, MOTION_MS } from "../../motion";
 import { fonts, radius, space, type } from "../../theme";
 import { tc } from "./tokens";
 
@@ -12,7 +12,7 @@ export type StatVariant = "number" | "meter" | "spark";
 export type Segment = { n: number; color: string; label: string };
 
 /** Ease-out count-up, ~600 ms. Shows the final value at once under reduced motion. */
-export function useCountUp(target: number, reduced: boolean, ms = 600): number {
+export function useCountUp(target: number, reduced: boolean, ms = MOTION_MS.enter): number {
   const [v, setV] = useState(reduced ? target : 0);
   const from = useRef(reduced ? target : 0);
   useEffect(() => {
@@ -46,7 +46,7 @@ export function StatTile({ label, value, sub, tone = tc.text, variant = "number"
   const reduced = useReducedMotion();
   const [focus, setFocus] = useState<number | null>(null);
   const shown = focus !== null && segments?.[focus] ? segments[focus].n : value;
-  const n = useCountUp(shown, reduced, focus === null ? 600 : 240);
+  const n = useCountUp(shown, reduced, MOTION_MS.enter);
   return (
     <PressScale
       key={replay}
@@ -72,7 +72,7 @@ export function StatTile({ label, value, sub, tone = tc.text, variant = "number"
 
 function Dot({ color, i, dim, reduced }: { color: string; i: number; dim: boolean; reduced: boolean }) {
   const p = useSharedValue(reduced ? 1 : 0);
-  useEffect(() => { if (!reduced) p.value = withDelay(i * 8, withSpring(1, { ...SNAP, reduceMotion: ReduceMotion.System })); }, [i, p, reduced]);
+  useEffect(() => { if (!reduced) p.value = withTiming(1, { ...SNAP, reduceMotion: ReduceMotion.System }); }, [i, p, reduced]);
   const st = useAnimatedStyle(() => ({ opacity: p.value * (dim ? 0.18 : 1), transform: [{ scale: 0.4 + 0.6 * p.value }] }));
   return <Animated.View style={[styles.dot, { backgroundColor: color }, st]} />;
 }
@@ -93,7 +93,7 @@ function Spark({ series, tone }: { series: number[]; tone: string }) {
   const pts = series.map((v, i) => `${((i / Math.max(1, series.length - 1)) * w).toFixed(1)},${(h - (v / max) * (h - 2)).toFixed(1)}`);
   const d = `M${pts.join("L")}`;
   return (
-    <Animated.View entering={FadeIn.duration(240)} style={{ marginTop: 4 }}>
+    <Animated.View entering={FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} style={{ marginTop: 4 }}>
       <Svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
         <Path d={`${d}L${w},${h}L0,${h}Z`} fill="rgba(236,232,223,.08)" />
         <Path d={d} stroke={tone} strokeWidth={1.2} fill="none" />

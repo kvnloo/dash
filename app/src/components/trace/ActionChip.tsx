@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   FadeIn,
+  cancelAnimation,
   LinearTransition,
   ReduceMotion,
   interpolate,
@@ -10,11 +11,10 @@ import Animated, {
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { haptic } from "../../haptics";
-import { SNAP } from "../../motion";
+import { SNAP, settleTiming, fade, press as pressMotion, MOTION_MS } from "../../motion";
 import { swipeDecision, type SwipeDecision, type TraceAction } from "../../trace/model";
 import { fonts, radius, space, type } from "../../theme";
 import { tc } from "./tokens";
@@ -47,7 +47,7 @@ export function ActionChip({ action, variant = "card", decision, onDecide }: {
   const pan = Gesture.Pan()
     .activeOffsetX([-10, 10])
     .failOffsetY([-14, 14])
-    .onBegin(() => { press.value = withSpring(0.97, spring); })
+    .onBegin(() => { cancelAnimation(x); press.value = withTiming(0.97, { ...pressMotion, reduceMotion: ReduceMotion.System }); })
     .onUpdate((e) => {
       x.value = e.translationX;
       const a = Math.abs(e.translationX) > w * 0.35 ? (e.translationX > 0 ? 1 : -1) : 0;
@@ -57,14 +57,15 @@ export function ActionChip({ action, variant = "card", decision, onDecide }: {
       const d = swipeDecision(e.translationX, e.velocityX, w);
       if (d) {
         const out = d === "do" ? w * 1.1 : -w * 1.1;
-        x.value = withTiming(out, { duration: reduced ? 0 : 160, reduceMotion: ReduceMotion.System }, (fin) => {
-          if (fin) { runOnJS(commit)(d); x.value = withSpring(0, spring); }
+        runOnJS(commit)(d);
+        x.value = withTiming(out, { ...fade, reduceMotion: ReduceMotion.System }, (fin) => {
+          if (fin) x.value = 0;
         });
       } else {
-        x.value = withSpring(0, { ...spring, velocity: e.velocityX });
+        x.value = withTiming(0, { ...settleTiming(-x.value, e.velocityX), reduceMotion: ReduceMotion.System });
       }
     })
-    .onFinalize(() => { press.value = withSpring(1, spring); armed.value = 0; });
+    .onFinalize(() => { press.value = withTiming(1, { ...pressMotion, reduceMotion: ReduceMotion.System }); armed.value = 0; });
 
 
   const chipStyle = useAnimatedStyle(() => ({
@@ -72,15 +73,15 @@ export function ActionChip({ action, variant = "card", decision, onDecide }: {
   }));
   const doUnder = useAnimatedStyle(() => ({ opacity: interpolate(x.value, [0, w * 0.35], [0, 1], "clamp") }));
   const notUnder = useAnimatedStyle(() => ({ opacity: interpolate(x.value, [-w * 0.35, 0], [1, 0], "clamp") }));
-  const doLabel = useAnimatedStyle(() => ({ transform: [{ scale: armed.value === 1 ? withSpring(1.12, spring) : withSpring(1, spring) }] }));
-  const notLabel = useAnimatedStyle(() => ({ transform: [{ scale: armed.value === -1 ? withSpring(1.12, spring) : withSpring(1, spring) }] }));
+  const doLabel = useAnimatedStyle(() => ({ transform: [{ scale: armed.value === 1 ? withTiming(1.12, spring) : withTiming(1, spring) }] }));
+  const notLabel = useAnimatedStyle(() => ({ transform: [{ scale: armed.value === -1 ? withTiming(1.12, spring) : withTiming(1, spring) }] }));
 
   const onLayout = (e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width);
   const decided = decision === "do" || decision === "not_now";
   const tone = OUTCOME_COLOR[action.outcome];
 
   return (
-    <Animated.View layout={reduced ? undefined : LinearTransition.springify().mass(SNAP.mass).stiffness(SNAP.stiffness).damping(SNAP.damping)} style={styles.outer} onLayout={onLayout} testID={`chip-${action.id}`}>
+    <Animated.View layout={reduced ? undefined : LinearTransition.duration(MOTION_MS.enter).reduceMotion(ReduceMotion.System)} style={styles.outer} onLayout={onLayout} testID={`chip-${action.id}`}>
       <Animated.View style={[styles.under, styles.underDo, doUnder]}><Animated.Text style={[styles.underText, { color: tc.ok }, doLabel]}>Do</Animated.Text></Animated.View>
       <Animated.View style={[styles.under, styles.underNot, notUnder]}><Animated.Text style={[styles.underText, { color: tc.text2 }, notLabel]}>Not now</Animated.Text></Animated.View>
       <GestureDetector gesture={pan}>
@@ -91,7 +92,7 @@ export function ActionChip({ action, variant = "card", decision, onDecide }: {
           <View style={styles.headRow}>
             <View style={[styles.outcome, { borderColor: tone }]}><Text style={[styles.outcomeText, { color: tone }]} numberOfLines={1}>{action.outcomeLabel}</Text></View>
             {decided ? (
-              <Animated.View entering={reduced ? undefined : FadeIn.duration(160)}>
+              <Animated.View entering={reduced ? undefined : FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)}>
                 <Pressable onPress={() => onDecide(action.id, "undo")} hitSlop={10} accessibilityRole="button" accessibilityLabel="Undo">
                   <Text style={[styles.badge, { color: decision === "do" ? tc.ok : tc.text3 }]}>{decision === "do" ? "Do ✓" : "Not now"} · undo</Text>
                 </Pressable>
@@ -117,8 +118,8 @@ function ChipButton({ label, tone, onPress }: { label: string; tone: string; onP
   const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
-      onPressIn={() => { s.value = withSpring(0.92, spring); haptic.tap(); }}
-      onPressOut={() => { s.value = withSpring(1, spring); }} hitSlop={6}>
+      onPressIn={() => { s.value = withTiming(0.92, { ...pressMotion, reduceMotion: ReduceMotion.System }); haptic.tap(); }}
+      onPressOut={() => { s.value = withTiming(1, { ...pressMotion, reduceMotion: ReduceMotion.System }); }} hitSlop={6}>
       <Animated.View style={[styles.btn, { borderColor: tone }, st]}><Text style={[styles.btnText, { color: tone }]}>{label}</Text></Animated.View>
     </Pressable>
   );

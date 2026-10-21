@@ -64,7 +64,7 @@ describe("bridge pull wiring", () => {
   test("overlay is a Reanimated gel sheet, not a Modal", () => {
     const src = readFileSync(join(import.meta.dir, "BridgePull.tsx"), "utf8");
     expect(src).toContain("Gesture.Pan");
-    expect(src).toContain("withSpring");
+    expect(src).toContain("withTiming");
     expect(src).toContain("sheetTranslateY");
     expect(src).toContain("ReduceMotion.System");
     expect(src).toContain("...GEL");
@@ -94,6 +94,6 @@ describe("bridge pull wiring", () => {
     const src = readFileSync(join(import.meta.dir, "BridgePull.tsx"), "utf8");
     expect(src).toContain("GEL");
     expect(src).not.toContain("stiffness: 180");
-    expect(GEL.stiffness).toBe(240);
+    expect(GEL.duration).toBe(150);
   });
 });
