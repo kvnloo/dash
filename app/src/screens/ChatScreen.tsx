@@ -34,14 +34,20 @@ import {
   conversationTargetError,
   createConversation,
   parkUnsentTurn,
-  promotePendingTurn,
+  flushPendingSends,
+  takeQueuedForSteer,
+  changeQueuePreview,
+  saveQueuePreview,
+  setQueueWaiting,
   saveSettings,
   setActive,
   setDetailMode,
   stopConversation,
   store,
 } from "../store/app";
-import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
+import { onTurnSettled } from "../store/queue";
+import { queuedParts } from "../lib/pending-queue";
+import { QueuedStack } from "../components/QueuedStack";
 import { colors, glass, radius, space, type } from "../theme";
 import { conversationThinking, type Thinking } from "../lib/thinking";
 import { useSessionPhase } from "../lib/session-phase";
@@ -93,7 +99,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const connection = store.use((s) => s.connection);
   const conversation = store.use((s) => s.conversations.find((c) => c.id === s.activeId));
   const messages = conversation?.messages ?? EMPTY;
-  const anchors = useMemo(() => railTurns(messages), [messages]);
+  const visibleMessages = useMemo(() => {
+    const queued = new Set(conversation ? queuedParts(conversation).flatMap(part => [part.user.id, part.assistant.id]) : []);
+    return messages.filter(message => !queued.has(message.id));
+  }, [messages, conversation]);
+  const anchors = useMemo(() => railTurns(visibleMessages), [visibleMessages]);
   useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
   const jumpPrompt = useCallback((prompt: number) => {
     const anchor = anchors[prompt];
@@ -168,36 +178,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   );
 
   const flushQueue = useCallback(
-    (conversationId: string) => {
-      if (!online) return;
-      const conv = store.get().conversations.find((c) => c.id === conversationId);
-      if (!conv) return;
-      if (conversationBusy(conversationId) && conv.messages.some((m) => m.role === "assistant" && m.state === "streaming")) {
-        return;
-      }
-      const turnId = dequeue(conversationId);
-      if (!turnId) return;
-      const payload = promotePendingTurn(turnId);
-      if (!payload) {
-        flushQueue(conversationId);
-        return;
-      }
-      haptic.tap();
-      const current = store.get().conversations.find((c) => c.id === conversationId);
-      const ok = sendChat({
-        turnId,
-        harness: payload.harness,
-        text: payload.text,
-        sessionId: current?.sessionId ?? payload.sessionId,
-        cwd: current?.cwd,
-        attachments: payload.attachments,
-      });
-      if (!ok) {
-        parkUnsentTurn(turnId);
-        return;
-      }
-      if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
-    },
+    (_conversationId: string) => { if (online) flushPendingSends(sendChat); },
     [online],
   );
 
@@ -207,16 +188,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       setFollow(true);
       const active = conversation ?? createConversation(harnessId);
       if (mode === "steer") { sendTurn(text, attachments, active, "steer"); return; }
-      if (conversationBusy(active.id)) {
-        const { turnId } = beginTurn(active.id, text, { pending: true, attachments });
-        enqueue(active.id, turnId);
+      if (conversationBusy(active.id) || thinking.phase !== "idle") {
+        if (!streamingMessage && thinking.phase !== "idle") setQueueWaiting(active.id, true);
+        beginTurn(active.id, text, { pending: true, attachments });
         haptic.tap();
         requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
         return;
       }
       sendTurn(text, attachments, active);
     },
-    [conversation, harnessId, sendTurn, setFollow],
+    [conversation, harnessId, sendTurn, setFollow, thinking.phase, streamingMessage],
   );
 
   useEffect(() => {
@@ -227,12 +208,19 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, [conversation?.id, flushQueue]);
 
   useEffect(() => {
-    if (conversation && !streamingMessage && queueLength(conversation.id) > 0) flushQueue(conversation.id);
+    if (conversation && !streamingMessage && queuedParts(conversation).length > 0) flushQueue(conversation.id);
   }, [conversation?.id, streamingMessage, flushQueue]);
 
   useEffect(() => {
-    if (online && conversation && queueLength(conversation.id) > 0) flushQueue(conversation.id);
+    if (online && conversation && queuedParts(conversation).length > 0) flushQueue(conversation.id);
   }, [online, conversation?.id, flushQueue]);
+
+  useEffect(() => {
+    if (conversation?.queueWaitForIdle && observed?.observed && observed.phase === "idle") {
+      setQueueWaiting(conversation.id, false);
+      flushQueue(conversation.id);
+    }
+  }, [conversation?.id, conversation?.queueWaitForIdle, observed?.observed, observed?.phase, flushQueue]);
 
   const onStop = useCallback(() => {
     if (conversation) stopConversation(conversation.id, (id) => { bridge.send({ type: "cancel", id }); });
@@ -275,7 +263,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       {liveOn && conversation ? <KeyboardInsetView style={styles.body}><LiveSurface conversationId={conversation.id} /></KeyboardInsetView> : <KeyboardInsetView style={styles.body} onOpen={scrollToNewest}>
         <BlurTargetView ref={blurTarget} style={styles.body}><FlashList
           ref={listRef}
-          data={messages}
+          data={visibleMessages}
           extraData={external}
           renderItem={({ item }) => <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
           keyExtractor={keyExtractor}
@@ -319,6 +307,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           <Text style={{ ...type.mono, color: colors.textTertiary, fontSize: 10, marginRight: 6 }}>Thinking & tools</Text>
           {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
         </View>
+        {conversation && !liveOn ? <QueuedStack conversation={conversation} canSteer={online && !targetError && canSteer(harnessId, conversation.sessionId, thinking.phase, liveOn)} onSteer={() => { const payload = takeQueuedForSteer(conversation.id); if (payload) sendTurn(payload.text, payload.attachments, conversation, "steer"); }} /> : null}
         <Composer
           key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
@@ -326,13 +315,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
           steerBusy={canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn)}
           initialText={composerDraft}
+          queuePreview={conversation?.queuePreview}
+          onQueuePreviewChange={text => { if (conversation) changeQueuePreview(conversation.id, text); }}
+          onSaveQueuePreview={() => { if (conversation) saveQueuePreview(conversation.id); }}
           harness={harnessId}
           blurTarget={liveOn ? undefined : blurTarget}
           cwd={conversation?.cwd}
           placeholder={liveOn ? (live.askHermes ? "Ask Hermes through the live surface" : "Live surface · quick reply") : composerPlaceholder({
             online,
             streaming: Boolean(streamingMessage),
-            queued: conversation ? queueLength(conversation.id) : 0,
+            queued: conversation ? queuedParts(conversation).length : 0,
             openIn: conversation?.openIn,
             harness: harnessId,
             harnessName,
