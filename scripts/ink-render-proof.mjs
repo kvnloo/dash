@@ -89,7 +89,8 @@ try{
   // Composition: Chats rows open the chat as a full-screen window; its X (not a header Back) returns to the list.
   await page.getByRole('button',{name:'Close chat window',exact:true}).click();await page.getByTestId('chat-window').waitFor({state:'detached'});
   await page.getByRole('tab').nth(1).click();await page.getByText(chat.title,{exact:true}).first().click();await page.getByTestId('chat-window').waitFor({state:'visible'});
-  assert.equal(await input.inputValue(),'Original unsent draft\nKeep this exact text');
+  const reopenDiag=await page.evaluate(()=>({boxes:[...document.querySelectorAll('textarea,input')].map(e=>[e.getAttribute('aria-label'),e.value.slice(0,40)]),windows:document.querySelectorAll('[data-testid="chat-window"]').length,title:document.querySelector('[data-testid="chat-window-pill-title"]')?.textContent??null}));
+  assert.equal(await input.inputValue(),'Original unsent draft\nKeep this exact text',JSON.stringify(reopenDiag));
   assert.deepEqual(await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes),originalInk);
   // Keep the annotation open, but use its existing tray relocation so it cannot cover the mic.
   await page.getByRole('button',{name:'Move tray to the top',exact:true}).click();

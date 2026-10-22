@@ -53,7 +53,7 @@ want mutation && stage mutation bun run test:mutate
 want export && stage android-export bash -c 'cd app && CI=1 bun x expo export --platform android --output-dir ../.acceptance-receipts/android-export'
 want render && stage web-export bash -c 'cd app && EXPO_PUBLIC_DEBUG=1 EXPO_PUBLIC_DEBUG_AUTONAV=0 bun x expo export --platform web'
 want render && stage chat-window-render node scripts/chat-window-proof.mjs
-want render && stage ink-voice-render node scripts/ink-render-proof.mjs
+{ want render || want ink; } && stage ink-voice-render node scripts/ink-render-proof.mjs
 want render && stage moodie-render node scripts/moodie-faces-proof.mjs
 want render && stage chat-rows-render flock "$HOME/.cache/dash-expo-proof-8099.lock" node scripts/chat-rows-proof.mjs
 printf '\nRESULT: %s (web/source gates only; not APK, phone, S25 or duplex media acceptance)\n' "$([ $fail = 0 ] && echo PASS || echo FAIL)"
