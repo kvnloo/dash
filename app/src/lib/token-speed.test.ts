@@ -5,7 +5,7 @@ describe("measured token speed", () => {
   test("no runtime timing is an honest unavailable state", () => {
     const speed = measuredTokenSpeed(undefined);
     expect(speed).toEqual({ kind: "unavailable", reason: NO_TOKEN_TIMING });
-    expect(tokenSpeedLabel(speed)).toBe("unavailable · runtime reports no token timing");
+    expect(tokenSpeedLabel(speed)).toBe("unavailable · no token timing");
   });
 
   test("provider token counts over the measured span give tokens per second", () => {

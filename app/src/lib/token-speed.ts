@@ -2,7 +2,7 @@
 export type TokenTiming = { outputTokens: number; startedAt: number; finishedAt: number; source: string };
 export type TokenSpeed = { kind: "measured"; tokensPerSecond: number; source: string } | { kind: "unavailable"; reason: string };
 
-export const NO_TOKEN_TIMING = "runtime reports no token timing";
+export const NO_TOKEN_TIMING = "no token timing";
 const MIN_SPAN_MS = 250;
 
 export function measuredTokenSpeed(timing: TokenTiming | undefined): TokenSpeed {
