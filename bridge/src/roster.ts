@@ -1,6 +1,6 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readlinkSync, readSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { isCatalogHarness } from "../../shared/catalog";
 import { hermesSessions } from "./hermes-sessions";
 import { grokDesktopBot, hermesBots, hostBotSources, serviceBots } from "./bots";
@@ -113,11 +113,18 @@ export function liveOmpFromDaemonRoot(root: string, alive: (pid: number) => bool
   return tabs.sort((a, b) => a.cwd.localeCompare(b.cwd) || a.id.localeCompare(b.id));
 }
 
-/** OMP stores sessions under `~/.omp/agent/sessions/<cwd with / → ->`. */
+/** Older OMP CLI builds use a home-relative, single-dash session folder. */
 export function ompSessionDirName(cwd: string, home: string): string {
   const homeDir = home.endsWith("/") ? home.slice(0, -1) : home;
   const rel = cwd === homeDir || cwd.startsWith(`${homeDir}/`) ? cwd.slice(homeDir.length) : cwd;
   return rel.replaceAll("/", "-") || "-";
+}
+
+function ompSessionDirectories(sessionRoot: string, cwd: string, home: string): string[] {
+  // Tern's installed OMP uses the full cwd wrapped in double dashes. Both
+  // layouts coexist on disk; retain reads of sessions written by older CLIs.
+  const current = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+  return [join(sessionRoot, current), join(sessionRoot, ompSessionDirName(cwd, home))];
 }
 
 function latestJsonl(dir: string): string | undefined {
@@ -145,7 +152,14 @@ function readOmpSessionFile(path: string, fallbackId: string | undefined): { ses
   let sessionId = fallbackId;
   let title: string | undefined;
   try {
-    const text = readFileSync(path, "utf8").slice(0, 8192);
+    const fd = openSync(path, "r");
+    const header = Buffer.alloc(8192);
+    let text: string;
+    try {
+      text = header.toString("utf8", 0, readSync(fd, header, 0, header.length, 0));
+    } finally {
+      closeSync(fd);
+    }
     for (const line of text.split("\n")) {
       if (line.charCodeAt(0) !== 123) continue;
       let rec: Record<string, unknown>;
@@ -170,13 +184,70 @@ function readOmpSessionFile(path: string, fallbackId: string | undefined): { ses
 export function attachOmpSessions(tabs: OmpTab[], sessionRoot: string, home: string): OmpTab[] {
   return tabs.map((tab) => {
     if (tab.sessionId) return tab;
-    const file = latestJsonl(join(sessionRoot, ompSessionDirName(tab.cwd, home)));
-    if (!file) return { ...tab, sessionId: tab.id };
-    const fromName = /_([^_/]+)\.jsonl$/.exec(file)?.[1];
-    const found = readOmpSessionFile(join(sessionRoot, ompSessionDirName(tab.cwd, home), file), fromName);
+    let path: string | undefined;
+    for (const dir of ompSessionDirectories(sessionRoot, tab.cwd, home)) {
+      const file = latestJsonl(dir);
+      if (file) { path = join(dir, file); break; }
+    }
+    if (!path) return { ...tab, sessionId: tab.id };
+    const fromName = /_([^_/]+)\.jsonl$/.exec(path)?.[1];
+    const found = readOmpSessionFile(path, fromName);
     if (!found) return { ...tab, sessionId: tab.id };
     return { ...tab, sessionId: found.sessionId, title: found.title ?? tab.title };
   });
+}
+
+/** Interactive frontends need not own a worker broker. /proc also links their
+ * exact open session file, avoiding newest-transcript guesses in shared cwds. */
+export function liveOmpFromProcessRoot(root: string, sessionRoot: string, alive: (pid: number) => boolean): OmpTab[] {
+  let names: string[];
+  try { names = readdirSync(root); } catch { return []; }
+  let realSessionRoot: string | undefined;
+  try { realSessionRoot = realpathSync(sessionRoot); } catch { /* no sessions yet */ }
+  const tabs: OmpTab[] = [];
+  for (const name of names) {
+    if (!/^[1-9]\d*$/.test(name)) continue;
+    const proc = join(root, name);
+    let cwd: string;
+    try {
+      if (readFileSync(join(proc, "comm"), "utf8").trim() !== "omp") continue;
+      const argv = readFileSync(join(proc, "cmdline"), "utf8").split("\0").filter(Boolean);
+      if (!argv.length || argv.slice(1).some(arg =>
+        arg.startsWith("__omp_") || arg === "-p" || arg === "--print" ||
+        arg === "--mode" || arg.startsWith("--mode=") || arg === "--help" ||
+        arg === "-h" || arg === "--version" || arg === "-v")) continue;
+      if (!alive(Number(name))) continue;
+      cwd = readlinkSync(join(proc, "cwd"));
+    } catch { continue; }
+    let id = `pid-${name}`;
+    try {
+      const pane = readFileSync(join(proc, "environ"), "utf8").split("\0").find(entry => entry.startsWith("TERN_PANE="))?.slice("TERN_PANE=".length);
+      if (pane && /^\d+$/.test(pane)) id = `tern-${pane}`;
+    } catch { /* pane metadata is optional */ }
+    // Never attach an unrelated latest session if fd inspection is unavailable.
+    let tab: OmpTab = { id, cwd, sessionId: id };
+    let fds: string[] = [];
+    try { fds = readdirSync(join(proc, "fd")); } catch { /* process may exit */ }
+    for (const fd of fds) {
+      try {
+        const path = realpathSync(join(proc, "fd", fd));
+        // Subagent transcripts live one level deeper than the main jsonl.
+        if (!realSessionRoot || dirname(dirname(path)) !== realSessionRoot || !path.endsWith(".jsonl")) continue;
+        const found = readOmpSessionFile(path, /_([^_]+)\.jsonl$/.exec(basename(path))?.[1]);
+        if (found) { tab = { id, cwd, ...found }; break; }
+      } catch { /* handle closed between listing and inspection */ }
+    }
+    tabs.push(tab);
+  }
+  return tabs.sort((a, b) => a.cwd.localeCompare(b.cwd) || a.id.localeCompare(b.id));
+}
+
+export function collectOmpSessions(home: string, sessionRoot: string, processRoot = "/proc", alive = pidAlive): OmpTab[] {
+  const frontends = liveOmpFromProcessRoot(processRoot, sessionRoot, alive);
+  const ownedCwds = new Set(frontends.map(tab => tab.cwd));
+  const brokers = liveOmpFromDaemonRoot(join(home, ".omp", "run", "daemons"), alive)
+    .filter(tab => !ownedCwds.has(tab.cwd));
+  return attachOmpSessions([...frontends, ...brokers], sessionRoot, home);
 }
 
 const SESSION_ID_OK = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -261,8 +332,10 @@ function jsonlMatchingSession(dir: string, sessionId: string): string | undefine
 export function findOmpJsonl(sessionRoot: string, sessionId: string, cwd?: string, home?: string): string | undefined {
   if (!SESSION_ID_OK.test(sessionId)) return undefined;
   if (cwd && home) {
-    const hit = jsonlMatchingSession(join(sessionRoot, ompSessionDirName(cwd, home)), sessionId);
-    if (hit) return hit;
+    for (const dir of ompSessionDirectories(sessionRoot, cwd, home)) {
+      const hit = jsonlMatchingSession(dir, sessionId);
+      if (hit) return hit;
+    }
   }
   if (!existsSync(sessionRoot)) return undefined;
   for (const name of readdirSync(sessionRoot)) {
@@ -598,11 +671,7 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
   refreshHermesList();
   const nodes = parseTailscaleStatus(readTailscaleStatus());
   const home = homedir();
-  const ompTabs = attachOmpSessions(
-    liveOmpFromDaemonRoot(join(home, ".omp", "run", "daemons"), pidAlive),
-    join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions"),
-    home,
-  );
+  const ompTabs = collectOmpSessions(home, join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions"));
   const selfNode = nodes.find((n) => n.self);
   const selfAddress = self.address ?? firstV4(selfNode?.ips ?? []);
   const hermesProfiles = listedHermesProfiles(parseHermesGatewayList(hermesListCache));
