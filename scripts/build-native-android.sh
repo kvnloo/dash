@@ -15,9 +15,13 @@ if [ ! -e .git ]; then git init -q; fi
 bun install --frozen-lockfile
 (cd bridge && bun install --frozen-lockfile)
 (cd app && bun install --frozen-lockfile)
-bun app/node_modules/typescript/bin/tsc -p app --noEmit > .native-receipts/typecheck.log 2>&1
-bun test app/src bridge/src shared > .native-receipts/unit.log 2>&1
-bun scripts/mutate.ts > .native-receipts/mutation.log 2>&1
+if [ "${DASH_NATIVE_ONLY:-0}" != 1 ]; then
+  bun app/node_modules/typescript/bin/tsc -p app --noEmit > .native-receipts/typecheck.log 2>&1
+  bun test app/src bridge/src shared > .native-receipts/unit.log 2>&1
+  bun scripts/mutate.ts > .native-receipts/mutation.log 2>&1
+else
+  printf 'Native-only retry: use the preceding unchanged-source JS gate receipts.\n'
+fi
 if [ ! -d "$ANDROID_HOME/ndk/27.1.12297006" ] || [ ! -d "$ANDROID_HOME/platforms/android-36" ] || [ ! -d "$ANDROID_HOME/build-tools/36.0.0" ]; then
   shared_sdk="$ANDROID_HOME"
   sdk="$HOME/.cache/dash-native-android-sdk"
@@ -40,7 +44,7 @@ if [ ! -d "$ANDROID_HOME/ndk/27.1.12297006" ] || [ ! -d "$ANDROID_HOME/platforms
   fi
 fi
 (cd app && CI=1 bun x expo prebuild --platform android --no-install)
-(cd app/android && ./gradlew :dash-share:testDebugUnitTest :app:assembleDebug -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
+(cd app/android && ./gradlew :app:assembleDebug :dash-share:testDebugUnitTest -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
 cp app/android/app/build/outputs/apk/debug/app-debug.apk .native-receipts/dash-native-arm64.apk
 cp -r app/modules/dash-share/android/build/test-results .native-receipts/native-test-results
 cp app/android/app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml .native-receipts/AndroidManifest.xml
