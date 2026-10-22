@@ -15,7 +15,7 @@ import { haptic } from "../../haptics";
 import { annotationDoc, annotationSendMode, attachmentNames, composeMessage } from "../../lib/annotate/compose";
 import { uploadBytes } from "../../lib/annotate/io";
 import { useRecordedSpeech } from "../../lib/useRecordedSpeech";
-import { pointerKind, pressureOf, routePointer, stylusEnters } from "../../lib/annotate/pointer";
+import { appendInkSample, pointerKind, pressureOf, routePointer, stylusEnters } from "../../lib/annotate/pointer";
 import { recognizeShape, type InkColor, type PointerKind, type StrokePoint, type Tool } from "../../lib/annotate/strokes";
 import { useHandedness } from "../../lib/useHandedness";
 import {
@@ -62,6 +62,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const activeSv = useSharedValue(false);
   const penSv = useSharedValue(false);
   const kindSv = useSharedValue(0);
+  const pointerSv = useSharedValue(-1);
   useEffect(() => { activeSv.value = active; }, [active, activeSv]);
   useEffect(() => { penSv.value = penMode; }, [penMode, penSv]);
   const inkFailed = useCallback((error: unknown) => {
@@ -89,10 +90,14 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     const first = points[0], last = points.at(-1);
     const shaped = shape && first && last ? [{ ...first, ...shape.from }, { ...last, ...shape.to }] : points;
     commitStroke({ tool: shape?.tool ?? s.tool, color: s.color, pointer, points: shaped, targets: targetsAt(screenPoints) });
+    if (__DEV__) console.log("[dash-ink] committed", { pointer, points: shaped.length, width, height });
     haptic.select();
   }, [size]);
 
   const send = useCallback((keep: boolean) => { void sendAnnotation(keep, captureTarget, size); }, [size]);
+  const tracePointer = useCallback((pointerType: number, touches: number) => {
+    if (__DEV__) console.log("[dash-ink] raw-down", { pointer: pointerKind(pointerType), touches });
+  }, []);
 
   const gesture = useMemo(() => {
     const draw = Gesture.Pan()
@@ -105,27 +110,35 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
           runOnJS(enterAnnotation)();
         }
         if (!activeSv.value || routePointer(kind, penSv.value, e.numberOfTouches) === "pass") { manager.fail(); return; }
+        const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
+        if (!point) { manager.fail(); return; }
+        kindSv.value = e.pointerType; pointerSv.value = point.id;
+        live.value = appendInkSample([], point.x, point.y, pressureOf(kind, undefined), Date.now());
+        runOnJS(tracePointer)(e.pointerType, e.numberOfTouches);
         manager.activate();
       })
-      .onStart(e => {
-        kindSv.value = e.pointerType;
-        live.value = [e.x, e.y, pressureOf(pointerKind(e.pointerType), e.stylusData?.pressure), Date.now()];
+      .onTouchesMove(e => {
+        const point = e.changedTouches?.find(touch => touch.id === pointerSv.value);
+        if (!point || pointerSv.value < 0) return;
+        live.value = appendInkSample(live.value, point.x, point.y, live.value.at(-2) ?? 0.5, Date.now());
       })
       .onUpdate(e => {
         const p = pressureOf(pointerKind(kindSv.value), e.stylusData?.pressure);
-        live.value = [...live.value, e.x, e.y, p, Date.now()];
+        live.value = appendInkSample(live.value, e.x, e.y, p, Date.now());
       })
-      .onEnd(e => {
-        // A coalesced/quick native pen stroke may have DOWN and UP but no UPDATE.
-        // UP is a real sample, not merely a signal to commit the preceding samples.
-        const p = pressureOf(pointerKind(kindSv.value), e.stylusData?.pressure);
-        runOnJS(finish)([...live.value, e.x, e.y, p, Date.now()], kindSv.value);
+      .onTouchesUp(e => {
+        const point = e.changedTouches?.find(touch => touch.id === pointerSv.value);
+        if (!point || pointerSv.value < 0) return;
+        // Pan's final x/y may still be the last MOVE (or DOWN). Raw UP has the actual endpoint.
+        const flat = appendInkSample(live.value, point.x, point.y, live.value.at(-2) ?? 0.5, Date.now());
+        pointerSv.value = -1;
+        runOnJS(finish)(flat, kindSv.value);
       })
-      .onFinalize(() => { live.value = []; });
+      .onFinalize(() => { live.value = []; pointerSv.value = -1; });
     const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(active)
       .onEnd((e, success) => { if (success && pointerKind(e.pointerType) === "stylus") runOnJS(send)(false); });
     return Gesture.Simultaneous(draw, penDoubleTap);
-  }, [active, penMode, inkError, finish, send, live, activeSv, penSv, kindSv]);
+  }, [active, penMode, inkError, finish, send, live, activeSv, penSv, kindSv, pointerSv, tracePointer]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;

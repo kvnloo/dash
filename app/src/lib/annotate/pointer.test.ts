@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { pointerKind, pressureOf, routePointer, stylusEnters } from "./pointer";
+import { appendInkSample, pointerKind, pressureOf, routePointer, stylusEnters } from "./pointer";
 
 describe("pointer routing", () => {
+  test("raw UP adds its true local-DIP endpoint without fontScale/density multiplication or input mutation", () => {
+    const down = appendInkSample([], 65, 285, 0.7, 1);
+    const up = appendInkSample(down, 215, 385, 0.7, 2);
+    expect(down).toEqual([65, 285, 0.7, 1]);
+    expect(up).toEqual([65, 285, 0.7, 1, 215, 385, 0.7, 2]);
+    const pressure = appendInkSample(up, 215, 385, 0.9, 3);
+    expect(pressure).not.toBe(up); expect(pressure).toHaveLength(8);
+    expect(pressure[6]).toBe(0.9);
+    expect(appendInkSample(up, Number.NaN, 0, 0.5, 4)).toEqual(up);
+  });
   test("maps Gesture Handler pointer types", () => {
     expect([0, 1, 2, 3, 4].map(pointerKind)).toEqual(["touch", "stylus", "mouse", "other", "other"]);
   });

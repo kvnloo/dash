@@ -77,6 +77,7 @@ export class ContinuousVoice {
       const acquiring = this.io.peer(raw => { if (this.live(generation)) void this.event(raw, generation).catch(() => { if (this.live(generation)) void this.stop("Voice delivery unconfirmed. Microphone stopped; do not resend until checked."); }); }, () => {
         if (!this.live(generation)) return;
         this.send({ type: "session.update", session: { type: "realtime", audio: { input: { noise_reduction: { type: "far_field" }, turn_detection: { type: "semantic_vad", eagerness: "high", interrupt_response: false, create_response: false } } } } });
+        if (!this.live(generation)) return; // A closed/backpressured channel can synchronously signal loss.
         this.peer?.mute(this.state.muted);
         clearTimeout(this.timeout);
         this.update({ phase: "listening" });

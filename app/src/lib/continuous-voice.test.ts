@@ -103,4 +103,13 @@ describe("root continuous WebRTC lifecycle", () => {
     resolvePeer({ offer: async () => "v=0", answer: async () => {}, mute: () => {}, send: () => {}, close: () => { closed = true; } });
     await Promise.all([start, stop, background]); expect(closed).toBe(true); expect(released).toBe(true);
   });
+  test("data-channel loss during ready never relabels a disconnected call as listening", async () => {
+    let ready = () => {}, lost = () => {};
+    const call = new ContinuousVoice({ changed: () => {}, transcript: () => {},
+      request: async path => path === "/v1/realtime/session" ? { session_id: "closed-channel", transport: "realtime", value: "ephemeral" } : path === "provider:answer" ? "v=0" : { messages: [], after: 0 },
+      peer: async (_event, onReady, onLost) => { ready = onReady; lost = onLost; return { offer: async () => "v=0", answer: async () => ready(), mute: () => {}, send: () => lost(), close: () => {} }; },
+    });
+    await call.start({ profile: "test", session: "attached" });
+    expect(call.state.phase).toBe("error"); await call.stop();
+  });
 });
