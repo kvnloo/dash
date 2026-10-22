@@ -268,6 +268,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       ) : null}
       </View> : null}
       {liveOn && conversation ? <KeyboardInsetView style={styles.body}><LiveSurface conversationId={conversation.id} /></KeyboardInsetView> : <KeyboardInsetView style={styles.body} onOpen={scrollToNewest}>
+        {/* Absolute overlays must use the unpadded list viewport, not the IME inset box. */}
+        <View style={styles.viewport} testID="transcript-viewport">
         <BlurTargetView ref={blurTarget} style={styles.body}><FlashList
           ref={listRef}
           data={visibleMessages}
@@ -304,6 +306,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         <PromptRail anchors={anchors} following={following} live={Boolean(streamingMessage)} onJump={jumpPrompt}
           onContinue={prompt => { const anchor = anchors[prompt]; if (anchor) navigation.setParams({ draft: `Continue from prompt ${prompt + 1}: ${anchor.text.split("\n")[0]}\nResult: ${anchor.summary}\n\n` }); }}
           onLatest={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
+        </View>
       </KeyboardInsetView>}
       <KeyboardDock>
         <WorkersStrip workers={workers} />
@@ -376,6 +379,7 @@ const styles = StyleSheet.create({
   targetError: { color: colors.danger, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   handoffNote: { color: colors.textTertiary, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },
   body: { flex: 1 },
+  viewport: { flex: 1, minHeight: 0 },
   listContent: { paddingVertical: space.sm },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: "45%" },
   emptyTitle: { color: colors.text, ...type.title },

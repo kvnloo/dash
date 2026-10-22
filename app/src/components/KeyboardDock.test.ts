@@ -51,4 +51,12 @@ describe("KeyboardDock", () => {
     expect(chat).toContain("<KeyboardInsetView style={styles.body}><LiveSurface");
     expect(chat).not.toMatch(/<View style=\{styles\.body\}>/);
   });
+
+  test("the rail and blur target share the inner transcript viewport, not the padded keyboard box", () => {
+    const chat = readFileSync(join(import.meta.dir, "../screens/ChatScreen.tsx"), "utf8");
+    expect(chat).toMatch(/<View style=\{styles\.viewport\} testID="transcript-viewport">\s*<BlurTargetView ref=\{blurTarget\}/);
+    expect(chat).toMatch(/<\/BlurTargetView>\s*<PromptRail[\s\S]*?<\/View>\s*<\/KeyboardInsetView>/);
+    expect(chat).toContain("viewport: { flex: 1, minHeight: 0 }");
+    expect(chat).toContain("blurTarget={liveOn ? undefined : blurTarget}");
+  });
 });
