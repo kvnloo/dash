@@ -23,7 +23,9 @@ export async function dictate(language?: string): Promise<DictationResult> {
     const ms = Date.now() - t0;
     if (__DEV__) console.log("[dictation] result", JSON.stringify({ resultCode: result.resultCode, keys: Object.keys(result.extra ?? {}), ms }));
     const text = parseRecognizerResult(result);
-    return text ? { ok: true, text, ms } : { ok: false, reason: "canceled", ms };
+    if (text) return { ok: true, text, ms };
+    if (result.resultCode === 0) return { ok: false, reason: "canceled", ms };
+    return { ok: false, reason: "error", message: result.resultCode === -1 ? "The system recognizer returned no transcript. Try again or use keyboard voice typing." : `The system recognizer returned result code ${result.resultCode}.`, ms };
   } catch (error) {
     return { ok: false, reason: "error", message: error instanceof Error ? error.message : String(error), ms: Date.now() - t0 };
   }

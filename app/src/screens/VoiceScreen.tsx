@@ -48,7 +48,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
     setView({ kind: "shared", result });
   };
 
-  // Chosen from the composer mic's Live voice mode: go straight into z0live instead of asking for a second tap.
+  // Chosen from the composer: report in-app availability without an external handoff.
   const autostart = props.route.params?.autostart === true;
   useEffect(() => { if (autostart && !live) void openVoice(); }, [autostart]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -58,7 +58,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
 
   const result = view.kind === "shared" ? view.result : undefined;
   const opening = view.kind === "opening";
-  const launcherLabel = opening ? "Opening…" : live ? "Open in z0live" : "Start voice";
+  const launcherLabel = "In-app voice availability";
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
@@ -79,7 +79,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
         {result?.kind === "unavailable" ? <Text accessibilityLiveRegion="polite" style={[styles.message, styles.error]}>{result.message}</Text> : null}
       </View>
       <View style={styles.controls}>
-        <PrimaryButton accessibilityLabel={live ? "Open in z0live" : "Start voice in z0live"} disabled={opening} onPress={() => void openVoice()} label={launcherLabel} />
+        <PrimaryButton accessibilityLabel="Check in-app voice availability" disabled={opening} onPress={() => void openVoice()} label={launcherLabel} />
         {live ? (
           <>
             <Pressable accessibilityRole="button" onPress={() => screenBack(props.navigation)} style={styles.secondary}>
@@ -90,9 +90,9 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
         ) : (
           <>
             <Pressable accessibilityRole="button" disabled={opening} onPress={() => setView({ kind: "legacy" })} style={styles.secondary}>
-              <Text style={styles.secondaryText}>Use legacy voice</Text>
+              <Text style={styles.secondaryText}>Use legacy turn-based voice</Text>
             </Pressable>
-            <Text style={styles.note}>{chat.online ? "No live call. Start one in z0live; this view follows it." : "Offline: pair the bridge to follow a live call."}</Text>
+            <Text style={styles.note}>{chat.online ? "No in-app media client. Dictate remains available in the composer." : "Offline: pair the bridge to follow a live call."}</Text>
           </>
         )}
       </View>
