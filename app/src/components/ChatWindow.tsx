@@ -7,8 +7,8 @@ import {
   CLOSE_GLYPH,
   CLOSE_HIT,
   PILL_HIT,
-  identityBadge,
   identityLabel,
+  identityLines,
   morphFrom,
   type IdentityInput,
   type PillGeometry,
@@ -95,6 +95,9 @@ function treeNodes(identity: IdentityInput, title: string): TreeNode[] {
 }
 
 const TREE_EXPANDED = ["window-host", "window-profile", "window-harness"];
+const BADGE_FONT = 11;
+/** Options trigger: sliders glyph + surface word, ≥ 44 hit. */
+const OPTIONS_RESERVE = 84;
 
 /**
  * The composer grown into the window's attached rectangle: badge row + identity Tree + whatever
@@ -112,9 +115,10 @@ export function WindowDock({ identity, title, options, treeOpen, onTree, onClose
 }) {
   const thumb = useHandedness();
   const { width } = useWindowDimensions();
-  // Monospace advance ≈ 0.6em; the system font scale grows it. Text also ellipsizes as a backstop.
-  const budget = Math.max(12, Math.floor((width - 2 * CLOSE_HIT - 2 * space.lg - space.md) / (type.mono.fontSize * 0.6 * PixelRatio.getFontScale())));
-  const badge = identityBadge(identity, budget);
+  // Monospace advance ≈ 0.6em; the system font scale grows it. Reserve the Options trigger, the X,
+  // the chevron and paddings. Text also ellipsizes as a backstop.
+  const budget = Math.max(10, Math.floor((width - OPTIONS_RESERVE - CLOSE_HIT - 2 * space.sm - 40) / (BADGE_FONT * 0.6 * PixelRatio.getFontScale())));
+  const lines = identityLines(identity, budget);
   const nodes = useMemo(() => treeNodes(identity, title), [identity, title]);
   return <View testID="chat-window-dock">
     {treeOpen ? <View testID="chat-window-identity" style={styles.identity}>
@@ -132,7 +136,10 @@ export function WindowDock({ identity, title, options, treeOpen, onTree, onClose
         onPress={() => { haptic.select(); onTree(!treeOpen); }}
         style={styles.badge}
       >
-        <Text style={styles.badgeText} numberOfLines={1} ellipsizeMode="middle">{badge}</Text>
+        <View style={styles.badgeLines}>
+          <Text style={styles.badgeWho} numberOfLines={1} ellipsizeMode="middle">{lines.who}</Text>
+          <Text style={[styles.badgeModel, !identity.model && styles.badgeUnknown]} numberOfLines={1} ellipsizeMode="middle">{lines.model}</Text>
+        </View>
         <Feather name={treeOpen ? "chevron-down" : "chevron-up"} size={14} color={colors.textTertiary} />
       </Pressable>
       <Pressable testID="chat-window-close" accessibilityRole="button" accessibilityLabel="Close chat window" onPress={() => { haptic.tap(); onClose(); }} style={styles.close}>
@@ -157,7 +164,10 @@ const styles = StyleSheet.create({
   gap: { ...type.mono, fontSize: 11, color: colors.textTertiary, paddingVertical: 4, paddingHorizontal: space.sm },
   badgeRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.sm, minHeight: CLOSE_HIT },
   badge: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: space.sm, borderRadius: radius.md },
-  badgeText: { ...type.mono, color: colors.textMuted, flexShrink: 1 },
+  badgeLines: { flexShrink: 1, minWidth: 0 },
+  badgeWho: { ...type.mono, fontSize: BADGE_FONT, lineHeight: 15, color: colors.textMuted },
+  badgeModel: { ...type.mono, fontSize: BADGE_FONT, lineHeight: 15, color: colors.text },
+  badgeUnknown: { color: colors.textTertiary },
   close: { width: CLOSE_HIT, height: CLOSE_HIT, alignItems: "center", justifyContent: "center" },
   closeGlyph: { width: CLOSE_GLYPH, height: CLOSE_GLYPH, borderRadius: CLOSE_GLYPH / 2, alignItems: "center", justifyContent: "center", backgroundColor: glass.quiet, borderWidth: StyleSheet.hairlineWidth, borderColor: glass.hair2 },
 });

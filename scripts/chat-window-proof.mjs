@@ -58,7 +58,10 @@ async function listScroll(page) {
 async function openRow(page, title) {
   await page.getByTestId('chats-pane').getByText(title, { exact: true }).first().click();
   await page.getByTestId('chat-window').waitFor({ state: 'visible' });
+  const firstOpacity = await page.getByTestId('chat-window').evaluate(el => Number(getComputedStyle(el).opacity));
   await sleep(400); // > the 100–150 ms morph
+  const settledOpacity = await page.getByTestId('chat-window').evaluate(el => Number(getComputedStyle(el).opacity));
+  return { firstOpacity, settledOpacity };
 }
 
 async function closeWindow(page) {
@@ -75,9 +78,9 @@ try {
   }
   assert(ready, 'Metro becomes ready');
   browser = await chromium.launch({ headless: true });
-  for (const [width, height, side] of [[360, 780, 'right'], [390, 844, 'right'], [412, 915, 'right'], [412, 915, 'left']]) {
-    const tag = `${width}-${side}`;
-    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2 });
+  for (const [width, height, side, reduce = false] of [[360, 780, 'right'], [390, 844, 'right'], [412, 915, 'right'], [412, 915, 'left'], [390, 844, 'right', true]]) {
+    const tag = `${width}-${side}${reduce ? '-reduced' : ''}`;
+    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, reducedMotion: reduce ? 'reduce' : 'no-preference' });
     const page = await context.newPage();
     page.on('pageerror', e => errors.push(`${tag}: ${e.message}`));
     await page.goto(`http://127.0.0.1:${port}/?debug=1`, { waitUntil: 'networkidle', timeout: 180000 });
@@ -103,7 +106,9 @@ try {
     const tabBefore = await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].findIndex(t => t.getAttribute('aria-selected') === 'true'));
     await page.screenshot({ path: path.join(out, `${tag}-0-list.png`) });
 
-    await openRow(page, title);
+    const morph = await openRow(page, title);
+    assert.equal(morph.settledOpacity, 1, 'window fully opaque after the morph');
+    if (reduce) assert.equal(morph.firstOpacity, 1, 'reduced motion: no fade-in');
     const stateOpen = await page.evaluate(() => window.__DASH_DEBUG__.state());
     await page.screenshot({ path: path.join(out, `${tag}-1-window.png`) });
 
@@ -128,6 +133,8 @@ try {
     const badgeText = await page.getByTestId('chat-window-badge').innerText();
     const badgeLabel = await page.getByTestId('chat-window-badge').getAttribute('aria-label');
     assert(/model unknown/.test(badgeText), `badge says model unknown: ${badgeText}`);
+    const clipped = await page.getByTestId('chat-window-badge').evaluate(el => [...el.querySelectorAll('div[dir="auto"]')].filter(t => t.scrollWidth > t.clientWidth + 1).map(t => t.textContent));
+    assert.deepEqual(clipped, [], 'badge lines fit their width without layout ellipsis');
     assert(/session debug-cli/.test(badgeLabel ?? ''), `badge a11y carries the session: ${badgeLabel}`);
     const dock = await box(page, 'chat-window-dock');
     assert(dock && dock.y > height / 2, 'badge lives in the bottom dock');
@@ -203,7 +210,7 @@ try {
     assert.equal(badgeAgain, badgeLabel, 'same identity before/after');
     await closeWindow(page);
 
-    cases.push({ tag, width, height, side, scrollBefore, scrollAfter, tabBefore, tabAfter, activeId: stateOpen.activeId, pill, pillLabel, pixels, badgeText, badgeLabel, close, controls, menuRows, ime, reopenedDraft });
+    cases.push({ tag, width, height, side, scrollBefore, scrollAfter, tabBefore, tabAfter, activeId: stateOpen.activeId, morph, pill, pillLabel, pixels, badgeText, badgeLabel, close, controls, menuRows, ime, reopenedDraft });
     await context.close();
   }
   assert.equal(errors.length, 0, errors.join('\n'));

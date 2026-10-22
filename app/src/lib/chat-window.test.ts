@@ -7,8 +7,8 @@ import {
   PILL_HEIGHT,
   PILL_HIT,
   backTarget,
-  identityBadge,
   identityLabel,
+  identityLines,
   morphFrom,
   pillGeometry,
   pillReserve,
@@ -96,25 +96,32 @@ describe("backTarget", () => {
   });
 });
 
-describe("identityBadge", () => {
+describe("identityLines", () => {
   const full = { hostName: "groot", harnessName: "hermes", profile: "clean", sessionId: "20261022_abcdef", model: undefined };
-  test("full text when it fits, model unknown when the host has not reported one", () => {
-    expect(identityBadge(full, 80)).toBe("groot · hermes · clean · 20261022 · model unknown");
+  test("full text when it fits, model unknown on its own line when the host has not reported one", () => {
+    expect(identityLines(full, 40)).toEqual({ who: "groot · hermes · clean · 20261022", model: "model unknown" });
+    expect(identityLines(full, 33).who).toBe("groot · hermes · clean · 20261022");
   });
-  test("drops host first, then harness, then truncates profile", () => {
-    expect(identityBadge(full, 44)).toBe("hermes · clean · 20261022 · model unknown");
-    expect(identityBadge(full, 35)).toBe("clean · 20261022 · model unknown");
-    expect(identityBadge({ ...full, profile: "chiefstaff" }, 35)).toBe("chiefs… · 20261022 · model unknown");
+  test("drops host first, then harness, then truncates profile; session stays", () => {
+    expect(identityLines(full, 32).who).toBe("hermes · clean · 20261022");
+    expect(identityLines(full, 25).who).toBe("hermes · clean · 20261022");
+    expect(identityLines(full, 24).who).toBe("clean · 20261022");
+    expect(identityLines(full, 16).who).toBe("clean · 20261022");
+    expect(identityLines({ ...full, profile: "chiefstaff" }, 21).who).toBe("chiefstaff · 20261022");
+    expect(identityLines({ ...full, profile: "chiefstaff" }, 20).who).toBe("chiefs… · 20261022");
+    expect(identityLines({ ...full, profile: "chiefs7" }, 10).who).toBe("chiefs7 · 20261022");
   });
-  test("model middle-truncates last and keeps head and tail", () => {
-    const text = identityBadge({ ...full, profile: "chiefstaff", model: "claude-opus-5-5-20261001" }, 30);
-    expect(text).toBe("chiefs… · 20261022 · claud…1001");
+  test("model middle-truncates only past its own budget, keeping head and tail", () => {
+    expect(identityLines(full, 13).model).toBe("model unknown");
+    expect(identityLines({ ...full, model: "claude-opus-5-5-20261001" }, 24).model).toBe("claude-opus-5-5-20261001");
+    expect(identityLines({ ...full, model: "claude-opus-5-5-20261001" }, 12).model).toBe("claude…61001");
+    expect(identityLines({ ...full, model: "claude-opus-5-5-20261001" }, 3).model).toBe("cla…001");
   });
   test("profile equal to harness is not repeated; unattached chats say so", () => {
-    expect(identityBadge({ harnessName: "omp" }, 80)).toBe("omp · new chat · model unknown");
+    expect(identityLines({ harnessName: "omp" }, 80)).toEqual({ who: "omp · new chat", model: "model unknown" });
   });
   test("a reported model is shown verbatim", () => {
-    expect(identityBadge({ ...full, model: "m1" }, 80)).toBe("groot · hermes · clean · 20261022 · m1");
+    expect(identityLines({ ...full, model: "m1" }, 80).model).toBe("m1");
   });
   test("a11y label carries every field", () => {
     const label = identityLabel(full);

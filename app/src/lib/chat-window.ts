@@ -99,24 +99,23 @@ function middle(text: string, keep: number): string {
 }
 
 /**
- * Collapsed badge text for a character budget. Drop order: host, then harness, then the profile
- * tail-truncates to 6 characters, then the model middle-truncates. Session8 stays when attached.
+ * Collapsed badge for a character budget per line. Line 1 is who/where; line 2 is the model, so
+ * `model unknown` is never squeezed out by names. Line 1 drop order: host, then harness, then the
+ * profile tail-truncates to 6 characters. Session8 always stays. The model middle-truncates last.
  */
-export function identityBadge(input: IdentityInput, budget: number): string {
+export function identityLines(input: IdentityInput, budget: number): { who: string; model: string } {
   const model = input.model ?? MODEL_UNKNOWN;
   const session = shortSession(input.sessionId) ?? "new chat";
   const profile = input.profile ?? input.harnessName;
-  const sep = " · ";
-  const join = (parts: (string | undefined)[]) => parts.filter((p): p is string => Boolean(p)).join(sep);
+  const distinct = profile === input.harnessName ? undefined : profile;
+  const join = (parts: (string | undefined)[]) => parts.filter((p): p is string => Boolean(p)).join(" · ");
   const candidates = [
-    join([input.hostName, input.harnessName, profile === input.harnessName ? undefined : profile, session, model]),
-    join([input.harnessName, profile === input.harnessName ? undefined : profile, session, model]),
-    join([profile, session, model]),
-    join([tail(profile, 6), session, model]),
+    join([input.hostName, input.harnessName, distinct, session]),
+    join([input.harnessName, distinct, session]),
+    join([profile, session]),
   ];
-  for (const text of candidates) if (text.length <= budget) return text;
-  const fixed = join([tail(profile, 6), session]).length + sep.length;
-  return join([tail(profile, 6), session, middle(model, Math.max(6, budget - fixed))]);
+  const who = candidates.find(text => text.length <= budget) ?? join([tail(profile, 6), session]);
+  return { who, model: model.length <= budget ? model : middle(model, Math.max(6, budget - 1)) };
 }
 
 export function identityLabel(input: IdentityInput): string {
