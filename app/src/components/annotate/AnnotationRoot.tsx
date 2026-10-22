@@ -41,10 +41,10 @@ function loadInk(): Promise<InkModule> {
 }
 
 class InkBoundary extends Component<{ children: ReactNode; onError(error: Error): void }, { failed: boolean }> {
-  state = { failed: false };
+  override state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(error: Error) { this.props.onError(error); }
-  render() { return this.state.failed ? null : this.props.children; }
+  override componentDidCatch(error: Error) { this.props.onError(error); }
+  override render() { return this.state.failed ? null : this.props.children; }
 }
 
 export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX.Element {
