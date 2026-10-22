@@ -38,6 +38,8 @@ import { clearDebugPersistence, applyDebugSeed } from "./src/debug/seed";
 import { applyDemoSeed } from "./src/mock/seed";
 import { hydrate, store } from "./src/store/app";
 import { colors } from "./src/theme";
+import { NativeEvents } from "./src/components/NativeEvents";
+import { flushNotificationTarget, handleChatLink } from "./src/lib/notification-routing";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -102,7 +104,7 @@ export default function App() {
 
   useEffect(() => {
     // Web stage and app-route URLs belong to NavigationContainer linking, not a second handler.
-    const openStage = (url: string | null) => Platform.OS !== "web" && (stageLinks.handle(url) || appRoutes.handle(url));
+    const openStage = (url: string | null) => Platform.OS !== "web" && (handleChatLink(url) || stageLinks.handle(url) || appRoutes.handle(url));
     void Linking.getInitialURL().then((url) => {
       if (!openStage(url)) deepLinks.handle(url);
     });
@@ -125,7 +127,7 @@ export default function App() {
               ref={debugNavigationRef}
               theme={theme}
               linking={Platform.OS === "web" ? linking : undefined}
-              onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); stageLinks.flush(); appRoutes.flush(); }}
+              onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); stageLinks.flush(); appRoutes.flush(); flushNotificationTarget(); }}
             >
             <AnnotationRoot>
               <Stack.Navigator
@@ -146,6 +148,7 @@ export default function App() {
                 <Stack.Screen name="Lab" component={LabScreen} />
               </Stack.Navigator>
               <BridgePullOverlay />
+              <NativeEvents />
             </AnnotationRoot>
             </NavigationContainer>
           </BridgePullProvider>

@@ -62,6 +62,7 @@ import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptOffset } from "../lib/prompt-navigation";
 import { railTurns } from "../lib/rail-turns";
 import { enterAnnotation, registerSink } from "../store/annotate";
+import { sharedDrafts, consumeSharedDraft } from "../store/shared-drafts";
 
 const EMPTY: Message[] = [];
 
@@ -101,6 +102,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const settings = store.use((s) => s.settings);
   const connection = store.use((s) => s.connection);
   const conversation = store.use((s) => s.conversations.find((c) => c.id === s.activeId));
+  const sharedDraft = sharedDrafts.use(s => conversation ? s[conversation.id] : undefined);
   const messages = conversation?.messages ?? EMPTY;
   const visibleMessages = useMemo(() => {
     const queued = new Set(conversation ? queuedParts(conversation).flatMap(part => [part.user.id, part.assistant.id]) : []);
@@ -124,6 +126,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const targetError = conversation ? conversationTargetError(conversation) : undefined;
   const live = liveStore.use((all) => (conversation ? all[conversation.id] ?? EMPTY_LIVE : EMPTY_LIVE));
   const liveOn = harnessId === "hermes" && live.open;
+  useEffect(() => { if (sharedDraft && conversation) setLiveOpen(conversation.id, false); }, [sharedDraft, conversation?.id]);
 
   const toggleLive = useCallback(() => {
     const active = conversation ?? createConversation("hermes");
@@ -321,6 +324,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           context={context}
           key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
+          sharedDraft={sharedDraft}
+          onSharedDraftConsumed={id => { if (conversation) consumeSharedDraft(conversation.id, id); }}
           disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
           streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
           steerBusy={canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn)}
@@ -339,7 +344,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             harness: harnessId,
             harnessName,
           })}
-          onSend={liveOn ? onLiveSend : onSend}
+          onSend={(text, attachments, mode) => {
+            if (liveOn && !attachments.length) onLiveSend(text);
+            else {
+              if (liveOn && conversation) setLiveOpen(conversation.id, false);
+              onSend(text, attachments, mode);
+            }
+          }}
           onStop={onStop}
           onVoice={() => navigation.navigate("Voice", { autostart: true })}
           voiceCall={voiceCall}

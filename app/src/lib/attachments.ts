@@ -22,7 +22,7 @@ export interface PickedFile {
   bytes?: ArrayBuffer;
 }
 
-export type DraftState = "uploading" | "ready" | "error";
+export type DraftState = "local" | "uploading" | "ready" | "error";
 
 /** One chip in the composer. */
 export interface DraftAttachment {
@@ -65,7 +65,7 @@ export function isImage(mime: string): boolean {
 
 /** Send is allowed with text or ready files, never while a file is still uploading. */
 export function canSendDrafts(text: string, drafts: readonly DraftAttachment[]): boolean {
-  if (drafts.some(d => d.state === "uploading")) return false;
+  if (drafts.some(d => d.state === "uploading" || d.state === "local")) return false;
   return text.trim().length > 0 || drafts.some(d => d.state === "ready");
 }
 
