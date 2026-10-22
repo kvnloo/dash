@@ -332,7 +332,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               <View key="bots" style={{ width, flex: 1 }}>
                 <BotsPane navigation={navigation} />
               </View>
-              <View key="chats" style={{ width }}>
+              <View key="chats" style={{ width, flex: 1 }}>
                 <ChatsPane navigation={navigation} />
               </View>
               <View key="orchestra" style={{ width, flex: 1 }}>

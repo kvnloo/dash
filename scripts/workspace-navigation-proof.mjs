@@ -39,6 +39,25 @@ try {
       await page.screenshot({path:path.join(out,`${width}-pane-${i}.png`)});
       visited.push(label);
     }
+    // Chats content, not the selected tab: a bounded list viewport and a painted row or empty state.
+    await page.getByRole('tab').nth(1).click();
+    await page.waitForFunction(()=>document.querySelectorAll('[role="tab"]')[1]?.getAttribute('aria-selected')==='true');
+    await page.waitForTimeout(600);
+    const conversationCount = await page.evaluate(()=>window.__DASH_DEBUG__.state().conversationCount);
+    const chats = await page.evaluate(()=>{
+      const pane = document.querySelector('[data-testid="chats-pane"]');
+      const box = pane?.getBoundingClientRect();
+      const painted = pane ? [...pane.querySelectorAll('[role="button"], div')].filter(el => {
+        const r = el.getBoundingClientRect();
+        return el.textContent?.trim() && r.height > 20 && r.width > 100 && r.left >= -1 && r.right <= innerWidth + 1 && r.top >= box.top && r.top < box.bottom;
+      }).length : 0;
+      return { height: box?.height ?? 0, top: box?.top ?? 0, painted, empty: Boolean(pane?.textContent?.includes('No chats yet')) };
+    });
+    await page.screenshot({path:path.join(out,`${width}-chats-content.png`)});
+    assert(chats.height > 300, `Chats list viewport is bounded, got ${JSON.stringify(chats)}`);
+    assert(conversationCount > 0 ? chats.painted > 0 && !chats.empty : chats.empty, `Chats shows ${conversationCount} conversations or the empty state: ${JSON.stringify(chats)}`);
+    await page.getByRole('tab').nth(2).click();
+    await page.waitForFunction(()=>document.querySelectorAll('[role="tab"]')[2]?.getAttribute('aria-selected')==='true');
     const trace = page.getByTestId('trace-entry');
     await trace.waitFor({state:'visible'});
     const bounds = await trace.boundingBox();
@@ -58,7 +77,7 @@ try {
     await page.getByRole('button',{name:'Event trace',exact:true}).click();
     await page.getByTestId('trace-scroll').waitFor({state:'visible'});
     await page.getByRole('button',{name:'Back',exact:true}).click();
-    cases.push({width,visited,traceBounds:bounds,traceLabRoundTrips:2,headerShortcut:true});
+    cases.push({width,visited,conversationCount,chats,traceBounds:bounds,traceLabRoundTrips:2,headerShortcut:true});
     await context.close();
   }
   assert.equal(errors.length,0,errors.join('\n'));

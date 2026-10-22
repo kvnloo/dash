@@ -153,7 +153,7 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
   const getItemType = useCallback((item: ChatsListItem) => item.kind, []);
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} testID="chats-pane">
       {conversations.some(c => c.stale) && (
         <PressScale onPress={() => confirmDestructive("Clear ended chats?", "Saved history is removed from this phone only.", "Clear ended", clearEndedConversations)} accessibilityRole="button" style={[styles.clearEnded, thumb.align]}>
           <Text style={styles.clearEndedText}>Clear ended</Text>
