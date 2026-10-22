@@ -1,3 +1,4 @@
+import { executionToken } from "./bridge-auth";
 import { useEffect } from "react";
 import { AppState } from "react-native";
 import { parseServerMessage } from "../../../shared/protocol";
@@ -17,7 +18,7 @@ export function useSessionActivity(settings: Settings | null, online: boolean, p
         controller = new AbortController();
         const timeout = setTimeout(() => controller?.abort(), 5000);
         try {
-          const response = await fetch(`http://${settings.address}/hermes/activity?profile=${encodeURIComponent(profile)}&session=${encodeURIComponent(session)}`, { headers: { Authorization: `Bearer ${settings.token}`, ...(etag ? { "If-None-Match": etag } : {}) }, signal: controller.signal });
+          const response = await fetch(`http://${settings.address}/hermes/activity?profile=${encodeURIComponent(profile)}&session=${encodeURIComponent(session)}`, { headers: { Authorization: `Bearer ${await executionToken(settings)}`, ...(etag ? { "If-None-Match": etag } : {}) }, signal: controller.signal });
           if (response.ok) {
             const parsed = parseServerMessage({ type: "history", harness: "hermes", sessionId: session, messages: await response.json() });
             if (!stopped && parsed?.type === "history") { applyLiveHistory("hermes", session, parsed.messages, host, profile); etag = response.headers.get("ETag") ?? ""; }

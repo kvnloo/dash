@@ -1,3 +1,4 @@
+import { executionToken } from "./bridge-auth";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { parseOrchestra, type OrchestraSnapshot } from "../../../shared/orchestra";
@@ -14,7 +15,7 @@ export function useOrchestraEvidence(settings: { address: string; token: string 
       if (pending || disposed || AppState.currentState !== "active" || !settings) return;
       pending = true;
       try {
-        const response = await fetch(`http://${settings.address}/orchestra/graph`, { headers: { Authorization: `Bearer ${settings.token.trim()}` }, signal: controller.signal });
+        const response = await fetch(`http://${settings.address}/orchestra/graph`, { headers: { Authorization: `Bearer ${await executionToken(settings)}` }, signal: controller.signal });
         if (!response.ok) throw new Error(`Graph evidence unavailable (HTTP ${response.status}); roster only.`);
         const parsed = parseOrchestra(await response.json());
         if (!parsed) throw new Error("Invalid graph snapshot; roster only.");

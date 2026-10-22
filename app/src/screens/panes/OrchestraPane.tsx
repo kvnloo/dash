@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useWindowDimensions } from "react-native";
+import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
 import { OrchestraGraph } from "../../components/OrchestraGraph";
 import { WorkspaceActions } from "../../components/WorkspaceHeader";
 import { debugUi } from "../../debug/ui-store";
@@ -36,5 +37,7 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
       const result = openAgentConversation({ id: agent.id, role: agent.kind, description: agent.detail || "Bridge session", name: agent.name, harness: agent.kind, targetHostId: host.id, profileId: agent.id, sessionId: agent.sessionId, cwd: agent.cwd, online: host.online });
       if ("conversation" in result) navigation.navigate("Chat");
     }
-  }} actions={<WorkspaceActions navigation={navigation} />} />;
+  }} actions={<WorkspaceActions navigation={navigation} />}>
+    <TraceEntryCard onOpen={() => navigation.navigate("Trace")} />
+  </OrchestraGraph>;
 }

@@ -29,6 +29,7 @@ export function WorkspaceActions({ navigation }: { navigation: NavigationProp<Ro
       {/* A sans numeral on a gold pill: a serif "1" beside a label reads as the letter I. */}
       <View style={styles.badge}><Text style={styles.badgeText}>{pending > 99 ? "99+" : pending}</Text></View>
     </PressScale> : null}
+    <IconButton icon="activity" label="Event trace" onPress={() => navigation.navigate("Trace")} />
     <IconButton icon="edit-3" label="New chat" onPress={() => { createConversation(store.get().settings?.harness ?? "omp"); navigation.navigate("Chat"); }} />
     <IconButton icon="settings" label="Settings" onPress={() => navigation.navigate("Settings")} />
   </View>;

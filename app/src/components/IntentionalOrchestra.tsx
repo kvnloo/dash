@@ -28,7 +28,7 @@ function Wire({ relation, active }: { relation: MapRelation; active: boolean }) 
   const animated = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return <Animated.View style={[{ width: 18, height: 24, borderLeftWidth: relation === "hosted" ? 1 : 2, borderBottomWidth: relation === "hosted" ? 1 : 2, borderColor: relationColor[relation], borderStyle: relation === "workspace" ? "dotted" : "solid", marginLeft: 10 }, animated]} />;
 }
-export function OrchestraGraph({ graph, width: _width, children: _children, actions, fixture = false, error, warnings = [], onOpen, onFeedback, canOpen }: { graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode; fixture?: boolean; error?: string; warnings?: string[]; onOpen?(node: MapNode): void; onFeedback?(node: MapNode): void; canOpen?(node: MapNode): boolean }) {
+export function OrchestraGraph({ graph, width: _width, children, actions, fixture = false, error, warnings = [], onOpen, onFeedback, canOpen }: { graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode; fixture?: boolean; error?: string; warnings?: string[]; onOpen?(node: MapNode): void; onFeedback?(node: MapNode): void; canOpen?(node: MapNode): boolean }) {
   const [view, setView] = useState<OrchestraView>(() => defaultView(graph.nodes));
   const [chosen, setChosen] = useState(false);
   const [filter, setFilter] = useState<MapFilter | null>(null);
@@ -72,6 +72,7 @@ export function OrchestraGraph({ graph, width: _width, children: _children, acti
     {view === "work" ? <Text style={styles.hint}>{current.nodes.filter(n => n.collision).length} W1 collisions · {current.nodes.filter(n => n.kind !== "repo" && n.state === "live").length} live sessions changing worktrees</Text> : null}
     {view === "triage" ? <Text style={styles.hint}>{TRIAGE_LANES.map(l => `${l.title} ${current.nodes.filter(n => n.state === l.state).length}`).join(" → ")}</Text> : null}
     <Animated.View style={[styles.body, transition]}><ScrollView contentContainerStyle={styles.content}>
+      {children}
       {view === "fleet" ? <View style={styles.telemetry}>{current.nodes.filter(n => n.kind === "host").map(host => <PressScale key={host.id} onPress={() => { setFocusId(host.id); setFocusOnly(true); }} style={[styles.telemetryRow, host.online === false && { opacity: 0.4, minHeight: 26 }]}><View style={styles.row}><Glyph kind="host" /><Text style={styles.label}>{host.label}</Text><Text style={styles.meta}>{host.online === false ? "offline · " : ""}{current.edges.filter(e => e.from === host.id && current.nodes.some(n => n.id === e.to && n.state === "live")).length} live</Text></View>{host.online !== false ? <Text style={styles.meta}>{host.health || host.reason}</Text> : null}</PressScale>)}</View> : null}
       {view === "triage" ? TRIAGE_LANES.map(lane => {
         const nodes = projected.nodes.filter(n => n.state === lane.state);

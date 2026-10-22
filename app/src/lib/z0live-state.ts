@@ -1,3 +1,4 @@
+import { executionToken } from "./bridge-auth";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { parseZ0LiveState, type Z0LiveState } from "../../../shared/z0live-state";
@@ -22,7 +23,7 @@ export function useZ0LiveState(settings: Settings | null, enabled: boolean, inte
       controller = new AbortController();
       const timeout = setTimeout(() => controller?.abort(), 900);
       try {
-        const response = await fetch(`http://${settings.address}/z0live/state`, { headers: { Authorization: `Bearer ${settings.token}` }, signal: controller.signal });
+        const response = await fetch(`http://${settings.address}/z0live/state`, { headers: { Authorization: `Bearer ${await executionToken(settings)}` }, signal: controller.signal });
         const state = response.ok ? parseZ0LiveState(await response.json()) : undefined;
         if (!disposed) setSample(state ? { key, state } : undefined);
       } catch { if (!disposed) setSample(undefined); }
