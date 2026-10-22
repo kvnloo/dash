@@ -66,6 +66,43 @@ try{
     assert(result.cases.at(-1).quickPen.red>redBefore+150,'quick stylus stroke must paint after release');
     await context.close();
   }
+  // An explicitly seeded, offline existing chat. No backend session is created or sent to.
+  const context=await browser.newContext({viewport:{width:412,height:915},deviceScaleFactor:1});
+  page=await context.newPage();page.on('pageerror',e=>result.errors.push(e.message));
+  let popups=0;page.on('popup',()=>popups++);
+  const chat={id:'repair-existing-chat',title:'Existing attached conversation',harness:'hermes',sessionId:'repair-existing-session',profileId:'repair-existing-profile',createdAt:1,updatedAt:1,queueWaitForIdle:true,messages:[{id:'held-user',role:'user',text:'Original queued request',delivery:'queued',at:1},{id:'held-answer',role:'assistant',text:'',state:'pending',turnId:'held-existing-turn',seq:0,at:2}]};
+  await page.addInitScript(chat=>{
+    if(sessionStorage.getItem('repair-seeded'))return;
+    localStorage.setItem('dash.settings.v1',JSON.stringify({address:'127.0.0.1:9',token:'offline-proof-only',harness:'hermes',inAppFeedback:false}));
+    localStorage.setItem('dash.conversations.v1',JSON.stringify([chat]));localStorage.setItem('dash.activeId.v1',chat.id);sessionStorage.setItem('repair-seeded','yes');
+  },chat);
+  await page.goto(`http://127.0.0.1:${port}`,{waitUntil:'domcontentloaded',timeout:180000});
+  await page.getByRole('tab').nth(1).click({timeout:120000});
+  await page.getByText(chat.title,{exact:true}).first().click({timeout:60000});
+  const input=page.getByRole('textbox',{name:'Message',exact:true});await input.fill('Original unsent draft\nKeep this exact text');
+  await page.evaluate(()=>window.__dashAnnotate.enterAnnotation());await wait(()=>page.locator('canvas').count(),'chat canvas');
+  await page.mouse.move(60,280);await page.mouse.down();await page.mouse.move(210,380,{steps:20});await page.mouse.up();await sleep(250);
+  const originalInk=await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes);
+  assert.equal(originalInk.length,1);
+  // Pen mode lets ordinary touch/mouse navigation pass without discarding the root-owned ink.
+  await page.getByRole('button',{name:'Pen mode: only the S Pen draws, fingers scroll',exact:true}).click();
+  await page.getByRole('button',{name:'Back',exact:true}).click();
+  await page.getByRole('tab').nth(1).click();await page.getByText(chat.title,{exact:true}).first().click();
+  assert.equal(await input.inputValue(),'Original unsent draft\nKeep this exact text');
+  assert.deepEqual(await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes),originalInk);
+  const mic=page.getByRole('button',{name:'Dictate',exact:true});const bounds=await mic.boundingBox();assert(bounds);
+  await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);await page.mouse.down();await sleep(350);
+  await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2-48,{steps:8});await page.mouse.up();
+  await page.getByRole('button',{name:'Live voice',exact:true}).click();
+  await page.getByRole('button',{name:'Retry Live voice',exact:true}).waitFor();
+  assert.equal(await page.getByText('Dash voice',{exact:true}).count(),0,'composer stays in this chat, not a Voice route');
+  assert.equal(await input.inputValue(),'Original unsent draft\nKeep this exact text');assert.equal(popups,0);
+  const persisted=await page.evaluate(()=>({active:localStorage.getItem('dash.activeId.v1'),chats:JSON.parse(localStorage.getItem('dash.conversations.v1')??'[]')}));
+  assert.equal(persisted.active,chat.id);assert.equal(persisted.chats.length,1);
+  assert.equal(persisted.chats[0].messages.find(m=>m.id==='held-answer')?.state,'pending');
+  await page.screenshot({path:path.join(out,'412-returned-chat-voice-unavailable.png')});
+  result.navigation={scope:'Offline existing-chat fixture; real raw ink and navigation, no backend turn or mic capture',draftPreserved:true,inkPreserved:true,queuePreserved:true,popups,noNewConversation:true};
+  await context.close();
   assert.deepEqual(result.errors,[]);result.status='PASS';
 }catch(error){result.status='FAIL';result.error=String(error.stack??error);if(page){result.body=await page.locator('body').innerText().catch(()=>'');await page.screenshot({path:path.join(out,'failure.png')}).catch(()=>{});}throw error;}
 finally{await browser?.close();try{process.kill(-expo.pid,'SIGTERM');}catch{}await writeFile(path.join(out,'expo.log'),log);await writeFile(path.join(out,'rendered-result.json'),JSON.stringify(result,null,2));}

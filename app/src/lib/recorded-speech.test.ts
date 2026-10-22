@@ -39,3 +39,11 @@ test("stale release cannot free a later owner's capture", () => {
   release?.(); const live = gate.acquire("live"); release?.();
   expect(gate.owner).toBe("live"); live?.();
 });
+
+test("failed stop holds the microphone lease; retry stops rather than starting a second recorder", async () => {
+  const gate = new CaptureGate(); let stops = 0, records = 0;
+  const speech = new RecordedSpeech("dictation", gate, { prepare: async () => {}, record: () => { records++; }, stop: async () => { if (++stops === 1) throw new Error("stop failed"); }, transcribe: async () => "words", text: () => {}, changed: () => {} });
+  await speech.begin(); await speech.end();
+  expect(gate.owner).toBe("dictation"); expect(gate.acquire("live")).toBeUndefined();
+  await speech.begin(); expect(records).toBe(1); expect(stops).toBe(2); expect(gate.owner).toBeUndefined();
+});
