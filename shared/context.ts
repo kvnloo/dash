@@ -1,5 +1,5 @@
 export type ContextCategory = { id: string; label: string; tokens: number; estimated: boolean; details: { label: string; tokens: number }[]; note?: string };
-export type ContextSnapshot = { sessionId: string; model: string; used: number; maximum: number; threshold: number; estimated: boolean; source: string; categories: ContextCategory[]; revision: string; notes: string[] };
+export type ContextSnapshot = { sessionId: string; model: string; /** Effective runtime provider the host recorded for this session (additive, optional). */ provider?: string; /** Hermes parent session (compaction/delegation lineage), when recorded. */ parentSessionId?: string; used: number; maximum: number; threshold: number; estimated: boolean; source: string; categories: ContextCategory[]; revision: string; notes: string[] };
 export type PlanWindow = { label: string; percent: number; resetsAt?: string };
 export type PlanUsage = { provider: string; windows: PlanWindow[]; unavailable?: boolean };
 export type ContextView = { context: ContextSnapshot | null; plans: PlanUsage[] };
@@ -14,7 +14,8 @@ export function parseContext(value: unknown): ContextSnapshot | undefined {
     for (const detail of item.details) { if (!record(detail) || typeof detail.label !== "string" || !count(detail.tokens)) return; details.push({ label: detail.label, tokens: detail.tokens }); }
     categories.push({ id: item.id, label: item.label, tokens: item.tokens, estimated: item.estimated, details, ...(typeof item.note === "string" ? { note: item.note } : {}) });
   }
-  return { sessionId: value.sessionId, model: value.model, used: value.used, maximum: value.maximum, threshold: value.threshold, estimated: value.estimated, source: value.source, revision: value.revision, categories, notes: value.notes };
+  const lineage = { ...(typeof value.provider === "string" && value.provider ? { provider: value.provider } : {}), ...(typeof value.parentSessionId === "string" && value.parentSessionId ? { parentSessionId: value.parentSessionId } : {}) };
+  return { sessionId: value.sessionId, model: value.model, ...lineage, used: value.used, maximum: value.maximum, threshold: value.threshold, estimated: value.estimated, source: value.source, revision: value.revision, categories, notes: value.notes };
 }
 export function parsePlan(value: unknown): PlanUsage | undefined {
   if (!record(value) || typeof value.provider !== "string" || !Array.isArray(value.windows)) return;
