@@ -44,7 +44,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
   const [manualCode, setManualCode] = useState(route.params?.code ?? "");
   const [bootstrapToken, setBootstrapToken] = useState("");
   const [identityLink, setIdentityLink] = useState(route.params?.identityLink ?? "");
-  useEffect(() => { if (route.params?.identityLink) setIdentityLink(route.params.identityLink); }, [route.params?.identityLink]);
+  useEffect(() => { if (route.params?.identityLink) { setIdentityLink(route.params.identityLink); if (route.params.address) setComputer(route.params.address); } }, [route.params?.identityLink, route.params?.address]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -199,7 +199,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
       if (!/^[A-Za-z0-9.-]+:\d{1,5}$/.test(computer.trim())) throw new Error("Enter the Dash bridge address and port (not the identity service)");
       const claim = await claimIdentity(link);
       await setSecret(identitySecretKey(claim.enrollment.credentialId), claim.credential);
-      const settings = { address: computer.trim(), token: "", harness: "omp", inAppFeedback: true, identity: claim.enrollment };
+      const settings = { address: computer.trim(), token: "", harness: "hermes", inAppFeedback: true, identity: claim.enrollment };
       const attempt = new AbortController();
       attemptRef.current?.abort(); attemptRef.current = attempt;
       await connectSettings({ settings, connection: store, save: saveSettings, start: s => bridge.start(s), signal: attempt.signal,

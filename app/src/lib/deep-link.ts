@@ -1,8 +1,18 @@
 import { parseDashConnectUrl, type PairPrefill } from "./pair-url";
+import { parseIdentityPairLink } from "../../../shared/z0bridge-identity";
+export type EnrollmentPrefill = PairPrefill | { address: string; identityLink: string };
+export function identityPrefill(raw: string): EnrollmentPrefill | null {
+  if (!parseIdentityPairLink(raw)) return null;
+  const address = new URLSearchParams(raw.slice(raw.indexOf("?") + 1)).get("bridge");
+  if (!address || !/^100\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.(?:[0-9]{1,3})\.(?:[0-9]{1,3}):[0-9]{1,5}$/.test(address)) return null;
+  const [host, port] = address.split(":");
+  if (!host || !port || host.split(".").some(n => Number(n) > 255) || Number(port) < 1 || Number(port) > 65535) return null;
+  return { address, identityLink: raw };
+}
 
 export type PairNavigator = {
   isReady(): boolean;
-  openPair(prefill: PairPrefill): void;
+  openPair(prefill: EnrollmentPrefill): void;
 };
 
 /**
@@ -12,11 +22,11 @@ export type PairNavigator = {
  * is kept: an older code would be stale anyway.
  */
 export function createDeepLinkRouter(nav: PairNavigator) {
-  let pending: PairPrefill | null = null;
+  let pending: EnrollmentPrefill | null = null;
   return {
     handle(url: string | null | undefined): boolean {
       if (!url) return false;
-      const prefill = parseDashConnectUrl(url);
+      const prefill = identityPrefill(url) ?? parseDashConnectUrl(url);
       if (!prefill) return false;
       if (nav.isReady()) nav.openPair(prefill);
       else pending = prefill;
