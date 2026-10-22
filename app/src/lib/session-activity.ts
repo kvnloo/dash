@@ -3,6 +3,7 @@ import { AppState } from "react-native";
 import { parseServerMessage } from "../../../shared/protocol";
 import type { Settings } from "../model";
 import { applyLiveHistory } from "../store/app";
+import { executionToken } from "./bridge-auth";
 
 /** Foreground, one request at a time; full snapshots replace by native message/call ID. */
 export function useSessionActivity(settings: Settings | null, online: boolean, profile?: string, session?: string, host?: string) {
@@ -17,7 +18,8 @@ export function useSessionActivity(settings: Settings | null, online: boolean, p
         controller = new AbortController();
         const timeout = setTimeout(() => controller?.abort(), 5000);
         try {
-          const response = await fetch(`http://${settings.address}/hermes/activity?profile=${encodeURIComponent(profile)}&session=${encodeURIComponent(session)}`, { headers: { Authorization: `Bearer ${settings.token}`, ...(etag ? { "If-None-Match": etag } : {}) }, signal: controller.signal });
+          const token = await executionToken(settings);
+          const response = await fetch(`http://${settings.address}/hermes/activity?profile=${encodeURIComponent(profile)}&session=${encodeURIComponent(session)}`, { headers: { Authorization: `Bearer ${token}`, ...(etag ? { "If-None-Match": etag } : {}) }, signal: controller.signal });
           if (response.ok) {
             const parsed = parseServerMessage({ type: "history", harness: "hermes", sessionId: session, messages: await response.json() });
             if (!stopped && parsed?.type === "history") { applyLiveHistory("hermes", session, parsed.messages, host, profile); etag = response.headers.get("ETag") ?? ""; }
@@ -29,5 +31,5 @@ export function useSessionActivity(settings: Settings | null, online: boolean, p
     };
     void poll();
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
-  }, [settings?.address, settings?.token, online, profile, session, host]);
+  }, [settings, online, profile, session, host]);
 }

@@ -1,7 +1,10 @@
-import { toggleHandedness, useHandedness } from "../lib/useHandedness";
+import { useHandedness } from "../lib/useHandedness";
+import { MicButton } from "./MicButton";
+import { dictate } from "../lib/dictation";
+import { insertAtCursor, type Selection } from "../lib/mic-gesture";
 import { Feather } from "@expo/vector-icons";
-import { type RefObject, memo, useRef, useState } from "react";
-import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { type RefObject, memo, useEffect, useRef, useState } from "react";
+import { Alert, Keyboard, Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { applyScopePrefix } from "../lib/global-search";
 import { PRESS_SCALE } from "../motion";
@@ -37,6 +40,28 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
 }: Props) {
   const thumb = useHandedness();
   const inputRef = useRef<TextInput>(null);
+  const selection = useRef<Selection | null>(null);
+  const pending = useRef(false);
+  const mounted = useRef(true);
+  const [dictating, setDictating] = useState(false);
+  const [cursor, setCursor] = useState<Selection>();
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const onDictate = async () => {
+    if (pending.current) return;
+    pending.current = true;
+    const at = selection.current;
+    setDictating(true); Keyboard.dismiss();
+    const result = await dictate();
+    pending.current = false;
+    if (!mounted.current) return;
+    if (result.ok) {
+      const next = insertAtCursor(value, at, result.text);
+      onChange(next.text);
+      const sel = { start: next.cursor, end: next.cursor };
+      selection.current = sel; setCursor(sel);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    } else if (result.reason !== "canceled") Alert.alert("Dictation", result.message ?? "System speech recognizer unavailable.");
+  };
   const [focused, setFocused] = useState(false);
   const canSend = value.trim().length > 0;
 
@@ -64,6 +89,11 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
         <TextInput
           ref={inputRef}
           value={value}
+          selection={cursor}
+          onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }}
+          showSoftInputOnFocus={!dictating}
+          onPressIn={() => setDictating(false)}
+          multiline
           onChangeText={onChange}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
@@ -96,20 +126,8 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
               <Feather name="arrow-up" size={18} color={colors.onAccent} />
             </PressScale>
           </Animated.View>
-        ) : (
-          <PressScale
-            onPress={onVoice}
-            onLongPress={toggleHandedness}
-            accessibilityHint="Long press to switch thumb side"
-            scaleTo={PRESS_SCALE.control}
-            style={styles.sideIcon}
-            accessibilityRole="button"
-            accessibilityLabel="Voice input"
-            hitSlop={8}
-          >
-            <Feather name="mic" size={22} color={colors.textMuted} />
-          </PressScale>
-        )}
+        ) : null}
+        <MicButton side={thumb.side} onDictate={onDictate} onLive={() => onVoice?.()} />
       </GlassSurface>
     </View>
   );
@@ -122,14 +140,14 @@ export function applyScopeMention(current: string, label: string): string {
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: space.md, paddingBottom: space.sm, gap: space.sm },
   wrapBottom: { paddingTop: space.xs, paddingBottom: 0 },
-  shell: { height: 52 },
+  shell: { minHeight: 52 },
   field: {
     flexDirection: "row",
     alignItems: "center",
     paddingLeft: 6,
     paddingRight: 6,
     paddingVertical: 6,
-    height: 52,
+    minHeight: 52,
   },
   sideIcon: {
     width: 44,
@@ -140,6 +158,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     minWidth: 0,
+    maxHeight: 148,
     color: colors.text,
     ...type.body,
     paddingVertical: 8,

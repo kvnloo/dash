@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 import type { Settings } from "../model";
 import type { Thinking } from "./thinking";
+import { executionToken } from "./bridge-auth";
 
 export type ObservedPhase = Thinking & { observed: boolean; source: "terminal" };
 export function parseObservedPhase(value: unknown): ObservedPhase | undefined {
@@ -28,8 +29,9 @@ export function useSessionPhase(settings: Settings | null, online: boolean, prof
       controller = new AbortController();
       const timeout = setTimeout(() => controller?.abort(), 1800);
       try {
+        const token = await executionToken(settings);
         const response = await fetch(`http://${settings.address}/hermes/phase?profile=${encodeURIComponent(profile)}&session=${encodeURIComponent(session)}`, {
-          headers: { Authorization: `Bearer ${settings.token}` }, signal: controller.signal,
+          headers: { Authorization: `Bearer ${token}` }, signal: controller.signal,
         });
         const phase = response.ok ? parseObservedPhase(await response.json()) : undefined;
         if (!disposed) setSample(phase ? { key, phase } : undefined);
@@ -38,6 +40,6 @@ export function useSessionPhase(settings: Settings | null, online: boolean, prof
     };
     void poll();
     return () => { disposed = true; clearTimeout(timer); controller?.abort(); };
-  }, [settings?.address, settings?.token, online, profile, session, key]);
+  }, [settings, online, profile, session, key]);
   return online && sample?.key === key ? sample.phase : undefined;
 }

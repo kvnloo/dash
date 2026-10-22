@@ -9,7 +9,8 @@ import { useFonts } from "expo-font";
 import { CormorantGaramond_500Medium } from "@expo-google-fonts/cormorant-garamond";
 import { HankenGrotesk_400Regular, HankenGrotesk_600SemiBold } from "@expo-google-fonts/hanken-grotesk";
 import { IBMPlexMono_400Regular } from "@expo-google-fonts/ibm-plex-mono";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { AttachedDock } from "./src/components/AttachedDock";
 import { Linking, Platform, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -82,6 +83,7 @@ const appRoutes = createAppRouteRouter({
 });
 
 export default function App() {
+  const [screen, setScreen] = useState<string>("Main");
   const [fontsLoaded, fontError] = useFonts({ CormorantGaramond_500Medium, HankenGrotesk_400Regular, HankenGrotesk_600SemiBold, IBMPlexMono_400Regular });
   if (fontError) throw fontError;
   const hydrated = store.use((s) => s.hydrated);
@@ -125,7 +127,8 @@ export default function App() {
               ref={debugNavigationRef}
               theme={theme}
               linking={Platform.OS === "web" ? linking : undefined}
-              onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); stageLinks.flush(); appRoutes.flush(); }}
+              onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); stageLinks.flush(); appRoutes.flush(); setScreen(debugNavigationRef.getCurrentRoute()?.name ?? "Main"); }}
+              onStateChange={() => setScreen(debugNavigationRef.getCurrentRoute()?.name ?? "Main")}
             >
             <AnnotationRoot>
               <Stack.Navigator
@@ -145,6 +148,11 @@ export default function App() {
                 <Stack.Screen name="Trace" component={TraceScreen} />
                 <Stack.Screen name="Lab" component={LabScreen} />
               </Stack.Navigator>
+              <AttachedDock visible={!["Chat", "Pair", "Voice"].includes(screen)}
+                onChat={() => debugNavigationRef.navigate("Chat")}
+                onSearch={() => debugNavigationRef.navigate("Main")}
+                onVoice={() => debugNavigationRef.navigate("Voice", { autostart: true })}
+                onApprovals={() => debugNavigationRef.navigate("Approvals")} />
               <BridgePullOverlay />
             </AnnotationRoot>
             </NavigationContainer>

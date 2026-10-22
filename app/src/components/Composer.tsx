@@ -24,6 +24,7 @@ import {
   type PickedFile,
 } from "../lib/attachments";
 import { store } from "../store/app";
+import { useComposerDraft } from "../store/composer-draft";
 import { colors, fonts, glass, radius, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 import { PressScale } from "./PressScale";
@@ -32,6 +33,7 @@ import { composerMode, type SendMode } from "../lib/composer-mode";
 import { haptic } from "../haptics";
 
 interface Props {
+  draftKey?: string;
   context?: ContextControl;
   disabled: boolean;
   streaming: boolean;
@@ -46,7 +48,7 @@ interface Props {
   blurTarget?: RefObject<View | null>;
   /** Debug fixtures only: chips to show on first render. */
   initialAttachments?: DraftAttachment[];
-  onSend(text: string, attachments: ChatAttachment[], mode?: SendMode): void;
+  onSend(text: string, attachments: ChatAttachment[], mode?: SendMode): boolean | void;
   onStop(): void;
   onVoice(): void;
   /** A live z0live call's orb state: the mic shows a small live orb instead of the glyph. */
@@ -55,14 +57,13 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice, voiceCall }: Props) {
+export const Composer = memo(function Composer({ draftKey, context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice, voiceCall }: Props) {
   const thumb = useHandedness();
   const [choice, setChoice] = useState<SendMode>("steer");
   useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
   const sendMode = composerMode(steerBusy, choice);
   const switchMode = () => { setChoice(value => value === "steer" ? "queue" : "steer"); haptic.select(); };
-  const [text, setText] = useState(initialText ?? "");
-  const [drafts, setDrafts] = useState<DraftAttachment[]>(initialAttachments ?? []);
+  const { text, setText, drafts, setDrafts } = useComposerDraft(draftKey, initialText, initialAttachments);
   const mounted = useRef(true);
   const inputRef = useRef<TextInput>(null);
   const selection = useRef<Selection | null>(null);
@@ -108,9 +109,9 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
   const canSend = editingQueue ? Boolean(draftText.trim()) : canSendDrafts(draftText, drafts) && !disabled;
 
   const update = useCallback((key: string, patch: Partial<DraftAttachment>) => {
-    if (!mounted.current) return;
+    if (!mounted.current && !draftKey) return;
     setDrafts(list => list.map(d => (d.key === key ? { ...d, ...patch } : d)));
-  }, []);
+  }, [draftKey, setDrafts]);
 
   const addFiles = useCallback((picked: PickedFile[]) => {
     const settings = store.get().settings;
@@ -158,9 +159,9 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
     if (queuePreview !== undefined) { onSaveQueuePreview?.(); return; }
     const refs = readyRefs(drafts);
     const value = text.trim();
+    if (onSend(value, refs, sendMode.mode) === false) return;
     setText("");
     setDrafts([]);
-    onSend(value, refs, sendMode.mode);
   }, [canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
 
   return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>

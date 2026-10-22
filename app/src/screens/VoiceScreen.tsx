@@ -50,7 +50,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
 
   // Chosen from the composer: report in-app availability without an external handoff.
   const autostart = props.route.params?.autostart === true;
-  useEffect(() => { if (autostart && !live) void openVoice(); }, [autostart]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (autostart && !live) void openVoice(); }, [autostart]);
 
   if (view.kind === "legacy") {
     return <LegacyVoiceScreen {...props} onExit={() => setView({ kind: "shared" })} />;

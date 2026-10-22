@@ -1,3 +1,4 @@
+import { sendConversation } from "../net/send-conversation";
 import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
 import { useHandedness } from "../lib/useHandedness";
@@ -181,15 +182,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       dragging.current = false;
       setFollow(true);
       const active = conversation ?? createConversation(harnessId);
-      if (mode === "steer") { sendTurn(text, attachments, active, "steer"); return; }
-      if (conversationBusy(active.id) || thinking.phase !== "idle") {
-        if (!streamingMessage && thinking.phase !== "idle") setQueueWaiting(active.id, true);
-        beginTurn(active.id, text, { pending: true, attachments });
-        haptic.tap();
-        requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
-        return;
-      }
-      sendTurn(text, attachments, active);
+      if (!sendConversation(active, text, attachments, mode, thinking.phase, Boolean(streamingMessage), sendChat)) return false;
+      haptic.tap();
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+      return true;
     },
     [conversation, harnessId, sendTurn, setFollow, thinking.phase, streamingMessage],
   );
@@ -318,6 +314,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         </> : null}
         {conversation && !liveOn ? <QueuedStack conversation={conversation} canSteer={online && !targetError && canSteer(harnessId, conversation.sessionId, thinking.phase, liveOn)} onSteer={() => { const payload = takeQueuedForSteer(conversation.id); if (payload) sendTurn(payload.text, payload.attachments, conversation, "steer"); }} /> : null}
         <Composer
+          draftKey={conversation?.id}
           context={context}
           key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
