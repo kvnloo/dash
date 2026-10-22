@@ -19,8 +19,9 @@ export function feedStatus(feed: TraceFeed, now: number): { title: string; detai
   return { title: `Live from bridge · updated ${ago(now - feed.receivedAt)}`, detail: "" };
 }
 
-export function entryLine(feed: TraceFeed): string {
-  if (feed.phase === "unpaired") return "Not paired · live trace unavailable";
+/** The feed only runs while Trace is open, so before the first visit pairing decides the line. */
+export function entryLine(feed: TraceFeed, paired: boolean): string {
+  if (feed.phase === "unpaired") return paired ? "Open to load live events" : "Not paired · live trace unavailable";
   if (feed.phase === "connecting") return "Open to load live events";
   if (feed.phase === "unavailable") return `Live trace unavailable · ${feed.reason}`;
   const st = feed.snapshot.stats;

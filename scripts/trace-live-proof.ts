@@ -105,6 +105,7 @@ try {
       assert(cmd, "TRACE_EVENT_CMD produces a real new source event");
       const ev = spawnSync("bash", ["-c", cmd], { encoding: "utf8", timeout: 240000 });
       result.eventCommandExit = ev.status;
+      check("event source command produced its event", ev.status === 0, `exit ${ev.status}`);
       const t1 = Date.now();
       let fresh = "";
       for (let i = 0; i < 60 && !fresh; i++) {
@@ -150,6 +151,26 @@ try {
     check("menu Open details opens the pressed row", (await page.getByTestId("trace-provenance").innerText()).includes(`Event · ${selected.key}`));
     await page.getByRole("button", { name: "Close", exact: true }).tap();
     await page.getByTestId("trace-detail").waitFor({ state: "hidden" });
+
+    const imageRow = snapshot.rows.find(r => r.key.startsWith("run:") && r.evidence?.artifacts.slice(0, 6).some(x => x.kind === "image" || x.kind === "storyboard"));
+    if (imageRow) {
+      const target = page.getByTestId(`row-${imageRow.key}`);
+      await target.scrollIntoViewIfNeeded(); await target.tap();
+      await page.getByTestId("trace-provenance").waitFor();
+      const img = page.locator('[data-testid="trace-evidence"] img').first();
+      await img.waitFor({ state: "visible", timeout: 20000 });
+      await img.scrollIntoViewIfNeeded();
+      await page.waitForFunction("[...document.images].some(i => i.complete && i.naturalWidth > 0)", undefined, { timeout: 20000 });
+      const groups = await page.getByTestId("trace-evidence").innerText();
+      check("real image artifact decodes through the authenticated artifact route, grouped by kind", /Images · \d+/.test(groups), imageRow.key, await shot(page, "6c-image-artifact"));
+      await img.tap();
+      const closeImage = page.getByRole("button", { name: "Close artifact image", exact: true });
+      await closeImage.waitFor();
+      check("image expands full screen and closes", true, undefined, await shot(page, "6d-image-expanded"));
+      await closeImage.tap();
+      await page.getByRole("button", { name: "Close", exact: true }).tap();
+      await page.getByTestId("trace-detail").waitFor({ state: "hidden" });
+    } else steps.push({ step: "no real run with an image on its first artifact page", ok: true });
 
     await page.getByRole("button", { name: "Component lab", exact: true }).click();
     await page.getByTestId("lab-demo-label").waitFor();

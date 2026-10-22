@@ -24,9 +24,10 @@ test("fetch failures map to owner-readable reasons", () => {
 });
 
 test("entry card shows counts only from a live snapshot", () => {
-  expect(entryLine({ phase: "unpaired" })).toBe("Not paired · live trace unavailable");
-  expect(entryLine({ phase: "connecting" })).toBe("Open to load live events");
-  expect(entryLine({ phase: "unavailable", reason: "Bridge unreachable", at: 0, lastLiveAt: null })).toBe("Live trace unavailable · Bridge unreachable");
+  expect(entryLine({ phase: "unpaired" }, false)).toBe("Not paired · live trace unavailable");
+  expect(entryLine({ phase: "unpaired" }, true)).toBe("Open to load live events");
+  expect(entryLine({ phase: "connecting" }, true)).toBe("Open to load live events");
+  expect(entryLine({ phase: "unavailable", reason: "Bridge unreachable", at: 0, lastLiveAt: null }, true)).toBe("Live trace unavailable · Bridge unreachable");
   const st = snapshot.stats;
-  expect(entryLine({ phase: "live", snapshot, receivedAt: 0, arrived: [] })).toBe(`${st.live} live · ${st.cut} cut · ${st.asks} need your OK · ${snapshot.rows.length} events`);
+  expect(entryLine({ phase: "live", snapshot, receivedAt: 0, arrived: [] }, true)).toBe(`${st.live} live · ${st.cut} cut · ${st.asks} need your OK · ${snapshot.rows.length} events`);
 });

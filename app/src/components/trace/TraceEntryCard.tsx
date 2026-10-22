@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { PressScale } from "../PressScale";
 import { haptic } from "../../haptics";
 import { traceStore } from "../../trace/source";
+import { store } from "../../store/app";
 import { entryLine } from "../../trace/feed-state";
 import { fonts, radius, space, type } from "../../theme";
 import { LivePulse, tc } from "./tokens";
@@ -10,7 +11,8 @@ import { LivePulse, tc } from "./tokens";
 /** Orchestra's way into the trace. Shows live counts only after a real bridge snapshot. */
 export const TraceEntryCard = memo(function TraceEntryCard({ onOpen }: { onOpen(): void }) {
   const feed = traceStore.use((s) => s.feed);
-  const line = entryLine(feed);
+  const paired = store.use((s) => Boolean(s.settings?.address && s.settings.token));
+  const line = entryLine(feed, paired);
   return (
     <PressScale onPress={() => { haptic.select(); onOpen(); }} style={styles.card} accessibilityRole="button" accessibilityLabel={`Agent trace: ${line}`} testID="trace-entry">
       <View style={styles.inner}>
