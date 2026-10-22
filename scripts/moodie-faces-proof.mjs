@@ -28,6 +28,10 @@ try {
     await page.goto(`http://127.0.0.1:${server.address().port}/?debug=1`);
     await page.waitForFunction(() => window.__DASH_DEBUG__?.ready);
     await page.evaluate(() => window.__DASH_DEBUG__.scenario('main-bots'));
+    // The debug seed selects the label; drive the actual pager before interacting with its pane.
+    await page.getByRole('tab').nth(0).click();
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: `${out}/${width}-bots-collapsed.png` });
     await page.getByTestId('tree-row-host:mbp').click();
     await page.getByTestId('bot-face-hermes:clean').first().waitFor();
     await page.screenshot({ path: `${out}/${width}-bots.png` });
