@@ -77,6 +77,16 @@ test("missing credential and service failure never return a legacy token", async
   }
 });
 
+test("identity failure identifies the safe endpoint and HTTP status without exposing response secrets", async () => {
+  const x = fixture();
+  const denied = new IdentityTokens(async () => x.credential, async url => url.endsWith("jwks.json")
+    ? Response.json(x.f.jwks) : Response.json({ error: x.credential }, { status: 403 }));
+  await expect(denied.token(x.enrollment, "z0live")).rejects.toThrow("/v1/token: HTTP 403");
+  try { await denied.token(x.enrollment, "z0live"); } catch (error) {
+    expect(String(error)).not.toContain(x.credential);
+  }
+});
+
 test("identity metadata fails closed on hydration; legacy settings and query WS stay compatible", () => {
   const x = fixture();
   const legacy = { address: "100.113.138.100:4747", token: "legacy-fixture", harness: "omp", inAppFeedback: true };
