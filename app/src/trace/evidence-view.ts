@@ -9,7 +9,8 @@ export function byKind(artifacts: TraceArtifact[]): [TraceArtifact["kind"], Trac
 export function goalLine(evidence: TraceEvidence): string {
   const flat = (t: string) => t.replace(/\s+/g, " ").replace(/…$/, "").trim();
   const goal = flat(evidence.intent.constraints.goal);
-  if (!goal) return "Unknown · no goal stated";
+  // Without a recorded request the extractor's goal is a placeholder, not a stated goal.
+  if (!goal || !evidence.quote) return "Unknown · no goal stated";
   if (evidence.quote && flat(evidence.quote).startsWith(goal.slice(0, 80))) return "Not stated separately · the request above is the goal";
   return goal.length > 240 ? `${goal.slice(0, 240)}…` : goal;
 }

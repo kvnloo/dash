@@ -9,7 +9,8 @@ test("goal never repeats the request it was extracted from", () => {
   expect(goalLine(evidence(ask, `${ask.slice(0, 90)}…`))).toBe("Not stated separately · the request above is the goal");
   expect(goalLine(evidence(ask, ""))).toBe("Unknown · no goal stated");
   expect(goalLine(evidence(ask, "Keep the composer attached"))).toBe("Keep the composer attached");
-  expect(goalLine(evidence("", "x".repeat(300)))).toBe(`${"x".repeat(240)}…`);
+  expect(goalLine(evidence("Ship it", "x".repeat(300)))).toBe(`${"x".repeat(240)}…`);
+  expect(goalLine(evidence("", "Original owner request unavailable"))).toBe("Unknown · no goal stated");
 });
 
 test("artifacts group by kind in review order and drop empty kinds", () => {
