@@ -14,6 +14,7 @@ export type LiveThinking = {
   online: boolean;
   /** Work observed in the Hermes terminal while this phone is not running a turn. */
   external?: ObservedPhase;
+  observed?: ObservedPhase;
   streamingMessage?: AssistantMessage;
 };
 
@@ -44,5 +45,5 @@ export function useLiveThinking(conversation: Conversation | undefined): LiveThi
   const external = online && localThinking.phase === "idle" && observed?.observed && observed.phase !== "idle" ? observed : undefined;
   const observationUnavailable = online && harnessId === "hermes" && Boolean(conversation?.sessionId) && !observed?.observed;
   const caption = orbCaption(thinking, !online ? "offline" : observationUnavailable ? "status unavailable" : "idle");
-  return { thinking, caption, online, external, streamingMessage };
+  return { thinking, caption, online, external, observed, streamingMessage };
 }

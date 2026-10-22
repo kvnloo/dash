@@ -135,7 +135,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     if (conversation) { haptic.tap(); sendLiveTurn(conversation.id, text); }
   }, [conversation]);
 
-  const { thinking, caption, external, streamingMessage } = useLiveThinking(conversation);
+  const { thinking, caption, external, observed, streamingMessage } = useLiveThinking(conversation);
   useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
   const workers = useSessionWorkers(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
   const [chatOptions, setChatOptions] = useState(false);

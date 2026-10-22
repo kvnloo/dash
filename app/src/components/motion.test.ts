@@ -94,8 +94,9 @@ describe("PressScale wiring", () => {
     const chats = readFileSync(join(import.meta.dir, "../screens/panes/ChatsPane.tsx"), "utf8");
     const bots = readFileSync(join(import.meta.dir, "../screens/panes/BotsPane.tsx"), "utf8");
     expect(composer).toContain("styles.controls");
-    expect(composer).toContain("multiline={editingQueue}");
-    expect(composer).toContain("numberOfLines={editingQueue ? 6 : 1}");
+    expect(composer).toContain("multiline scrollEnabled");
+    expect(composer).toContain("editingQueue && styles.previewInput");
+    expect(composer).toContain("maxHeight: 148");
     expect(composer).toContain("PressScale");
     expect(search).toContain("staggerUp");
     expect(search).toContain("popIn");
