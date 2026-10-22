@@ -1,4 +1,5 @@
 import type { Thinking } from "./thinking";
+import type { BotFaceIdentity, BotFaceState } from "./moodie-identity";
 
 export type TreeKind = "host" | "bot" | "harness" | "session" | "repo" | "turn" | "thinking" | "tools" | "call" | "args" | "output" | "note";
 
@@ -11,6 +12,7 @@ export interface TreeNode {
   status?: "running" | "available" | "offline";
   dimmed?: boolean;
   thinking?: Thinking;
+  botFace?: { identity: BotFaceIdentity; state: BotFaceState };
   /** Live text: the label lights up with a moving shimmer instead of showing an orb. */
   shimmer?: boolean;
   children?: TreeNode[] | (() => TreeNode[] | Promise<TreeNode[]>);
