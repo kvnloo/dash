@@ -62,7 +62,7 @@ function Row({ item, selected, activate, toggle, collapse, inline }: {
           style={({ pressed }) => [styles.content, { paddingLeft: space.xs + depth * space.lg }, (selected || pressed) && styles.selected]}
         >
           <View style={styles.chevronSpace}>{node.children && <Animated.View style={chevron}><Feather name="chevron-right" size={space.md} color={colors.textTertiary} /></Animated.View>}</View>
-          {node.botFace ? <BotFace {...node.botFace} size={28} /> : node.thinking ? <AgentOrb thinking={node.thinking} size={20} label={`Session ${node.thinking.phase}`} /> : <Feather name={icons[node.kind]} size={space.lg} color={expanded ? colors.accent : colors.textMuted} />}
+          {node.botFace ? <BotFace {...node.botFace} size={32} /> : node.thinking ? <AgentOrb thinking={node.thinking} size={20} label={`Session ${node.thinking.phase}`} /> : <Feather name={icons[node.kind]} size={space.lg} color={expanded ? colors.accent : colors.textMuted} />}
           <View style={styles.label}>
             {node.shimmer ? <ShimmerText text={node.label} size={13} family="sans-serif" dim={colors.textMuted} bright={colors.text} /> : <Text style={[node.kind === "host" ? type.heading : type.small, styles.text]} numberOfLines={node.kind === "call" ? 2 : 1}>{node.label}</Text>}
             {node.detail ? <Text style={styles.detail} numberOfLines={node.kind === "args" || node.kind === "output" || node.kind === "thinking" ? undefined : 1} selectable>{node.detail}</Text> : null}

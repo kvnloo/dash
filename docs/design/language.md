@@ -22,6 +22,7 @@ Where each lives in the app:
 - **Harnesses** are in the bridge sheet (the chevron in the top bar): "Harnesses on <host>". Tapping one starts a chat with it. The harness picker in Chat chooses the harness for new chats.
 - **Sessions** are rows in **Chats**.
 - Identity orbs remain the live agent/voice vocabulary in chat and Voice. Bots and known Hermes profile/session rows in the host tree use **Moodie faces** (`BotFace`, `vendor/moodie.ts`): stable profile-key resting expressions, with thinking → thinking, work → focused, done → happy, error → worried and approval → alert. A running gateway alone is not evidence of work. Unknown profile metadata stays unknown; host identity never gets a face. The Component lab has explicitly labelled synthetic profile/expression samples. The port preserves Moodie and bloub's MIT notices in code.
+- Profile identity stays visible during every expression: opaque body tones translate synergy.ai's paper/blue/orange/acid palette roles to Living Night text/information/warn/ok tokens. Body tone never changes with work or error state; dark `onAccent` eyes retain contrast. Host-tree faces use a 32px footprint so the blob body, not just its eye marks, remains readable.
 
 ## Product
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { EXPRESSIONS, createEyePath, createBlobBodyPath, liveliness } from "../vendor/moodie";
 import { botFaceIdentity, expressionForState, faceStateFromMessages, hermesProfileKey } from "./moodie-identity";
+import { colors } from "../theme";
 
 describe("real synergy Moodie faces", () => {
   test("preserves the original expression geometry instead of dotted-orb eyes", () => {
@@ -19,6 +20,16 @@ describe("real synergy Moodie faces", () => {
     expect(["clean", "default", "chiefstaff", "intake"].map(p => botFaceIdentity(p).rest)).toEqual(["curious", "neutral", "calm", "cheeky"]);
     expect(botFaceIdentity("constructor").rest).toBeTypeOf("string");
     expect(botFaceIdentity("new-profile")).toEqual(botFaceIdentity("new-profile"));
+  });
+  test("profile body colors remain visibly distinct when expressions are identical", () => {
+    const identities = ["default", "clean", "chiefstaff", "intake"].map(profile => botFaceIdentity(profile));
+    expect(identities.map(identity => identity.bodyColor)).toEqual([colors.text, colors.information, colors.warn, colors.ok]);
+    expect(new Set(identities.map(identity => identity.bodyColor)).size).toBe(4);
+    for (const identity of identities) {
+      expect(identity.eyeColor).toBe(colors.onAccent);
+      expect(expressionForState("thinking", identity.rest)).toBe("thinking");
+      expect(botFaceIdentity(identity.key.slice(7)).bodyColor).toBe(identity.bodyColor);
+    }
   });
   test("state maps to the upstream expression table without inventing activity", () => {
     expect(expressionForState("idle", "cheeky")).toBe("cheeky");

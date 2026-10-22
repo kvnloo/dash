@@ -36,6 +36,7 @@ try {
     await page.getByTestId('bot-face-hermes:clean').first().waitFor();
     await page.screenshot({ path: `${out}/${width}-bots.png` });
     assert.equal(await page.getByTestId('bot-face-hermes:clean').count(), 1);
+    assert.equal((await page.getByTestId('bot-face-hermes:clean').boundingBox()).width, 32, 'row faces have a readable 32px footprint');
     await page.evaluate(() => window.__DASH_DEBUG__.run({ action: 'navigate', screen: 'Lab' }));
     const scroll = page.getByTestId('lab-scroll');
     await scroll.waitFor();
@@ -48,6 +49,7 @@ try {
     await lab.evaluate(el => { const sc = document.querySelector('[data-testid="lab-scroll"]'); sc.scrollTop += el.getBoundingClientRect().top - sc.getBoundingClientRect().top; });
     await page.waitForTimeout(250);
     const paths = {};
+    const bodyFills = {};
     for (const state of ['idle', 'thinking', 'working', 'done', 'error']) {
       await page.getByRole('button', { name: `Face state ${state}`, exact: true }).click();
       await page.waitForTimeout(180);
@@ -55,6 +57,16 @@ try {
       assert.equal(await faces.count(), 4);
       assert.equal(await lab.getByTestId('moodie-eye-left').count(), 4);
       paths[state] = await lab.getByTestId('moodie-eye-left').evaluateAll(els => els.map(el => el.getAttribute('d')));
+      bodyFills[state] = await lab.getByTestId('moodie-body').evaluateAll(els => els.map(el => el.getAttribute('fill')));
+      assert.equal(new Set(bodyFills[state]).size, 4, 'profile identity remains visible even when expressions match');
+      if (state !== 'idle') assert.deepEqual(bodyFills[state], bodyFills.idle, 'work/error state must not overwrite profile identity');
+      for (const body of await lab.getByTestId('moodie-body').all()) {
+        const fill = await body.getAttribute('fill');
+        assert.match(fill, /^#[0-9a-f]{6}$/i, 'opaque theme body, not dark translucent surface');
+        const rgb = [1, 3, 5].map(i => parseInt(fill.slice(i, i + 2), 16) / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
+        const luminance = rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722;
+        assert((luminance + .05) / (.004 + .05) >= 4.5, 'body is clearly separated from Living Night background');
+      }
       for (const face of await faces.all()) {
         const box = await face.boundingBox();
         assert(box && box.x >= 0 && box.x + box.width <= width && box.y >= 0 && box.y + box.height < 915, 'sample face remains in viewport');
@@ -72,7 +84,7 @@ try {
     await page.waitForTimeout(220);
     assert.equal(await face.locator('svg > g').getAttribute('transform'), before, 'reduced motion stays still');
     await context.close();
-    checks.push({ width, states: Object.keys(paths), fourDistinctRestFaces: true, reducedMotionStatic: true });
+    checks.push({ width, states: Object.keys(paths), fourDistinctRestFaces: true, persistentDistinctBodyFills: bodyFills, rowFacePixels: 32, reducedMotionStatic: true });
   }
   const motionContext = await browser.newContext({ viewport: { width: 412, height: 915 }, reducedMotion: 'no-preference' });
   const motionPage = await motionContext.newPage();

@@ -49,14 +49,13 @@ export const BotFace = memo(function BotFace({ identity, state = "idle", size = 
     const blink = lidToScale(life.value.lid);
     return { transform: `translate(${x} ${y}) translate(100 96) scale(1 ${blink}) translate(-100 -96)` };
   });
-  const ink = state === "error" || state === "waiting-approval" ? colors.warn : colors.text;
   return <View accessibilityRole="image" accessibilityLabel={`${identity.key} · ${state} · ${expression} face`} testID={`bot-face-${identity.key}`} style={{ width: size, height: size }}>
     <Animated.View style={[{ width: size, height: size }, body]}>
       <Svg width={size} height={size} viewBox="0 0 200 200">
-        <Path d={BLOB_BODY_PATH} fill={colors.surface} stroke={colors.border} strokeWidth={2} />
+        <Path testID="moodie-body" d={BLOB_BODY_PATH} fill={identity.bodyColor} stroke={colors.border} strokeWidth={2} />
         <AnimatedG animatedProps={gaze}>
-          <Path testID="moodie-eye-left" d={paths.left} fill={ink} />
-          <Path testID="moodie-eye-right" d={paths.right} fill={ink} />
+          <Path testID="moodie-eye-left" d={paths.left} fill={identity.eyeColor} />
+          <Path testID="moodie-eye-right" d={paths.right} fill={identity.eyeColor} />
         </AnimatedG>
       </Svg>
     </Animated.View>
