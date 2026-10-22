@@ -4,6 +4,8 @@ import type { HostInfo } from "../../../shared/protocol";
 import { botsTree, hostLabel } from "./bots-tree";
 import { childNodes, treeIndex, type TreeNode } from "./tree";
 import { toolTree, TOOL_TREE_FIXTURE } from "./tool-tree";
+import type { Conversation } from "../model";
+import { botFaceIdentity } from "./moodie-identity";
 
 const host: HostInfo = { id: "0", name: "0", hostname: "groot", self: true, online: true, bots: [], agents: [
   { id: "hermes:session:clean:s1", kind: "hermes", name: "Review roster", status: "running", sessionId: "s1", profileId: "clean", cwd: "/workspace/dash", lastActivityAt: 0 },
@@ -45,6 +47,22 @@ test("sessionless harness targets are not dropped and old Hermes profile IDs sti
   expect(branches).toHaveLength(2);
   expect((await children(branches[0]))[0]?.label).toBe("Review roster");
   expect((await children(branches[1])).map(node => node.label)).toEqual(["OMP A", "OMP B"]);
+});
+
+test("bot and session share the real profile face; live work and completed/error replies drive expressions", async () => {
+  const roster: HostInfo = { ...host, bots: [{ id: "hermes-bot:clean", name: "Renamed bot", runtime: "hermes", status: "running", channels: [], agentId: "hermes:clean" }], agents: [...host.agents, { id: "hermes:clean", kind: "hermes", name: "Clean profile", status: "running" }] };
+  const chat: Conversation = { id: "chat", harness: "hermes", title: "Real profile session", createdAt: 0, updatedAt: 10, sessionId: "s1", targetHostId: "0", profileId: "clean", messages: [{ id: "reply", role: "assistant", text: "", at: 1, state: "streaming", status: "Running bash", turnId: "t1", seq: 0 }] };
+  const root = botsTree([roster], () => {}, () => {}, 10, [chat])[0];
+  const bot = (await children(root))[0];
+  const session = (await children(bot))[0];
+  expect(bot?.botFace).toEqual({ identity: botFaceIdentity("clean"), state: "working" });
+  expect(session?.botFace).toEqual(bot?.botFace);
+  for (const state of ["done", "error"] as const) {
+    const ended: Conversation = { ...chat, messages: [{ id: "reply", role: "assistant", text: "", at: 1, state, turnId: "t1", seq: 0 }] };
+    expect((await children(botsTree([roster], () => {}, () => {}, 10, [ended])[0]))[0]?.botFace?.state).toBe(state);
+  }
+  expect((await children(botsTree([roster], () => {}, () => {})[0]))[0]?.botFace?.state).toBe("idle");
+  expect((await children(botsTree([{ ...roster, online: false }], () => {}, () => {}, 10, [chat])[0]))[0]?.botFace?.state).toBe("idle");
 });
 
 test("tool adapter preserves actual arguments/output/duration and namespaces IDs", async () => {
