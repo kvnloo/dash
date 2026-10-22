@@ -77,17 +77,18 @@ export function extractIntent(prompt: string, source: string, verbatim?: string)
   const owner = inline || body.join("\n");
   const quotes = [...owner.matchAll(/(?:^|\n)\s*(?:\d+[.)]\s*)?["“]([\s\S]*?)["”](?=\s*(?:\n|$))/g)].map(m => m[1] ?? "");
   const original = verbatim ?? (quotes.join("\n\n") || owner.trim());
-  const quote = redact(original);
+  const boundedOriginal = original.length <= 65536 ? original : "";
+  const quote = redact(boundedOriginal);
   const explicit = section(prompt, /^(?:ACCEPTANCE(?: CRITERIA| CHECKS)?|TESTS|VERIFICATION):?$/i);
   const build = prompt.match(/(?:^|\n)BUILD\s*\n([\s\S]*?)(?=\n[A-Z][A-Z /_-]+\s*\n|$)/)?.[1] ?? "";
   const declared = [...build.matchAll(/^([A-Z][.)]\s+.+)$/gm)].map(m => m[1] ?? "");
   const acceptance = (explicit.length ? explicit : declared).map(redact);
   const rules = section(prompt, /^CONSTRAINTS:?$/i).map(redact);
   const extracted: TraceEvidence = {
-    quote, quoteRedacted: original !== quote,
+    quote, quoteRedacted: boundedOriginal !== quote,
     intent: { specVersion: "0.2", graphId: `trace:${sourceHash.slice(0, 24)}`, revision: 0, intentGraph: { nodes: [{ id: "owner-request", kind: "task", ports: [], capabilities: [] }], edges: [] }, policies: {}, constraints: { budgets: {}, termination: {}, goal: quote.split("\n")[0] || "Original owner request unavailable", acceptance, rules }, provenance: { sourceHash, source } },
     checks: acceptance.map((text, i) => ({ id: `check-${i + 1}`, text, status: "unknown", evidence: [] })), artifacts: [],
-    warnings: [...(!original ? ["No verbatim OWNER section found; no request was invented."] : []), ...(!acceptance.length ? ["No explicit acceptance section; criteria require owner review."] : []), ...(!explicit.length && declared.length ? ["Checks copied verbatim from declared BUILD items; owner review of granularity required."] : []), "Extracted intent, not a compiled plan or Bend verdict."],
+    warnings: [...(!original ? ["No verbatim OWNER section found; no request was invented."] : []), ...(original.length > 65536 ? ["Original request exceeds display bound; no truncated quote is presented as verbatim."] : []), ...(!acceptance.length ? ["No explicit acceptance section; criteria require owner review."] : []), ...(!explicit.length && declared.length ? ["Checks copied verbatim from declared BUILD items; owner review of granularity required."] : []), "Extracted intent, not a compiled plan or Bend verdict."],
   };
   if (intentCache.size >= 256) { const oldest = intentCache.keys().next().value; if (oldest) intentCache.delete(oldest); }
   intentCache.set(cacheKey, extracted);
@@ -108,7 +109,8 @@ export function discoverArtifacts(report: string): TraceArtifact[] {
   const artifacts: TraceArtifact[] = [];
   for (const raw of matches) {
     const target = raw.replace(/[.,;]+$/, "");
-    if (!safeTraceTarget(target) || secret.test(target) || artifacts.some(a => a.target === target)) continue;
+    const secretPath = target.replace(/^(\/home\/[^/]+)\/\.dash\/attachments(?=\/)/, "$1/attachments");
+    if (!safeTraceTarget(target) || secret.test(secretPath) || artifacts.some(a => a.target === target)) continue;
     const kind = target.startsWith("dash:") ? "dash" : /github\.com\/[^/]+\/[^/]+\/pull\/\d+$/.test(target) ? "pr" : /github\.com\/[^/]+\/[^/]+\/commit\/[a-f0-9]+$/.test(target) ? "commit" : /^http/.test(target) ? "page" : /\.(png|jpe?g|webp)$/i.test(target) ? /story|sheet/i.test(target) ? "storyboard" : "image" : "file";
     artifacts.push({ kind, target, title: target.split("/").at(-1) || target });
     if (artifacts.length >= 64) break;

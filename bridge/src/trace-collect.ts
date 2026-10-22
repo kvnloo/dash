@@ -62,8 +62,14 @@ export async function collectTrace(options: { runs?: string; profiles?: string[]
         const source = `${home}/state.db#sessions/${id}`;
         let evidence;
         try {
-          const first = db.query<{ content: string }, [string]>("SELECT substr(content,1,65000) AS content FROM messages WHERE session_id=? AND role='user' ORDER BY timestamp LIMIT 1").get(id);
-          if (first?.content) evidence = extractIntent(first.content, source, first.content);
+          const first = db.query<{ content: string; contentLength: number }, [string]>("SELECT CASE WHEN length(content)<=65000 THEN content ELSE '' END AS content, length(content) AS contentLength FROM messages WHERE session_id=? AND role='user' ORDER BY timestamp LIMIT 1").get(id);
+          if (first?.content) {
+            const embedded = extractIntent(first.content, source);
+            evidence = embedded.quote ? embedded : extractIntent(first.content, source, first.content);
+          } else if (first && first.contentLength > 65000) {
+            evidence = extractIntent("", source);
+            evidence.warnings.push("Original request exceeds bounded read; no truncated quote is presented as verbatim.");
+          }
         } catch { warnings.push("Original session request unavailable"); }
         let calls = 0;
         try {

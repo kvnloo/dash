@@ -15,6 +15,9 @@ test("original quote and explicit acceptance only; deterministic HOTL not an obs
   expect(first).toEqual(extractIntent(prompt, "/runs/story/PROMPT.txt"));
   expect(first.intent).not.toHaveProperty("observedGraph");
   expect(extractIntent("do something", "/p").checks).toEqual([]);
+  const oversized = extractIntent(`OWNER:\n"${"x".repeat(65537)}"`, "/large");
+  expect(oversized.quote).toBe("");
+  expect(oversized.warnings.some(w => w.includes("exceeds display bound"))).toBe(true);
 });
 test("reports do not self-certify; exact criterion-bound machine receipt only", () => {
   const c = extractIntent('OWNER:\n"Build it"\n\nACCEPTANCE\n- Image opens', "/p");
@@ -39,6 +42,7 @@ test("links discovered without executing report instructions or permitting dange
   const a = discoverArtifacts("https://github.com/kvnloo/dash/pull/106\nhttps://example.com/page\ndash://Trace\n/mnt/art/storyboard.png\nfile:///etc/passwd\nhttps://x.test/?token=secret\njavascript:alert(1)");
   expect(a.map(a => a.kind)).toEqual(["pr", "page", "dash", "storyboard"]);
   expect(a.some(a => a.target.includes("secret"))).toBe(false);
+  expect(discoverArtifacts("/home/tester/.dash/attachments/proof.png")[0]?.kind).toBe("image");
 });
 test("artifact access denies canonical/symlink escapes, secrets, binary types, oversized and directories", async () => {
   const root = mkdtempSync(join(tmpdir(), "trace-test-"));
@@ -49,6 +53,9 @@ test("artifact access denies canonical/symlink escapes, secrets, binary types, o
     writeFileSync(join(root, "allowed/a.svg"), "<script/>");
     writeFileSync(join(root, "allowed/large.md"), Buffer.alloc(256 * 1024 + 1));
     writeFileSync(join(root, "allowed/fake.png"), "not an image");
+    mkdirSync(join(root, ".dash/attachments"), { recursive: true });
+    writeFileSync(join(root, ".dash/attachments/proof.md"), "approved attachment");
+    expect((await readTraceArtifact(join(root, ".dash/attachments/proof.md"), [join(root, ".dash/attachments")]))?.status).toBe(200);
     symlinkSync(join(root, "outside.md"), join(root, "allowed/escape.md"));
     symlinkSync(join(root, "allowed/.env"), join(root, "allowed/alias.md"));
     for (const name of ["../outside.md", "escape.md", "alias.md", ".env", "a.svg", "large.md", "fake.png", "."]) expect(await readTraceArtifact(join(root, "allowed", name), [join(root, "allowed")])).toBeNull();
