@@ -54,7 +54,7 @@ try {
   for (const name of ["bots", "chats", "orchestra"]) assert.equal(await page.getByTestId(`mounted-${name}`).count(), 1);
   assert.deepEqual(await rowIds(), ["chats-action"]);
   await page.getByRole("button", { name: "Fresh callback", exact: true }).click();
-  await rows.getByRole("button", { name: "Run", exact: true }).click();
+  await rows.locator("button").click();
   assert.equal(await page.getByTestId("dispatch").innerText(), "chats:1");
   await page.getByRole("button", { name: "bots", exact: true }).click();
   assert.deepEqual(await rowIds(), ["bots-action"]);
@@ -86,7 +86,7 @@ try {
   assert.deepEqual(await rowIds(), initial);
   await page.screenshot({ path: path.join(out, "route-refocused.png") });
   await page.getByRole("button", { name: "chats", exact: true }).click();
-  await rows.getByRole("button", { name: "Run", exact: true }).click();
+  await rows.locator("button").click();
   assert.equal(await page.getByTestId("dispatch").innerText(), "chats:2");
   assert.deepEqual(await rowIds(), ["chats-action"]);
   checks.push("route blur removes rows immediately; refocus has no duplicates and fresh callbacks (React StrictMode)");
