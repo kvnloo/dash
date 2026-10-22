@@ -5,8 +5,8 @@ import { orchestraControlRows, useOrchestraController } from "../lib/orchestra-c
 import type { OrchestraMap } from "../lib/orchestra-map";
 
 const graph: OrchestraMap = { nodes: [
-  { id: "host", label: "Fixture host", kind: "host", state: "idle", thinking: { phase: "idle" } },
-  { id: "chat", label: "Fixture chat", kind: "chat", state: "live", thinking: { phase: "thinking" } },
+  { id: "host", hostId: "host", label: "Fixture host", kind: "host", state: "idle", thinking: { phase: "idle" } },
+  { id: "chat", hostId: "host", label: "Fixture chat", kind: "chat", state: "live", thinking: { phase: "thinking" } },
 ], edges: [{ id: "hosted", from: "host", to: "chat", relation: "hosted", active: false }] };
 
 function MountedPane({ page, version, onDispatch }: { page: string; version: number; onDispatch(value: string): void }) {

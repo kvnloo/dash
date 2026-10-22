@@ -5,10 +5,10 @@ import { viewGraph } from "./orchestra-views";
 
 const graph: OrchestraMap = {
   nodes: [
-    { id: "host", label: "Groot", kind: "host", state: "idle", thinking: { phase: "idle" } },
-    { id: "chat", label: "Hermes", kind: "chat", state: "live", thinking: { phase: "thinking" } },
-    { id: "child", label: "Worker", kind: "subagent", state: "idle", thinking: { phase: "idle" } },
-    { id: "repo", label: "Dash", kind: "repo", state: "idle", thinking: { phase: "idle" } },
+    { id: "host", hostId: "host", label: "Groot", kind: "host", state: "idle", thinking: { phase: "idle" } },
+    { id: "chat", hostId: "host", label: "Hermes", kind: "chat", state: "live", thinking: { phase: "thinking" } },
+    { id: "child", hostId: "host", label: "Worker", kind: "subagent", state: "idle", thinking: { phase: "idle" } },
+    { id: "repo", hostId: "host", label: "Dash", kind: "repo", state: "idle", thinking: { phase: "idle" } },
   ],
   edges: [
     { id: "hosted", from: "host", to: "chat", relation: "hosted", active: false },
