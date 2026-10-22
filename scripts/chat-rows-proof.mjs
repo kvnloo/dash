@@ -10,7 +10,7 @@ const out = path.resolve('.chat-rows-receipts');
 await mkdir(out, { recursive: true });
 const port = 8099;
 let browser, log = '';
-const errors = [], cases = [];
+const errors = [], cases = [], requests = [];
 const expo = spawn('bun', ['x', 'expo', 'start', '--web', '--port', String(port)], { cwd: path.resolve('app'), detached: true, env: { ...process.env, CI: '1', EXPO_PUBLIC_DEBUG: '1', EXPO_PUBLIC_DEBUG_AUTONAV: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
 expo.stdout.on('data', d => log += d);
 expo.stderr.on('data', d => log += d);
@@ -25,6 +25,8 @@ try {
   for (const width of [390, 412]) {
     const page = await browser.newPage({ viewport: { width, height: 915 }, deviceScaleFactor: 1 });
     page.on('pageerror', error => errors.push(error.message));
+    // Diagnostic only: which requests keep the page from reaching network idle.
+    page.on('request', request => { requests.push(`${width} ${Date.now()} ${request.method()} ${request.url().slice(0, 160)}`); if (requests.length > 400) requests.shift(); });
     await page.goto(`http://127.0.0.1:${port}/?debug=1`, { waitUntil: 'networkidle', timeout: 180000 });
     await page.waitForFunction(() => window.__DASH_DEBUG__?.ready, undefined, { timeout: 120000 });
     await page.evaluate(async () => {
@@ -62,7 +64,7 @@ try {
   assert.equal(errors.length, 0, errors.join('\n'));
   await writeFile(path.join(out, 'result.json'), JSON.stringify({ status: 'PASS', revision: process.env.DASH_PROOF_REVISION, scope: 'Real Expo web UI + synthetic fixtures; not native phone acceptance', cases, errors }, null, 2));
 } catch (error) {
-  await writeFile(path.join(out, 'result.json'), JSON.stringify({ status: 'FAIL', error: String(error.stack ?? error), cases, errors }, null, 2));
+  await writeFile(path.join(out, 'result.json'), JSON.stringify({ status: 'FAIL', error: String(error.stack ?? error), cases, errors, requests: requests.slice(-80) }, null, 2));
   throw error;
 } finally {
   await browser?.close();
