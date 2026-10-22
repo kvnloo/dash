@@ -22,5 +22,6 @@ orchestrate/dash/status.md
 *.keystore
 .native-build-inputs/
 .native-receipts/
+.acceptance-receipts/
 .voice-deps/
 .repair-receipts/

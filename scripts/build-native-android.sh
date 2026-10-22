@@ -60,9 +60,10 @@ cp app/android/app/build/outputs/apk/debug/app-debug.apk .native-receipts/dash-n
 cp -r app/modules/dash-share/android/build/test-results .native-receipts/native-test-results
 cp -r app/modules/dash-cutout/android/build/test-results .native-receipts/cutout-test-results
 # Module inclusion: the class and its autolinked registration must be in the APK's dex.
-for module in 'Lapp/dash/cutout/DashCutoutModule;' 'Lapp/dash/share/DashShareModule;' 'app.dash.cutout.DashCutoutModule' 'app.dash.share.DashShareModule'; do
-  printf '%s %s\n' "$(unzip -p .native-receipts/dash-native-arm64.apk 'classes*.dex' | grep -a -c -F "$module")" "$module"
+for module in 'Lapp/dash/cutout/DashCutoutModule;' 'Lapp/dash/share/DashShareModule;' 'Lcom/oney/WebRTCModule/WebRTCModule;' 'Lorg/webrtc/PeerConnectionFactory;' 'app.dash.cutout.DashCutoutModule' 'app.dash.share.DashShareModule'; do
+  printf '%s %s\n' "$(unzip -p .native-receipts/dash-native-arm64.apk 'classes*.dex' | grep -a -c -F "$module" || true)" "$module"
 done | tee .native-receipts/module-inclusion.txt
+unzip -l .native-receipts/dash-native-arm64.apk 'lib/*' | tee .native-receipts/native-libs.txt | { grep -c 'libjingle_peerconnection_so.so' || true; } | sed 's/^/libjingle_peerconnection_so.so entries: /' | tee -a .native-receipts/module-inclusion.txt
 cp app/android/app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml .native-receipts/AndroidManifest.xml
 python3 scripts/verify-native-manifest.py .native-receipts/AndroidManifest.xml > .native-receipts/manifest-check.json
 sha256sum .native-receipts/dash-native-arm64.apk | tee .native-receipts/apk.sha256
