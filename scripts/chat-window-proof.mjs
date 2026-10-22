@@ -278,7 +278,8 @@ try {
     const slot = await pillSlot(page);
     assert(slot.status === 'speaking' && !slot.statusClipped && slot.statusInside, `cut-out status slot readable: ${JSON.stringify(slot)}`);
     const badge = await page.getByTestId('chat-window-badge').innerText();
-    assert(/anthropic · claude-opus-5-5/.test(badge), `host-reported model shown: ${badge}`);
+    assert(/claude-opus-5-5/.test(badge) && (width < 360 || /anthropic · claude-opus-5-5/.test(badge)), `host-reported model shown: ${badge}`);
+    assert(/model anthropic claude-opus-5-5, reported by host/.test(await page.getByTestId('chat-window-badge').getAttribute('aria-label') ?? ''), 'a11y carries provider + model');
     await page.getByTestId('chat-window-badge').click();
     const tree = await page.getByTestId('chat-window-identity').innerText();
     assert(/root-0001/.test(tree) && /Model reported by host for this session · checked \d\d:\d\d:\d\d/.test(tree), `lineage + freshness: ${tree}`);

@@ -241,6 +241,10 @@ describe("hostIdentity", () => {
   test("badge shows provider · model only when reported", () => {
     const base = { harnessName: "hermes", profile: "clean", sessionId: "s1" };
     expect(identityLines({ ...base, model: "claude-opus-5-5", provider: "anthropic" }, 40).model).toBe("anthropic · claude-opus-5-5");
+    expect(identityLines({ ...base, model: "claude-opus-5-5", provider: "anthropic" }, 27).model).toBe("anthropic · claude-opus-5-5");
+    expect(identityLines({ ...base, model: "claude-opus-5-5", provider: "anthropic" }, 26).model).toBe("claude-opus-5-5");
+    expect(identityLines({ ...base, model: "claude-opus-5-5", provider: "anthropic" }, 15).model).toBe("claude-opus-5-5");
+    expect(identityLines({ ...base, model: "claude-opus-5-5", provider: "anthropic" }, 14).model).toBe("claude-…us-5-5");
     expect(identityLines({ ...base, provider: "anthropic" }, 40).model).toBe("model unknown");
     expect(identityLabel({ ...base, model: "m", provider: "p" })).toContain("model p m, reported by host");
   });

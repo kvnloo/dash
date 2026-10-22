@@ -172,7 +172,9 @@ function middle(text: string, keep: number): string {
  * profile tail-truncates to 6 characters. Session8 always stays. The model middle-truncates last.
  */
 export function identityLines(input: IdentityInput, budget: number): { who: string; model: string } {
-  const model = input.model ? (input.provider ? `${input.provider} · ${input.model}` : input.model) : MODEL_UNKNOWN;
+  const full = input.model ? (input.provider ? `${input.provider} · ${input.model}` : input.model) : MODEL_UNKNOWN;
+  // Narrow: drop the provider before cutting the model name (the a11y label keeps both).
+  const model = full.length <= budget || !input.model ? full : input.model;
   const session = shortSession(input.sessionId) ?? "new chat";
   const profile = input.profile ?? input.harnessName;
   const distinct = profile === input.harnessName ? undefined : profile;
