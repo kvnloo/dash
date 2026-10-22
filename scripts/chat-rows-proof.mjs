@@ -44,8 +44,8 @@ try {
       return { id: row.dataset.testid, left: rect.left, right: rect.right, height: rect.height };
     }));
     assert.equal(overflow.length, 4);
-    assert(overflow.every(row => row.left >= -1 && row.right <= width + 1 && row.height >= 68));
     await page.screenshot({ path: path.join(out, `chats-${width}.png`) });
+    assert(overflow.every(row => row.left >= -1 && row.right <= width + 1 && row.height >= 68), JSON.stringify({ width, rows: overflow }));
     // Exercise the unchanged row press with this fixture, never a live session.
     await pane.getByTestId('chat-row-row-rich').click();
     await page.waitForFunction(() => window.__DASH_DEBUG__.state().activeId === 'row-rich');
