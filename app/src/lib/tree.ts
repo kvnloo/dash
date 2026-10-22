@@ -11,6 +11,8 @@ export interface TreeNode {
   status?: "running" | "available" | "offline";
   dimmed?: boolean;
   thinking?: Thinking;
+  /** Live text: the label lights up with a moving shimmer instead of showing an orb. */
+  shimmer?: boolean;
   children?: TreeNode[] | (() => TreeNode[] | Promise<TreeNode[]>);
   onPress?(): void;
   onLongPress?(): void;

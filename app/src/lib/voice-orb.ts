@@ -1,4 +1,4 @@
-import type { OrbPhase } from "../components/orb-html";
+import type { OrbPhase } from "./orb-phase";
 import type { VoicePhase } from "./voice-session";
 
 /** Capture, bridge work and TTS events are authoritative; screen visibility isn't activity. */

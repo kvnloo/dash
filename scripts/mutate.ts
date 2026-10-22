@@ -19,6 +19,8 @@ export const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 export type Target = { file: string; tests: readonly string[] };
 
 export const TARGETS: readonly Target[] = [
+  { file: "app/src/lib/pending-queue.ts", tests: ["app/src/lib/pending-queue.test.ts"] },
+  { file: "app/src/trace/chip-state.ts", tests: ["app/src/trace/chip-state.test.ts"] },
   { file: "bridge/src/model-health.ts", tests: ["bridge/src/model-health.test.ts"] },
   { file: "bridge/src/model-roles.ts", tests: ["bridge/src/model-roles.test.ts"] },
   { file: "shared/model-roles.ts", tests: ["bridge/src/model-roles.test.ts"] },
@@ -30,11 +32,18 @@ export const TARGETS: readonly Target[] = [
   { file: "app/src/components/bridge-pull.ts", tests: ["app/src/components/bridge-pull.test.ts"] },
   { file: "app/src/motion.ts", tests: ["app/src/components/motion.test.ts"] },
   { file: "shared/protocol.ts", tests: ["shared/protocol.test.ts", "shared/protocol-boundary.test.ts", "shared/protocol-attachments.test.ts", "shared/reply-parts.test.ts", "bridge/src/thinking-summary.test.ts"] },
+  { file: "shared/z0live-state.ts", tests: ["bridge/src/z0live-state.test.ts"] },
+  { file: "bridge/src/z0live-state.ts", tests: ["bridge/src/z0live-state.test.ts"] },
+  { file: "app/src/lib/orb-phase.ts", tests: ["app/src/lib/orb-phase.test.ts"] },
   { file: "bridge/src/roster.ts", tests: ["bridge/src/roster.test.ts", "bridge/src/roster-boundary.test.ts"] },
   { file: "app/src/lib/density.ts", tests: ["app/src/lib/density.test.ts"] },
   { file: "app/src/lib/info-levels.ts", tests: ["app/src/lib/info-levels.test.ts"] },
   { file: "app/src/lib/filter-gesture.ts", tests: ["app/src/lib/filter-gesture.test.ts"] },
   { file: "app/src/lib/zero-card.ts", tests: ["app/src/lib/zero-card.test.ts"] },
+  { file: "app/src/lib/annotate/strokes.ts", tests: ["app/src/lib/annotate/strokes.test.ts"] },
+  { file: "app/src/lib/annotate/pointer.ts", tests: ["app/src/lib/annotate/pointer.test.ts"] },
+  { file: "app/src/lib/annotate/align.ts", tests: ["app/src/lib/annotate/align.test.ts"] },
+  { file: "app/src/lib/annotate/compose.ts", tests: ["app/src/lib/annotate/compose.test.ts"] },
 ];
 
 export type Mutant = {

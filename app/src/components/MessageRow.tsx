@@ -49,7 +49,7 @@ export const MessageRow = memo(function MessageRow({
     );
   }
   if (message.delivery === "steered" && message.state !== "error") return null;
-  if (message.delivery === "queued" && message.state === "streaming") return <View style={styles.assistantRow}><Text style={styles.statusText}>Queued for next turn…</Text></View>;
+  if (message.delivery === "queued" && message.state === "streaming") return null;
   return (
     <View style={styles.assistantRow}>
       {message.summaries?.filter(summary => summary.kind === "turn").map(summary => <ThinkingSummaryChip key={summary.blockId} turnId={message.turnId} summary={summary} />)}
@@ -91,14 +91,8 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
   const connection = store.use(s => s.connection.status);
   switch (message.state) {
     case "pending":
-      return (
-        <View style={styles.statusRow}>
-          <AgentOrb size={20} thinking={messageThinking(message, { connection })} />
-          <Text style={styles.statusText} numberOfLines={1}>
-            Queued…
-          </Text>
-        </View>
-      );
+      // The user bubble already says it is queued; a second orb row repeated it.
+      return null;
     case "streaming":
       return (
         <>

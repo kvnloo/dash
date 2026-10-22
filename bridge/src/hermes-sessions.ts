@@ -1,4 +1,5 @@
 import { readSessionPhase, UNOBSERVED, type SessionPhase } from "./hermes-phase";
+import { readSessionWorkers, type SessionWorker } from "./hermes-workers";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
@@ -327,6 +328,23 @@ export class HermesSessions {
     const ids = withDb(profile, db => [...lineageIds(db, sessionId)]) ?? [sessionId];
     const alive = this.gateways.gatewayPids(profile.id, profile.home).length > 0;
     return readSessionPhase(profile.home, ids, alive);
+  }
+  workers(profileId: string, sessionId: string): SessionWorker[] {
+    const profile = this.profiles(false).find(p => (p.id === profileId || hermesSessionAgentId(p.id, sessionId) === profileId) && (() => {
+      const row = localSession(p, sessionId);
+      return row !== undefined && visible(row);
+    })());
+    if (!profile) return [];
+    const ids = withDb(profile, db => [...lineageIds(db, sessionId)]) ?? [sessionId];
+    return readSessionWorkers(profile.home, ids);
+  }
+  /** Read-only identity lookup; deliberately never reads API credentials or probes a gateway. */
+  nativeHome(profileId: string, sessionId: string): string | undefined {
+    const matches = this.profiles(false).filter(p => (p.id === profileId || hermesSessionAgentId(p.id, sessionId) === profileId) && (() => {
+      const row = localSession(p, sessionId);
+      return row !== undefined && visible(row);
+    })());
+    return matches.length === 1 ? matches[0]?.home : undefined;
   }
   homeOf(profileId: string): string | undefined {
     return this.profiles().find(p => p.id === profileId)?.home;

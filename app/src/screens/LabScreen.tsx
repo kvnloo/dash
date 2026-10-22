@@ -7,6 +7,9 @@ import { fade } from "../motion";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
+import type { OrbPhase } from "../lib/orb-phase";
+
+const HERO_PHASES: OrbPhase[] = ["listening", "speaking", "thinking", "tool", "connecting", "idle"];
 import { PressScale } from "../components/PressScale";
 import { DensityScope, LevelBadge, TypeScaleToggle, useDensity } from "../components/Density";
 import { FloatingFilter } from "../components/FilterMenu";
@@ -24,7 +27,6 @@ import { LivePulse, tc } from "../components/trace/tokens";
 import { haptic } from "../haptics";
 import { inAppFeedbackEnabled } from "../lib/feedback";
 import { submitInAppFeedback } from "../lib/feedback-submit";
-import type { ThinkingPhase } from "../lib/thinking";
 import type { ScreenProps } from "../navigation";
 import { store } from "../store/app";
 import { activeSeries } from "../trace/model";
@@ -47,8 +49,8 @@ function LabScreenBody({ navigation }: ScreenProps<"Lab">) {
   const settings = store.use((s) => s.settings);
   const [visible, setVisible] = useState<Set<number>>(new Set([0, 1]));
   const [stress, setStress] = useState(false);
+  const [heroPhase, setHeroPhase] = useState<OrbPhase>("listening");
   const [replay, setReplay] = useState(0);
-  const [chipState, setChipState] = useState<Record<string, string>>({});
   const [sent, setSent] = useState(false);
   useEffect(() => { void loadFeedback(); }, []);
 
@@ -113,12 +115,12 @@ Filter (sliders, beside @): hold 250 ms → rows bloom · slide to a row (tick) 
         </Block>
 
         {action ? (
-          <Block title="Action chip" note="swipe right = Do · left = Not now" action={{ label: "Reset", onPress: () => setChipState({}) }} testID="lab-action-chip">
+          <Block title="Action chip" note="swipe to decide · Undo for 5 seconds" action={{ label: "Reset", onPress: () => { for (const v of ["card", "pill", "buttons"]) record("action", `lab-${v}`, "undo"); } }} testID="lab-action-chip">
             {(["card", "pill", "buttons"] as ChipVariant[]).map((v, i) => (
               <Variant key={v} letter={"ABC"[i] ?? ""} name={v} picked={P("action-chip") === v} onPick={() => pick("action-chip", v)}>
                 <View style={styles.pad}>
-                  <ActionChip action={{ ...action, id: `lab-${v}` }} variant={v} decision={chipState[`lab-${v}`]}
-                    onDecide={(id, d) => setChipState((s) => ({ ...s, [id]: d }))} />
+                  <ActionChip action={{ ...action, id: `lab-${v}` }} variant={v} decision={latest(records, "action", `lab-${v}`)} decidedAt={records.find(r => r.kind === "action" && r.id === `lab-${v}`)?.at}
+                    onDecide={(id, d) => record("action", id, d)} />
                 </View>
               </Variant>
             ))}
@@ -141,7 +143,7 @@ Filter (sliders, beside @): hold 250 ms → rows bloom · slide to a row (tick) 
           {[20, 40, 64, 48].map((size, i) => (
             <Variant key={size} letter={"ABCD"[i] ?? ""} name={`${size}px`} picked={P("orb-states") === `${size}px`} onPick={() => pick("orb-states", `${size}px`)}>
               <View style={styles.orbRow}>
-                {(["idle", "thinking", "tool", "streaming", "waiting-approval"] as ThinkingPhase[]).map((phase) => (
+                {(["idle", "thinking", "tool", "streaming", "waiting-approval", "listening", "speaking", "connecting"] satisfies OrbPhase[]).map((phase) => (
                   <View key={phase} style={styles.orbCell}>
                     <AgentOrb thinking={{ phase: stress ? "thinking" : phase, tool: phase === "tool" ? "terminal" : undefined }} animated={stress || i < 2} size={size} label={stress ? "thinking stress orb" : phase} />
                     <Text style={styles.orbLabel} numberOfLines={1}>{stress ? "thinking" : phase === "waiting-approval" ? "approval" : phase}</Text>
@@ -153,6 +155,10 @@ Filter (sliders, beside @): hold 250 ms → rows bloom · slide to a row (tick) 
           ))}
         </Block>
 
+        <Block title="Voice orb · hero" note="Live call phases at hero size · tap to cycle" action={{ label: heroPhase, onPress: () => setHeroPhase(p => HERO_PHASES[(HERO_PHASES.indexOf(p) + 1) % HERO_PHASES.length] ?? "listening") }} testID="lab-orb-hero">
+          <View style={styles.heroOrb}><AgentOrb size="hero" thinking={{ phase: heroPhase, tool: heroPhase === "tool" ? "ask_z0" : undefined }} label={`hero ${heroPhase}`} /></View>
+        </Block>
+
         <View style={styles.footer} testID="lab-picks">
           <Text style={styles.footT}>{picks.length ? picks.map(([s, v]) => `${s}: ${v}`).join(" · ") : "No picks yet"}</Text>
           {picks.length && inAppFeedbackEnabled(settings) ? (
@@ -161,7 +167,7 @@ Filter (sliders, beside @): hold 250 ms → rows bloom · slide to a row (tick) 
             </PressScale>
           ) : null}
         </View>
-      </>), [snapshot, records, chipState, replay, sent, settings, pick, rowsSmall, rowsLane, series, density, info, sizing.padding, stress, levelOf, action, st, navigation]);
+      </>), [snapshot, records, replay, sent, settings, pick, rowsSmall, rowsLane, series, density, info, sizing.padding, stress, levelOf, action, st, navigation, heroPhase]);
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
@@ -249,6 +255,7 @@ const styles = StyleSheet.create({
   pickT: { fontFamily: fonts.semibold, fontSize: 12, color: tc.text },
   levelPicker: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: space.lg },
   sideCell: { flex: 1, minWidth: 0, borderWidth: 1, borderColor: tc.rule, borderRadius: radius.md, padding: 4, gap: 4 },
+  heroOrb: { alignItems: "center", paddingVertical: space.lg },
   orbRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-around", padding: space.md, rowGap: space.md },
   orbCell: { alignItems: "center", gap: 4, minWidth: 52 },
   orbLabel: { fontFamily: fonts.mono, fontSize: 9, color: tc.text3 },

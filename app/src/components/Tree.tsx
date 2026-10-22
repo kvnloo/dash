@@ -1,3 +1,4 @@
+import { TURBO } from "../turbo";
 import { Feather } from "@expo/vector-icons";
 import { syncDataLoaderFeature, type ItemInstance } from "@headless-tree/core";
 import { useTree } from "@headless-tree/react";
@@ -11,6 +12,7 @@ import { SNAP, MOTION_MS, fade } from "../motion";
 import { colors, controlMin, glass, radius, space, type } from "../theme";
 import { TreeKeyboard } from "./TreeKeyboard";
 import { AgentOrb } from "./AgentOrb";
+import { ShimmerText } from "./ShimmerText";
 
 const icons: Record<TreeKind, ComponentProps<typeof Feather>["name"]> = {
   host: "monitor", bot: "cpu", harness: "terminal", session: "message-circle", repo: "git-branch",
@@ -22,7 +24,7 @@ const layout = LinearTransition.duration(MOTION_MS.enter).reduceMotion(ReduceMot
 function TreeCell({ children, ...props }: ViewProps) {
   // RN Web's positioned cells already move when FlashList reflows; a second
   // global-coordinate layout transition double-translates them. Fade rows on web.
-  return <Animated.View {...props} layout={Platform.OS === "web" ? undefined : layout}>{children}</Animated.View>;
+  return <Animated.View {...props} layout={Platform.OS === "web" || TURBO ? undefined : layout}>{children}</Animated.View>;
 }
 
 function Row({ item, selected, activate, toggle, collapse, inline }: {
@@ -39,7 +41,7 @@ function Row({ item, selected, activate, toggle, collapse, inline }: {
     onPanResponderRelease: (_, g) => { if (g.dx < -space.xxxl) collapse(); },
   }), [collapse]);
   return (
-    <Animated.View layout={inline ? layout : undefined} entering={FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} exiting={FadeOut.duration(fade.duration).reduceMotion(ReduceMotion.System)} {...swipe.panHandlers}>
+    <Animated.View layout={inline && !TURBO ? layout : undefined} entering={FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} exiting={FadeOut.duration(fade.duration).reduceMotion(ReduceMotion.System)} {...swipe.panHandlers}>
       <View style={[styles.row, node.dimmed && styles.dimmed]}>
         {Array.from({ length: depth }, (_, level) => <View pointerEvents="none" key={level} style={[styles.guide, { left: space.md + level * space.lg }]} />)}
         <Pressable
@@ -61,7 +63,7 @@ function Row({ item, selected, activate, toggle, collapse, inline }: {
           <View style={styles.chevronSpace}>{node.children && <Animated.View style={chevron}><Feather name="chevron-right" size={space.md} color={colors.textTertiary} /></Animated.View>}</View>
           {node.thinking ? <AgentOrb thinking={node.thinking} size={20} label={`Session ${node.thinking.phase}`} /> : <Feather name={icons[node.kind]} size={space.lg} color={expanded ? colors.accent : colors.textMuted} />}
           <View style={styles.label}>
-            <Text style={[node.kind === "host" ? type.heading : type.small, styles.text]} numberOfLines={node.kind === "call" ? 2 : 1}>{node.label}</Text>
+            {node.shimmer ? <ShimmerText text={node.label} size={13} family="sans-serif" dim={colors.textMuted} bright={colors.text} /> : <Text style={[node.kind === "host" ? type.heading : type.small, styles.text]} numberOfLines={node.kind === "call" ? 2 : 1}>{node.label}</Text>}
             {node.detail ? <Text style={styles.detail} numberOfLines={node.kind === "args" || node.kind === "output" || node.kind === "thinking" ? undefined : 1} selectable>{node.detail}</Text> : null}
           </View>
           {node.meta ? <Text style={styles.meta}>{node.meta}</Text> : null}

@@ -219,6 +219,7 @@ class Bridge {
         // Keep ordering: text before the event that follows it.
         this.flushDeltas();
         applyTurnEvent(message);
+        if (message.type === "done" || message.type === "error") flushPendingSends(sendChat);
         return;
       case "history":
         applyLiveHistory(message.harness, message.sessionId, message.messages, message.hostId, message.profileId);

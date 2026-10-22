@@ -1,3 +1,4 @@
+import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
 import { useHandedness } from "../lib/useHandedness";
 import { BlurTargetView } from "expo-blur";
@@ -5,8 +6,8 @@ import { Canvas } from "../components/Canvas";
 import { setThinkingSummaries } from "../store/app";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Platform, StyleSheet, Text, View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
 import { DensityScope } from "../components/Density";
@@ -39,25 +40,33 @@ import {
   conversationTargetError,
   createConversation,
   parkUnsentTurn,
-  promotePendingTurn,
+  flushPendingSends,
+  takeQueuedForSteer,
+  changeQueuePreview,
+  saveQueuePreview,
+  setQueueWaiting,
   saveSettings,
   setActive,
   setDetailMode,
   stopConversation,
   store,
 } from "../store/app";
-import { dequeue, enqueue, onTurnSettled, queueLength } from "../store/queue";
+import { onTurnSettled } from "../store/queue";
+import { queuedParts } from "../lib/pending-queue";
+import { QueuedStack } from "../components/QueuedStack";
 import { colors, glass, radius, space, type } from "../theme";
-import { conversationThinking, type Thinking } from "../lib/thinking";
-import { useSessionPhase } from "../lib/session-phase";
+import { useLiveThinking } from "../lib/live-thinking";
+import { mergeVoicePhase } from "../lib/orb-phase";
+import { useZ0LiveState } from "../lib/z0live-state";
 import { useSessionActivity } from "../lib/session-activity";
-import { replyText } from "../store/text";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
+import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
 import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptOffset } from "../lib/prompt-navigation";
 import { railTurns } from "../lib/rail-turns";
+import { enterAnnotation, registerSink } from "../store/annotate";
 
 const EMPTY: Message[] = [];
 
@@ -98,7 +107,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const connection = store.use((s) => s.connection);
   const conversation = store.use((s) => s.conversations.find((c) => c.id === s.activeId));
   const messages = conversation?.messages ?? EMPTY;
-  const anchors = useMemo(() => railTurns(messages), [messages]);
+  const visibleMessages = useMemo(() => {
+    const queued = new Set(conversation ? queuedParts(conversation).flatMap(part => [part.user.id, part.assistant.id]) : []);
+    return messages.filter(message => !queued.has(message.id));
+  }, [messages, conversation]);
+  const anchors = useMemo(() => railTurns(visibleMessages), [visibleMessages]);
   useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
   const jumpPrompt = useCallback((prompt: number) => {
     const anchor = anchors[prompt];
@@ -129,25 +142,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     if (conversation) { haptic.tap(); sendLiveTurn(conversation.id, text); }
   }, [conversation]);
 
-  const streamingMessage = useMemo(() => {
-    return messages.find((m) => m.role === "assistant" && m.state === "streaming");
-  }, [messages]);
-
-  const replyId = streamingMessage?.role === "assistant" ? streamingMessage.turnId : "";
-  const subscribeText = useCallback((notify: () => void) => replyText.subscribe(replyId, notify), [replyId]);
-  const hasText = useCallback(() => Boolean(replyText.get(replyId)), [replyId]);
-  // Header needs only the first-text edge, not a whole-screen render for every token.
-  const liveText = useSyncExternalStore(subscribeText, hasText, hasText);
+  const { thinking, caption, external, observed, streamingMessage } = useLiveThinking(conversation);
   useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
-  const observed = useSessionPhase(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
-  const localThinking = conversationThinking(messages, connection.status);
-  const thinking: Thinking = !online ? { phase: "idle" } : localThinking.phase !== "idle"
-    ? (localThinking.phase === "thinking" && liveText && !(streamingMessage?.role === "assistant" && streamingMessage.status) ? { phase: "streaming" } : localThinking)
-    : observed?.observed ? observed : { phase: "idle" };
-  const external = online && localThinking.phase === "idle" && observed?.observed && observed.phase !== "idle" ? observed : undefined;
+  const workers = useSessionWorkers(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
+  const [chatOptions, setChatOptions] = useState(false);
+  const context = useContextView(settings, online && (!conversation?.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)), harnessId, conversation?.profileId, conversation?.sessionId, thinking.phase !== "idle");
   const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
-  const observationUnavailable = online && harnessId === "hermes" && Boolean(conversation?.sessionId) && !observed?.observed;
-  const caption = thinking.phase === "tool" ? `working · ${thinking.tool}` : thinking.phase === "waiting-approval" ? "waiting for approval or clarification" : thinking.phase === "idle" ? (!online ? "offline" : observationUnavailable ? "status unavailable" : "idle") : "working";
+  const callFixture = debugUi.use((s) => s.z0liveFixture ?? null);
+  const call = useZ0LiveState(settings, online && callFixture === null, 3000);
+  const liveCall = callFixture ?? call;
+  const voiceCall = liveCall?.live ? mergeVoicePhase(liveCall, thinking) : undefined;
 
   const sendTurn = useCallback(
     (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId), mode: SendMode = "queue") => {
@@ -173,36 +177,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   );
 
   const flushQueue = useCallback(
-    (conversationId: string) => {
-      if (!online) return;
-      const conv = store.get().conversations.find((c) => c.id === conversationId);
-      if (!conv) return;
-      if (conversationBusy(conversationId) && conv.messages.some((m) => m.role === "assistant" && m.state === "streaming")) {
-        return;
-      }
-      const turnId = dequeue(conversationId);
-      if (!turnId) return;
-      const payload = promotePendingTurn(turnId);
-      if (!payload) {
-        flushQueue(conversationId);
-        return;
-      }
-      haptic.tap();
-      const current = store.get().conversations.find((c) => c.id === conversationId);
-      const ok = sendChat({
-        turnId,
-        harness: payload.harness,
-        text: payload.text,
-        sessionId: current?.sessionId ?? payload.sessionId,
-        cwd: current?.cwd,
-        attachments: payload.attachments,
-      });
-      if (!ok) {
-        parkUnsentTurn(turnId);
-        return;
-      }
-      if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
-    },
+    (_conversationId: string) => { if (online) flushPendingSends(sendChat); },
     [online],
   );
 
@@ -212,17 +187,25 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       setFollow(true);
       const active = conversation ?? createConversation(harnessId);
       if (mode === "steer") { sendTurn(text, attachments, active, "steer"); return; }
-      if (conversationBusy(active.id)) {
-        const { turnId } = beginTurn(active.id, text, { pending: true, attachments });
-        enqueue(active.id, turnId);
+      if (conversationBusy(active.id) || thinking.phase !== "idle") {
+        if (!streamingMessage && thinking.phase !== "idle") setQueueWaiting(active.id, true);
+        beginTurn(active.id, text, { pending: true, attachments });
         haptic.tap();
         requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
         return;
       }
       sendTurn(text, attachments, active);
     },
-    [conversation, harnessId, sendTurn, setFollow],
+    [conversation, harnessId, sendTurn, setFollow, thinking.phase, streamingMessage],
   );
+
+  // Annotation mode sends into this chat: steer a running Hermes turn, else send/queue.
+  const steerableRef = useRef(false);
+  steerableRef.current = canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn);
+  useEffect(() => {
+    if (liveOn) return;
+    return registerSink({ label: `${harnessName} chat`, steerable: () => steerableRef.current, send: (text, attachments, mode) => onSend(text, attachments, mode) });
+  }, [onSend, harnessName, liveOn]);
 
   useEffect(() => {
     if (!conversation) return;
@@ -232,12 +215,19 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, [conversation?.id, flushQueue]);
 
   useEffect(() => {
-    if (conversation && !streamingMessage && queueLength(conversation.id) > 0) flushQueue(conversation.id);
+    if (conversation && !streamingMessage && queuedParts(conversation).length > 0) flushQueue(conversation.id);
   }, [conversation?.id, streamingMessage, flushQueue]);
 
   useEffect(() => {
-    if (online && conversation && queueLength(conversation.id) > 0) flushQueue(conversation.id);
+    if (online && conversation && queuedParts(conversation).length > 0) flushQueue(conversation.id);
   }, [online, conversation?.id, flushQueue]);
+
+  useEffect(() => {
+    if (conversation?.queueWaitForIdle && observed?.observed && observed.phase === "idle") {
+      setQueueWaiting(conversation.id, false);
+      flushQueue(conversation.id);
+    }
+  }, [conversation?.id, conversation?.queueWaitForIdle, observed?.observed, observed?.phase, flushQueue]);
 
   const onStop = useCallback(() => {
     if (conversation) stopConversation(conversation.id, (id) => { bridge.send({ type: "cancel", id }); });
@@ -268,8 +258,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
       <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} />
-      <View style={styles.liveRow} accessibilityLabel={`${harnessName} ${caption}`}><AgentOrb size={20} thinking={thinking} /><Text style={styles.liveNote}>{caption}{external ? " · terminal" : ""}</Text></View>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: chatOptions }} accessibilityLabel="Chat options" onPress={() => setChatOptions(v => !v)} style={styles.optionsToggle}><Text style={styles.optionsToggleText}>{chatOptions ? "Hide options" : "Options"}</Text></Pressable>
       <ConnectionPill />
+      {chatOptions ? <View>
       {conversation ? <PressScale accessibilityRole="switch" accessibilityLabel="Thinking summaries" accessibilityState={{ checked: conversation.summariesEnabled === true }} onPress={() => setThinkingSummaries(conversation.id, !conversation.summariesEnabled)} style={styles.liveRow}><Text style={styles.liveNote}>Thinking summaries · {conversation.summariesEnabled ? "on" : "off"} · next turn</Text></PressScale> : null}
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       {!targetError && conversation?.openIn ? (
@@ -286,10 +277,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           <Text style={styles.liveNote} numberOfLines={1}>{liveOn ? "fast lane · Hermes stays in charge" : "Hermes chat"}</Text>
         </View>
       ) : null}
+      </View> : null}
       {liveOn && conversation ? <KeyboardInsetView style={styles.body}><LiveSurface conversationId={conversation.id} /></KeyboardInsetView> : <KeyboardInsetView style={styles.body} onOpen={scrollToNewest}>
         <BlurTargetView ref={blurTarget} style={styles.body}><FlashList
           ref={listRef}
-          data={messages}
+          data={visibleMessages}
           extraData={external}
           renderItem={({ item }) => <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
           keyExtractor={keyExtractor}
@@ -325,34 +317,41 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onLatest={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
       </KeyboardInsetView>}
       <KeyboardDock>
+        <WorkersStrip workers={workers} />
         <View style={styles.liveRow}>
           <PressScale accessibilityRole="button" accessibilityLabel="Choose harness" onPress={() => { haptic.select(); setPickerVisible(true); }} style={styles.liveChip}><Text style={styles.liveChipText}>{harnessName} · Change</Text></PressScale>
           {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approval}><Text style={styles.approvalText}>{approvalCount} approvals{approvalDryRun ? " · preview" : ""} ›</Text></PressScale> : null}
         </View>
         <ZeroCard screen="chat" project={chatProject} onOpenTrace={() => navigation.navigate("Trace")} />
+        {conversation && !liveOn ? <QueuedStack conversation={conversation} canSteer={online && !targetError && canSteer(harnessId, conversation.sessionId, thinking.phase, liveOn)} onSteer={() => { const payload = takeQueuedForSteer(conversation.id); if (payload) sendTurn(payload.text, payload.attachments, conversation, "steer"); }} /> : null}
         <FilterMenuHost screen="chat">
         <Composer
           filter={<FilterButton />}
+          context={context}
           key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
           disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
           streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
           steerBusy={canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn)}
           initialText={composerDraft}
+          queuePreview={conversation?.queuePreview}
+          onQueuePreviewChange={text => { if (conversation) changeQueuePreview(conversation.id, text); }}
+          onSaveQueuePreview={() => { if (conversation) saveQueuePreview(conversation.id); }}
           harness={harnessId}
           blurTarget={liveOn ? undefined : blurTarget}
           cwd={conversation?.cwd}
           placeholder={liveOn ? (live.askHermes ? "Ask Hermes through the live surface" : "Live surface · quick reply") : composerPlaceholder({
             online,
             streaming: Boolean(streamingMessage),
-            queued: conversation ? queueLength(conversation.id) : 0,
+            queued: conversation ? queuedParts(conversation).length : 0,
             openIn: conversation?.openIn,
             harness: harnessId,
             harnessName,
           })}
           onSend={liveOn ? onLiveSend : onSend}
           onStop={onStop}
-          onVoice={() => navigation.navigate("Voice")}
+          onVoice={() => navigation.navigate("Voice", { autostart: true })}
+          voiceCall={voiceCall}
         />
         </FilterMenuHost>
       </KeyboardDock>
@@ -369,6 +368,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
 }
 
 const styles = StyleSheet.create({
+  optionsToggle: { alignSelf: "flex-start", marginLeft: 20, marginTop: -2, marginBottom: 4, paddingVertical: 4 },
+  optionsToggleText: { ...type.mono, fontSize: 10, color: colors.textFaint },
   screen: { flex: 1, backgroundColor: colors.bg },
   approval: { minHeight: 44, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: space.lg, borderBottomWidth: 1, borderColor: colors.hair },
   approvalText: { ...type.small, color: colors.warn },
