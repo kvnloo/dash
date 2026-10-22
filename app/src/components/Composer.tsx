@@ -7,7 +7,7 @@ import { MicButton } from "./MicButton";
 import { dictate } from "../lib/dictation";
 import { insertAtCursor, type Selection } from "../lib/mic-gesture";
 import { type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Keyboard, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
 import { pickFiles, pickPhotos } from "../lib/attachment-picker";
 import { uploadPickedFile } from "../lib/attachment-upload";
@@ -69,24 +69,38 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
   const [cursor, setCursor] = useState<Selection | undefined>(undefined);
   /** While dictating, focus the field without raising the keyboard; a tap on the field restores normal typing. */
   const [dictating, setDictating] = useState(false);
+  const recognitionPending = useRef(false);
   const onDictate = useCallback(async () => {
+    if (recognitionPending.current) return;
+    recognitionPending.current = true;
+    const at = selection.current;
     setDictating(true);
+    Keyboard.dismiss();
     const result = await dictate();
+    recognitionPending.current = false;
     if (!mounted.current) return;
     if (result.ok) {
-      setText(current => {
-        const next = insertAtCursor(current, selection.current, result.text);
+      if (queuePreview !== undefined) {
+        const next = insertAtCursor(queuePreview, at, result.text);
+        onQueuePreviewChange?.(next.text);
         const sel = { start: next.cursor, end: next.cursor };
         selection.current = sel;
         setCursor(sel);
-        return next.text;
-      });
+      } else {
+        setText(current => {
+          const next = insertAtCursor(current, at, result.text);
+          const sel = { start: next.cursor, end: next.cursor };
+          selection.current = sel;
+          setCursor(sel);
+          return next.text;
+        });
+      }
       requestAnimationFrame(() => inputRef.current?.focus());
     } else if (result.reason !== "canceled") {
       Alert.alert("Dictation", result.message ? `System speech recognizer unavailable: ${result.message}` : "System speech recognizer unavailable.");
     }
-  }, []);
-  useEffect(() => () => { mounted.current = false; }, []);
+  }, [queuePreview, onQueuePreviewChange]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const editingQueue = queuePreview !== undefined;
   const draftText = queuePreview ?? text;

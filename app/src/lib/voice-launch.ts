@@ -2,27 +2,12 @@ export interface VoiceLinker {
   openURL(url: string): Promise<unknown>;
 }
 
-export type VoiceLaunchResult =
-  | { kind: "opened" }
-  | { kind: "unavailable"; message: string };
+export type VoiceLaunchResult = { kind: "unavailable"; message: string };
 
-export async function launchSharedVoice(platform: string, linker: VoiceLinker): Promise<VoiceLaunchResult> {
-  if (platform !== "android") {
-    return {
-      kind: "unavailable",
-      message: "Shared z0live voice is available on Android. You can use legacy voice here.",
-    };
-  }
-
-  try {
-    // Lawnchair's LinkActivity accepts this exact public URI and opens controls without starting capture.
-    // Open directly: canOpenURL can hide installed handlers when Expo Go cannot declare package queries.
-    await linker.openURL("z0live://voice");
-    return { kind: "opened" };
-  } catch {
-    return {
-      kind: "unavailable",
-      message: "Could not open Lawnchair z0live. Check that it is installed, or install it, then try again. You can also use legacy voice.",
-    };
-  }
+/** No installed in-app media client: never silently hand off to an external activity. */
+export async function launchSharedVoice(_platform: string, _linker: VoiceLinker): Promise<VoiceLaunchResult> {
+  return {
+    kind: "unavailable",
+    message: "In-app z0live is not connected yet. WebRTC microphone capture in this Expo Go runtime is not verified. Dash needs its own broker device pairing and a secure microphone origin. No external app was opened. System Dictate still works from the composer. Legacy voice is a separate, optional turn-based mode, not z0live.",
+  };
 }
