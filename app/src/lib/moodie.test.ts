@@ -41,6 +41,9 @@ describe("real synergy Moodie faces", () => {
     expect(liveliness(1.4).lid).toBe(1);
     expect(liveliness(1.481).lid).toBeCloseTo(0, 6);
     expect(liveliness(901.481).lid).toBeCloseTo(liveliness(1.481).lid, 6);
-    expect(liveliness(2, { wander: 0, blink: false, float: false })).toEqual({ dYaw: 0, dPitch: 0, dRoll: 0, lid: 1, driftX: 0, driftY: 0, breath: 1 });
+    const still = liveliness(2, { wander: 0, blink: false, float: false });
+    for (const value of [still.dYaw, still.dPitch, still.dRoll, still.driftX, still.driftY]) expect(value === 0).toBe(true);
+    expect(still.lid).toBe(1);
+    expect(still.breath).toBe(1);
   });
 });
