@@ -30,7 +30,7 @@ test("recorded native Hermes ACP emits content wrappers, not rawInput/rawOutput"
   const updates: unknown = JSON.parse(fixture("acp-parts.json"));
   if (!Array.isArray(updates)) throw new Error("fixture");
   for (const update of updates) if (record(update)) acpParts(update, emitter);
-  expect(parts.find(p => p.kind === "tool_start")).toMatchObject({ name: "terminal", args: "$ printf dash-protocol-sample" });
+  expect(parts.find(p => p.kind === "tool_start")).toMatchObject({ name: "terminal", summary: "printf dash-protocol-sample", args: "$ printf dash-protocol-sample" });
   expect(parts.find(p => p.kind === "tool_output")).toMatchObject({ text: "terminal result\n- **output:** dash-protocol-sample\n- **exit_code:** 0" });
   expect(parts.find(p => p.kind === "tool_finish")).toMatchObject({ status: "ok" });
 });

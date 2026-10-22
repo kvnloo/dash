@@ -80,3 +80,13 @@ test("Headless Tree expands flattened nodes without a DOM or native modules", ()
   tree.getItemInstance("host").collapse();
   expect(tree.getItems()).toHaveLength(1);
 });
+async function labels(nodes: TreeNode[]): Promise<string[]> {
+  const out: string[] = [];
+  for (const node of nodes) out.push(node.label, ...(await labels(await children(node))));
+  return out;
+}
+test("ACP plain-text terminal call keeps its command in the inline tree", async () => {
+  const text = (await labels(toolTree({ id: "acp", tools: [{ id: "t", name: "terminal", summary: "terminal", args: "$ bun test parser.test.ts", output: "", status: "live", durationMs: 0, truncated: false }] }))).join("\n");
+  expect(text).toContain("bun test parser.test.ts");
+  expect(text).not.toContain("terminal · terminal");
+});

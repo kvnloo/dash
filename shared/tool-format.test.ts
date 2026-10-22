@@ -75,3 +75,18 @@ test('redacts args, title, nested output, Authorization and .env values', () => 
   const write = formatTool({...base,name:'write_file',args:JSON.stringify({path:'/repo/.env',content:'NORMAL=private-value'})});
   expect(JSON.stringify(write)).not.toContain('private-value');
 });
+test('ACP plain "$ command" terminal args keep command identity and exit status', () => {
+  const f = formatTool({...base,args:'$ bun test parser.test.ts',output:'terminal result\n- **output:** 1 fail\n- **exit_code:** 1',status:'error'});
+  expect(f.title).toBe('bun test parser.test.ts');
+  expect(f.detail).toContain('exit 1');
+  expect(f.detail).toContain('1 fail');
+});
+test('retained summary is the title fallback before the bare tool name', () => {
+  expect(formatTool({...base,name:'mystery',args:'not json',summary:'inspect roster'}).title).toBe('inspect roster');
+  expect(formatTool({...base,name:'mystery',args:'',summary:'mystery'}).title).toBe('mystery');
+});
+test('plain-text terminal args are redacted in title and args', () => {
+  const f = formatTool({...base,args:"$ curl -H 'Authorization: Bearer abcdef123456' --data token=hunter2-secret"});
+  expect(JSON.stringify(f)).not.toContain('abcdef123456'); expect(JSON.stringify(f)).not.toContain('hunter2-secret');
+  expect(f.title).toStartWith('curl -H');
+});
