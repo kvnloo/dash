@@ -90,6 +90,8 @@ try{
   await page.getByRole('tab').nth(1).click();await page.getByText(chat.title,{exact:true}).first().click();
   assert.equal(await input.inputValue(),'Original unsent draft\nKeep this exact text');
   assert.deepEqual(await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes),originalInk);
+  // Keep the annotation open, but use its existing tray relocation so it cannot cover the mic.
+  await page.getByRole('button',{name:'Move tray to the top',exact:true}).click();
   const mic=page.getByRole('button',{name:'Dictate',exact:true});const bounds=await mic.boundingBox();assert(bounds);
   await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);await page.mouse.down();await sleep(350);
   await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2-48,{steps:8});await page.mouse.up();
