@@ -72,3 +72,49 @@ The parent/integration owner should verify on the installed package:
 - Verify the existing voice, turbo and QA screens from the integrated source. Native imports added later need an APK rebuild.
 
 Native tests use Robolectric and an actual ContentProvider/file descriptor for the receive/copy path. They are not evidence of real source-app grant lifetime, phone UI, OS permission dialogs or killed-app push delivery.
+
+## Native continuous voice (separate reviewed rollout)
+
+The Voice route no longer launches Lawnchair. `ContinuousVoiceRoot` owns a native
+`react-native-webrtc` call outside the navigator and annotation overlay. The composer
+Live voice tap starts it; navigation does not unmount it. Mute clears pending input;
+Stop closes tracks/peer before best-effort broker cancellation/end. Leaving Dash for
+the Android background stops the mic. There is no microphone foreground service,
+background-capture promise, platform-TTS fallback, or Expo Go/web implementation.
+
+The bridge's `/voice/bootstrap` is online identity-authenticated, native-only metadata
+for an exact known attached Hermes profile/session, enabled with `DASH_NATIVE_VOICE=1`.
+It does not mint a bearer and does not turn `dash:chat` into voice permission. The app
+separately mints an in-memory access token with `aud=z0live`, exactly `z0live:voice`,
+from its existing device-bound SecureStore enrollment. An absent grant fails closed.
+The parent must review an explicit additional voice grant for the S25's native Dash
+credential; it is independently removable with `z0bridge revoke CRED --scope z0live:voice`.
+No Lawnchair token or owner bearer belongs in Dash. No grants are applied by builds.
+
+The matching isolated z0live change requires `Z0LIVE_IDENTITY=1`, loopback identity
+URL `http://127.0.0.1:4789`, and `Z0LIVE_IDENTITY_CREDENTIAL_FILE` pointing to a 0600
+local `z0bridge:introspect` enrollment (not the owner token). It introspects every
+request and binds ownership to device plus credential, preserving identity across
+short-lived-token refresh. Voice enrollment cannot call gesture/admin endpoints.
+The server stores the exact attached target outside mutable app-state metadata;
+attached relay cannot override it or fall back to the most-recent session. A causal
+reply is read from the submitted gateway admission's `prompt.receipt`, not inferred
+from later session activity. Luna's explicit configured model/provider must remain
+unchanged; native media uses gpt-realtime/Marin without a transport/model fallback.
+
+While annotating, spoken intent stays with the draft until image+strokes upload and
+submission to the same attached conversation. A second recorder is disabled. The
+draft is retained on disconnect/unconfirmed delivery; retry observes the original
+turn rather than creating a duplicate. A local pre-submit "queued" label is not an
+acknowledgement. Only a started/final receipt clears the draft. The final reply is
+queued into the same realtime peer at a silent turn boundary. Process-kill recovery
+of the annotation drawing is not implemented by this change.
+
+Rollout order: review/grant voice scope; deploy the tested isolated broker change and
+its introspection config with an idle-checked restart; enable/deploy bridge bootstrap;
+prepare the owned Metro dependency overlay; install the verified fresh APK under the
+phone-install lock; then test OS permission, duplex physical mic/playback, S Pen with
+current-screen capture, navigation, barge-in/noise, network loss, mute/stop and Android
+background teardown. Workers stop before shared service restarts and owner phone UI.
+Unit tests, browser synthetic media and signed APK compilation do not certify those
+physical checks. The task's REPORT.md is the authority for actual tested SHAs/artifacts.

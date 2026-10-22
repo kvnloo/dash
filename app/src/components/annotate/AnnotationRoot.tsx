@@ -26,6 +26,7 @@ import { colors, radius, space, type } from "../../theme";
 import { PressScale } from "../PressScale";
 import { targetsAt } from "./hit-test";
 import { loadSkia } from "./skia-ready";
+import { useContinuousVoice } from "../ContinuousVoiceRoot";
 
 export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
 /** Strokes whose extent is under this many points are taps (e.g. a pen double-tap). */
@@ -159,7 +160,7 @@ async function sendAnnotation(keep: boolean, target: React.RefObject<View | null
       uploadBytes(settings, names.image, "image/png", bytes),
       uploadBytes(settings, names.json, "application/json", new TextEncoder().encode(JSON.stringify(doc, null, 1))),
     ]);
-    sink.send(text, [image, json], annotationSendMode(sink.steerable()));
+    await sink.send(text, [image, json], annotationSendMode(sink.steerable()));
     haptic.success();
     finishSend(keep);
   } catch (error) {
@@ -250,11 +251,14 @@ function Swatch({ color, selected }: { color: InkColor; selected: boolean }): Re
 
 /** Hold to talk: the bridge transcribes the clip; the segment's time span aligns strokes. */
 function HoldToTalk(): React.JSX.Element {
+  const voice = useContinuousVoice();
+  const liveVoice = !["idle", "error"].includes(voice.state.phase);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recording = annotate.use(s => s.recording);
   const started = useRef(0);
   const [note, setNote] = useState<string>();
   const begin = async () => {
+    if (liveVoice) { setNote("Live mic in use"); return; }
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) { setNote("Mic blocked"); return; }
@@ -282,9 +286,9 @@ function HoldToTalk(): React.JSX.Element {
     } catch { setNote("Not heard"); }
   };
   return (
-    <PressScale accessibilityRole="button" accessibilityLabel="Hold to talk" accessibilityState={{ selected: recording }}
+    <PressScale accessibilityRole="button" accessibilityLabel={liveVoice ? "Continuous voice is active" : "Hold to talk"} disabled={liveVoice} accessibilityState={{ selected: recording, disabled: liveVoice }}
       onPressIn={() => void begin()} onPressOut={() => void end()} style={[styles.chip, recording && styles.recording]}>
-      <Text style={[styles.chipText, recording && styles.chipTextOn]}>{recording ? "● Talk" : note ?? "Talk"}</Text>
+      <Text style={[styles.chipText, recording && styles.chipTextOn]}>{liveVoice ? "Live mic" : recording ? "● Talk" : note ?? "Talk"}</Text>
     </PressScale>
   );
 }

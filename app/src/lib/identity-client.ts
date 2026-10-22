@@ -41,10 +41,11 @@ export class IdentityTokens {
   private cached = new Map<string, { token: string; until: number }>();
   constructor(private loadSecret: (key: string) => Promise<string | null>, private fetchImpl: (url: string, init?: RequestInit) => Promise<Response> = fetch, private now = Date.now) {}
   clear(): void { this.cached.clear(); }
-  async token(enrollment: IdentityEnrollment): Promise<string> {
+  async token(enrollment: IdentityEnrollment, audience: "dash" | "z0live" = "dash"): Promise<string> {
     const checked = parseIdentityEnrollment(enrollment);
     if (!checked) throw new Error("Invalid z0bridge settings");
-    const key = `${checked.url}|${checked.kid}|${checked.issuer}|${checked.credentialId}`;
+    const scope = audience === "dash" ? "dash:chat" : "z0live:voice";
+    const key = `${checked.url}|${checked.kid}|${checked.issuer}|${checked.credentialId}|${audience}`;
     const cached = this.cached.get(key);
     if (cached && cached.until > this.now() + 15_000) return cached.token;
     const credential = await this.loadSecret(identitySecretKey(checked.credentialId));
@@ -54,9 +55,9 @@ export class IdentityTokens {
     const started = this.now();
     const result = await jsonFetch(`${checked.url}/v1/token`, {
       method: "POST", headers: { authorization: `Bearer ${credential}`, "content-type": "application/json" },
-      body: JSON.stringify({ aud: "dash", scope: ["dash:chat"], ttl: 120 }),
+      body: JSON.stringify({ aud: audience, scope: [scope], ttl: 120 }),
     }, this.fetchImpl);
-    if (!record(result) || result.aud !== "dash" || result.token_type !== "Bearer" || result.scope !== "dash:chat" ||
+    if (!record(result) || result.aud !== audience || result.token_type !== "Bearer" || result.scope !== scope ||
         typeof result.access_token !== "string" || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(result.access_token) ||
         typeof result.expires_in !== "number" || !Number.isInteger(result.expires_in) || result.expires_in < 30 || result.expires_in > 300) throw new Error("Invalid z0bridge token response");
     this.cached.set(key, { token: result.access_token, until: started + result.expires_in * 1000 });

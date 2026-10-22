@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 mkdir -p .native-receipts
 exec > >(tee .native-receipts/build.log) 2>&1
 printf 'Native Android build host: %s\n' "$(hostname)"
+if [ -f .native-build-inputs/source-revision.txt ]; then cp .native-build-inputs/source-revision.txt .native-receipts/source-revision.txt; fi
 if [ -f .native-build-inputs/aodl.bundle ]; then
   if [ ! -d .native-build-inputs/aodl.git ]; then git clone --mirror .native-build-inputs/aodl.bundle .native-build-inputs/aodl.git; fi
   mirror="file://$(realpath .native-build-inputs/aodl.git)"
@@ -22,6 +23,7 @@ if [ "${DASH_NATIVE_ONLY:-0}" != 1 ]; then
   bun app/node_modules/typescript/bin/tsc -p app --noEmit > .native-receipts/typecheck.log 2>&1
   bun test app/src bridge/src shared > .native-receipts/unit.log 2>&1
   bun scripts/mutate.ts > .native-receipts/mutation.log 2>&1
+  (cd app && CI=1 bun x expo export --platform android --output-dir ../.native-receipts/export) > .native-receipts/export.log 2>&1
 else
   printf 'Native-only retry: use the preceding unchanged-source JS gate receipts.\n'
 fi
@@ -54,4 +56,9 @@ cp app/android/app/build/intermediates/merged_manifests/debug/processDebugManife
 python3 scripts/verify-native-manifest.py .native-receipts/AndroidManifest.xml > .native-receipts/manifest-check.json
 sha256sum .native-receipts/dash-native-arm64.apk | tee .native-receipts/apk.sha256
 signer=$(printf '%s\n' "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-"$signer" verify --verbose .native-receipts/dash-native-arm64.apk | tee .native-receipts/signature.txt
+"$signer" verify --verbose --print-certs .native-receipts/dash-native-arm64.apk | tee .native-receipts/signature.txt
+(cd app && node -e 'for (const n of ["expo", "react-native", "react-native-webrtc", "expo-dev-client"]) console.log(n + " " + require(n + "/package.json").version)') > .native-receipts/runtime-dependencies.txt
+mkdir -p .native-receipts/runtime-packages
+for package in react-native-webrtc base64-js debug ms; do
+  rsync -a --exclude=android/ --exclude=ios/ --exclude=common/ "app/node_modules/$package" .native-receipts/runtime-packages/
+done
