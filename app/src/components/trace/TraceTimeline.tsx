@@ -26,6 +26,7 @@ import { InteractiveTile } from "../InteractiveTile";
 import { PressScale } from "../PressScale";
 import { colors, fonts, radius, space, type } from "../../theme";
 import { LivePulse, tc } from "./tokens";
+import { traceVerdict } from "../../../../shared/trace-evidence";
 
 export type RowVariant = "bars" | "density" | "compact";
 export type RowRect = { x: number; y: number; width: number; height: number };
@@ -405,7 +406,7 @@ const RowLabel = memo(function RowLabel({ row, h, selected, onPress, refCb, vari
     <View ref={refCb} collapsable={false} style={{ height: h }}>
       <InteractiveTile title={row.key} summary={`${row.key}. ${rowMeta(sum)}`} onOpen={onPress} style={[styles.rowLabel, selected && styles.rowSel]} testID={`row-${row.key}`}>
         <View style={[styles.rowLabelInner, dim && { opacity: 0.55 }]}>
-          <Text style={styles.project} numberOfLines={1}>{row.project}{sum.workers > 1 ? <Text style={styles.count}>  ×{sum.workers}</Text> : null}</Text>
+          <Text style={styles.project} numberOfLines={1}><Text accessibilityLabel={`Contract ${traceVerdict(row.evidence)}`}>{traceVerdict(row.evidence) === "met" ? "✓" : traceVerdict(row.evidence) === "failed" ? "×" : traceVerdict(row.evidence) === "partly" ? "◐" : "?"} </Text>{row.project}{sum.workers > 1 ? <Text style={styles.count}>  ×{sum.workers}</Text> : null}</Text>
           {variant === "compact" ? null : <Text style={styles.goal} numberOfLines={1}>{row.goal}</Text>}
           {sum.cut || sum.asks ? (
             <Text style={styles.meta} numberOfLines={1}>
@@ -463,6 +464,7 @@ const PlotRow = memo(function PlotRow({ index, item, span, now, variant, maxDens
 function WorkerBar({ w, lane, span, variant, max, step }: { w: TraceWorker; lane: number; span: number; variant: RowVariant; max: number; step: number }) {
   const live = w.status === "running";
   const left = `${(w.s / span) * 100}%` as const;
+  if (w.status === "unknown") return <View accessibilityLabel="Source timestamp · duration unknown" style={{ position: "absolute", left, top: 10 + lane * step, width: 4, height: 4, backgroundColor: tc.faint }} />;
   const width = `${(Math.max(60, w.e - w.s) / span) * 100}%` as const;
   if (variant === "compact") {
     return <View style={[styles.line, { left, width, top: 10 + lane * step, backgroundColor: live ? tc.live : w.status === "interrupted" ? tc.cut : tc.tick }]} />;
@@ -511,9 +513,9 @@ function EndNote({ w, span, now, y, below }: { w: TraceWorker; span: number; now
       </View>
     );
   }
-  const text = w.asks.length ? `needs OK: ${askWord(w.asks[0] ?? "")}` : w.status === "interrupted" && !w.resumed ? "cut" : null;
+  const text = w.status === "unknown" ? "unknown" : w.asks.length ? `needs OK: ${askWord(w.asks[0] ?? "")}` : w.status === "interrupted" && !w.resumed ? "cut" : null;
   if (!text) return null;
-  const color = w.asks.length ? tc.ask : tc.cut;
+  const color = w.status === "unknown" ? tc.text3 : w.asks.length ? tc.ask : tc.cut;
   const nearNow = now - w.e < 2400;
   const pos = nearNow ? { right: `${(1 - w.e / span) * 100}%` as const, top: below, marginRight: 0, justifyContent: "flex-end" as const } : [styles.noteLeft, { left, top: y - 3 }];
   return (

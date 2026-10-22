@@ -19,6 +19,7 @@ import { askWord, clock, dur, rowMeta, summarizeRow, type TraceRow, type TraceSn
 import { fonts, radius, space, type } from "../../theme";
 import { LivePulse, tc } from "./tokens";
 import type { RowRect } from "./TraceTimeline";
+import { TraceEvidenceCards, type TraceRoute } from "./TraceEvidenceCards";
 
 const open = { ...fade, easing: snappy.easing, reduceMotion: ReduceMotion.System };
 
@@ -27,12 +28,13 @@ const open = { ...fade, easing: snappy.easing, reduceMotion: ReduceMotion.System
  * to the sheet rect; contents fade in once it is mostly open. Drag down, tap the scrim or press
  * back to close (reverse morph into the row). Reduced motion: a plain crossfade.
  */
-export function TraceDetail({ snapshot, row, origin, onClose }: { snapshot: TraceSnapshot; row: TraceRow; origin: RowRect; onClose(): void }) {
+export function TraceDetail({ snapshot, row, origin, onClose, onNavigate }: { snapshot: TraceSnapshot; row: TraceRow; origin: RowRect; onClose(): void; onNavigate?(route: TraceRoute): void }) {
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const p = useSharedValue(0);
   const [ready, setReady] = useState(reduced);
+  const [metricsOpen, setMetricsOpen] = useState(false);
   const drag = useSharedValue(0);
   const top = insets.top + 56;
   const target = { x: 0, y: top, width: W, height: H - top + 24 }; // runs past the bottom edge: no gap, no bottom corners
@@ -107,6 +109,11 @@ export function TraceDetail({ snapshot, row, origin, onClose }: { snapshot: Trac
           </View>
           <Animated.View style={[styles.flex, body]}>
             {ready ? <ScrollView contentContainerStyle={styles.scroll}>
+              <TraceEvidenceCards evidence={row.evidence} onNavigate={route => { onClose(); onNavigate?.(route); }} />
+              <Pressable onPress={() => setMetricsOpen(v => !v)} accessibilityRole="button" accessibilityLabel="Worker metrics" accessibilityState={{ expanded: metricsOpen }}>
+                <Text style={styles.section}>{metricsOpen ? "−" : "+"} WORKERS & METRICS · {sum.workers}</Text>
+              </Pressable>
+              {metricsOpen ? <>
               <View style={styles.metrics}>
                 <Metric k="workers" v={String(sum.workers)} />
                 <Metric k="calls" v={sum.calls.toLocaleString("en-US")} />
@@ -115,7 +122,7 @@ export function TraceDetail({ snapshot, row, origin, onClose }: { snapshot: Trac
               </View>
               <Text style={styles.section}>{rowMeta(sum).toUpperCase()}</Text>
               {row.workers.map((w) => {
-                const status = w.status === "running" ? `live ${dur(snapshot.now - w.s)}` : w.status === "interrupted" ? `cut ${clock(snapshot.t0, w.e)}${w.resumed ? ", resumed" : ""}` : `done ${clock(snapshot.t0, w.e)}`;
+                const status = w.status === "unknown" ? "liveness unknown" : w.status === "running" ? `live ${dur(snapshot.now - w.s)}` : w.status === "interrupted" ? `cut ${clock(snapshot.t0, w.e)}${w.resumed ? ", resumed" : ""}` : `done ${clock(snapshot.t0, w.e)}`;
                 const color = w.status === "running" ? tc.live : w.status === "interrupted" ? tc.cut : tc.text2;
                 const stall = w.stalls.reduce((a, [s, e]) => a + e - s, 0);
                 return (
@@ -124,16 +131,17 @@ export function TraceDetail({ snapshot, row, origin, onClose }: { snapshot: Trac
                       <Text style={styles.wId}>{w.id.replace("run-", "#")}</Text>
                       <Text style={[styles.wStatus, { color }]}>{status}</Text>
                     </View>
-                    <MiniBar w={w} t0={sum.s} t1={Math.max(sum.e, sum.s + 60)} />
+                    {w.status === "unknown" ? null : <MiniBar w={w} t0={sum.s} t1={Math.max(sum.e, sum.s + 60)} />}
                     <Text style={styles.wMeta}>
-                      {clock(snapshot.t0, w.s)} · ran {dur(w.e - w.s)} · {w.calls} calls · {w.errors} failed{stall ? ` · stalled ${dur(stall)}` : ""}
+                      {w.status === "unknown" ? "Duration / error counts unavailable" : `${clock(snapshot.t0, w.s)} · ran ${dur(w.e - w.s)} · ${w.calls} calls · ${w.errors} failed${stall ? ` · stalled ${dur(stall)}` : ""}`}
                     </Text>
                     <Text style={styles.wModel} numberOfLines={1}>{w.model}</Text>
                     {w.asks.length ? <Text style={styles.wAsk}>asked your OK: {w.asks.map(askWord).join(", ")}</Text> : null}
                   </View>
                 );
               })}
-              <Text style={styles.foot}>Bundled snapshot · labels are allowlisted, no goals or prompts.</Text>
+              </> : null}
+              <Text style={styles.foot}>{row.evidence ? "Private authenticated evidence · unknown is not acceptance" : "Bundled snapshot · no original contract or validation"}</Text>
             </ScrollView> : <View accessibilityLabel="Loading detail" style={styles.flex} />}
           </Animated.View>
         </Animated.View>

@@ -4,7 +4,8 @@
  * Functions marked 'worklet' run on the UI thread inside gesture callbacks and in bun tests.
  */
 
-export type WorkerStatus = "running" | "completed" | "interrupted";
+import { parseTraceEvidence, type TraceEvidence } from "../../../shared/trace-evidence";
+export type WorkerStatus = "running" | "completed" | "interrupted" | "unknown";
 export type RowGroup = "live" | "recent" | "earlier";
 export type Outcome = "control" | "ring" | "debt" | "burn";
 
@@ -26,13 +27,15 @@ export type TraceWorker = {
   stalls: [number, number][];
 };
 
-export type TraceRow = { key: string; project: string; goal: string; group: RowGroup; workers: TraceWorker[] };
+export type TraceRow = { key: string; project: string; goal: string; group: RowGroup; workers: TraceWorker[]; evidence?: TraceEvidence; provenance?: { parentSessionId: string; source: string } };
 export type TraceAction = { id: string; outcome: Outcome; outcomeLabel: string; title: string; why: string };
 export type TraceStats = {
   workers: number; live: number; cut: number; resumed: number; asks: number;
   calls: number; errors: number; claudeUsed: number; claudeResetH: number; codexUsed: number;
 };
 export type TraceSnapshot = {
+  generatedAt?: number;
+  sourceKind?: "observations";
   t0: string;
   now: number;
   bucketS: number;
@@ -71,7 +74,7 @@ function parseWorker(v: unknown, at: string): TraceWorker {
   return {
     id: str(w.id, `${at}.id`),
     model: str(w.model, `${at}.model`),
-    status: oneOf(w.status, ["running", "completed", "interrupted"] as const, `${at}.status`),
+    status: oneOf(w.status, ["running", "completed", "interrupted", "unknown"] as const, `${at}.status`),
     s: num(w.s, `${at}.s`),
     e: num(w.e, `${at}.e`),
     calls: num(w.calls, `${at}.calls`),
@@ -94,6 +97,8 @@ export function parseTraceSnapshot(raw: unknown): TraceSnapshot {
   if (d.schema !== "dash.trace.snapshot/v1") throw new Error("trace snapshot: unknown schema");
   const st = obj(d.stats, "stats");
   return {
+    ...(d.generatedAt === undefined ? {} : { generatedAt: num(d.generatedAt, "generatedAt") }),
+    ...(d.sourceKind === "observations" ? { sourceKind: "observations" } : {}),
     t0: str(d.t0, "t0"),
     now: num(d.now, "now"),
     bucketS: num(d.bucketS, "bucketS"),
@@ -123,6 +128,7 @@ export function parseTraceSnapshot(raw: unknown): TraceSnapshot {
         goal: str(r.goal, `rows[${i}].goal`),
         group: oneOf(r.group, ["live", "recent", "earlier"] as const, `rows[${i}].group`),
         workers: arr(r.workers, `rows[${i}].workers`).map((w, j) => parseWorker(w, `rows[${i}].workers[${j}]`)),
+        ...(r.evidence === undefined ? {} : { evidence: parseTraceEvidence(r.evidence) }),
       };
     }),
   };
@@ -168,7 +174,7 @@ export function packLanes(workers: TraceWorker[]): number[] {
 
 export function activeAt(rows: TraceRow[], t: number): number {
   let n = 0;
-  for (const r of rows) for (const w of r.workers) if (w.s <= t && w.e > t) n += 1;
+  for (const r of rows) for (const w of r.workers) if (w.status !== "unknown" && w.s <= t && w.e > t) n += 1;
   return n;
 }
 

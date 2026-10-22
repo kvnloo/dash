@@ -18,16 +18,22 @@ import { CHIP_REORDER_MS, orderChips, restoreChip } from "../trace/chip-state";
 import { activeSeries, clock, type TraceRow } from "../trace/model";
 import { feedbackStore, latest, loadFeedback, record, traceStore } from "../trace/source";
 import { colors, fonts, space } from "../theme";
+import { store } from "../store/app";
+import { useTraceFeed } from "../trace/useTraceFeed";
 
 /** Agent trace, native: READ strip, swipe chips, stat tiles and the gesture timeline. */
 export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
-  const { snapshot, origin } = traceStore.use((s) => s);
+  const { snapshot, origin, error } = traceStore.use((s) => s);
+  const settings = store.use(s => s.settings);
+  useTraceFeed(settings);
   const records = feedbackStore.use((s) => s.records);
   const reduced = useReducedMotion();
   const scrollRef = useRef<ScrollView>(null);
   const [open, setOpen] = useState<{ row: TraceRow; rect: RowRect } | null>(null);
   const [scrub, setScrub] = useState<ScrubState>(null);
   useEffect(() => { void loadFeedback(); }, []);
+  useEffect(() => { setOpen(null); }, [settings?.address, settings?.token]);
+  useEffect(() => { setOpen(previous => previous && snapshot.rows.some(r => r.key === previous.row.key) ? previous : null); }, [snapshot]);
 
   const series = useMemo(() => activeSeries(snapshot.rows, snapshot.now), [snapshot]);
   const [orderTime, setOrderTime] = useState(Date.now);
@@ -50,8 +56,9 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
       <DensityPicker />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} testID="trace-scroll">
         <Text style={styles.sub}>
-          {clock(snapshot.t0, 0)} to now {clock(snapshot.t0, snapshot.now)} · {st.workers} workers · {origin === "bundled" ? "bundled snapshot" : "live from bridge"}
+          {clock(snapshot.t0, 0)} to {clock(snapshot.t0, snapshot.now)} · {st.workers} {snapshot.sourceKind === "observations" ? "sources" : "workers"} · {origin === "bundled" ? "bundled snapshot" : snapshot.generatedAt && Math.abs(Date.now() - snapshot.generatedAt) > 60000 ? "cached bridge snapshot" : "live from bridge"}
         </Text>
+        {error ? <Text style={styles.sub}>{error}</Text> : null}
         <ReadStrip text={snapshot.read} variant="slide" />
         <View style={styles.chips}>
           {actions.map((a) => (
@@ -73,7 +80,7 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
           <Text style={styles.floatS}>{scrub.live} live then</Text>
         </Animated.View>
       ) : null}
-      {open ? <TraceDetail snapshot={snapshot} row={open.row} origin={open.rect} onClose={() => setOpen(null)} /> : null}
+      {open ? <TraceDetail snapshot={snapshot} row={snapshot.rows.find(r => r.key === open.row.key) ?? open.row} origin={open.rect} onClose={() => setOpen(null)} onNavigate={route => navigation.navigate(route)} /> : null}
     </SafeAreaView>
   );
 }

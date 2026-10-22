@@ -10,7 +10,7 @@ import { LivePulse, tc } from "./tokens";
 export const TraceEntryCard = memo(function TraceEntryCard({ onOpen }: { onOpen(): void }) {
   const st = traceStore.use((s) => s.snapshot.stats);
   return (
-    <PressScale onPress={() => { haptic.select(); onOpen(); }} style={styles.card} accessibilityRole="button" accessibilityLabel={`Agent trace: ${st.live} live, ${st.cut} cut, ${st.asks} asks`} testID="trace-entry">
+    <PressScale onPress={() => { haptic.select(); onOpen(); }} style={styles.card} accessibilityRole="button" accessibilityLabel={`Agent trace: ${st.live} live, ${st.cut} cut, ${st.asks} approvals asked`} testID="trace-entry">
       <View style={styles.inner}>
         <View style={styles.top}>
           <Text style={styles.title}>Agent trace</Text>
@@ -20,7 +20,7 @@ export const TraceEntryCard = memo(function TraceEntryCard({ onOpen }: { onOpen(
           <LivePulse size={6} />
           <Text style={[styles.k, { color: tc.live }]}>{st.live} live</Text>
           <Text style={[styles.k, { color: tc.cut }]}>{st.cut} cut</Text>
-          <Text style={[styles.k, { color: tc.ask }]}>{st.asks} ask</Text>
+          <Text style={[styles.k, { color: tc.ask }]}>{st.asks} approvals asked</Text>
           <Text style={styles.k}>{st.workers} workers · 12 h</Text>
         </View>
       </View>
