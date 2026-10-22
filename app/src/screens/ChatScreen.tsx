@@ -335,7 +335,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           })}
           onSend={liveOn ? onLiveSend : onSend}
           onStop={onStop}
-          onVoice={() => navigation.navigate("Voice")}
+          onVoice={() => navigation.navigate("Voice", { autostart: true })}
           voiceCall={voiceCall}
         />
       </KeyboardDock>
