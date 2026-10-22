@@ -11,8 +11,12 @@ import { store } from "../store/app";
 import { colors } from "../theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { microphone } from "../lib/recorded-speech";
+import { createStore } from "../store/createStore";
+import { debugUi } from "../debug/ui-store";
 
 const initial: VoiceState = { phase: "idle", muted: false, lines: [] };
+/** Top offset (DIP) requested by a full-screen chat window so the mic bar sits below its pill; 0 = safe-area top. */
+export const voiceBarTop = createStore(0);
 interface VoiceContext { state: VoiceState; start(): Promise<void>; stop(): Promise<void>; mute(): void }
 const Context = createContext<VoiceContext | null>(null);
 export function useContinuousVoice(): VoiceContext {
@@ -28,6 +32,9 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const starting = useRef(false);
   const releaseMic = useRef<(() => void) | undefined>(undefined);
   const insets = useSafeAreaInsets();
+  const barTop = voiceBarTop.use(top => top);
+  // SYNTHETIC debug-only state for rendered proofs (never set outside the debug controller).
+  const fixture = debugUi.use(s => s.voiceStateFixture ?? null);
   const start = async () => {
     if (starting.current) return;
     if (call.current && !["idle", "error"].includes(call.current.state.phase)) return;
@@ -104,7 +111,8 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
     };
   }, []);
-  const active = !["idle", "error"].includes(state.phase);
+  const shown = fixture ?? state;
+  const active = !["idle", "error"].includes(shown.phase);
   useEffect(() => {
     const target = attached.current;
     if (!active || !target) return;
@@ -113,11 +121,11 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       send: (text, attachments) => sendVoiceAnnotation(target, text, attachments, (id, reply) => { if (generation === epoch.current) call.current?.deliverFinal(`annotation:${id}`, reply); }),
     });
   }, [active, bindingGeneration]);
-  return <Context.Provider value={{ state, start, stop, mute: () => call.current?.mute(!state.muted) }}>
+  return <Context.Provider value={{ state: shown, start, stop, mute: () => call.current?.mute(!state.muted) }}>
     {children}
-    {active ? <View style={[styles.bar, { top: insets.top }]} accessibilityLiveRegion="polite">
-      <Text style={styles.text}>{state.muted ? "Mic muted" : state.phase === "connecting" ? "Voice connecting · mic muted" : `● Mic active · ${state.phase}`}</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel={state.muted ? "Unmute microphone" : "Mute microphone"} onPress={() => call.current?.mute(!state.muted)} style={styles.button}><Text style={styles.text}>{state.muted ? "Unmute" : "Mute"}</Text></Pressable>
+    {active ? <View testID="voice-mic-bar" style={[styles.bar, { top: Math.max(insets.top, barTop) }]} accessibilityLiveRegion="polite">
+      <Text style={styles.text}>{shown.muted ? "Mic muted" : shown.phase === "connecting" ? "Voice connecting · mic muted" : `● Mic active · ${shown.phase}`}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={shown.muted ? "Unmute microphone" : "Mute microphone"} onPress={() => call.current?.mute(!shown.muted)} style={styles.button}><Text style={styles.text}>{shown.muted ? "Unmute" : "Mute"}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Stop continuous voice" onPress={() => void stop()} style={styles.button}><Text style={styles.text}>Stop</Text></Pressable>
     </View> : null}
   </Context.Provider>;

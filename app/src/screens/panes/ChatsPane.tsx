@@ -1,7 +1,8 @@
 import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import type { WindowOrigin } from "../../lib/chat-window";
 import { chatAttention, chatPriority } from "../../lib/chat-attention";
 import { threadAppearance } from "../../components/thread-appearance";
 import { AgentOrb } from "../../components/AgentOrb";
@@ -35,16 +36,24 @@ const Row = memo(function Row({
   harnessName: string;
   connectionStatus: ConnectionStatus;
   live?: boolean;
-  onPress(id: string): void;
+  onPress(id: string, origin?: WindowOrigin): void;
   onLongPress(id: string): void;
 }) {
   const appearance = threadAppearance({ stale: item.stale, live });
   const stale = appearance.stale;
+  const frame = useRef<View>(null);
   // What the agent is doing now, as a thinking-orbs orb (idle orbs hold still).
   const thinking = item.stale ? { phase: "idle" as const } : conversationThinking(item.messages, connectionStatus);
+  const press = () => {
+    const node = frame.current;
+    if (!node) { onPress(item.id); return; }
+    // The window morphs from this row; measuring is one native call, not per frame.
+    node.measureInWindow((_x, y, _width, height) => onPress(item.id, Number.isFinite(y) && height > 0 ? { y, height } : undefined));
+  };
   return (
+    <View ref={frame} collapsable={false}>
     <PressScale
-      onPress={() => onPress(item.id)}
+      onPress={press}
       onLongPress={() => onLongPress(item.id)}
       delayLongPress={350}
       style={[styles.row, active && !stale && styles.rowActive]}
@@ -65,6 +74,7 @@ const Row = memo(function Row({
       </View>
       <View style={styles.hairline} />
     </PressScale>
+    </View>
   );
 });
 
@@ -100,10 +110,11 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
   }, [conversations]);
 
   const open = useCallback(
-    (id: string) => {
+    (id: string, origin?: WindowOrigin) => {
       haptic.select();
       setActive(id);
-      navigation.navigate("Chat");
+      // Same conversation, same session: only the presentation changes (a window over this list).
+      navigation.navigate("Chat", { window: origin ?? { y: 0, height: 0 } });
     },
     [navigation],
   );

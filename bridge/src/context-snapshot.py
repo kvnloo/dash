@@ -149,7 +149,8 @@ def snapshot(home, session_id, source):
     category('reserved', 'Reserved', reserved, note='Kept free so compacting has room to run. Estimated from profile configuration and the offline window; includes output reservation.', estimated=True)
     category('free', 'Free', max(0, maximum - used - reserved), estimated=True)
     revision = hashlib.sha256(json.dumps([sid, summary_ids]).encode()).hexdigest()
-    return dict(sessionId=sid, model=model, used=used, maximum=maximum, threshold=threshold, estimated=True, source=source_label, categories=categories, revision=revision, notes=notes)
+    parent = row['parent_session_id'] if 'parent_session_id' in row.keys() else None
+    return dict(sessionId=sid, model=model, provider=provider if isinstance(provider, str) and provider else None, parentSessionId=parent if isinstance(parent, str) and parent else None, used=used, maximum=maximum, threshold=threshold, estimated=True, source=source_label, categories=categories, revision=revision, notes=notes)
 
 
 if __name__ == '__main__':

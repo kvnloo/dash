@@ -1,8 +1,10 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { WindowOrigin } from "./lib/chat-window";
 
 export type RootStackParamList = {
   Main: { tab?: number } | undefined;
-  Chat: { draft?: string } | undefined;
+  /** `window`: opened from the Chats list as a window over the retained workspace (source row rect). */
+  Chat: { draft?: string; window?: WindowOrigin } | undefined;
   OrchestraDetail: { orchestraId: string };
   Voice: { autostart?: boolean } | undefined;
   Approvals: undefined;

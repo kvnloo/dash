@@ -55,9 +55,14 @@ if [ ! -d "$ANDROID_HOME/ndk/27.1.12297006" ] || [ ! -d "$ANDROID_HOME/platforms
   fi
 fi
 (cd app && CI=1 bun x expo prebuild --platform android --no-install)
-(cd app/android && ./gradlew :app:assembleDebug :dash-share:testDebugUnitTest -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
+(cd app/android && ./gradlew :app:assembleDebug :dash-share:testDebugUnitTest :dash-cutout:testDebugUnitTest -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
 cp app/android/app/build/outputs/apk/debug/app-debug.apk .native-receipts/dash-native-arm64.apk
 cp -r app/modules/dash-share/android/build/test-results .native-receipts/native-test-results
+cp -r app/modules/dash-cutout/android/build/test-results .native-receipts/cutout-test-results
+# Module inclusion: the class and its autolinked registration must be in the APK's dex.
+for module in 'Lapp/dash/cutout/DashCutoutModule;' 'Lapp/dash/share/DashShareModule;' 'app.dash.cutout.DashCutoutModule' 'app.dash.share.DashShareModule'; do
+  printf '%s %s\n' "$(unzip -p .native-receipts/dash-native-arm64.apk 'classes*.dex' | grep -a -c -F "$module")" "$module"
+done | tee .native-receipts/module-inclusion.txt
 cp app/android/app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml .native-receipts/AndroidManifest.xml
 python3 scripts/verify-native-manifest.py .native-receipts/AndroidManifest.xml > .native-receipts/manifest-check.json
 sha256sum .native-receipts/dash-native-arm64.apk | tee .native-receipts/apk.sha256

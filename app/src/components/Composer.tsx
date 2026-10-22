@@ -35,6 +35,7 @@ import type { IncomingShare } from "../lib/incoming-share";
 import { composerDrafts, updateComposerDraft, type ComposerDraft } from "../store/composer-drafts";
 
 interface Props {
+  /** Conversation id: the unsent text and attachments outlive this view (window close, surface switch). */
   draftKey?: string;
   context?: ContextControl;
   disabled: boolean;

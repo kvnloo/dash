@@ -7,7 +7,12 @@ import { setThinkingSummaries } from "../store/app";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet, Text, View, Pressable } from "react-native";
+import { BackHandler, Platform, StyleSheet, Text, View, Pressable, useWindowDimensions } from "react-native";
+import Animated from "react-native-reanimated";
+import { Feather } from "@expo/vector-icons";
+import { ComposerActionMenu, type ComposerMenuRow } from "../components/ComposerActionMenu";
+import { WindowDock, WindowPill, useDisplayCutout, useWindowMorph } from "../components/ChatWindow";
+import { backTarget, hostIdentity, pillGeometry, pillPrimary, pillReserve, pillStatus, surfaceValue, type IdentityInput } from "../lib/chat-window";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
 import { composerPlaceholder } from "./composer-placeholder";
@@ -52,7 +57,7 @@ import { QueuedStack } from "../components/QueuedStack";
 import { colors, glass, radius, space, type } from "../theme";
 import { useLiveThinking } from "../lib/live-thinking";
 import type { OrbState } from "../lib/orb-phase";
-import { useContinuousVoice } from "../components/ContinuousVoiceRoot";
+import { useContinuousVoice, voiceBarTop } from "../components/ContinuousVoiceRoot";
 import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
@@ -251,14 +256,167 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     [settings, conversation],
   );
 
+  // Window presentation: opened from the Chats list over the retained workspace.
+  const windowOrigin = route.params?.window;
+  const windowed = windowOrigin !== undefined;
+  const morph = useWindowMorph(windowOrigin, windowed);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const [navOpen, setNavOpen] = useState(false);
+  const [treeOpen, setTreeOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Native DisplayCutout rect when the APK provides it; null (web, Expo Go, older APK, no cut-out) keeps the safe-area pill.
+  const cutout = useDisplayCutout(windowWidth, windowHeight, insets.top);
+  const pill = useMemo(() => pillGeometry({ insetTop: insets.top, width: windowWidth, cutout }), [insets.top, windowWidth, cutout]);
+  // The app-wide mic bar (single mic home: Mute/Stop) moves below the pill while this window is open.
+  useEffect(() => {
+    if (!windowed) return;
+    voiceBarTop.set(pillReserve(pill, insets.top));
+    return () => voiceBarTop.set(0);
+  }, [windowed, pill, insets.top]);
+  const closeWindow = useCallback(() => {
+    // Presentation only: no cancel, stop, voice end or conversation change happens here.
+    morph.close(() => screenBack(navigation));
+  }, [morph, navigation]);
+  const layers = useRef({ menuOpen, treeOpen, navOpen });
+  layers.current = { menuOpen, treeOpen, navOpen };
+  useEffect(() => {
+    if (!windowed) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      switch (backTarget(layers.current)) {
+        case "menu": setMenuOpen(false); break;
+        case "tree": setTreeOpen(false); break;
+        case "nav": setNavOpen(false); break;
+        case "window": closeWindow(); break;
+      }
+      return true;
+    });
+    return () => sub.remove();
+  }, [windowed, closeWindow]);
+  const selfHost = connection.hosts.find(host => host.self);
+  // Authoritative per-session model/provider/lineage: the host's existing authenticated context
+  // reading (Hermes state.db), bound to this exact session. Debug fixture is synthetic, web-only.
+  const hostFixture = debugUi.use(s => s.hostSessionFixture ?? null);
+  const hostReading = hostFixture ?? context.snapshot;
+  const [observedAt, setObservedAt] = useState<number>();
+  useEffect(() => { setObservedAt(hostReading ? Date.now() : undefined); }, [hostReading]);
+  const identity = useMemo((): IdentityInput => ({
+    hostName: conversation?.targetHostId ? connection.hosts.find(host => host.id === conversation.targetHostId)?.name ?? conversation.targetHostId : selfHost?.name ?? (connection.host || undefined),
+    harnessName,
+    profile: conversation?.profileName ?? conversation?.profileId,
+    sessionId: conversation?.sessionId,
+    // Never a default name: unknown unless the host reported it for this exact session.
+    ...hostIdentity(hostReading ?? undefined, conversation?.sessionId, observedAt),
+  }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, connection.hosts, connection.host, selfHost?.name, harnessName, hostReading, observedAt]);
+  const queuedCount = conversation ? queuedParts(conversation).length : 0;
+  const detailMode = conversation?.detailMode ?? "Compact";
+  const menuRows = useMemo((): ComposerMenuRow[] => {
+    const rows: ComposerMenuRow[] = [];
+    if (harnessId === "hermes" && conversation) rows.push({
+      id: "surface", label: "Surface", value: surfaceValue(liveOn), values: ["Chat", "Live surface"], index: liveOn ? 1 : 0,
+      run: toggleLive, inspect: index => { if ((index === 1) !== liveOn) toggleLive(); },
+    });
+    rows.push({
+      id: "details", label: "Thinking & tools", value: detailMode, values: [...DETAIL_MODES], index: Math.max(0, DETAIL_MODES.indexOf(detailMode)),
+      run: () => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, DETAIL_MODES[(DETAIL_MODES.indexOf(detailMode) + 1) % DETAIL_MODES.length] ?? "Compact"); },
+      inspect: index => { const mode = DETAIL_MODES[index]; if (mode) setDetailMode((conversation ?? createConversation(harnessId)).id, mode); },
+    });
+    if (conversation) rows.push({ id: "summaries", label: "Thinking summaries", value: conversation.summariesEnabled ? "On · next turn" : "Off", run: () => setThinkingSummaries(conversation.id, !conversation.summariesEnabled) });
+    rows.push({ id: "annotate", label: "Annotate", value: "S Pen or finger", run: () => enterAnnotation() });
+    if (approvalCount > 0) rows.push({ id: "approvals", label: "Approvals", value: `${approvalCount} pending${approvalDryRun ? " · preview" : ""} ›`, run: () => navigation.navigate("Approvals") });
+    rows.push({ id: "harness", label: "Harness", value: `${harnessName} · Change…`, run: () => setPickerVisible(true) });
+    return rows;
+  }, [harnessId, conversation, liveOn, toggleLive, detailMode, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible]);
+
+  const dockBody = <>
+    <WorkersStrip workers={workers} />
+    {voice.state.phase === "error" ? <View style={styles.liveRow}>
+      <Text accessibilityRole="alert" style={[styles.liveNote, { flex: 1 }]}>{voice.state.note}</Text>
+      <PressScale accessibilityRole="button" accessibilityLabel="Retry Live voice" onPress={() => void voice.start()} style={styles.liveChip}><Text style={styles.liveChipText}>Retry voice</Text></PressScale>
+    </View> : null}
+    {voiceControls && voiceActive ? <View style={styles.liveRow}>
+      <PressScale accessibilityRole="button" accessibilityLabel={voice.state.muted ? "Unmute Live voice" : "Mute Live voice"} onPress={voice.mute} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.muted ? "Unmute" : "Mute"}</Text></PressScale>
+      <PressScale accessibilityRole="button" accessibilityLabel="End Live voice" onPress={() => void voice.stop()} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.phase === "connecting" ? "Cancel connection" : "End voice"}</Text></PressScale>
+    </View> : null}
+    {windowed ? null : <View style={styles.liveRow}>
+      <PressScale accessibilityRole="button" accessibilityLabel="Choose harness" onPress={() => { haptic.select(); setPickerVisible(true); }} style={styles.liveChip}><Text style={styles.liveChipText}>{harnessName} · Change</Text></PressScale>
+      {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approval}><Text style={styles.approvalText}>{approvalCount} approvals{approvalDryRun ? " · preview" : ""} ›</Text></PressScale> : null}
+    </View>}
+    {chatOptions && !windowed ? <>
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 16, gap: 4 }}>
+      {/* Temporary entry point until the page-aware composer filter menu lands (sol-density-dial). */}
+      <PressScale accessibilityRole="button" accessibilityLabel="Annotate this screen" onPress={() => { haptic.select(); enterAnnotation(); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center", marginRight: "auto" }}><Text style={{ ...type.mono, fontSize: 11, color: colors.gold }}>✎ Annotate</Text></PressScale>
+      <Text style={{ ...type.mono, color: colors.textTertiary, fontSize: 10, marginRight: 6 }}>Thinking & tools</Text>
+      {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
+    </View>
+    </> : null}
+    {conversation && !liveOn ? <QueuedStack conversation={conversation} canSteer={online && !targetError && canSteer(harnessId, conversation.sessionId, thinking.phase, liveOn)} onSteer={() => { const payload = takeQueuedForSteer(conversation.id); if (payload) sendTurn(payload.text, payload.attachments, conversation, "steer"); }} /> : null}
+    <Composer
+      draftKey={conversation?.id}
+      context={context}
+      key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
+      initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
+      sharedDraft={sharedDraft}
+      onSharedDraftConsumed={id => { if (conversation) consumeSharedDraft(conversation.id, id); }}
+      disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
+      streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
+      steerBusy={canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn)}
+      initialText={composerDraft}
+      queuePreview={conversation?.queuePreview}
+      onQueuePreviewChange={text => { if (conversation) changeQueuePreview(conversation.id, text); }}
+      onSaveQueuePreview={() => { if (conversation) saveQueuePreview(conversation.id); }}
+      harness={harnessId}
+      blurTarget={liveOn ? undefined : blurTarget}
+      cwd={conversation?.cwd}
+      placeholder={liveOn ? (live.askHermes ? "Ask Hermes through the live surface" : "Live surface · quick reply") : composerPlaceholder({
+        online,
+        streaming: Boolean(streamingMessage),
+        queued: queuedCount,
+        openIn: conversation?.openIn,
+        harness: harnessId,
+        harnessName,
+      })}
+      onSend={(text, attachments, mode) => {
+        if (liveOn && !attachments.length) onLiveSend(text);
+        else {
+          if (liveOn && conversation) setLiveOpen(conversation.id, false);
+          onSend(text, attachments, mode);
+        }
+      }}
+      onStop={onStop}
+      onVoice={onVoice}
+      voiceCall={voiceCall}
+    />
+  </>;
+
+  const optionsTrigger = <ComposerActionMenu
+    testID="chat-window-options"
+    label={`Options. Current surface: ${liveOn ? "Live surface" : "Chat"}`}
+    rows={menuRows}
+    open={menuOpen}
+    onOpenChange={setMenuOpen}
+  >
+    <View style={styles.optionsTrigger}>
+      <Feather name="sliders" size={15} color={colors.textMuted} />
+      <Text style={styles.optionsTriggerText}>{liveOn ? "Live" : "Chat"}</Text>
+      {approvalCount > 0 ? <View accessibilityLabel={`${approvalCount} approvals pending`} style={styles.approvalDot} /> : null}
+    </View>
+  </ComposerActionMenu>;
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
+    <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, insets.top) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
+      {windowed ? <>
+        <WindowPill geometry={pill} title={conversation?.title || harnessName} thinking={thinking}
+          status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
+          primary={pillPrimary({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
+          open={navOpen} onToggle={() => setNavOpen(value => !value)} />
+        {navOpen ? <AppNav navigation={navigation} tab={1} /> : null}
+      </> : <>
       <AppNav navigation={navigation} tab={1} />
       <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} />
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: chatOptions }} accessibilityLabel="Chat options" onPress={() => setChatOptions(v => !v)} style={styles.optionsToggle}><Text style={styles.optionsToggleText}>{chatOptions ? "Hide options" : "Options"}</Text></Pressable>
+      </>}
       <ConnectionPill />
-      {chatOptions ? <View>
+      {chatOptions && !windowed ? <View>
       {conversation ? <PressScale accessibilityRole="switch" accessibilityLabel="Thinking summaries" accessibilityState={{ checked: conversation.summariesEnabled === true }} onPress={() => setThinkingSummaries(conversation.id, !conversation.summariesEnabled)} style={styles.liveRow}><Text style={styles.liveNote}>Thinking summaries · {conversation.summariesEnabled ? "on" : "off"} · next turn</Text></PressScale> : null}
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
       {!targetError && conversation?.openIn ? (
@@ -317,65 +475,17 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onLatest={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
         </View>
       </KeyboardInsetView>}
-      <KeyboardDock>
-        <WorkersStrip workers={workers} />
-        {voice.state.phase === "error" ? <View style={styles.liveRow}>
-          <Text accessibilityRole="alert" style={[styles.liveNote, { flex: 1 }]}>{voice.state.note}</Text>
-          <PressScale accessibilityRole="button" accessibilityLabel="Retry Live voice" onPress={() => void voice.start()} style={styles.liveChip}><Text style={styles.liveChipText}>Retry voice</Text></PressScale>
-        </View> : null}
-        {voiceControls && voiceActive ? <View style={styles.liveRow}>
-          <PressScale accessibilityRole="button" accessibilityLabel={voice.state.muted ? "Unmute Live voice" : "Mute Live voice"} onPress={voice.mute} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.muted ? "Unmute" : "Mute"}</Text></PressScale>
-          <PressScale accessibilityRole="button" accessibilityLabel="End Live voice" onPress={() => void voice.stop()} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.phase === "connecting" ? "Cancel connection" : "End voice"}</Text></PressScale>
-        </View> : null}
-        <View style={styles.liveRow}>
-          <PressScale accessibilityRole="button" accessibilityLabel="Choose harness" onPress={() => { haptic.select(); setPickerVisible(true); }} style={styles.liveChip}><Text style={styles.liveChipText}>{harnessName} · Change</Text></PressScale>
-          {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approval}><Text style={styles.approvalText}>{approvalCount} approvals{approvalDryRun ? " · preview" : ""} ›</Text></PressScale> : null}
-        </View>
-        {chatOptions ? <>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 16, gap: 4 }}>
-          {/* Temporary entry point until the page-aware composer filter menu lands (sol-density-dial). */}
-          <PressScale accessibilityRole="button" accessibilityLabel="Annotate this screen" onPress={() => { haptic.select(); enterAnnotation(); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center", marginRight: "auto" }}><Text style={{ ...type.mono, fontSize: 11, color: colors.gold }}>✎ Annotate</Text></PressScale>
-          <Text style={{ ...type.mono, color: colors.textTertiary, fontSize: 10, marginRight: 6 }}>Thinking & tools</Text>
-          {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
-        </View>
-        </> : null}
-        {conversation && !liveOn ? <QueuedStack conversation={conversation} canSteer={online && !targetError && canSteer(harnessId, conversation.sessionId, thinking.phase, liveOn)} onSteer={() => { const payload = takeQueuedForSteer(conversation.id); if (payload) sendTurn(payload.text, payload.attachments, conversation, "steer"); }} /> : null}
-        <Composer
-          draftKey={conversation?.id}
-          context={context}
-          key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
-          initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
-          sharedDraft={sharedDraft}
-          onSharedDraftConsumed={id => { if (conversation) consumeSharedDraft(conversation.id, id); }}
-          disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
-          streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
-          steerBusy={canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn)}
-          initialText={composerDraft}
-          queuePreview={conversation?.queuePreview}
-          onQueuePreviewChange={text => { if (conversation) changeQueuePreview(conversation.id, text); }}
-          onSaveQueuePreview={() => { if (conversation) saveQueuePreview(conversation.id); }}
-          harness={harnessId}
-          blurTarget={liveOn ? undefined : blurTarget}
-          cwd={conversation?.cwd}
-          placeholder={liveOn ? (live.askHermes ? "Ask Hermes through the live surface" : "Live surface · quick reply") : composerPlaceholder({
-            online,
-            streaming: Boolean(streamingMessage),
-            queued: conversation ? queuedParts(conversation).length : 0,
-            openIn: conversation?.openIn,
-            harness: harnessId,
-            harnessName,
-          })}
-          onSend={(text, attachments, mode) => {
-            if (liveOn && !attachments.length) onLiveSend(text);
-            else {
-              if (liveOn && conversation) setLiveOpen(conversation.id, false);
-              onSend(text, attachments, mode);
-            }
-          }}
-          onStop={onStop}
-          onVoice={onVoice}
-          voiceCall={voiceCall}
-        />
+      <KeyboardDock style={windowed ? styles.windowDock : undefined}>
+        {windowed ? <WindowDock
+          identity={identity}
+          title={conversation?.title || harnessName}
+          options={optionsTrigger}
+          treeOpen={treeOpen}
+          onTree={setTreeOpen}
+          onClose={closeWindow}
+          notice={targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text>
+            : conversation?.openIn ? <Text accessibilityRole="text" style={styles.handoffNote}>{sessionViewerLabel(conversation.openIn, conversation.targetHostId, connection)}</Text> : null}
+        >{dockBody}</WindowDock> : dockBody}
       </KeyboardDock>
       <HarnessPicker
         visible={pickerVisible}
@@ -384,11 +494,18 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         onSelect={onSelectHarness}
         onClose={() => setPickerVisible(false)}
       />
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  windowDock: {
+    backgroundColor: glass.fillRaised, borderTopLeftRadius: 18, borderTopRightRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth, borderBottomWidth: 0, borderColor: glass.hair2, paddingTop: space.xs,
+  },
+  optionsTrigger: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 },
+  optionsTriggerText: { ...type.label, color: colors.textMuted, letterSpacing: 0 },
+  approvalDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.warn },
   optionsToggle: { alignSelf: "flex-start", marginLeft: 20, marginTop: -2, marginBottom: 4, paddingVertical: 4 },
   optionsToggleText: { ...type.mono, fontSize: 10, color: colors.textFaint },
   screen: { flex: 1, backgroundColor: colors.bg },

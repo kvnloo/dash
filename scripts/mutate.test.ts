@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { applyMutant, collectMutants, ROOT, TARGETS, runMutation } from "./mutate";
 
  test("default mutation plan exercises parser and roster branches, not only constants", async () => {
-  const report = await runMutation({ dryRun: true, max: 400 });
+  // Keep the per-target budget at 20 so adding a target does not starve parser/roster branches.
+  const report = await runMutation({ dryRun: true, max: 20 * TARGETS.length });
   for (const file of ["shared/protocol.ts", "bridge/src/roster.ts"]) {
     const branches = report.results.filter((row) => row.file === file && (row.operator === "eq" || row.operator === "logic"));
     expect(branches.length).toBeGreaterThanOrEqual(12);
@@ -57,6 +58,7 @@ describe("targets", () => {
       "shared/thinking-summary.ts",
       "bridge/src/turn-summaries.ts",
       "app/src/lib/rail-turns.ts",
+      "app/src/lib/chat-window.ts",
       "app/src/components/golden-nav.ts",
       "app/src/components/bridge-pull.ts",
       "app/src/motion.ts",

@@ -20,6 +20,9 @@ describe("context display math and boundary", () => {
   });
   test("round-trips explicit projections, rejects malformed counts", () => {
     expect(parseContext(contextFixture())).toEqual(contextFixture());
+    expect(parseContext({ ...contextFixture(), provider: "anthropic", parentSessionId: "root" })).toEqual({ ...contextFixture(), provider: "anthropic", parentSessionId: "root" });
+    expect(parseContext({ ...contextFixture(), provider: "", parentSessionId: null })).toEqual(contextFixture());
+    expect(parseContext({ ...contextFixture(), provider: 3, parentSessionId: 4 })).toEqual(contextFixture());
     for (const bad of [null, {}, { ...contextFixture(), used: -1 }, { ...contextFixture(), maximum: Infinity }, { ...contextFixture(), notes: [3] }, { ...contextFixture(), categories: [{ id: "x", tokens: 2 }] }]) expect(parseContext(bad)).toBeUndefined();
     expect(parsePlan({ provider: "claude", windows: [{ label: "Weekly", percent: 24, resetsAt: "later" }] })?.windows[0]?.percent).toBe(24);
     expect(parsePlan({ provider: "codex", windows: [{ label: "Weekly", percent: 101 }] })).toBeUndefined();

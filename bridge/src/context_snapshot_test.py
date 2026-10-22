@@ -35,6 +35,9 @@ CREATE TABLE messages(id INTEGER PRIMARY KEY,session_id TEXT,active INT,role TEX
             result = projection.snapshot(home, 's', os.environ['DASH_HERMES_SOURCE'])
             self.assertEqual(before, Path(home, 'state.db').read_bytes())
             self.assertEqual(result['maximum'], 1000000)
+            self.assertEqual(result['model'], 'test-model')
+            self.assertIsNone(result['provider'])
+            self.assertIsNone(result['parentSessionId'])
             self.assertEqual(result['threshold'], 800000)
             categories = {c['id']:c for c in result['categories']}
             self.assertEqual(categories['reserved']['tokens'], 200000)
