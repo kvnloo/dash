@@ -10,7 +10,7 @@ export function arrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 /** Host STT through the bridge's POST /transcribe. */
-export async function transcribeRecording(settings: BridgeSettings, audio: ArrayBuffer, fetchImpl: typeof fetch = fetch, authorize = executionToken): Promise<string> {
+export async function transcribeRecording(settings: BridgeSettings, audio: ArrayBuffer, fetchImpl: (url: string, init?: RequestInit) => Promise<Response> = fetch, authorize = executionToken): Promise<string> {
   // Identity failure is not a network failure to /transcribe. Keep its safe stage/status.
   const token = await authorize(settings);
   let res: Response;

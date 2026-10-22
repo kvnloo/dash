@@ -185,12 +185,7 @@ async function sendAnnotation(keep: boolean, target: React.RefObject<View | null
     ]);
     await sink.send(text, [image, json], annotationSendMode(sink.steerable()));
     haptic.success();
-    const current = annotate.get();
-    if (current.drawing.strokes !== strokes || current.segments !== s.segments) {
-      // Drawing/talking can continue during upload: never clear the newer draft.
-      annotate.set(state => ({ ...state, pendingTurn: undefined }));
-      setAnnotationStatus("sent");
-    } else finishSend(keep);
+    finishSend(keep, { strokes, segments: s.segments });
   } catch (error) {
     setAnnotationStatus("error", { error: error instanceof Error ? error.message : "Could not send the annotation." });
   }

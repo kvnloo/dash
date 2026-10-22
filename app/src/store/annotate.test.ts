@@ -47,6 +47,20 @@ test("discard drops strokes and speech", () => {
   expect(annotate.get()).toMatchObject({ active: false, drawing: EMPTY_DRAWING, segments: [] });
 });
 
+test("confirmed send clears only its snapshot, not newer ink/words or their next id", () => {
+  enterAnnotation(); commitStroke(line);
+  addSegment({ id: "submitted", text: "first", start: 1, end: 2, source: "voice" });
+  const submitted = { strokes: annotate.get().drawing.strokes, segments: annotate.get().segments };
+  commitStroke(line);
+  addSegment({ id: "new", text: "second", start: 3, end: 4, source: "voice" });
+  finishSend(false, submitted);
+  expect(annotate.get().active).toBe(true);
+  expect(annotate.get().drawing.strokes.map(stroke => stroke.id)).toEqual([2]);
+  expect(annotate.get().drawing.nextId).toBe(3);
+  expect(annotate.get().drawing.past).toEqual([]);
+  expect(annotate.get().segments.map(segment => segment.id)).toEqual(["new"]);
+});
+
 test("segments replace by id and age out after ten minutes", () => {
   addSegment({ id: "a", text: "old", start: 0, end: 1000, source: "voice" });
   addSegment({ id: "a", text: "new", start: 0, end: 1000, source: "voice" });

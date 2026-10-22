@@ -352,12 +352,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           dock="bottom"
           placeholder={feedbackOn ? "Feedback for Dash" : "Search or message Dash"}
           onVoice={() => {
-            if (feedbackOn) {
-              createConversation(settings?.harness ?? "omp", {
-                id: FEEDBACK_CONVERSATION_ID,
-                title: "Dash feedback",
-              });
-            }
+            // Voice keeps the explicitly attached chat; never retarget via a new feedback chat.
             navigation.navigate("Voice");
           }}
           onSend={(text) => {
