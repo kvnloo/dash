@@ -5,6 +5,7 @@ import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ProviderInfo
 import android.database.MatrixCursor
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -27,7 +28,9 @@ class ShareInboxTest {
   @Before fun setup() {
     context = RuntimeEnvironment.getApplication()
     File(context.cacheDir, "incoming-shares").deleteRecursively()
-    ShadowContentResolver.registerProviderInternal("dash-test", TestProvider().apply { attachInfo(context, null) })
+    ShadowContentResolver.registerProviderInternal("dash-test", TestProvider().apply {
+      attachInfo(context, ProviderInfo().apply { authority = "dash-test"; exported = true; grantUriPermissions = true })
+    })
   }
   @Test fun receivesTextAndUrlsWithoutFetching() {
     val result = JSONObject(ShareInbox(context).consume(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "https://example.com")))
