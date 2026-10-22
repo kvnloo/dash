@@ -6,6 +6,7 @@ import type { ThinkingPhase } from "../lib/thinking";
 import type { RootStackParamList } from "../navigation";
 import { saveSettings, setActive, store } from "../store/app";
 import type { Z0LiveState } from "../../../shared/z0live-state";
+import type { CutoutReading, HostSessionReading } from "../lib/chat-window";
 import { debugNavigate, debugResetTo, flushPendingDebugNavigation, waitForDebugNavigation } from "./nav";
 import { applyDebugSeed, type DebugSeedVariant } from "./seed";
 import {
@@ -27,6 +28,8 @@ export type DebugCommand =
   | { action: "setThinking"; phase: ThinkingPhase }
   | { action: "setHandedness"; side: "left" | "right" }
   | { action: "setVoiceFixture"; state: Z0LiveState | null }
+  | { action: "setCutoutFixture"; reading: CutoutReading | null }
+  | { action: "setHostSessionFixture"; reading: HostSessionReading | null }
   | { action: "setConnection"; status: "online" | "offline" | "connecting" | "idle" }
   | { action: "setBridgePull"; open: boolean }
   | { action: "wait"; ms: number }
@@ -149,6 +152,12 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
     }
     case "setVoiceFixture":
       debugUi.set(s => ({ ...s, z0liveFixture: cmd.state }));
+      return { ok: true };
+    case "setCutoutFixture":
+      debugUi.set(s => ({ ...s, cutoutFixture: cmd.reading }));
+      return { ok: true };
+    case "setHostSessionFixture":
+      debugUi.set(s => ({ ...s, hostSessionFixture: cmd.reading }));
       return { ok: true };
     case "setThinking": {
       const current = store.get();

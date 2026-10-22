@@ -12,8 +12,8 @@ export const PILL_HIT = 44;
 export const PILL_GAP = 4;
 export const PILL_MAX_FRACTION = 0.56;
 export const PILL_MAX_WIDTH = 260;
-/** Room for a short label on each side of a cut-out. */
-export const PILL_LABEL_SLOT = 72;
+/** Room for a short label on each side of a cut-out: one orb/glyph plus a 12-character status. */
+export const PILL_LABEL_SLOT = 112;
 export const CLOSE_GLYPH = 24;
 export const CLOSE_HIT = 44;
 export const MORPH_SCALE_FROM = 0.94;
@@ -52,9 +52,48 @@ export function pillGeometry({ insetTop, width, cutout }: { insetTop: number; wi
   return { mode: "cutout", left, top, width: pillWidth, height, hole: { left: cutout.x - left - PILL_GAP, width: cutout.width + 2 * PILL_GAP } };
 }
 
-/** Space the window reserves above the transcript so content never sits under the pill. */
-export function pillReserve(geometry: PillGeometry): number {
-  return geometry.top + geometry.height + PILL_GAP;
+/**
+ * Space the window reserves above the transcript so content never sits under the pill, and
+ * never above the status-bar inset (system icons beside the cut-out stay unobstructed).
+ */
+export function pillReserve(geometry: PillGeometry, insetTop = 0): number {
+  return Math.max(insetTop, geometry.top + geometry.height + PILL_GAP);
+}
+
+/** What the native DisplayCutout provider reports, already in DIP (converted once natively). */
+export interface CutoutReading {
+  supported: boolean;
+  rects: Rect[];
+  windowWidth: number;
+  windowHeight: number;
+  safeInsetTop: number;
+  rotation: number;
+}
+
+function finite(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value); }
+function obj(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
+
+/** Boundary parser for the native module's map. Anything malformed means "no reading". */
+export function parseCutout(value: unknown): CutoutReading | null {
+  if (!obj(value) || value.supported !== true || !Array.isArray(value.rects)) return null;
+  if (!finite(value.windowWidth) || !finite(value.windowHeight) || !finite(value.safeInsetTop) || !finite(value.rotation)) return null;
+  const rects: Rect[] = [];
+  for (const r of value.rects) {
+    if (!obj(r) || !finite(r.x) || !finite(r.y) || !finite(r.width) || !finite(r.height)) return null;
+    rects.push({ x: r.x, y: r.y, width: r.width, height: r.height });
+  }
+  return { supported: true, rects, windowWidth: value.windowWidth, windowHeight: value.windowHeight, safeInsetTop: value.safeInsetTop, rotation: value.rotation };
+}
+
+/**
+ * The cut-out to wrap: the top-band rect of a reading taken for this window size. A reading for
+ * another size (rotation in flight, split screen, stale) is ignored rather than mis-placed.
+ */
+export function topCutout(reading: CutoutReading | null, window: { width: number; insetTop: number }): Rect | null {
+  if (!reading || Math.abs(reading.windowWidth - window.width) > 2) return null;
+  const band = Math.max(window.insetTop, reading.safeInsetTop) + PILL_HEIGHT;
+  const top = reading.rects.filter(r => r.y < band && r.y + r.height <= band + PILL_HEIGHT).sort((a, b) => a.y - b.y)[0];
+  return top ?? null;
 }
 
 /** Start transform for the open morph; the window is laid out at its final size. */
@@ -78,8 +117,37 @@ export interface IdentityInput {
   harnessName: string;
   profile?: string;
   sessionId?: string;
-  /** Host-reported model for this session. The protocol has none yet: always undefined. */
+  /** Host-reported model for this exact session (Hermes state.db `sessions.model`), else unknown. */
   model?: string;
+  /** Host-recorded effective runtime provider for the session, when reported. */
+  provider?: string;
+  /** Parent session (compaction/delegation lineage), when reported. */
+  parentSessionId?: string;
+  /** The host continued this chat in a compaction child; the reading is for that child. */
+  continuedAs?: string;
+  /** When the host reading was received (ms epoch). */
+  observedAt?: number;
+}
+
+/** Minimal shape of the host's exact-session context reading (shared/context ContextSnapshot). */
+export interface HostSessionReading { sessionId: string; model: string; provider?: string; parentSessionId?: string }
+
+/**
+ * Bind a host reading to the attached session. Only the same session, or its compaction
+ * continuation (child whose parent is the attached session), may label this chat.
+ */
+export function hostIdentity(reading: HostSessionReading | undefined, attached: string | undefined, observedAt?: number): Pick<IdentityInput, "model" | "provider" | "parentSessionId" | "continuedAs" | "observedAt"> {
+  if (!reading || !attached) return {};
+  const same = reading.sessionId === attached;
+  const continued = !same && reading.parentSessionId === attached;
+  if (!same && !continued) return {};
+  return {
+    ...(reading.model ? { model: reading.model } : {}),
+    ...(reading.provider ? { provider: reading.provider } : {}),
+    ...(reading.parentSessionId ? { parentSessionId: reading.parentSessionId } : {}),
+    ...(continued ? { continuedAs: reading.sessionId } : {}),
+    ...(observedAt !== undefined ? { observedAt } : {}),
+  };
 }
 
 export const MODEL_UNKNOWN = "model unknown";
@@ -104,7 +172,7 @@ function middle(text: string, keep: number): string {
  * profile tail-truncates to 6 characters. Session8 always stays. The model middle-truncates last.
  */
 export function identityLines(input: IdentityInput, budget: number): { who: string; model: string } {
-  const model = input.model ?? MODEL_UNKNOWN;
+  const model = input.model ? (input.provider ? `${input.provider} · ${input.model}` : input.model) : MODEL_UNKNOWN;
   const session = shortSession(input.sessionId) ?? "new chat";
   const profile = input.profile ?? input.harnessName;
   const distinct = profile === input.harnessName ? undefined : profile;
@@ -119,7 +187,7 @@ export function identityLines(input: IdentityInput, budget: number): { who: stri
 }
 
 export function identityLabel(input: IdentityInput): string {
-  return `Chat identity: host ${input.hostName ?? "unknown"}, harness ${input.harnessName}, profile ${input.profile ?? "none"}, session ${input.sessionId ?? "not attached yet"}, ${input.model ? `model ${input.model}` : "model unknown, host has not reported it"}. Double-tap for details.`;
+  return `Chat identity: host ${input.hostName ?? "unknown"}, harness ${input.harnessName}, profile ${input.profile ?? "none"}, session ${input.sessionId ?? "not attached yet"}, ${input.model ? `model ${input.provider ? `${input.provider} ` : ""}${input.model}, reported by host` : "model unknown, host has not reported it"}. Double-tap for details.`;
 }
 
 export interface PillStatusInput {
@@ -139,6 +207,23 @@ export function pillStatus(input: PillStatusInput): string[] {
   if (input.voicePhase) parts.push(`voice ${input.voicePhase}`);
   if (input.queued > 0) parts.push(`${input.queued} queued`);
   return parts;
+}
+
+/** Longest status text the pill's reserved slot shows unclipped (glyph + 12 mono characters). */
+export const STATUS_CHARS = 12;
+export type PillGlyph = "wifi-off" | "mic" | "tool" | "activity" | "layers";
+/**
+ * The one status the pill shows next to the title. Its slot is reserved, so the title truncates
+ * first. Priority: offline, live voice, running tool, working, queued. Idle shows nothing.
+ */
+export function pillPrimary(input: PillStatusInput): { glyph: PillGlyph; text: string } | null {
+  const fit = (text: string) => tail(text, STATUS_CHARS - 1);
+  if (!input.online) return { glyph: "wifi-off", text: "offline" };
+  if (input.voicePhase) return { glyph: "mic", text: fit(input.voicePhase) };
+  if (input.phase === "tool") return { glyph: "tool", text: fit(input.tool ?? "tool") };
+  if (input.phase !== "idle") return { glyph: "activity", text: "working" };
+  if (input.queued > 0) return { glyph: "layers", text: fit(`${input.queued} queued`) };
+  return null;
 }
 
 /** Explicit current-vs-switch wording for the Surface row; never a bare highlighted chip. */

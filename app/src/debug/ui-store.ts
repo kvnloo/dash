@@ -1,6 +1,7 @@
 import type { DraftAttachment } from "../lib/attachments";
 import { createStore } from "../store/createStore";
 import type { Z0LiveState } from "../../../shared/z0live-state";
+import type { CutoutReading, HostSessionReading } from "../lib/chat-window";
 
 /** Remote-controllable UI overrides (null = screen uses local state). */
 export interface DebugUiState {
@@ -14,6 +15,10 @@ export interface DebugUiState {
   orchestraFixture?: boolean;
   /** Screenshot fixture for the Voice view's z0live call (replaces the bridge poll). */
   z0liveFixture?: Z0LiveState | null;
+  /** SYNTHETIC DisplayCutout reading for web proofs of the cut-out pill (never a device value). */
+  cutoutFixture?: CutoutReading | null;
+  /** SYNTHETIC host session reading (model/provider/lineage) for web proofs of the badge. */
+  hostSessionFixture?: HostSessionReading | null;
 }
 
 export const debugUi = createStore<DebugUiState>({

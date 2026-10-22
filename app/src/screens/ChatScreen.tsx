@@ -11,8 +11,8 @@ import { BackHandler, Platform, StyleSheet, Text, View, Pressable, useWindowDime
 import Animated from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 import { ComposerActionMenu, type ComposerMenuRow } from "../components/ComposerActionMenu";
-import { WindowDock, WindowPill, useWindowMorph } from "../components/ChatWindow";
-import { backTarget, pillGeometry, pillReserve, pillStatus, surfaceValue, type IdentityInput } from "../lib/chat-window";
+import { WindowDock, WindowPill, useDisplayCutout, useWindowMorph } from "../components/ChatWindow";
+import { backTarget, hostIdentity, pillGeometry, pillPrimary, pillReserve, pillStatus, surfaceValue, type IdentityInput } from "../lib/chat-window";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
 import { composerPlaceholder } from "./composer-placeholder";
@@ -251,12 +251,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const windowOrigin = route.params?.window;
   const windowed = windowOrigin !== undefined;
   const morph = useWindowMorph(windowOrigin, windowed);
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [navOpen, setNavOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  // No JS API reports the display cut-out rect; null selects the safe-area pill (see chat-window.ts).
-  const pill = useMemo(() => pillGeometry({ insetTop: insets.top, width: windowWidth, cutout: null }), [insets.top, windowWidth]);
+  // Native DisplayCutout rect when the APK provides it; null (web, Expo Go, older APK, no cut-out) keeps the safe-area pill.
+  const cutout = useDisplayCutout(windowWidth, windowHeight, insets.top);
+  const pill = useMemo(() => pillGeometry({ insetTop: insets.top, width: windowWidth, cutout }), [insets.top, windowWidth, cutout]);
   const closeWindow = useCallback(() => {
     // Presentation only: no cancel, stop, voice end or conversation change happens here.
     morph.close(() => screenBack(navigation));
@@ -277,14 +278,20 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     return () => sub.remove();
   }, [windowed, closeWindow]);
   const selfHost = connection.hosts.find(host => host.self);
+  // Authoritative per-session model/provider/lineage: the host's existing authenticated context
+  // reading (Hermes state.db), bound to this exact session. Debug fixture is synthetic, web-only.
+  const hostFixture = debugUi.use(s => s.hostSessionFixture ?? null);
+  const hostReading = hostFixture ?? context.snapshot;
+  const [observedAt, setObservedAt] = useState<number>();
+  useEffect(() => { setObservedAt(hostReading ? Date.now() : undefined); }, [hostReading]);
   const identity = useMemo((): IdentityInput => ({
     hostName: conversation?.targetHostId ? connection.hosts.find(host => host.id === conversation.targetHostId)?.name ?? conversation.targetHostId : selfHost?.name ?? (connection.host || undefined),
     harnessName,
     profile: conversation?.profileName ?? conversation?.profileId,
     sessionId: conversation?.sessionId,
-    // The protocol carries no per-session model yet; never substitute a default.
-    model: undefined,
-  }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, connection.hosts, connection.host, selfHost?.name, harnessName]);
+    // Never a default name: unknown unless the host reported it for this exact session.
+    ...hostIdentity(hostReading ?? undefined, conversation?.sessionId, observedAt),
+  }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, connection.hosts, connection.host, selfHost?.name, harnessName, hostReading, observedAt]);
   const queuedCount = conversation ? queuedParts(conversation).length : 0;
   const detailMode = conversation?.detailMode ?? "Compact";
   const menuRows = useMemo((): ComposerMenuRow[] => {
@@ -373,10 +380,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   </ComposerActionMenu>;
 
   return (
-    <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
+    <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, insets.top) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
       {windowed ? <>
         <WindowPill geometry={pill} title={conversation?.title || harnessName} thinking={thinking}
           status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
+          primary={pillPrimary({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
           open={navOpen} onToggle={() => setNavOpen(value => !value)} />
         {navOpen ? <AppNav navigation={navigation} tab={1} /> : null}
       </> : <>

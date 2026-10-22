@@ -8,7 +8,12 @@ import {
   PILL_HEIGHT,
   PILL_HIT,
   PILL_LABEL_SLOT,
+  STATUS_CHARS,
   backTarget,
+  hostIdentity,
+  parseCutout,
+  pillPrimary,
+  topCutout,
   identityLabel,
   identityLines,
   morphFrom,
@@ -77,13 +82,13 @@ describe("pillGeometry", () => {
   });
 
   test("geometry constants are pinned (visual 28/24 pt, 44 pt hits, 4 pt gap, 0.94 morph)", () => {
-    expect([PILL_HEIGHT, PILL_GAP, PILL_HIT, CLOSE_HIT, CLOSE_GLYPH, PILL_LABEL_SLOT, MORPH_SCALE_FROM]).toEqual([28, 4, 44, 44, 24, 72, 0.94]);
+    expect([PILL_HEIGHT, PILL_GAP, PILL_HIT, CLOSE_HIT, CLOSE_GLYPH, PILL_LABEL_SLOT, MORPH_SCALE_FROM]).toEqual([28, 4, 44, 44, 24, 112, 0.94]);
   });
 
   test("a wide cut-out gets a label slot on each side even past the normal cap", () => {
     const g = pillGeometry({ insetTop: 40, width: 900, cutout: { x: 350, y: 10, width: 200, height: 28 } });
-    expect(g.width).toBe(200 + 2 * 72);
-    expect(g.left).toBe(450 - 172);
+    expect(g.width).toBe(200 + 2 * 112);
+    expect(g.left).toBe(450 - 212);
   });
 });
 
@@ -166,4 +171,77 @@ describe("pillStatus", () => {
 test("surface value names the current surface and the switch", () => {
   expect(surfaceValue(false)).toBe("Current: Chat · switch to Live surface");
   expect(surfaceValue(true)).toBe("Current: Live surface · switch to Chat");
+});
+
+describe("native cut-out reading", () => {
+  const reading = { supported: true, rects: [{ x: 192, y: 8, width: 27.43, height: 27.43 }], windowWidth: 411.43, windowHeight: 891.43, safeInsetTop: 35.43, rotation: 0, density: 3.5, statusBarTop: 40 };
+  test("parses the module map and rejects malformed or unsupported values", () => {
+    expect(parseCutout(reading)).toEqual({ supported: true, rects: [{ x: 192, y: 8, width: 27.43, height: 27.43 }], windowWidth: 411.43, windowHeight: 891.43, safeInsetTop: 35.43, rotation: 0 });
+    for (const bad of [null, 3, [], { ...reading, supported: false }, { ...reading, rects: "x" }, { ...reading, windowWidth: "411" }, { ...reading, windowHeight: Infinity }, { ...reading, safeInsetTop: undefined }, { ...reading, rotation: null }, { ...reading, rects: [{ x: 1, y: 2, width: 3 }] }, { ...reading, rects: [null] }]) expect(parseCutout(bad)).toBeNull();
+  });
+  test("picks the top-band hole for the matching window, ignores stale/rotated readings", () => {
+    const parsed = parseCutout(reading);
+    expect(topCutout(parsed, { width: 411.43, insetTop: 40 })).toEqual({ x: 192, y: 8, width: 27.43, height: 27.43 });
+    expect(topCutout(parsed, { width: 413.4, insetTop: 40 })).toEqual({ x: 192, y: 8, width: 27.43, height: 27.43 });
+    expect(topCutout(parsed, { width: 891.43, insetTop: 0 })).toBeNull();
+    expect(topCutout(parsed, { width: 409.4, insetTop: 40 })).toBeNull();
+    expect(topCutout(null, { width: 411.43, insetTop: 40 })).toBeNull();
+    const two = { ...reading, rects: [{ x: 0, y: 500, width: 20, height: 40 }, { x: 100, y: 20, width: 20, height: 20 }, { x: 192, y: 6, width: 28, height: 28 }] };
+    expect(topCutout(parseCutout(two), { width: 411.43, insetTop: 40 })).toEqual({ x: 192, y: 6, width: 28, height: 28 });
+    const tall = { ...reading, rects: [{ x: 0, y: 0, width: 411, height: 200 }] };
+    expect(topCutout(parseCutout(tall), { width: 411.43, insetTop: 40 })).toBeNull();
+    const edge = { ...reading, safeInsetTop: 0, rects: [{ x: 192, y: 67.9, width: 20, height: 20 }] };
+    expect(topCutout(parseCutout(edge), { width: 411.43, insetTop: 40 })).toEqual({ x: 192, y: 67.9, width: 20, height: 20 });
+    expect(topCutout(parseCutout({ ...edge, rects: [{ x: 192, y: 68, width: 20, height: 20 }] }), { width: 411.43, insetTop: 40 })).toBeNull();
+    expect(topCutout(parseCutout({ ...edge, safeInsetTop: 50 }), { width: 411.43, insetTop: 40 })).toEqual({ x: 192, y: 67.9, width: 20, height: 20 });
+    expect(topCutout(parseCutout({ ...edge, rects: [{ x: 192, y: 60, width: 20, height: 36 }] }), { width: 411.43, insetTop: 40 })).toEqual({ x: 192, y: 60, width: 20, height: 36 });
+    expect(topCutout(parseCutout({ ...edge, rects: [{ x: 192, y: 60, width: 20, height: 37 }] }), { width: 411.43, insetTop: 40 })).toBeNull();
+  });
+  test("a parsed S25-like reading yields a cut-out pill wrapping the hole inside the status band", () => {
+    const hole = topCutout(parseCutout(reading), { width: 411.43, insetTop: 40 });
+    const g = pillGeometry({ insetTop: 40, width: 411.43, cutout: hole });
+    expect(g.mode).toBe("cutout");
+    expect(g.left + (g.hole?.left ?? 0) + PILL_GAP).toBeCloseTo(192);
+    expect(g.top + g.height).toBeLessThanOrEqual(40);
+    expect(pillReserve(g, 40)).toBeCloseTo(43.43);
+    expect(pillReserve(g, 60)).toBe(60);
+    expect(pillReserve(g, 0)).toBeCloseTo(g.top + g.height + PILL_GAP);
+  });
+});
+
+describe("pillPrimary", () => {
+  test("one reserved status, highest priority first, never invented", () => {
+    expect(pillPrimary({ online: true, phase: "idle", queued: 0 })).toBeNull();
+    expect(pillPrimary({ online: false, phase: "tool", voicePhase: "listening", queued: 2 })).toEqual({ glyph: "wifi-off", text: "offline" });
+    expect(pillPrimary({ online: true, phase: "tool", tool: "terminal", voicePhase: "listening", queued: 2 })).toEqual({ glyph: "mic", text: "listening" });
+    expect(pillPrimary({ online: true, phase: "tool", tool: "terminal", queued: 2 })).toEqual({ glyph: "tool", text: "terminal" });
+    expect(pillPrimary({ online: true, phase: "tool", queued: 0 })).toEqual({ glyph: "tool", text: "tool" });
+    expect(pillPrimary({ online: true, phase: "thinking", queued: 2 })).toEqual({ glyph: "activity", text: "working" });
+    expect(pillPrimary({ online: true, phase: "idle", queued: 3 })).toEqual({ glyph: "layers", text: "3 queued" });
+  });
+  test("status text is bounded to the reserved slot", () => {
+    expect(STATUS_CHARS).toBe(12);
+    expect(pillPrimary({ online: true, phase: "tool", tool: "mcp_github_create_pull_request", queued: 0 })).toEqual({ glyph: "tool", text: "mcp_github_…" });
+    expect(pillPrimary({ online: true, phase: "tool", tool: "abcdefghijkl", queued: 0 })?.text).toBe("abcdefghijkl");
+    expect(pillPrimary({ online: true, phase: "idle", voicePhase: "reconnecting-now", queued: 0 })?.text).toBe("reconnectin…");
+    expect(pillPrimary({ online: true, phase: "idle", queued: 1234567890123 })?.text).toBe("12345678901…");
+  });
+});
+
+describe("hostIdentity", () => {
+  test("binds only the attached session or its compaction continuation", () => {
+    const reading = { sessionId: "s1", model: "claude-opus-5-5", provider: "anthropic" };
+    expect(hostIdentity(reading, "s1", 5)).toEqual({ model: "claude-opus-5-5", provider: "anthropic", observedAt: 5 });
+    expect(hostIdentity(reading, "other", 5)).toEqual({});
+    expect(hostIdentity(reading, undefined, 5)).toEqual({});
+    expect(hostIdentity(undefined, "s1", 5)).toEqual({});
+    expect(hostIdentity({ sessionId: "s2", model: "m", parentSessionId: "s1" }, "s1")).toEqual({ model: "m", parentSessionId: "s1", continuedAs: "s2" });
+    expect(hostIdentity({ sessionId: "s1", model: "", parentSessionId: "root" }, "s1")).toEqual({ parentSessionId: "root" });
+  });
+  test("badge shows provider · model only when reported", () => {
+    const base = { harnessName: "hermes", profile: "clean", sessionId: "s1" };
+    expect(identityLines({ ...base, model: "claude-opus-5-5", provider: "anthropic" }, 40).model).toBe("anthropic · claude-opus-5-5");
+    expect(identityLines({ ...base, provider: "anthropic" }, 40).model).toBe("model unknown");
+    expect(identityLabel({ ...base, model: "m", provider: "p" })).toContain("model p m, reported by host");
+  });
 });

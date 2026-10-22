@@ -37,7 +37,7 @@ stage() {
 want() { [ "${CW_STAGES:-all}" = all ] || [[ ",${CW_STAGES}," == *",$1,"* ]]; }
 want typecheck && stage typecheck bun run typecheck
 want lint && stage lint bun run lint
-want lint && stage lint-owned bun x eslint --max-warnings 0 app/App.tsx app/src/navigation.ts app/src/screens/ChatScreen.tsx app/src/screens/panes/ChatsPane.tsx app/src/components/ChatWindow.tsx app/src/components/ComposerActionMenu.tsx app/src/components/Composer.tsx app/src/lib/chat-window.ts app/src/lib/chat-window.test.ts app/src/lib/filter-gesture.ts app/src/store/composer-draft.ts app/src/debug/controller.ts scripts/mutate.ts scripts/mutate.test.ts
+want lint && stage lint-owned bun x eslint --max-warnings 0 app/App.tsx app/src/navigation.ts app/src/screens/ChatScreen.tsx app/src/screens/panes/ChatsPane.tsx app/src/components/ChatWindow.tsx app/src/components/ComposerActionMenu.tsx app/src/components/Composer.tsx app/src/lib/chat-window.ts app/src/lib/chat-window.test.ts app/src/lib/filter-gesture.ts app/src/store/composer-draft.ts app/src/debug/controller.ts app/src/debug/ui-store.ts app/src/lib/display-cutout.ts app/src/lib/display-cutout.native.ts shared/context.ts shared/context.test.ts scripts/mutate.ts scripts/mutate.test.ts
 want focused && stage focused bun test app/src/lib/chat-window.test.ts scripts/mutate.test.ts
 want unit && stage unit bun run test
 want mutation && stage mutation bun scripts/mutate.ts --file app/src/lib/chat-window.ts

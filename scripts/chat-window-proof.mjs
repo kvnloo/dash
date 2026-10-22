@@ -64,6 +64,35 @@ async function openRow(page, title) {
   return { firstOpacity, settledOpacity };
 }
 
+async function pillSlot(page) {
+  return page.evaluate(() => {
+    const text = el => el ? { text: el.textContent, clipped: el.scrollWidth > el.clientWidth + 1, right: el.getBoundingClientRect().right } : null;
+    const title = document.querySelector('[data-testid="chat-window-pill-title"]');
+    const status = document.querySelector('[data-testid="chat-window-pill-status"]');
+    const statusText = status ? [...status.querySelectorAll('div[dir="auto"]')].pop() : null;
+    const t = text(title), s = text(statusText);
+    const pill = document.querySelector('[data-testid="chat-window-pill"]').getBoundingClientRect();
+    const sr = status?.getBoundingClientRect();
+    return { title: t?.text, titleClipped: t?.clipped, status: s?.text ?? null, statusClipped: s?.clipped ?? false, statusInside: sr ? sr.left >= pill.left && sr.right <= pill.right + 0.5 : null };
+  });
+}
+
+async function setup(browser, { width, height, side = 'right', reduce = false, tag }) {
+  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, reducedMotion: reduce ? 'reduce' : 'no-preference' });
+  const page = await context.newPage();
+  page.on('pageerror', e => errors.push(`${tag}: ${e.message}`));
+  await page.goto(`http://127.0.0.1:${port}/?debug=1`, { waitUntil: 'networkidle', timeout: 180000 });
+  await page.waitForFunction(() => window.__DASH_DEBUG__?.ready, undefined, { timeout: 120000 });
+  await page.evaluate(() => window.__DASH_DEBUG__.scenario('main-chats'));
+  await page.evaluate(s => window.__DASH_DEBUG__.run({ action: 'setHandedness', side: s }), side);
+  await page.getByTestId('chats-pane').waitFor({ state: 'attached' });
+  await page.getByRole('tab').nth(1).click();
+  await page.waitForFunction(() => document.querySelectorAll('[role="tab"]')[1]?.getAttribute('aria-selected') === 'true');
+  await page.evaluate(() => document.fonts.ready);
+  await sleep(700);
+  return { context, page };
+}
+
 async function closeWindow(page) {
   await page.getByTestId('chat-window-close').click();
   await page.getByTestId('chat-window').waitFor({ state: 'detached' });
@@ -111,6 +140,10 @@ try {
     if (reduce) assert.equal(morph.firstOpacity, 1, 'reduced motion: no fade-in');
     const stateOpen = await page.evaluate(() => window.__DASH_DEBUG__.state());
     await page.screenshot({ path: path.join(out, `${tag}-1-window.png`) });
+    // Long title truncates first; the reserved status slot stays whole and readable.
+    const slot = await pillSlot(page);
+    assert.equal(slot.status, 'listening', `voice state readable in its slot: ${JSON.stringify(slot)}`);
+    assert(!slot.statusClipped && slot.titleClipped, `title truncates before status: ${JSON.stringify(slot)}`);
 
     // Underlying workspace stays mounted and painted (transparent presentation), not reset.
     const underlying = await page.evaluate(() => {
@@ -210,7 +243,88 @@ try {
     assert.equal(badgeAgain, badgeLabel, 'same identity before/after');
     await closeWindow(page);
 
-    cases.push({ tag, width, height, side, scrollBefore, scrollAfter, tabBefore, tabAfter, activeId: stateOpen.activeId, morph, pill, pillLabel, pixels, badgeText, badgeLabel, close, controls, menuRows, ime, reopenedDraft });
+    cases.push({ tag, width, height, side, scrollBefore, scrollAfter, tabBefore, tabAfter, activeId: stateOpen.activeId, morph, pill, pillLabel, slot, pixels, badgeText, badgeLabel, close, controls, menuRows, ime, reopenedDraft });
+    await context.close();
+  }
+
+  // SYNTHETIC cut-out + host-reading fixtures (debug-only), proving the native path's rendering.
+  for (const [width, height] of [[412, 915], [320, 700]]) {
+    const tag = `${width}-cutout`;
+    const { context, page } = await setup(browser, { width, height, tag });
+    const hole = { x: width / 2 - 13.715, y: 8, width: 27.43, height: 27.43 };
+    await page.evaluate(r => window.__DASH_DEBUG__.run({ action: 'setCutoutFixture', reading: r }), { supported: true, rects: [hole], windowWidth: width, windowHeight: height, safeInsetTop: 35.43, rotation: 0 });
+    // A reading for a different session must NOT label this chat.
+    await page.evaluate(() => window.__DASH_DEBUG__.run({ action: 'setHostSessionFixture', reading: { sessionId: 'someone-else', model: 'wrong-model', provider: 'wrong' } }));
+    await page.evaluate(() => window.__DASH_DEBUG__.run({ action: 'setVoiceFixture', state: { live: true, sessionId: 'fixture', phase: 'speaking', muted: false, updated: 0, transcript: [] } }));
+    await openRow(page, 'Make Dash great on the phone: reply into Hermes sessions, magic links and approvals');
+    const wrong = await page.getByTestId('chat-window-badge').innerText();
+    assert(/model unknown/.test(wrong) && !/wrong-model/.test(wrong), `foreign session reading ignored: ${wrong}`);
+    await page.evaluate(() => window.__DASH_DEBUG__.run({ action: 'setHostSessionFixture', reading: { sessionId: 'debug-cli', model: 'claude-opus-5-5', provider: 'anthropic', parentSessionId: 'root-0001' } }));
+    await sleep(300);
+    const geometry = await page.evaluate(() => {
+      const r = id => { const b = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect(); return b ? { x: b.x, y: b.y, width: b.width, height: b.height } : null; };
+      const path = document.querySelector('[data-testid="chat-window-pill-shape"] path');
+      return { pill: r('chat-window-pill'), hole: r('chat-window-pill-hole'), fillRule: path?.getAttribute('fill-rule') ?? null };
+    });
+    assert(geometry.hole && geometry.fillRule === 'evenodd', `cut-out pill shape: ${JSON.stringify(geometry)}`);
+    assert(Math.abs(geometry.hole.x + geometry.hole.width / 2 - width / 2) <= 1, `hole spacer centred on the camera: ${JSON.stringify(geometry)}`);
+    assert(geometry.pill.y < hole.y && geometry.pill.y + geometry.pill.height > hole.y + hole.height, 'pill wraps the camera vertically');
+    // The lens area is unpainted: darker than the pill body beside it.
+    const lens = await paint(page, { x: width / 2 - 4, y: hole.y + hole.height / 2 - 4, width: 8, height: 8 });
+    const body = await paint(page, { x: geometry.pill.x + 4, y: hole.y + hole.height / 2 - 2, width: 4, height: 4 });
+    assert(lens.meanLuminance + 3 < body.meanLuminance, `camera gap unpainted: lens ${JSON.stringify(lens)} body ${JSON.stringify(body)}`);
+    const slot = await pillSlot(page);
+    assert(slot.status === 'speaking' && !slot.statusClipped && slot.statusInside, `cut-out status slot readable: ${JSON.stringify(slot)}`);
+    const badge = await page.getByTestId('chat-window-badge').innerText();
+    assert(/anthropic · claude-opus-5-5/.test(badge), `host-reported model shown: ${badge}`);
+    await page.getByTestId('chat-window-badge').click();
+    const tree = await page.getByTestId('chat-window-identity').innerText();
+    assert(/root-0001/.test(tree) && /Model reported by host for this session · checked \d\d:\d\d:\d\d/.test(tree), `lineage + freshness: ${tree}`);
+    await page.screenshot({ path: path.join(out, `${tag}-pill-tree.png`) });
+    await page.getByTestId('chat-window-badge').click();
+    await page.screenshot({ path: path.join(out, `${tag}-window.png`) });
+    await page.screenshot({ path: path.join(out, `${tag}-pill-zoom.png`), clip: { x: 0, y: 0, width, height: 80 } });
+    cases.push({ tag, synthetic: 'cutout + host reading fixtures', geometry, lens, body, slot, badge, tree });
+    await context.close();
+  }
+
+  // Populated transcript with a SYNTHETIC recorded stream (no model turn): running tool +
+  // streaming text, X-close and reopen mid-stream; the stream keeps going, nothing duplicates.
+  for (const [width, height] of [[390, 844], [320, 700]]) {
+    const tag = `${width}-streaming`;
+    const { context, page } = await setup(browser, { width, height, tag });
+    await openRow(page, 'Transcript navigation');
+    await page.evaluate(() => window.__DASH_DEBUG__.run({ action: 'setThinking', phase: 'tool' }));
+    await page.evaluate(() => window.__DASH_DEBUG__.run({ action: 'uxOutput', text: 'SYNTHETIC STREAM chunk one. ' }));
+    await sleep(400);
+    const before = await page.evaluate(() => {
+      const viewport = document.querySelector('[data-testid="transcript-viewport"]');
+      const scroller = viewport && [...viewport.querySelectorAll('div')].find(el => el.scrollHeight > el.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(el).overflowY));
+      const body = document.querySelector('[data-testid="chat-window"]').innerText;
+      return { scrollable: Boolean(scroller), scrollHeight: scroller?.scrollHeight ?? 0, chunks: body.split('SYNTHETIC STREAM chunk one.').length - 1, prompts: body.split('Prompt 23:').length - 1, stops: document.querySelectorAll('[aria-label="Stop"]').length };
+    });
+    const slotBefore = await pillSlot(page);
+    assert(before.scrollable && before.chunks === 1 && before.prompts >= 1, `populated transcript: ${JSON.stringify(before)}`);
+    assert.equal(slotBefore.status, 'terminal', `running tool in the pill: ${JSON.stringify(slotBefore)}`);
+    assert(before.stops <= 1, 'one Stop control at most');
+    const draft = `draft while streaming ${tag}`;
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill(draft);
+    await page.screenshot({ path: path.join(out, `${tag}-1-open.png`) });
+    await closeWindow(page);
+    // The stream continues while the window is closed.
+    await page.evaluate(() => window.__DASH_DEBUG__.run({ action: 'uxOutput', text: 'SYNTHETIC STREAM chunk two.' }));
+    await page.screenshot({ path: path.join(out, `${tag}-2-closed.png`) });
+    await openRow(page, 'Transcript navigation');
+    const after = await page.evaluate(() => {
+      const body = document.querySelector('[data-testid="chat-window"]').innerText;
+      return { one: body.split('SYNTHETIC STREAM chunk one.').length - 1, two: body.split('SYNTHETIC STREAM chunk two.').length - 1, prompts: body.split('Prompt 23:').length - 1, windows: document.querySelectorAll('[data-testid="chat-window"]').length, pills: document.querySelectorAll('[data-testid="chat-window-pill"]').length };
+    });
+    const slotAfter = await pillSlot(page);
+    assert.deepEqual(after, { one: 1, two: 1, prompts: before.prompts, windows: 1, pills: 1 }, `stream continued once, single instances: ${JSON.stringify(after)}`);
+    assert.equal(slotAfter.status, 'terminal', 'tool still running after close/reopen (not stopped)');
+    assert.equal(await page.getByRole('textbox', { name: 'Message', exact: true }).inputValue(), draft, 'draft retained mid-stream');
+    await page.screenshot({ path: path.join(out, `${tag}-3-reopened.png`) });
+    cases.push({ tag, synthetic: 'recorded fixture stream, not a model turn', before, slotBefore, after, slotAfter });
     await context.close();
   }
   assert.equal(errors.length, 0, errors.join('\n'));
