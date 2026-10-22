@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CLOSE_GLYPH,
   CLOSE_HIT,
   MODEL_UNKNOWN,
   MORPH_SCALE_FROM,
   PILL_GAP,
   PILL_HEIGHT,
   PILL_HIT,
+  PILL_LABEL_SLOT,
   backTarget,
   identityLabel,
   identityLines,
@@ -72,6 +74,16 @@ describe("pillGeometry", () => {
   test("touch targets stay at least 44", () => {
     expect(PILL_HIT).toBeGreaterThanOrEqual(44);
     expect(CLOSE_HIT).toBeGreaterThanOrEqual(44);
+  });
+
+  test("geometry constants are pinned (visual 28/24 pt, 44 pt hits, 4 pt gap, 0.94 morph)", () => {
+    expect([PILL_HEIGHT, PILL_GAP, PILL_HIT, CLOSE_HIT, CLOSE_GLYPH, PILL_LABEL_SLOT, MORPH_SCALE_FROM]).toEqual([28, 4, 44, 44, 24, 72, 0.94]);
+  });
+
+  test("a wide cut-out gets a label slot on each side even past the normal cap", () => {
+    const g = pillGeometry({ insetTop: 40, width: 900, cutout: { x: 350, y: 10, width: 200, height: 28 } });
+    expect(g.width).toBe(200 + 2 * 72);
+    expect(g.left).toBe(450 - 172);
   });
 });
 
