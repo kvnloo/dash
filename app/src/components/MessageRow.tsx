@@ -75,9 +75,9 @@ function Disclosure({ label, text }: { label: string; text: string }) {
     {open ? <Text selectable style={styles.detailText}>{text}</Text> : null}
   </View>;
 }
-function Answer({ text, turnId, detailMode }: { text: string; turnId: string; detailMode: DetailMode }) {
+function Answer({ text, turnId, detailMode, streaming = false }: { text: string; turnId: string; detailMode: DetailMode; streaming?: boolean }) {
   const parts = splitThinking(text);
-  return <>{parts.thinking ? <ReplyBlocks turnId={turnId} parts={[{ kind: "reasoning", text: parts.thinking }]} mode={detailMode} /> : null}{parts.text ? <Markdown text={parts.text} onIntent={intent => sendInlineIntent(turnId, intent)} /> : null}</>;
+  return <>{parts.thinking ? <ReplyBlocks turnId={turnId} parts={[{ kind: "reasoning", text: parts.thinking }]} mode={detailMode} /> : null}{parts.text ? <Markdown text={parts.text} streaming={streaming} onIntent={intent => sendInlineIntent(turnId, intent)} /> : null}</>;
 }
 
 function ThinkingMarker({ turnState, waiting = false }: { harnessId?: string; turnState: AssistantState; waiting?: boolean }) {
@@ -96,7 +96,7 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
     case "streaming":
       return (
         <>
-          {liveText || message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={liveText || message.text} /> : null}
+          {liveText || message.text ? <Answer streaming turnId={message.turnId} detailMode={detailMode} text={liveText || message.text} /> : null}
           <View style={styles.statusRow}>
             <AgentOrb size={20} thinking={messageThinking(message, { liveText, connection })} label={message.handoff === "queued" ? "queued" : "streaming"} />
             <Text style={styles.statusText} numberOfLines={1}>

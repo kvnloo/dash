@@ -18,11 +18,17 @@ function WidgetView({ widget: w, onIntent }: { widget: Widget; onIntent?: (inten
     if (ok) setSelected(s => ({ ...s, [item.id]: checked }));
     setNotice(ok ? `Sent: ${item.label}` : "Not sent · agent busy or offline. Try again.");
   };
-  return <View style={styles.card} accessibilityLabel={`${w.type}: ${w.title}`}>
+  if (w.type === "progress") return <View style={styles.progressRow} accessibilityLabel={`${w.title}: ${w.value}%`}>
+    <View style={styles.progressHeader}><Text style={styles.progressTitle}>{w.title}</Text><Text style={styles.progressValue}>{w.value}%</Text></View>
+    <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Number(w.value) }} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(w.value)} style={styles.track}><View style={{ height: 4, borderRadius: 2, width: `${Number(w.value)}%`, backgroundColor: colors.gold }} /></View>
+    {w.text ? <Text selectable style={styles.progressDetail}>{w.text}</Text> : null}
+  </View>;
+  return <View style={[styles.card, w.children?.every(child => child.type === "progress") && styles.progressGroup]} accessibilityLabel={`${w.type}: ${w.title}`}>
+
     <Text style={styles.title}>{w.title}</Text>
     {w.text ? <Text selectable style={styles.body}>{w.text}</Text> : null}
     {w.type === "stat" ? <Text style={styles.stat}>{w.value}</Text> : null}
-    {w.type === "progress" ? <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Number(w.value) }} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(w.value)}><Text style={styles.meta}>{w.value}%</Text><View style={styles.track}><View style={{ height: 6, borderRadius: 3, width: `${Number(w.value)}%`, backgroundColor: colors.gold }} /></View></View> : null}
+
     {w.type === "table" ? <ScrollView horizontal><View role="table">
       {[w.columns ?? [], ...(w.rows ?? [])].map((row, i) => <View key={i} role="row" style={styles.row}>{row.map((cell, j) => <Text key={j} role={i === 0 ? "columnheader" : "cell"} selectable style={[styles.cell, i === 0 && styles.header]}>{cell}</Text>)}</View>)}
     </View></ScrollView> : null}
@@ -35,6 +41,12 @@ function WidgetView({ widget: w, onIntent }: { widget: Widget; onIntent?: (inten
   </View>;
 }
 const styles = StyleSheet.create({
+  progressGroup: { padding: 0, borderWidth: 0, backgroundColor: "transparent", gap: 2 },
+  progressRow: { paddingVertical: 10, gap: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hair, minWidth: 0 },
+  progressHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  progressTitle: { ...type.body, fontSize: 14, lineHeight: 19, color: colors.text, flex: 1, minWidth: 0 },
+  progressValue: { ...type.mono, fontSize: 11, lineHeight: 19, color: colors.textMuted, flexShrink: 0 },
+  progressDetail: { ...type.small, fontSize: 11, lineHeight: 16, color: colors.textMuted },
   card: { borderWidth: 1, borderColor: glass.hair, borderTopColor: glass.highlight, borderRadius: radius.md, backgroundColor: glass.fill, padding: 12, gap: 8 },
   title: { ...type.heading, color: colors.text }, body: { ...type.body, color: colors.text }, meta: { ...type.small, color: colors.textMuted },
   stat: { ...type.number, color: colors.gold }, track: { backgroundColor: glass.quiet, borderRadius: 3 },
