@@ -17,7 +17,7 @@ const wav = () => { // 0.01 s of silence, PCM16 mono 16 kHz: fixture audio only,
   return data;
 };
 const CALLS: Call[] = [
-  { site: "app/src/lib/roster.ts:68 fetchRoster", method: "GET", path: "/roster", authed: [200], check: b => expect(Array.isArray(b)).toBe(true) },
+  { site: "app/src/lib/roster.ts:68 fetchRoster", method: "GET", path: "/roster", authed: [200], check: b => expect(Array.isArray((b as { hosts?: unknown }).hosts)).toBe(true) }, // app parses raw.hosts
   { site: "app/src/lib/session-phase.ts:32", method: "GET", path: "/hermes/phase?profile=default&session=missing", authed: [200, 404] },
   { site: "app/src/lib/session-activity.ts:21", method: "GET", path: "/hermes/activity?profile=default&session=missing", authed: [200, 404] },
   { site: "app/src/components/WorkersStrip.tsx:42", method: "GET", path: "/hermes/workers?profile=default&session=missing", authed: [200, 404] },
