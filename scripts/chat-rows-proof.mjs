@@ -27,7 +27,7 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     // Diagnostic only: which requests keep the page from reaching network idle.
     page.on('request', request => { requests.push(`${width} ${Date.now()} ${request.method()} ${request.url().slice(0, 160)}`); if (requests.length > 400) requests.shift(); });
-    await page.goto(`http://127.0.0.1:${port}/?debug=1`, { waitUntil: 'networkidle', timeout: 180000 });
+    await page.goto(`http://127.0.0.1:${port}/?debug=1`, { waitUntil: 'load', timeout: 180000 } /* readiness = __DASH_DEBUG__.ready below; networkidle flaked on second pages in the composed app */);
     await page.waitForFunction(() => window.__DASH_DEBUG__?.ready, undefined, { timeout: 120000 });
     await page.evaluate(async () => {
       await window.__DASH_DEBUG__.scenario('main-chats');

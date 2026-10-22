@@ -87,8 +87,8 @@ try{
   // Pen mode lets ordinary touch/mouse navigation pass without discarding the root-owned ink.
   await page.getByRole('button',{name:'Pen mode: only the S Pen draws, fingers scroll',exact:true}).click();
   // Composition: Chats rows open the chat as a full-screen window; its X (not a header Back) returns to the list.
-  await page.getByRole('button',{name:'Close chat window',exact:true}).click();
-  await page.getByRole('tab').nth(1).click();await page.getByText(chat.title,{exact:true}).first().click();
+  await page.getByRole('button',{name:'Close chat window',exact:true}).click();await page.getByTestId('chat-window').waitFor({state:'detached'});
+  await page.getByRole('tab').nth(1).click();await page.getByText(chat.title,{exact:true}).first().click();await page.getByTestId('chat-window').waitFor({state:'visible'});
   assert.equal(await input.inputValue(),'Original unsent draft\nKeep this exact text');
   assert.deepEqual(await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes),originalInk);
   // Keep the annotation open, but use its existing tray relocation so it cannot cover the mic.

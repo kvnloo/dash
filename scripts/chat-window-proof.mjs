@@ -81,7 +81,7 @@ async function setup(browser, { width, height, side = 'right', reduce = false, t
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, reducedMotion: reduce ? 'reduce' : 'no-preference' });
   const page = await context.newPage();
   page.on('pageerror', e => errors.push(`${tag}: ${e.message}`));
-  await page.goto(`http://127.0.0.1:${port}/?debug=1`, { waitUntil: 'networkidle', timeout: 180000 });
+  await page.goto(`http://127.0.0.1:${port}/?debug=1`, { waitUntil: 'load', timeout: 180000 } /* readiness = __DASH_DEBUG__.ready below; networkidle flaked on second pages in the composed app */);
   await page.waitForFunction(() => window.__DASH_DEBUG__?.ready, undefined, { timeout: 120000 });
   await page.evaluate(() => window.__DASH_DEBUG__.scenario('main-chats'));
   await page.evaluate(s => window.__DASH_DEBUG__.run({ action: 'setHandedness', side: s }), side);
@@ -112,7 +112,7 @@ try {
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 2, reducedMotion: reduce ? 'reduce' : 'no-preference' });
     const page = await context.newPage();
     page.on('pageerror', e => errors.push(`${tag}: ${e.message}`));
-    await page.goto(`http://127.0.0.1:${port}/?debug=1`, { waitUntil: 'networkidle', timeout: 180000 });
+    await page.goto(`http://127.0.0.1:${port}/?debug=1`, { waitUntil: 'load', timeout: 180000 } /* readiness = __DASH_DEBUG__.ready below; networkidle flaked on second pages in the composed app */);
     await page.waitForFunction(() => window.__DASH_DEBUG__?.ready, undefined, { timeout: 120000 });
     await page.evaluate(() => window.__DASH_DEBUG__.scenario('main-chats'));
     await page.evaluate(s => window.__DASH_DEBUG__.run({ action: 'setHandedness', side: s }), side);
