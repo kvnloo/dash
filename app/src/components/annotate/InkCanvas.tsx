@@ -2,7 +2,7 @@
 // Live ink is a derived Skia path fed by a UI-thread shared value: no JS per point.
 import { Canvas, Path } from "@shopify/react-native-skia";
 import { memo } from "react";
-import { StyleSheet } from "react-native";
+
 import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { meanPressure, strokeOutline, strokeWidth, type DrawTool, type InkColor, type Stroke, type Tool } from "../../lib/annotate/strokes";
 import { outlinePath, strokePath } from "./composite";
@@ -38,7 +38,7 @@ export function InkCanvas({ strokes, width, height, ink, live, tool, color }: In
     return tool === "eraser" ? 24 : strokeWidth(drawTool, flat.length >= 4 ? flat[flat.length - 2] ?? 0.5 : 0.5);
   });
   return (
-    <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+    <Canvas style={{ width, height }} pointerEvents="none">
       {strokes.map(stroke => <Committed key={stroke.id} stroke={stroke} width={width} height={height} ink={ink} />)}
       <Path path={path} style="stroke" strokeWidth={width2} strokeCap="round" strokeJoin="round" color={tool === "eraser" ? "#ffffff" : ink[color]} opacity={tool === "eraser" ? 0.25 : tool === "highlighter" ? 0.35 : 1} />
     </Canvas>

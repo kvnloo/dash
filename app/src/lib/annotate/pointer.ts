@@ -33,3 +33,13 @@ export function pressureOf(kind: PointerKind, pressure: number | undefined): num
   if (kind !== "stylus" || pressure === undefined || !Number.isFinite(pressure) || pressure <= 0) return 0.5;
   return Math.min(1, pressure);
 }
+
+/** Raw touch coordinates are already local DIP, not pixels or font-scaled text units. */
+export function appendInkSample(flat: readonly number[], x: number, y: number, p: number, t: number): number[] {
+  "worklet";
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return flat.slice();
+  if (flat.length >= 4 && flat[flat.length - 4] === x && flat[flat.length - 3] === y) {
+    const next = flat.slice(); next[next.length - 2] = p; return next;
+  }
+  return [...flat, x, y, p, t];
+}

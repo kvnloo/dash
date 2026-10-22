@@ -39,6 +39,7 @@ import { applyDemoSeed } from "./src/mock/seed";
 import { hydrate, store } from "./src/store/app";
 import { colors } from "./src/theme";
 import { NativeEvents } from "./src/components/NativeEvents";
+import { ContinuousVoiceRoot } from "./src/components/ContinuousVoiceRoot";
 import { flushNotificationTarget, handleChatLink } from "./src/lib/notification-routing";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -129,7 +130,7 @@ export default function App() {
               linking={Platform.OS === "web" ? linking : undefined}
               onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); stageLinks.flush(); appRoutes.flush(); flushNotificationTarget(); }}
             >
-            <AnnotationRoot>
+            <ContinuousVoiceRoot><AnnotationRoot>
               <Stack.Navigator
                 initialRouteName={isDebugActive() || hasSettings ? "Main" : "Pair"}
                 // Native-stack duration is iOS-only (and ignored for modal presentations).
@@ -149,7 +150,7 @@ export default function App() {
               </Stack.Navigator>
               <BridgePullOverlay />
               <NativeEvents />
-            </AnnotationRoot>
+            </AnnotationRoot></ContinuousVoiceRoot>
             </NavigationContainer>
           </BridgePullProvider>
           <DebugHost />

@@ -51,8 +51,9 @@ import { queuedParts } from "../lib/pending-queue";
 import { QueuedStack } from "../components/QueuedStack";
 import { colors, glass, radius, space, type } from "../theme";
 import { useLiveThinking } from "../lib/live-thinking";
-import { mergeVoicePhase } from "../lib/orb-phase";
-import { useZ0LiveState } from "../lib/z0live-state";
+import type { OrbState } from "../lib/orb-phase";
+import { useContinuousVoice } from "../components/ContinuousVoiceRoot";
+import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
@@ -146,10 +147,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const [chatOptions, setChatOptions] = useState(false);
   const context = useContextView(settings, online && (!conversation?.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)), harnessId, conversation?.profileId, conversation?.sessionId, thinking.phase !== "idle");
   const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
-  const callFixture = debugUi.use((s) => s.z0liveFixture ?? null);
-  const call = useZ0LiveState(settings, online && callFixture === null, 3000);
-  const liveCall = callFixture ?? call;
-  const voiceCall = liveCall?.live ? mergeVoicePhase(liveCall, thinking) : undefined;
+  const voice = useContinuousVoice();
+  const voiceActive = !["idle", "error"].includes(voice.state.phase);
+  const [voiceControls, setVoiceControls] = useState(false);
+  // Broker liveness/another client's call is not evidence that Dash's mic is live.
+  const voiceCall: OrbState | undefined = voiceActive ? { phase: voice.state.phase === "hearing" ? "listening" : voice.state.phase === "error" ? "idle" : voice.state.phase } : undefined;
+  const onVoice = () => {
+    if (voiceActive) setVoiceControls(value => !value);
+    else { setVoiceControls(true); void voice.start(); }
+  };
 
   const sendTurn = useCallback(
     (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId), mode: SendMode = "queue") => {
@@ -201,9 +207,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const steerableRef = useRef(false);
   steerableRef.current = canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn);
   useEffect(() => {
-    if (liveOn) return;
-    return registerSink({ label: `${harnessName} chat`, steerable: () => steerableRef.current, send: (text, attachments, mode) => onSend(text, attachments, mode) });
-  }, [onSend, harnessName, liveOn]);
+    if (!conversation) return;
+    return registerSink({ label: `${harnessName} chat`, steerable: () => steerableRef.current, send: (text, attachments, mode) => {
+      if (liveOn) setLiveOpen(conversation.id, false);
+      return sendVoiceAnnotation(conversation, text, attachments, () => {}, mode);
+    } });
+  }, [conversation, harnessName, liveOn]);
 
   useEffect(() => {
     if (!conversation) return;
@@ -310,6 +319,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       </KeyboardInsetView>}
       <KeyboardDock>
         <WorkersStrip workers={workers} />
+        {voice.state.phase === "error" ? <View style={styles.liveRow}>
+          <Text accessibilityRole="alert" style={[styles.liveNote, { flex: 1 }]}>{voice.state.note}</Text>
+          <PressScale accessibilityRole="button" accessibilityLabel="Retry Live voice" onPress={() => void voice.start()} style={styles.liveChip}><Text style={styles.liveChipText}>Retry voice</Text></PressScale>
+        </View> : null}
+        {voiceControls && voiceActive ? <View style={styles.liveRow}>
+          <PressScale accessibilityRole="button" accessibilityLabel={voice.state.muted ? "Unmute Live voice" : "Mute Live voice"} onPress={voice.mute} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.muted ? "Unmute" : "Mute"}</Text></PressScale>
+          <PressScale accessibilityRole="button" accessibilityLabel="End Live voice" onPress={() => void voice.stop()} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.phase === "connecting" ? "Cancel connection" : "End voice"}</Text></PressScale>
+        </View> : null}
         <View style={styles.liveRow}>
           <PressScale accessibilityRole="button" accessibilityLabel="Choose harness" onPress={() => { haptic.select(); setPickerVisible(true); }} style={styles.liveChip}><Text style={styles.liveChipText}>{harnessName} · Change</Text></PressScale>
           {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approval}><Text style={styles.approvalText}>{approvalCount} approvals{approvalDryRun ? " · preview" : ""} ›</Text></PressScale> : null}
@@ -324,6 +341,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         </> : null}
         {conversation && !liveOn ? <QueuedStack conversation={conversation} canSteer={online && !targetError && canSteer(harnessId, conversation.sessionId, thinking.phase, liveOn)} onSteer={() => { const payload = takeQueuedForSteer(conversation.id); if (payload) sendTurn(payload.text, payload.attachments, conversation, "steer"); }} /> : null}
         <Composer
+          draftKey={conversation?.id}
           context={context}
           key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
@@ -355,7 +373,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             }
           }}
           onStop={onStop}
-          onVoice={() => navigation.navigate("Voice", { autostart: true })}
+          onVoice={onVoice}
           voiceCall={voiceCall}
         />
       </KeyboardDock>

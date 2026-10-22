@@ -28,13 +28,16 @@ describe("app-owned attachment chooser", () => {
     expect(chooser).toContain('thumb.side === "left" ? anchor.x : anchor.x + anchor.width - width');
   });
 
-  test("retains OS pickers, slots, upload validation and other consent/error Alerts", () => {
+  test("retains OS file pickers, upload consent and Dash-native dictation error/retry UI", () => {
     expect(composer).toContain('kind === "photos" ? await pickPhotos(room) : await pickFiles(room)');
     expect(composer).toContain("remainingSlots(drafts)");
     expect(composer).toContain("rejectReason(file)");
     expect(composer).toContain("uploadPickedFile(settings, file)");
     expect(composer).toContain('Alert.alert("Upload shared files?"');
     expect(composer).toContain('Alert.alert("Attachments"');
-    expect(composer).toContain('Alert.alert("Dictation"');
+    expect(composer).toContain('useRecordedSpeech("dictation"');
+    expect(composer).toContain('accessibilityLabel="Retry dictation"');
+    expect(composer).toContain('speech.state.phase === "error" ? "alert" : "text"');
+    expect(composer).not.toContain('Alert.alert("Dictation"');
   });
 });

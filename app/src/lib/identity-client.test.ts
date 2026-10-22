@@ -4,6 +4,20 @@ import { claimIdentity, identitySecretKey, IdentityTokens, parseIdentityEnrollme
 import { socketUrl } from "./bridge-auth";
 import { parseSettings } from "../model";
 
+test("voice mint is a separate exact audience/scope and cannot reuse the chat cache", async () => {
+  const x = fixture(); const bodies: unknown[] = [];
+  const request = async (url: string, init?: RequestInit) => {
+    if (url.endsWith("jwks.json")) return Response.json(x.f.jwks);
+    const body = JSON.parse(String(init?.body)); bodies.push(body);
+    return Response.json({ access_token: x.f.token(), token_type: "Bearer", expires_in: 120, scope: body.aud === "z0live" ? "z0live:voice" : "dash:chat", aud: body.aud });
+  };
+  const tokens = new IdentityTokens(async () => x.credential, request);
+  await tokens.token(x.enrollment); await tokens.token(x.enrollment, "z0live"); await tokens.token(x.enrollment);
+  expect(bodies).toEqual([{ aud: "dash", scope: ["dash:chat"], ttl: 120 }, { aud: "z0live", scope: ["z0live:voice"], ttl: 120 }]);
+  // An identity service that only permits dash:chat cannot be treated as voice authorization.
+  await expect(new IdentityTokens(async () => x.credential, x.fetchImpl).token(x.enrollment, "z0live")).rejects.toThrow("token response");
+});
+
 function fixture() {
   const f = identityFixture();
   const enrollment = { url: "http://100.113.138.100:4788", issuer: f.issuer, kid: f.kid, credentialId: "cred_0123456789abcdef" };
@@ -60,6 +74,16 @@ test("missing credential and service failure never return a legacy token", async
   for (const response of [{ token_type: "Basic" }, { aud: "noop" }, { scope: "dash:other" }, { expires_in: 999 }, { access_token: "not-jwt" }]) {
     const bad: (url: string, init?: RequestInit) => Promise<Response> = async input => String(input).endsWith("jwks.json") ? Response.json(x.f.jwks) : Response.json({ access_token: x.f.token(), token_type: "Bearer", aud: "dash", scope: "dash:chat", expires_in: 120, ...response });
     await expect(new IdentityTokens(async () => x.credential, bad).token(x.enrollment)).rejects.toThrow("token response");
+  }
+});
+
+test("identity failure identifies the safe endpoint and HTTP status without exposing response secrets", async () => {
+  const x = fixture();
+  const denied = new IdentityTokens(async () => x.credential, async url => url.endsWith("jwks.json")
+    ? Response.json(x.f.jwks) : Response.json({ error: x.credential }, { status: 403 }));
+  await expect(denied.token(x.enrollment, "z0live")).rejects.toThrow("/v1/token: HTTP 403");
+  try { await denied.token(x.enrollment, "z0live"); } catch (error) {
+    expect(String(error)).not.toContain(x.credential);
   }
 });
 

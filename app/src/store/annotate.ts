@@ -27,6 +27,8 @@ export interface AnnotateState {
   preview?: AnnotationPreview;
   /** Which sink a Send will reach, for the tray label. */
   sink?: string;
+  /** An unconfirmed voice annotation keeps its exact submission, never resends as a new turn. */
+  pendingTurn?: { id: string; conversationId: string; fingerprint: string };
 }
 
 export const annotate = createStore<AnnotateState>({
@@ -37,7 +39,7 @@ export interface AnnotationSink {
   label: string;
   /** True when a Hermes turn is running and can be steered. */
   steerable(): boolean;
-  send(text: string, attachments: ChatAttachment[], mode: "steer" | "queue"): void;
+  send(text: string, attachments: ChatAttachment[], mode: "steer" | "queue"): void | Promise<void>;
   /** Voice sessions publish what was heard so strokes can be aligned. */
   live?: boolean;
 }
@@ -47,16 +49,16 @@ const sinks: AnnotationSink[] = [];
 /** The newest registration wins; the returned function unregisters it. */
 export function registerSink(sink: AnnotationSink): () => void {
   sinks.push(sink);
-  annotate.set(s => ({ ...s, sink: sink.label }));
+  annotate.set(s => ({ ...s, sink: currentSink()?.label }));
   return () => {
     const i = sinks.lastIndexOf(sink);
     if (i >= 0) sinks.splice(i, 1);
-    annotate.set(s => ({ ...s, sink: sinks.at(-1)?.label }));
+    annotate.set(s => ({ ...s, sink: currentSink()?.label }));
   };
 }
 
 export function currentSink(): AnnotationSink | undefined {
-  return sinks.at(-1);
+  return sinks.findLast(sink => sink.live) ?? sinks.at(-1);
 }
 
 export function enterAnnotation(): void {
@@ -65,7 +67,7 @@ export function enterAnnotation(): void {
 
 /** Discard: leave the mode and throw the drawing away. */
 export function exitAnnotation(): void {
-  annotate.set(s => ({ ...s, active: false, drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle", preview: undefined, error: undefined }));
+  annotate.set(s => ({ ...s, active: false, drawing: EMPTY_DRAWING, segments: [], recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined }));
 }
 
 export function setPenMode(on: boolean): void { annotate.set(s => ({ ...s, penMode: on })); }
@@ -87,7 +89,13 @@ export function setAnnotationStatus(status: AnnotateState["status"], extra: Part
   annotate.set(s => ({ ...s, status, error: extra.error, preview: extra.preview ?? (status === "idle" ? undefined : s.preview) }));
 }
 
-/** After a send: either leave, or keep the mode with a fresh page ("Keep drawing"). */
-export function finishSend(keep: boolean): void {
-  annotate.set(s => ({ ...s, active: keep, drawing: EMPTY_DRAWING, segments: [], recording: false, status: "sent" }));
+/** Clear only the confirmed snapshot; ink/words added during upload remain a new draft. */
+export function finishSend(keep: boolean, submitted?: { strokes: readonly Stroke[]; segments: readonly Segment[] }): void {
+  annotate.set(s => {
+    const strokes = submitted ? s.drawing.strokes.filter(stroke => !submitted.strokes.includes(stroke)) : [];
+    const segments = submitted ? s.segments.filter(segment => !submitted.segments.includes(segment)) : [];
+    const remaining = strokes.length > 0 || segments.length > 0;
+    return { ...s, active: keep || remaining, drawing: remaining ? { strokes, nextId: s.drawing.nextId, past: [] } : EMPTY_DRAWING,
+      segments, recording: submitted ? s.recording : false, pendingTurn: undefined, status: "sent" };
+  });
 }

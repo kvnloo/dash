@@ -1,73 +1,38 @@
-import { useEffect, useState } from "react";
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
 import { Canvas } from "../components/Canvas";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { debugUi } from "../debug/ui-store";
-import { useLiveThinking } from "../lib/live-thinking";
-import { mergeVoicePhase, orbCaption, transcriptTail } from "../lib/orb-phase";
+import { useContinuousVoice } from "../components/ContinuousVoiceRoot";
 import { screenBack } from "../lib/screen-back";
-import { launchSharedVoice, type VoiceLaunchResult } from "../lib/voice-launch";
-import { useZ0LiveState } from "../lib/z0live-state";
-import type { Message } from "../model";
+
 import type { ScreenProps } from "../navigation";
-import { store } from "../store/app";
+import type { OrbState } from "../lib/orb-phase";
 import { colors, radius, space, type } from "../theme";
-import { LegacyVoiceScreen } from "./LegacyVoiceScreen";
 
-type VoiceView =
-  | { kind: "shared"; result?: VoiceLaunchResult }
-  | { kind: "opening" }
-  | { kind: "legacy" };
-
-const EMPTY: Message[] = [];
 
 /** Live conversation mode: the hero orb follows a live z0live call, else the chat's live phase. */
 export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   const insets = useSafeAreaInsets();
-  const conversation = store.use(s => s.conversations.find(c => c.id === s.activeId));
-  const settings = store.use(s => s.settings);
-  const harness = conversation?.harness ?? settings?.harness ?? "hermes";
-  const harnessName = store.use(s => s.connection.harnesses.find(h => h.id === harness)?.name ?? harness);
-  const [view, setView] = useState<VoiceView>({ kind: "shared" });
-  const chat = useLiveThinking(conversation);
-  const fixture = debugUi.use(s => s.z0liveFixture ?? null);
-  const polled = useZ0LiveState(settings, chat.online && fixture === null && view.kind !== "legacy");
-  const call = fixture ?? polled;
-  const live = call?.live === true;
-  const orb = mergeVoicePhase(call, chat.thinking);
-  const caption = live ? orbCaption(orb, "listening") : chat.caption;
-  const lines = transcriptTail(call, conversation?.messages ?? EMPTY);
-
-  const openVoice = async (): Promise<void> => {
-    if (view.kind === "opening") return;
-    setView({ kind: "opening" });
-    const result = await launchSharedVoice(Platform.OS, Linking);
-    setView({ kind: "shared", result });
-  };
-
-  // Chosen from the composer mic's Live voice mode: go straight into z0live instead of asking for a second tap.
+  const { state, start, stop, mute } = useContinuousVoice();
+  const live = !["idle", "error"].includes(state.phase);
+  const opening = state.phase === "connecting";
+  const caption = state.note ?? (live ? `${state.phase}${state.muted ? " · muted" : ""}${state.delivery ? ` · ${state.delivery}` : ""}` : "Realtime voice inside Dash");
+  const lines = state.lines;
+  const orb: OrbState = { phase: state.phase === "hearing" ? "listening" : state.phase === "error" ? "idle" : state.phase };
   const autostart = props.route.params?.autostart === true;
-  useEffect(() => { if (autostart && !live) void openVoice(); }, [autostart]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (view.kind === "legacy") {
-    return <LegacyVoiceScreen {...props} onExit={() => setView({ kind: "shared" })} />;
-  }
-
-  const result = view.kind === "shared" ? view.result : undefined;
-  const opening = view.kind === "opening";
-  const launcherLabel = opening ? "Opening…" : live ? "Open in z0live" : "Start voice";
+  useEffect(() => { if (autostart && !live) void start(); }, [autostart]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
       <Canvas /><ScreenHeader title={live ? "Live call" : "Voice"} onBack={() => screenBack(props.navigation)} />
       <View style={styles.content}>
-        <Text style={styles.title}>{live ? "z0live" : harnessName}</Text>
-        <AgentOrb size="hero" thinking={orb} label={`${live ? "z0live call" : harnessName} ${caption}`} />
+        <Text style={styles.title}>Dash voice</Text>
+        <AgentOrb size="hero" thinking={orb} label={`Dash voice ${caption}`} />
         <Text accessibilityLiveRegion="polite" style={styles.caption} testID="voice-caption">
-          {caption}{live && call.muted ? " · muted" : ""}
+          {caption}
         </Text>
         <View style={styles.transcript} testID="voice-transcript">
           {lines.map((line, i) => (
@@ -76,23 +41,21 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
             </Text>
           ))}
         </View>
-        {result?.kind === "unavailable" ? <Text accessibilityLiveRegion="polite" style={[styles.message, styles.error]}>{result.message}</Text> : null}
+
       </View>
       <View style={styles.controls}>
-        <PrimaryButton accessibilityLabel={live ? "Open in z0live" : "Start voice in z0live"} disabled={opening} onPress={() => void openVoice()} label={launcherLabel} />
+        <PrimaryButton accessibilityLabel={live ? "Stop voice in Dash" : "Start voice in Dash"} onPress={() => void (live ? stop() : start())} label={opening ? "Cancel connection" : live ? "Stop voice" : "Start voice"} />
         {live ? (
           <>
             <Pressable accessibilityRole="button" onPress={() => screenBack(props.navigation)} style={styles.secondary}>
               <Text style={styles.secondaryText}>Back to chat · call keeps going</Text>
             </Pressable>
-            <Text style={styles.note}>Mute and end stay in z0live: the broker has no control API Dash can call for the phone's call.</Text>
+            <Pressable accessibilityRole="button" onPress={mute} style={styles.secondary}><Text style={styles.secondaryText}>{state.muted ? "Unmute" : "Mute"}</Text></Pressable>
+            <Text style={styles.note}>Call stays active across Dash screens. Leaving Dash stops the mic; background capture is not enabled.</Text>
           </>
         ) : (
           <>
-            <Pressable accessibilityRole="button" disabled={opening} onPress={() => setView({ kind: "legacy" })} style={styles.secondary}>
-              <Text style={styles.secondaryText}>Use legacy voice</Text>
-            </Pressable>
-            <Text style={styles.note}>{chat.online ? "No live call. Start one in z0live; this view follows it." : "Offline: pair the bridge to follow a live call."}</Text>
+            <Text style={styles.note}>Requires the native Dash APK and explicit voice authorization. Expo Go/web voice is unavailable; no other app is opened.</Text>
           </>
         )}
       </View>
