@@ -29,7 +29,7 @@ class ShareInboxTest {
     context = RuntimeEnvironment.getApplication()
     File(context.cacheDir, "incoming-shares").deleteRecursively()
     ShadowContentResolver.registerProviderInternal("dash-test", TestProvider().apply {
-      attachInfo(context, ProviderInfo().apply { authority = "dash-test"; exported = true; grantUriPermissions = true })
+      attachInfo(this@ShareInboxTest.context, ProviderInfo().apply { authority = "dash-test"; exported = true; grantUriPermissions = true })
     })
   }
   @Test fun receivesTextAndUrlsWithoutFetching() {
