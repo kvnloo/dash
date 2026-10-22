@@ -16,9 +16,11 @@ import {
 import { debugUi } from "./ui-store";
 import { parseConversation } from "../model";
 import { applyGateMessage } from "../store/approvals";
+import { parseRecentModels } from "../../../shared/recent-models";
 
 export type DebugCommand =
   | { action: "inputSnapshot"; conversation: unknown }
+  | { action: "inputModels"; snapshot: unknown }
   | { action: "scenario"; id: DebugScenarioId }
   | { action: "navigate"; screen: keyof RootStackParamList; params?: RootStackParamList[keyof RootStackParamList] }
   | { action: "reset"; seed?: DebugSeedVariant }
@@ -77,6 +79,13 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
       applyGateMessage({ type: "gate_snapshot", dry_run: true, owner_decisions: false, items: [] });
       debugUi.set(s => ({ ...s, mainTabIndex: 1, mainSearchQuery: null }));
       debugResetTo("Main", { tab: 1 }); flushPendingDebugNavigation();
+      return { ok: true, readOnly: true };
+    }
+    case "inputModels": {
+      const body = cmd.snapshot;
+      if (!body || typeof body !== "object" || !("profile" in body) || typeof body.profile !== "string") return { ok: false };
+      const snapshot = { profile: body.profile, models: parseRecentModels("models" in body ? body.models : undefined), catalog: parseRecentModels("catalog" in body ? body.catalog : undefined), current: parseRecentModels("current" in body ? [body.current] : [])[0], note: "Read-only native metadata snapshot, not a live connection. Model application is unavailable; nothing was sent." };
+      debugUi.set(s => ({ ...s, inputModels: snapshot }));
       return { ok: true, readOnly: true };
     }
     case "contextTarget": {

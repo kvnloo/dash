@@ -1,7 +1,8 @@
 import { useEffect, useReducer, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { AgentOrb } from "./AgentOrb";
+import { AgentPopup } from "./AgentPopup";
+import { HarnessPicker } from "./HarnessPicker";
 import { Composer } from "./Composer";
 import { KeyboardDock } from "./KeyboardDock";
 import { ShimmerText } from "./ShimmerText";
@@ -13,7 +14,7 @@ import { useSessionActivity } from "../lib/session-activity";
 import type { Conversation } from "../model";
 import { bridge, sendChat } from "../net/bridge";
 import { sendConversation } from "../net/send-conversation";
-import { conversationBusy, conversationTargetError, flushPendingSends, setActive, setQueueWaiting, stopConversation, store } from "../store/app";
+import { conversationBusy, conversationTargetError, createConversation, flushPendingSends, saveSettings, setActive, setQueueWaiting, stopConversation, store } from "../store/app";
 import { actionable, approvals, itemTitle } from "../store/approvals";
 import { attachedUi, showAttachedSearch } from "../store/attached-ui";
 import { replyText, useKeyed } from "../store/text";
@@ -32,6 +33,7 @@ export function AttachedDock(props: Props) {
 function SessionDock({ conversation, visible, onChat, onSearch, onVoice, onApprovals }: Props & { conversation: Conversation }) {
   const thumb = useHandedness();
   const settings = store.use(s => s.settings);
+  const harnesses = store.use(s => s.connection.harnesses);
   const conversations = store.use(s => s.conversations);
   const search = attachedUi.use(s => s.search);
   const { thinking, caption, online, observed, streamingMessage } = useLiveThinking(conversation);
@@ -39,6 +41,7 @@ function SessionDock({ conversation, visible, onChat, onSearch, onVoice, onAppro
   const workers = useSessionWorkers(settings, visible && online && conversation.harness === "hermes", conversation.profileId, conversation.sessionId);
   const targetError = conversationTargetError(conversation);
   const [picker, setPicker] = useState(false);
+  const [harnessPicker, setHarnessPicker] = useState(false);
   const [peek, dispatch] = useReducer(peekTransition, PEEK_IDLE);
   const [snoozed, setSnoozed] = useState<string[]>([]);
   const gate = approvals.use(s => s.items.find(i => actionable(i) && i.origin.session === conversation.sessionId && !snoozed.includes(i.id)));
@@ -64,8 +67,8 @@ function SessionDock({ conversation, visible, onChat, onSearch, onVoice, onAppro
   return <View style={!visible ? styles.hidden : undefined}>
     <KeyboardDock>
       <View style={[styles.identity, thumb.row]}>
+        <AgentPopup conversation={conversation} thinking={thinking} onHarness={() => setHarnessPicker(true)} onApprovals={onApprovals} />
         <Pressable accessibilityRole="button" accessibilityLabel={`Attached to ${label}. Switch session`} accessibilityHint="Long press for session actions" onPress={() => setPicker(true)} onLongPress={() => setPicker(true)} style={[styles.chip, thumb.row]}>
-          <AgentOrb size={22} thinking={thinking} label={caption} />
           <Text numberOfLines={1} style={styles.label}>{label}</Text>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={search ? "Return to attached conversation input" : "Search without detaching"} onPress={() => { showAttachedSearch(!search); if (!search) onSearch(); }} style={styles.button}><Text style={styles.action}>{search ? "Message" : "Search"}</Text></Pressable>
@@ -94,6 +97,10 @@ function SessionDock({ conversation, visible, onChat, onSearch, onVoice, onAppro
           onStop={() => stopConversation(conversation.id, id => { bridge.send({ type: "cancel", id }); })} onVoice={onVoice} />
       </View>
     </KeyboardDock>
+    <HarnessPicker visible={harnessPicker} harnesses={harnesses} selected={conversation.harness} onClose={() => setHarnessPicker(false)} onSelect={id => {
+      if (settings) saveSettings({ ...settings, harness: id });
+      if (id !== conversation.harness) createConversation(id);
+    }} />
     <Modal visible={picker && visible} transparent animationType="none" onRequestClose={() => setPicker(false)}>
       <View style={styles.scrim}><View style={styles.sheet}>
         <Text style={styles.label}>Attached session</Text>
