@@ -8,6 +8,8 @@ import { isDebugActive } from "../../debug/expose";
 import { orchestraMotionFixture } from "../../debug/orchestra-fixture";
 import { orchestraMap } from "../../lib/orchestra-map";
 import { useOrchestraEvidence } from "../../lib/useOrchestraEvidence";
+import { orchestraControlRows, useOrchestraController } from "../../lib/orchestra-controls";
+import { usePageControls } from "../../lib/settings-registry";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import type { ScreenProps } from "../../navigation";
@@ -25,7 +27,10 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
     nodes: snapshot.nodes.map(n => ({ ...n, thinking: n.state === "live" ? { phase: "thinking" as const } : { phase: "idle" as const } })),
     edges: snapshot.edges,
   } : orchestraMap(hosts, conversations), [hosts, conversations, fixtureOn, snapshot]);
-  return <OrchestraGraph graph={graph} width={width} fixture={fixtureOn} error={fixtureOn ? undefined : error} warnings={snapshot?.warnings} canOpen={node => Boolean(node.sessionId && (conversations.some(c => c.sessionId === node.sessionId) || hosts.some(h => `host:${h.id}` === node.hostId && h.self && h.online && h.agents.some(a => a.sessionId === node.sessionId))))} onFeedback={inAppFeedbackEnabled(settings) ? node => {
+  const controller = useOrchestraController(graph);
+  controller.state.use(s => s);
+  usePageControls("orchestra", orchestraControlRows(controller, graph));
+  return <OrchestraGraph controller={controller} graph={graph} width={width} fixture={fixtureOn} error={fixtureOn ? undefined : error} warnings={snapshot?.warnings} canOpen={node => Boolean(node.sessionId && (conversations.some(c => c.sessionId === node.sessionId) || hosts.some(h => `host:${h.id}` === node.hostId && h.self && h.online && h.agents.some(a => a.sessionId === node.sessionId))))} onFeedback={inAppFeedbackEnabled(settings) ? node => {
     submitInAppFeedback({ kind: "select", text: `Selected orchestra ${node.label}`, selection: { kind: "orchestra", id: node.id, label: node.label } });
     navigation.navigate("Chat");
   } : undefined} onOpen={node => {

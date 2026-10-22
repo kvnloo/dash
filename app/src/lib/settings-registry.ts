@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { createContext, useContext, useLayoutEffect, useMemo } from "react";
 import { createStore } from "../store/createStore";
 
 /**
@@ -31,13 +31,15 @@ export const GLOBAL_ROW_IDS = ["info", "layout"] as const;
 export const HEADER_ROW_IDS = ["thinking-summaries", "handedness", "large-type"] as const;
 
 export const pageControls = createStore<Record<string, readonly SettingRow[]>>({});
-/** The screen whose page rows the composer menu shows (Main's pager reports its tab). */
-export const activeScreen = createStore<string>("chats");
+const owners = new Map<string, symbol>();
 
 export function registerPage(screen: string, rows: readonly SettingRow[]): () => void {
+  const owner = Symbol(screen);
+  owners.set(screen, owner);
   pageControls.set(prev => ({ ...prev, [screen]: rows }));
   return () => pageControls.set(prev => {
-    if (prev[screen] !== rows) return prev;
+    if (owners.get(screen) !== owner) return prev;
+    owners.delete(screen);
     const next = { ...prev };
     delete next[screen];
     return next;
@@ -55,16 +57,72 @@ export function tapIndex(row: Pick<SettingRow, "index" | "values" | "kind">): nu
   return (row.index + 1) % Math.max(1, row.values.length);
 }
 
-/** Registers a screen's rows; re-registers whenever a row's value changes. */
+export interface PageControlsFocus {
+  routeFocused: boolean;
+  activeMainPage: string | null;
+}
+const unfocused: PageControlsFocus = { routeFocused: false, activeMainPage: null };
+const FocusContext = createContext<PageControlsFocus>(unfocused);
+/** Host adapter: supply navigation focus AND Main's selected pager page. Default is inert. */
+export const PageControlsFocusProvider = FocusContext.Provider;
+export function pageIsFocused(screen: string, focus: PageControlsFocus): boolean {
+  return focus.routeFocused && focus.activeMainPage === screen;
+}
+const emptyRows: readonly SettingRow[] = [];
+export function pageRowsFor(screen: string, focus: PageControlsFocus, state = pageControls.get()): readonly SettingRow[] {
+  return pageIsFocused(screen, focus) ? state[screen] ?? emptyRows : emptyRows;
+}
+/** Canonical host selector; even a still-mounted blurred host sees no page controls. */
+export function usePageRows(screen: string): readonly SettingRow[] {
+  const focus = useContext(FocusContext);
+  return pageControls.use(state => pageRowsFor(screen, focus, state));
+}
+
+/** Commit-time lifecycle shared by the React hook and behavioral tests. */
+export function createPageControlsBinding(screen: string) {
+  let latest: readonly SettingRow[] = emptyRows;
+  let published: readonly SettingRow[] | undefined;
+  let signature: string | undefined;
+  let cleanup: (() => void) | undefined;
+  function dispose() {
+    latest = emptyRows;
+    published = undefined;
+    signature = undefined;
+    cleanup?.();
+    cleanup = undefined;
+  }
+  return {
+    dispose,
+    update(rows: readonly SettingRow[], focus: PageControlsFocus) {
+      if (!pageIsFocused(screen, focus)) { dispose(); return; }
+      latest = rows;
+      // JSON avoids collisions between labels/values containing delimiters.
+      const nextSignature = JSON.stringify(rows.map(({ select, run, ...metadata }) => [metadata, Boolean(run)]));
+      if (signature === nextSignature && published && pageControls.get()[screen] === published) return;
+      cleanup?.();
+      signature = nextSignature;
+      const registered = rows.map(row => ({
+        ...row,
+        // Resolve at dispatch, not registration. A retained blurred/replaced row is inert.
+        select: (index: number) => {
+          if (published === registered && pageControls.get()[screen] === registered)
+            latest.find(current => current.id === row.id)?.select(index);
+        },
+        run: row.run ? () => {
+          if (published === registered && pageControls.get()[screen] === registered)
+            latest.find(current => current.id === row.id)?.run?.();
+        } : undefined,
+      }));
+      published = registered;
+      cleanup = registerPage(screen, registered);
+    },
+  };
+}
+
+/** Register only after a committed focus change; layout cleanup removes rows on blur before paint. */
 export function usePageControls(screen: string, rows: readonly SettingRow[]): void {
-  const latest = useRef(rows);
-  latest.current = rows;
-  const signature = rows.map(row => `${row.id}:${row.kind}:${row.home}:${row.label}:${row.hint}:${row.index}:${row.values.join("|")}`).join(",");
-  useEffect(() => registerPage(screen, latest.current.map(row => ({
-    ...row,
-    // A callback may change with selection/session even when its displayed value does not.
-    // Keep registered metadata stable, but dispatch to this render's callback by stable ID.
-    select: index => latest.current.find(current => current.id === row.id)?.select(index),
-    run: row.run ? () => latest.current.find(current => current.id === row.id)?.run?.() : undefined,
-  }))), [screen, signature]);
+  const focus = useContext(FocusContext);
+  const binding = useMemo(() => createPageControlsBinding(screen), [screen]);
+  useLayoutEffect(() => binding.update(rows, focus));
+  useLayoutEffect(() => () => binding.dispose(), [binding]);
 }

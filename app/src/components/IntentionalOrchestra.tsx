@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated, { cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { MOTION_MS } from "../motion";
 import { colors, space, type } from "../theme";
-import { matchesFilter, projectMap, type MapFilter, type MapKind, type MapNode, type MapRelation, type OrchestraMap } from "../lib/orchestra-map";
-import { defaultView, ORCHESTRA_VIEWS, TRIAGE_LANES, viewGraph, type OrchestraView } from "../lib/orchestra-views";
+import { matchesFilter, projectMap, type MapKind, type MapNode, type MapRelation, type OrchestraMap } from "../lib/orchestra-map";
+import { ORCHESTRA_VIEWS, TRIAGE_LANES, viewGraph } from "../lib/orchestra-views";
+import { ORCHESTRA_LEGEND, useOrchestraController, type OrchestraController } from "../lib/orchestra-controls";
 import { PressScale } from "./PressScale";
 import { InteractiveTile } from "./InteractiveTile";
 import { Tree } from "./Tree";
@@ -13,7 +14,7 @@ import type { TreeNode } from "../lib/tree";
 const kindColor = { chat: colors.gold, subagent: colors.orchestraSubagent, repo: colors.gold, host: colors.textMuted };
 const stateColor = { idle: colors.textMuted, live: colors.information, "needs-you": colors.warn, failing: colors.danger, done: colors.textMuted };
 const relationColor = { delegated: colors.gold, touched: colors.information, hosted: colors.textFaint, workspace: colors.provenance };
-const legend: (MapKind | MapRelation)[] = ["chat", "subagent", "repo", "host", "delegated", "touched", "hosted", "workspace"];
+const legend = ORCHESTRA_LEGEND;
 function isKind(k: MapKind | MapRelation): k is MapKind { return k === "chat" || k === "subagent" || k === "repo" || k === "host"; }
 function Glyph({ kind }: { kind: MapKind | MapRelation }) {
   return isKind(kind) ? <View style={{ width: 11, height: 11, borderRadius: kind === "repo" ? 1 : 6, borderWidth: 1.5, borderColor: kindColor[kind], backgroundColor: kind === "host" ? "transparent" : kindColor[kind] }} /> : <View style={{ width: 20, height: 0, borderTopWidth: kind === "hosted" ? 1 : 2, borderColor: relationColor[kind], borderStyle: kind === "workspace" ? "dotted" : "solid" }} />;
@@ -28,20 +29,32 @@ function Wire({ relation, active }: { relation: MapRelation; active: boolean }) 
   const animated = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return <Animated.View style={[{ width: 18, height: 24, borderLeftWidth: relation === "hosted" ? 1 : 2, borderBottomWidth: relation === "hosted" ? 1 : 2, borderColor: relationColor[relation], borderStyle: relation === "workspace" ? "dotted" : "solid", marginLeft: 10 }, animated]} />;
 }
-export function OrchestraGraph({ graph, width: _width, children, actions, fixture = false, error, warnings = [], onOpen, onFeedback, canOpen }: { graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode; fixture?: boolean; error?: string; warnings?: string[]; onOpen?(node: MapNode): void; onFeedback?(node: MapNode): void; canOpen?(node: MapNode): boolean }) {
-  const [view, setView] = useState<OrchestraView>(() => defaultView(graph.nodes));
-  const [chosen, setChosen] = useState(false);
-  const [filter, setFilter] = useState<MapFilter | null>(null);
-  const [focusId, setFocusId] = useState<string | null>(null);
-  const [focusOnly, setFocusOnly] = useState(false);
-  useEffect(() => { if (!chosen) setView(defaultView(graph.nodes)); }, [graph, chosen]);
+interface OrchestraGraphProps {
+  graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode;
+  fixture?: boolean; error?: string; warnings?: string[]; controller?: OrchestraController;
+  onOpen?(node: MapNode): void; onFeedback?(node: MapNode): void; canOpen?(node: MapNode): boolean;
+}
+export function OrchestraGraph(props: OrchestraGraphProps) {
+  return props.controller ? <ControlledOrchestraGraph {...props} controller={props.controller} /> : <LocalOrchestraGraph {...props} />;
+}
+function LocalOrchestraGraph(props: OrchestraGraphProps) {
+  const controller = useOrchestraController(props.graph);
+  return <ControlledOrchestraGraph {...props} controller={controller} />;
+}
+function ControlledOrchestraGraph({ graph, children, actions, controller, fixture = false, error, warnings = [], onOpen, onFeedback, canOpen }: OrchestraGraphProps & { controller: OrchestraController }) {
+  const { view, filter, focusId, focusOnly, viewRevision } = controller.state.use(s => s);
+  const { switchView, focus: setFocusId } = controller;
   const current = useMemo(() => viewGraph(graph, view), [graph, view]);
   const projected = useMemo(() => projectMap(current, filter, focusId, focusOnly), [current, filter, focusId, focusOnly]);
   const selected = graph.nodes.find(n => n.id === focusId);
   const liveConnections = (id: string) => new Set(projected.edges.filter(e => (e.from === id || e.to === id) && projected.nodes.some(n => n.state === "live" && (n.id === e.from || n.id === e.to))).map(e => e.from === id ? e.to : e.from)).size;
   const fade = useSharedValue(1);
   const transition = useAnimatedStyle(() => ({ opacity: fade.value }));
-  function switchView(next: OrchestraView) { fade.value = 0.5; setView(next); setChosen(true); setFilter(null); setFocusId(null); setFocusOnly(false); fade.value = withTiming(1, { duration: MOTION_MS.exit }); }
+  useEffect(() => {
+    if (!viewRevision) return;
+    fade.value = 0.5;
+    fade.value = withTiming(1, { duration: MOTION_MS.exit });
+  }, [viewRevision, fade]);
   function card(node: MapNode, compact = false) {
     const dim = !matchesFilter(node, current, filter) || node.online === false;
     return <InteractiveTile key={node.id} title={node.label} summary={`${node.kind}: ${node.label}, ${node.state}. ${node.reason || ""}`} onOpen={() => setFocusId(node.id)} extraActions={onFeedback ? [{ id: "feedback", label: "Feedback", run: () => onFeedback(node) }] : []} style={[styles.card, compact && styles.compact, { opacity: dim ? 0.4 : 1, borderColor: node.collision || node.state === "failing" ? colors.danger : focusId === node.id ? colors.gold : colors.border }, node.collision && styles.collision]}>
@@ -73,7 +86,7 @@ export function OrchestraGraph({ graph, width: _width, children, actions, fixtur
     {view === "triage" ? <Text style={styles.hint}>{TRIAGE_LANES.map(l => `${l.title} ${current.nodes.filter(n => n.state === l.state).length}`).join(" → ")}</Text> : null}
     <Animated.View style={[styles.body, transition]}><ScrollView contentContainerStyle={styles.content}>
       {children}
-      {view === "fleet" ? <View style={styles.telemetry}>{current.nodes.filter(n => n.kind === "host").map(host => <PressScale key={host.id} onPress={() => { setFocusId(host.id); setFocusOnly(true); }} style={[styles.telemetryRow, host.online === false && { opacity: 0.4, minHeight: 26 }]}><View style={styles.row}><Glyph kind="host" /><Text style={styles.label}>{host.label}</Text><Text style={styles.meta}>{host.online === false ? "offline · " : ""}{current.edges.filter(e => e.from === host.id && current.nodes.some(n => n.id === e.to && n.state === "live")).length} live</Text></View>{host.online !== false ? <Text style={styles.meta}>{host.health || host.reason}</Text> : null}</PressScale>)}</View> : null}
+      {view === "fleet" ? <View style={styles.telemetry}>{current.nodes.filter(n => n.kind === "host").map(host => <PressScale key={host.id} onPress={() => controller.focusHost(host.id)} style={[styles.telemetryRow, host.online === false && { opacity: 0.4, minHeight: 26 }]}><View style={styles.row}><Glyph kind="host" /><Text style={styles.label}>{host.label}</Text><Text style={styles.meta}>{host.online === false ? "offline · " : ""}{current.edges.filter(e => e.from === host.id && current.nodes.some(n => n.id === e.to && n.state === "live")).length} live</Text></View>{host.online !== false ? <Text style={styles.meta}>{host.health || host.reason}</Text> : null}</PressScale>)}</View> : null}
       {view === "triage" ? TRIAGE_LANES.map(lane => {
         const nodes = projected.nodes.filter(n => n.state === lane.state);
         return <View key={lane.state} style={[styles.lane, { borderLeftColor: stateColor[lane.state] }]}><Text style={[styles.heading, { color: stateColor[lane.state] }]}>{lane.title} · {nodes.length}</Text>{nodes.length ? nodes.map(n => card(n)) : <Text style={styles.meta}>Nothing here</Text>}</View>;
@@ -91,9 +104,9 @@ export function OrchestraGraph({ graph, width: _width, children, actions, fixtur
       const items = isKind(kind) ? current.nodes.filter(n => n.kind === kind) : current.edges.filter(e => e.relation === kind);
       if (!items.length) return null;
       const live = isKind(kind) ? current.nodes.filter(n => n.kind === kind && n.state === "live").length : current.edges.filter(e => e.relation === kind && e.active).length;
-      return <PressScale key={kind} accessibilityRole="button" accessibilityLabel={`Legend ${kind}`} accessibilityHint="Tap to highlight; long press to show only" onPress={() => setFilter(filter?.kind === kind ? null : { kind, only: false })} onLongPress={() => { setFilter({ kind, only: true }); setFocusOnly(false); }} style={[styles.legendItem, filter?.kind === kind && styles.tabOn]}><Glyph kind={kind} /><Text style={styles.meta}>{kind} {items.length} · {live} live</Text></PressScale>;
+      return <PressScale key={kind} accessibilityRole="button" accessibilityLabel={`Legend ${kind}`} accessibilityHint="Tap to highlight; long press to show only" onPress={() => controller.highlight(kind)} onLongPress={() => controller.only(kind)} style={[styles.legendItem, filter?.kind === kind && styles.tabOn]}><Glyph kind={kind} /><Text style={styles.meta}>{kind} {items.length} · {live} live</Text></PressScale>;
     })}</View>
-    <View style={styles.footer}><PressScale onPress={() => { setFocusOnly(!focusOnly); }} style={styles.button}><Text style={styles.meta}>{focusOnly ? "All" : "Focus"}</Text></PressScale><PressScale onPress={() => { setFilter(null); setFocusOnly(false); setFocusId(null); }} style={styles.button}><Text style={styles.meta}>Reset</Text></PressScale>{actions}</View>
+    <View style={styles.footer}><PressScale onPress={() => controller.scope(!focusOnly)} style={styles.button}><Text style={styles.meta}>{focusOnly ? "All" : "Focus"}</Text></PressScale><PressScale onPress={controller.reset} style={styles.button}><Text style={styles.meta}>Reset</Text></PressScale>{actions}</View>
     {selected ? <View style={styles.sheet} accessibilityLabel="Node details"><ScrollView><Text style={styles.heading}>{selected.label}</Text><Text style={styles.meta}>{selected.kind} · {selected.state} · {selected.harness}{selected.model ? ` · ${selected.model}` : ""}</Text><Text style={styles.label}>{selected.reason || "No live state reported"}</Text><Text style={styles.action}>→ {selected.action || TRIAGE_LANES.find(l => l.state === selected.state)?.action}</Text><Text selectable style={styles.meta}>{selected.path}{selected.branch ? ` · ${selected.branch}` : ""}</Text><Text style={styles.meta}>Parent: {graph.nodes.find(n => n.id === selected.parentId)?.label || "None recorded"}</Text><Text style={styles.meta}>Children: {graph.edges.filter(e => e.from === selected.id && e.relation === "delegated").map(e => graph.nodes.find(n => n.id === e.to)?.label).join(", ") || "None recorded"}</Text><Text selectable style={styles.meta}>{selected.provenance?.join("\n")}</Text><View style={styles.row}>{onOpen && selected.sessionId && (!canOpen || canOpen(selected)) ? <PressScale onPress={() => onOpen(selected)} style={styles.button}><Text style={styles.action}>Open chat</Text></PressScale> : null}{selected.path?.startsWith("https://github.com/") ? <PressScale onPress={() => void Linking.openURL(selected.path!)} style={styles.button}><Text style={styles.action}>Open PR</Text></PressScale> : null}<PressScale onPress={() => setFocusId(null)} style={styles.button}><Text style={styles.action}>Close</Text></PressScale></View></ScrollView></View> : null}
   </View>;
 }
