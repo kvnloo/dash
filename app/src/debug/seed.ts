@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { uxFixture } from "./ux-fixture";
+import { chatRowsFixture } from "./chat-rows-fixture";
 import { applyGateMessage } from "../store/approvals";
 import type { Connection, Conversation, Settings } from "../model";
 import { DEMO_CONVERSATIONS } from "../mock/seed";
@@ -73,7 +74,7 @@ const ONLINE_CONNECTION: Partial<Connection> = {
   hosts: DEBUG_HOSTS,
 };
 
-export type DebugSeedVariant = "paired" | "unpaired" | "offline" | "connecting";
+export type DebugSeedVariant = "paired" | "unpaired" | "offline" | "connecting" | "chat-rows";
 
 const STORAGE_KEYS = ["dash.settings.v1", "dash.conversations.v1", "dash.activeId.v1"] as const;
 
@@ -102,6 +103,12 @@ export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
 
   saveSettings(DEBUG_SETTINGS);
 
+
+  if (variant === "chat-rows") {
+    store.set((s) => ({ ...s, conversations: chatRowsFixture(), activeId: null,
+      connection: { ...s.connection, ...ONLINE_CONNECTION, status: "online", hosts: [] } }));
+    return;
+  }
   // Saved phone chats first, so the roster below reconciles them and adopts host chats.
   store.set((s) => ({
     ...s,

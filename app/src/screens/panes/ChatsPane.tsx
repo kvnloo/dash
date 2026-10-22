@@ -9,7 +9,8 @@ import { AgentOrb } from "../../components/AgentOrb";
 import { conversationThinking } from "../../lib/thinking";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
-import { conversationPreview as preview } from "../../lib/live-sessions";
+import { chatRow } from "../../lib/chat-row";
+import { chatRowActions, pressRow, rowLongPress } from "../../lib/chat-row-actions";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import type { ConnectionStatus, Conversation } from "../../model";
@@ -44,12 +45,8 @@ const Row = memo(function Row({
   const frame = useRef<View>(null);
   // What the agent is doing now, as a thinking-orbs orb (idle orbs hold still).
   const thinking = item.stale ? { phase: "idle" as const } : conversationThinking(item.messages, connectionStatus);
-  const press = () => {
-    const node = frame.current;
-    if (!node) { onPress(item.id); return; }
-    // The window morphs from this row; measuring is one native call, not per frame.
-    node.measureInWindow((_x, y, _width, height) => onPress(item.id, Number.isFinite(y) && height > 0 ? { y, height } : undefined));
-  };
+  const press = () => pressRow(frame.current, item.id, onPress);
+  const content = useMemo(() => chatRow(item, harnessName, connectionStatus), [item, harnessName, connectionStatus]);
   return (
     <View ref={frame} collapsable={false}>
     <PressScale
@@ -58,18 +55,28 @@ const Row = memo(function Row({
       delayLongPress={350}
       style={[styles.row, active && !stale && styles.rowActive]}
       accessibilityRole="button"
+      testID={`chat-row-${item.id}`}
     >
       <AgentOrb size={28} thinking={thinking} label={`${harnessName} · ${thinking.tool ?? thinking.phase}`} />
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
           <Text style={[styles.rowTitle, stale && styles.stale]} numberOfLines={1}>
-            {item.title || harnessName}
+            {content.title}
           </Text>
           {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
           <Text style={styles.rowTime} numberOfLines={1}>{stale ? "ended" : item.openIn ? `${item.openIn} · ${timeAgo(item.updatedAt)}` : timeAgo(item.updatedAt)}</Text>
         </View>
-          <Text style={[styles.rowPreview, stale && styles.stale, chatAttention(item) === "Needs attention" && styles.attention]} numberOfLines={1}>
-            {chatAttention(item) ? `${chatAttention(item)} · ` : ""}{preview(item)}
+        <View style={styles.rowMeta}>
+          <Text style={styles.rowFolder} numberOfLines={1} accessibilityLabel={content.folderPath ? `Working folder: ${content.folderPath}` : content.folder}>
+            {content.folder}
+          </Text>
+          <Text style={[styles.rowActivity, content.needsAttention && styles.attention]} numberOfLines={1}>
+            {content.activity}
+          </Text>
+        </View>
+        {content.outcomeLabel ? <Text style={styles.rowLabel}>{content.outcomeLabel}</Text> : null}
+        <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={2}>
+          {content.outcome}
         </Text>
       </View>
       <View style={styles.hairline} />
@@ -109,21 +116,15 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
     return out;
   }, [conversations]);
 
-  const open = useCallback(
-    (id: string, origin?: WindowOrigin) => {
-      haptic.select();
-      setActive(id);
-      // Same conversation, same session: only the presentation changes (a window over this list).
-      navigation.navigate("Chat", { window: origin ?? { y: 0, height: 0 } });
-    },
-    [navigation],
-  );
-
-  const remove = useCallback((id: string) => {
-    confirmDestructive("Delete chat?", "This removes it from this phone only.", "Delete", () => {
-      deleteConversation(id);
-    });
-  }, []);
+  const actions = useMemo(() => chatRowActions({
+    select: () => haptic.select(),
+    setActive,
+    navigate: (route, params) => navigation.navigate(route, params),
+    confirm: confirmDestructive,
+    remove: deleteConversation,
+  }), [navigation]);
+  const open = actions.open;
+  const remove = actions.remove;
 
   const onFeedback = useCallback(
     (id: string) => {
@@ -154,7 +155,7 @@ export function ChatsPane({ navigation }: Pick<ScreenProps<"Main">, "navigation"
           connectionStatus={connectionStatus}
           live={Boolean(c.sessionId && hosts.some(host => host.online && (!c.targetHostId || host.id === c.targetHostId) && host.agents.some(agent => agent.sessionId === c.sessionId && agent.kind === c.harness && agent.status === "running")))}
           onPress={open}
-          onLongPress={feedbackOn ? onFeedback : remove}
+          onLongPress={rowLongPress(feedbackOn, onFeedback, remove)}
         />
       );
     },
@@ -218,6 +219,10 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: "row", alignItems: "center", gap: space.sm },
   rowTitle: { color: colors.text, ...type.heading, flex: 1 },
   rowTime: { color: colors.textTertiary, ...type.mono, textTransform: "none", letterSpacing: 0 },
+  rowMeta: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.xs },
+  rowFolder: { color: colors.goldLo, ...type.mono, flex: 1, minWidth: 0 },
+  rowActivity: { color: colors.textTertiary, ...type.label, flexShrink: 1, maxWidth: "55%" },
+  rowLabel: { color: colors.textTertiary, ...type.label, marginTop: space.xs },
   rowPreview: { color: colors.textMuted, ...type.small, marginTop: 2, textTransform: "none", letterSpacing: 0 },
   empty: { paddingTop: "40%", alignItems: "center" },
   emptyText: { color: colors.textMuted, ...type.body },

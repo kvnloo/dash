@@ -115,7 +115,7 @@ describe("mergeLiveConversations", () => {
     const src = readFileSync(join(import.meta.dir, "../store/app.ts"), "utf8");
     expect(src).toContain("mergeLiveConversations");
     const pane = readFileSync(join(import.meta.dir, "../screens/panes/ChatsPane.tsx"), "utf8");
-    expect(pane).toContain("conversationPreview");
+    expect(pane).toContain("chatRow(item, harnessName, connectionStatus)");
     const chat = readFileSync(join(import.meta.dir, "../screens/ChatScreen.tsx"), "utf8");
     expect(chat).toContain("cwd: current.cwd");
   });

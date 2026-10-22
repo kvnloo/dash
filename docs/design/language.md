@@ -18,10 +18,11 @@ Use these words exactly, in UI strings, accessibility labels, code and tests. If
 
 Where each lives in the app:
 
-- **Bots** tab lists only bots, grouped by host in collapsible sections. A host header shows a plain host glyph, the address, the bot count and an online dot. A bot row shows its name and one muted line of channel states ("Telegram connected · Discord not running"). No identity orbs on this page.
+- **Bots** tab groups deployed bots by host and nests their sessions alongside installed harness targets. A host header keeps its plain host glyph, address, actual counts and online dot. Bot rows retain their name and muted channel-state summary; their identity face is the original synergy.ai Moodie companion, not a dotted-orb recreation.
 - **Harnesses** are in the bridge sheet (the chevron in the top bar): "Harnesses on <host>". Tapping one starts a chat with it. The harness picker in Chat chooses the harness for new chats.
 - **Sessions** are rows in **Chats**.
-- Identity orbs mean a live agent or voice: chat rows and the Voice screen. Never on hosts or bots.
+- Identity orbs remain the live agent/voice vocabulary in chat and Voice. Bots and known Hermes profile/session rows in the host tree use **Moodie faces** (`BotFace`, `vendor/moodie.ts`): stable profile-key resting expressions, with thinking → thinking, work → focused, done → happy, error → worried and approval → alert. A running gateway alone is not evidence of work. Unknown profile metadata stays unknown; host identity never gets a face. The Component lab has explicitly labelled synthetic profile/expression samples. The port preserves Moodie and bloub's MIT notices in code.
+- Profile identity stays visible during every expression: opaque body tones translate synergy.ai's paper/blue/orange/acid palette roles to Living Night text/information/warn/ok tokens. Body tone never changes with work or error state; dark `onAccent` eyes retain contrast. Host-tree faces use a 32px footprint so the blob body, not just its eye marks, remains readable.
 
 ## Product
 
@@ -95,4 +96,4 @@ Competitor surfaces (T3 Code, ChatGPT, Grok, Claude, Conductor, Cursor 3, harnes
 
 ## Non-goals
 
-No cartoon robots. No generic chatbot chrome. No bottom tab bar (tabs are **top**). No cyan/violet “zerOS” palette — that was invented; host `0` Hermes/zerOS share has GrowTwin previews, not Dash tokens.
+No invented robot artwork: the owner-requested synergy.ai Moodie/bloub companion is the bot-face source. No generic chatbot chrome. No bottom tab bar (tabs are **top**). No cyan/violet “zerOS” palette — that was invented; host `0` Hermes/zerOS share has GrowTwin previews, not Dash tokens.

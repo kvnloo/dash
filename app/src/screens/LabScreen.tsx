@@ -8,6 +8,7 @@ import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
 import type { OrbPhase } from "../lib/orb-phase";
+import { BotFaceLab } from "../components/BotFaceLab";
 
 const HERO_PHASES: OrbPhase[] = ["listening", "speaking", "thinking", "tool", "connecting", "idle"];
 import { PressScale } from "../components/PressScale";
@@ -119,6 +120,10 @@ Hold + slide: action wheel · centre: cancel</Text>
               </View>
             ))}
           </TileGrid>
+        </Block>
+
+        <Block title="Hermes profile faces" note="Original synergy.ai companion · choose an expression" testID="lab-bot-faces">
+          <BotFaceLab />
         </Block>
 
         <Block title="Orb states" note={stress ? "Stress: all 20 animated · shared clock" : "Visible only · at most 6 animated · shared clock"} action={{ label: stress ? "Cap at 6" : "Animate 20", onPress: () => setStress(value => !value) }} testID="lab-orb-states">
