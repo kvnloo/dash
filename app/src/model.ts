@@ -66,6 +66,11 @@ export interface AssistantMessage {
 export type Message = UserMessage | AssistantMessage;
 
 export interface Conversation {
+  /** Default on, including chats saved before this preference existed. */
+  deliverQueuedAsOne?: boolean;
+  /** A durable merge preview pauses automatic delivery until saved or canceled. */
+  queuePreview?: string;
+  queueWaitForIdle?: boolean;
   detailMode?: DetailMode;
   summariesEnabled?: boolean;
   id: string;
@@ -181,6 +186,9 @@ export function parseConversation(raw: unknown): Conversation | null {
     detailMode: raw.detailMode === "Hide" || raw.detailMode === "Compact" || raw.detailMode === "Full" ? raw.detailMode : undefined,
     title: raw.title,
     summariesEnabled: raw.summariesEnabled === true,
+    deliverQueuedAsOne: raw.deliverQueuedAsOne !== false,
+    queueWaitForIdle: raw.queueWaitForIdle === true,
+    queuePreview: typeof raw.queuePreview === "string" ? raw.queuePreview : undefined,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     sessionId: typeof raw.sessionId === "string" ? raw.sessionId : undefined,

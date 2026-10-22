@@ -19,6 +19,7 @@ export const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 export type Target = { file: string; tests: readonly string[] };
 
 export const TARGETS: readonly Target[] = [
+  { file: "app/src/lib/pending-queue.ts", tests: ["app/src/lib/pending-queue.test.ts"] },
   { file: "bridge/src/model-health.ts", tests: ["bridge/src/model-health.test.ts"] },
   { file: "bridge/src/model-roles.ts", tests: ["bridge/src/model-roles.test.ts"] },
   { file: "shared/model-roles.ts", tests: ["bridge/src/model-roles.test.ts"] },
