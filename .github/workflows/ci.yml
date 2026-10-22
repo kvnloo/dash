@@ -2,9 +2,8 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, preview, nightly, dev, integrate/device-layer]
   push:
-    branches: [main, preview, nightly, dev, integrate/device-layer]
+    branches: [main, preview, nightly, dev, integrate/dash-v2, integrate/dash-20261020]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -14,30 +13,47 @@ env:
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
 jobs:
-  unit-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-          cache: true
-      - name: Install app and bridge
-        run: bun install --frozen-lockfile --cwd app && bun install --frozen-lockfile --cwd bridge
-      - name: Unit tests
-        run: bun test app/src bridge/src shared scripts/mutate.test.ts scripts/oss-loop.test.ts
-
-  mutation:
-    needs: unit-tests
+  checks:
+    name: ${{ matrix.gate }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [typecheck, lint, test, mutation]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-          cache: true
-      - name: Install app and bridge
-        run: bun install --frozen-lockfile --cwd app && bun install --frozen-lockfile --cwd bridge
-      - name: Mutation tests
+          bun-version: 1.4.3
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'app/bun.lock', 'bridge/bun.lock') }}
+      - name: Install locked root and bridge dependencies; public app without private renderer
+        run: bun install --frozen-lockfile && bun scripts/install-public-ci.ts && bun install --frozen-lockfile --cwd bridge
+      - name: Typecheck app, bridge, shared and scripts
+        if: matrix.gate == 'typecheck'
+        run: bun run typecheck
+      - name: Lint
+        if: matrix.gate == 'lint'
+        run: bun run lint
+      - name: Install real audio decoder for pairing regression
+        if: matrix.gate == 'test'
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends ffmpeg
+      - name: Unit and regression tests
+        if: matrix.gate == 'test'
+        run: bun run test
+      - name: Mutation tests (including protocol and roster branches)
+        if: matrix.gate == 'mutation'
         run: bun scripts/mutate.ts --threshold 80 --max 200
+
+  required-gates:
+    if: always()
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject failed, cancelled or skipped gates
+        env:
+          GATE_RESULT: ${{ needs.checks.result }}
+        run: test "$GATE_RESULT" = success

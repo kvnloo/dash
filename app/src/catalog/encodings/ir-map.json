@@ -1,0 +1,358 @@
+{
+  "schemaVersion": 1,
+  "hotlSpecVersion": "0.2",
+  "encodingVersion": "2026-09-10.1",
+  "rule": "tau is partial. A visual channel or silhouette compiles only through this map. Unknown ids and not-inferred statuses are bot (fail closed).",
+  "channels": {
+    "provider": {
+      "layer": "visual",
+      "visual": "outer hue family",
+      "hotl": null,
+      "object": null,
+      "compile": "none",
+      "job": "Hue is not a node kind. Executor identity may be a label on V_t; it does not compile from color."
+    },
+    "model": {
+      "layer": "visual",
+      "visual": "core geometry",
+      "hotl": null,
+      "object": null,
+      "compile": "none",
+      "job": "Geometry is not a node kind. Model identity may be a label on V_t; it does not compile from shape."
+    },
+    "effort": {
+      "layer": "visual",
+      "visual": "orbit count + energy amplitude",
+      "hotl": "constraints.budgets (declared)",
+      "object": "Gamma_t",
+      "compile": "declared-only",
+      "job": "Orbits are not spend evidence. Effort is declared budget, never a receipt."
+    },
+    "topology": {
+      "layer": "visual+ir",
+      "visual": "coordination silhouette",
+      "hotl": "policies.kinds + declared edges",
+      "object": "Pi_t + E_t",
+      "compile": "ir-map",
+      "job": "Shape is a declared coordination class. Compile only through topologies[id]. Density of a drawing is not connectivity."
+    },
+    "operatingMode": {
+      "layer": "visual",
+      "visual": "temporal organization rune",
+      "hotl": null,
+      "object": null,
+      "compile": "none",
+      "job": "Not in HOTL 0.2. Copilot/overnight/tournament are visual runes, not policies.kinds."
+    },
+    "state": {
+      "layer": "visual",
+      "visual": "runtime cadence + marker",
+      "hotl": null,
+      "object": "S_t (observed)",
+      "compile": "none",
+      "job": "Cadence is not intent. Observed O_t is a different object from the document."
+    },
+    "economics": {
+      "layer": "visual",
+      "visual": "value-score perimeter; dashed when unmeasured",
+      "hotl": "constraints.budgets (declared)",
+      "object": "Gamma_t",
+      "compile": "declared-only",
+      "job": "Dashed = unmeasured. Never evidence of spend. Payment execution stays unsupported."
+    }
+  },
+  "fromHotl": {
+    "sequence": "pipeline",
+    "fanout": "parallel",
+    "reducer": "cluster",
+    "recursion": "hierarchy",
+    "auction": "marketplace",
+    "human_gate": "supervisor",
+    "retry": null,
+    "blackboard": "blackboard"
+  },
+  "topologies": {
+    "solo": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "sequence"
+        ],
+        "fanIn": "all"
+      },
+      "typicalNodes": [
+        "executor"
+      ],
+      "typicalEdges": [],
+      "example": null,
+      "note": "One declared executor. No fan-out."
+    },
+    "paired": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "sequence"
+        ],
+        "fanIn": "all"
+      },
+      "typicalNodes": [
+        "executor",
+        "verifier"
+      ],
+      "typicalEdges": [
+        "dependency",
+        "critique",
+        "verification"
+      ],
+      "example": null,
+      "note": "Two agents in direct partnership. Verification is an edge, not implied by the second dot."
+    },
+    "council": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "fanout",
+          "reducer"
+        ],
+        "fanIn": "quorum"
+      },
+      "typicalNodes": [
+        "executor",
+        "verifier"
+      ],
+      "typicalEdges": [
+        "dependency",
+        "critique"
+      ],
+      "example": null,
+      "note": "Quorum fan-in must be declared. The ring is not consensus."
+    },
+    "hierarchy": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "recursion"
+        ],
+        "fanIn": "all",
+        "dynamic": {
+          "allowed": true,
+          "maxChildren": "finite",
+          "maxDepth": "finite"
+        }
+      },
+      "typicalEdges": [
+        "delegation"
+      ],
+      "example": "examples/valid/bounded-recursion.json",
+      "note": "Delegation depth is finite. Unbounded spawn fails closed."
+    },
+    "mesh": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "fanout"
+        ],
+        "fanIn": "all"
+      },
+      "typicalEdges": [
+        "message",
+        "data"
+      ],
+      "example": null,
+      "note": "Every peer edge must be declared. There is no HOTL kind named mesh."
+    },
+    "ring": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "sequence"
+        ],
+        "fanIn": "all"
+      },
+      "typicalEdges": [
+        "message"
+      ],
+      "forbidden": [
+        "dependency cycle"
+      ],
+      "example": null,
+      "note": "Ring is a directed message circuit. Dependency cycles fail closed."
+    },
+    "star": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "fanout"
+        ],
+        "fanIn": "all"
+      },
+      "typicalEdges": [
+        "allocation",
+        "delegation"
+      ],
+      "example": null,
+      "note": "Hub-and-spoke is declared allocation/delegation, not implied centrality."
+    },
+    "swarm": {
+      "status": "not-inferred",
+      "requires": [
+        "policies.dynamic.allowed",
+        "finite maxChildren",
+        "finite maxDepth",
+        "reserved budget"
+      ],
+      "doesNotImply": [
+        "consensus",
+        "intelligence",
+        "mesh",
+        "marketplace"
+      ],
+      "typicalEdges": [
+        "message"
+      ],
+      "example": null,
+      "note": "Swarm is a visual silhouette. IR is bounded dynamic spawn, not a node kind."
+    },
+    "cluster": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "fanout",
+          "reducer"
+        ],
+        "fanIn": "reducer"
+      },
+      "typicalEdges": [
+        "dependency",
+        "message"
+      ],
+      "example": "examples/valid/fanout-fanin.json",
+      "note": "Subgraphs coordinate only at declared edges."
+    },
+    "parallel": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "fanout"
+        ],
+        "fanIn": "all"
+      },
+      "typicalEdges": [
+        "dependency"
+      ],
+      "example": "examples/valid/fanout-fanin.json"
+    },
+    "pipeline": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "sequence",
+          "retry"
+        ],
+        "fanIn": "all"
+      },
+      "typicalEdges": [
+        "dependency",
+        "verification"
+      ],
+      "example": "examples/valid/pipeline.json"
+    },
+    "supervisor": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "human_gate"
+        ],
+        "fanIn": "all"
+      },
+      "typicalNodes": [
+        "verifier",
+        "humanGate"
+      ],
+      "typicalEdges": [
+        "control",
+        "observation"
+      ],
+      "example": null,
+      "note": "Supervisor is control/observation + an explicit humanGate, not a health color."
+    },
+    "blackboard": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "sequence"
+        ],
+        "fanIn": "all"
+      },
+      "typicalNodes": [
+        "memory",
+        "stateStore"
+      ],
+      "typicalEdges": [
+        "data"
+      ],
+      "example": null,
+      "note": "Shared memory is a node kind (memory/stateStore), not a topology kind."
+    },
+    "marketplace": {
+      "status": "expressible",
+      "policies": {
+        "kinds": [
+          "auction"
+        ],
+        "fanIn": "any",
+        "auction": {
+          "phases": [
+            "announce",
+            "bid",
+            "award",
+            "execute",
+            "verify",
+            "settle"
+          ],
+          "payment": "unsupported"
+        }
+      },
+      "typicalEdges": [
+        "allocation",
+        "verification",
+        "control"
+      ],
+      "example": "examples/valid/market.json",
+      "note": "Marketplace is allocation policy Π_t, not a product. Payment execution is unsupported."
+    },
+    "hybrid": {
+      "status": "not-inferred",
+      "requires": [
+        "explicit policies.kinds listing every active pattern"
+      ],
+      "doesNotImply": [
+        "union of all silhouettes",
+        "craid",
+        "swarm"
+      ],
+      "example": "examples/valid/craid.json",
+      "note": "Unlabeled hybrid is invalid. The named program is C(RAID): Continuous Research, Analysis, Integration, Deployment. kinds must list sequence, fanout, reducer, human_gate. D to R is observation, never dependency. See spec/craid.md."
+    },
+    "unknown": {
+      "status": "unspecified",
+      "example": null,
+      "note": "Topology unreported. Decoder stays dashed; validator does not invent a class."
+    }
+  },
+  "translation": {
+    "symbol": "tau",
+    "partial": true,
+    "failClosed": "bot",
+    "latex": "\\tau : \\mathsf{Visual} \\rightharpoonup \\mathsf{HOTL}_{0.2} \\cup \\{\\bot\\}",
+    "inverseLatex": "\\tau^{-1} : \\Pi_t.\\mathsf{kinds} \\rightharpoonup \\mathsf{silhouette} \\cup \\{\\bot\\}",
+    "domain": "visual channels + topology silhouettes",
+    "codomain": "HOTL 0.2 (V_t, E_t, S_t, Pi_t, Gamma_t)",
+    "threeObjects": [
+      "intent",
+      "plan",
+      "observed"
+    ],
+    "note": "Cores decode declared metadata. They are not O_t. Solarpunk/HomeForge consumes visual.json; it does not own ids."
+  }
+}

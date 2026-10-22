@@ -39,7 +39,8 @@ describe("verified-oss-loop onboard (Dash)", () => {
     const ci = read(".github/workflows/ci.yml");
     expect(ci).toContain("preview");
     expect(ci).toContain("nightly");
-    expect(ci).toContain("cache: true");
+    expect(ci).toContain("actions/cache@v4");
+    expect(ci).toContain("~/.bun/install/cache");
     expect(ci).toContain("--frozen-lockfile");
     expect(ci).toContain("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD");
     expect(ci).toContain("cancel-in-progress: true");
@@ -82,6 +83,8 @@ describe("verified-oss-loop onboard (Dash)", () => {
     expect(skill).toContain("rollout.py");
     expect(skill).toContain("feature_target");
     expect(skill.includes("open a PR against `main`")).toBe(false);
+    expect(skill.includes("If nothing is claimable: stop")).toBe(false);
+    expect(skill).toContain("not labeled `claimed`");
   });
 
   test("kit skills do not replace Dash verify-dash or mutate.ts", () => {

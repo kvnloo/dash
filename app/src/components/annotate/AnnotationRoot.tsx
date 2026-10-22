@@ -1,0 +1,314 @@
+// Annotation mode: draw over whatever screen is showing, talk, and send it to the
+// agent as one message (composited screenshot + strokes JSON + marked transcript).
+//
+// Entry: Options → Annotate, or an S Pen touch while pen mode is on.
+// No page-global long press: row holds keep their own actions. The tray, frame
+// and preview are siblings outside it so a thumb on the mic never cancels the pen.
+import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from "expo-audio";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Image, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { runOnJS, useSharedValue } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { debugNavigationRef } from "../../debug/nav";
+import { haptic } from "../../haptics";
+import { annotationDoc, annotationSendMode, attachmentNames, composeMessage } from "../../lib/annotate/compose";
+import { readRecording, transcribeRecording, uploadBytes } from "../../lib/annotate/io";
+import { pointerKind, pressureOf, routePointer, stylusEnters } from "../../lib/annotate/pointer";
+import { recognizeShape, type InkColor, type PointerKind, type StrokePoint, type Tool } from "../../lib/annotate/strokes";
+import { useHandedness } from "../../lib/useHandedness";
+import {
+  addSegment, annotate, clearStrokes, commitStroke, currentSink, enterAnnotation, eraseStrokes, exitAnnotation, finishSend,
+  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, undoStroke,
+} from "../../store/annotate";
+import { store } from "../../store/app";
+import { colors, radius, space, type } from "../../theme";
+import { PressScale } from "../PressScale";
+import { targetsAt } from "./hit-test";
+import { loadSkia } from "./skia-ready";
+
+export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
+/** Strokes whose extent is under this many points are taps (e.g. a pen double-tap). */
+const MIN_EXTENT = 6;
+
+type InkModule = typeof import("./InkCanvas");
+let inkModule: Promise<InkModule> | undefined;
+function loadInk(): Promise<InkModule> {
+  inkModule ??= loadSkia().then(() => import("./InkCanvas"));
+  return inkModule;
+}
+
+export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX.Element {
+  const active = annotate.use(s => s.active);
+  const penMode = annotate.use(s => s.penMode);
+  const tool = annotate.use(s => s.tool);
+  const color = annotate.use(s => s.color);
+  const strokes = annotate.use(s => s.drawing.strokes);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [ink, setInk] = useState<InkModule | null>(null);
+  const captureTarget = useRef<View>(null);
+
+  const live = useSharedValue<number[]>([]);
+  const activeSv = useSharedValue(false);
+  const penSv = useSharedValue(false);
+  const kindSv = useSharedValue(0);
+  useEffect(() => { activeSv.value = active; }, [active, activeSv]);
+  useEffect(() => { penSv.value = penMode; }, [penMode, penSv]);
+  useEffect(() => { if ((active || penMode) && !ink) void loadInk().then(setInk); }, [active, penMode, ink]);
+
+  const finish = useCallback((flat: number[], pointerType: number) => {
+    const { width, height } = size;
+    const s = annotate.get();
+    if (!width || !height || flat.length < 8) return;
+    const screenPoints: { x: number; y: number }[] = [];
+    const points: StrokePoint[] = [];
+    for (let i = 0; i + 3 < flat.length; i += 4) {
+      const x = flat[i] ?? 0, y = flat[i + 1] ?? 0;
+      screenPoints.push({ x, y });
+      points.push({ x: x / width, y: y / height, p: flat[i + 2] ?? 0.5, t: flat[i + 3] ?? Date.now() });
+    }
+    const xs = screenPoints.map(p => p.x), ys = screenPoints.map(p => p.y);
+    if (Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) < MIN_EXTENT) return;
+    if (s.tool === "eraser") { eraseStrokes(points); return; }
+    const pointer: PointerKind = pointerKind(pointerType);
+    const shape = s.tool === "pen" ? recognizeShape(points) : null;
+    const first = points[0], last = points.at(-1);
+    const shaped = shape && first && last ? [{ ...first, ...shape.from }, { ...last, ...shape.to }] : points;
+    commitStroke({ tool: shape?.tool ?? s.tool, color: s.color, pointer, points: shaped, targets: targetsAt(screenPoints) });
+    haptic.select();
+  }, [size]);
+
+  const send = useCallback((keep: boolean) => { void sendAnnotation(keep, captureTarget, size); }, [size]);
+
+  const gesture = useMemo(() => {
+    const draw = Gesture.Pan()
+      .manualActivation(true)
+      .enabled(active || penMode)
+      .onTouchesDown((e, manager) => {
+        const kind = pointerKind(e.pointerType);
+        if (stylusEnters(kind, penSv.value, activeSv.value)) {
+          activeSv.value = true;
+          runOnJS(enterAnnotation)();
+        }
+        if (!activeSv.value || routePointer(kind, penSv.value, e.numberOfTouches) === "pass") { manager.fail(); return; }
+        manager.activate();
+      })
+      .onStart(e => {
+        kindSv.value = e.pointerType;
+        live.value = [e.x, e.y, pressureOf(pointerKind(e.pointerType), e.stylusData?.pressure), Date.now()];
+      })
+      .onUpdate(e => {
+        const p = pressureOf(pointerKind(kindSv.value), e.stylusData?.pressure);
+        live.modify(points => { points.push(e.x, e.y, p, Date.now()); return points; });
+      })
+      .onEnd(() => { runOnJS(finish)(live.value.slice(), kindSv.value); })
+      .onFinalize(() => { live.value = []; });
+    const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(active)
+      .onEnd((e, success) => { if (success && pointerKind(e.pointerType) === "stylus") runOnJS(send)(false); });
+    return Gesture.Simultaneous(draw, penDoubleTap);
+  }, [active, penMode, finish, send, live, activeSv, penSv, kindSv]);
+
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setSize(prev => (prev.width === width && prev.height === height ? prev : { width, height }));
+  }, []);
+
+  const Ink = ink?.InkCanvas;
+  return (
+    <View style={styles.root}>
+      <GestureDetector gesture={gesture}>
+        <View style={styles.root} collapsable={false} onLayout={onLayout}>
+          <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
+          {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
+          {active && !penMode ? <View style={StyleSheet.absoluteFill} {...overlayProps} /> : null}
+          {active && Ink ? <View style={StyleSheet.absoluteFill} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></View> : null}
+        </View>
+      </GestureDetector>
+      {active ? <View pointerEvents="none" style={styles.frame} accessibilityLabel="Annotation mode on" {...overlayProps} /> : null}
+      {active ? <Tray onSend={send} /> : <Toast />}
+    </View>
+  );
+}
+
+const overlayProps = { testID: "annotation-overlay" };
+
+// Dev-only web hook so a browser harness can feed transcript segments when host STT is unavailable.
+if (__DEV__ && typeof window !== "undefined") Reflect.set(window, "__dashAnnotate", { addSegment, annotate, enterAnnotation });
+
+async function sendAnnotation(keep: boolean, target: React.RefObject<View | null>, size: { width: number; height: number }): Promise<void> {
+  const s = annotate.get();
+  if (s.status === "capturing" || s.status === "sending") return;
+  const strokes = s.drawing.strokes;
+  if (strokes.length === 0) { setAnnotationStatus("error", { error: "Draw something first." }); return; }
+  const sink = currentSink();
+  const settings = store.get().settings;
+  if (!sink) { setAnnotationStatus("error", { error: "Open a chat or a voice session to send." }); return; }
+  if (!settings) { setAnnotationStatus("error", { error: "Pair with your computer to send." }); return; }
+  setAnnotationStatus("capturing");
+  try {
+    const route = debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute() : undefined;
+    const screen = { id: route?.key ?? "unknown", route: route?.name ?? "unknown", width: Math.round(size.width), height: Math.round(size.height) };
+    const createdAt = Date.now();
+    const { composite } = await loadInk();
+    const { bytes, dataUri } = await composite(target, strokes, screen, INK, colors.bg);
+    const text = composeMessage({ strokes, segments: s.segments, screen });
+    setAnnotationStatus("sending", { preview: { image: dataUri, text, strokes: strokes.length } });
+    const names = attachmentNames(createdAt);
+    const doc = annotationDoc({ strokes, segments: s.segments, screen, createdAt });
+    const [image, json] = await Promise.all([
+      uploadBytes(settings, names.image, "image/png", bytes),
+      uploadBytes(settings, names.json, "application/json", new TextEncoder().encode(JSON.stringify(doc, null, 1))),
+    ]);
+    sink.send(text, [image, json], annotationSendMode(sink.steerable()));
+    haptic.success();
+    finishSend(keep);
+  } catch (error) {
+    setAnnotationStatus("error", { error: error instanceof Error ? error.message : "Could not send the annotation." });
+  }
+}
+
+const TOOLS: { id: Tool; label: string; a11y: string }[] = [
+  { id: "pen", label: "Pen", a11y: "Pen" },
+  { id: "highlighter", label: "Hi", a11y: "Highlighter" },
+  { id: "arrow", label: "→", a11y: "Arrow" },
+  { id: "box", label: "▢", a11y: "Box" },
+  { id: "circle", label: "◯", a11y: "Circle" },
+  { id: "eraser", label: "Erase", a11y: "Eraser" },
+];
+
+function Tray({ onSend }: { onSend(keep: boolean): void }): React.JSX.Element {
+  const insets = useSafeAreaInsets();
+  const thumb = useHandedness();
+  const s = annotate.use(x => x);
+  const busy = s.status === "capturing" || s.status === "sending";
+  const count = s.drawing.strokes.length;
+  // The tray can hop to the top so it never hides the part of the screen being marked.
+  const [top, setTop] = useState(false);
+  return (
+    <View style={[styles.tray, top ? { top: insets.top + space.sm } : { bottom: insets.bottom + space.sm }]} {...overlayProps}>
+      {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `Sending to ${s.sink ?? "chat"}…`} /> : null}
+      {s.status === "error" && s.error ? <Text accessibilityRole="alert" style={styles.error}>{s.error}</Text> : null}
+      <View style={[styles.row, thumb.row]}>
+        {TOOLS.map(t => <Chip key={t.id} label={t.label} a11y={t.a11y} selected={s.tool === t.id} onPress={() => setTool(t.id)} />)}
+        <Swatch color="accent" selected={s.color === "accent"} />
+        <Swatch color="red" selected={s.color === "red"} />
+      </View>
+      <View style={[styles.row, thumb.row]}>
+        <Chip label="Undo" a11y="Undo" disabled={s.drawing.past.length === 0} onPress={undoStroke} />
+        <Chip label="Clear" a11y="Clear" disabled={count === 0} onPress={clearStrokes} />
+        <Chip label={s.penMode ? "S Pen ✓" : "S Pen"} a11y="Pen mode: only the S Pen draws, fingers scroll" selected={s.penMode} onPress={() => setPenMode(!s.penMode)} />
+        <HoldToTalk />
+        <Chip label="⇅" a11y={top ? "Move tray to the bottom" : "Move tray to the top"} onPress={() => setTop(!top)} />
+        <Chip label="✕" a11y="Discard annotation" onPress={exitAnnotation} />
+        <Chip label="Keep" a11y="Send and keep drawing" disabled={busy || count === 0} onPress={() => onSend(true)} />
+        <Chip label={busy ? "…" : "Send"} a11y="Send annotation" primary disabled={busy || count === 0} onPress={() => onSend(false)} />
+      </View>
+      <Text style={styles.hint} numberOfLines={1}>{s.sink ? `→ ${s.sink}` : "Open a chat to send"} · {s.segments.length ? `${s.segments.length} spoken` : "hold Talk to speak"}{s.penMode ? " · fingers scroll" : ""}</Text>
+    </View>
+  );
+}
+
+function Toast(): React.JSX.Element | null {
+  const s = annotate.use(x => x);
+  useEffect(() => {
+    if (s.status !== "sent") return;
+    const id = setTimeout(() => setAnnotationStatus("idle"), 3500);
+    return () => clearTimeout(id);
+  }, [s.status]);
+  if (s.status !== "sent" || !s.preview) return null;
+  return <View style={[styles.tray, styles.toast]}><Preview image={s.preview.image} text={s.preview.text} label={`Sent to ${s.sink ?? "chat"} · ${s.preview.strokes} strokes`} /></View>;
+}
+
+function Preview({ image, text, label }: { image: string; text: string; label: string }): React.JSX.Element {
+  return (
+    <View style={styles.preview} accessibilityLabel={`Annotation preview. ${label}`}>
+      <Image source={{ uri: image }} style={styles.thumb} resizeMode="cover" />
+      <View style={styles.previewBody}>
+        <Text style={styles.previewLabel}>{label}</Text>
+        <Text style={styles.previewText} numberOfLines={5}>{text}</Text>
+      </View>
+    </View>
+  );
+}
+
+function Chip({ label, a11y, selected, primary, disabled, onPress }: { label: string; a11y: string; selected?: boolean; primary?: boolean; disabled?: boolean; onPress(): void }): React.JSX.Element {
+  return (
+    <PressScale accessibilityRole="button" accessibilityLabel={a11y} accessibilityState={{ selected: selected === true, disabled: disabled === true }} disabled={disabled}
+      onPress={() => { haptic.select(); onPress(); }} style={[styles.chip, selected && styles.chipOn, primary && styles.primary, disabled && styles.disabled]}>
+      <Text style={[styles.chipText, (selected || primary) && styles.chipTextOn]}>{label}</Text>
+    </PressScale>
+  );
+}
+
+function Swatch({ color, selected }: { color: InkColor; selected: boolean }): React.JSX.Element {
+  return (
+    <PressScale accessibilityRole="radio" accessibilityLabel={color === "red" ? "Red ink" : "Accent ink"} accessibilityState={{ checked: selected }} onPress={() => setColor(color)} style={styles.chip}>
+      <View style={[styles.swatch, { backgroundColor: INK[color] }, selected && styles.swatchOn]} />
+    </PressScale>
+  );
+}
+
+/** Hold to talk: the bridge transcribes the clip; the segment's time span aligns strokes. */
+function HoldToTalk(): React.JSX.Element {
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recording = annotate.use(s => s.recording);
+  const started = useRef(0);
+  const [note, setNote] = useState<string>();
+  const begin = async () => {
+    try {
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) { setNote("Mic blocked"); return; }
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      started.current = Date.now();
+      setRecording(true);
+      setNote(undefined);
+    } catch { setNote("Mic failed"); }
+  };
+  const end = async () => {
+    if (!annotate.get().recording) return;
+    const start = started.current;
+    const stop = Date.now();
+    setRecording(false);
+    try {
+      await recorder.stop();
+      const settings = store.get().settings;
+      if (!recorder.uri || !settings) throw new Error("no recording");
+      setNote("…");
+      const text = await transcribeRecording(settings, await readRecording(recorder.uri));
+      if (text.trim()) addSegment({ id: `mic-${start}`, text, start, end: stop, source: "mic" });
+      setNote(undefined);
+    } catch { setNote("Not heard"); }
+  };
+  return (
+    <PressScale accessibilityRole="button" accessibilityLabel="Hold to talk" accessibilityState={{ selected: recording }}
+      onPressIn={() => void begin()} onPressOut={() => void end()} style={[styles.chip, recording && styles.recording]}>
+      <Text style={[styles.chipText, recording && styles.chipTextOn]}>{recording ? "● Talk" : note ?? "Talk"}</Text>
+    </PressScale>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  frame: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderWidth: 2, borderColor: colors.accent, borderRadius: 2 },
+  tray: { position: "absolute", left: space.xs, right: space.xs, padding: space.xs, gap: 2, borderRadius: radius.md, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.hair },
+  toast: { bottom: 120 },
+  row: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 2 },
+  chip: { minHeight: 40, minWidth: 36, paddingHorizontal: 6, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
+  chipOn: { backgroundColor: colors.goldLo },
+  primary: { backgroundColor: colors.accent, paddingHorizontal: space.sm },
+  recording: { backgroundColor: "#f0503c" },
+  disabled: { opacity: 0.4 },
+  chipText: { ...type.mono, color: colors.textMuted },
+  chipTextOn: { color: colors.bg },
+  swatch: { width: 18, height: 18, borderRadius: 9 },
+  swatchOn: { borderWidth: 2, borderColor: colors.text },
+  hint: { ...type.mono, fontSize: 10, color: colors.textTertiary, paddingHorizontal: space.sm },
+  error: { ...type.small, color: colors.danger, paddingHorizontal: space.sm },
+  preview: { flexDirection: "row", gap: space.sm, padding: space.xs, marginBottom: space.xs, borderRadius: radius.sm, backgroundColor: colors.surfaceRaised },
+  thumb: { width: 72, height: 160, borderRadius: radius.sm, backgroundColor: colors.bg },
+  previewBody: { flex: 1, gap: 2 },
+  previewLabel: { ...type.label, color: colors.accent },
+  previewText: { ...type.mono, fontSize: 10, color: colors.text },
+});

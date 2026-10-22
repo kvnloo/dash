@@ -45,21 +45,19 @@ describe("AODL catalog executors", () => {
 });
 
 describe("pi", () => {
-  test("argv is documented --mode json, not omp's --auto-approve fork flags", () => {
+  test("argv uses documented --mode json with approval bypass disabled", () => {
     const pi = byId("pi");
     expect(pi?.bin).toBe("pi");
     expect(pi?.name).toBe("Pi");
     expect(pi?.argv({ text: "list files", cwd: "/tmp/dash" })).toEqual([
       "--mode",
       "json",
-      "--approve",
       "--",
       "list files",
     ]);
     expect(pi?.argv({ text: "hi", cwd: "/work", sessionId: "abc" })).toEqual([
       "--mode",
       "json",
-      "--approve",
       "--session",
       "abc",
       "--",
@@ -89,21 +87,19 @@ describe("pi", () => {
 });
 
 describe("fx", () => {
-  test("argv is fx ask --json --full-access with resume-id", () => {
+  test("argv is fx ask --json with approval bypass disabled and resume-id", () => {
     const fx = byId("fx");
     expect(fx?.bin).toBe("fx");
     expect(fx?.name).toBe("fx");
     expect(fx?.argv({ text: "explain this repo", cwd: "/tmp/dash" })).toEqual([
       "ask",
       "--json",
-      "--full-access",
       "--",
       "explain this repo",
     ]);
     expect(fx?.argv({ text: "continue", cwd: "/tmp/dash", sessionId: "AbCdEfGhIjKl" })).toEqual([
       "ask",
       "--json",
-      "--full-access",
       "--resume-id",
       "AbCdEfGhIjKl",
       "--",
@@ -144,5 +140,59 @@ describe("fx", () => {
     parser.end();
     expect(sessions).toEqual(["pretty-id"]);
     expect(deltas).toEqual(["partial answer"]);
+  });
+});
+
+describe("legacy approval policy", () => {
+  const input = { text: "hello", cwd: "/tmp" };
+  const bypassFlags = ["--auto-approve", "--allow-home", "--always-approve", "--approve", "--full-access", "bypassPermissions", "--dangerously-bypass-approvals-and-sandbox", "--yolo"];
+
+  test("every default argv leaves approvals enabled", () => {
+    for (const harness of HARNESSES) {
+      const argv = harness.argv(input, {});
+      for (const flag of bypassFlags) expect(argv).not.toContain(flag);
+    }
+    expect(byId("codex")?.argv(input, {})).toContain("read-only");
+    expect(byId("claude")?.argv(input, {})).toContain("default");
+  });
+
+  test("blanket and mistyped policies cannot bypass approvals", () => {
+    for (const harness of HARNESSES) {
+      const env = { DASH_APPROVAL_POLICY: "bypass", DASH_AUTO_APPROVE: "1", [`DASH_${harness.id.toUpperCase()}_APPROVAL_POLICY`]: "true" };
+      for (const flag of bypassFlags) expect(harness.argv(input, env)).not.toContain(flag);
+    }
+  });
+
+  const cases = [
+    { agent: "omp", flag: "--auto-approve" },
+    { agent: "grok", flag: "--always-approve" },
+    { agent: "claude", flag: "bypassPermissions" },
+    { agent: "codex", flag: "--dangerously-bypass-approvals-and-sandbox" },
+    { agent: "hermes", flag: "--yolo" },
+    { agent: "pi", flag: "--approve" },
+    { agent: "fx", flag: "--full-access" },
+  ];
+  for (const { agent, flag } of cases) {
+    test(`explicit ${agent} policy affects only that agent`, () => {
+      const env = { [`DASH_${agent.toUpperCase()}_APPROVAL_POLICY`]: "bypass" };
+      for (const harness of HARNESSES) {
+        const argv = harness.argv(input, env);
+        expect(argv.includes(flag)).toBe(harness.id === agent);
+      }
+    });
+  }
+});
+
+describe("malformed harness JSON", () => {
+  test("OMP parser surfaces a structured error instead of dropping the line", () => {
+    const omp = byId("omp");
+    expect(omp).toBeDefined();
+    const { sink, errors, deltas } = collectSink();
+    const parser = omp!.parser(sink);
+    parser.line("{not-json");
+    parser.line(JSON.stringify({ type: "session", id: "keep-going" }));
+    parser.end();
+    expect(errors).toEqual(["Harness emitted malformed JSON."]);
+    expect(deltas).toEqual([]);
   });
 });

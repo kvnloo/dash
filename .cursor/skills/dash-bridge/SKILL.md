@@ -30,7 +30,7 @@ The bridge is a Bun WebSocket server that:
   Send SIGTERM to the running process (followed by SIGKILL after 3s if it doesn't exit).
 
 - `{ type: "attach", turns: [{ id: string, seq: number }] }`  
-  Re-subscribe to turns that were in flight when the socket dropped. `seq` is the last event sequence the client saw; the bridge replays everything after it.
+  Re-subscribe to turns that were in flight when the socket dropped. `seq` is the last event sequence the client saw; the bridge flushes any coalesced delta batch, then replays everything after `seq`. A dropped socket does not discard in-flight voice audio.
 
 **Server → Client (bridge → phone):**
 
@@ -149,9 +149,11 @@ interface LineParser {
 
 **Error handling:**
 
-- Non-zero exit codes trigger `sink.error(stderrTail)` (last 2KB of stderr).
-- Parse failures are logged but don't crash the turn (graceful degradation).
-- Cancelled turns (via `{ type: "cancel" }`) emit `{ type: "done", exitCode: 130 }` (SIGTERM exit code).
+- Non-zero exit codes trigger `sink.error(...)` (stderr tail if present, else `"<name> exited with code N"`).
+- A `{`-prefixed stdout line that fails `JSON.parse` emits `error` (`"Harness emitted malformed JSON."`) and the turn continues.
+- A hang past `DASH_TURN_TIMEOUT_MS` (default 10 minutes) kills the child and emits `error` plus `done` with exit `124`. Cancel stays `130`.
+- Parser throws are logged and do not crash the bridge process.
+- Cancelled turns (via `{ type: "cancel" }`) emit `{ type: "done", exitCode: 130 }`.
 
 ## Protocol Changes
 

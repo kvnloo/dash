@@ -23,7 +23,20 @@ python3 .verified-oss-loop/rollout.py show
 
 Take **one** open issue labeled `claimable` and not `claimed`. Prefer `priority:P0` then `P1`, then `good-first-issue`. Skip `needs-discussion` unless the human assigned it.
 
-If nothing is claimable: stop. Comment on the newest `needs-discussion` issue with a one-paragraph proposal. Do not start coding. Do not open a consolation PR at `main`.
+An empty `claimable` list is **not** a stop. Cloud agents often cannot write GitHub labels. The product bar is `orchestrate/dash/done.ts`. Keep picking TDD slices while `shouldKeepGoing()` is true (any `state: "open"`). Claimed / `needs-discussion` items are `blocked`, not a reason to idle.
+
+Pick the first `open` slice, or the highest-priority unclaimed issue that matches it:
+
+- not labeled `claimed`
+- has no claim comment newer than 24h
+- has no open PR that already covers the same scope (including work already on `origin/nightly`)
+- allowed by ownership in `AGENTS.md`
+
+Pinned ethos/docs issues that name no concrete code gap are not a coding pick. A merged loop or green CI is not "Dash is finished".
+
+Spawned subagents must be **low effort** only: `cursor-grok-4.6-low` or `cursor-grok-4.6-low-fast`. Do not spawn high/max workers.
+
+If nothing remains except `needs-discussion` and claimed work (`shouldKeepGoing()` is false): report the blocked slices. Do not start coding that discussion. Do not open a consolation PR at `main`.
 
 ## Claim (lease)
 
@@ -81,4 +94,4 @@ Workers never merge `main` or `dev`, never force-push `main`, never mark Linear 
 
 ## Stop conditions
 
-Stop and report if: ownership blocks the change, a competing PR covers the scope, tests need a live phone you do not have, or the claim expired.
+Stop and report if: `shouldKeepGoing()` is false, ownership blocks the **current** slice, a competing PR covers the scope, tests need a live phone you do not have, or the claim expired. Then pick the next `open` slice if any remain.

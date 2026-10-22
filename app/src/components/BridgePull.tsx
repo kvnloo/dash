@@ -11,20 +11,21 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   ReduceMotion,
+  cancelAnimation,
   runOnJS,
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
   type SharedValue,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { haptic } from "../haptics";
-import { GEL, PRESS_SCALE } from "../motion";
+import { GEL, PRESS_SCALE, navDuration, navProgress } from "../motion";
 import type { Connection } from "../model";
 import type { RootStackParamList } from "../navigation";
 import { bridge } from "../net/bridge";
-import { store } from "../store/app";
+import { createConversation, saveSettings, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import {
   backdropOpacity,
@@ -34,7 +35,7 @@ import {
   sheetTranslateY,
 } from "./bridge-pull";
 import { GlassSurface } from "./GlassSurface";
-import { NAV_CHROME_HEIGHT, NAV_PAGER_RADIUS } from "./golden-nav";
+import { NAV_CHROME_HEIGHT } from "./golden-nav";
 import { PressScale } from "./PressScale";
 
 const gel = { ...GEL, reduceMotion: ReduceMotion.System };
@@ -59,9 +60,14 @@ export function useBridgePullOptional(): BridgePullApi | null {
   return useContext(BridgePullContext);
 }
 
-function snapTo(progress: SharedValue<number>, next: 0 | 1) {
+function snapTo(progress: SharedValue<number>, next: 0 | 1, velocity: number) {
   "worklet";
-  progress.value = withSpring(next, gel);
+  const distance = next - progress.value;
+  const duration = navDuration(distance, velocity);
+  progress.value = withTiming(next, { duration, easing: (t: number) => {
+    "worklet";
+    return navProgress(t, distance, velocity, duration);
+  }, reduceMotion: ReduceMotion.System });
 }
 
 export function useBridgePullPan() {
@@ -74,6 +80,7 @@ export function useBridgePullPan() {
     .failOffsetX([-24, 24])
     .onBegin(() => {
       if (!api) return;
+      cancelAnimation(api.progress);
       const p = api.progress.value;
       start.value = p > 1 ? 1 : p < 0 ? 0 : p;
     })
@@ -85,7 +92,7 @@ export function useBridgePullPan() {
     .onEnd((e) => {
       if (!api) return;
       const next = settlePull(api.progress.value, e.velocityY, api.height.value);
-      snapTo(api.progress, next);
+      snapTo(api.progress, next, e.velocityY / api.height.value);
       runOnJS(haptic.select)();
     });
 }
@@ -102,13 +109,13 @@ export function BridgePullProvider({ children }: { children: ReactNode }) {
   const height = useSharedValue(280);
 
   const open = useCallback(() => {
-    progress.value = withSpring(1, gel);
+    progress.value = withTiming(1, gel);
   }, [progress]);
   const close = useCallback(() => {
-    progress.value = withSpring(0, gel);
+    progress.value = withTiming(0, gel);
   }, [progress]);
   const toggle = useCallback(() => {
-    progress.value = withSpring(progress.value >= 0.5 ? 0 : 1, gel);
+    progress.value = withTiming(progress.value >= 0.5 ? 0 : 1, gel);
   }, [progress]);
 
   const api = useMemo<BridgePullApi>(
@@ -145,7 +152,6 @@ export function BridgePullOverlay() {
   const connection = store.use((s) => s.connection);
   const settings = store.use((s) => s.settings);
   const sheetPan = useBridgePullPan();
-  const hitPan = useBridgePullPan();
   const [armed, setArmed] = useState(false);
 
   useAnimatedReaction(
@@ -172,7 +178,17 @@ export function BridgePullOverlay() {
   const canRetry = connection.status === "offline" || connection.status === "connecting";
   const hosts = connection.hosts;
   const harnesses = connection.harnesses;
+  // The sheet drops from under the top navigation bar, beside its chevron.
   const top = insets.top + NAV_CHROME_HEIGHT;
+
+  const startHarness = (id: string) => {
+    if (!settings) return;
+    api.close();
+    haptic.tap();
+    saveSettings({ ...settings, harness: id });
+    createConversation(id);
+    navigation.navigate("Chat");
+  };
 
   const goEdit = () => {
     api.close();
@@ -182,7 +198,7 @@ export function BridgePullOverlay() {
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-      <Animated.View pointerEvents={armed ? "auto" : "none"} style={[styles.dim, { top }, dimStyle]}>
+      <Animated.View pointerEvents={armed ? "auto" : "none"} aria-hidden={!armed} accessibilityElementsHidden={!armed} importantForAccessibility={armed ? "auto" : "no-hide-descendants"} style={[styles.dim, { top }, dimStyle]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={() => {
@@ -193,17 +209,12 @@ export function BridgePullOverlay() {
           accessibilityLabel="Dismiss bridge details"
         />
       </Animated.View>
-      <GestureDetector gesture={hitPan}>
-        <View
-          pointerEvents={armed ? "none" : "auto"}
-          collapsable={false}
-          style={[styles.hit, { top }]}
-          accessibilityElementsHidden
-        />
-      </GestureDetector>
       <GestureDetector gesture={sheetPan}>
         <Animated.View
           pointerEvents={armed ? "auto" : "none"}
+          aria-hidden={!armed}
+          accessibilityElementsHidden={!armed}
+          importantForAccessibility={armed ? "auto" : "no-hide-descendants"}
           style={[styles.sheetWrap, { top: top - 2 }, sheetStyle]}
           onLayout={(e) => {
             const h = e.nativeEvent.layout.height;
@@ -212,7 +223,8 @@ export function BridgePullOverlay() {
         >
           <GlassSurface
             variant="nav"
-            borderRadius={NAV_PAGER_RADIUS}
+            blur
+            borderRadius={radius.md}
             style={styles.sheet}
             contentStyle={styles.sheetInner}
             accessibilityLabel="Bridge details"
@@ -267,15 +279,24 @@ export function BridgePullOverlay() {
 
             {harnesses.length > 0 ? (
               <View style={styles.section}>
-                <Text style={styles.label}>Harnesses</Text>
+                {/* Harnesses are the agent CLIs on this host. Tap one to start a chat with it. */}
+                <Text style={styles.label}>Harnesses on {connection.host ?? "this host"}</Text>
                 <View style={styles.chips}>
                   {harnesses.map((h) => (
-                    <View key={h.id} style={styles.chip}>
+                    <PressScale
+                      key={h.id}
+                      scaleTo={PRESS_SCALE.control}
+                      disabled={!h.available || !settings}
+                      onPress={() => startHarness(h.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={h.available ? `New ${h.name} chat` : `${h.name}, not installed`}
+                      style={[styles.chip, !h.available && styles.chipOff]}
+                    >
                       <View
                         style={[styles.dotSm, { backgroundColor: h.available ? colors.ok : colors.textFaint }]}
                       />
                       <Text style={styles.chipText}>{h.name}</Text>
-                    </View>
+                    </PressScale>
                   ))}
                 </View>
               </View>
@@ -306,22 +327,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "#000",
   },
-  hit: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 24,
-  },
   sheetWrap: {
     position: "absolute",
     left: space.lg,
     right: space.lg,
   },
-  sheet: {
-    overflow: "hidden",
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-  },
+  sheet: { overflow: "hidden" },
   sheetInner: {
     paddingHorizontal: space.lg,
     paddingTop: space.md,
@@ -336,12 +347,12 @@ const styles = StyleSheet.create({
   },
   statusText: { flex: 1, minWidth: 0 },
   title: { color: colors.ink, ...type.heading },
-  meta: { color: colors.ink3, ...type.small, marginTop: 2 },
+  meta: { color: colors.ink3, ...type.mono, marginTop: 2 },
   label: { color: colors.ink3, ...type.label, marginBottom: 6 },
   section: { gap: 6 },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 22 },
   rowTitle: { color: colors.ink, ...type.small, flexShrink: 1 },
-  rowMeta: { color: colors.ink3, ...type.small, marginLeft: "auto", maxWidth: "46%" },
+  rowMeta: { color: colors.ink3, ...type.mono, marginLeft: "auto", maxWidth: "46%" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     flexDirection: "row",
@@ -353,6 +364,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(18,18,18,0.45)",
   },
   chipText: { color: colors.ink2, ...type.small },
+  chipOff: { opacity: 0.55 },
   edit: {
     alignSelf: "flex-start",
     paddingHorizontal: 12,

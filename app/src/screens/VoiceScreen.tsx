@@ -1,182 +1,100 @@
-import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from "expo-audio";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import Animated, {
-  cancelAnimation,
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
+import { useEffect, useState } from "react";
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppNav } from "../components/AppNav";
-import { haptic } from "../haptics";
-import { ReplySpeaker } from "../lib/speak";
-import { VoiceSession, type Recorder, type VoicePhase } from "../lib/voice-session";
+import { AgentOrb } from "../components/AgentOrb";
+import { Canvas } from "../components/Canvas";
+import { PrimaryButton } from "../components/PrimaryButton";
+import { ScreenHeader } from "../components/ScreenHeader";
+import { debugUi } from "../debug/ui-store";
+import { useLiveThinking } from "../lib/live-thinking";
+import { mergeVoicePhase, orbCaption, transcriptTail } from "../lib/orb-phase";
+import { screenBack } from "../lib/screen-back";
+import { launchSharedVoice, type VoiceLaunchResult } from "../lib/voice-launch";
+import { useZ0LiveState } from "../lib/z0live-state";
+import type { Message } from "../model";
 import type { ScreenProps } from "../navigation";
-import { sendVoiceBegin, sendVoiceChunk, sendVoiceCommit } from "../net/bridge";
-import { beginTurn, createConversation, store } from "../store/app";
-import { replyText } from "../store/text";
+import { store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
+import { LegacyVoiceScreen } from "./LegacyVoiceScreen";
 
-const ORB = 190;
+type VoiceView =
+  | { kind: "shared"; result?: VoiceLaunchResult }
+  | { kind: "opening" }
+  | { kind: "legacy" };
 
-const CAPTION: Record<VoicePhase, string> = {
-  idle: "Say something…",
-  listening: "Say something…",
-  hearing: "Listening…",
-  thinking: "Thinking…",
-  speaking: "Speaking…",
-};
+const EMPTY: Message[] = [];
 
-export function VoiceScreen({ navigation }: ScreenProps<"Voice">): React.JSX.Element {
+/** Live conversation mode: the hero orb follows a live z0live call, else the chat's live phase. */
+export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   const insets = useSafeAreaInsets();
-  const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
+  const conversation = store.use(s => s.conversations.find(c => c.id === s.activeId));
+  const settings = store.use(s => s.settings);
+  const harness = conversation?.harness ?? settings?.harness ?? "hermes";
+  const harnessName = store.use(s => s.connection.harnesses.find(h => h.id === harness)?.name ?? harness);
+  const [view, setView] = useState<VoiceView>({ kind: "shared" });
+  const chat = useLiveThinking(conversation);
+  const fixture = debugUi.use(s => s.z0liveFixture ?? null);
+  const polled = useZ0LiveState(settings, chat.online && fixture === null && view.kind !== "legacy");
+  const call = fixture ?? polled;
+  const live = call?.live === true;
+  const orb = mergeVoicePhase(call, chat.thinking);
+  const caption = live ? orbCaption(orb, "listening") : chat.caption;
+  const lines = transcriptTail(call, conversation?.messages ?? EMPTY);
 
-  const [phase, setPhase] = useState<VoicePhase>("idle");
-  const [error, setError] = useState<string | undefined>();
+  const openVoice = async (): Promise<void> => {
+    if (view.kind === "opening") return;
+    setView({ kind: "opening" });
+    const result = await launchSharedVoice(Platform.OS, Linking);
+    setView({ kind: "shared", result });
+  };
 
-  const level = useSharedValue(0);
-  const pulse = useSharedValue(0);
-  const sessionRef = useRef<VoiceSession | null>(null);
-  const speakerRef = useRef<ReplySpeaker | null>(null);
-  const turnRef = useRef<string | null>(null);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
+  // Chosen from the composer mic's Live voice mode: go straight into z0live instead of asking for a second tap.
+  const autostart = props.route.params?.autostart === true;
+  useEffect(() => { if (autostart && !live) void openVoice(); }, [autostart]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const conversationId = store.use((s) => s.activeId);
-  const harness = store.use((s) => s.settings?.harness ?? "omp");
-  /** The last thing the bridge heard, so the user can see they were understood. */
-  const heard = store.use((s) => {
-    const messages = s.conversations.find((c) => c.id === s.activeId)?.messages ?? [];
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      if (message?.role === "user" && message.text) return message.text;
-    }
-    return "";
-  });
+  if (view.kind === "legacy") {
+    return <LegacyVoiceScreen {...props} onExit={() => setView({ kind: "shared" })} />;
+  }
 
-  /** Watch one reply as it streams and speak each finished sentence. */
-  const followReply = useCallback((turnId: string) => {
-    unsubscribeRef.current?.();
-    const speaker = speakerRef.current;
-    if (!speaker) return;
-    const tick = (): void => speaker.feed(replyText.get(turnId));
-    unsubscribeRef.current = replyText.subscribe(turnId, tick);
-  }, []);
-
-  const sendUtterance = useCallback(
-    (chunks: string[], mime: string): boolean => {
-      const active =
-        store.get().conversations.find((c) => c.id === conversationId) ?? createConversation(harness);
-      // The text is empty until the bridge tells us what it heard.
-      const { turnId } = beginTurn(active.id, "");
-      const opened = sendVoiceBegin({
-        turnId,
-        harness: active.harness,
-        mime,
-        sessionId: store.get().conversations.find((c) => c.id === active.id)?.sessionId,
-      });
-      if (!opened) {
-        setError("Not connected to your computer.");
-        return false;
-      }
-      for (const chunk of chunks) sendVoiceChunk(turnId, chunk);
-      sendVoiceCommit(turnId);
-      turnRef.current = turnId;
-      followReply(turnId);
-      haptic.tap();
-      return true;
-    },
-    [conversationId, harness, followReply],
-  );
-
-  useEffect(() => {
-    const speaker = new ReplySpeaker((speaking) => {
-      sessionRef.current?.setReplyActive(speaking);
-      if (!speaking) sessionRef.current?.turnSettled();
-    });
-    speakerRef.current = speaker;
-
-    const adapter: Recorder = {
-      get uri() {
-        return recorder.uri;
-      },
-      prepareToRecordAsync: () => recorder.prepareToRecordAsync(),
-      record: () => recorder.record(),
-      stop: () => recorder.stop(),
-      getStatus: () => recorder.getStatus(),
-    };
-
-    const session = new VoiceSession(adapter, {
-      onPhase: setPhase,
-      onLevel: (db) => {
-        // -50dB is a quiet room, -10dB is loud speech.
-        level.value = Math.max(0, Math.min(1, (db + 50) / 40));
-      },
-      onUtterance: sendUtterance,
-      onBargeIn: () => {
-        speaker.stop();
-        haptic.tap();
-      },
-      onError: setError,
-    });
-    sessionRef.current = session;
-
-    void (async () => {
-      const permission = await requestRecordingPermissionsAsync();
-      if (!permission.granted) {
-        setError("Dash needs the microphone to hold a conversation.");
-        return;
-      }
-      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await session.start();
-    })();
-
-    return () => {
-      unsubscribeRef.current?.();
-      unsubscribeRef.current = null;
-      speaker.stop();
-      void session.stop();
-      sessionRef.current = null;
-    };
-  }, [recorder, level, sendUtterance]);
-
-  // A slow breath while idle; a faster one while the agent works.
-  useEffect(() => {
-    cancelAnimation(pulse);
-    const duration = phase === "thinking" ? 900 : 2600;
-    pulse.value = 0;
-    pulse.value = withRepeat(withTiming(1, { duration, easing: Easing.inOut(Easing.ease) }), -1, true);
-  }, [phase, pulse]);
-
-  const orbStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + pulse.value * 0.05 + level.value * 0.16 }],
-    opacity: 0.85 + pulse.value * 0.15,
-  }));
-
-  const haloStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1.08 + level.value * 0.42 }],
-    opacity: 0.05 + level.value * 0.3,
-  }));
-
-  const caption = useMemo(() => error ?? CAPTION[phase], [error, phase]);
+  const result = view.kind === "shared" ? view.result : undefined;
+  const opening = view.kind === "opening";
+  const launcherLabel = opening ? "Opening…" : live ? "Open in z0live" : "Start voice";
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.xl }]}>
-      <AppNav navigation={navigation} tab={1} />
-
-      <View style={styles.stage}>
-        <Animated.View style={[styles.halo, haloStyle]} />
-        <Animated.View style={[styles.orb, orbStyle]}>
-          <View style={styles.orbCore} />
-          <View style={styles.orbHighlight} />
-        </Animated.View>
+    <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
+      <Canvas /><ScreenHeader title={live ? "Live call" : "Voice"} onBack={() => screenBack(props.navigation)} />
+      <View style={styles.content}>
+        <Text style={styles.title}>{live ? "z0live" : harnessName}</Text>
+        <AgentOrb size="hero" thinking={orb} label={`${live ? "z0live call" : harnessName} ${caption}`} />
+        <Text accessibilityLiveRegion="polite" style={styles.caption} testID="voice-caption">
+          {caption}{live && call.muted ? " · muted" : ""}
+        </Text>
+        <View style={styles.transcript} testID="voice-transcript">
+          {lines.map((line, i) => (
+            <Text key={`${i}:${line.role}`} numberOfLines={2} style={[styles.line, line.role === "user" ? styles.user : styles.assistant, i < lines.length - 1 && styles.older]}>
+              <Text style={styles.who}>{line.role === "user" ? "you  " : "agent  "}</Text>{line.text}
+            </Text>
+          ))}
+        </View>
+        {result?.kind === "unavailable" ? <Text accessibilityLiveRegion="polite" style={[styles.message, styles.error]}>{result.message}</Text> : null}
       </View>
-
-      <View style={styles.footer}>
-        <Text style={[styles.caption, error ? styles.captionError : null]}>{caption}</Text>
-        {heard ? <Text style={styles.heard}>{heard}</Text> : null}
+      <View style={styles.controls}>
+        <PrimaryButton accessibilityLabel={live ? "Open in z0live" : "Start voice in z0live"} disabled={opening} onPress={() => void openVoice()} label={launcherLabel} />
+        {live ? (
+          <>
+            <Pressable accessibilityRole="button" onPress={() => screenBack(props.navigation)} style={styles.secondary}>
+              <Text style={styles.secondaryText}>Back to chat · call keeps going</Text>
+            </Pressable>
+            <Text style={styles.note}>Mute and end stay in z0live: the broker has no control API Dash can call for the phone's call.</Text>
+          </>
+        ) : (
+          <>
+            <Pressable accessibilityRole="button" disabled={opening} onPress={() => setView({ kind: "legacy" })} style={styles.secondary}>
+              <Text style={styles.secondaryText}>Use legacy voice</Text>
+            </Pressable>
+            <Text style={styles.note}>{chat.online ? "No live call. Start one in z0live; this view follows it." : "Offline: pair the bridge to follow a live call."}</Text>
+          </>
+        )}
       </View>
     </View>
   );
@@ -184,40 +102,19 @@ export function VoiceScreen({ navigation }: ScreenProps<"Voice">): React.JSX.Ele
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  stage: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: space.xl },
-  halo: {
-    position: "absolute",
-    width: ORB,
-    height: ORB,
-    borderRadius: radius.pill,
-    backgroundColor: colors.accent,
-  },
-  orb: {
-    width: ORB,
-    height: ORB,
-    borderRadius: radius.pill,
-    backgroundColor: "#8a8a8a",
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  orbCore: {
-    width: ORB * 0.72,
-    height: ORB * 0.72,
-    borderRadius: radius.pill,
-    backgroundColor: "#d8d8d8",
-  },
-  orbHighlight: {
-    position: "absolute",
-    top: ORB * 0.16,
-    left: ORB * 0.22,
-    width: ORB * 0.38,
-    height: ORB * 0.22,
-    borderRadius: radius.pill,
-    backgroundColor: "rgba(255,255,255,0.55)",
-  },
-  footer: { alignItems: "center", gap: space.md, minHeight: 96, paddingHorizontal: space.xl },
-  caption: { ...type.body, color: colors.textMuted },
-  captionError: { color: colors.danger, textAlign: "center" },
-  heard: { ...type.small, color: colors.textFaint, textAlign: "center" },
+  content: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: space.xl, gap: space.md },
+  title: { ...type.title, color: colors.text },
+  caption: { ...type.body, color: colors.textMuted, textAlign: "center", minHeight: 22 },
+  transcript: { alignSelf: "stretch", gap: space.sm, minHeight: 96, justifyContent: "flex-end", paddingHorizontal: space.sm, borderRadius: radius.md },
+  line: { ...type.body },
+  user: { color: colors.text, textAlign: "right" },
+  assistant: { color: colors.text, textAlign: "left" },
+  older: { opacity: 0.55 },
+  who: { ...type.small, color: colors.textFaint },
+  message: { ...type.body, color: colors.text, textAlign: "center" },
+  error: { color: colors.danger },
+  controls: { paddingHorizontal: space.xl, alignItems: "stretch", gap: space.xs },
+  secondary: { minHeight: 44, justifyContent: "center", alignItems: "center", paddingHorizontal: space.lg },
+  secondaryText: { ...type.body, color: colors.textMuted },
+  note: { ...type.small, color: colors.textFaint, textAlign: "center" },
 });

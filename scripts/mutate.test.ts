@@ -2,7 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyMutant, collectMutants, ROOT, TARGETS } from "./mutate";
+import { applyMutant, collectMutants, ROOT, TARGETS, runMutation } from "./mutate";
+
+ test("default mutation plan exercises parser and roster branches, not only constants", async () => {
+  const report = await runMutation({ dryRun: true, max: 400 });
+  for (const file of ["shared/protocol.ts", "bridge/src/roster.ts"]) {
+    const branches = report.results.filter((row) => row.file === file && (row.operator === "eq" || row.operator === "logic"));
+    expect(branches.length).toBeGreaterThanOrEqual(12);
+    expect(new Set(branches.map((row) => row.start)).size).toBe(branches.length);
+  }
+});
 
 describe("collectMutants", () => {
   test("mutates numeric constants that lock UI geometry", () => {
@@ -12,11 +21,11 @@ describe("collectMutants", () => {
     expect(mutants.some((m) => m.original === "true" && m.replacement === "false")).toBe(true);
   });
 
-  test("does not mutate equivalent operators inside functions", () => {
+  test("mutates equality and logic operators that change parse/roster branches", () => {
     const source = "export const ok = (n: number) => n < 2 && n === 0;\n";
     const mutants = collectMutants(source, "cmp.ts");
-    expect(mutants.some((m) => m.original === "===")).toBe(false);
-    expect(mutants.some((m) => m.original === "&&")).toBe(false);
+    expect(mutants.some((m) => m.original === "===" && m.replacement === "!==")).toBe(true);
+    expect(mutants.some((m) => m.original === "&&" && m.replacement === "||")).toBe(true);
   });
 
   test("does not mutate numbers inside strings or comments", () => {
@@ -39,11 +48,27 @@ describe("collectMutants", () => {
 describe("targets", () => {
   test("covers the modules that accidentally mutated UI or protocol", () => {
     expect(TARGETS.map((t) => t.file)).toEqual([
+      "app/src/lib/pending-queue.ts",
+      "app/src/trace/chip-state.ts",
+      "bridge/src/model-health.ts",
+      "bridge/src/model-roles.ts",
+      "shared/model-roles.ts",
+      "bridge/src/thinking-summary.ts",
+      "shared/thinking-summary.ts",
+      "bridge/src/turn-summaries.ts",
+      "app/src/lib/rail-turns.ts",
       "app/src/components/golden-nav.ts",
       "app/src/components/bridge-pull.ts",
       "app/src/motion.ts",
       "shared/protocol.ts",
+      "shared/z0live-state.ts",
+      "bridge/src/z0live-state.ts",
+      "app/src/lib/orb-phase.ts",
       "bridge/src/roster.ts",
+      "app/src/lib/annotate/strokes.ts",
+      "app/src/lib/annotate/pointer.ts",
+      "app/src/lib/annotate/align.ts",
+      "app/src/lib/annotate/compose.ts",
     ]);
   });
 
