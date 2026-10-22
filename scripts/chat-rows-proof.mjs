@@ -31,6 +31,13 @@ try {
       await window.__DASH_DEBUG__.scenario('main-chats');
       await window.__DASH_DEBUG__.run({ action: 'reset', seed: 'chat-rows' });
     });
+    // The debug route resets data, but the native-style pager still needs its measured tab action.
+    await page.getByRole('tab').nth(1).click();
+    await page.waitForFunction(() => {
+      const row = document.querySelector('[data-testid="chat-row-row-rich"]');
+      const bounds = row?.getBoundingClientRect();
+      return bounds && Math.abs(bounds.left) < 1 && bounds.right <= innerWidth + 1;
+    });
     const pane = page.getByTestId('chats-pane');
     await pane.getByText('Pairing now keeps errors visible.', { exact: true }).waitFor();
     for (const text of ['Repair pairing feedback', 'Plan the garden review', 'Inspect the next handoff', 'Check the retry path', 'Folder unknown', 'No summary yet', 'Running tests']) {
