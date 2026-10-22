@@ -9,8 +9,9 @@ import { isImageRef } from "../lib/genui";
 
 class TranscriptRenderer extends Renderer {
   onIntent?: (intent: LiveIntent) => boolean;
+  streaming = false;
   override code(code: string, language = ""): ReactNode {
-    return <GenerativeBlock key={this.getKey()} code={code} language={language.trim().toLowerCase().split(/\s/)[0] ?? ""} onIntent={this.onIntent} />;
+    return <GenerativeBlock key={this.getKey()} code={code} streaming={this.streaming} language={language.trim().toLowerCase().split(/\s/)[0] ?? ""} onIntent={this.onIntent} />;
   }
   override link(children: string | ReactNode[], href: string, style?: TextStyle): ReactNode {
     if (isImageRef(href)) return <InlineImage key={this.getKey()} href={href} label="Image" />;
@@ -23,9 +24,9 @@ class TranscriptRenderer extends Renderer {
   }
   override linkImage(_href: string, imageUri: string, alt?: string): ReactNode { return this.image(imageUri, alt); }
 }
-export const Markdown = memo(function Markdown({ text, onIntent }: { text: string; onIntent?: (intent: LiveIntent) => boolean }) {
+export const Markdown = memo(function Markdown({ text, onIntent, streaming = false }: { text: string; onIntent?: (intent: LiveIntent) => boolean; streaming?: boolean }) {
   // Reset renderer keys per parse so unchanged code blocks retain their identity.
-  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: true }); renderer.onIntent = onIntent; return renderer; }, [text, onIntent]);
+  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: true }); renderer.onIntent = onIntent; renderer.streaming = streaming; return renderer; }, [text, onIntent, streaming]);
   const nodes = useMarkdown(text, { renderer, styles, colorScheme: "dark" });
   // Hook only, not the library's nested FlatList. FlashList owns vertical scroll.
   return <View>{nodes}</View>;
