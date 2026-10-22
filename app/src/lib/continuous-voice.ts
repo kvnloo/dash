@@ -21,6 +21,8 @@ export interface VoiceIO {
   transcript(id: string, text: string, start: number, end: number): void;
   cursor?: { read(): Promise<number | null>; write(value: number): Promise<void> };
   holdIntent?(): boolean;
+  /** Local tracks and any in-flight acquisition are closed; another capture may start. */
+  captureReleased?(): void;
 }
 export function object(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 export const realWords = (text: string): boolean => /[\p{L}\p{N}]{2}/u.test(text) && !/^\s*(\[.*\]|\(.*\)|[.!?…]+)\s*$/.test(text);
@@ -30,6 +32,7 @@ export class ContinuousVoice {
   state: VoiceState = { phase: "idle", muted: false, lines: [] };
   private generation = 0;
   private peer?: VoicePeer;
+  private acquiring?: Promise<VoicePeer>;
   private sid?: string;
   private timer?: ReturnType<typeof setInterval>;
   private timeout?: ReturnType<typeof setTimeout>;
@@ -71,13 +74,16 @@ export class ContinuousVoice {
       } while (object(page) && page.has_more === true && this.live(generation));
       await this.io.cursor?.write(this.cursor);
       if (!this.live(generation)) return;
-      const peer = await this.io.peer(raw => { if (this.live(generation)) void this.event(raw, generation).catch(() => { if (this.live(generation)) void this.stop("Voice delivery unconfirmed. Microphone stopped; do not resend until checked."); }); }, () => {
+      const acquiring = this.io.peer(raw => { if (this.live(generation)) void this.event(raw, generation).catch(() => { if (this.live(generation)) void this.stop("Voice delivery unconfirmed. Microphone stopped; do not resend until checked."); }); }, () => {
         if (!this.live(generation)) return;
         this.send({ type: "session.update", session: { type: "realtime", audio: { input: { noise_reduction: { type: "far_field" }, turn_detection: { type: "semantic_vad", eagerness: "high", interrupt_response: false, create_response: false } } } } });
         this.peer?.mute(this.state.muted);
         clearTimeout(this.timeout);
         this.update({ phase: "listening" });
       }, () => { if (this.live(generation)) void this.stop("Voice disconnected. Mic stopped; tap Start to reconnect."); });
+      this.acquiring = acquiring;
+      const peer = await acquiring;
+      if (this.acquiring === acquiring) this.acquiring = undefined;
       if (!this.live(generation)) { peer.close(); return; }
       this.peer = peer;
       const sdp = await peer.offer();
@@ -90,7 +96,7 @@ export class ContinuousVoice {
       if (!this.live(generation)) return;
       this.timer = setInterval(() => void this.poll(generation), 1000);
       this.timeout = setTimeout(() => { if (this.state.phase === "connecting") void this.stop("Voice connection timed out. Microphone stopped."); }, 20_000);
-    } catch { if (this.live(generation)) await this.stop("Voice unavailable. Check the reviewed voice grant, bridge/broker deployment and Tailscale."); }
+    } catch (error) { if (this.live(generation)) await this.stop(error instanceof VoiceAccessDenied ? error.message : "Voice unavailable. Check the reviewed voice grant, bridge/broker deployment, native microphone permission and Tailscale. Tap Start to retry."); }
   }
   private send(event: object): void { this.peer?.send(event); }
   private reply(): void {
@@ -215,9 +221,15 @@ export class ContinuousVoice {
     ++this.generation;
     clearInterval(this.timer); clearTimeout(this.timeout);
     this.peer?.mute(true); this.peer?.close(); this.peer = undefined;
+    const acquiring = this.acquiring;
     const sid = this.sid; this.sid = undefined;
     this.response = this.creating = this.user = this.playing = this.continuation = false; this.toolPending = 0; this.inbox = []; this.seen.clear();
     this.update({ phase: note ? "error" : "idle", muted: false, note });
+    if (acquiring) {
+      try { (await acquiring).close(); } catch { /* No acquired media. */ }
+      if (this.acquiring === acquiring) this.acquiring = undefined;
+    }
+    this.io.captureReleased?.();
     if (sid) {
       try { await this.io.request("/v1/tools/cancel_work", { session_id: sid, arguments: {} }); } catch { /* Not confirmed. Never claim worker cancellation. */ }
       try { await this.io.request(`/v1/sessions/${encodeURIComponent(sid)}/end`, {}); } catch { /* Broker idle expiry is independent. */ }

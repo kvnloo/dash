@@ -11,7 +11,7 @@ export async function createVoicePeer(event: (raw: string) => void, ready: () =>
   const peer = new RTCPeerConnection({ iceServers: [] });
   let closed = false;
   let notified = false;
-  const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
+  const stream = await mediaDevices.getUserMedia({ audio: true, video: false }).catch(error => { peer.close(); throw error; });
   // Muted until ICE AND the data channel are ready; native remote audio renders automatically.
   for (const track of stream.getAudioTracks()) { track.enabled = false; peer.addTrack(track, stream); }
   const channel = peer.createDataChannel("oai-events");

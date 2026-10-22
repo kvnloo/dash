@@ -2,13 +2,13 @@ import type { ChatAttachment } from "../../../shared/protocol";
 import type { Conversation } from "../model";
 import { sendChat } from "../net/bridge";
 import { annotate } from "../store/annotate";
-import { applyTurnEvent, beginTurn, store } from "../store/app";
+import { applyTurnEvent, beginTurn, conversationTargetError, store } from "../store/app";
 import { annotationReceipt } from "./voice-annotation-receipt";
 
 /** One exact bridge turn. A lost ack preserves the drawing and the original turn id.
  * Retrying checks that receipt; it never submits a second message.
  */
-export async function sendVoiceAnnotation(conversation: Conversation, text: string, attachments: ChatAttachment[], final: (id: string, text: string) => void): Promise<void> {
+export async function sendVoiceAnnotation(conversation: Conversation, text: string, attachments: ChatAttachment[], final: (id: string, text: string) => void, mode: "steer" | "queue" = "queue"): Promise<void> {
   const pending = annotate.get().pendingTurn;
   const draft = annotate.get();
   const fingerprint = JSON.stringify([draft.drawing.strokes, draft.segments]);
@@ -17,10 +17,12 @@ export async function sendVoiceAnnotation(conversation: Conversation, text: stri
   let turnId = pending?.id;
   if (!turnId) {
     if (store.get().connection.status !== "online") throw new Error("Offline. Drawing and spoken intent are kept; reconnect before sending.");
-    turnId = beginTurn(conversation.id, text, { attachments, mode: "queue" }).turnId;
+    const targetError = conversationTargetError(conversation);
+    if (targetError) throw new Error(targetError);
+    turnId = beginTurn(conversation.id, text, { attachments, mode }).turnId;
     const id = turnId;
     annotate.set(s => ({ ...s, pendingTurn: { id, conversationId: conversation.id, fingerprint } }));
-    const sent = sendChat({ turnId, harness: "hermes", text, sessionId: conversation.sessionId, cwd: conversation.cwd, attachments, mode: "queue" });
+    const sent = sendChat({ turnId, harness: conversation.harness, text, sessionId: conversation.sessionId, cwd: conversation.cwd, attachments, mode });
     if (!sent) {
       applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Annotation was not sent: bridge offline." });
       annotate.set(s => ({ ...s, pendingTurn: undefined }));

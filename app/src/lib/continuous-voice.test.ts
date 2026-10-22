@@ -91,4 +91,16 @@ describe("root continuous WebRTC lifecycle", () => {
     expect(h.sent.filter(x => Reflect.get(x, "type") === "response.create")).toHaveLength(0); await h.call.stop();
   });
   test("noise gate rejects labels and accepts words", () => { expect(realWords("[noise]")).toBe(false); expect(realWords("…")).toBe(false); expect(realWords("cancel that")).toBe(true); });
+  test("stop/background cannot release the microphone lease before pending native acquisition closes", async () => {
+    let acquired = false, released = false, closed = false;
+    let resolvePeer: (peer: VoicePeer) => void = () => {};
+    const call = new ContinuousVoice({ changed: () => {}, transcript: () => {}, captureReleased: () => { released = true; },
+      request: async path => path === "/v1/realtime/session" ? { session_id: "pending", transport: "realtime", value: "ephemeral" } : { messages: [], after: 0 },
+      peer: () => { acquired = true; return new Promise(resolve => { resolvePeer = resolve; }); },
+    });
+    const start = call.start({ profile: "test", session: "attached" }); await settle(); expect(acquired).toBe(true);
+    const stop = call.stop(); const background = call.stop(); expect(released).toBe(false);
+    resolvePeer({ offer: async () => "v=0", answer: async () => {}, mute: () => {}, send: () => {}, close: () => { closed = true; } });
+    await Promise.all([start, stop, background]); expect(closed).toBe(true); expect(released).toBe(true);
+  });
 });

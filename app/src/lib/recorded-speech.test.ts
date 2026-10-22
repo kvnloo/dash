@@ -14,7 +14,7 @@ function harness(gate = new CaptureGate()) {
 }
 test("quick hold/release before permission/preparation resolves never starts a hot mic", async () => {
   const h = harness(); const begin = h.speech.begin();
-  await h.speech.end(); h.prepared(); await begin;
+  const end = h.speech.end(); h.prepared(); await begin; await end;
   expect(h.events).not.toContain("record"); expect(h.gate.owner).toBeUndefined();
 });
 test("one capture owner, including while permission or preparation is pending", async () => {

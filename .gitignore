@@ -23,3 +23,4 @@ orchestrate/dash/status.md
 .native-build-inputs/
 .native-receipts/
 .voice-deps/
+.repair-receipts/

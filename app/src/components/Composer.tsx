@@ -4,7 +4,7 @@ import { AgentOrb } from "./AgentOrb";
 import type { OrbState } from "../lib/orb-phase";
 import { useHandedness } from "../lib/useHandedness";
 import { MicButton } from "./MicButton";
-import { dictate } from "../lib/dictation";
+import { useRecordedSpeech } from "../lib/useRecordedSpeech";
 import { insertAtCursor, type Selection } from "../lib/mic-gesture";
 import { type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -32,8 +32,10 @@ import { ComposerSuggestions } from "./ComposerSuggestions";
 import { composerMode, type SendMode } from "../lib/composer-mode";
 import { haptic } from "../haptics";
 import type { IncomingShare } from "../lib/incoming-share";
+import { composerDrafts, updateComposerDraft, type ComposerDraft } from "../store/composer-drafts";
 
 interface Props {
+  draftKey?: string;
   context?: ContextControl;
   disabled: boolean;
   streaming: boolean;
@@ -59,14 +61,21 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
+export const Composer = memo(function Composer({ draftKey, context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
   const thumb = useHandedness();
   const [choice, setChoice] = useState<SendMode>("steer");
   useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
   const sendMode = composerMode(steerBusy, choice);
   const switchMode = () => { setChoice(value => value === "steer" ? "queue" : "steer"); haptic.select(); };
-  const [text, setText] = useState(initialText ?? "");
-  const [drafts, setDrafts] = useState<DraftAttachment[]>(initialAttachments ?? []);
+  const [seed] = useState<ComposerDraft>(() => ({ text: initialText ?? "", attachments: initialAttachments ?? [] }));
+  const [localDraft, setLocalDraft] = useState(seed);
+  const savedDraft = composerDrafts.use(all => draftKey ? all[draftKey] : undefined);
+  const { text, attachments: drafts } = savedDraft ?? localDraft;
+  const changeDraft = useCallback((update: (draft: ComposerDraft) => ComposerDraft) => {
+    if (draftKey) updateComposerDraft(draftKey, seed, update); else setLocalDraft(update);
+  }, [draftKey, seed]);
+  const setText = useCallback((value: string | ((previous: string) => string)) => changeDraft(draft => ({ ...draft, text: typeof value === "function" ? value(draft.text) : value })), [changeDraft]);
+  const setDrafts = useCallback((value: DraftAttachment[] | ((previous: DraftAttachment[]) => DraftAttachment[])) => changeDraft(draft => ({ ...draft, attachments: typeof value === "function" ? value(draft.attachments) : value })), [changeDraft]);
   const lastShare = useRef<string | undefined>(undefined);
   const blockedShare = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -91,24 +100,25 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
   const [cursor, setCursor] = useState<Selection | undefined>(undefined);
   /** While dictating, focus the field without raising the keyboard; a tap on the field restores normal typing. */
   const [dictating, setDictating] = useState(false);
-  const onDictate = useCallback(async () => {
-    setDictating(true);
-    const result = await dictate();
-    if (!mounted.current) return;
-    if (result.ok) {
+  const speech = useRecordedSpeech("dictation", transcript => {
+    if (mounted.current) {
       setText(current => {
-        const next = insertAtCursor(current, selection.current, result.text);
+        const next = insertAtCursor(current, selection.current, transcript);
         const sel = { start: next.cursor, end: next.cursor };
         selection.current = sel;
         setCursor(sel);
         return next.text;
       });
       requestAnimationFrame(() => inputRef.current?.focus());
-    } else if (result.reason !== "canceled") {
-      Alert.alert("Dictation", result.message ? `System speech recognizer unavailable: ${result.message}` : "System speech recognizer unavailable.");
     }
-  }, []);
-  useEffect(() => () => { mounted.current = false; }, []);
+  });
+  const speechBusy = ["preparing", "recording", "transcribing"].includes(speech.state.phase);
+  const onDictate = () => {
+    if (queuePreview !== undefined) return;
+    setDictating(true);
+    if (speechBusy) void speech.end(); else void speech.begin();
+  };
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const editingQueue = queuePreview !== undefined;
   const draftText = queuePreview ?? text;
@@ -116,9 +126,9 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
   const canSend = editingQueue ? Boolean(draftText.trim()) : canSendDrafts(draftText, drafts) && !disabled;
 
   const update = useCallback((key: string, patch: Partial<DraftAttachment>) => {
-    if (!mounted.current) return;
+    // An upload completion belongs to its original draft even while offscreen.
     setDrafts(list => list.map(d => (d.key === key ? { ...d, ...patch } : d)));
-  }, []);
+  }, [setDrafts]);
 
   const addFiles = useCallback((picked: PickedFile[]) => {
     const settings = store.get().settings;
@@ -194,12 +204,17 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
     ) : null}
     {drafts.some(d => d.state === "local") ? <PressScale accessibilityRole="button" accessibilityLabel="Upload shared files" disabled={disabled || editingQueue} onPress={uploadShared} style={styles.modeToggle}><Text style={styles.chipName}>Upload shared files to paired computer</Text></PressScale> : null}
     {steerBusy && !editingQueue ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
+    {speech.state.note ? <View style={styles.modeRow}>
+      <Text accessibilityLiveRegion="polite" accessibilityRole={speech.state.phase === "error" ? "alert" : "text"} style={styles.chipMeta}>{speech.state.note}</Text>
+      {speechBusy ? <PressScale accessibilityRole="button" accessibilityLabel="Stop dictation" onPress={() => void speech.end()} style={styles.modeToggle}><Text style={styles.chipName}>Stop</Text></PressScale> : null}
+      {speech.state.phase === "error" ? <PressScale accessibilityRole="button" accessibilityLabel="Retry dictation" onPress={onDictate} style={styles.modeToggle}><Text style={styles.chipName}>Retry</Text></PressScale> : null}
+    </View> : null}
     <View testID="composer-field" style={[styles.field, editingQueue && styles.previewField]}>
       <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={changeText} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
       <View testID="composer-controls" style={[styles.controls, thumb.row, { justifyContent: thumb.side === "left" ? "flex-start" : "flex-end" }, editingQueue && thumb.align]}>
         {context ? <ContextGauge control={context} /> : null}
         <View ref={attachRef} collapsable={false}><PressScale accessibilityRole="button" accessibilityLabel="Attach file" accessibilityState={{ expanded: attachAnchor !== null }} onPress={onAttach} disabled={disabled || editingQueue} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale></View>
-        <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onTap={voiceCall ? onVoice : undefined} accessibilityLabel={voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
+        <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onTap={speechBusy ? onDictate : voiceCall ? onVoice : undefined} accessibilityLabel={speechBusy ? "Stop dictation" : voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
 
         {streaming ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale> : null}
         <PressScale accessibilityRole="button" accessibilityLabel={editingQueue ? "Save queued merge" : streaming && !steerBusy ? "Queue" : sendMode.action} accessibilityHint={editingQueue ? "Keep this merged message queued for the next turn" : sendMode.label} onPress={submit} disabled={!canSend} style={[styles.hit, editingQueue && styles.previewSave]}>{editingQueue ? <Text style={styles.chipName}>Save queued</Text> : <View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View>}</PressScale>

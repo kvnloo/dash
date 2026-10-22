@@ -10,11 +10,15 @@ export function parseIdentityEnrollment(raw: unknown): IdentityEnrollment | unde
 }
 
 async function jsonFetch(url: string, init: RequestInit, fetchImpl: (url: string, init?: RequestInit) => Promise<Response>): Promise<unknown> {
+  const endpoint = new URL(url).pathname;
+  let response: Response;
   try {
-    const response = await fetchImpl(url, { ...init, redirect: "error", signal: AbortSignal.timeout(8000) });
-    if (!response.ok) throw new Error();
-    return await response.json();
-  } catch { throw new Error("z0bridge request failed. Check Tailscale, the pairing code, and the host's identity service."); }
+    response = await fetchImpl(url, { ...init, redirect: "error", signal: AbortSignal.timeout(8000) });
+  } catch { throw new Error(`z0bridge request failed at ${endpoint}. Check Tailscale and the host identity service.`); }
+  // Never show the server body: it may echo an enrollment credential or token.
+  if (!response.ok) throw new Error(`z0bridge ${endpoint}: HTTP ${response.status}. ${response.status === 403 ? "Requested scope was refused; ask the owner to review the grant." : response.status === 401 ? "Identity was refused; ask the owner to review enrollment." : "Host identity service unavailable; retry."}`);
+  try { return await response.json(); }
+  catch { throw new Error(`z0bridge ${endpoint}: invalid JSON response.`); }
 }
 
 /** Claim only after explicit owner confirmation. No persistence or automatic legacy replacement. */

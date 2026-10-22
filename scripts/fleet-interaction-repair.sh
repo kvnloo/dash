@@ -10,7 +10,7 @@ rsync -a --delete --exclude=node_modules/ --exclude=/.git --exclude=/.repair-rec
 cd "$build_dir"
 mkdir -p .repair-receipts
 trap 'cp -a .repair-receipts "$source_dir/"' EXIT
-exec > >(tee .repair-receipts/validation.log) 2>&1
+exec > >(tee .repair-receipts/validation.log 9>&-) 2>&1
 printf 'host=%s\nrevision=%s\n' "$(hostname)" "${DASH_PROOF_REVISION:-uncommitted}"
 mirror="$HOME/.cache/dash-native-notifications-share-build/.native-build-inputs/aodl.git"
 if [ -d "$mirror" ]; then
@@ -20,14 +20,20 @@ fi
 bun install --frozen-lockfile
 (cd app && bun install --frozen-lockfile)
 (cd bridge && bun install --frozen-lockfile)
+git add .
 case "${DASH_REPAIR_GATE:-render}" in
-  render) node scripts/ink-render-proof.mjs ;;
+  render) node scripts/ink-render-proof.mjs 9>&- ;;
   unit) bun test app/src/lib/annotate app/src/store/annotate.test.ts app/src/lib/identity-client.test.ts app/src/lib/continuous-voice.test.ts app/src/lib/voice-launch.test.ts app/src/lib/recorded-speech.test.ts ;;
   full)
     bun run typecheck > .repair-receipts/typecheck.log 2>&1
     bun run test > .repair-receipts/unit.log 2>&1
     bun scripts/mutate.ts > .repair-receipts/mutation.log 2>&1
+    set +e
     bun run lint > .repair-receipts/lint.log 2>&1
+    lint_status=$?
+    set -e
+    printf '%s\n' "$lint_status" > .repair-receipts/lint.exit
     (cd app && CI=1 bun x expo export --platform android --output-dir ../.repair-receipts/android-export) > .repair-receipts/android-export.log 2>&1
-    node scripts/ink-render-proof.mjs ;;
+    node scripts/ink-render-proof.mjs 9>&-
+    exit "$lint_status" ;;
 esac

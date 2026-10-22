@@ -4,16 +4,17 @@
 // Entry: Options → Annotate, or an S Pen touch while pen mode is on.
 // No page-global long press: row holds keep their own actions. The tray, frame
 // and preview are siblings outside it so a thumb on the mic never cancels the pen.
-import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from "expo-audio";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Image, PixelRatio, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { debugNavigationRef } from "../../debug/nav";
 import { haptic } from "../../haptics";
 import { annotationDoc, annotationSendMode, attachmentNames, composeMessage } from "../../lib/annotate/compose";
-import { readRecording, transcribeRecording, uploadBytes } from "../../lib/annotate/io";
+import { uploadBytes } from "../../lib/annotate/io";
+import { useRecordedSpeech } from "../../lib/useRecordedSpeech";
 import { pointerKind, pressureOf, routePointer, stylusEnters } from "../../lib/annotate/pointer";
 import { recognizeShape, type InkColor, type PointerKind, type StrokePoint, type Tool } from "../../lib/annotate/strokes";
 import { useHandedness } from "../../lib/useHandedness";
@@ -35,8 +36,15 @@ const MIN_EXTENT = 6;
 type InkModule = typeof import("./InkCanvas");
 let inkModule: Promise<InkModule> | undefined;
 function loadInk(): Promise<InkModule> {
-  inkModule ??= loadSkia().then(() => import("./InkCanvas"));
+  inkModule ??= loadSkia().then(() => import("./InkCanvas")).catch(error => { inkModule = undefined; throw error; });
   return inkModule;
+}
+
+class InkBoundary extends Component<{ children: ReactNode; onError(error: Error): void }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error: Error) { this.props.onError(error); }
+  render() { return this.state.failed ? null : this.props.children; }
 }
 
 export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX.Element {
@@ -47,6 +55,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const strokes = annotate.use(s => s.drawing.strokes);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [ink, setInk] = useState<InkModule | null>(null);
+  const [inkError, setInkError] = useState<string>();
   const captureTarget = useRef<View>(null);
 
   const live = useSharedValue<number[]>([]);
@@ -55,7 +64,11 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const kindSv = useSharedValue(0);
   useEffect(() => { activeSv.value = active; }, [active, activeSv]);
   useEffect(() => { penSv.value = penMode; }, [penMode, penSv]);
-  useEffect(() => { if ((active || penMode) && !ink) void loadInk().then(setInk); }, [active, penMode, ink]);
+  const inkFailed = useCallback((error: unknown) => {
+    setInk(null); setInkError("Ink couldn't load. Annotation is paused; your drawing is kept.");
+    if (__DEV__) console.warn("[dash-ink] unavailable", error instanceof Error ? error.message : "renderer failed");
+  }, []);
+  useEffect(() => { if ((active || penMode) && !ink && !inkError) void loadInk().then(setInk).catch(inkFailed); }, [active, penMode, ink, inkError, inkFailed]);
 
   const finish = useCallback((flat: number[], pointerType: number) => {
     const { width, height } = size;
@@ -84,7 +97,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const gesture = useMemo(() => {
     const draw = Gesture.Pan()
       .manualActivation(true)
-      .enabled(active || penMode)
+      .enabled((active || penMode) && !inkError)
       .onTouchesDown((e, manager) => {
         const kind = pointerKind(e.pointerType);
         if (stylusEnters(kind, penSv.value, activeSv.value)) {
@@ -100,18 +113,24 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       })
       .onUpdate(e => {
         const p = pressureOf(pointerKind(kindSv.value), e.stylusData?.pressure);
-        live.modify(points => { points.push(e.x, e.y, p, Date.now()); return points; });
+        live.value = [...live.value, e.x, e.y, p, Date.now()];
       })
-      .onEnd(() => { runOnJS(finish)(live.value.slice(), kindSv.value); })
+      .onEnd(e => {
+        // A coalesced/quick native pen stroke may have DOWN and UP but no UPDATE.
+        // UP is a real sample, not merely a signal to commit the preceding samples.
+        const p = pressureOf(pointerKind(kindSv.value), e.stylusData?.pressure);
+        runOnJS(finish)([...live.value, e.x, e.y, p, Date.now()], kindSv.value);
+      })
       .onFinalize(() => { live.value = []; });
     const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(active)
       .onEnd((e, success) => { if (success && pointerKind(e.pointerType) === "stylus") runOnJS(send)(false); });
     return Gesture.Simultaneous(draw, penDoubleTap);
-  }, [active, penMode, finish, send, live, activeSv, penSv, kindSv]);
+  }, [active, penMode, inkError, finish, send, live, activeSv, penSv, kindSv]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     setSize(prev => (prev.width === width && prev.height === height ? prev : { width, height }));
+    if (__DEV__) console.log("[dash-ink] bounds", { width, height, fontScale: PixelRatio.getFontScale() });
   }, []);
 
   const Ink = ink?.InkCanvas;
@@ -121,12 +140,16 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         <View style={styles.root} collapsable={false} onLayout={onLayout}>
           <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
           {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
-          {active && !penMode ? <View style={StyleSheet.absoluteFill} {...overlayProps} /> : null}
-          {active && Ink ? <View style={StyleSheet.absoluteFill} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></View> : null}
+          {active && !penMode && !inkError ? <View style={StyleSheet.absoluteFill} {...overlayProps} /> : null}
+          {active && Ink ? <InkBoundary onError={inkFailed}><View style={StyleSheet.absoluteFill} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></View></InkBoundary> : null}
         </View>
       </GestureDetector>
       {active ? <View pointerEvents="none" style={styles.frame} accessibilityLabel="Annotation mode on" {...overlayProps} /> : null}
       {active ? <Tray onSend={send} /> : <Toast />}
+      {active && inkError ? <View style={styles.inkError}>
+        <Text accessibilityRole="alert" style={styles.error}>{inkError}</Text>
+        <Chip label="Retry ink" a11y="Retry ink renderer" onPress={() => setInkError(undefined)} />
+      </View> : null}
     </View>
   );
 }
@@ -258,48 +281,24 @@ function Swatch({ color, selected }: { color: InkColor; selected: boolean }): Re
 function HoldToTalk(): React.JSX.Element {
   const voice = useContinuousVoice();
   const liveVoice = !["idle", "error"].includes(voice.state.phase);
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recording = annotate.use(s => s.recording);
-  const started = useRef(0);
-  const [note, setNote] = useState<string>();
-  const begin = async () => {
-    if (liveVoice) { setNote("Live mic in use"); return; }
-    try {
-      const permission = await requestRecordingPermissionsAsync();
-      if (!permission.granted) { setNote("Mic blocked"); return; }
-      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await recorder.prepareToRecordAsync();
-      recorder.record();
-      started.current = Date.now();
-      setRecording(true);
-      setNote(undefined);
-    } catch { setNote("Mic failed"); }
-  };
-  const end = async () => {
-    if (!annotate.get().recording) return;
-    const start = started.current;
-    const stop = Date.now();
-    setRecording(false);
-    try {
-      await recorder.stop();
-      const settings = store.get().settings;
-      if (!recorder.uri || !settings) throw new Error("no recording");
-      setNote("…");
-      const text = await transcribeRecording(settings, await readRecording(recorder.uri));
-      if (text.trim()) addSegment({ id: `mic-${start}`, text, start, end: stop, source: "mic" });
-      setNote(undefined);
-    } catch { setNote("Not heard"); }
-  };
+  const speech = useRecordedSpeech("annotation", (text, start, end) => addSegment({ id: `mic-${start}`, text, start, end, source: "mic" }));
+  const recording = speech.state.phase === "recording";
+  const busy = speech.state.phase === "transcribing";
+  useEffect(() => { setRecording(recording); return () => setRecording(false); }, [recording]);
   return (
+    <View>
     <PressScale accessibilityRole="button" accessibilityLabel={liveVoice ? "Continuous voice is active" : "Hold to talk"} disabled={liveVoice} accessibilityState={{ selected: recording, disabled: liveVoice }}
-      onPressIn={() => void begin()} onPressOut={() => void end()} style={[styles.chip, recording && styles.recording]}>
-      <Text style={[styles.chipText, recording && styles.chipTextOn]}>{liveVoice ? "Live mic" : recording ? "● Talk" : note ?? "Talk"}</Text>
+      onPressIn={() => { if (!busy) void speech.begin(); }} onPressOut={() => void speech.end()} style={[styles.chip, recording && styles.recording]}>
+      <Text style={[styles.chipText, recording && styles.chipTextOn]}>{liveVoice ? "Live mic" : recording ? "● Talk" : busy ? "Transcribing…" : "Talk"}</Text>
     </PressScale>
+    {speech.state.note && speech.state.phase === "error" ? <Text accessibilityRole="alert" style={styles.error}>{speech.state.note}</Text> : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  inkError: { position: "absolute", top: 80, left: 12, right: 12, padding: 8, backgroundColor: colors.surfaceRaised, borderRadius: radius.sm },
   frame: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderWidth: 2, borderColor: colors.accent, borderRadius: 2 },
   tray: { position: "absolute", left: space.xs, right: space.xs, padding: space.xs, gap: 2, borderRadius: radius.md, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.hair },
   toast: { bottom: 120 },

@@ -2,12 +2,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .native-receipts
-exec > >(tee .native-receipts/build.log) 2>&1
+exec > >(tee .native-receipts/build.log 9>&-) 2>&1
 printf 'Native Android build host: %s\n' "$(hostname)"
+printf '%s\n' "${DASH_PROOF_REVISION:-uncommitted}" > .native-receipts/source-revision.txt
 if [ -f .native-build-inputs/source-revision.txt ]; then cp .native-build-inputs/source-revision.txt .native-receipts/source-revision.txt; fi
 if [ -f .native-build-inputs/aodl.bundle ]; then
   if [ ! -d .native-build-inputs/aodl.git ]; then git clone --mirror .native-build-inputs/aodl.bundle .native-build-inputs/aodl.git; fi
   mirror="file://$(realpath .native-build-inputs/aodl.git)"
+  export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0="url.$mirror.insteadOf" GIT_CONFIG_VALUE_0=ssh://git@github.com/kvnloo/aodl-views.git
+  export GIT_CONFIG_KEY_1="url.$mirror.insteadOf" GIT_CONFIG_VALUE_1=https://github.com/kvnloo/aodl-views.git GIT_ALLOW_PROTOCOL=file:https:ssh
+elif [ -d "$HOME/.cache/dash-native-notifications-share-build/.native-build-inputs/aodl.git" ]; then
+  mirror="file://$HOME/.cache/dash-native-notifications-share-build/.native-build-inputs/aodl.git"
   export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0="url.$mirror.insteadOf" GIT_CONFIG_VALUE_0=ssh://git@github.com/kvnloo/aodl-views.git
   export GIT_CONFIG_KEY_1="url.$mirror.insteadOf" GIT_CONFIG_VALUE_1=https://github.com/kvnloo/aodl-views.git GIT_ALLOW_PROTOCOL=file:https:ssh
 fi
@@ -16,6 +21,7 @@ if [ ! -e .git ]; then git init -q; fi
 bun install --frozen-lockfile
 (cd bridge && bun install --frozen-lockfile)
 (cd app && bun install --frozen-lockfile)
+git add .
 if [ ! -f app/node_modules/@shopify/react-native-skia/libs/android/arm64-v8a/libskia.a ]; then
   node app/node_modules/@shopify/react-native-skia/scripts/install-libs.js
 fi

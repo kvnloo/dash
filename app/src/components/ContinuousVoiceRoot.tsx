@@ -10,6 +10,7 @@ import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { store } from "../store/app";
 import { colors } from "../theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { microphone } from "../lib/recorded-speech";
 
 const initial: VoiceState = { phase: "idle", muted: false, lines: [] };
 interface VoiceContext { state: VoiceState; start(): Promise<void>; stop(): Promise<void>; mute(): void }
@@ -25,9 +26,10 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const attached = useRef<Conversation | null>(null);
   const epoch = useRef(0);
   const starting = useRef(false);
+  const releaseMic = useRef<(() => void) | undefined>(undefined);
   const insets = useSafeAreaInsets();
   const start = async () => {
-    if (starting.current || annotate.get().recording) return;
+    if (starting.current) return;
     if (call.current && !["idle", "error"].includes(call.current.state.phase)) return;
     const settings = store.get().settings;
     const conversation = store.get().conversations.find(c => c.id === store.get().activeId);
@@ -35,6 +37,10 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       setState({ ...initial, phase: "error", note: "Attach the intended Hermes conversation and pair Dash through z0bridge before starting voice." }); return;
     }
     const target = { profile: conversation.profileId, session: conversation.sessionId };
+    const release = microphone.acquire("live");
+    if (!release) { setState({ ...initial, phase: "error", note: `Microphone is in use by ${microphone.owner}. Stop that capture before starting Live voice.` }); return; }
+    releaseMic.current = release;
+    call.current = null;
     attached.current = conversation;
     const generation = ++epoch.current;
     setBindingGeneration(generation);
@@ -47,33 +53,56 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
         if (!response.ok) throw new Error("Realtime signaling unavailable"); return response.text();
       }
       let token: string;
-      try { token = await voiceAccessToken(settings); } catch { throw new VoiceAccessDenied("Voice identity unavailable"); }
+      try { token = await voiceAccessToken(settings); } catch (error) { throw new VoiceAccessDenied(error instanceof Error ? error.message : "Voice identity unavailable"); }
       const response = await fetch(`https://0.taila30dc.ts.net:8791${path}`, { method: body === undefined ? "GET" : "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000), redirect: "error" });
-      if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied("Voice authorization refused");
+      if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(`Voice broker: HTTP ${response.status}. The separate z0live:voice grant/introspection must be reviewed.`);
       if (!response.ok) throw new Error("Voice broker request refused"); return response.json();
     };
     // Bootstrap is authenticated independently using the existing Dash identity, not an owner bearer.
     try {
       setState({ ...initial, phase: "connecting" });
       const response = await fetch(`http://${settings.address}/voice/bootstrap`, { method: "POST", headers: { authorization: `Bearer ${await executionToken(settings)}`, "content-type": "application/json" }, body: JSON.stringify(target), signal: AbortSignal.timeout(8000), redirect: "error" });
+      if (!response.ok) throw new Error(`Dash /voice/bootstrap: HTTP ${response.status}. ${response.status === 404 ? "Running bridge lacks native voice bootstrap." : response.status === 503 ? "Native voice is not enabled on the running bridge." : "Review Dash identity and the exact attached target."}`);
       const bootstrap: unknown = await response.json();
-      if (!response.ok || !object(bootstrap) || bootstrap.profile !== target.profile || bootstrap.session !== target.session || bootstrap.ready !== true) throw new Error("Voice bootstrap unavailable");
+      if (!object(bootstrap) || bootstrap.profile !== target.profile || bootstrap.session !== target.session || bootstrap.ready !== true) throw new Error("Voice bootstrap did not confirm this exact profile/session. No call started.");
       if (generation !== epoch.current) return;
       if (AppState.currentState !== "active") throw new Error("Dash is backgrounded");
       const cursorKey = `dash.voice.inbox.${settings.identity.credentialId}`;
-      const controller = new ContinuousVoice({ request, peer: createVoicePeer, changed: setState,
+      const controller = new ContinuousVoice({ request, peer: createVoicePeer, changed: next => {
+        if (generation !== epoch.current) return;
+        setState(next);
+      },
+        captureReleased: () => { release(); if (releaseMic.current === release) releaseMic.current = undefined; },
         holdIntent: () => annotate.get().active,
         cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
         transcript: (id, text, start, end) => { if (annotate.get().active) addSegment({ id, text, start, end, source: "voice" }); } });
       call.current = controller;
       await controller.start(target);
-    } catch { if (generation === epoch.current) setState({ ...initial, phase: "error", note: "Native voice is not ready: bridge bootstrap, broker identity verification and explicit z0live:voice grant must be deployed. No external app opened." }); }
+    } catch (error) {
+      release(); if (releaseMic.current === release) releaseMic.current = undefined;
+      if (generation === epoch.current) setState({ ...initial, phase: "error", note: `${error instanceof Error ? error.message : "Native voice unavailable."} No external app opened. Retry after the blocker is resolved.` });
+    }
     finally { if (generation === epoch.current) starting.current = false; }
   };
-  const stop = async () => { epoch.current++; starting.current = false; const cleanup = call.current?.stop(); setState(initial); await cleanup; };
+  const stop = async () => {
+    epoch.current++; starting.current = false;
+    const controller = call.current;
+    const cleanup = controller?.stop();
+    if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
+    setState(initial); await cleanup;
+  };
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", next => { if (next === "background") { epoch.current++; starting.current = false; void call.current?.stop("Mic stopped because Dash left the foreground. Tap Start to resume."); setState(previous => ["idle", "error"].includes(previous.phase) ? previous : { ...previous, phase: "error", note: "Mic stopped because Dash left the foreground. Tap Start to resume." }); } });
-    return () => { epoch.current++; subscription.remove(); void call.current?.stop(); };
+    const subscription = AppState.addEventListener("change", next => { if (next === "background") {
+      epoch.current++; starting.current = false;
+      const controller = call.current;
+      void controller?.stop("Mic stopped because Dash left the foreground. Tap Start to resume.");
+      if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
+      setState(previous => ["idle", "error"].includes(previous.phase) ? previous : { ...previous, phase: "error", note: "Mic stopped because Dash left the foreground. Tap Start to resume." });
+    } });
+    return () => {
+      epoch.current++; subscription.remove(); const controller = call.current; void controller?.stop();
+      if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
+    };
   }, []);
   const active = !["idle", "error"].includes(state.phase);
   useEffect(() => {
