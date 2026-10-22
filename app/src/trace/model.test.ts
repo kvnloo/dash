@@ -115,8 +115,8 @@ describe("gesture math", () => {
   });
 
   test("swipe: right = Do, left = Not now, short drags snap back, flings commit", () => {
-    expect(swipeDecision(130, 0, 340)).toBe("do");
-    expect(swipeDecision(-130, 0, 340)).toBe("not_now");
+    expect(swipeDecision(140, 0, 340)).toBe("do");
+    expect(swipeDecision(-140, 0, 340)).toBe("not_now");
     expect(swipeDecision(60, 0, 340)).toBeNull();
     expect(swipeDecision(40, 1200, 340)).toBe("do");
     expect(swipeDecision(-40, -1200, 340)).toBe("not_now");

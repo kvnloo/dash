@@ -270,10 +270,10 @@ export function scrubTick(t: number, stepS: number): number {
 }
 
 export type SwipeDecision = "do" | "not_now" | null;
-/** Right = Do, left = Not now. Past 35% of the width, or a fling over 800 px/s in that direction. */
+/** Handedness-normalized: Do past ~40% of the width, or a fling over 800 px/s in that direction. */
 export function swipeDecision(dx: number, vx: number, width: number): SwipeDecision {
   "worklet";
-  const t = width * 0.35;
+  const t = width * 0.4;
   if (dx > t || (vx > 800 && dx > 24)) return "do";
   if (dx < -t || (vx < -800 && dx < -24)) return "not_now";
   return null;

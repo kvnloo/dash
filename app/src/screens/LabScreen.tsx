@@ -46,7 +46,6 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
   const [stress, setStress] = useState(false);
   const [heroPhase, setHeroPhase] = useState<OrbPhase>("listening");
   const [replay, setReplay] = useState(0);
-  const [chipState, setChipState] = useState<Record<string, string>>({});
   const [sent, setSent] = useState(false);
   useEffect(() => { void loadFeedback(); }, []);
 
@@ -98,12 +97,12 @@ Hold + slide: action wheel · centre: cancel</Text>
         </Block>
 
         {action ? (
-          <Block title="Action chip" note="swipe right = Do · left = Not now" action={{ label: "Reset", onPress: () => setChipState({}) }} testID="lab-action-chip">
+          <Block title="Action chip" note="swipe to decide · Undo for 5 seconds" action={{ label: "Reset", onPress: () => { for (const v of ["card", "pill", "buttons"]) record("action", `lab-${v}`, "undo"); } }} testID="lab-action-chip">
             {(["card", "pill", "buttons"] as ChipVariant[]).map((v, i) => (
               <Variant key={v} letter={"ABC"[i] ?? ""} name={v} picked={P("action-chip") === v} onPick={() => pick("action-chip", v)}>
                 <View style={styles.pad}>
-                  <ActionChip action={{ ...action, id: `lab-${v}` }} variant={v} decision={chipState[`lab-${v}`]}
-                    onDecide={(id, d) => setChipState((s) => ({ ...s, [id]: d }))} />
+                  <ActionChip action={{ ...action, id: `lab-${v}` }} variant={v} decision={latest(records, "action", `lab-${v}`)} decidedAt={records.find(r => r.kind === "action" && r.id === `lab-${v}`)?.at}
+                    onDecide={(id, d) => record("action", id, d)} />
                 </View>
               </Variant>
             ))}
@@ -150,7 +149,7 @@ Hold + slide: action wheel · centre: cancel</Text>
             </PressScale>
           ) : null}
         </View>
-      </>), [snapshot, records, chipState, replay, sent, settings, pick, rowsSmall, rowsLane, series, density, sizing.padding, stress]);
+      </>), [snapshot, records, replay, sent, settings, pick, rowsSmall, rowsLane, series, density, sizing.padding, stress, heroPhase]);
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>

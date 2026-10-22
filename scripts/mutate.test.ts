@@ -49,6 +49,7 @@ describe("targets", () => {
   test("covers the modules that accidentally mutated UI or protocol", () => {
     expect(TARGETS.map((t) => t.file)).toEqual([
       "app/src/lib/pending-queue.ts",
+      "app/src/trace/chip-state.ts",
       "bridge/src/model-health.ts",
       "bridge/src/model-roles.ts",
       "shared/model-roles.ts",
