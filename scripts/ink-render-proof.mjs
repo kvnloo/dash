@@ -52,6 +52,18 @@ try{
     assert(redCommitted>redBefore+150,'committed Skia stroke remains visible');
     await page.getByRole('button',{name:'Undo',exact:true}).click();
     assert.equal(await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes.length),0);
+    await page.getByRole('button',{name:'Pen mode: only the S Pen draws, fingers scroll',exact:true}).click();
+    const cdp=await context.newCDPSession(page);
+    // Coalesced native-style stylus stroke: DOWN/UP can arrive with no Pan UPDATE.
+    await cdp.send('Input.dispatchMouseEvent',{type:'mousePressed',x:65,y:285,button:'left',buttons:1,clickCount:1,pointerType:'pen',force:0.7});
+    await cdp.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:215,y:385,button:'left',buttons:0,clickCount:1,pointerType:'pen'});
+    await sleep(300);
+    const quick=await page.screenshot({path:path.join(out,`${width}-quick-pen.png`)});
+    const penStrokes=await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes);
+    result.cases.at(-1).quickPen={strokes:penStrokes,red:await pixels(quick)};
+    assert.equal(penStrokes.length,1,'stylus UP endpoint must survive even with no intermediate Pan update');
+    assert.equal(penStrokes[0].pointer,'stylus');
+    assert(result.cases.at(-1).quickPen.red>redBefore+150,'quick stylus stroke must paint after release');
     await context.close();
   }
   assert.deepEqual(result.errors,[]);result.status='PASS';
