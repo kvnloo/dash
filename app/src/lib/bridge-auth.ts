@@ -3,6 +3,10 @@ import { loadIdentitySecret } from "./identity-secret";
 
 const tokens = new IdentityTokens(key => loadIdentitySecret(key), (url, init) => fetch(url, init));
 export function clearIdentityTokens(): void { tokens.clear(); }
+export async function voiceAccessToken(settings: AuthSettings): Promise<string> {
+  if (!settings.identity) throw new Error("Native voice requires z0bridge enrollment and a reviewed z0live:voice grant.");
+  return tokens.token(settings.identity, "z0live");
+}
 export interface AuthSettings { token: string; identity?: IdentityEnrollment }
 
 export async function executionToken(settings: AuthSettings): Promise<string> {

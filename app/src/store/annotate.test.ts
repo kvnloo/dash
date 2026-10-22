@@ -7,6 +7,14 @@ const line = { tool: "pen" as const, color: "accent" as const, pointer: "stylus"
 
 beforeEach(() => { exitAnnotation(); });
 
+test("root live voice sink remains pinned when another chat registers on navigation", () => {
+  const voice = { ...sink("attached voice"), live: true };
+  const offVoice = registerSink(voice);
+  const offChat = registerSink(sink("different chat"));
+  expect(currentSink()).toBe(voice); expect(annotate.get().sink).toBe("attached voice");
+  offVoice(); expect(currentSink()?.label).toBe("different chat"); offChat();
+});
+
 test("newest sink wins and unregistering falls back", () => {
   const offChat = registerSink(sink("chat"));
   const offVoice = registerSink(sink("voice session"));

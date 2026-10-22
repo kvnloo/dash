@@ -41,6 +41,7 @@ import { sendGatewayMessage } from "./src/hermes-steer";
 import { sessionPhaseHttp } from "./src/hermes-phase";
 import { sessionWorkersHttp } from "./src/hermes-workers";
 import { z0liveStateHttp } from "./src/z0live-state";
+import { voiceBootstrap } from "./src/voice-bootstrap";
 import { activityHttp } from "./src/hermes-activity";
 const nativeActivityHttp = activityHttp((profile, session) => hermesSessions.nativeActivity(profile, session));
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
@@ -731,6 +732,11 @@ const server = Bun.serve<SocketData>({
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      if (url.pathname === "/voice/bootstrap") {
+        const principal = await bridgeAuth.authenticate(request, false, true);
+        const voice = await voiceBootstrap(request, principal?.kind === "identity", (profile, session) => !!hermesSessions.target(profile, session));
+        if (voice) return cors(voice);
+      }
       if (url.pathname === "/chat/context/compact" && request.method === "POST") server.timeout(request, 255);
       const context = await handleContext(request, await authorize(request));
       if (context) return cors(context);

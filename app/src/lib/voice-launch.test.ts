@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { launchSharedVoice } from "./voice-launch";
 
-describe("shared z0live voice launcher", () => {
-  test("Android opens the exact public controls URI with no pairing or session data", async () => {
+describe("retired external voice launcher", () => {
+  test("Android never opens a secondary app", async () => {
     const opened: string[] = [];
     const result = await launchSharedVoice("android", {
       openURL: async (url) => {
@@ -10,8 +10,8 @@ describe("shared z0live voice launcher", () => {
       },
     });
 
-    expect(opened).toEqual(["z0live://voice"]);
-    expect(result).toEqual({ kind: "opened" });
+    expect(opened).toEqual([]);
+    expect(result.kind).toBe("unavailable");
   });
 
   test("a missing app offers installation or explicit legacy voice without throwing", async () => {
@@ -23,9 +23,8 @@ describe("shared z0live voice launcher", () => {
 
     expect(result.kind).toBe("unavailable");
     if (result.kind !== "unavailable") throw new Error("Expected unavailable voice");
-    expect(result.message).toContain("Lawnchair z0live");
-    expect(result.message).toContain("install");
-    expect(result.message).toContain("legacy voice");
+    expect(result.message).toContain("inside Dash");
+    expect(result.message).toContain("Expo Go/web voice is unavailable");
   });
 
   test("unexpected native failures also become a recoverable fallback", async () => {
@@ -50,8 +49,7 @@ describe("shared z0live voice launcher", () => {
       expect(opened).toEqual([]);
       expect(result.kind).toBe("unavailable");
       if (result.kind !== "unavailable") throw new Error("Expected unavailable voice");
-      expect(result.message).toContain("Android");
-      expect(result.message).toContain("legacy voice");
+      expect(result.message).toContain("Expo Go/web voice is unavailable");
     });
   }
 });
