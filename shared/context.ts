@@ -25,6 +25,11 @@ export function parsePlan(value: unknown): PlanUsage | undefined {
 }
 export function contextTone(snapshot: ContextSnapshot): "normal" | "amber" | "red" { return snapshot.threshold > 0 && snapshot.used >= snapshot.threshold ? "red" : snapshot.maximum > 0 && snapshot.used / snapshot.maximum > .8 ? "amber" : "normal"; }
 export function tokenLabel(tokens: number): string { return tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(Math.round(tokens)); }
+/** The host explicitly does not carry session compaction (read-only bridge line): show unavailable, never a guess. */
+export function compactionUnavailable(status: number, value: unknown): boolean {
+  return status === 501 && record(value) && value.ok === false && value.code === "unavailable";
+}
+
 export function compactionResult(before: ContextSnapshot, after: ContextSnapshot): number | undefined {
   // A smaller estimate alone is not evidence: compaction must replace the active transcript.
   if (before.revision === after.revision || after.used >= before.used) return;

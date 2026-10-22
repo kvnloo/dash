@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Animated, Easing, Platform, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { compactionResult, contextTone, parseContext, parsePlan, record, tokenLabel, type ContextSnapshot, type PlanUsage } from "../../../shared/context";
+import { compactionResult, compactionUnavailable, contextTone, parseContext, parsePlan, record, tokenLabel, type ContextSnapshot, type PlanUsage } from "../../../shared/context";
 import type { Settings } from "../model";
 import { MOTION_MS } from "../motion";
 import { colors, glass, type } from "../theme";
@@ -16,6 +16,8 @@ export function useContextView(settings: Settings | null, online: boolean, harne
   const [sample, setSample] = useState<{ key: string; snapshot?: ContextSnapshot; plans: PlanUsage[] }>();
   const [phase, setPhase] = useState<"idle" | "waiting" | "summarizing">("idle");
   const [notice, setNotice] = useState("");
+  /** Host answered that it does not carry compaction: the control stays visibly unavailable for this host. */
+  const [unsupportedHost, setUnsupportedHost] = useState<string>();
   const key = `${settings?.address}\0${profile}\0${session}\0${harness}`;
   const identity = useRef(key);
   identity.current = key;
@@ -61,6 +63,7 @@ export function useContextView(settings: Settings | null, online: boolean, harne
     try {
       const response = await fetch(endpoint(settings, profile ?? "default", session, true), { method: "POST", headers: { Authorization: `Bearer ${settings.token}` }, signal: controller.signal });
       const value: unknown = await response.json();
+      if (compactionUnavailable(response.status, value)) { setUnsupportedHost(settings.address); setNotice("Compaction is not available on this host"); return; }
       if (identity.current !== startKey) return;
       const after = record(value) ? parseContext(value.context) : undefined;
       if (after) setSample({ key, snapshot: after, plans });
@@ -70,7 +73,7 @@ export function useContextView(settings: Settings | null, online: boolean, harne
     } catch (error) { if (identity.current === startKey) setNotice(error instanceof Error && error.message.startsWith("Compaction") ? error.message : "Outcome unknown. Check the session before retrying."); }
     finally { clearTimeout(timeout); if (identity.current === startKey) { pending.current = false; setPhase("idle"); } }
   }, [key, settings, session, profile, snapshot, online, harness, busy, plans]);
-  return { open, toggle: () => setOpen(v => !v), snapshot, plans, phase, notice, compact, canCompact: online && harness === "hermes" && Boolean(snapshot) && phase === "idle" };
+  return { open, toggle: () => setOpen(v => !v), snapshot, plans, phase, notice, compact, canCompact: online && harness === "hermes" && Boolean(snapshot) && phase === "idle" && unsupportedHost !== settings?.address, compactUnavailable: unsupportedHost !== undefined && unsupportedHost === settings?.address };
 }
 export type ContextControl = ReturnType<typeof useContextView>;
 export function ContextGauge({ control }: { control: ContextControl }) {
@@ -117,7 +120,7 @@ export function ContextCard({ control }: { control: ContextControl }) {
     {control.plans.map(p => <View key={p.provider} style={styles.plan}><Text style={styles.provider}>{p.provider}</Text>{p.unavailable ? <Text style={styles.meta}>Plan usage unavailable</Text> : p.windows.map(w => <View key={w.label} style={styles.window}><View style={styles.row}><Text style={styles.meta}>{w.label} {Math.round(w.percent)}%</Text><Text style={styles.reset}>{resetLabel(w.resetsAt)}</Text></View><View style={styles.planBar}><View style={{ width: `${w.percent}%`, height: 3, backgroundColor: colors.gold }} /></View></View>)}</View>)}
     {s?.notes.map(note => <Text key={note} style={styles.provenance}>{note}</Text>)}
     </ScrollView>
-    {s ? <View style={styles.footer}><Text style={[styles.meta, { flex: 1 }]}>{control.phase === "waiting" ? "Waiting for the running turn" : compressing ? "Summarizing messages" : s.threshold ? `~${tokenLabel(Math.max(0, s.threshold - s.used))} until auto-compact` : "Auto-compact unavailable"}</Text><PressScale accessibilityRole="button" accessibilityLabel="Compact now" disabled={!control.canCompact} onPress={() => void control.compact()} style={[styles.compact, !control.canCompact && { opacity: .4 }]}><Text style={styles.compactText}>Compact now</Text></PressScale></View> : null}
+    {s ? <View style={styles.footer}><Text style={[styles.meta, { flex: 1 }]}>{control.phase === "waiting" ? "Waiting for the running turn" : compressing ? "Summarizing messages" : s.threshold ? `~${tokenLabel(Math.max(0, s.threshold - s.used))} until auto-compact` : "Auto-compact unavailable"}</Text><PressScale accessibilityRole="button" accessibilityLabel={control.compactUnavailable ? "Compaction unavailable on this host" : "Compact now"} disabled={!control.canCompact} onPress={() => void control.compact()} style={[styles.compact, !control.canCompact && { opacity: .4 }]}><Text style={styles.compactText}>{control.compactUnavailable ? "Unavailable" : "Compact now"}</Text></PressScale></View> : null}
     {control.notice ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.notice}>{control.notice}</Text> : null}
   </Animated.View>;
 }

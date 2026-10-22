@@ -31,3 +31,13 @@ describe("context display math and boundary", () => {
     expect(tokenLabel(999)).toBe("999"); expect(tokenLabel(1000)).toBe("1.0k"); expect(tokenLabel(604100)).toBe("604.1k"); expect(tokenLabel(1_000_000)).toBe("1.0M");
   });
 });
+
+describe("compaction availability", () => {
+  test("only the explicit 501 unavailable answer marks the host as not carrying compaction", async () => {
+    const { compactionUnavailable } = await import("./context");
+    expect(compactionUnavailable(501, { ok: false, code: "unavailable", error: "Compaction is not available on this host" })).toBe(true);
+    for (const [status, value] of [[409, { ok: false, code: "unavailable" }], [501, { ok: true, code: "unavailable" }], [501, { ok: false, code: "outcome_unknown" }], [501, null], [404, { error: "not found" }], [200, { ok: true, code: "committed" }]] as const) {
+      expect(compactionUnavailable(status, value)).toBe(false);
+    }
+  });
+});
