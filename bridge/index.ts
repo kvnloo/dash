@@ -64,6 +64,7 @@ import {
 import { speechAvailable, transcribe, warmup } from "./speech";
 import { AttachmentError, AttachmentStore, promptWithAttachments, type StoredAttachment } from "./src/attachments";
 import { createFilesHttpHandler } from "./src/files-http";
+import { contextHttp } from "./src/context-http";
 import { createSuggestionsHttpHandler } from "./src/suggestions-http";
 import { LiveSurface } from "./src/live-surface";
 import { createModelsHttpHandler } from "./src/models-http";
@@ -692,6 +693,7 @@ const handleFiles = createFilesHttpHandler({
   ...(speechAvailable().ok ? { transcribe } : {}),
 });
 
+const handleContext = contextHttp({ sessions: hermesSessions });
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleModels = createModelsHttpHandler({ authorize });
 const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
@@ -729,6 +731,8 @@ const server = Bun.serve<SocketData>({
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      const context = await handleContext(request, await authorize(request));
+      if (context) return cors(context);
       const orchestra = await handleOrchestra(request);
       if (orchestra) return cors(orchestra);
       const models = await handleModels(request);
