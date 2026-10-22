@@ -17,7 +17,7 @@ test("native run/session/fleet collection remains read-only and does not infer a
   const db = new Database(join(profile, "state.db"));
   db.exec("CREATE TABLE sessions(id TEXT, title TEXT, model TEXT, started_at REAL, ended_at REAL, last_activity_at REAL, parent_session_id TEXT); CREATE TABLE messages(session_id TEXT, role TEXT, content TEXT, timestamp REAL, tool_calls TEXT)");
   db.query("INSERT INTO sessions VALUES(?,?,?,?,?,?,?)").run("session1", "Test session", "Sol", Date.now() / 1000 - 100000, null, Date.now() / 1000, "parent1");
-  db.query("INSERT INTO messages VALUES(?,?,?,?,?)").run("session1", "user", "Original unicode — request\ntoken=never-show-me", 1, null);
+  db.query("INSERT INTO messages VALUES(?,?,?,?,?)").run("session1", "user", 'OWNER ASK (verbatim): "Original unicode — request"\n\nWORKER INSTRUCTIONS\ntoken=never-show-me', 1, null);
   db.query("INSERT INTO messages VALUES(?,?,?,?,?)").run("session1", "assistant", "", 2, '[{"name":"read_file"}]');
   db.close();
   try {
@@ -30,7 +30,7 @@ test("native run/session/fleet collection remains read-only and does not infer a
     expect(run?.evidence?.checks[0]?.status).toBe("unknown");
     const session = snapshot.rows.find(r => r.key.startsWith("hermes:"));
     expect(session?.workers[0]?.calls).toBe(1);
-    expect(session?.evidence?.quote).toContain("Original unicode — request");
+    expect(session?.evidence?.quote).toBe("Original unicode — request");
     expect(JSON.stringify(snapshot)).not.toContain("never-show-me");
     expect(session?.workers[0]?.status).toBe("unknown");
     const job = snapshot.rows.find(r => r.key.startsWith("fleet:"));
