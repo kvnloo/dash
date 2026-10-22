@@ -1,5 +1,5 @@
 import { DensityText as Text, DensityAnimatedText } from "../Density";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, } from "react";
 import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -21,6 +21,8 @@ import {
   type RowGroup, type TraceRow, type TraceSnapshot, type TraceWorker,
 } from "../../trace/model";
 import { useDensity } from "../Density";
+import { shows } from "../../lib/info-levels";
+import type { InfoLevel } from "../../lib/density";
 import { InteractiveTile } from "../InteractiveTile";
 import { PressScale } from "../PressScale";
 import { fonts, radius, space, type } from "../../theme";
@@ -75,7 +77,7 @@ export function buildItems(rows: TraceRow[], variant: RowVariant, opts: { lanes:
  *  - tap a row (label or plot): onOpenRow with the row's window rect for the expand
  */
 export const TraceTimeline = memo(function TraceTimeline({
-  snapshot, rows, variant = "bars", lanes = true, groups = true, onOpenRow, onScrub, scrollRef, selectedKey, testID = "trace-timeline",
+  snapshot, rows, variant: variantProp = "bars", lanes = true, groups = true, onOpenRow, onScrub, scrollRef, selectedKey, testID = "trace-timeline",
 }: {
   snapshot: TraceSnapshot;
   rows: TraceRow[];
@@ -89,10 +91,12 @@ export const TraceTimeline = memo(function TraceTimeline({
   testID?: string;
 }) {
   const reduced = useReducedMotion();
-  const { sizing, fontScale } = useDensity();
+  const { sizing, fontScale, info } = useDensity();
+  const variant: RowVariant = shows("timeline", "bars", info) ? variantProp : "compact";
+  const showAxis = shows("timeline", "axis", info);
   const minRowHeight = Math.max(sizing.rowMin, Math.ceil(52 * fontScale));
   const span = snapshot.now + 40 * 60;
-  const items = useMemo(() => buildItems(rows, variant, { lanes, groups, minHeight: minRowHeight }), [rows, variant, lanes, groups, minRowHeight]);
+  const items = useMemo(() => buildItems(rows, variant, { lanes, groups, minHeight: minRowHeight }).filter((it) => showAxis || it.kind !== "axis"), [rows, variant, lanes, groups, minRowHeight, showAxis]);
   const offsets = useMemo(() => { let y = 0; return items.map((it) => { const o = y; y += it.h; return o; }); }, [items]);
   const maxDensity = useMemo(() => Math.max(1, ...rows.flatMap((r) => r.workers.flatMap((w) => w.density))), [rows]);
   const cutTimes = useMemo(() => rows.flatMap((r) => r.workers.filter((w) => w.status === "interrupted").map((w) => w.e)), [rows]);
@@ -242,6 +246,7 @@ export const TraceTimeline = memo(function TraceTimeline({
   const hours = useMemo(() => { const out: number[] = []; for (let t = 0; t <= span; t += 3600) out.push(t); return out; }, [span]);
 
   return (
+    <InfoContext.Provider value={info}>
     <View ref={wrapRef} style={styles.wrap} testID={testID}>
       {/* labels column */}
       <View style={styles.labels}>
@@ -293,8 +298,12 @@ export const TraceTimeline = memo(function TraceTimeline({
         </View>
       </GestureDetector>
     </View>
+    </InfoContext.Provider>
   );
 });
+
+/** Info level for the timeline's row, bar and note subcomponents (one subscription, not one per bar). */
+const InfoContext = createContext<InfoLevel>(3);
 
 function ZoomControls({ h, onZoom, span }: { h: number; onZoom(z: number): void; span: number }) {
   const opts: { label: string; z: number }[] = [
@@ -324,14 +333,15 @@ function GroupLabel({ group, n, h }: { group: RowGroup; n: number; h: number }) 
 
 const RowLabel = memo(function RowLabel({ row, h, selected, onPress, refCb, variant }: { row: TraceRow; h: number; selected: boolean; onPress?(): void; refCb(r: View | null): void; variant: RowVariant }) {
   const sum = summarizeRow(row);
+  const info = useContext(InfoContext);
   const dim = row.group === "earlier";
   return (
     <View ref={refCb} collapsable={false} style={{ height: h }}>
       <InteractiveTile title={row.key} summary={`${row.key}. ${rowMeta(sum)}`} onOpen={onPress} style={[styles.rowLabel, selected && styles.rowSel]} testID={`row-${row.key}`}>
         <View style={[styles.rowLabelInner, dim && { opacity: 0.55 }]}>
-          <Text style={styles.project} numberOfLines={1}>{row.project}{sum.workers > 1 ? <Text style={styles.count}>  ×{sum.workers}</Text> : null}</Text>
-          {variant === "compact" ? null : <Text style={styles.goal} numberOfLines={1}>{row.goal}</Text>}
-          {sum.cut || sum.asks ? (
+          <Text style={styles.project} numberOfLines={1}>{row.project}{sum.workers > 1 && shows("timeline", "counts", info) ? <Text style={styles.count}>  ×{sum.workers}</Text> : null}</Text>
+          {shows("timeline", "goal", info) ? <Text style={styles.goal} numberOfLines={1}>{row.goal}</Text> : null}
+          {(sum.cut || sum.asks) && shows("timeline", "counts", info) ? (
             <Text style={styles.meta} numberOfLines={1}>
               {sum.cut ? <Text style={{ color: tc.cut }}>{sum.cut} cut</Text> : null}{sum.cut && sum.asks ? " · " : null}{sum.asks ? <Text style={{ color: tc.ask }}>{sum.asks} ask{sum.asks === 1 ? "" : "s"}</Text> : null}
             </Text>
@@ -369,6 +379,7 @@ const PlotRow = memo(function PlotRow({ index, item, span, now, variant, maxDens
   pressed: SharedValue<number>; selected: boolean; dim: boolean;
 }) {
   const press = useAnimatedStyle(() => ({ backgroundColor: pressed.value === index ? "rgba(236,232,223,.05)" : "transparent" }));
+  const info = useContext(InfoContext);
   const last = item.row.workers.reduce<TraceWorker | null>((a, w) => (!a || w.e > a.e ? w : a), null);
   return (
     <Animated.View style={[styles.rowClip, { height: item.h }, selected && styles.plotSel, press]}>
@@ -378,13 +389,14 @@ const PlotRow = memo(function PlotRow({ index, item, span, now, variant, maxDens
           : item.row.workers.map((w, j) => (
             <WorkerBar key={w.id} w={w} lane={item.lanes[j] ?? 0} span={span} variant={variant} max={maxDensity} step={(item.h - 28) / item.nLanes} />
           ))}
-        {last ? <EndNote w={last} span={span} now={now} below={item.h - 17} y={variant === "density" ? 18 : 8 + (item.lanes[item.row.workers.indexOf(last)] ?? 0) * ((item.h - 28) / item.nLanes)} /> : null}
+        {last && shows("timeline", "annotations", info) ? <EndNote w={last} span={span} now={now} below={item.h - 17} y={variant === "density" ? 18 : 8 + (item.lanes[item.row.workers.indexOf(last)] ?? 0) * ((item.h - 28) / item.nLanes)} /> : null}
       </Animated.View>
     </Animated.View>
   );
 });
 
 function WorkerBar({ w, lane, span, variant, max, step }: { w: TraceWorker; lane: number; span: number; variant: RowVariant; max: number; step: number }) {
+  const outliers = shows("timeline", "outliers", useContext(InfoContext));
   const live = w.status === "running";
   const left = `${(w.s / span) * 100}%` as const;
   const width = `${(Math.max(60, w.e - w.s) / span) * 100}%` as const;
@@ -399,8 +411,8 @@ function WorkerBar({ w, lane, span, variant, max, step }: { w: TraceWorker; lane
       {w.density.map((d, i) => d === 0 ? null : (
         <View key={i} style={[styles.tick, { left: `${(i / n) * 100}%`, width: `${Math.max(0.6, 70 / n)}%`, height: `${Math.max(14, (d / max) * 100)}%` }]} />
       ))}
-      {w.stalls.map(([a, b], i) => <View key={`s${i}`} style={[styles.stall, { left: `${((a - w.s) / len) * 100}%`, width: `${((b - a) / len) * 100}%` }]} />)}
-      {w.fails.map((f, i) => <View key={`f${i}`} style={[styles.fail, { left: `${((f - w.s) / len) * 100}%` }]} />)}
+      {outliers && w.stalls.map(([a, b], i) => <View key={`s${i}`} style={[styles.stall, { left: `${((a - w.s) / len) * 100}%`, width: `${((b - a) / len) * 100}%` }]} />)}
+      {outliers && w.fails.map((f, i) => <View key={`f${i}`} style={[styles.fail, { left: `${((f - w.s) / len) * 100}%` }]} />)}
       {w.status === "interrupted" ? <View style={styles.cutCap} /> : null}
       {live ? <View style={styles.liveCap} /> : null}
     </View>

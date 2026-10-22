@@ -8,7 +8,11 @@ import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
 import { PressScale } from "../components/PressScale";
-import { DensityPicker, useDensity } from "../components/Density";
+import { DensityScope, LevelBadge, TypeScaleToggle, useDensity } from "../components/Density";
+import { FloatingFilter } from "../components/FilterMenu";
+import { ZeroCard } from "../components/ZeroCard";
+import { INFO_LEVELS } from "../lib/density";
+import { partsAt, type InfoComponent } from "../lib/info-levels";
 import { TileGrid } from "../components/TileGrid";
 import { InteractiveTile } from "../components/InteractiveTile";
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -35,8 +39,9 @@ type Section = (typeof SECTIONS)[number];
  * "Pick" stores the choice (dash.trace.feedback/v1, kind lab_pick); "Send picks" files it
  * through the existing in-app feedback path.
  */
-export function LabScreen({ navigation }: ScreenProps<"Lab">) {
-  const { density, sizing } = useDensity();
+function LabScreenBody({ navigation }: ScreenProps<"Lab">) {
+  const { density, info, sizing } = useDensity();
+  const [levelOf, setLevelOf] = useState<LabLevelComponent>("stat");
   const snapshot = traceStore.use((s) => s.snapshot);
   const records = feedbackStore.use((s) => s.records);
   const settings = store.use((s) => s.settings);
@@ -64,11 +69,24 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
   const P = (section: Section) => latest(records, "lab_pick", section);
 
   const items = useMemo(() => labItems(<>
-        <View style={{ gap: 12 }}><Text style={styles.intro}>Compare every component in Compact, Comfortable and Rich. Tap Pick to save a variant on this phone.</Text>
+        <View style={{ gap: 12 }}><Text style={styles.intro}>Compare every component in Compact, Comfortable and Spacious, at info levels L1–L5. Tap Pick to save a variant on this phone.</Text>
           <InteractiveTile title="Gesture playground" summary="Tap opens detail. Double tap pins locally in this view. Triple tap copies this summary. Hold, slide and release selects a radial action; release in the centre cancels." testID="gesture-playground" style={{ marginHorizontal: 16, padding: sizing.padding, borderWidth: 1, borderColor: tc.rule, borderRadius: 14, backgroundColor: tc.raised }}>
             <Text style={styles.blockT}>Gesture playground</Text><Text style={styles.intro}>Tap: detail · 2×: pin locally · 3×: copy
-Hold + slide: action wheel · centre: cancel</Text>
+Hold + slide: action wheel · centre: cancel
+Filter (sliders, beside @): hold 250 ms → rows bloom · slide to a row (tick) · pause 350 ms as the ring fills, or press hard → row arms · ←/→ scrub levels live · release commits · back onto the button cancels</Text>
           </InteractiveTile></View>
+
+        <Block title="Info levels" note="the same component at L1 to L5 · current layout" testID="lab-info-levels">
+          <View style={styles.levelPicker}>{LAB_LEVEL_COMPONENTS.map(c => <PressScale key={c} onPress={() => setLevelOf(c)} scaleTo={0.92} style={[styles.smallBtn, levelOf === c && styles.pickOn]} accessibilityRole="button" accessibilityLabel={`Show ${c} at every level`} accessibilityState={{ selected: levelOf === c }}><Text style={[styles.smallBtnT, levelOf === c && { color: colors.bg }]}>{c}</Text></PressScale>)}</View>
+          {INFO_LEVELS.map(level => <DensityScope key={level} fixedInfo={level}><View style={[styles.variant, styles.pad, { gap: 6 }]} testID={`lab-level-${level}`}>
+            <LevelBadge text={`L${level} · ${partsAt(CONTRACT_OF[levelOf], level).join(" + ")}`} />
+            {levelOf === "stat" ? <StatTile label="active" value={series[series.length - 1] ?? 0} sub={`peak ${Math.max(...series)}`} variant="spark" series={series} /> : null}
+            {levelOf === "read" ? <ReadStrip text={snapshot.read} variant="slide" /> : null}
+            {levelOf === "chip" && action ? <ActionChip action={{ ...action, id: `lvl-${level}` }} variant="card" onDecide={() => {}} /> : null}
+            {levelOf === "timeline" ? <TraceTimeline snapshot={snapshot} rows={rowsSmall.slice(0, 3)} lanes={false} groups={false} testID={`lab-level-timeline-${level}`} /> : null}
+            {levelOf === "zero" ? <View style={{ height: 150, justifyContent: "flex-end" }}><ZeroCard screen={`lab-level-${level}`} onOpenTrace={() => navigation.navigate("Trace")} /></View> : null}
+          </View></DensityScope>)}
+        </Block>
 
         <Block title="Timeline" note="pinch · pan with momentum · hold to scrub" testID="lab-timeline">
           {(["bars", "density", "compact"] as RowVariant[]).map((v, i) => (
@@ -143,19 +161,29 @@ Hold + slide: action wheel · centre: cancel</Text>
             </PressScale>
           ) : null}
         </View>
-      </>), [snapshot, records, chipState, replay, sent, settings, pick, rowsSmall, rowsLane, series, density, sizing.padding, stress]);
+      </>), [snapshot, records, chipState, replay, sent, settings, pick, rowsSmall, rowsLane, series, density, info, sizing.padding, stress, levelOf, action, st, navigation]);
 
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
       <ScreenHeader title="Component lab" compact onBack={() => navigation.goBack()} onAction={() => navigation.navigate("Trace")} action="Open trace" icon="activity" />
-      <DensityPicker />
+      <TypeScaleToggle />
       <FlashList testID="lab-scroll" contentContainerStyle={styles.scroll} drawDistance={915}
         data={items} getItemType={(_item, index) => index}
         renderItem={({ item, index }) => <LabCell active={visible.has(index)}>{item}</LabCell>}
         onViewableItemsChanged={({ viewableItems }) => setVisible(new Set(viewableItems.flatMap(item => item.index === null ? [] : [item.index])))}
         extraData={visible} />
+      <FloatingFilter screen="lab" />
     </SafeAreaView>
   );
+}
+
+const LAB_LEVEL_COMPONENTS = ["stat", "read", "chip", "timeline", "zero"] as const;
+type LabLevelComponent = (typeof LAB_LEVEL_COMPONENTS)[number];
+const CONTRACT_OF: Record<LabLevelComponent, InfoComponent> = { stat: "stat", read: "readStrip", chip: "actionChip", timeline: "timeline", zero: "zeroCard" };
+
+/** Lab reads and writes its own density override. */
+export function LabScreen(props: ScreenProps<"Lab">) {
+  return <DensityScope screen="lab"><LabScreenBody {...props} /></DensityScope>;
 }
 
 function labItems(fragment: ReactElement<{ children: ReactNode }>) { return Children.toArray(fragment.props.children); }
@@ -219,6 +247,7 @@ const styles = StyleSheet.create({
   pick: { minWidth: 64, height: 32, borderRadius: radius.pill, borderWidth: 1, borderColor: tc.barEdge, paddingHorizontal: 10 },
   pickOn: { backgroundColor: tc.text, borderColor: tc.text },
   pickT: { fontFamily: fonts.semibold, fontSize: 12, color: tc.text },
+  levelPicker: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: space.lg },
   sideCell: { flex: 1, minWidth: 0, borderWidth: 1, borderColor: tc.rule, borderRadius: radius.md, padding: 4, gap: 4 },
   orbRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-around", padding: space.md, rowGap: space.md },
   orbCell: { alignItems: "center", gap: 4, minWidth: 52 },

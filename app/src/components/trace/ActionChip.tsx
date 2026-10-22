@@ -19,6 +19,7 @@ import { SNAP, settleTiming, fade, press as pressMotion, MOTION_MS } from "../..
 import { swipeDecision, type SwipeDecision, type TraceAction } from "../../trace/model";
 import { fonts, radius, space, type } from "../../theme";
 import { useDensity } from "../Density";
+import { shows } from "../../lib/info-levels";
 import { PressScale } from "../PressScale";
 import { tc } from "./tokens";
 
@@ -39,7 +40,7 @@ export function ActionChip({ action, variant = "card", decision, onDecide }: {
   onDecide(id: string, value: Decision | "undo"): void;
 }) {
   const reduced = useReducedMotion();
-  const { sizing } = useDensity();
+  const { sizing, info } = useDensity();
   const [w, setW] = useState(320);
   const x = useSharedValue(0);
   const press = useSharedValue(1);
@@ -94,18 +95,18 @@ export function ActionChip({ action, variant = "card", decision, onDecide }: {
           onAccessibilityAction={(e) => onDecide(action.id, e.nativeEvent.actionName === "increment" ? "do" : "not_now")}
         >
           <View style={styles.headRow}>
-            <View style={[styles.outcome, { borderColor: tone }]}><Text style={[styles.outcomeText, { color: tone }]} numberOfLines={1}>{action.outcomeLabel}</Text></View>
+            {shows("actionChip", "outcome", info) ? <View style={[styles.outcome, { borderColor: tone }]}><Text style={[styles.outcomeText, { color: tone }]} numberOfLines={1}>{action.outcomeLabel}</Text></View> : <View />}
             {decided ? (
               <Animated.View entering={reduced ? undefined : FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)}>
                 <Pressable onPress={() => onDecide(action.id, "undo")} hitSlop={10} accessibilityRole="button" accessibilityLabel="Undo">
                   <Text style={[styles.badge, { color: decision === "do" ? tc.ok : tc.text3 }]}>{decision === "do" ? "Do ✓" : "Not now"} · undo</Text>
                 </Pressable>
               </Animated.View>
-            ) : variant !== "buttons" ? <Text style={styles.hint}>⇠ swipe ⇢</Text> : null}
+            ) : variant !== "buttons" && shows("actionChip", "hint", info) ? <Text style={styles.hint}>⇠ swipe ⇢</Text> : null}
           </View>
           <Text style={styles.title} numberOfLines={variant === "pill" ? 1 : 2}>{action.title}</Text>
-          {variant === "pill" ? null : <Text style={styles.why} numberOfLines={2}>{action.why}</Text>}
-          {variant === "buttons" && !decided ? (
+          {variant === "pill" || !shows("actionChip", "why", info) ? null : <Text style={styles.why} numberOfLines={info >= 5 ? undefined : 2}>{action.why}</Text>}
+          {(variant === "buttons" || shows("actionChip", "buttons", info)) && !decided ? (
             <View style={styles.btnRow}>
               <ChipButton label="Do" tone={tc.ok} onPress={() => commit("do")} />
               <ChipButton label="Not now" tone={tc.text2} onPress={() => commit("not_now")} />

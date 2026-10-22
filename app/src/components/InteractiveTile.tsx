@@ -46,7 +46,7 @@ export const InteractiveTile = memo(function InteractiveTile({ title, summary, c
 }) {
   const ref = useRef<View>(null);
   const detail = useContext(DetailContext);
-  const { sizing, setDensity, density } = useDensity();
+  const { sizing, cycleLayout } = useDensity();
   const [pinned, setPinned] = useState(false);
   const [copyState, setCopyState] = useState("");
   const open = () => {
@@ -55,7 +55,7 @@ export const InteractiveTile = memo(function InteractiveTile({ title, summary, c
   };
   const pin = () => setPinned(value => !value);
   const copy = () => { void setStringAsync(summary).then(() => setCopyState("Copied"), () => setCopyState("Copy failed")); };
-  const cycleDensity = () => setDensity(density === "compact" ? "comfortable" : density === "comfortable" ? "rich" : "compact");
+  const cycleDensity = cycleLayout;
   const { gesture, animatedStyle, holding } = useTileGestures({ onOpen: open, onPrimary: pin, onSecondary: copy, actions: [
     { id: "detail", label: "Detail", run: open }, { id: "pin", label: pinned ? "Unpin" : "Pin locally", run: pin }, { id: "copy", label: "Copy", run: copy }, { id: "density", label: "Density", run: cycleDensity }, ...extraActions.slice(0, 4),
   ] });

@@ -9,6 +9,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
+import { DensityScope } from "../components/Density";
+import { FilterButton, FilterMenuHost } from "../components/FilterMenu";
+import { ZeroCard } from "../components/ZeroCard";
+import { projectsFromHosts } from "../lib/project-data";
+import { usePageControls } from "../lib/settings-registry";
 import { composerPlaceholder } from "./composer-placeholder";
 import { sessionViewerLabel } from "./session-viewer-label";
 import { KeyboardDock, KeyboardInsetView } from "../components/KeyboardDock";
@@ -250,7 +255,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   );
 
 
+  const allConversations = store.use((s) => s.conversations);
+  const chatProject = useMemo(() => conversation ? projectsFromHosts({ conversations: allConversations, hosts: connection.hosts, cwd: connection.cwd, now: Date.now() }).find(p => p.chatIds.includes(conversation.id)) : undefined, [allConversations, connection.hosts, connection.cwd, conversation]);
+  const detailMode = conversation?.detailMode ?? "Compact";
+  usePageControls("chat", [{
+    id: "chat-details", label: "Thinking & tools", kind: "scrub", home: "composer", values: DETAIL_MODES, index: Math.max(0, DETAIL_MODES.indexOf(detailMode)),
+    select: i => { const mode = DETAIL_MODES[i]; if (!mode) return; const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); },
+    hint: "How much reasoning and tool output each reply shows",
+  }]);
   return (
+    <DensityScope screen="chat" chat={conversation?.id}>
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
       <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} />
@@ -315,11 +329,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           <PressScale accessibilityRole="button" accessibilityLabel="Choose harness" onPress={() => { haptic.select(); setPickerVisible(true); }} style={styles.liveChip}><Text style={styles.liveChipText}>{harnessName} · Change</Text></PressScale>
           {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approval}><Text style={styles.approvalText}>{approvalCount} approvals{approvalDryRun ? " · preview" : ""} ›</Text></PressScale> : null}
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 16, gap: 4 }}>
-          <Text style={{ ...type.mono, color: colors.textTertiary, fontSize: 10, marginRight: 6 }}>Thinking & tools</Text>
-          {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
-        </View>
+        <ZeroCard screen="chat" project={chatProject} onOpenTrace={() => navigation.navigate("Trace")} />
+        <FilterMenuHost screen="chat">
         <Composer
+          filter={<FilterButton />}
           key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
           disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
@@ -341,6 +354,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onStop={onStop}
           onVoice={() => navigation.navigate("Voice")}
         />
+        </FilterMenuHost>
       </KeyboardDock>
       <HarnessPicker
         visible={pickerVisible}
@@ -350,6 +364,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         onClose={() => setPickerVisible(false)}
       />
     </View>
+    </DensityScope>
   );
 }
 

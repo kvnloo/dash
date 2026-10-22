@@ -6,6 +6,7 @@ import Svg, { Path } from "react-native-svg";
 import { InteractiveTile } from "../InteractiveTile";
 import { NumberTicker } from "../NumberTicker";
 import { useDensity } from "../Density";
+import { shows } from "../../lib/info-levels";
 import { haptic } from "../../haptics";
 import { SNAP, fade, MOTION_MS } from "../../motion";
 import { fonts, radius, space, type } from "../../theme";
@@ -30,7 +31,8 @@ export function StatTile({ label, value, sub, tone = tc.text, variant = "number"
   const reduced = useReducedMotion();
   const [focus, setFocus] = useState<number | null>(null);
   const shown = focus !== null && segments?.[focus] ? segments[focus].n : value;
-  const { sizing } = useDensity();
+  const { sizing, info } = useDensity();
+  const range = series?.length ? `range ${Math.min(...series)}–${Math.max(...series)}` : segments?.length ? `${Math.round((segments[0]?.n ?? 0) / Math.max(1, value) * 100)}% ${segments[0]?.label ?? ""}` : undefined;
   return (
     <InteractiveTile
       key={replay}
@@ -43,10 +45,12 @@ export function StatTile({ label, value, sub, tone = tc.text, variant = "number"
       <View style={[styles.inner, { padding: sizing.padding }]}>
         <Text style={styles.label} numberOfLines={1}>{focus !== null && segments?.[focus] ? segments[focus].label : label}</Text>
         <NumberTicker value={shown} style={[styles.value, { color: focus !== null && segments?.[focus] ? segments[focus].color : tone }]} />
-        {variant === "meter" && segments ? <DotMeter segments={segments} focus={focus} reduced={reduced} /> : null}
-        {variant === "spark" && series ? <Spark series={series} tone={tone} /> : null}
-        {sub ? <Text style={styles.sub}>{sub}</Text> : null}
-        {segments?.length ? <Text style={styles.sub}>Hold → Segment</Text> : null}
+        {sub && shows("stat", "delta", info) ? <Text style={styles.sub} testID="stat-delta">{sub}</Text> : null}
+        {shows("stat", "chart", info) && variant === "meter" && segments ? <DotMeter segments={segments} focus={focus} reduced={reduced} /> : null}
+        {shows("stat", "chart", info) && variant === "spark" && series ? <Spark series={series} tone={tone} /> : null}
+        {range && shows("stat", "range", info) ? <Text style={styles.sub} testID="stat-range">{range}</Text> : null}
+        {segments?.length && shows("stat", "breakdown", info) ? <View testID="stat-breakdown">{segments.map(seg => <Text key={seg.label} style={[styles.sub, { color: seg.color }]}>{seg.n} {seg.label}</Text>)}<Text style={styles.sub}>Hold → Segment</Text></View> : null}
+        {series?.length && shows("stat", "breakdown", info) ? <Text style={styles.sub} testID="stat-breakdown">{series.length} samples · last {series[series.length - 1]}</Text> : null}
       </View>
     </InteractiveTile>
   );

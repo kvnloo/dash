@@ -1,22 +1,16 @@
-export type Density = "compact" | "comfortable" | "rich";
-export const DENSITIES: Density[] = ["compact", "comfortable", "rich"];
+import { LAYOUTS, layoutSizing, type LayoutDensity } from "./density";
+
+export type Density = LayoutDensity;
+export const DENSITIES: readonly Density[] = LAYOUTS;
 
 /** Minimums, not fixed heights: font scaling may grow rows; plots stretch without an aspect lock. */
 export function componentSizing(density: Density, fontScale = 1) {
-  const scale = Math.max(1, fontScale);
-  const base = density === "compact" ? 44 : density === "rich" ? 84 : 60;
-  return {
-    rowMin: Math.ceil(base * scale),
-    tileMin: Math.ceil((density === "compact" ? 100 : density === "rich" ? 176 : 136) * scale),
-    padding: density === "compact" ? 8 : density === "rich" ? 18 : 12,
-    plotMin: density === "compact" ? 44 : density === "rich" ? 100 : 68,
-    gap: density === "compact" ? 4 : density === "rich" ? 12 : 8,
-  };
+  return layoutSizing(density, fontScale);
 }
 
 /** Keep enough readable width for padding and large-type labels before choosing columns. */
 export function tileColumns(availableWidth: number, density: Density, fontScale = 1, gap = 8): number {
-  const minimum = density === "compact" ? 96 : density === "rich" ? 128 : 112;
+  const minimum = density === "compact" ? 96 : density === "spacious" ? 124 : 112;
   return Math.max(1, Math.min(3, Math.floor((availableWidth + gap) / (minimum * Math.max(1, fontScale) + gap))));
 }
 

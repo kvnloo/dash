@@ -22,8 +22,8 @@ import { debugUi } from "../../debug/ui-store";
 import { isDebugActive } from "../../debug/expose";
 import { orchestraMotionFixture } from "../../debug/orchestra-fixture";
 import { OrchestraGraph } from "../../components/OrchestraGraph";
-import { WorkspaceActions } from "../../components/WorkspaceHeader";
-import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
+import { actionable, approvals } from "../../store/approvals";
+import { primaryProject } from "../../lib/project-data";
 
 const Card = memo(function Card({
   item,
@@ -135,13 +135,16 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
   const { width } = useWindowDimensions();
   const fixture = debugUi.use(s => s.orchestraFixture);
   const fixtureOn = isDebugActive() && fixture === true;
+  const pending = approvals.use(s => s.items.filter(actionable).length);
+  const approvalsRow = useMemo(() => pending > 0 ? { pending, open: () => { haptic.select(); navigation.navigate("Approvals"); } } : undefined, [pending, navigation]);
+  // The primary project lives in the Zero card above the bar; the list keeps only the others.
+  const others = useMemo(() => { const first = primaryProject(projects); return projects.filter(p => p.id !== first?.id); }, [projects]);
   const graph = useMemo(() => fixtureOn ? orchestraMotionFixture() : orchestraMap(hosts, conversations), [hosts, conversations, fixtureOn]);
   return (
-    <OrchestraGraph graph={graph} width={width} fixture={fixtureOn} actions={<WorkspaceActions navigation={navigation} />}>
-    <View style={styles.projects}>
+    <OrchestraGraph graph={graph} width={width} fixture={fixtureOn} approvals={approvalsRow}>
+    {others.length ? <View style={styles.projects}>
     <FlashList
-      data={projects}
-      ListHeaderComponent={<TraceEntryCard onOpen={() => navigation.navigate("Trace")} />}
+      data={others}
       renderItem={renderItem}
       keyExtractor={(p) => p.id}
       contentContainerStyle={styles.list}
@@ -152,7 +155,7 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
         </View>
       }
     />
-    </View>
+    </View> : null}
     </OrchestraGraph>
   );
 }

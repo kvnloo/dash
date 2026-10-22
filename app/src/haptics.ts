@@ -10,6 +10,10 @@ export const haptic = {
   select(): void {
     if (enabled) void Haptics.selectionAsync().catch(() => {});
   },
+  /** Stronger than a tick: a row became a scrubber. */
+  arm(): void {
+    if (enabled) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+  },
   success(): void {
     if (enabled) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
   },

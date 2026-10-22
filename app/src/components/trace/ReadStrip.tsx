@@ -1,5 +1,5 @@
 import { DensityText as Text, DensityAnimatedText } from "../Density";
-import { useEffect, useMemo } from "react";
+import { createContext, useContext, useEffect, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
   FadeIn,
@@ -13,6 +13,7 @@ import Animated, {
 import { SNAP, fade, MOTION_MS } from "../../motion";
 import { fonts, space, type } from "../../theme";
 import { useDensity } from "../Density";
+import { readText, shows } from "../../lib/info-levels";
 import { tc } from "./tokens";
 
 export type ReadVariant = "slide" | "words" | "shimmer";
@@ -20,23 +21,31 @@ export type ReadVariant = "slide" | "words" | "shimmer";
 const spring = { ...SNAP, reduceMotion: ReduceMotion.System };
 
 /** The interpretation strip. Numbers in the text render in tabular mono. */
-export function ReadStrip({ text, variant = "slide", replay = 0 }: { text: string; variant?: ReadVariant; replay?: number }) {
+export function ReadStrip({ text: full, variant = "slide", replay = 0 }: { text: string; variant?: ReadVariant; replay?: number }) {
   const reduced = useReducedMotion();
-  const { sizing } = useDensity();
+  const { sizing, info } = useDensity();
+  const text = readText(full, info);
+  const plain = !shows("readStrip", "numbers", info);
   const sentences = useMemo(() => text.split(/(?<=\.)\s+/).filter(Boolean), [text]);
   return (
     <View style={[styles.strip, { padding: sizing.padding, minWidth: 0, alignSelf: "stretch" }]} testID={`read-strip-${variant}`} accessibilityRole="summary" accessibilityLabel={`Read: ${text}`}>
-      <Animated.View entering={reduced ? undefined : FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} style={styles.tagRow} key={`tag-${replay}`}>
+      <PlainContext.Provider value={plain}>
+      {shows("readStrip", "tag", info) ? <Animated.View entering={reduced ? undefined : FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} style={styles.tagRow} key={`tag-${replay}`}>
         <Text style={styles.tag}>READ</Text>
-      </Animated.View>
+      </Animated.View> : null}
       {variant === "slide" ? <Slide key={replay} sentences={sentences} reduced={reduced} /> : null}
       {variant === "words" ? <Words key={replay} text={text} reduced={reduced} /> : null}
       {variant === "shimmer" ? <Shimmer key={replay} text={text} reduced={reduced} /> : null}
+      </PlainContext.Provider>
     </View>
   );
 }
 
+const PlainContext = createContext(false);
+
 function Rich({ s }: { s: string }) {
+  const plain = useContext(PlainContext);
+  if (plain) return <>{s}</>;
   const parts = s.split(/(\d[\d:.,%×]*)/);
   return <>{parts.map((p, i) => (/^\d/.test(p) ? <Text key={i} style={styles.num}>{p}</Text> : p))}</>;
 }
@@ -61,7 +70,8 @@ function Word({ w, i }: { w: string; i: number }) {
   const p = useSharedValue(0);
   useEffect(() => { p.value = withTiming(1, spring); }, [i, p]);
   const st = useAnimatedStyle(() => ({ opacity: p.value, transform: [{ translateY: (1 - p.value) * 6 }] }));
-  return <DensityAnimatedText style={[styles.body, st]}>{/^\d/.test(w) ? <Text style={styles.num}>{w}</Text> : w}{" "}</DensityAnimatedText>;
+  const plain = useContext(PlainContext);
+  return <DensityAnimatedText style={[styles.body, st]}>{!plain && /^\d/.test(w) ? <Text style={styles.num}>{w}</Text> : w}{" "}</DensityAnimatedText>;
 }
 
 function Words({ text, reduced }: { text: string; reduced: boolean }) {

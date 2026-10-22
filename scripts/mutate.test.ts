@@ -60,6 +60,10 @@ describe("targets", () => {
       "app/src/motion.ts",
       "shared/protocol.ts",
       "bridge/src/roster.ts",
+      "app/src/lib/density.ts",
+      "app/src/lib/info-levels.ts",
+      "app/src/lib/filter-gesture.ts",
+      "app/src/lib/zero-card.ts",
     ]);
   });
 

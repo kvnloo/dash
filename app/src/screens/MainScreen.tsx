@@ -32,6 +32,12 @@ import { colors, space, type } from "../theme";
 import { BotsPane } from "./panes/BotsPane";
 import { ChatsPane } from "./panes/ChatsPane";
 import { OrchestraPane } from "./panes/OrchestraPane";
+import { DensityScope } from "../components/Density";
+import { FilterButton, FilterMenuHost } from "../components/FilterMenu";
+import { ZeroCard } from "../components/ZeroCard";
+import { primaryProject, projectsFromHosts } from "../lib/project-data";
+
+const TAB_SCREENS = ["bots", "chats", "orchestra"] as const;
 
 function feedbackFromSearch(item: SearchResult): FeedbackAction {
   switch (item.kind) {
@@ -162,6 +168,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const hosts = store.use((s) => s.connection.hosts);
   const cwd = store.use((s) => s.connection.cwd);
   const settings = store.use((s) => s.settings);
+  const zeroProject = useMemo(() => primaryProject(projectsFromHosts({ conversations, hosts, cwd, now: Date.now() })), [conversations, hosts, cwd]);
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
   const searchActive = parsed.mode !== "discover" && parsed.scope !== "unknown" && composerTrigger(query) === null;
@@ -284,6 +291,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             : "No live sessions or installed harnesses match."
           : "No matches. Use @ for bots and chats, / for harness files and tools.";
 
+  const screen = TAB_SCREENS[index] ?? "chats";
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav
@@ -295,7 +303,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           pagerRef.current?.setPage(next);
         }}
       />
-      <WorkspaceHeader navigation={navigation} tab={index} titleOnly={index === 2} />
+      <WorkspaceHeader navigation={navigation} tab={index} approvals={index !== 2} />
       <ConnectionPill />
       <BlurTargetView ref={blurTarget} style={styles.body}>
         {searchActive ? (
@@ -330,13 +338,13 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               pageWidth={width}
             >
               <View key="bots" style={{ width, flex: 1 }}>
-                <BotsPane navigation={navigation} />
+                <DensityScope screen="bots"><BotsPane navigation={navigation} /></DensityScope>
               </View>
               <View key="chats" style={{ width }}>
-                <ChatsPane navigation={navigation} />
+                <DensityScope screen="chats"><ChatsPane navigation={navigation} /></DensityScope>
               </View>
               <View key="orchestra" style={{ width, flex: 1 }}>
-                <OrchestraPane navigation={navigation} />
+                <DensityScope screen="orchestra"><OrchestraPane navigation={navigation} /></DensityScope>
               </View>
             </MainPager>
           </Animated.View>
@@ -344,7 +352,11 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       </BlurTargetView>
 
       <KeyboardDock style={styles.searchDock}>
+        <DensityScope screen={screen}>
+        {index === 2 && !searchActive ? <ZeroCard screen={screen} project={zeroProject} onOpenTrace={() => navigation.navigate("Trace")} /> : null}
+        <FilterMenuHost screen={screen}>
         <GlobalSearchBar
+          filter={<FilterButton />}
           value={query}
           blurTarget={blurTarget}
           onChange={setQuery}
@@ -374,6 +386,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             setQuery("");
           }}
         />
+        </FilterMenuHost>
+        </DensityScope>
       </KeyboardDock>
     </View>
   );

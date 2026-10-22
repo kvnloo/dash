@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { cancelAnimation, ReduceMotion, useAnimatedProps, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
@@ -11,6 +11,12 @@ import { colors, controlMin, radius, space, type } from "../theme";
 import { mapPositions, matchesFilter, projectMap, type MapEdge, type MapFilter, type MapKind, type MapLayout, type MapNode, type MapRelation, type OrchestraMap, type Point } from "../lib/orchestra-map";
 import { AgentOrb } from "./AgentOrb";
 import { PressScale } from "./PressScale";
+import { useDensity } from "./Density";
+import { shows } from "../lib/info-levels";
+import type { InfoLevel } from "../lib/density";
+import { usePageControls, type SettingRow } from "../lib/settings-registry";
+
+const NodeInfo = createContext<InfoLevel>(3);
 
 const ALine = Animated.createAnimatedComponent(Line);
 const ACircle = Animated.createAnimatedComponent(Circle);
@@ -18,7 +24,9 @@ const spring = { ...snappy, reduceMotion: ReduceMotion.System };
 const kindColor: Record<MapKind, string> = { chat: colors.gold, subagent: colors.orchestraSubagent, repo: colors.gold, host: colors.textMuted };
 const stateColor = { idle: colors.textMuted, live: colors.information, "needs-you": colors.warn, failing: colors.danger };
 const relationColor: Record<MapRelation, string> = { delegated: colors.gold, touched: colors.information, hosted: colors.textFaint, workspace: colors.provenance };
-const layouts: MapLayout[] = ["spine", "constellation", "radial", "islands"];
+/** Orchestra's own view registry. The menu's view row is data-driven from this list, so renamed views (#98) render unchanged. */
+export const ORCHESTRA_VIEWS: readonly MapLayout[] = ["spine", "constellation", "radial", "islands"];
+const layouts = ORCHESTRA_VIEWS;
 const legend: (MapKind | MapRelation)[] = ["chat", "subagent", "repo", "host", "delegated", "touched", "hosted", "workspace"];
 function legendColor(kind: MapKind | MapRelation): string {
   return kind === "chat" || kind === "subagent" || kind === "repo" || kind === "host" ? kindColor[kind] : relationColor[kind];
@@ -60,14 +68,18 @@ function MapDot({ node, point, selected, dim, reduced, onPress }: { node: MapNod
   }, [node.state, reduced, pulse]);
   const position = useAnimatedStyle(() => ({ left: x.value - 22, top: y.value - 22, opacity: dim ? 0.2 : 1, transform: [{ scale: appear.value }] }));
   const ring = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }], opacity: 1.6 - pulse.value }));
+  const info = useContext(NodeInfo);
+  const stateOn = shows("orchestraNode", "state", info);
   return <Animated.View style={[styles.node, position]}>
     <PressScale accessibilityRole="button" accessibilityLabel={`${node.kind}: ${node.label}, ${node.state}`} accessibilityState={{ selected }} onPress={onPress} style={styles.nodeHit}>
-      <Animated.View style={[styles.stateRing, { borderColor: selected ? colors.goldHi : stateColor[node.state], borderWidth: selected || node.state !== "idle" ? 2 : 0 }, ring]} />
+      <Animated.View style={[styles.stateRing, { borderColor: selected ? colors.goldHi : stateColor[node.state], borderWidth: selected || (stateOn && node.state !== "idle") ? 2 : 0 }, ring]} />
       <View style={[styles.glyph, { backgroundColor: node.kind === "host" ? "transparent" : kindColor[node.kind], borderColor: kindColor[node.kind], borderRadius: node.kind === "repo" ? 3 : 10, width: node.kind === "subagent" ? 10 : 14, height: node.kind === "subagent" ? 10 : 14 }]} />
       {node.kind === "host" ? <View style={styles.hostCenter} /> : null}
-      {node.state === "live" || node.state === "needs-you" ? <View style={styles.orb} pointerEvents="none">{reduced ? <Text style={styles.liveLabel}>{node.state === "needs-you" ? "!" : "•"}</Text> : <AgentOrb thinking={node.thinking} size={20} />}</View> : null}
+      {stateOn && (node.state === "live" || node.state === "needs-you") ? <View style={styles.orb} pointerEvents="none">{reduced ? <Text style={styles.liveLabel}>{node.state === "needs-you" ? "!" : "•"}</Text> : <AgentOrb thinking={node.thinking} size={20} />}</View> : null}
     </PressScale>
-    <Text numberOfLines={1} style={styles.nodeLabel}>{node.label}</Text>
+    {shows("orchestraNode", "label", info) ? <Text numberOfLines={1} style={styles.nodeLabel}>{node.label}</Text> : null}
+    {shows("orchestraNode", "caption", info) ? <Text numberOfLines={1} style={[styles.nodeLabel, styles.nodeMeta]}>{node.state === "needs-you" ? "needs you" : node.state}</Text> : null}
+    {shows("orchestraNode", "path", info) && node.path ? <Text numberOfLines={1} style={[styles.nodeLabel, styles.nodePath]}>{node.path.split("/").slice(-2).join("/")}</Text> : null}
   </Animated.View>;
 }
 
@@ -75,7 +87,8 @@ function Control({ label, selected = false, onPress, onLongPress }: { label: str
   return <PressScale accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }} onPress={() => { haptic.select(); onPress(); }} onLongPress={onLongPress ? () => { haptic.select(); onLongPress(); } : undefined} style={[styles.control, selected && styles.controlOn]}><Text style={[styles.controlText, selected && { color: colors.goldHi }]}>{label}</Text></PressScale>;
 }
 
-export function OrchestraGraph({ graph, width, children, actions, fixture = false }: { graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode; fixture?: boolean }) {
+export function OrchestraGraph({ graph, width, children, approvals, fixture = false }: { graph: OrchestraMap; width: number; children?: ReactNode; approvals?: { pending: number; open(): void }; fixture?: boolean }) {
+  const { info } = useDensity();
   const thumb = useHandedness();
   const [layout, setLayout] = useState<MapLayout>("spine");
   const [filter, setFilter] = useState<MapFilter | null>(null);
@@ -109,7 +122,16 @@ export function OrchestraGraph({ graph, width, children, actions, fixture = fals
     tx.value = withTiming((width / 2 - point.x) * 1.35, spring);
     ty.value = withTiming((height / 2 - point.y) * 1.35 - 35, spring);
   }
-  return <View style={styles.root} testID="orchestra-graph">
+  const legendValues = ["none", ...legend];
+  const rows: SettingRow[] = [
+    { id: "orchestra-view", label: "View", kind: "scrub", home: "composer", values: layouts.map(mode => `${mode[0]?.toUpperCase() ?? ""}${mode.slice(1)}`), index: Math.max(0, layouts.indexOf(layout)), select: i => { const next = layouts[i]; if (next) { reset(); setLayout(next); } }, hint: "Graph layout" },
+    { id: "orchestra-scope", label: "Show", kind: "toggle", home: "composer", values: ["All", "Focus"], index: focusOnly ? 1 : 0, select: i => setFocusOnly(i === 1) },
+    { id: "orchestra-legend", label: "Highlight", kind: "scrub", home: "composer", values: legendValues, index: filter ? Math.max(0, legendValues.indexOf(filter.kind)) : 0, select: i => { const kind = legend[i - 1]; setFilter(kind ? { kind, only: false } : null); }, hint: "Highlight one kind" },
+    { id: "orchestra-reset", label: "Reset", kind: "action", home: "composer", values: ["view"], index: 0, select: () => {}, run: () => { reset(); setFilter(null); setFocusOnly(false); } },
+    ...(approvals ? [{ id: "orchestra-approvals", label: "Approvals", kind: "action" as const, home: "composer" as const, values: [`${approvals.pending} pending`], index: 0, select: () => {}, run: approvals.open }] : []),
+  ];
+  usePageControls("orchestra", rows);
+  return <NodeInfo.Provider value={info}><View style={styles.root} testID="orchestra-graph">
     <View style={styles.status}><Text style={styles.hint}>{fixture ? "Fixture · not live" : "Tap to inspect · pinch & pan"}</Text><Text accessibilityLiveRegion="polite" style={styles.hint}>{projected.nodes.length} shown{filter && !filter.only ? ` · ${projected.nodes.filter(n => matchesFilter(n, graph, filter)).length} highlighted` : ""}</Text></View>
     <View style={styles.stateSummary} accessibilityLabel="Graph states">
       {(["live", "needs-you", "failing"] satisfies MapNode["state"][]).map(state => <Text key={state} style={[styles.hint, { color: stateColor[state] }]}>{graph.nodes.filter(node => node.state === state).length} {state === "needs-you" ? "needs you" : state}</Text>)}
@@ -131,16 +153,12 @@ export function OrchestraGraph({ graph, width, children, actions, fixture = fals
       </Animated.View> : null}
     </View>
     {children}
-    <View style={styles.dock}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.legend} accessibilityLabel="Graph legend. Tap to highlight, hold to show only.">
-        {legend.map(kind => <PressScale key={kind} accessibilityRole="button" accessibilityLabel={`Legend ${kind}`} accessibilityHint="Tap to highlight; long press to show only" accessibilityState={{ selected: filter?.kind === kind }} onPress={() => { haptic.select(); setFilter(filter?.kind === kind ? null : { kind, only: false }); }} onLongPress={() => { haptic.select(); setFilter({ kind, only: true }); reset(); }} style={[styles.legendItem, filter?.kind === kind && styles.controlOn]}>
-          <Text style={[styles.legendGlyph, { color: legendColor(kind) }]}>{kind === "repo" ? "□" : kind === "host" ? "⊙" : kind === "chat" || kind === "subagent" ? "●" : "━"}</Text><Text style={styles.controlText}>{kind}</Text>
-        </PressScale>)}
-      </ScrollView>
-      <View style={styles.controls}>{layouts.map(mode => <Control key={mode} label={mode[0]?.toUpperCase() + mode.slice(1)} selected={layout === mode} onPress={() => { reset(); setLayout(mode); }} />)}</View>
-      <View style={[styles.controls, thumb.row]}><Control label={focusOnly ? "Focus" : "All"} selected={focusOnly} onPress={() => setFocusOnly(!focusOnly)} /><Control label="Reset" onPress={() => { reset(); setFilter(null); setFocusOnly(false); }} />{actions}</View>
-    </View>
-  </View>;
+    {shows("orchestraNode", "state", info) ? <View style={styles.dock} accessibilityLabel="Graph legend">
+      {legend.map(kind => <View key={kind} style={[styles.legendItem, filter?.kind === kind && styles.controlOn]}>
+        <Text style={[styles.legendGlyph, { color: legendColor(kind) }]}>{kind === "repo" ? "□" : kind === "host" ? "⊙" : kind === "chat" || kind === "subagent" ? "●" : "━"}</Text><Text style={styles.controlText}>{kind}</Text>
+      </View>)}
+    </View> : null}
+  </View></NodeInfo.Provider>;
 }
 
 const styles = StyleSheet.create({
@@ -157,7 +175,9 @@ const styles = StyleSheet.create({
   orb: { position: "absolute", left: 29, top: 0 },
   liveLabel: { color: colors.information, ...type.label },
   nodeLabel: { position: "absolute", top: 44, width: 84, textAlign: "center", color: colors.textMuted, ...type.small, fontSize: 10, lineHeight: 12 },
-  dock: { paddingHorizontal: space.md, paddingTop: 4, borderTopWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
+  dock: { flexDirection: "row", flexWrap: "wrap", columnGap: 4, paddingHorizontal: space.md, paddingVertical: 2 },
+  nodeMeta: { top: 56, color: colors.textTertiary },
+  nodePath: { top: 68, color: colors.textFaint },
   controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 2 },
   control: { minHeight: controlMin, minWidth: controlMin, paddingHorizontal: 10, borderRadius: radius.pill },
   controlOn: { backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.goldLo },

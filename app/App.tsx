@@ -141,7 +141,7 @@ export default function App() {
                 <Stack.Screen name="Voice" component={VoiceScreen} options={{ presentation: "fullScreenModal" }} />
                 <Stack.Screen name="Pair" component={PairScreen} />
                 <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: "modal" }} />
-                <Stack.Screen name="Trace" component={TraceScreen} />
+                <Stack.Screen name="Trace" component={TraceScreen} options={{ presentation: "modal" }} />
                 <Stack.Screen name="Lab" component={LabScreen} />
               </Stack.Navigator>
               <BridgePullOverlay />

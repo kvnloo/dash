@@ -31,6 +31,10 @@ export const TARGETS: readonly Target[] = [
   { file: "app/src/motion.ts", tests: ["app/src/components/motion.test.ts"] },
   { file: "shared/protocol.ts", tests: ["shared/protocol.test.ts", "shared/protocol-boundary.test.ts", "shared/protocol-attachments.test.ts", "shared/reply-parts.test.ts", "bridge/src/thinking-summary.test.ts"] },
   { file: "bridge/src/roster.ts", tests: ["bridge/src/roster.test.ts", "bridge/src/roster-boundary.test.ts"] },
+  { file: "app/src/lib/density.ts", tests: ["app/src/lib/density.test.ts"] },
+  { file: "app/src/lib/info-levels.ts", tests: ["app/src/lib/info-levels.test.ts"] },
+  { file: "app/src/lib/filter-gesture.ts", tests: ["app/src/lib/filter-gesture.test.ts"] },
+  { file: "app/src/lib/zero-card.ts", tests: ["app/src/lib/zero-card.test.ts"] },
 ];
 
 export type Mutant = {

@@ -1,6 +1,6 @@
 import { toggleHandedness, useHandedness } from "../lib/useHandedness";
 import { Feather } from "@expo/vector-icons";
-import { type RefObject, memo, useRef, useState } from "react";
+import { type ReactNode, type RefObject, memo, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { applyScopePrefix } from "../lib/global-search";
@@ -22,6 +22,8 @@ interface Props {
   placeholder?: string;
   /** Bottom dock on main screen — chips expand upward. */
   dock?: "top" | "bottom";
+  /** Display filter button, placed beside @ on the thumb side. */
+  filter?: ReactNode;
 }
 
 export const GlobalSearchBar = memo(function GlobalSearchBar({
@@ -34,6 +36,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
   onSend,
   placeholder = "Message Dash",
   dock = "top",
+  filter,
 }: Props) {
   const thumb = useHandedness();
   const inputRef = useRef<TextInput>(null);
@@ -61,6 +64,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
         >
           <Text style={{ ...type.cardTitle, color: colors.gold }}>@</Text>
         </PressScale>
+        {filter}
         <TextInput
           ref={inputRef}
           value={value}

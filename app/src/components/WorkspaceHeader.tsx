@@ -13,18 +13,19 @@ import { IconButton } from "./ScreenHeader";
  * The row under the top navigation bar on Main: the current pane's name (the dot pager has
  * no labels), pending approvals, compose and settings. Navigation itself stays in AppNav.
  */
-export function WorkspaceHeader({ navigation, tab, titleOnly = false }: { navigation: NavigationProp<RootStackParamList>; tab: number; titleOnly?: boolean }) {
+export function WorkspaceHeader({ navigation, tab, titleOnly = false, approvals: showApprovals = true }: { navigation: NavigationProp<RootStackParamList>; tab: number; titleOnly?: boolean; approvals?: boolean }) {
   const title = TAB_LABELS[clampTab(tab)];
   return <View style={styles.header}>
     <Text style={styles.title} numberOfLines={1} accessibilityRole="header">{title}</Text>
-    {titleOnly ? null : <WorkspaceActions navigation={navigation} />}
+    {titleOnly ? null : <WorkspaceActions navigation={navigation} approvals={showApprovals} />}
   </View>;
 }
 
-export function WorkspaceActions({ navigation }: { navigation: NavigationProp<RootStackParamList> }) {
+/** `approvals={false}` where the page's display menu already owns Approvals (Orchestra). */
+export function WorkspaceActions({ navigation, approvals: showApprovals = true }: { navigation: NavigationProp<RootStackParamList>; approvals?: boolean }) {
   const pending = approvals.use(s => s.items.filter(actionable).length);
   return <View style={styles.actions}>
-    {pending > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Approvals, ${pending} pending`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approvals}>
+    {pending > 0 && showApprovals ? <PressScale accessibilityRole="button" accessibilityLabel={`Approvals, ${pending} pending`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approvals}>
       <Text style={styles.approvalsLabel}>Approvals</Text>
       {/* A sans numeral on a gold pill: a serif "1" beside a label reads as the letter I. */}
       <View style={styles.badge}><Text style={styles.badgeText}>{pending > 99 ? "99+" : pending}</Text></View>

@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { toggleHandedness, useHandedness } from "../lib/useHandedness";
-import { type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
 import { pickFiles, pickPhotos } from "../lib/attachment-picker";
@@ -26,6 +26,8 @@ import { composerMode, type SendMode } from "../lib/composer-mode";
 import { haptic } from "../haptics";
 
 interface Props {
+  /** Display filter button on the leading (thumb-mirrored) edge of the field. */
+  filter?: ReactNode;
   disabled: boolean;
   streaming: boolean;
   steerBusy?: boolean;
@@ -43,7 +45,7 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ disabled, streaming, steerBusy = false, placeholder, initialText, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice }: Props) {
+export const Composer = memo(function Composer({ filter, disabled, streaming, steerBusy = false, placeholder, initialText, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice }: Props) {
   const thumb = useHandedness();
   const [choice, setChoice] = useState<SendMode>("steer");
   useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
@@ -119,6 +121,7 @@ export const Composer = memo(function Composer({ disabled, streaming, steerBusy 
     ) : null}
     {steerBusy ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
     <View style={[styles.field, thumb.row]}>
+      {filter}
       <TextInput style={styles.input} value={text} onChangeText={setText} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline={false} numberOfLines={1} keyboardAppearance="dark" autoCapitalize="sentences" onSubmitEditing={submit} accessibilityLabel="Message" />
       <View style={[styles.controls, thumb.row]}>
         <PressScale accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttach} disabled={disabled} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale>

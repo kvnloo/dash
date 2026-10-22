@@ -5,7 +5,8 @@ import { ScrollView } from "react-native-gesture-handler";
 import Animated, { FadeInUp, FadeOutUp, useReducedMotion } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TileGrid } from "../components/TileGrid";
-import { DensityPicker } from "../components/Density";
+import { DensityScope } from "../components/Density";
+import { FloatingFilter } from "../components/FilterMenu";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { ActionChip } from "../components/trace/ActionChip";
 import { ReadStrip } from "../components/trace/ReadStrip";
@@ -19,7 +20,11 @@ import { feedbackStore, latest, loadFeedback, record, traceStore } from "../trac
 import { colors, fonts, space } from "../theme";
 
 /** Agent trace, native: READ strip, swipe chips, stat tiles and the gesture timeline. */
-export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
+export function TraceScreen(props: ScreenProps<"Trace">) {
+  return <DensityScope screen="trace"><TraceScreenBody {...props} /></DensityScope>;
+}
+
+function TraceScreenBody({ navigation }: ScreenProps<"Trace">) {
   const { snapshot, origin } = traceStore.use((s) => s);
   const records = feedbackStore.use((s) => s.records);
   const reduced = useReducedMotion();
@@ -36,7 +41,6 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
       <ScreenHeader title="Trace" compact onBack={() => navigation.goBack()} onAction={() => navigation.navigate("Lab")} action="Component lab" icon="layers" />
-      <DensityPicker />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} testID="trace-scroll">
         <Text style={styles.sub}>
           {clock(snapshot.t0, 0)} to now {clock(snapshot.t0, snapshot.now)} · {st.workers} workers · {origin === "bundled" ? "bundled snapshot" : "live from bridge"}
@@ -62,6 +66,7 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
           <Text style={styles.floatS}>{scrub.live} live then</Text>
         </Animated.View>
       ) : null}
+      <FloatingFilter screen="trace" />
       {open ? <TraceDetail snapshot={snapshot} row={open.row} origin={open.rect} onClose={() => setOpen(null)} /> : null}
     </SafeAreaView>
   );

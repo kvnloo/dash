@@ -103,3 +103,10 @@ export function projectsFromHosts(input: {
   }
   return [...projects.values()].sort((a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id));
 }
+
+/** The project the Zero card shows: the most recently updated one. */
+export function primaryProject(projects: readonly LiveProject[]): LiveProject | undefined {
+  let best: LiveProject | undefined;
+  for (const project of projects) if (!best || project.updatedAt > best.updatedAt) best = project;
+  return best;
+}
