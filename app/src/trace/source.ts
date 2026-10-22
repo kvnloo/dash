@@ -3,19 +3,38 @@ import { createStore } from "../store/createStore";
 import bundled from "./snapshot.json";
 import { parseTraceSnapshot, type TraceSnapshot } from "./model";
 
-/**
- * Where the trace comes from. Today: the bundled export (scripts/trace-snapshot.py).
- * Bridge wiring later: have the bridge run the exporter and answer a `trace_snapshot`
- * request with the same dash.trace.snapshot/v1 JSON, then call `setTraceSnapshot(parseTraceSnapshot(msg.snapshot))`
- * from net/bridge.ts. Screens read `traceStore` and need no change.
- */
-export const traceStore = createStore<{ snapshot: TraceSnapshot; origin: "bundled" | "bridge" }>({
-  snapshot: parseTraceSnapshot(bundled),
-  origin: "bundled",
-});
+/** Bundled sample export. Component Lab demo only; production Trace never renders it. */
+export const demoSnapshot: TraceSnapshot = parseTraceSnapshot(bundled);
 
-export function setTraceSnapshot(snapshot: TraceSnapshot): void {
-  traceStore.set({ snapshot, origin: "bridge" });
+/**
+ * Production Trace feed. Private live data lives only in memory and is discarded on
+ * pairing changes and outages; there is no sample fallback.
+ */
+export type TraceFeed =
+  | { phase: "unpaired" }
+  | { phase: "connecting" }
+  | { phase: "live"; snapshot: TraceSnapshot; receivedAt: number; arrived: string[] }
+  | { phase: "unavailable"; reason: string; at: number; lastLiveAt: number | null };
+
+export const traceStore = createStore<{ feed: TraceFeed }>({ feed: { phase: "unpaired" } });
+
+export function resetTraceFeed(paired: boolean): void {
+  traceStore.set({ feed: paired ? { phase: "connecting" } : { phase: "unpaired" } });
+}
+
+/** Rows that appeared since the previous live poll; empty on the first load after a gap. */
+export function setTraceSnapshot(snapshot: TraceSnapshot, now = Date.now()): void {
+  const previous = traceStore.get().feed;
+  const known = previous.phase === "live" ? new Set(previous.snapshot.rows.map(r => r.key)) : null;
+  const fresh = known ? snapshot.rows.filter(r => !known.has(r.key)).map(r => r.key) : [];
+  const arrived = previous.phase === "live" && !fresh.length ? previous.arrived : fresh;
+  traceStore.set({ feed: { phase: "live", snapshot, receivedAt: now, arrived } });
+}
+
+export function setTraceUnavailable(reason: string, now = Date.now()): void {
+  const previous = traceStore.get().feed;
+  const lastLiveAt = previous.phase === "live" ? previous.receivedAt : previous.phase === "unavailable" ? previous.lastLiveAt : null;
+  traceStore.set({ feed: { phase: "unavailable", reason, at: now, lastLiveAt } });
 }
 
 /* ---------- owner responses (same contract as the prototype: dash.trace.feedback/v1) ---------- */

@@ -26,7 +26,7 @@ import { submitInAppFeedback } from "../lib/feedback-submit";
 import type { ScreenProps } from "../navigation";
 import { store } from "../store/app";
 import { activeSeries } from "../trace/model";
-import { feedbackStore, latest, loadFeedback, record, traceStore } from "../trace/source";
+import { demoSnapshot, feedbackStore, latest, loadFeedback, record } from "../trace/source";
 import { colors, fonts, radius, space, type } from "../theme";
 
 const SECTIONS = ["timeline", "lane-row", "read-strip", "action-chip", "stat-tile", "orb-states"] as const;
@@ -39,7 +39,7 @@ type Section = (typeof SECTIONS)[number];
  */
 export function LabScreen({ navigation }: ScreenProps<"Lab">) {
   const { density, sizing } = useDensity();
-  const snapshot = traceStore.use((s) => s.snapshot);
+  const snapshot = demoSnapshot;
   const records = feedbackStore.use((s) => s.records);
   const settings = store.use((s) => s.settings);
   const [visible, setVisible] = useState<Set<number>>(new Set([0, 1]));
@@ -66,7 +66,8 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
   const P = (section: Section) => latest(records, "lab_pick", section);
 
   const items = useMemo(() => labItems(<>
-        <View style={{ gap: 12 }}><Text style={styles.intro}>Compare every component in Compact, Comfortable and Rich. Tap Pick to save a variant on this phone.</Text>
+        <View style={{ gap: 12 }}><Text style={styles.demo} testID="lab-demo-label">DEMO DATA · bundled sample, not live events. Live events are on Trace.</Text>
+          <Text style={styles.intro}>Compare every component in Compact, Comfortable and Rich. Tap Pick to save a variant on this phone.</Text>
           <InteractiveTile title="Gesture playground" summary="Tap opens detail. Double tap pins locally in this view. Triple tap copies this summary. Hold, slide and release selects a radial action; release in the centre cancels." testID="gesture-playground" style={{ marginHorizontal: 16, padding: sizing.padding, borderWidth: 1, borderColor: tc.rule, borderRadius: 14, backgroundColor: tc.raised }}>
             <Text style={styles.blockT}>Gesture playground</Text><Text style={styles.intro}>Tap: detail · 2×: pin locally · 3×: copy
 Hold + slide: action wheel · centre: cancel</Text>
@@ -206,6 +207,7 @@ function PickBar({ letter, name, picked, onPick, stacked = false }: { letter: st
 }
 
 const styles = StyleSheet.create({
+  demo: { fontFamily: fonts.mono, fontSize: 11, color: tc.ask, paddingHorizontal: 16 },
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { paddingBottom: 140, gap: space.xl },
   intro: { ...type.small, color: tc.text2, paddingHorizontal: space.lg },
