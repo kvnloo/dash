@@ -14,6 +14,7 @@ import { TraceDetail } from "../components/trace/TraceDetail";
 import { TraceTimeline, type RowRect, type ScrubState } from "../components/trace/TraceTimeline";
 import { tc } from "../components/trace/tokens";
 import type { ScreenProps } from "../navigation";
+import { CHIP_REORDER_MS, orderChips, restoreChip } from "../trace/chip-state";
 import { activeSeries, clock, type TraceRow } from "../trace/model";
 import { feedbackStore, latest, loadFeedback, record, traceStore } from "../trace/source";
 import { colors, fonts, space } from "../theme";
@@ -29,6 +30,16 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
   useEffect(() => { void loadFeedback(); }, []);
 
   const series = useMemo(() => activeSeries(snapshot.rows, snapshot.now), [snapshot]);
+  const [orderTime, setOrderTime] = useState(Date.now);
+  useEffect(() => {
+    setOrderTime(Date.now());
+    const timer = setTimeout(() => setOrderTime(Date.now()), CHIP_REORDER_MS + 10);
+    return () => clearTimeout(timer);
+  }, [records]);
+  const actions = orderChips(snapshot.actions, id => {
+    const response = records.find(r => r.kind === "action" && r.id === id);
+    return restoreChip(response?.value, response ? Date.parse(response.at) : 0);
+  }, orderTime);
   const st = snapshot.stats;
   const onDecide = useCallback((id: string, v: "do" | "not_now" | "undo") => record("action", id, v), []);
   const onOpenRow = useCallback((row: TraceRow, rect: RowRect) => setOpen({ row, rect }), []);
@@ -43,8 +54,8 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
         </Text>
         <ReadStrip text={snapshot.read} variant="slide" />
         <View style={styles.chips}>
-          {snapshot.actions.map((a) => (
-            <ActionChip key={a.id} action={a} variant="card" decision={latest(records, "action", a.id)} onDecide={onDecide} />
+          {actions.map((a) => (
+            <ActionChip key={a.id} action={a} variant="card" decision={latest(records, "action", a.id)} decidedAt={records.find(r => r.kind === "action" && r.id === a.id)?.at} onDecide={onDecide} />
           ))}
         </View>
         <TileGrid>

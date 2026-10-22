@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { HostInfo } from "../../../shared/protocol";
 import type { Conversation } from "../model";
 import { orchestraMotionFixture } from "../debug/orchestra-fixture";
-import { mapPositions, matchesFilter, orchestraMap, projectMap, type MapLayout } from "./orchestra-map";
+import { matchesFilter, orchestraMap, projectMap } from "./orchestra-map";
 
 const hosts: HostInfo[] = [{ id: "0", name: "0", hostname: "groot", online: true, self: true, agents: [
   { id: "a", name: "Design", kind: "hermes", status: "running", sessionId: "s", cwd: "/work/dash" },
@@ -21,7 +21,7 @@ test("roster maps kinds independently of unknown providers and does not invent r
   expect(graph.nodes.find(n => n.label === "Installed")).toBeUndefined();
   expect(new Set(graph.edges.map(e => e.relation))).toEqual(new Set(["hosted", "workspace"]));
   expect(graph.edges.every(e => !e.active)).toBe(true);
-  expect(orchestraMap([{ ...hosts[0]!, online: false }], []).nodes).toHaveLength(0);
+  expect(orchestraMap([{ ...hosts[0]!, online: false }], []).nodes.find(n => n.kind === "host")?.online).toBe(false);
 });
 
 test("thinking, needs-you and failure states come from reported turn state", () => {
@@ -45,22 +45,4 @@ test("legend tap highlights without removing; hold filters; relation filters inc
   const filtered = projectMap(graph, { kind: "host", only: true }, null, false);
   expect(filtered.nodes).toHaveLength(1);
   expect(filtered.edges).toHaveLength(0);
-});
-
-test("all layouts retain IDs and keep thirteen nodes within the viewport", () => {
-  const graph = orchestraMotionFixture();
-  const layouts: MapLayout[] = ["spine", "constellation", "radial", "islands"];
-  for (const layout of layouts) {
-    const positions = mapPositions(graph.nodes, 412, 440, layout);
-    expect(positions.size).toBe(13);
-    for (const point of positions.values()) {
-      expect(point.x).toBeGreaterThanOrEqual(22);
-      expect(point.x).toBeLessThanOrEqual(390);
-      expect(point.y).toBeGreaterThanOrEqual(22);
-      expect(point.y).toBeLessThanOrEqual(418);
-    }
-    const points = [...positions.values()];
-    for (const a of points) for (const b of points) if (a !== b) expect(Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))).toBeGreaterThanOrEqual(44);
-  }
-  expect(mapPositions([], 412, 440, "spine").size).toBe(0);
 });

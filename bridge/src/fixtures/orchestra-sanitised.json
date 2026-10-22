@@ -1,0 +1,32 @@
+{
+  "origin": "Read-only clean/state.db sample, 2026-10-21; IDs, labels, paths and content replaced; parent/source/end-state preserved. W1 tested by replaying live owners against this worktree.",
+  "sessions": [
+    {
+      "id": "parent",
+      "source": "oneshot",
+      "parent_session_id": null,
+      "started_at": 1792567461.844113,
+      "ended_at": 1792567623.72624,
+      "end_reason": "cli_close",
+      "title": "Sanitised parent"
+    },
+    {
+      "id": "worker",
+      "source": "subagent",
+      "parent_session_id": "parent",
+      "started_at": 1792567575.3011758,
+      "ended_at": 1792567623.037925,
+      "end_reason": "agent_close",
+      "title": "Sanitised worker"
+    }
+  ],
+  "tool_calls": [
+    {
+      "id": "call-redacted",
+      "function": {
+        "name": "write_file",
+        "arguments": "{\"path\": \"/work/dash/src/example.ts\", \"content\": \"[removed]\"}"
+      }
+    }
+  ]
+}

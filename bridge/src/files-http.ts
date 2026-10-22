@@ -5,6 +5,8 @@
 //     → { id, name, mime, size }   (the phone sends `id` with its next chat turn)
 //   POST /share   { "path": "/abs/path" }
 //     → { ok, message }            (owner-initiated KDE Connect push to the phone)
+//   POST /transcribe   body: one recorded utterance (any container ffmpeg reads)
+//     → { text }                   (speech-to-text only; no turn starts)
 import { bearerToken, secretMatches } from "./bridge-security";
 import { AttachmentError, type AttachmentStore } from "./attachments";
 import { checkShareable, pickDevice, shareToPhone, type Run } from "./share";
@@ -19,16 +21,19 @@ export interface FilesHttpOptions {
   device?: string;
   run: Run;
   onEvent?(event: string, fields: Record<string, unknown>): void;
+  /** Host STT. Absent when the bridge has no speech model. */
+  transcribe?(audio: Uint8Array, id: string): Promise<{ text: string }>;
 }
 
 const MAX_SHARE_JSON = 8 * 1024;
+export const MAX_TRANSCRIBE_BYTES = 10 * 1024 * 1024;
 
 export function createFilesHttpHandler(options: FilesHttpOptions) {
   const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
   let sharing = false;
   return async (request: Request): Promise<Response | null> => {
     const url = new URL(request.url);
-    if (url.pathname !== "/attachments" && url.pathname !== "/share" && url.pathname !== "/files") return null;
+    if (url.pathname !== "/attachments" && url.pathname !== "/share" && url.pathname !== "/files" && url.pathname !== "/transcribe") return null;
     if (!(options.authorize ? await options.authorize(request) : secretMatches(bearerToken(request), options.token))) return json({ error: "unauthorized" }, 401);
     if (url.pathname === "/files") {
       if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
@@ -36,6 +41,21 @@ export function createFilesHttpHandler(options: FilesHttpOptions) {
       catch { return json({ error: "Image unavailable" }, 404); }
     }
     if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+    if (url.pathname === "/transcribe") {
+      if (!options.transcribe) return json({ error: "Speech-to-text is not available on this host." }, 503);
+      const length = Number(request.headers.get("content-length") ?? "0");
+      if (length > MAX_TRANSCRIBE_BYTES) return json({ error: "recording too large" }, 413);
+      const audio = new Uint8Array(await request.arrayBuffer());
+      if (audio.byteLength === 0) return json({ error: "empty recording" }, 400);
+      if (audio.byteLength > MAX_TRANSCRIBE_BYTES) return json({ error: "recording too large" }, 413);
+      try {
+        const { text } = await options.transcribe(audio, `transcribe-${Date.now().toString(36)}`);
+        options.onEvent?.("transcribe.done", { bytes: audio.byteLength, chars: text.length });
+        return json({ text });
+      } catch {
+        return json({ error: "Could not transcribe the recording." }, 500);
+      }
+    }
     if (url.pathname === "/attachments") {
       const name = url.searchParams.get("name") ?? "";
       try {

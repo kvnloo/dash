@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
@@ -47,6 +47,10 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
     const result = await launchSharedVoice(Platform.OS, Linking);
     setView({ kind: "shared", result });
   };
+
+  // Chosen from the composer mic's Live voice mode: go straight into z0live instead of asking for a second tap.
+  const autostart = props.route.params?.autostart === true;
+  useEffect(() => { if (autostart && !live) void openVoice(); }, [autostart]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (view.kind === "legacy") {
     return <LegacyVoiceScreen {...props} onExit={() => setView({ kind: "shared" })} />;

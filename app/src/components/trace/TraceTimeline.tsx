@@ -511,7 +511,7 @@ function EndNote({ w, span, now, y, below }: { w: TraceWorker; span: number; now
       </View>
     );
   }
-  const text = w.asks.length ? `asks ${askWord(w.asks[0] ?? "")}` : w.status === "interrupted" && !w.resumed ? "cut" : null;
+  const text = w.asks.length ? `needs OK: ${askWord(w.asks[0] ?? "")}` : w.status === "interrupted" && !w.resumed ? "cut" : null;
   if (!text) return null;
   const color = w.asks.length ? tc.ask : tc.cut;
   const nearNow = now - w.e < 2400;

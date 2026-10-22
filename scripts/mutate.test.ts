@@ -48,6 +48,8 @@ describe("collectMutants", () => {
 describe("targets", () => {
   test("covers the modules that accidentally mutated UI or protocol", () => {
     expect(TARGETS.map((t) => t.file)).toEqual([
+      "app/src/lib/pending-queue.ts",
+      "app/src/trace/chip-state.ts",
       "bridge/src/model-health.ts",
       "bridge/src/model-roles.ts",
       "shared/model-roles.ts",
@@ -59,7 +61,14 @@ describe("targets", () => {
       "app/src/components/bridge-pull.ts",
       "app/src/motion.ts",
       "shared/protocol.ts",
+      "shared/z0live-state.ts",
+      "bridge/src/z0live-state.ts",
+      "app/src/lib/orb-phase.ts",
       "bridge/src/roster.ts",
+      "app/src/lib/annotate/strokes.ts",
+      "app/src/lib/annotate/pointer.ts",
+      "app/src/lib/annotate/align.ts",
+      "app/src/lib/annotate/compose.ts",
     ]);
   });
 
