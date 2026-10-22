@@ -64,23 +64,25 @@ function round(n: number) {
   return Number(n.toFixed(3));
 }
 
-function rotatePoint(x: number, y: number, degrees: number) {
+type Point = readonly [number, number];
+function rotatePoint(x: number, y: number, degrees: number): Point {
   const rad = (degrees * Math.PI) / 180;
   const c = Math.cos(rad);
   const s = Math.sin(rad);
   return [x * c - y * s, x * s + y * c];
 }
 
-function createClosedPath(points: number[][], tension = 1) {
+function createClosedPath(points: readonly Point[], tension = 1) {
   if (points.length < 3) return "";
   const safeTension = clamp(tension, 0, 2, 1);
-  const first = points[0];
+  const first = points[0]!;
   let path = `M${round(first[0])},${round(first[1])}`;
   for (let i = 0; i < points.length; i += 1) {
-    const prev = points[(i - 1 + points.length) % points.length];
-    const cur = points[i];
-    const next = points[(i + 1) % points.length];
-    const after = points[(i + 2) % points.length];
+    // The generated polygon has at least three points; every wrapped index is in bounds.
+    const prev = points[(i - 1 + points.length) % points.length]!;
+    const cur = points[i]!;
+    const next = points[(i + 1) % points.length]!;
+    const after = points[(i + 2) % points.length]!;
     const c1 = [
       round(cur[0] + ((next[0] - prev[0]) / 6) * safeTension),
       round(cur[1] + ((next[1] - prev[1]) / 6) * safeTension)
@@ -103,7 +105,7 @@ function createEyePoints(geometry: Partial<EyeGeometry> = {}) {
   const curve = clamp(geometry.curve, 0, 1, 0.78);
   const skew = clamp(geometry.skew, -1, 1, 0);
   const exponent = 2 + curve * 2.4;
-  return Array.from({ length: EYE_POINTS }, (_, index) => {
+  return Array.from({ length: EYE_POINTS }, (_, index): Point => {
     const angle = (index / EYE_POINTS) * Math.PI * 2;
     const cosine = Math.cos(angle);
     const sine = Math.sin(angle);
@@ -123,7 +125,7 @@ export function createEyePath(geometry: Partial<EyeGeometry> = {}) {
 }
 
 export function createBlobBodyPath() {
-  const points = Array.from({ length: 16 }, (_, index) => {
+  const points = Array.from({ length: 16 }, (_, index): Point => {
     const angle = (index / 16) * Math.PI * 2 - Math.PI / 2;
     const cosine = Math.cos(angle);
     const sine = Math.sin(angle);
@@ -175,8 +177,7 @@ const BLINKS = (() => {
 /** bloub blinkLid: 1 open → 0 closed → 1 open over BLINK_DUR. */
 function blinkLid(tSec: number) {
   "worklet";
-  for (let i = 0; i < BLINKS.length; i += 1) {
-    const start = BLINKS[i];
+  for (const start of BLINKS) {
     if (tSec < start) break;
     const k = (tSec - start) / BLINK_DUR;
     if (k >= 0 && k <= 1) {

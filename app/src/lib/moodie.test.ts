@@ -16,8 +16,9 @@ describe("real synergy Moodie faces", () => {
     expect(hermesProfileKey({ id: "hermes:session:clean:s1", kind: "hermes" })).toBeUndefined();
     expect(botFaceIdentity(" clean ")).toEqual(botFaceIdentity("clean"));
     expect(botFaceIdentity("clean").key).toBe("hermes:clean");
-    expect(new Set(["clean", "default", "chiefstaff", "intake"].map(p => botFaceIdentity(p).rest))).toHaveProperty("size", 4);
-    expect(botFaceIdentity("clean").rest).toBe("curious");
+    expect(["clean", "default", "chiefstaff", "intake"].map(p => botFaceIdentity(p).rest)).toEqual(["curious", "neutral", "calm", "cheeky"]);
+    expect(botFaceIdentity("constructor").rest).toBeTypeOf("string");
+    expect(botFaceIdentity("new-profile")).toEqual(botFaceIdentity("new-profile"));
   });
   test("state maps to the upstream expression table without inventing activity", () => {
     expect(expressionForState("idle", "cheeky")).toBe("cheeky");
@@ -39,6 +40,7 @@ describe("real synergy Moodie faces", () => {
     expect(liveliness(2).breath).not.toBe(liveliness(3).breath);
     expect(liveliness(1.4).lid).toBe(1);
     expect(liveliness(1.481).lid).toBeCloseTo(0, 6);
+    expect(liveliness(901.481).lid).toBeCloseTo(liveliness(1.481).lid, 6);
     expect(liveliness(2, { wander: 0, blink: false, float: false })).toEqual({ dYaw: 0, dPitch: 0, dRoll: 0, lid: 1, driftX: 0, driftY: 0, breath: 1 });
   });
 });
