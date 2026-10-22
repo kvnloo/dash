@@ -1,6 +1,6 @@
 import { Text, View, StyleSheet } from "react-native";
 import type { SummaryInfo } from "../../../shared/thinking-summary";
-import { parseSummary } from "../../../shared/thinking-summary";
+import { parseSummary, summaryLabel } from "../../../shared/thinking-summary";
 import { replySummaries, useKeyed } from "../store/text";
 import { colors, type } from "../theme";
 export function ThinkingSummaryChip({ turnId, summary }: { turnId: string; summary: SummaryInfo }) {
@@ -8,7 +8,7 @@ export function ThinkingSummaryChip({ turnId, summary }: { turnId: string; summa
   let current = summary;
   try { current = parseSummary(JSON.parse(live)) ?? summary; } catch { /* Persisted summary after relaunch. */ }
   return <View style={styles.chip} accessibilityLabel={current.kind === "turn" ? "Turn summary" : "Thinking summary"}>
-    <Text numberOfLines={current.kind === "live" ? 1 : 2} style={styles.label}>Thought {Math.round(current.durationMs / 1000)} s · {current.text}</Text>
+    <Text numberOfLines={current.kind === "live" ? 1 : 2} style={styles.label}>{summaryLabel(current)}</Text>
   </View>;
 }
 const styles = StyleSheet.create({

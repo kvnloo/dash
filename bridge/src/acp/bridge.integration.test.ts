@@ -6,14 +6,14 @@ import { parseServerMessage, type ServerMessage } from "../../../shared/protocol
 
 function shellQuote(value: string): string { return `'${value.replaceAll("'", "'\\''")}'`; }
 
-async function bridgeFixture(mode = "ok") {
+async function bridgeFixture(mode = "ok", overrides: Record<string, string> = {}) {
   const root = await mkdtemp(join(tmpdir(), "dash-bridge-fixture-"));
   const bin = join(root, "bin");
   await mkdir(bin);
   await writeFile(join(bin, "tailscale"), "#!/bin/sh\nexit 1\n", { mode: 0o700 });
   await writeFile(join(bin, "omp"), `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(join(import.meta.dir, "fixtures/agent.ts"))} ${shellQuote(mode)}\n`, { mode: 0o700 });
   const proc = Bun.spawn([process.execPath, resolve(import.meta.dir, "../../index.ts")], {
-    env: { ...process.env, HOME: root, PATH: `${bin}:${process.env.PATH}`, DASH_ALLOW_LOOPBACK: "1", DASH_HOST: "127.0.0.1", DASH_PORT: "0", DASH_STT_MODEL: join(root, "no-model"), DASH_ALLOWED_ORIGINS: "http://localhost:8100", DASH_ENABLE_LEGACY_CLI: "0", DASH_ACP_FIXTURE_PID: join(root, "agent.pid") },
+    env: { ...process.env, HOME: root, PATH: `${bin}:${process.env.PATH}`, DASH_ALLOW_LOOPBACK: "1", DASH_HOST: "127.0.0.1", DASH_PORT: "0", DASH_STT_MODEL: join(root, "no-model"), DASH_ALLOWED_ORIGINS: "http://localhost:8100", DASH_ENABLE_LEGACY_CLI: "0", DASH_ACP_FIXTURE_PID: join(root, "agent.pid"), ...overrides },
     stdin: "ignore", stdout: "ignore", stderr: "pipe",
   });
   let stderr = "";
@@ -113,6 +113,21 @@ test("canonical wire redacts tool data, caps previews, and fetches full output o
     expect(detail?.type === "status" && detail.part?.kind === "tool_detail" ? detail.part.text.length : 0).toBe(10014);
     expect(JSON.stringify(detail)).not.toContain("fixture-private-value");
   } finally { connection.socket.close(); stranger.socket.close(); await f.close(); }
+});
+
+test("summary opt-in reaches canonical wire; missing OAuth transport degrades without failing the turn", async () => {
+  const f = await bridgeFixture("parts", { DASH_HERMES_BIN: "/nonexistent-summary-hermes", DASH_CONFIG_DIR: "/nonexistent-summary-config" });
+  const connection = await connect(f.port, f.token);
+  try {
+    connection.send({ type: "chat", id: "summary-off", harness: "omp", text: "synthetic", summariesEnabled: false });
+    expect(await connection.until(value => value.type === "done" && value.id === "summary-off")).toMatchObject({ exitCode: 0 });
+    expect(connection.messages.some(value => value.type === "status" && value.id === "summary-off" && value.summary)).toBe(false);
+    connection.send({ type: "chat", id: "summary-on", harness: "omp", text: "synthetic", summariesEnabled: true });
+    expect(await connection.until(value => value.type === "done" && value.id === "summary-on")).toMatchObject({ exitCode: 0 });
+    const degraded = connection.messages.find(value => value.type === "status" && value.id === "summary-on" && value.summary?.kind === "turn");
+    expect(degraded).toMatchObject({ summary: { unavailable: "transport_unavailable", model: "openai-codex/gpt-6-luna", text: "Summary unavailable · @smol transport not configured" } });
+    expect(JSON.stringify(connection.messages)).not.toContain("fixture-private-value");
+  } finally { connection.socket.close(); await f.close(); }
 });
 
 test("canonical bridge cancels a live ACP turn and emits one terminal result", async () => {

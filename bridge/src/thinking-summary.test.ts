@@ -21,31 +21,31 @@ test("summary toggle, 4-second throttle, final bypass, cache and chat isolation"
   expect((await service.summarize({ ...input, chatId: "private" }))?.cached).toBe(false);
   expect(calls).toBe(4);
 });
-test("smol failure uses tiny; no secret reaches either provider or output", async () => {
+test("smol failure is visible without fallback; secrets stay redacted", async () => {
   const models: string[] = [];
   const service = new ThinkingSummarizer(resolveRoles, async (model, prompt) => {
     models.push(model); expect(prompt).not.toContain("sk-secret123");
-    if (models.length === 1) throw new Error("unavailable");
-    return "Verified branch\nignored line\nthird line sk-outputsecret";
+    throw new Error("unavailable");
   });
   const result = await service.summarize({ ...input, text: "token=sk-secret123 Check branch" });
-  expect(models).toEqual(["openai-codex/gpt-6-luna", "local/qwen3-4b-q4km"]);
-  expect(result?.text).toBe("Verified branch"); expect(result?.model).toBe("local/qwen3-4b-q4km");
+  expect(models).toEqual(["openai-codex/gpt-6-luna"]);
+  expect(result?.unavailable).toBe("provider_unavailable");
   expect(redact("Bearer abcdef token=abcdef sk-secret123 ghp_secret123")).toBe("[REDACTED] [REDACTED] [REDACTED] [REDACTED]");
 });
-test("slow provider aborted at 750ms, tiny inside 1.5s; failures are not cached", async () => {
-  let calls = 0;
-  const service = new ThinkingSummarizer(resolveRoles, (model, _prompt, signal) => {
+test("deadline aborts the real request; failures are not cached", async () => {
+  let calls = 0, aborted = false;
+  const service = new ThinkingSummarizer(resolveRoles, (_model, _prompt, signal) => {
     calls++;
-    if (model.startsWith("local/")) return Promise.resolve("Tiny summary");
-    return new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted"))));
-  });
+    return new Promise((_, reject) => signal.addEventListener("abort", () => { aborted = true; reject(new Error("aborted")); }));
+  }, Date.now, 25);
   const at = performance.now();
-  expect((await service.summarize(input))?.text).toBe("Tiny summary");
-  expect(performance.now() - at).toBeLessThan(1500); expect(calls).toBe(2);
-  const broken = new ThinkingSummarizer(resolveRoles, async () => { throw new Error("no service"); });
-  expect(await broken.summarize({ ...input, kind: "final" })).toBeNull();
-  expect(await broken.summarize({ ...input, kind: "final" })).toBeNull();
+  expect((await service.summarize(input))?.unavailable).toBe("deadline");
+  expect(performance.now() - at).toBeLessThan(1000); expect(calls).toBe(1); expect(aborted).toBe(true);
+  let failedCalls = 0;
+  const broken = new ThinkingSummarizer(resolveRoles, async () => { failedCalls++; throw new Error("no service"); });
+  expect((await broken.summarize({ ...input, kind: "final" }))?.unavailable).toBe("provider_unavailable");
+  expect((await broken.summarize({ ...input, kind: "final" }))?.cached).toBe(false);
+  expect(failedCalls).toBe(2);
 });
 test("identical concurrent requests coalesce", async () => {
   let calls = 0;

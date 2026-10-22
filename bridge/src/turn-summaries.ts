@@ -9,6 +9,9 @@ export class TurnSummaries {
   private opened = 0;
   private started = 0;
   private closed = false;
+  private cancelled = false;
+  private abort = new AbortController();
+  private liveAbort = new AbortController();
   private pending: Promise<void>[] = [];
   constructor(private id: string, private summarizer: ThinkingSummarizer, private emit: (summary: SummaryInfo) => void, private now = Date.now) {}
   reasoning(delta: string): void {
@@ -17,8 +20,8 @@ export class TurnSummaries {
     this.text = (this.text + delta).slice(-12000);
     const block = this.block;
     const text = this.text;
-    void this.summarizer.summarize({ chatId: this.id, blockId: String(block), text, kind: "live", enabled: true }).then(result => {
-      if (result && !this.closed && this.block === block && this.text) this.emit({ blockId: String(block), kind: "live", text: result.text, model: result.model, durationMs: this.now() - this.opened });
+    void this.summarizer.summarize({ chatId: this.id, blockId: String(block), text, kind: "live", enabled: true, signal: this.liveAbort.signal }).then(result => {
+      if (result && !this.closed && this.block === block && this.text) this.emit({ blockId: String(block), kind: "live", text: result.text, model: result.model, durationMs: this.now() - this.opened, ...(result.unavailable ? { unavailable: result.unavailable } : {}) });
     });
   }
   action(label: string): void {
@@ -29,18 +32,24 @@ export class TurnSummaries {
   endBlock(): void {
     if (!this.text) return;
     const text = this.text, blockId = String(this.block), durationMs = this.now() - this.opened;
+    this.liveAbort.abort(); this.liveAbort = new AbortController();
     this.text = "";
     this.trace = `${this.trace}\nReasoning: ${text}`.slice(-12000);
-    this.pending.push(this.summarizer.summarize({ chatId: this.id, blockId, text, kind: "final", enabled: true }).then(result => {
-      if (result) this.emit({ blockId, kind: "final", text: result.text, model: result.model, durationMs });
+    this.pending.push(this.summarizer.summarize({ chatId: this.id, blockId, text, kind: "final", enabled: true, signal: this.abort.signal }).then(result => {
+      if (result && !this.cancelled) this.emit({ blockId, kind: "final", text: result.text, model: result.model, durationMs, ...(result.unavailable ? { unavailable: result.unavailable } : {}) });
     }));
   }
   async finish(): Promise<void> {
     if (this.closed) return;
     this.endBlock(); this.closed = true;
-    await Promise.all(this.pending);
-    if (!this.trace.trim()) return;
-    const result = await this.summarizer.summarize({ chatId: this.id, blockId: "turn", text: this.trace, kind: "turn", enabled: true });
-    if (result) this.emit({ blockId: "turn", kind: "turn", text: result.text, model: result.model, durationMs: this.started ? this.now() - this.started : 0 });
+    // Run the final block and turn concurrently: completion waits at most one
+    // summary deadline, not two serial cloud round trips.
+    const turn = this.trace.trim() ? this.summarizer.summarize({ chatId: this.id, blockId: "turn", text: this.trace, kind: "turn", enabled: true, signal: this.abort.signal }) : Promise.resolve(null);
+    const [result] = await Promise.all([turn, Promise.all(this.pending)]);
+    if (result && !this.cancelled) this.emit({ blockId: "turn", kind: "turn", text: result.text, model: result.model, durationMs: this.started ? this.now() - this.started : 0, ...(result.unavailable ? { unavailable: result.unavailable } : {}) });
+  }
+  cancel(): void {
+    this.cancelled = true; this.closed = true;
+    this.abort.abort(); this.liveAbort.abort();
   }
 }

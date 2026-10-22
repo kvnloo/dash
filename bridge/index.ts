@@ -118,7 +118,9 @@ class Turn implements Sink {
       this.summaries = new TurnSummaries(this.id, new ThinkingSummarizer(() => roles), summary => {
         this.emit({ type: "status", id: this.id, seq: 0, text: "", summary });
       });
-    } catch { /* Invalid role config disables summaries, never the user's turn. */ }
+    } catch {
+      this.emit({ type: "status", id: this.id, seq: 0, text: "", summary: { blockId: "turn", kind: "turn", text: "Summary unavailable · @smol role not configured", model: "@smol", durationMs: 0, unavailable: "role_unavailable" } });
+    }
   }
   reasoning(text: string): void { this.summaries?.reasoning(text); }
 
@@ -390,8 +392,10 @@ class Turn implements Sink {
   }
 
   cancel(): void {
-    if (this.cancelled || this.finished) return;
+    if (this.cancelled) return;
+    if (this.finished) { this.summaries?.cancel(); return; }
     this.cancelled = true;
+    this.summaries?.cancel();
     if (this.acp) { void this.acp.cancel(); return; }
     this.abort?.abort();
     if (!this.proc) {

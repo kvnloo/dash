@@ -57,31 +57,44 @@ reasoning block; action labels are added to the turn trace. Each block receives
 live (one line, at most every four seconds) and final (one or two lines) summaries.
 The turn chip summarizes reasoning and action labels. A generation is advisory,
 not verification that a claimed action succeeded. Prompts explicitly distinguish
-plans from completed actions. No summary is shown when providers fail.
+plans from completed actions. Failures produce an explicit, sanitized
+`Summary unavailable · @smol …` chip, not silent null or fabricated prose.
 
-Smol is attempted first, tiny second; each request gets at most 750 ms and the
-whole generation gets at most 1.5 seconds. Real fetches are aborted at the deadline.
+Only the assigned smol model is attempted. There is no tiny, evaluator or
+cross-provider fallback. Each request, including native runtime startup, gets a
+12-second wall deadline. Fetches are aborted and OAuth helper processes killed at
+the deadline or turn cancellation. Stale live requests are cancelled when their
+block closes; a block has at most one live request in flight.
 The live throttle does not suppress finals. SHA-256 caches include chat/turn scope,
 model assignment, mode and redacted text; they are bounded and memory-only. Errors
 are not cached. In-flight duplicates coalesce. No raw trace is logged. PEM blocks,
 credential assignments, bearer tokens, known token prefixes, JWT-like and long
 opaque strings are redacted before inference and again on output.
 
-Supported summary transports in this draft: local OpenAI-compatible llama.cpp and
-Anthropic's messages API using an existing `ANTHROPIC_API_KEY` in the bridge's
-process environment. No credential files are read by the transport. No credentials
-are accepted over the phone or returned by the registry. There is deliberately no
-attempt to scrape OMP's OAuth credentials. Codex OAuth (including the currently
-assigned gpt-6-luna) and Jev generation are NOT implemented summary transports;
-they fail closed and the live request tries tiny. This is a remaining acceptance
-blocker, not evidence that the owner's OMP/Codex account is unavailable.
+Supported summary transports: local OpenAI-compatible llama.cpp, Anthropic's
+messages API using an existing `ANTHROPIC_API_KEY` in the bridge process, and
+`openai-codex/<model>` using Hermes's authorized OAuth client. For Codex, the
+fixed `summary-oauth.py` helper discovers the native Python via
+`hermes --print-runtime-command` (override binary with `DASH_HERMES_BIN`) and
+imports `resolve_provider_client` from the installed source (`DASH_HERMES_SOURCE`,
+same default as Dash's existing native Hermes helpers). It uses the bridge's
+`HERMES_HOME`, never scans profiles, reads chats, launches an agent, or changes
+Hermes settings. Credential resolution/refresh stays inside Hermes; no credentials
+are accepted over the phone or returned to Bun. It requires the official Codex
+endpoint and exact resolved/response model, explicitly sends no tools with
+`tool_choice: none` and `store: false`, disables SDK retries, and never executes
+returned tool items. Only a redacted bounded prompt travels over stdin. Helper
+stdout is size-limited structured output; stderr/provider diagnostics are discarded.
 
-The general role fallback chain is exposed for consumers. The live summary policy
-specifically tries the smol and tiny primary assignments, not arbitrary evaluator
-fallbacks or an unbounded chain of paid providers. That distinction preserves the
-live deadline and avoids sending private trace text to Jev.
+Anthropic OAuth is not implemented by this lane: Haiku still needs the existing
+bridge API key. Missing credentials now report sign-in required; this is not
+evidence that an OMP/Hermes Anthropic subscription is unavailable. Unsupported
+providers and model mismatches fail closed without rerouting the trace.
 
-`TurnSummaries.finish` waits for pending finals and the turn summary before the
+The general role fallback chain is exposed for other consumers; summaries ignore
+it and use only the smol primary assignment.
+
+`TurnSummaries.finish` starts the turn summary alongside pending finals, then waits before the
 `done` packet, but it does not block answer streaming. The summary chip's time is
 host-observed elapsed turn/block time, not model inference latency.
 
@@ -127,5 +140,12 @@ For a real recorded trace in a private JSON file containing `{ "text": "..." }`:
 `bun scripts/prove-model-summary.ts /private/recorded-reasoning.json`
 
 An optional second argument changes only the direct diagnostic deadline (ms),
-not the live summarizer's 1.5-second budget. Output contains sanitized summaries,
+not the live summarizer's 12-second budget. Output contains sanitized summaries,
 model ids, latencies and failures; it never prints the raw recorded reasoning.
+
+For the transport acceptance probe without private transcripts:
+`bun scripts/probe-thinking-summary.ts --luna`. This explicitly authorizes one
+synthetic `openai-codex/gpt-6-luna` request and verifies disabled/cached behavior.
+CPU suites/typechecks/mutation runs belong on `fleet-build --node mbp`, not the
+host serving Dash. A real device/served-preview check remains an integration step;
+an isolated transport probe is not evidence that the shared bridge was deployed.
