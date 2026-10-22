@@ -50,7 +50,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
 
   // Chosen from the composer mic's Live voice mode: go straight into z0live instead of asking for a second tap.
   const autostart = props.route.params?.autostart === true;
-  useEffect(() => { if (autostart && !live) void openVoice(); }, [autostart]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (autostart && !live) void openVoice(); }, [autostart]);
 
   if (view.kind === "legacy") {
     return <LegacyVoiceScreen {...props} onExit={() => setView({ kind: "shared" })} />;
