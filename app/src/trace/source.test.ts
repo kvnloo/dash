@@ -9,9 +9,19 @@ mock.module("@react-native-async-storage/async-storage", () => ({ default: {
   multiRemove: async (keys: string[]) => { for (const key of keys) disk.delete(key); },
   setItem: async (key: string, value: string) => { disk.set(key, value); },
 } }));
-const { feedbackStore, latest, loadFeedback, record } = await import("./source");
+const { feedbackStore, latest, loadFeedback, record, traceStore, setTraceSnapshot, resetBundledTrace } = await import("./source");
 const key = "dash.trace.feedback/v1";
 beforeEach(() => { disk.clear(); feedbackStore.set({ records: [], loaded: false }); });
+
+test("offline/pairing reset drops old-host trace evidence and never persists private snapshot", () => {
+  setTraceSnapshot({ ...traceStore.get().snapshot, read: "private host evidence" });
+  expect(traceStore.get().origin).toBe("bridge");
+  resetBundledTrace("Offline · bundled snapshot");
+  expect(traceStore.get().origin).toBe("bundled");
+  expect(traceStore.get().snapshot.read).not.toBe("private host evidence");
+  expect(traceStore.get().error).toContain("Offline");
+  expect(disk.size).toBe(0);
+});
 
 test("action and Lab decisions persist in the existing export schema, reload, and undo", async () => {
   await loadFeedback();

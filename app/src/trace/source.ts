@@ -4,18 +4,21 @@ import bundled from "./snapshot.json";
 import { parseTraceSnapshot, type TraceSnapshot } from "./model";
 
 /**
- * Where the trace comes from. Today: the bundled export (scripts/trace-snapshot.py).
- * Bridge wiring later: have the bridge run the exporter and answer a `trace_snapshot`
- * request with the same dash.trace.snapshot/v1 JSON, then call `setTraceSnapshot(parseTraceSnapshot(msg.snapshot))`
- * from net/bridge.ts. Screens read `traceStore` and need no change.
+ * Private live data lives only in memory. The screen polls authenticated HTTP;
+ * offline/pairing changes restore the public bundled export, never a previous host's data.
  */
-export const traceStore = createStore<{ snapshot: TraceSnapshot; origin: "bundled" | "bridge" }>({
+export const traceStore = createStore<{ snapshot: TraceSnapshot; origin: "bundled" | "bridge"; error: string }>({
   snapshot: parseTraceSnapshot(bundled),
   origin: "bundled",
+  error: "",
 });
 
 export function setTraceSnapshot(snapshot: TraceSnapshot): void {
-  traceStore.set({ snapshot, origin: "bridge" });
+  traceStore.set({ snapshot, origin: "bridge", error: "" });
+}
+
+export function resetBundledTrace(error = ""): void {
+  traceStore.set({ snapshot: parseTraceSnapshot(bundled), origin: "bundled", error });
 }
 
 /* ---------- owner responses (same contract as the prototype: dash.trace.feedback/v1) ---------- */
