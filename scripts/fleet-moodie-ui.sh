@@ -18,5 +18,5 @@ bun install --frozen-lockfile
 (cd app && bun install --frozen-lockfile)
 bun test app/src/lib/moodie.test.ts app/src/lib/tree.test.ts
 bun app/node_modules/typescript/bin/tsc -p app --noEmit
-(cd app && EXPO_PUBLIC_DEBUG=1 EXPO_PUBLIC_DEBUG_AUTONAV=0 bunx expo export --platform web)
+(cd app && EXPO_PUBLIC_DEBUG=1 EXPO_PUBLIC_DEBUG_AUTONAV=0 bun x expo export --platform web)
 node scripts/moodie-faces-proof.mjs
