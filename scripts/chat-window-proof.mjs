@@ -269,10 +269,12 @@ try {
     assert(geometry.hole && geometry.fillRule === 'evenodd', `cut-out pill shape: ${JSON.stringify(geometry)}`);
     assert(Math.abs(geometry.hole.x + geometry.hole.width / 2 - width / 2) <= 1, `hole spacer centred on the camera: ${JSON.stringify(geometry)}`);
     assert(geometry.pill.y < hole.y && geometry.pill.y + geometry.pill.height > hole.y + hole.height, 'pill wraps the camera vertically');
-    // The lens area is unpainted: darker than the pill body beside it.
+    // The lens area is unpainted: it matches the window background outside the pill, not the pill fill.
     const lens = await paint(page, { x: width / 2 - 4, y: hole.y + hole.height / 2 - 4, width: 8, height: 8 });
     const body = await paint(page, { x: geometry.pill.x + 4, y: hole.y + hole.height / 2 - 2, width: 4, height: 4 });
-    assert(lens.meanLuminance + 3 < body.meanLuminance, `camera gap unpainted: lens ${JSON.stringify(lens)} body ${JSON.stringify(body)}`);
+    const outside = await paint(page, { x: 2, y: hole.y + hole.height / 2 - 2, width: 4, height: 4 });
+    assert(Math.abs(lens.meanLuminance - outside.meanLuminance) < 1 && Math.abs(lens.meanLuminance - body.meanLuminance) > 1,
+      `camera gap unpainted: lens ${JSON.stringify(lens)} outside ${JSON.stringify(outside)} body ${JSON.stringify(body)}`);
     const slot = await pillSlot(page);
     assert(slot.status === 'speaking' && !slot.statusClipped && slot.statusInside, `cut-out status slot readable: ${JSON.stringify(slot)}`);
     const badge = await page.getByTestId('chat-window-badge').innerText();
@@ -284,7 +286,7 @@ try {
     await page.getByTestId('chat-window-badge').click();
     await page.screenshot({ path: path.join(out, `${tag}-window.png`) });
     await page.screenshot({ path: path.join(out, `${tag}-pill-zoom.png`), clip: { x: 0, y: 0, width, height: 80 } });
-    cases.push({ tag, synthetic: 'cutout + host reading fixtures', geometry, lens, body, slot, badge, tree });
+    cases.push({ tag, synthetic: 'cutout + host reading fixtures', geometry, lens, outside, body, slot, badge, tree });
     await context.close();
   }
 
