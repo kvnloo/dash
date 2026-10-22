@@ -10,7 +10,6 @@ import { colors, fonts, glass, radius, space, type } from "../theme";
 import { messageThinking, type Thinking } from "../lib/thinking";
 import { splitThinking } from "../lib/message-details";
 import { AgentOrb } from "./AgentOrb";
-import { ThinkingSummaryChip } from "./ThinkingSummaryChip";
 import { Markdown } from "./Markdown";
 import { sendInlineIntent } from "../lib/inline-intent";
 import { InlineImage } from "./genui/InlineImage";
@@ -52,7 +51,6 @@ export const MessageRow = memo(function MessageRow({
   if (message.delivery === "queued" && message.state === "streaming") return null;
   return (
     <View style={styles.assistantRow}>
-      {message.summaries?.filter(summary => summary.kind === "turn").map(summary => <ThinkingSummaryChip key={summary.blockId} turnId={message.turnId} summary={summary} />)}
       <ReplyBlocks turnId={message.turnId} summaries={message.summaries} parts={message.parts} mode={detailMode} request={callId => {
         const chat = store.get().conversations.find(c => c.messages.some(m => m.id === message.id));
         const history = message.seq === 0 && chat?.harness === "hermes";

@@ -64,7 +64,7 @@ function Row({ item, selected, activate, toggle, collapse, inline }: {
           {node.thinking ? <AgentOrb thinking={node.thinking} size={20} label={`Session ${node.thinking.phase}`} /> : <Feather name={icons[node.kind]} size={space.lg} color={expanded ? colors.accent : colors.textMuted} />}
           <View style={styles.label}>
             {node.shimmer ? <ShimmerText text={node.label} size={13} family="sans-serif" dim={colors.textMuted} bright={colors.text} /> : <Text style={[node.kind === "host" ? type.heading : type.small, styles.text]} numberOfLines={node.kind === "call" ? 2 : 1}>{node.label}</Text>}
-            {node.detail ? <Text style={styles.detail} numberOfLines={node.kind === "args" || node.kind === "output" || node.kind === "thinking" ? undefined : 1} selectable>{node.detail}</Text> : null}
+            {node.detail ? <Text style={styles.detail} numberOfLines={node.kind === "args" || node.kind === "output" || node.kind === "thinking" ? undefined : node.kind === "call" ? 2 : 1} selectable>{node.detail}</Text> : null}
           </View>
           {node.meta ? <Text style={styles.meta}>{node.meta}</Text> : null}
           {node.status ? <View style={[styles.dot, { backgroundColor: node.status === "running" ? colors.accent : node.status === "offline" ? colors.textFaint : colors.textTertiary }]} /> : null}

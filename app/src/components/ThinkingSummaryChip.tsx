@@ -8,7 +8,7 @@ export function ThinkingSummaryChip({ turnId, summary }: { turnId: string; summa
   let current = summary;
   try { current = parseSummary(JSON.parse(live)) ?? summary; } catch { /* Persisted summary after relaunch. */ }
   return <View style={styles.chip} accessibilityLabel={current.kind === "turn" ? "Turn summary" : "Thinking summary"}>
-    <Text numberOfLines={current.kind === "live" ? 1 : 2} style={styles.label}>Thought {Math.round(current.durationMs / 1000)} s · {current.text}</Text>
+    <Text numberOfLines={3} style={styles.label}>Thought {Math.round(current.durationMs / 1000)} s · {current.text}</Text>
   </View>;
 }
 const styles = StyleSheet.create({

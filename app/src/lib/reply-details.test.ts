@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { detailsOf, reducePart, EMPTY_DETAILS, readDetails, wrappedTail, toolStackLabel } from "./reply-details";
+import { detailsOf, reducePart, EMPTY_DETAILS, readDetails, wrappedTail, toolStackLabel, shownSummary } from "./reply-details";
 import { parseConversation } from "../model";
 
 test("renderer model separates reasoning, tool stack, args/output, status and duration", () => {
@@ -11,7 +11,7 @@ test("renderer model separates reasoning, tool stack, args/output, status and du
   expect(state.reasoning).toBe("inspect");
   expect(state.tools[0]).toMatchObject({ status: "error", durationMs: 12000, output: "full output", truncated: false });
   expect(state.tools[1]?.status).toBe("live");
-  expect(toolStackLabel(state.tools)).toBe("3 tools · 12.0 s");
+  expect(toolStackLabel(state.tools)).toBe("3 tools · 1 failed · 2 running · 12.0 s");
   expect(reducePart(state, { kind: "tool_start", callId: "a", name: "terminal", summary: "updated", args: "{}" }).tools[0]).toMatchObject({ status: "error", summary: "updated" });
 });
 test("compact renderer tails three wrapped visual rows, not the first lines", () => {
@@ -26,4 +26,12 @@ test("per-chat detail preference and persisted parts survive reload", () => {
   const conversation = parseConversation({ id: "chat", harness: "hermes", title: "Chat", createdAt: 1, updatedAt: 1, detailMode: "Full", messages: [{ id: "m", role: "assistant", state: "done", text: "answer", at: 1, turnId: "t", parts: [{ kind: "reasoning", text: "thought" }] }] });
   expect(conversation?.detailMode).toBe("Full");
   expect(conversation?.messages[0]?.role === "assistant" ? conversation.messages[0].parts : []).toEqual([{ kind: "reasoning", text: "thought" }]);
+});
+test("one summary per reply: the newest with content; Hide keeps only a turn summary", () => {
+  const at = (blockId: string, kind: "live" | "final" | "turn", text: string) => ({ blockId, kind, text, model: "m", durationMs: 1000 });
+  const list = [at("b1", "final", "Read the parser"), at("b2", "live", "Rerun the failing parser test"), at("b3", "live", " ")];
+  expect(shownSummary(list, "Compact")?.text).toBe("Rerun the failing parser test");
+  expect(shownSummary(list, "Hide")).toBeUndefined();
+  expect(shownSummary([...list, at("t", "turn", "Fixed parser")], "Hide")?.text).toBe("Fixed parser");
+  expect(shownSummary(undefined, "Full")).toBeUndefined();
 });

@@ -1,4 +1,5 @@
 import type { ReplyPart } from "../../../shared/protocol";
+import type { SummaryInfo } from "../../../shared/thinking-summary";
 
 export type DetailMode = "Hide" | "Compact" | "Full";
 export const DETAIL_MODES: readonly DetailMode[] = ["Hide", "Compact", "Full"];
@@ -33,4 +34,13 @@ export function wrappedTail(text: string, columns: number, lines = 3): string {
   return rows.slice(-lines).join("\n");
 }
 export function seconds(ms: number): string { return `${(ms / 1000).toFixed(1)} s`; }
-export function toolStackLabel(tools: ToolView[]): string { return `${tools.length} ${tools.length === 1 ? "tool" : "tools"} · ${seconds(tools.reduce((sum, tool) => sum + tool.durationMs, 0))}`; }
+export function toolStackLabel(tools: Pick<ToolView, "status" | "durationMs">[]): string {
+  const failed = tools.filter(tool => tool.status === "error").length;
+  const running = tools.filter(tool => tool.status === "live").length;
+  return [`${tools.length} ${tools.length === 1 ? "tool" : "tools"}`, failed ? `${failed} failed` : "", running ? `${running} running` : "", seconds(tools.reduce((sum, tool) => sum + tool.durationMs, 0))].filter(Boolean).join(" · ");
+}
+/** The one summary a reply shows: the newest, or in Hide mode only a turn summary. */
+export function shownSummary(summaries: readonly SummaryInfo[] = [], mode: DetailMode): SummaryInfo | undefined {
+  const shown = mode === "Hide" ? summaries.filter(summary => summary.kind === "turn") : summaries;
+  return [...shown].reverse().find(summary => summary.text.trim());
+}

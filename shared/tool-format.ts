@@ -3,7 +3,7 @@ export function redactTool(text: string): string {
   return text.replace(/\bBearer\s+[^\s"',}]+/gi, 'Bearer [REDACTED]')
     .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g, '[REDACTED]')
     .replace(/\b(?:sk-[\w-]{12,}|gh[pousr]_[\w]{12,}|github_pat_[\w]{12,}|xox[baprs]-[\w-]{10,}|eyJ[\w-]+\.[\w-]+\.[\w-]+)\b/g, '[REDACTED]')
-    .replace(/((?:["']?(?:[\w-]{0,64}(?:token|secret|password)|api[_-]?key|authorization)["']?)\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,}\n]+)/gi, '$1"[REDACTED]"')
+    .replace(/((?:["']?(?:[\w-]{0,64}(?:token|secret|password)|api[_-]?key|authorization)["']?)\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,}\n]+)/gi, (match: string, key: string) => `${key}${match.slice(key.length).startsWith('"') ? '"[REDACTED]"' : '[REDACTED]'}`)
     .replace(/\bBearer\s+[^\s"',}]+/gi, 'Bearer [REDACTED]');
 }
 export function object(value: unknown): Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value) ? Object.fromEntries(Object.entries(value)) : {}; }
@@ -22,12 +22,20 @@ const short = (text: string, max = 100) => text.length <= max ? text : `${text.s
 const str = (value: unknown): string => typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value);
 const first = (text: string) => text.trim().split('\n')[0] ?? '';
 export interface FormatTool { name: string; args: string; output: string; status: string; durationMs: number; summary?: string }
-export interface ToolDescription { title: string; detail: string; args: string; output: string; path?: string; diff?: string }
+/** `facts` is the formatter detail without status/duration; `outcome` is the output line that explains the result. */
+export interface ToolDescription { title: string; detail: string; facts: string; outcome: string; exit?: string; args: string; output: string; path?: string; diff?: string }
+const TEST_FAILURE = /^\(fail\)|^FAIL\b|^✗|^✘|^not ok\b/;
+const FAILURE = /\b(?:error|errors|fail|failed|failure|exception|panic|denied|not found|cannot|traceback)\b|✗|✘/i;
+/** The last named test failure, else the last failure-looking line, else the last non-empty line. */
+export function headline(text: string): string {
+  const lines = text.split('\n').map(line => line.trim()).filter(Boolean).reverse();
+  return lines.find(line => TEST_FAILURE.test(line)) ?? lines.find(line => FAILURE.test(line)) ?? lines[0] ?? '';
+}
 /** `text` is non-JSON argument text, e.g. ACP's "$ bun test". */
 type Context = { a: Record<string, unknown>; r: Record<string, unknown>; output: string; name: string; text: string };
 type Formatter = (c: Context) => { title: string; detail?: string; path?: string; diff?: string };
 const pathOf = (a: Record<string, unknown>) => str(a.path ?? a.file_path ?? a.filePath ?? a.target_file);
-const terminal: Formatter = ({ a, r, output, text }) => ({ title: short(first(Array.isArray(a.command) ? a.command.join(' ') : str(a.command ?? a.cmd ?? a.code ?? a.script ?? (text.replace(/^\$\s+/, '') || undefined)))), detail: [a.cwd ?? a.workdir ?? r.cwd, r.exit_code !== undefined ? `exit ${str(r.exit_code)}` : '', str(r.output ?? output).trimEnd().split('\n').slice(-2).join('\n')].filter(Boolean).join(' · ') });
+const terminal: Formatter = ({ a, r, output, text }) => ({ title: short(first(Array.isArray(a.command) ? a.command.join(' ') : str(a.command ?? a.cmd ?? a.code ?? a.script ?? (text.replace(/^\$\s+/, '') || undefined)))), detail: [r.exit_code !== undefined ? `exit ${str(r.exit_code)}` : '', str(r.output ?? output).trimEnd().split('\n').slice(-2).join('\n'), a.cwd ?? a.workdir ?? r.cwd].filter(Boolean).join(' · ') });
 const read: Formatter = ({ a }) => { const start = Number(a.offset ?? a.start_line ?? 1); const end = a.end_line ?? (a.limit ? start + Number(a.limit) - 1 : undefined); const path = pathOf(a); return { title: `${path}:${start}${end ? `–${str(end)}` : ''}`, path }; };
 const write: Formatter = ({ a, r }) => ({ title: pathOf(a), path: str(r.resolved_path) || pathOf(a), detail: [r.bytes_written ?? r.file_size ?? r.bytes ?? new TextEncoder().encode(str(a.content ?? a.contents)).length, 'bytes', r.lint_result ?? object(r.lint).status ?? r.lint ?? (r.verified === true ? 'write verified' : '')].filter(x => x !== '').map(str).join(' ') });
 const edit: Formatter = ({ a, r, output }) => { const old = str(a.old_string ?? a.oldText); const next = str(a.new_string ?? a.newText); const count = (s: string) => s ? s.split('\n').length : 0; const diff = old || next ? [...old.split('\n').filter(() => Boolean(old)).map(s => `-${s}`), ...next.split('\n').filter(() => Boolean(next)).map(s => `+${s}`)].join('\n') : str(r.diff ?? a.patch ?? a.input ?? output); return { title: pathOf(a) || /^\*\*\* (?:Update|Add|Delete) File: (.+)$/m.exec(diff)?.[1] || first(diff), path: pathOf(a) || /^\*\*\* (?:Update|Add|Delete) File: (.+)$/m.exec(diff)?.[1], detail: old || next ? `+${count(next)}/−${count(old)}` : `+${diff.split('\n').filter(s => s.startsWith('+') && !s.startsWith('+++')).length}/−${diff.split('\n').filter(s => s.startsWith('-') && !s.startsWith('---')).length}`, diff }; };
@@ -64,7 +72,8 @@ export function formatTool(tool: FormatTool, harness = 'hermes'): ToolDescriptio
   let args: string;
   try { args = JSON.stringify(JSON.parse(tool.args), null, 2); } catch { args = tool.args; }
   if (/(^|\/)\.env(?:\.|$)/.test(path)) args = args.replace(/("(?:content|old_string|new_string)"\s*:\s*)"(?:\\.|[^"\\])*"/g, '$1"[REDACTED .env values]"');
-  return { ...result, title: short(redactTool(title), 120), detail: redactTool([result.detail, `${tool.status} · ${(tool.durationMs / 1000).toFixed(1)}s`].filter(Boolean).join(' · ')), args: redactTool(args), output, ...(result.diff ? { diff: /(^|\/)\.env(?:\.|$)/.test(path) ? '[REDACTED .env values]' : redactTool(result.diff) } : {}) };
+  const outcome = redactTool(short(headline(str(r.output ?? r.error ?? r.stderr ?? output)), 160));
+  return { ...result, title: short(redactTool(title), 120), facts: redactTool(result.detail ?? ''), outcome, ...(r.exit_code !== undefined ? { exit: redactTool(str(r.exit_code)) } : {}), detail: redactTool([result.detail, `${tool.status} · ${(tool.durationMs / 1000).toFixed(1)}s`].filter(Boolean).join(' · ')), args: redactTool(args), output, ...(result.diff ? { diff: /(^|\/)\.env(?:\.|$)/.test(path) ? '[REDACTED .env values]' : redactTool(result.diff) } : {}) };
 }
 export function groupTools<T extends FormatTool>(tools: T[]): { tools: T[]; title: string }[] {
   const groups: { tools: T[]; title: string }[] = [];

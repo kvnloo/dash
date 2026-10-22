@@ -53,7 +53,8 @@ for (const [harness, names, args, expected] of [
 });
 test('terminal result tail, cwd, exit and duration', () => {
   const f = formatTool({...base,args:'{"command":"bun test","cwd":"/repo"}',output:JSON.stringify({exit_code:1,output:'first\nsecond\nerror: failed'})});
-  expect(f.detail).toContain('/repo · exit 1 · second\nerror: failed'); expect(f.detail).not.toContain('first');
+  expect(f.detail).toStartWith('exit 1 · second\nerror: failed · /repo'); expect(f.detail).not.toContain('first');
+  expect(f.exit).toBe('1'); expect(f.outcome).toBe('error: failed');
 });
 test('diff counts, bytes, match count', () => {
   expect(formatTool({...base,name:'patch',args:'{"path":"x","old_string":"a","new_string":"b\\nc"}'}).detail).toContain('+2/−1');
@@ -89,4 +90,15 @@ test('plain-text terminal args are redacted in title and args', () => {
   const f = formatTool({...base,args:"$ curl -H 'Authorization: Bearer abcdef123456' --data token=hunter2-secret"});
   expect(JSON.stringify(f)).not.toContain('abcdef123456'); expect(JSON.stringify(f)).not.toContain('hunter2-secret');
   expect(f.title).toStartWith('curl -H');
+});
+test('headline prefers the failure line over trailing summary noise', () => {
+  const f = formatTool({...base,args:'{"command":"bun test parser.test.ts"}',output:JSON.stringify({exit_code:1,output:'(fail) parser rejects unterminated string\nerror: expected 1 got 0\nRan 12 tests across 1 file.'})});
+  expect(f.outcome).toBe('(fail) parser rejects unterminated string');
+});
+test('redacting an unquoted secret inside a JSON result keeps the result parseable', () => {
+  const output = JSON.stringify({ exit_code: 1, output: 'error: request failed · Authorization: Bearer sk-fixtureSECRET0123456789\nRan 3 tests' });
+  const f = formatTool({...base,args:'{"command":"bun test"}',output,status:'error'});
+  expect(f.output).not.toContain('fixtureSECRET'); expect(() => JSON.parse(f.output)).not.toThrow();
+  expect(f.exit).toBe('1'); expect(f.outcome).toStartWith('error: request failed');
+  expect(redactTool('{"token": "abc"}')).toBe('{"token": "[REDACTED]"}');
 });
