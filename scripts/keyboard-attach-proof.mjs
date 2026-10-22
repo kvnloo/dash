@@ -57,6 +57,16 @@ async function phase(name) {
       const input = page.getByRole('textbox', { name: 'Message', exact: true });
       await input.fill('Keep my draft\nand selection');
       await input.evaluate(el => el.setSelectionRange(5, 13));
+      const composerGeometry = await input.evaluate(el => {
+        const rect = node => { const r=node.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom}; };
+        return {input:rect(el),field:rect(el.parentElement),controls:rect(el.nextElementSibling)};
+      });
+      if (name === 'after') {
+        assert(composerGeometry.input.width >= composerGeometry.field.width * .90, 'input uses the full composer width instead of a leftover slot beside tools');
+        assert(composerGeometry.input.bottom <= composerGeometry.controls.y + 1, 'buttons are below the text field, not crowding it');
+      } else {
+        assert(composerGeometry.input.width < composerGeometry.field.width * .80, 'baseline reproduces controls crowding the input');
+      }
       // Find the actual keyboard inset + dock without modifying application debug APIs.
       await page.evaluate(() => {
         const navigator = document.querySelector('[aria-label="Prompt navigator"]');
@@ -166,7 +176,7 @@ async function phase(name) {
         await page.screenshot({ path: path.join(out, `${name}-${width}-attach-left.png`) });
         await page.getByRole('button', { name: 'Cancel attachment', exact: true }).click();
       }
-      result.cases.push({ width, samples, chooser });
+      result.cases.push({ width, samples, chooser, composerGeometry });
       await context.close();
     }
   } finally {
