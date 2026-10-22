@@ -36,6 +36,10 @@ export const TARGETS: readonly Target[] = [
   { file: "bridge/src/z0live-state.ts", tests: ["bridge/src/z0live-state.test.ts"] },
   { file: "app/src/lib/orb-phase.ts", tests: ["app/src/lib/orb-phase.test.ts"] },
   { file: "bridge/src/roster.ts", tests: ["bridge/src/roster.test.ts", "bridge/src/roster-boundary.test.ts"] },
+  { file: "app/src/lib/annotate/strokes.ts", tests: ["app/src/lib/annotate/strokes.test.ts"] },
+  { file: "app/src/lib/annotate/pointer.ts", tests: ["app/src/lib/annotate/pointer.test.ts"] },
+  { file: "app/src/lib/annotate/align.ts", tests: ["app/src/lib/annotate/align.test.ts"] },
+  { file: "app/src/lib/annotate/compose.ts", tests: ["app/src/lib/annotate/compose.test.ts"] },
 ];
 
 export type Mutant = {

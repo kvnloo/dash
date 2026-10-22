@@ -61,7 +61,14 @@ describe("targets", () => {
       "app/src/components/bridge-pull.ts",
       "app/src/motion.ts",
       "shared/protocol.ts",
+      "shared/z0live-state.ts",
+      "bridge/src/z0live-state.ts",
+      "app/src/lib/orb-phase.ts",
       "bridge/src/roster.ts",
+      "app/src/lib/annotate/strokes.ts",
+      "app/src/lib/annotate/pointer.ts",
+      "app/src/lib/annotate/align.ts",
+      "app/src/lib/annotate/compose.ts",
     ]);
   });
 
