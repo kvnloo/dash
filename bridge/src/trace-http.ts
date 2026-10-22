@@ -127,7 +127,7 @@ export function createTraceHttpHandler(options: { authorize(request: Request): P
     if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
     if (u.pathname === "/trace/artifact") return await readTraceArtifact(u.searchParams.get("path") ?? "", options.roots) ?? json({ error: "artifact unavailable" }, 404);
     try {
-      if (!cache || Date.now() - at > 15000) {
+      if (!cache || Date.now() - at > 3000) {
         pending ??= options.collect().finally(() => { pending = undefined; });
         cache = await pending; at = Date.now();
       }

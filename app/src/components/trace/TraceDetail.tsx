@@ -28,7 +28,7 @@ const open = { ...fade, easing: snappy.easing, reduceMotion: ReduceMotion.System
  * to the sheet rect; contents fade in once it is mostly open. Drag down, tap the scrim or press
  * back to close (reverse morph into the row). Reduced motion: a plain crossfade.
  */
-export function TraceDetail({ snapshot, row, origin, onClose, onNavigate }: { snapshot: TraceSnapshot; row: TraceRow; origin: RowRect; onClose(): void; onNavigate?(route: TraceRoute): void }) {
+export function TraceDetail({ snapshot, row, stale = false, origin, onClose, onNavigate }: { snapshot: TraceSnapshot; row: TraceRow; stale?: boolean; origin: RowRect; onClose(): void; onNavigate?(route: TraceRoute): void }) {
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
@@ -109,6 +109,12 @@ export function TraceDetail({ snapshot, row, origin, onClose, onNavigate }: { sn
           </View>
           <Animated.View style={[styles.flex, body]}>
             {ready ? <ScrollView contentContainerStyle={styles.scroll}>
+              <View style={styles.provenance} testID="trace-provenance">
+                <Text style={styles.provText} selectable>Event · {row.key}</Text>
+                <Text style={styles.provText} selectable numberOfLines={2}>Source · {row.provenance?.source ?? row.evidence?.intent.provenance.source ?? "unknown"}</Text>
+                {row.evidence ? <Text style={styles.provText} selectable>Request hash · {row.evidence.intent.provenance.sourceHash.slice(0, 12)}</Text> : null}
+                {stale ? <Text style={[styles.provText, { color: tc.cut }]}>No longer in the live feed · showing its last received copy</Text> : null}
+              </View>
               <TraceEvidenceCards evidence={row.evidence} onNavigate={route => { onClose(); onNavigate?.(route); }} />
               <Pressable onPress={() => setMetricsOpen(v => !v)} accessibilityRole="button" accessibilityLabel="Worker metrics" accessibilityState={{ expanded: metricsOpen }} aria-expanded={metricsOpen}>
                 <Text style={styles.section}>{metricsOpen ? "−" : "+"} WORKERS & METRICS · {sum.workers}</Text>
@@ -136,12 +142,12 @@ export function TraceDetail({ snapshot, row, origin, onClose, onNavigate }: { sn
                       {w.status === "unknown" ? "Duration / error counts unavailable" : `${clock(snapshot.t0, w.s)} · ran ${dur(w.e - w.s)} · ${w.calls} calls · ${w.errors} failed${stall ? ` · stalled ${dur(stall)}` : ""}`}
                     </Text>
                     <Text style={styles.wModel} numberOfLines={1}>{w.model}</Text>
-                    {w.asks.length ? <Text style={styles.wAsk}>asked your OK: {w.asks.map(askWord).join(", ")}</Text> : null}
+                    {w.asks.length ? <Text style={styles.wAsk}>needs your OK: {w.asks.map(askWord).join(", ")}</Text> : null}
                   </View>
                 );
               })}
               </> : null}
-              <Text style={styles.foot}>{row.evidence ? "Private authenticated evidence · unknown is not acceptance" : "Bundled snapshot · no original contract or validation"}</Text>
+              <Text style={styles.foot}>{row.evidence ? "Private authenticated evidence · unknown is not acceptance" : "No original request or validation recorded for this event"}</Text>
             </ScrollView> : <View accessibilityLabel="Loading detail" style={styles.flex} />}
           </Animated.View>
         </Animated.View>
@@ -197,5 +203,7 @@ const styles = StyleSheet.create({
   wAsk: { fontFamily: fonts.mono, fontSize: 11, color: tc.ask },
   miniTrack: { height: 12, position: "relative" },
   miniBar: { position: "absolute", top: 1, height: 10, borderRadius: 2, borderWidth: 1, borderColor: tc.barEdge, backgroundColor: tc.bar, overflow: "hidden" },
+  provenance: { gap: 2, paddingBottom: space.sm, borderBottomWidth: 1, borderBottomColor: tc.grid },
+  provText: { fontFamily: fonts.mono, fontSize: 10, lineHeight: 15, color: tc.text3 },
   foot: { fontFamily: fonts.mono, fontSize: 10, color: tc.faint, marginTop: space.lg },
 });

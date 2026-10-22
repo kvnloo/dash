@@ -158,7 +158,7 @@ export const askWord = (k: string): string => ASK_WORD[k] ?? k.replace(/[_-]/g, 
 export function rowMeta(sum: RowSummary): string {
   const parts = [`${sum.workers} worker${sum.workers === 1 ? "" : "s"}`];
   if (sum.cut) parts.push(`${sum.cut} cut`);
-  if (sum.asks) parts.push(`${sum.asks} approval${sum.asks === 1 ? "" : "s"} asked`);
+  if (sum.asks) parts.push(`${sum.asks} need${sum.asks === 1 ? "s" : ""} your OK`);
   return parts.join(" · ");
 }
 

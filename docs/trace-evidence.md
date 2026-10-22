@@ -4,20 +4,21 @@ This change is deliberately NOT registered in bridge/index.ts. No production or 
 
 ## Parent registration after review (not executed)
 
-bridge/index.ts already defines `authorize`, `cors` and `handleOrchestra` (around lines 697/737 on the rollup base). Reuse exactly that execution authorization boundary:
+bridge/index.ts already defines `authorize` (line ~663) and the `cors` wrapper inside `fetch` (line ~721). Reuse exactly that execution authorization boundary. `bridge/src/trace-route.ts` composes the handler and the read-only collector, so registration is:
 
-    import { createTraceHttpHandler } from "./src/trace-http";
-    import { collectTrace, traceRoots } from "./src/trace-collect";
-    const handleTrace = createTraceHttpHandler({ authorize, collect: () => collectTrace(), roots: traceRoots() });
+    import { createTraceRoute } from "./src/trace-route";
+    const handleTrace = createTraceRoute({ authorize: request => authorize(request) });
 
-In the authenticated HTTP routing chain, before the generic fallback:
+In the HTTP routing chain, next to `handleOrchestra` and before the generic fallback:
 
     const trace = await handleTrace(request);
     if (trace) return cors(trace);
 
+Then restart the bridge (parent only). Until then, the phone's Trace shows "Live trace unavailable · Live trace endpoint unavailable (HTTP 404)". It no longer substitutes the bundled sample. `scripts/trace-live-proof.ts` exercises the same `createTraceRoute` against real groot sources.
+
 Parent must review this registration on the CURRENT integration branch, not edit the served checkout. Review source SHA, MBP receipts, original ask, unknown checks, screenshots and allowed roots first. The historical restart command is `systemctl --user restart dash-bridge-4747`; only the parent may execute it in an idle-checked, qualified rollout transaction with rollback/device gates. This document is not restart authorization. Never infer phone acceptance from Metro logs.
 
-Until admission, GET /trace/snapshot is unavailable on the shared bridge and the app truthfully restores the public bundled snapshot. No live bridge route is claimed by this commit.
+Until admission, GET /trace/snapshot is unavailable on the shared bridge and the app says so explicitly. The bundled snapshot is Component Lab demo data only; production Trace never renders it. No live bridge route is claimed by this commit.
 
 ## Data and contract
 
@@ -37,7 +38,7 @@ Artifacts are discovered from report links/absolute paths and run-root images. P
 
 GET /trace/artifact accepts a path only after authorization. Both lexical and canonical paths must remain within explicit roots; traversal, symlink escapes, hidden/credential/config/database/key paths, directories, active HTML/SVG and unknown types are refused. Reads open once with O_NOFOLLOW, compare inode/canonical path, and cap text at 256 KiB and images at 8 MiB; text is redacted and image signatures checked. no-store/nosniff/sandbox headers are sent. Supported image types are PNG/JPEG/WebP. Roots are sol-runs, project-artifacts, ~/.dash/attachments and products/*/docs; not all of home, profiles or arbitrary worktrees. Reports and filenames are data, never instructions.
 
-The app polls only on the foreground Trace screen, with cancellation/timeout and a 15-second interval. Pairing changes and unavailable/invalid responses discard private old-host data and restore the public bundle. Live snapshots are not persisted to AsyncStorage. Old captured timestamps show “cached bridge snapshot”. Detail leads with intent, validation and artifacts, then collapsed metrics; six-artifact pagination bounds eager image loads.
+The app polls only on the foreground Trace screen, with cancellation/timeout and a 5-second interval; the route caches a collection for 3 seconds. Feed phases are unpaired, connecting, live and unavailable (with reason, retry interval and when it was last live). Pairing changes and unavailable/invalid responses discard private old-host data and show the unavailable state with no rows. Leaving Trace for Lab pauses polling and keeps the view; refocus polls at once. Rows that appear between polls are named in a "New since last update" line, and an open detail follows its row by key. Live snapshots are not persisted to AsyncStorage. Detail leads with intent, validation and artifacts, then collapsed metrics; six-artifact pagination bounds eager image loads.
 
 ## Reproduce on MBP
 
