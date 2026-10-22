@@ -4,10 +4,10 @@ import { fetchTraceSnapshot } from "./feed";
 import { setTraceSnapshot, traceStore, resetBundledTrace } from "./source";
 
 /** Screen-scoped, foreground-only polling; pairing changes discard private old-host data. */
-export function useTraceFeed(settings: { address: string; token: string } | null): void {
+export function useTraceFeed(settings: { address: string; token: string } | null, focused = true): void {
   useEffect(() => {
     resetBundledTrace(settings ? "Connecting to bridge" : "Pair with a bridge for live trace");
-    if (!settings) return;
+    if (!settings || !focused) return;
     let disposed = false, pending = false;
     let controller: AbortController | undefined;
     async function load() {
@@ -26,5 +26,5 @@ export function useTraceFeed(settings: { address: string; token: string } | null
     const timer = setInterval(() => void load(), 15000);
     const listener = AppState.addEventListener("change", state => { if (state === "active") void load(); });
     return () => { disposed = true; controller?.abort(); clearInterval(timer); listener.remove(); traceStore.set(s => ({ ...s, error: "" })); };
-  }, [settings?.address, settings?.token]);
+  }, [settings?.address, settings?.token, focused]);
 }

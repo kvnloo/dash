@@ -20,12 +20,14 @@ import { feedbackStore, latest, loadFeedback, record, traceStore } from "../trac
 import { colors, fonts, space } from "../theme";
 import { store } from "../store/app";
 import { useTraceFeed } from "../trace/useTraceFeed";
+import { useIsFocused } from "@react-navigation/native";
 
 /** Agent trace, native: READ strip, swipe chips, stat tiles and the gesture timeline. */
 export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
   const { snapshot, origin, error } = traceStore.use((s) => s);
   const settings = store.use(s => s.settings);
-  useTraceFeed(settings);
+  const focused = useIsFocused();
+  useTraceFeed(settings, focused);
   const records = feedbackStore.use((s) => s.records);
   const reduced = useReducedMotion();
   const scrollRef = useRef<ScrollView>(null);
