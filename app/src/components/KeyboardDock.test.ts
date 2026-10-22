@@ -33,7 +33,9 @@ describe("KeyboardDock", () => {
     const composer = readFileSync(join(import.meta.dir, "Composer.tsx"), "utf8");
     const dock = readFileSync(join(import.meta.dir, "KeyboardDock.tsx"), "utf8");
     expect(composer).toContain("paddingHorizontal: 12");
-    expect(composer).toContain("minHeight: 60");
+    expect(composer).toContain('field: { flexDirection: "column", alignItems: "stretch", minHeight: 96 }');
+    expect(composer).toContain('testID="composer-controls"');
+    expect(composer).toContain('alignSelf: "stretch", minWidth: 0, minHeight: 48');
     expect(composer).not.toContain("KeyboardAvoidingView");
     expect(dock).toContain('stick: { width: "100%" }');
     expect(dock).toContain("translateY: height.value");
