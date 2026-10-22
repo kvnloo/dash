@@ -18,8 +18,8 @@ import type { HermesApi } from "./hermes-sessions";
  * - a standalone process that runs its own agent (`handoff`): Dash never writes beside
  *   it; the reply waits for the owner to close (ordered handoff).
  *
- * Transports are Hermes's own:
- * - `live`: Hermes's thin gateway client, `hermes chat --resume <id> --format stream-json`
+ * Transports reuse Hermes's own clients:
+ * - `live`: bridge-owned hermes-live.py uses GatewayChatView with attended admissions
  *   (see src/hermes-live.ts). It follows only its own admission; the gateway's ACP
  *   projection would also forward the terminal's own turns into Dash's reply;
  * - otherwise the native API `/api/sessions/{id}/chat` when the profile has one (host-only key);

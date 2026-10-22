@@ -91,19 +91,24 @@ while a turn runs. All of them are clients of one gateway FIFO per session.
    Anything else is `standalone`.
 3. **Gateway-hosted (`live`): send now, into that gateway.** Also for a `local`
    session with no lease (an open TUI or Desktop). The bridge shows "Open in CLI on
-   groot · sending into the live session" when a lease exists, and runs Hermes's
-   own thin client, `hermes chat --resume <id> --query-file - --format stream-json`
-   (`bridge/src/hermes-live.ts`, text on stdin, `HERMES_HOME` = profile home,
-   `HERMES_TUI_GATEWAY_URL` dropped). It attaches as one more viewer and
-   `prompt.submit`s on the session's durable FIFO: an idle session runs it as the
-   next turn, a running turn gets it queued behind it (Hermes's own multi-client
-   behaviour; mid-turn steering stays the typing user's `/steer`). It follows only
-   its own admission, so the terminal's turns never leak into Dash's reply. The
-   gateway ACP projection (`hermes acp`) is not used here: it forwards every
-   viewer's deltas into the prompt's stream. The TUI paints Dash's turn live; the
-   classic prompt_toolkit CLI renders only its own turns, but its next turn has
-   Dash's turn in context. Stop on the phone sends SIGINT to the thin client; a
-   turn the gateway already started keeps running there.
+   groot · sending into the live session" when a lease exists. The bridge runs
+   `bridge/src/hermes-live.py`, bootstrapped with `hermes --print-runtime-command`.
+   `DASH_HERMES_SOURCE` selects the Hermes source tree (default
+   `/workspace/hermes-home/hermes-agent`). Text travels only on stdin.
+   The helper sets `HERMES_DISABLE_LAZY_INSTALLS=1` before runtime discovery and
+   bootstrap, so a send does not install dependencies or finish a source update.
+   `HERMES_HOME` selects the profile and `HERMES_TUI_GATEWAY_URL` is removed.
+   Discovery attaches only to an existing gateway. It never starts an agent or gateway.
+   The helper resumes the session and admits text on its durable FIFO.
+   An idle session runs it next; a running session queues it.
+   Hermes's `GatewayChatView.run(oneshot=True)` and `StreamJsonEmitter` retain
+   admission filtering, terminal result/exit codes, control detachment and replay-gap recovery.
+   A narrow client adapter removes `finite` only from `prompt.submit`.
+   The viewer follows one admission, but the turn is a long-lived chat turn.
+   Async delegates and background completion notifications therefore remain available.
+   The gateway ACP projection is not used because it includes other viewers' deltas.
+   The TUI paints Dash's turn live. Stop on the phone detaches the helper.
+   Accepted queued or running work remains at the gateway. Do not resend it.
 4. **Standalone owner: the reply waits.** Only a process that runs its own agent
    (no serving gateway, no link to it) keeps the ordered handoff: a `status` event
    with `handoff: { state: "queued" }` ("Open in CLI on groot · reply queued until
@@ -115,6 +120,41 @@ while a turn runs. All of them are clients of one gateway FIFO per session.
    `session/prompt`) under that profile's `HERMES_HOME`. Never a classic CLI that
    runs its own agent.
 6. One Dash continuation per profile session at a time, queued or running.
+
+### Clarification and approval controls
+
+Dash no longer marks these turns finite. Previously, finite turns returned the
+headless clarify result immediately, without waiting for a human answer.
+Now a non-finite turn can wait for a clarification answer.
+The helper does not request `clarify_batch`, so Hermes publishes per-question
+`clarify.request` controls. Hermes's one-shot viewer detects a pending clarification
+or approval and detaches without cancelling, with a terminal `result` and exit code 3.
+Dash tells the user to answer in Hermes TUI/CLI and not resend the message.
+Dash does not implement a control-answer surface in this transport.
+
+The underlying turn remains pending until a viewer answers, an interrupt occurs,
+or the configured clarify timeout expires. Hermes resolves that timeout from
+`clarify.timeout`, then `agent.clarify_timeout`, then 3600 seconds.
+Zero or a negative value means unlimited waiting. On timeout, the tool reports
+`outcome: timed_out` with unanswered questions and the turn can continue.
+Later results remain visible in the session history, not in the detached Dash stream.
+Attended approval rules also apply again. No control is auto-approved by this helper.
+
+The helper retains the session's existing source label. Omitting `finite` removes
+the admission-level unattended override; it does not turn automation-source sessions
+into attended human sessions. The steer helper and `session.steer` route are unchanged.
+
+Unit proof (no gateway connection):
+
+```sh
+bun test bridge/src/hermes-live.test.ts
+DASH_HERMES_SOURCE=/workspace/hermes-home/hermes-agent \
+  <python-from-hermes-print-runtime-command> -I bridge/src/hermes-live.test.py
+```
+
+The native Python tests use the real Hermes viewer and emitter with a fake client.
+They pin admission flags, foreign-admission filtering, blocking controls,
+unknown-turn refusal, and replay-gap recovery. They do not submit to a real session.
 
 New Hermes chats start through Hermes ACP in the bridge's own `HERMES_HOME`. Their
 `session` event carries `hermes:session:<profile>:<id>`, so the next roster refresh

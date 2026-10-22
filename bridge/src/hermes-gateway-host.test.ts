@@ -7,6 +7,7 @@ import { chooseHermesRoute, liveText, planContinuation } from "./hermes-continue
 import { connectedVia, ownerHosting, parseProcTcp, readGatewayPids, type GatewayHostProbe } from "./hermes-gateway-host";
 import type { LiveOwner } from "./hermes-owner";
 import { HermesSessions } from "./hermes-sessions";
+import { liveArgv } from "./hermes-live";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -51,9 +52,9 @@ test("routing decision: gateway owner or gateway session sends live, standalone 
   expect(liveText("cli", "groot")).toBe("Open in CLI on groot · sending into the live session");
 });
 
-test("a live send uses Hermes's thin gateway client, never the API or ACP projection; no hermes is reported", () => {
+test("a live send uses the attended helper, never the API or ACP projection; no hermes is reported", () => {
   const api = { url: "http://127.0.0.1:8642", key: "k" };
-  const argv = ["/bin/hermes", "chat", "--resume", "local-x", "--query-file", "-", "--format", "stream-json"];
+  const argv = liveArgv("/bin/hermes", "local-x");
   expect(chooseHermesRoute({ api, home: "/h", acpCommand: ["/bin/hermes", "acp"], liveArgv: argv })).toEqual({ kind: "live", argv, home: "/h" });
   expect(chooseHermesRoute({ api, home: "/h", acpCommand: ["/bin/hermes", "acp"], liveArgv: null }).kind).toBe("unavailable");
   expect(chooseHermesRoute({ api, home: "/h", acpCommand: ["/bin/hermes", "acp"] })).toEqual({ kind: "api", api });

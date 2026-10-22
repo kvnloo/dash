@@ -1,18 +1,16 @@
 /**
- * One Dash reply into a Hermes session that is live in a gateway-hosted CLI/TUI, sent the way
- * Hermes's own clients send it: `hermes chat --resume <id> --query-file - --format stream-json`.
+ * One Dash reply into a gateway-hosted Hermes session. The bridge-owned Python helper uses
+ * Hermes's GatewayChatView one-shot follow path and StreamJsonEmitter, but removes `finite`
+ * from prompt.submit. The viewer follows one admission; the long-lived chat stays attended.
  *
- * In current Hermes that command is a thin gateway client (`hermes_cli/gateway_chat.py`): it
- * attaches to the profile's running gateway as one more viewer (`session.resume`), admits the
- * text with `prompt.submit` on the session's durable FIFO and follows only ITS admission. So an
- * idle session runs it as the next turn, a running turn gets it queued behind it, the open
- * TUI paints the turn, and other viewers' turns never leak into Dash's reply (the gateway ACP
- * projection forwards every viewer's deltas, so it is not used for this). It never takes the
- * terminal's session lease and never runs an agent of its own.
+ * Hermes retains admission filtering, control detachment and replay-gap recovery. Async
+ * delegates and background completions remain available. This never takes the terminal's
+ * session lease, starts a gateway, or runs an agent of its own.
  *
  * Only used when `ownerHosting` proved a gateway serves the session; a standalone owner still
  * gets the ordered handoff. The text goes on stdin, not argv.
  */
+import { fileURLToPath } from "node:url";
 import { PartEmitter, hermesParts } from "./reply-parts";
 import type { ReplyPart } from "../../shared/protocol";
 import { TurnPhase } from "./turn-phase";
@@ -34,7 +32,7 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 export function liveArgv(bin: string, sessionId: string): string[] {
-  return [bin, "chat", "--resume", sessionId, "--query-file", "-", "--format", "stream-json"];
+  return ["python3", fileURLToPath(new URL("./hermes-live.py", import.meta.url)), "--hermes-bin", bin, "--session-id", sessionId];
 }
 
 /** One stdout line of Hermes's stream-json protocol (`hermes_cli/stream_json.py`). */
@@ -112,7 +110,7 @@ export async function sendIntoLiveSession(options: {
   let stderrTail = "";
   let terminateTimer: ReturnType<typeof setTimeout> | undefined;
   const onAbort = () => {
-    // Ctrl-C: the thin client withdraws its own still-queued admission; a running turn is the gateway's.
+    // Detach this viewer only. Accepted queued/running work remains owned by the gateway.
     child.kill("SIGINT");
     terminateTimer = setTimeout(() => child.kill("SIGTERM"), 5_000);
     terminateTimer.unref?.();
@@ -136,7 +134,11 @@ export async function sendIntoLiveSession(options: {
     const code = await child.exited;
     if (options.signal?.aborted) throw new Error("Cancelled. A turn the gateway already started keeps running in the open session.");
     if (!result) throw new Error(`Hermes gateway client ended without a result (exit ${code}). The reply may still land in the open session; check it before resending.`);
-    if (result.exitCode !== 0) throw new Error(`Hermes: ${result.error ?? (stderrTail.replace(/^Error:\s*/, "") || `exit ${result.exitCode}`)}`);
+    if (result.exitCode !== 0) {
+      const error = result.error ?? (stderrTail.replace(/^Error:\s*/, "") || `exit ${result.exitCode}`);
+      if (result.exitCode === 3 && error.startsWith("Input required")) throw new Error("Hermes needs an answer in its TUI/CLI. Dash detached without cancelling the turn. Answer the pending clarification or approval there; do not resend this message.");
+      throw new Error(`Hermes: ${error}`);
+    }
     // Unstreamed, or cut by a replay gap (`text` events stopped; `text` is the whole reply): show the rest once.
     if (!streamed.trim() && result.text) { options.sink.delta(result.text); streamed = result.text; }
     else if (result.replayGap && result.text.startsWith(streamed) && result.text.length > streamed.length) { options.sink.delta(result.text.slice(streamed.length)); streamed = result.text; }

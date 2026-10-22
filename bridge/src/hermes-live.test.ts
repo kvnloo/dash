@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { fileURLToPath } from "node:url";
 import { liveArgv, parseLiveLine, sendIntoLiveSession, type LiveSpawn } from "./hermes-live";
 
 function fakeSpawn(lines: string[], options: { exit?: number; stderr?: string } = {}) {
@@ -22,8 +23,14 @@ function sink() {
   return { out, sink: { delta: (t: string) => out.deltas.push(t), status: (t: string) => out.statuses.push(t) } };
 }
 
-test("argv is Hermes's own one-shot gateway client; the text never rides argv", () => {
-  expect(liveArgv("/bin/hermes", "local-1")).toEqual(["/bin/hermes", "chat", "--resume", "local-1", "--query-file", "-", "--format", "stream-json"]);
+test("live argv uses the attended helper, not the finite Hermes chat command", () => {
+  expect(liveArgv("/bin/hermes", "local-1")).toEqual(["python3", fileURLToPath(new URL("./hermes-live.py", import.meta.url)), "--hermes-bin", "/bin/hermes", "--session-id", "local-1"]);
+});
+
+test("Python helper omits finite at the RPC boundary with a fake client", () => {
+  const result = Bun.spawnSync(["python3", "-I", fileURLToPath(new URL("./hermes-live.test.py", import.meta.url))]);
+  expect(result.stderr.toString()).toContain("OK");
+  expect(result.exitCode).toBe(0);
 });
 
 test("stream-json lines map to deltas, tool status and one result", () => {
@@ -38,11 +45,14 @@ test("stream-json lines map to deltas, tool status and one result", () => {
 test("a live send streams its own reply, uses the profile home and drops an inherited remote gateway URL", async () => {
   const { spawn, seen } = fakeSpawn(['{"type":"system","subtype":"init"}', '{"type":"tool_use","name":"terminal"}', '{"type":"tool_result"}', '{"type":"text","text":"po"}', '{"type":"text","text":"ng"}', '{"type":"result","exit_code":0,"text":"pong","session_id":"local-1"}']);
   const { out, sink: s } = sink();
-  const result = await sendIntoLiveSession({ argv: ["hermes"], home: "/p/clean", sessionId: "local-1", text: "reply with just pong", sink: s, spawn, env: { HERMES_TUI_GATEWAY_URL: "ws://elsewhere", PATH: "/bin" } });
+  const argv = liveArgv("/bin/hermes", "local-1");
+  const result = await sendIntoLiveSession({ argv, home: "/p/clean", sessionId: "local-1", text: "reply with just pong", sink: s, spawn, env: { HERMES_TUI_GATEWAY_URL: "ws://elsewhere", PATH: "/bin" } });
   expect(result).toEqual({ text: "pong", sessionId: "local-1", exitCode: 0 });
   expect(out.deltas).toEqual(["po", "ng"]);
   expect(out.statuses).toEqual(["Thinking", "Running terminal", "Thinking", ""]);
   expect(seen.stdin).toBe("reply with just pong");
+  expect(seen.argv).toEqual(argv);
+  expect(seen.argv).not.toContain(seen.stdin);
   expect(seen.env?.HERMES_HOME).toBe("/p/clean");
   expect("HERMES_TUI_GATEWAY_URL" in (seen.env ?? {})).toBe(false);
 });
@@ -61,6 +71,10 @@ test("failures are reported, never retried: refused turn, no result (ambiguous),
   await expect(sendIntoLiveSession({ argv: ["hermes"], home: "/h", sessionId: "s", text: "t", sink: s, spawn: fakeSpawn(['{"type":"result","exit_code":3,"text":"","error":"needs approval"}'], { exit: 3 }).spawn, env: {} })).rejects.toThrow("Hermes: needs approval");
   await expect(sendIntoLiveSession({ argv: ["hermes"], home: "/h", sessionId: "s", text: "t", sink: s, spawn: fakeSpawn([], { exit: 1, stderr: "Error: Gateway disconnected\n" }).spawn, env: {} })).rejects.toThrow("check it before resending");
   await expect(sendIntoLiveSession({ argv: ["hermes"], home: "/h", sessionId: "s", text: "t", sink: s, spawn: fakeSpawn(['{"type":"result","exit_code":0,"text":""}']).spawn, env: {} })).rejects.toThrow("without a reply");
+});
+
+test("blocking human controls tell Dash users where to answer without resubmitting", async () => {
+  await expect(sendIntoLiveSession({ argv: liveArgv("/bin/hermes", "s"), home: "/h", sessionId: "s", text: "t", sink: sink().sink, spawn: fakeSpawn(['{"type":"result","exit_code":3,"error":"Input required; detached without cancelling. Resume this session interactively."}'], { exit: 3 }).spawn, env: {} })).rejects.toThrow("Answer the pending clarification or approval there; do not resend this message.");
 });
 
 test("stopping the Dash turn interrupts only the thin client (SIGINT), and reports the cancel", async () => {
