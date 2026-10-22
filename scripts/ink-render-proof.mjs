@@ -79,6 +79,8 @@ try{
   await page.goto(`http://127.0.0.1:${port}`,{waitUntil:'domcontentloaded',timeout:180000});
   await page.getByRole('tab').nth(1).click({timeout:120000});
   await page.getByText(chat.title,{exact:true}).first().click({timeout:60000});
+  // Composition: the row opens a window over Main (whose search bar is also a 'Message' textbox); type only once the window is up.
+  await page.getByTestId('chat-window').waitFor({state:'visible'});
   const input=page.getByRole('textbox',{name:'Message',exact:true});await input.fill('Original unsent draft\nKeep this exact text');
   await page.evaluate(()=>window.__dashAnnotate.enterAnnotation());await wait(()=>page.locator('canvas').count(),'chat canvas');
   await page.mouse.move(60,280);await page.mouse.down();await page.mouse.move(210,380,{steps:20});await page.mouse.up();await sleep(250);
