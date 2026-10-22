@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Image, Linking, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { store } from "../../store/app";
 import { fonts, space } from "../../theme";
 import type { TraceArtifact, TraceEvidence } from "../../../../shared/trace-evidence";
@@ -10,6 +10,7 @@ export function TraceEvidenceCards({ evidence, onNavigate }: { evidence?: TraceE
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [artifactPage, setArtifactPage] = useState(0);
   const artifacts = evidence?.artifacts ?? [];
+  useEffect(() => { setArtifactPage(0); setQuoteOpen(false); }, [evidence?.intent.provenance.sourceHash, artifacts.length]);
   return <View style={s.stack} testID="trace-evidence">
     <Text style={s.heading}>INTENT CONTRACT</Text>
     {evidence ? <>
@@ -35,10 +36,13 @@ export function TraceEvidenceCards({ evidence, onNavigate }: { evidence?: TraceE
 function Artifact({ artifact: a, onNavigate }: { artifact: TraceArtifact; onNavigate?(route: TraceRoute): void }) {
   const settings = store.use(s => s.settings);
   const [image, setImage] = useState(""), [preview, setPreview] = useState(""), [error, setError] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  const version = useRef(0), fileRequest = useRef<AbortController | null>(null);
   const local = a.target.startsWith("/"), isImage = a.kind === "image" || a.kind === "storyboard";
   useEffect(() => {
-    setImage(""); setPreview(""); setError("");
-    if (!local || !isImage || !settings) return;
+    version.current += 1; fileRequest.current?.abort();
+    setImage(""); setPreview(""); setError(""); setExpanded(false);
+    if (!local || !isImage || !settings) return () => { version.current += 1; fileRequest.current?.abort(); };
     let disposed = false;
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 12000);
     void fetch(`http://${settings.address}/trace/artifact?path=${encodeURIComponent(a.target)}`, { headers: { Authorization: `Bearer ${settings.token.trim()}` }, signal: controller.signal }).then(async r => {
@@ -49,7 +53,7 @@ function Artifact({ artifact: a, onNavigate }: { artifact: TraceArtifact; onNavi
       reader.onload = () => { if (!disposed && typeof reader.result === "string") setImage(reader.result); };
       reader.readAsDataURL(blob);
     }).catch(() => { if (!disposed) setError("Image unavailable · authenticated bridge required"); }).finally(() => clearTimeout(timer));
-    return () => { disposed = true; controller.abort(); clearTimeout(timer); };
+    return () => { disposed = true; version.current += 1; fileRequest.current?.abort(); controller.abort(); clearTimeout(timer); };
   }, [a.target, isImage, local, settings?.address, settings?.token]);
   async function open() {
     if (a.kind === "dash") {
@@ -57,21 +61,33 @@ function Artifact({ artifact: a, onNavigate }: { artifact: TraceArtifact; onNavi
       if (route === "Trace" || route === "Lab" || route === "Settings" || route === "Approvals" || route === "Main") onNavigate?.(route);
     } else if (!local) { try { await Linking.openURL(a.target); } catch { setError("Could not open link"); } }
     else if (settings && !isImage) {
+      const sourceVersion = version.current;
+      fileRequest.current?.abort(); setError("");
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 12000);
+      fileRequest.current = controller;
       try {
         const r = await fetch(`http://${settings.address}/trace/artifact?path=${encodeURIComponent(a.target)}`, { headers: { Authorization: `Bearer ${settings.token.trim()}` }, signal: controller.signal });
         if (!r.ok) throw new Error("unavailable");
-        setPreview((await r.text()).slice(0, 4000));
-      } catch { setError("File unavailable · allowlisted text only"); } finally { clearTimeout(timer); }
-    } else if (!settings) setError("Pair with the originating bridge to open this file");
+        const text = (await r.text()).slice(0, 4000);
+        if (sourceVersion === version.current && fileRequest.current === controller) setPreview(text);
+      } catch { if (sourceVersion === version.current && fileRequest.current === controller) setError("File unavailable · allowlisted text only"); } finally { clearTimeout(timer); }
+    } else if (isImage && image) setExpanded(true);
+    else if (!settings) setError("Pair with the originating bridge to open this file");
   }
-  return <Pressable style={s.card} onPress={() => void open()} accessibilityRole="button" accessibilityLabel={`${a.kind}: ${a.title}`}>
+  return <><Pressable style={s.card} onPress={() => void open()} accessibilityRole="button" accessibilityLabel={`${a.kind}: ${a.title}`}>
     <Text style={s.body}>{a.kind === "dash" ? "Take me there → " : ""}{a.title}</Text>
     <Text style={s.muted} numberOfLines={2}>{a.target}</Text>
     {image ? <Image source={{ uri: image }} style={s.image} resizeMode="contain" accessibilityLabel={a.title} /> : null}
     {preview || a.preview ? <Text style={s.muted} selectable>{preview || a.preview}</Text> : null}
     {error ? <Text style={s.muted}>{error}</Text> : null}
-  </Pressable>;
+  </Pressable>
+    <Modal visible={expanded} transparent animationType="none" onRequestClose={() => setExpanded(false)}>
+      <View style={s.fullscreen} accessibilityViewIsModal>
+        <Pressable onPress={() => setExpanded(false)} accessibilityRole="button" accessibilityLabel="Close artifact image" style={s.imageClose}><Text style={s.body}>Close image ×</Text></Pressable>
+        {image ? <Image source={{ uri: image }} style={s.fullImage} resizeMode="contain" accessibilityLabel={`Full image: ${a.title}`} /> : null}
+      </View>
+    </Modal>
+  </>;
 }
 const s = StyleSheet.create({
   stack: { gap: space.sm }, heading: { fontFamily: fonts.mono, fontSize: 11, color: tc.text3, marginTop: space.md },
@@ -79,4 +95,6 @@ const s = StyleSheet.create({
   body: { color: tc.text, fontSize: 14, lineHeight: 20 }, muted: { color: tc.text3, fontSize: 11, lineHeight: 17 },
   card: { padding: space.sm, gap: 5, backgroundColor: tc.raised, borderWidth: 1, borderColor: tc.rule, borderRadius: 8 },
   image: { width: "100%", height: 220 },
+  fullscreen: { flex: 1, backgroundColor: "#000", paddingTop: 48, paddingBottom: 32 },
+  imageClose: { padding: space.md, alignSelf: "flex-end" }, fullImage: { flex: 1, width: "100%" },
 });

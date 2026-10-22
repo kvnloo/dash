@@ -55,8 +55,10 @@ const evidence = { source: input ? "MBP render of captured real groot native sta
 try {
   const page = await browser.newPage({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   page.on("pageerror", e => evidence.errors.push(e.message));
+  let offline = false;
   await page.route("**/trace/**", async route => {
     const path = new URL(route.request().url());
+    if (offline && path.pathname === "/trace/snapshot") { await route.fulfill({ status: 503, body: "simulated endpoint outage" }); return; }
     const real = await fetch(`${bridge}${path.pathname}${path.search}`, { headers, signal: AbortSignal.timeout(15000) });
     await route.fulfill({ status: real.status, contentType: real.headers.get("Content-Type") || "application/json", body: Buffer.from(await real.arrayBuffer()) });
   });
@@ -79,6 +81,10 @@ try {
   evidence.openMs.push(Date.now() - start);
   assert(await page.getByText("VALIDATION", { exact: true }).isVisible());
   assert(await page.getByText("ARTIFACTS", { exact: true }).isVisible());
+  const positions = await Promise.all(["INTENT CONTRACT", "VALIDATION", "ARTIFACTS"].map(text => page.getByText(text, { exact: true }).boundingBox()));
+  assert(positions.every(Boolean));
+  assert(positions[0].y < positions[1].y && positions[1].y < positions[2].y);
+  evidence.headingGeometry = positions;
   assert.equal(await page.getByLabel("Worker metrics", { exact: true }).getAttribute("aria-expanded"), "false");
   await page.screenshot({ path: `${out}/trace-intent.png` }); evidence.screenshots.push("trace-intent.png");
   await writeFile(`${out}/trace-intent.txt`, await page.locator("body").innerText(), { mode: 0o600 });
@@ -87,6 +93,7 @@ try {
   await page.getByRole("button", { name: "Close", exact: true }).tap();
   await page.getByTestId("trace-detail").waitFor({ state: "hidden" });
   const artifactRow = snapshot.rows.find(r => r.evidence?.artifacts.some(a => (a.kind === "image" || a.kind === "storyboard") && (!input || capturedTargets.has(a.target))));
+  assert(artifactRow, "actual captured image-producing run exists");
   if (artifactRow) {
     const target = page.getByTestId(`row-${artifactRow.key}`); await target.scrollIntoViewIfNeeded(); await target.tap();
     await page.getByText("ARTIFACTS", { exact: true }).waitFor();
@@ -100,8 +107,17 @@ try {
     await img.scrollIntoViewIfNeeded();
     await page.waitForFunction(() => [...document.images].some(i => i.complete && i.naturalWidth > 0));
     await page.screenshot({ path: `${out}/trace-artifacts.png` }); evidence.screenshots.push("trace-artifacts.png");
+    await img.tap();
+    const closeImage = page.getByRole("button", { name: "Close artifact image", exact: true });
+    await closeImage.waitFor();
+    await page.screenshot({ path: `${out}/trace-image-expanded.png` }); evidence.screenshots.push("trace-image-expanded.png");
+    await closeImage.tap();
+    await page.getByRole("button", { name: "Close", exact: true }).tap();
   }
-  evidence.assertions.push("unauthorized read denied", "native data loads over authenticated endpoint", "original run contract visible", "intent then validation then artifacts", "metrics initially collapsed and opens", "detail closes");
+  offline = true;
+  await page.getByText(/Offline \/ endpoint unavailable/).waitFor({ timeout: 25000 });
+  await page.screenshot({ path: `${out}/trace-offline.png` }); evidence.screenshots.push("trace-offline.png");
+  evidence.assertions.push("unauthorized read denied", "native captured data loads over authenticated endpoint", "original run contract visible", "intent then validation then artifacts geometry", "metrics initially collapsed and opens", "detail closes", "real captured image decodes and expands", "simulated endpoint outage discards private data and restores bundled snapshot");
   assert.deepEqual(evidence.errors, []);
 } finally {
   await writeFile(`${out}/visual-evidence.json`, JSON.stringify(evidence, null, 2));
