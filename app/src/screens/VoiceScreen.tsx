@@ -23,7 +23,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   const lines = state.lines;
   const orb: OrbState = { phase: state.phase === "hearing" ? "listening" : state.phase === "error" ? "idle" : state.phase };
   const autostart = props.route.params?.autostart === true;
-  useEffect(() => { if (autostart && !live) void start(); }, [autostart]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (autostart && !live) void start(); }, [autostart]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
