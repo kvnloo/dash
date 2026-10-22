@@ -21,6 +21,32 @@ expo.stdout.on('data', d => log += d); expo.stderr.on('data', d => log += d);
 const box = async (page, testId) => page.getByTestId(testId).boundingBox();
 const overlaps = (a, b) => a && b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
+// No vision model in this run: decode the real screenshot pixels in Chromium and require painted
+// content (distinct colours, bright text pixels) inside a region instead of trusting the DOM alone.
+async function paint(page, rect) {
+  const clip = { x: Math.max(0, rect.x), y: Math.max(0, rect.y), width: Math.max(1, rect.width), height: Math.max(1, rect.height) };
+  const png = (await page.screenshot({ clip })).toString('base64');
+  return page.evaluate(async data => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${data}`;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width; canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const px = ctx.getImageData(0, 0, img.width, img.height).data;
+    const colours = new Set();
+    let bright = 0, total = 0, lum = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      const l = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+      lum += l; total++;
+      if (l > 140) bright++;
+      colours.add(((px[i] >> 4) << 8) | ((px[i + 1] >> 4) << 4) | (px[i + 2] >> 4));
+    }
+    return { colours: colours.size, brightFraction: bright / total, meanLuminance: lum / total };
+  }, png);
+}
+
 async function listScroll(page) {
   return page.evaluate(() => {
     const pane = document.querySelector('[data-testid="chats-pane"]');
@@ -59,9 +85,11 @@ try {
     await page.evaluate(() => window.__DASH_DEBUG__.scenario('main-chats'));
     await page.evaluate(s => window.__DASH_DEBUG__.run({ action: 'setHandedness', side: s }), side);
     await page.evaluate(() => window.__DASH_DEBUG__.run({ action: 'setVoiceFixture', state: { live: true, sessionId: 'fixture', phase: 'listening', muted: false, updated: 0, transcript: [] } }));
-    await page.getByTestId('chats-pane').waitFor({ state: 'visible' });
+    await page.getByTestId('chats-pane').waitFor({ state: 'attached' });
+    await page.getByRole('tab').nth(1).click();
+    await page.waitForFunction(() => document.querySelectorAll('[role="tab"]')[1]?.getAttribute('aria-selected') === 'true');
     await page.evaluate(() => document.fonts.ready);
-    await sleep(500);
+    await sleep(700);
 
     // Scroll the underlying list so "exact scroll restored" is a real check, when it can scroll.
     const title = 'Make Dash great on the phone: reply into Hermes sessions, magic links and approvals';
@@ -103,6 +131,9 @@ try {
     assert(/session debug-cli/.test(badgeLabel ?? ''), `badge a11y carries the session: ${badgeLabel}`);
     const dock = await box(page, 'chat-window-dock');
     assert(dock && dock.y > height / 2, 'badge lives in the bottom dock');
+    const pixels = { pill: await paint(page, pill), badgeRow: await paint(page, await box(page, 'chat-window-badge-row')), transcript: await paint(page, { x: 0, y: pill.y + pill.height + 8, width, height: Math.max(40, dock.y - pill.y - pill.height - 16) }) };
+    assert(pixels.pill.colours >= 4 && pixels.pill.brightFraction > 0.005, `pill paints text: ${JSON.stringify(pixels.pill)}`);
+    assert(pixels.badgeRow.colours >= 4 && pixels.badgeRow.brightFraction > 0.002, `badge row paints: ${JSON.stringify(pixels.badgeRow)}`);
 
     // X: thumb-side corner of the dock, ≥ 44 hit, clear of send/mic.
     const close = await box(page, 'chat-window-close');
@@ -172,7 +203,7 @@ try {
     assert.equal(badgeAgain, badgeLabel, 'same identity before/after');
     await closeWindow(page);
 
-    cases.push({ tag, width, height, side, scrollBefore, scrollAfter, tabBefore, tabAfter, activeId: stateOpen.activeId, pill, pillLabel, badgeText, badgeLabel, close, controls, menuRows, ime, reopenedDraft });
+    cases.push({ tag, width, height, side, scrollBefore, scrollAfter, tabBefore, tabAfter, activeId: stateOpen.activeId, pill, pillLabel, pixels, badgeText, badgeLabel, close, controls, menuRows, ime, reopenedDraft });
     await context.close();
   }
   assert.equal(errors.length, 0, errors.join('\n'));
