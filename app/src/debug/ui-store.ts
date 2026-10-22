@@ -1,9 +1,11 @@
 import type { DraftAttachment } from "../lib/attachments";
 import { createStore } from "../store/createStore";
 import type { Z0LiveState } from "../../../shared/z0live-state";
+import type { RecentModel } from "../../../shared/recent-models";
 
 /** Remote-controllable UI overrides (null = screen uses local state). */
 export interface DebugUiState {
+  inputModels?: { profile: string; models: RecentModel[]; catalog: RecentModel[]; current?: RecentModel; note: string };
   mainSearchQuery: string | null;
   mainTabIndex: number | null;
   chatHarnessPickerOpen: boolean | null;

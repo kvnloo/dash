@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
+import { AgentPopup } from "../components/AgentPopup";
 import { composerPlaceholder } from "./composer-placeholder";
 import { sessionViewerLabel } from "./session-viewer-label";
 import { KeyboardDock, KeyboardInsetView } from "../components/KeyboardDock";
@@ -57,7 +58,7 @@ import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
 import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
-import { approvals, actionable } from "../store/approvals";
+
 import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptOffset } from "../lib/prompt-navigation";
 import { railTurns } from "../lib/rail-turns";
@@ -96,8 +97,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     if (isDebugActive()) debugUi.set((s) => ({ ...s, chatHarnessPickerOpen: open }));
   }, []);
 
-  const approvalCount = approvals.use(s => s.items.filter(actionable).length);
-  const approvalDryRun = approvals.use(s => s.dryRun);
+
   const settings = store.use((s) => s.settings);
   const connection = store.use((s) => s.connection);
   const conversation = store.use((s) => s.conversations.find((c) => c.id === s.activeId));
@@ -304,10 +304,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       </KeyboardInsetView>}
       <KeyboardDock>
         <WorkersStrip workers={workers} />
-        <View style={styles.liveRow}>
-          <PressScale accessibilityRole="button" accessibilityLabel="Choose harness" onPress={() => { haptic.select(); setPickerVisible(true); }} style={styles.liveChip}><Text style={styles.liveChipText}>{harnessName} · Change</Text></PressScale>
-          {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approval}><Text style={styles.approvalText}>{approvalCount} approvals{approvalDryRun ? " · preview" : ""} ›</Text></PressScale> : null}
-        </View>
+
         {chatOptions ? <>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 16, gap: 4 }}>
           {/* Temporary entry point until the page-aware composer filter menu lands (sol-density-dial). */}
@@ -318,6 +315,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         </> : null}
         {conversation && !liveOn ? <QueuedStack conversation={conversation} canSteer={online && !targetError && canSteer(harnessId, conversation.sessionId, thinking.phase, liveOn)} onSteer={() => { const payload = takeQueuedForSteer(conversation.id); if (payload) sendTurn(payload.text, payload.attachments, conversation, "steer"); }} /> : null}
         <Composer
+          agentControl={<AgentPopup conversation={conversation} onHarness={() => setPickerVisible(true)} onApprovals={() => navigation.navigate("Approvals")} />}
           context={context}
           key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}

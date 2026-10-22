@@ -68,6 +68,7 @@ import { contextHttp } from "./src/context-http";
 import { createSuggestionsHttpHandler } from "./src/suggestions-http";
 import { LiveSurface } from "./src/live-surface";
 import { createModelsHttpHandler } from "./src/models-http";
+import { createRecentModelsHttpHandler } from "./src/recent-models-http";
 import { loadRoles } from "./src/model-roles";
 import { ThinkingSummarizer } from "./src/thinking-summary";
 import { TurnSummaries } from "./src/turn-summaries";
@@ -696,6 +697,7 @@ const handleFiles = createFilesHttpHandler({
 const handleContext = contextHttp({ sessions: hermesSessions });
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleModels = createModelsHttpHandler({ authorize });
+const handleRecentModels = createRecentModelsHttpHandler({ authorize });
 const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
 
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
@@ -738,6 +740,8 @@ const server = Bun.serve<SocketData>({
       if (orchestra) return cors(orchestra);
       const models = await handleModels(request);
       if (models) return cors(models);
+      const recentModels = await handleRecentModels(request);
+      if (recentModels) return cors(recentModels);
       const supervision = await handleSupervision(request);
       if (supervision) return cors(supervision);
       const activity = nativeActivityHttp(request, await authorize(request));
