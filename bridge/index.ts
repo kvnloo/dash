@@ -72,6 +72,7 @@ import { loadRoles } from "./src/model-roles";
 import { ThinkingSummarizer } from "./src/thinking-summary";
 import { TurnSummaries } from "./src/turn-summaries";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
+import { createOrchestraHttpHandler } from "./src/orchestra-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 
 // ---------------------------------------------------------------------------
@@ -692,6 +693,7 @@ const handleFiles = createFilesHttpHandler({
 });
 
 const handleContext = contextHttp({ sessions: hermesSessions });
+const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleModels = createModelsHttpHandler({ authorize });
 const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
 
@@ -731,6 +733,8 @@ const server = Bun.serve<SocketData>({
       if (url.pathname === "/chat/context/compact" && request.method === "POST") server.timeout(request, 255);
       const context = await handleContext(request, await authorize(request));
       if (context) return cors(context);
+      const orchestra = await handleOrchestra(request);
+      if (orchestra) return cors(orchestra);
       const models = await handleModels(request);
       if (models) return cors(models);
       const supervision = await handleSupervision(request);
