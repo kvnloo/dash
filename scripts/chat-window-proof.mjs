@@ -144,13 +144,18 @@ try {
     const slot = await pillSlot(page);
     assert.equal(slot.status, 'listening', `voice state readable in its slot: ${JSON.stringify(slot)}`);
     assert(!slot.statusClipped && slot.titleClipped, `title truncates before status: ${JSON.stringify(slot)}`);
-    // Sol's app-wide mic bar (the one Mute/Stop home) sits below the pill, never over it or the camera band.
-    const bar = await page.evaluate(() => {
-      const b = document.querySelector('[data-testid="voice-mic-bar"]')?.getBoundingClientRect();
-      const p = document.querySelector('[data-testid="chat-window-pill"]').getBoundingClientRect();
-      return { barTop: b?.top ?? null, pillBottom: p.bottom, mutes: document.querySelectorAll('[aria-label="Mute microphone"]').length };
+    // One home for voice controls in the window: dock row with Mute/End; app-wide bar absent; phase in the pill.
+    const voiceWin = await page.evaluate(() => {
+      const r = el => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; };
+      const mutes = [...document.querySelectorAll('[data-testid="voice-mute"]')], ends = [...document.querySelectorAll('[data-testid="voice-end"]')];
+      const dock = document.querySelector('[data-testid="chat-window-dock"]');
+      return { bars: document.querySelectorAll('[data-testid="voice-mic-bar"]').length, mutes: mutes.length, ends: ends.length,
+        inDock: mutes.concat(ends).every(el => dock?.contains(el)), mute: mutes[0] ? r(mutes[0]) : null, end: ends[0] ? r(ends[0]) : null, viewport: innerHeight,
+        endLabel: ends[0]?.getAttribute('aria-label') ?? null };
     });
-    assert(bar.barTop !== null && bar.barTop >= bar.pillBottom - 0.5 && bar.mutes === 1, `mic bar below pill, one Mute: ${JSON.stringify(bar)}`);
+    assert(voiceWin.bars === 0 && voiceWin.mutes === 1 && voiceWin.ends === 1 && voiceWin.inDock, `window: one Mute/End set, in the dock, no global bar: ${JSON.stringify(voiceWin)}`);
+    assert(voiceWin.mute.top > voiceWin.viewport / 2 && voiceWin.end.top > voiceWin.viewport / 2, 'voice controls thumb-reachable (lower half)');
+    assert.equal(voiceWin.endLabel, 'End voice call', 'voice End is its own identity (not the task Stop)');
 
     // Underlying workspace stays mounted and painted (transparent presentation), not reset.
     const underlying = await page.evaluate(() => {
@@ -241,7 +246,22 @@ try {
     if (scrollBefore) assert.equal(scrollAfter?.top, scrollBefore.top, 'exact list scroll restored');
     assert.equal(stateClosed.activeId, stateOpen.activeId, 'same conversation after close');
     assert.equal(stateClosed.ui.voiceStateFixture?.phase, 'listening', 'voice state not stopped by closing');
-    assert(await page.getByTestId('voice-mic-bar').isVisible(), 'mic bar (Mute/Stop) still shown after close');
+    // Outside the window the app-wide bar is the one home, in its OWN band: it covers no tab, and every tab is
+    // the hit target at its own centre (geometry + hit-test, not pointer-events pass-through) and selectable.
+    const nav = await page.evaluate(() => {
+      const bar = document.querySelector('[data-testid="voice-mic-bar"]'); const b = bar?.getBoundingClientRect();
+      const tabs = [...document.querySelectorAll('[role="tab"]')].map(t => { const r = t.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { top: r.top, bottom: r.bottom, hitsTab: Boolean(hit && t.contains(hit)), underBar: Boolean(bar && hit && bar.contains(hit)) }; });
+      return { barBottom: b?.bottom ?? null, tabs, mutes: document.querySelectorAll('[data-testid="voice-mute"]').length, ends: document.querySelectorAll('[data-testid="voice-end"]').length };
+    });
+    assert(nav.barBottom !== null && nav.mutes === 1 && nav.ends === 1, `closed: one Mute/End set in the bar: ${JSON.stringify(nav)}`);
+    assert(nav.tabs.length >= 3 && nav.tabs.every(t => t.hitsTab && !t.underBar && t.top >= nav.barBottom - 0.5), `bar owns its band; tabs uncovered: ${JSON.stringify(nav)}`);
+    for (let i = 0; i < nav.tabs.length; i++) {
+      await page.getByRole('tab').nth(i).click({ trial: false });
+      await page.waitForFunction(n => document.querySelectorAll('[role="tab"]')[n]?.getAttribute('aria-selected') === 'true', i);
+    }
+    await page.getByRole('tab').nth(tabBefore).click();
+    await page.waitForFunction(n => document.querySelectorAll('[role="tab"]')[n]?.getAttribute('aria-selected') === 'true', tabBefore);
+    await page.screenshot({ path: path.join(out, `${tag}-5b-voice-bar-main.png`) });
 
     // Reopen: same session, draft retained.
     await openRow(page, title);
@@ -315,6 +335,13 @@ try {
       return { scrollable: Boolean(scroller), scrollHeight: scroller?.scrollHeight ?? 0, chunks: body.split('SYNTHETIC STREAM chunk one.').length - 1, prompts: body.split('Prompt 23:').length - 1, stops: document.querySelectorAll('[aria-label="Stop"]').length };
     });
     const slotBefore = await pillSlot(page);
+    // Voice live during a running task: voice End and the composer's task Stop are separate controls.
+    await page.evaluate(() => window.__DASH_DEBUG__.run({ action: 'setVoiceStateFixture', state: { phase: 'thinking', muted: false, lines: [] } }));
+    await sleep(200);
+    const both = await page.evaluate(() => ({ taskStops: document.querySelectorAll('[aria-label="Stop"]').length, voiceEnds: [...document.querySelectorAll('[data-testid="voice-end"]')].map(e => e.getAttribute('aria-label')), bars: document.querySelectorAll('[data-testid="voice-mic-bar"]').length }));
+    assert(both.voiceEnds.length === 1 && both.voiceEnds[0] === 'End voice call' && both.taskStops <= 1 && both.bars === 0, `voice End distinct from task Stop: ${JSON.stringify(both)}`);
+    await page.evaluate(() => window.__DASH_DEBUG__.run({ action: 'setVoiceStateFixture', state: null }));
+    await sleep(200);
     assert(before.scrollable && before.chunks === 1 && before.prompts >= 1, `populated transcript: ${JSON.stringify(before)}`);
     assert.equal(slotBefore.status, 'terminal', `running tool in the pill: ${JSON.stringify(slotBefore)}`);
     assert(before.stops <= 1, 'one Stop control at most');

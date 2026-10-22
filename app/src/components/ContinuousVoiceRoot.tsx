@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaInsetsContext, useSafeAreaInsets, type EdgeInsets } from "react-native-safe-area-context";
+import { appInsets, VOICE_BAR_ROW, voiceControlHome } from "../lib/voice-bar";
 import { executionToken, voiceAccessToken } from "../lib/bridge-auth";
 import { ContinuousVoice, object, VoiceAccessDenied, type VoiceState } from "../lib/continuous-voice";
 import { createVoicePeer } from "../lib/voice-peer";
@@ -15,8 +16,13 @@ import { createStore } from "../store/createStore";
 import { debugUi } from "../debug/ui-store";
 
 const initial: VoiceState = { phase: "idle", muted: false, lines: [] };
-/** Top offset (DIP) requested by a full-screen chat window so the mic bar sits below its pill; 0 = safe-area top. */
-export const voiceBarTop = createStore(0);
+/** True while a full-screen chat window is open: its dock row is then the single home of voice Mute/End. */
+export const voiceWindowOpen = createStore(false);
+const DeviceInsets = createContext<EdgeInsets | null>(null);
+/** Real device safe-area insets (the window's cut-out pill must hug the status band, not the voice bar). */
+export function useDeviceInsets(): EdgeInsets {
+  const device = useContext(DeviceInsets); const app = useSafeAreaInsets(); return device ?? app;
+}
 interface VoiceContext { state: VoiceState; start(): Promise<void>; stop(): Promise<void>; mute(): void }
 const Context = createContext<VoiceContext | null>(null);
 export function useContinuousVoice(): VoiceContext {
@@ -32,7 +38,8 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const starting = useRef(false);
   const releaseMic = useRef<(() => void) | undefined>(undefined);
   const insets = useSafeAreaInsets();
-  const barTop = voiceBarTop.use(top => top);
+  const windowOpen = voiceWindowOpen.use(open => open);
+  const [barRow, setBarRow] = useState(0);
   // SYNTHETIC debug-only state for rendered proofs (never set outside the debug controller).
   const fixture = debugUi.use(s => s.voiceStateFixture ?? null);
   const start = async () => {
@@ -121,14 +128,20 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       send: (text, attachments) => sendVoiceAnnotation(target, text, attachments, (id, reply) => { if (generation === epoch.current) call.current?.deliverFinal(`annotation:${id}`, reply); }),
     });
   }, [active, bindingGeneration]);
+  // The bar owns a band under the status bar (screens inset below it); it never floats over AppNav or content.
+  // Space stays allocated while a chat window covers the app, so the list underneath never jumps on close.
+  const home = voiceControlHome(active, windowOpen);
   return <Context.Provider value={{ state: shown, start, stop, mute: () => call.current?.mute(!state.muted) }}>
-    {children}
-    {/* box-none: only Mute/Stop take touches; the label never swallows taps meant for the nav beneath it. */}
-    {active ? <View testID="voice-mic-bar" pointerEvents="box-none" style={[styles.bar, { top: Math.max(insets.top, barTop) }]} accessibilityLiveRegion="polite">
-      <Text style={styles.text}>{shown.muted ? "Mic muted" : shown.phase === "connecting" ? "Voice connecting · mic muted" : `● Mic active · ${shown.phase}`}</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel={shown.muted ? "Unmute microphone" : "Mute microphone"} onPress={() => call.current?.mute(!shown.muted)} style={styles.button}><Text style={styles.text}>{shown.muted ? "Unmute" : "Mute"}</Text></Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Stop continuous voice" onPress={() => void stop()} style={styles.button}><Text style={styles.text}>Stop</Text></Pressable>
+    <DeviceInsets.Provider value={insets}>
+      <SafeAreaInsetsContext.Provider value={appInsets(insets, active, barRow)}>{children}</SafeAreaInsetsContext.Provider>
+    </DeviceInsets.Provider>
+    {home === "bar" ? <View testID="voice-mic-bar" style={[styles.bar, { paddingTop: insets.top }]} accessibilityLiveRegion="polite">
+      <View style={styles.row} onLayout={e => setBarRow(e.nativeEvent.layout.height)}>
+        <Text style={[styles.text, styles.label]} numberOfLines={1}>{shown.muted ? "Mic muted" : shown.phase === "connecting" ? "Voice connecting · mic muted" : `● Mic active · ${shown.phase}`}</Text>
+        <Pressable testID="voice-mute" accessibilityRole="button" accessibilityLabel={shown.muted ? "Unmute voice microphone" : "Mute voice microphone"} onPress={() => call.current?.mute(!shown.muted)} style={styles.button}><Text style={styles.text}>{shown.muted ? "Unmute" : "Mute"}</Text></Pressable>
+        <Pressable testID="voice-end" accessibilityRole="button" accessibilityLabel="End voice call" onPress={() => void stop()} style={styles.button}><Text style={styles.text}>End voice</Text></Pressable>
+      </View>
     </View> : null}
   </Context.Provider>;
 }
-const styles = StyleSheet.create({ bar: { position: "absolute", left: 8, right: 8, backgroundColor: colors.bg, borderColor: colors.accent, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", zIndex: 1000 }, text: { color: colors.text, fontSize: 12 }, button: { minHeight: 44, minWidth: 52, alignItems: "center", justifyContent: "center" } });
+const styles = StyleSheet.create({ bar: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: colors.bg, zIndex: 1000 }, row: { minHeight: VOICE_BAR_ROW, marginHorizontal: 8, borderColor: colors.accent, borderWidth: 1, flexDirection: "row", alignItems: "center", paddingLeft: 8 }, label: { flex: 1, minWidth: 0 }, text: { color: colors.text, fontSize: 12 }, button: { minHeight: 44, minWidth: 52, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 } });

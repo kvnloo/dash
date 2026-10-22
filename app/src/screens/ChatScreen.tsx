@@ -57,7 +57,7 @@ import { QueuedStack } from "../components/QueuedStack";
 import { colors, glass, radius, space, type } from "../theme";
 import { useLiveThinking } from "../lib/live-thinking";
 import type { OrbState } from "../lib/orb-phase";
-import { useContinuousVoice, voiceBarTop } from "../components/ContinuousVoiceRoot";
+import { useContinuousVoice, useDeviceInsets, voiceWindowOpen } from "../components/ContinuousVoiceRoot";
 import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
@@ -84,6 +84,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const thumb = useHandedness();
   const composerDraft = route.params?.draft;
   const insets = useSafeAreaInsets();
+  // The window owns the full screen: its pill hugs the real status band (device insets), not the voice bar band.
+  const deviceTop = useDeviceInsets().top;
   const blurTarget = useRef<View>(null);
   const listRef = useRef<FlashListRef<Message>>(null);
   const followRef = useRef(true);
@@ -154,12 +156,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
   const voice = useContinuousVoice();
   const voiceActive = !["idle", "error"].includes(voice.state.phase);
-  const [voiceControls, setVoiceControls] = useState(false);
   // Broker liveness/another client's call is not evidence that Dash's mic is live.
   const voiceCall: OrbState | undefined = voiceActive ? { phase: voice.state.phase === "hearing" ? "listening" : voice.state.phase === "error" ? "idle" : voice.state.phase } : undefined;
   const onVoice = () => {
-    if (voiceActive) setVoiceControls(value => !value);
-    else { setVoiceControls(true); void voice.start(); }
+    // A live call already shows its one Mute/End home (window dock row, else the app-wide bar).
+    if (voiceActive) return;
+    void voice.start();
   };
 
   const sendTurn = useCallback(
@@ -265,14 +267,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const [treeOpen, setTreeOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   // Native DisplayCutout rect when the APK provides it; null (web, Expo Go, older APK, no cut-out) keeps the safe-area pill.
-  const cutout = useDisplayCutout(windowWidth, windowHeight, insets.top);
-  const pill = useMemo(() => pillGeometry({ insetTop: insets.top, width: windowWidth, cutout }), [insets.top, windowWidth, cutout]);
-  // The app-wide mic bar (single mic home: Mute/Stop) moves below the pill while this window is open.
+  const cutout = useDisplayCutout(windowWidth, windowHeight, deviceTop);
+  const pill = useMemo(() => pillGeometry({ insetTop: deviceTop, width: windowWidth, cutout }), [deviceTop, windowWidth, cutout]);
+  // While this window is open its dock row is the single voice Mute/End home; the app-wide bar steps aside
+  // (the root call is untouched: no stop, no remount).
   useEffect(() => {
     if (!windowed) return;
-    voiceBarTop.set(pillReserve(pill, insets.top));
-    return () => voiceBarTop.set(0);
-  }, [windowed, pill, insets.top]);
+    voiceWindowOpen.set(true);
+    return () => voiceWindowOpen.set(false);
+  }, [windowed]);
   const closeWindow = useCallback(() => {
     // Presentation only: no cancel, stop, voice end or conversation change happens here.
     morph.close(() => screenBack(navigation));
@@ -333,9 +336,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       <Text accessibilityRole="alert" style={[styles.liveNote, { flex: 1 }]}>{voice.state.note}</Text>
       <PressScale accessibilityRole="button" accessibilityLabel="Retry Live voice" onPress={() => void voice.start()} style={styles.liveChip}><Text style={styles.liveChipText}>Retry voice</Text></PressScale>
     </View> : null}
-    {voiceControls && voiceActive ? <View style={styles.liveRow}>
-      <PressScale accessibilityRole="button" accessibilityLabel={voice.state.muted ? "Unmute Live voice" : "Mute Live voice"} onPress={voice.mute} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.muted ? "Unmute" : "Mute"}</Text></PressScale>
-      <PressScale accessibilityRole="button" accessibilityLabel="End Live voice" onPress={() => void voice.stop()} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.phase === "connecting" ? "Cancel connection" : "End voice"}</Text></PressScale>
+    {windowed && voiceActive ? <View testID="window-voice-controls" style={[styles.liveRow, thumb.row]}>
+      <PressScale testID="voice-mute" accessibilityRole="button" accessibilityLabel={voice.state.muted ? "Unmute voice microphone" : "Mute voice microphone"} onPress={voice.mute} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.muted ? "Unmute" : "Mute"}</Text></PressScale>
+      <PressScale testID="voice-end" accessibilityRole="button" accessibilityLabel="End voice call" onPress={() => void voice.stop()} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.phase === "connecting" ? "Cancel connection" : "End voice"}</Text></PressScale>
     </View> : null}
     {windowed ? null : <View style={styles.liveRow}>
       <PressScale accessibilityRole="button" accessibilityLabel="Choose harness" onPress={() => { haptic.select(); setPickerVisible(true); }} style={styles.liveChip}><Text style={styles.liveChipText}>{harnessName} · Change</Text></PressScale>
@@ -403,7 +406,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   </ComposerActionMenu>;
 
   return (
-    <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, insets.top) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
+    <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
       {windowed ? <>
         <WindowPill geometry={pill} title={conversation?.title || harnessName} thinking={thinking}
           status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
