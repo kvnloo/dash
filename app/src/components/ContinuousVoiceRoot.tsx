@@ -123,7 +123,8 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   }, [active, bindingGeneration]);
   return <Context.Provider value={{ state: shown, start, stop, mute: () => call.current?.mute(!state.muted) }}>
     {children}
-    {active ? <View testID="voice-mic-bar" style={[styles.bar, { top: Math.max(insets.top, barTop) }]} accessibilityLiveRegion="polite">
+    {/* box-none: only Mute/Stop take touches; the label never swallows taps meant for the nav beneath it. */}
+    {active ? <View testID="voice-mic-bar" pointerEvents="box-none" style={[styles.bar, { top: Math.max(insets.top, barTop) }]} accessibilityLiveRegion="polite">
       <Text style={styles.text}>{shown.muted ? "Mic muted" : shown.phase === "connecting" ? "Voice connecting · mic muted" : `● Mic active · ${shown.phase}`}</Text>
       <Pressable accessibilityRole="button" accessibilityLabel={shown.muted ? "Unmute microphone" : "Mute microphone"} onPress={() => call.current?.mute(!shown.muted)} style={styles.button}><Text style={styles.text}>{shown.muted ? "Unmute" : "Mute"}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Stop continuous voice" onPress={() => void stop()} style={styles.button}><Text style={styles.text}>Stop</Text></Pressable>
