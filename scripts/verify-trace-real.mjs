@@ -89,6 +89,7 @@ try {
   await page.screenshot({ path: `${out}/trace-intent.png` }); evidence.screenshots.push("trace-intent.png");
   await writeFile(`${out}/trace-intent.txt`, await page.locator("body").innerText(), { mode: 0o600 });
   await page.getByLabel("Worker metrics", { exact: true }).tap();
+  assert.equal(await page.getByLabel("Worker metrics", { exact: true }).getAttribute("aria-expanded"), "true");
   await page.screenshot({ path: `${out}/trace-workers.png` }); evidence.screenshots.push("trace-workers.png");
   await page.getByRole("button", { name: "Close", exact: true }).tap();
   await page.getByTestId("trace-detail").waitFor({ state: "hidden" });

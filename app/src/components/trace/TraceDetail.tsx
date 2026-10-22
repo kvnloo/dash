@@ -110,7 +110,7 @@ export function TraceDetail({ snapshot, row, origin, onClose, onNavigate }: { sn
           <Animated.View style={[styles.flex, body]}>
             {ready ? <ScrollView contentContainerStyle={styles.scroll}>
               <TraceEvidenceCards evidence={row.evidence} onNavigate={route => { onClose(); onNavigate?.(route); }} />
-              <Pressable onPress={() => setMetricsOpen(v => !v)} accessibilityRole="button" accessibilityLabel="Worker metrics" accessibilityState={{ expanded: metricsOpen }}>
+              <Pressable onPress={() => setMetricsOpen(v => !v)} accessibilityRole="button" accessibilityLabel="Worker metrics" accessibilityState={{ expanded: metricsOpen }} aria-expanded={metricsOpen}>
                 <Text style={styles.section}>{metricsOpen ? "−" : "+"} WORKERS & METRICS · {sum.workers}</Text>
               </Pressable>
               {metricsOpen ? <>
