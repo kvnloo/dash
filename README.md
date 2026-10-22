@@ -88,6 +88,15 @@ Pixel language: [docs/design/language.md](docs/design/language.md). Competitor +
 
 Each harness keeps its own session id for multi-turn threads.
 
+The authenticated `GET /roster` also lists existing interactive OMP sessions on
+Linux. It reads live `omp` processes and their open session JSONL handles under
+`~/.omp/agent/sessions` (or `$PI_CODING_AGENT_DIR/sessions`); `TERN_PANE` supplies
+the stable pane identity when available. Worker brokers and noninteractive
+turns are not frontends, and nested subagent transcripts are not separate chats.
+If process inspection is unavailable, broker discovery remains the fallback.
+Both current `--absolute-cwd--` and older single-dash session folders are read.
+An unreadable frontend handle is listed without guessing another session's ID.
+
 Canonical ids: [kvnloo/aodl `harnesses/catalog.json`](https://github.com/kvnloo/aodl/blob/main/harnesses/catalog.json). `o8` is a control room; firstmate is a distro — neither is a Dash spawn target.
 
 ## Related
