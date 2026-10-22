@@ -32,6 +32,8 @@ import { TraceScreen } from "./src/screens/TraceScreen";
 import { LabScreen } from "./src/screens/LabScreen";
 import { DebugHost } from "./src/debug/DebugHost";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
+import { AgentSurface } from "./src/agent-surface/AgentSurface";
+import { surface } from "./src/agent-surface/state";
 import { isDebugActive } from "./src/debug/expose";
 import { debugNavigationRef, flushPendingDebugNavigation } from "./src/debug/nav";
 import { clearDebugPersistence, applyDebugSeed } from "./src/debug/seed";
@@ -88,6 +90,7 @@ export default function App() {
   if (fontError) throw fontError;
   const hydrated = store.use((s) => s.hydrated);
   const hasSettings = store.use((s) => s.settings !== null);
+  const guideEnabled = surface.use(s => s.enabled);
 
   useEffect(() => {
     void hydrate().then(async () => {
@@ -129,7 +132,7 @@ export default function App() {
               linking={Platform.OS === "web" ? linking : undefined}
               onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); stageLinks.flush(); appRoutes.flush(); flushNotificationTarget(); }}
             >
-            <AnnotationRoot>
+            <View style={[styles.root, { paddingTop: guideEnabled ? 44 : 0 }]}><AnnotationRoot>
               <Stack.Navigator
                 initialRouteName={isDebugActive() || hasSettings ? "Main" : "Pair"}
                 // Native-stack duration is iOS-only (and ignored for modal presentations).
@@ -149,7 +152,8 @@ export default function App() {
               </Stack.Navigator>
               <BridgePullOverlay />
               <NativeEvents />
-            </AnnotationRoot>
+            </AnnotationRoot></View>
+            <AgentSurface />
             </NavigationContainer>
           </BridgePullProvider>
           <DebugHost />

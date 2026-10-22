@@ -1,4 +1,5 @@
 import { applyGateMessage } from "../store/approvals";
+import { receiveSurface, setSurfaceTransport } from "../agent-surface/state";
 import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
 import { parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
 import type { LiveIntent } from "../../../shared/live";
@@ -137,6 +138,7 @@ class Bridge {
     }, CONNECT_TIMEOUT_MS);
     ws.onopen = () => {
       if (this.ws !== ws) return;
+      setSurfaceTransport(value => { if (this.ws === ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value)); });
       clearTimeout(this.connectTimer);
       this.attempt = 0;
     };
@@ -149,6 +151,7 @@ class Bridge {
     };
     ws.onclose = (event) => {
       if (this.ws !== ws) return;
+      setSurfaceTransport(undefined);
       this.ws = null;
       this.onClosed(closeReason(event.code));
     };
@@ -172,6 +175,7 @@ class Bridge {
     } catch {
       return;
     }
+    if (typeof parsed === "object" && parsed !== null && "type" in parsed && parsed.type === "surface_command") { void receiveSurface(parsed); return; }
     const message = parseServerMessage(parsed);
     if (!message) return;
     switch (message.type) {
@@ -270,6 +274,7 @@ class Bridge {
   }
 
   private teardownSocket(): void {
+    setSurfaceTransport(undefined);
     const ws = this.ws;
     this.ws = null;
     if (ws) {

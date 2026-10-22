@@ -61,7 +61,8 @@ import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptOffset } from "../lib/prompt-navigation";
 import { railTurns } from "../lib/rail-turns";
-import { enterAnnotation, registerSink } from "../store/annotate";
+import { registerSink } from "../store/annotate";
+import { ChatGuideControls, SurfaceAnchor } from "../agent-surface/AgentSurface";
 import { sharedDrafts, consumeSharedDraft } from "../store/shared-drafts";
 
 const EMPTY: Message[] = [];
@@ -247,7 +248,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
       <ScreenHeader compact title={conversation?.title || harnessName} onBack={() => screenBack(navigation)} />
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded: chatOptions }} accessibilityLabel="Chat options" onPress={() => setChatOptions(v => !v)} style={styles.optionsToggle}><Text style={styles.optionsToggleText}>{chatOptions ? "Hide options" : "Options"}</Text></Pressable>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingRight: 16 }}>
+        <SurfaceAnchor name="chat.options"><Pressable accessibilityRole="button" accessibilityState={{ expanded: chatOptions }} accessibilityLabel="Chat options" onPress={() => setChatOptions(v => !v)} style={[styles.optionsToggle, { minHeight: 44, justifyContent: "center" }]}><Text style={[styles.optionsToggleText, { color: colors.textMuted }]}>{chatOptions ? "Hide options" : "Options"}</Text></Pressable></SurfaceAnchor>
+        <ChatGuideControls />
+      </View>
       <ConnectionPill />
       {chatOptions ? <View>
       {conversation ? <PressScale accessibilityRole="switch" accessibilityLabel="Thinking summaries" accessibilityState={{ checked: conversation.summariesEnabled === true }} onPress={() => setThinkingSummaries(conversation.id, !conversation.summariesEnabled)} style={styles.liveRow}><Text style={styles.liveNote}>Thinking summaries · {conversation.summariesEnabled ? "on" : "off"} · next turn</Text></PressScale> : null}
@@ -317,7 +321,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         {chatOptions ? <>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 16, gap: 4 }}>
           {/* Temporary entry point until the page-aware composer filter menu lands (sol-density-dial). */}
-          <PressScale accessibilityRole="button" accessibilityLabel="Annotate this screen" onPress={() => { haptic.select(); enterAnnotation(); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center", marginRight: "auto" }}><Text style={{ ...type.mono, fontSize: 11, color: colors.gold }}>✎ Annotate</Text></PressScale>
+
           <Text style={{ ...type.mono, color: colors.textTertiary, fontSize: 10, marginRight: 6 }}>Thinking & tools</Text>
           {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
         </View>

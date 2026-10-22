@@ -67,6 +67,7 @@ import { createFilesHttpHandler } from "./src/files-http";
 import { contextHttp } from "./src/context-http";
 import { createSuggestionsHttpHandler } from "./src/suggestions-http";
 import { LiveSurface } from "./src/live-surface";
+import { AgentSurfaceBroker } from "./src/agent-surface";
 import { createModelsHttpHandler } from "./src/models-http";
 import { loadRoles } from "./src/model-roles";
 import { ThinkingSummarizer } from "./src/thinking-summary";
@@ -700,6 +701,7 @@ const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFA
 
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
 const liveSurface = new LiveSurface({ log });
+const agentSurface = new AgentSurfaceBroker({ directory: join(CREDENTIAL_DIR, "agent-surface"), url: () => `http://${bridgeAddress}` });
 const handleSupervision = createSupervisionHttpHandler({ token: TOKEN, directory: process.env.DASH_SUPERVISION_DIR });
 const gatePoll = gate ? setInterval(() => { try { gate.refresh(); } catch { /* Explicit next request returns corruption error. */ } }, 2000) : null;
 
@@ -731,6 +733,8 @@ const server = Bun.serve<SocketData>({
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      const surfaceResponse = await agentSurface.http(request);
+      if (surfaceResponse) return cors(surfaceResponse);
       if (url.pathname === "/chat/context/compact" && request.method === "POST") server.timeout(request, 255);
       const context = await handleContext(request, await authorize(request));
       if (context) return cors(context);
@@ -782,7 +786,9 @@ const server = Bun.serve<SocketData>({
         ws.close(1008, "Identity authorization expired");
         return;
       }
-      const message = parseClientMessage(parseJson(raw));
+      const parsed = parseJson(raw);
+      if (agentSurface.receive({ key: ws, subject: ws.data.principal.kind === "identity" ? ws.data.principal.subject : "legacy", send: value => ws.send(JSON.stringify(value)) }, parsed)) return;
+      const message = parseClientMessage(parsed);
       if (!message) {
         log("ws.bad_message", { remote: ws.remoteAddress });
         return;
@@ -958,6 +964,7 @@ const server = Bun.serve<SocketData>({
       }
     },
     close(ws) {
+      agentSurface.disconnect(ws);
       ws.data.stopIdentityWatch?.();
       if (ws.data.gateSend) gate?.unsubscribe(ws.data.gateSend);
       detachSocket(ws.data.turns, (id) => turns.get(id), ws);

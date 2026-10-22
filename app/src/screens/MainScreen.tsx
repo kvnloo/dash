@@ -1,4 +1,5 @@
 import { BlurTargetView } from "expo-blur";
+import { setSurfaceMainTab, updateSurface } from "../agent-surface/state";
 import { Canvas } from "../components/Canvas";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
@@ -120,6 +121,11 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const [localTab, setLocalTab] = useState(DEFAULT_MAIN_TAB);
   const query = debugSearch !== null ? debugSearch : localQuery;
   const index = debugTab !== null ? debugTab : localTab;
+  useEffect(() => {
+    setSurfaceMainTab(route.key, index);
+    if (navigation.isFocused()) updateSurface({ route: index === 0 ? "bots" : index === 2 ? "orchestra" : "chats", anchors: {} });
+    return () => setSurfaceMainTab(route.key, undefined);
+  }, [route.key, index, navigation]);
 
   const setQuery = useCallback(
     (next: string | ((prev: string) => string)) => {

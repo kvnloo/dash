@@ -20,3 +20,4 @@ orchestrate/dash/status.md
 *.p12
 *.jks
 *.keystore
+.surface-receipts/
