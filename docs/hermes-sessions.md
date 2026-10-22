@@ -20,6 +20,27 @@ It excludes kitchen, oneshot, cron, kanban, tool and subagent sources. Hidden,
 archived and delegate-provenance rows are excluded. Persisted Hermes sessions
 are `available`, **not** advertised as running processes.
 
+### Chats row content
+
+Chats rows show the supplied title, working-folder name, activity and a literal
+excerpt from the latest nonempty completed assistant reply. The excerpt is labeled
+**Last reply**, not an inferred summary or verified outcome. It uses the first
+sentence of the first nonempty line. Pending, streaming, interrupted and failed
+replies never replace that excerpt. A row without a completed reply says
+**No summary yet**.
+
+The current conversation contract supplies `cwd`, not git root, branch or a repo
+list. Rows therefore label it **Folder** and preserve the full path in its
+accessibility label. Missing cwd says **Folder unknown**. No repo membership is
+inferred from paths or message text. Thinking-block summaries are not conversation
+summaries and are not used here.
+
+Activity distinguishes running turns, queued sends, host handoffs and unknown
+connection state. A live host process alone does not mean that a turn is running.
+The row press, long-press and navigation callbacks remain unchanged. The debug
+seed `chat-rows` covers a rich row, a folder-less row, a no-summary row and a
+running row. `scripts/chat-rows-proof.mjs` captures the real Expo web Chats pane.
+
 ## Reused boundaries
 
 - Like z0live's `desktop/z0live_desktop/work_sources.py`, fallback discovery and
