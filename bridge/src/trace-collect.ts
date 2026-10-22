@@ -23,7 +23,9 @@ function worker(id: string, model: string, start: number, end: number, status: T
 /** Read-only, bounded native collection. Never runs commands, probes fleet or writes sibling runs. */
 export async function collectTrace(options: { runs?: string; profiles?: string[]; roots?: string[]; fleet?: string; now?: number } = {}) {
   const now = options.now ?? Date.now(), runs = options.runs ?? TRACE_RUNS, roots = options.roots ?? traceRoots();
-  const start = now - 24 * 3600000, t0 = new Date(start).toISOString().replace(/Z$/, "");
+  const start = now - 24 * 3600000;
+  // The app prints t0 as a wall clock, so it must be the bridge's local time, not UTC.
+  const t0 = new Date(start - new Date(start).getTimezoneOffset() * 60000).toISOString().replace(/Z$/, "");
   const rows: TraceRow[] = [], warnings: string[] = [];
   const sorted = dirs(runs).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs).slice(0, 150);
   for (const dir of sorted) {

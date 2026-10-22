@@ -4,6 +4,7 @@ import { store } from "../../store/app";
 import { fonts, space } from "../../theme";
 import type { TraceArtifact, TraceEvidence } from "../../../../shared/trace-evidence";
 import { tc } from "./tokens";
+import { KIND_LABEL, byKind, goalLine } from "../../trace/evidence-view";
 export type TraceRoute = "Trace" | "Lab" | "Settings" | "Approvals" | "Main";
 
 export function TraceEvidenceCards({ evidence, onNavigate }: { evidence?: TraceEvidence; onNavigate?(route: TraceRoute): void }) {
@@ -17,19 +18,25 @@ export function TraceEvidenceCards({ evidence, onNavigate }: { evidence?: TraceE
       <Text style={s.label}>{evidence.quoteRedacted ? "You asked · secrets redacted" : "You asked · verbatim"}</Text>
       <Text style={s.quote} selectable numberOfLines={quoteOpen ? undefined : 6}>{evidence.quote || "Original owner request unavailable"}</Text>
       {evidence.quote.length > 200 ? <Pressable onPress={() => setQuoteOpen(v => !v)} accessibilityRole="button"><Text style={s.label}>{quoteOpen ? "Less" : "Read full request"}</Text></Pressable> : null}
-      <Text style={s.muted}>Goal · {evidence.intent.constraints.goal.slice(0, 180)}{evidence.intent.constraints.goal.length > 180 ? "…" : ""}</Text>
+      <Text style={s.label}>Goal</Text>
+      <Text style={s.body} testID="trace-goal">{goalLine(evidence)}</Text>
       {evidence.intent.constraints.rules.map((r, i) => <Text key={i} style={s.muted}>Constraint · {r}</Text>)}
       <Text style={s.muted}>AODL / HOTL {evidence.intent.specVersion} · extracted intent, not an observed plan</Text>
     </> : <Text style={s.muted}>No original contract in this snapshot. Pair with a bridge to load run evidence.</Text>}
     <Text style={s.heading}>VALIDATION</Text>
+    <Text style={s.label}>Acceptance · one receipt per check</Text>
     {evidence?.checks.length ? evidence.checks.map(c => <View key={c.id} style={s.card}>
       <Text style={s.body}>{c.status === "pass" ? "✓" : c.status === "fail" ? "×" : "?"} {c.text}</Text>
-      <Text style={s.muted}>{c.status === "unknown" ? "Unknown · no criterion-bound receipt" : `${c.status} · linked receipt`}</Text>
+      <Text style={[s.muted, c.status === "pass" ? { color: tc.ok } : c.status === "fail" ? { color: tc.cut } : null]}>{c.status === "unknown" ? "Unknown · no criterion-bound receipt" : `${c.status === "pass" ? "Passed" : "Failed"} · ${c.evidence.length} receipt${c.evidence.length === 1 ? "" : "s"}`}</Text>
       {c.evidence.map(path => <Artifact key={path} artifact={{ kind: "file", title: "Receipt", target: path }} onNavigate={onNavigate} />)}
-    </View>) : <Text style={s.muted}>Unknown · no explicit acceptance checks recovered. No success is inferred from a report or Metro log.</Text>}
+    </View>) : <Text style={s.muted}>Acceptance unknown · {evidence ? "the request states no checks" : "no request recorded for this event"}. Nothing is marked passed from a report or log.</Text>}
     <Text style={s.heading}>ARTIFACTS</Text>
-    {artifacts.length ? artifacts.slice(artifactPage * 6, artifactPage * 6 + 6).map(a => <Artifact key={a.target} artifact={a} onNavigate={onNavigate} />) : <Text style={s.muted}>No relevant outputs discovered.</Text>}
+    {artifacts.length ? byKind(artifacts.slice(artifactPage * 6, artifactPage * 6 + 6)).map(([kind, group]) => <View key={kind} style={s.stack}>
+      <Text style={s.label}>{KIND_LABEL[kind]} · {group.length}</Text>
+      {group.map(a => <Artifact key={a.target} artifact={a} onNavigate={onNavigate} />)}
+    </View>) : <Text style={s.muted}>No outputs recorded for this event.</Text>}
     {artifacts.length > 6 ? <Pressable onPress={() => setArtifactPage(p => (p + 1) * 6 >= artifacts.length ? 0 : p + 1)} accessibilityRole="button"><Text style={s.label}>Next artifacts · {artifactPage * 6 + 1}–{Math.min(artifacts.length, artifactPage * 6 + 6)} of {artifacts.length}</Text></Pressable> : null}
+    {evidence?.warnings.length ? <Text style={s.heading}>NOTES</Text> : null}
     {evidence?.warnings.map((w, i) => <Text key={i} style={s.muted}>{w}</Text>)}
   </View>;
 }

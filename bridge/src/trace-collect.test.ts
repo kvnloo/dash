@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { collectTrace } from "./trace-collect";
-import { parseTraceSnapshot } from "../../app/src/trace/model";
+import { clock, parseTraceSnapshot } from "../../app/src/trace/model";
 
 test("native run/session/fleet collection remains read-only and does not infer acceptance", async () => {
   const root = mkdtempSync(join(tmpdir(), "trace-native-"));
@@ -39,4 +39,11 @@ test("native run/session/fleet collection remains read-only and does not infer a
     const readback = new Database(join(profile, "state.db"), { readonly: true });
     expect(readback.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()?.n).toBe(2); readback.close();
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("timeline clock reads the bridge's local wall time for now", async () => {
+  const now = Date.UTC(2026, 9, 22, 17, 17);
+  const snapshot = parseTraceSnapshot(await collectTrace({ runs: "/nonexistent", fleet: "/nonexistent", profiles: [], roots: [], now }));
+  const local = new Date(now);
+  expect(clock(snapshot.t0, snapshot.now)).toBe(`${String(local.getHours()).padStart(2, "0")}:${String(local.getMinutes()).padStart(2, "0")}`);
 });

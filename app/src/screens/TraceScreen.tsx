@@ -15,7 +15,7 @@ import { TraceTimeline, type RowRect, type ScrubState } from "../components/trac
 import { tc } from "../components/trace/tokens";
 import type { ScreenProps } from "../navigation";
 import { CHIP_REORDER_MS, orderChips, restoreChip } from "../trace/chip-state";
-import { activeSeries, clock, type TraceRow, type TraceSnapshot } from "../trace/model";
+import { activeSeries, clock, dur, type TraceRow, type TraceSnapshot } from "../trace/model";
 import { feedbackStore, latest, loadFeedback, record, traceStore, type TraceFeed } from "../trace/source";
 import { colors, fonts, space } from "../theme";
 import { store } from "../store/app";
@@ -92,7 +92,7 @@ function LiveTrace({ snapshot, receivedAt, arrived, onNavigate, pairKey }: { sna
     <>
       <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} testID="trace-scroll">
         <Text style={styles.sub} testID="trace-feed-live">
-          Live from bridge · updated {ago(now - receivedAt)} · {snapshot.rows.length} events · {clock(snapshot.t0, 0)} to {clock(snapshot.t0, snapshot.now)}
+          Live from bridge · updated {ago(now - receivedAt)} · {snapshot.rows.length} events · last {dur(snapshot.now)} to {clock(snapshot.t0, snapshot.now)}
         </Text>
         {newest.length ? <Text style={[styles.sub, { color: tc.live }]} numberOfLines={2} testID="trace-arrived">New since last update · {newest.map(r => r.goal).join(" · ")}</Text> : null}
         <ReadStrip text={snapshot.read} variant="slide" />
@@ -108,7 +108,7 @@ function LiveTrace({ snapshot, receivedAt, arrived, onNavigate, pairKey }: { sna
           <StatTile label="active" value={series[series.length - 1] ?? 0} sub={`peak ${Math.max(0, ...series)}`} variant="spark" series={series} />
         </TileGrid>
         <Text style={styles.hint}>Pinch to zoom · drag to pan · hold a row for its actions · tap a row</Text>
-        <TraceTimeline snapshot={snapshot} rows={snapshot.rows} onOpenRow={onOpenRow} onScrub={setScrub} scrollRef={scrollRef} selectedKey={open?.key ?? null} />
+        <TraceTimeline snapshot={snapshot} rows={snapshot.rows} onOpenRow={onOpenRow} onScrub={setScrub} scrollRef={scrollRef} selectedKey={open?.key ?? null} freshKeys={arrived} />
       </ScrollView>
       {scrub ? (
         <Animated.View entering={reduced ? undefined : FadeInUp.duration(fade.duration)} exiting={reduced ? undefined : FadeOutUp.duration(fade.duration)} style={styles.float} pointerEvents="none" testID="scrub-float">

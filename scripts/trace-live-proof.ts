@@ -95,7 +95,9 @@ try {
     const prov = await page.getByTestId("trace-provenance").innerText();
     check("selected real row opens with its own key and source provenance", prov.includes(`Event · ${selected.key}`) && /Source · \//.test(prov) && /Request hash · [a-f0-9]{12}/.test(prov), isPrivate(selected.key) ? "hermes session (key withheld)" : selected.key, await shot(page, "3-detail"));
     const evidenceText = await page.getByTestId("trace-evidence").innerText();
-    check("detail shows the verbatim request and validation section", evidenceText.includes("You asked") && evidenceText.includes("VALIDATION") && evidenceText.includes("ARTIFACTS"));
+    check("detail leads with verbatim request, goal, acceptance and artifacts", evidenceText.includes("You asked") && evidenceText.includes("Goal") && evidenceText.includes("Acceptance") && evidenceText.includes("ARTIFACTS"));
+    const goal = await page.getByTestId("trace-goal").innerText();
+    check("goal line is stated or explicitly not separate, never a repeat of the request", goal.length > 0 && goal.length <= 241, goal.slice(0, 80));
 
     if (width === 412) {
       const before = new Set(snapshot.rows.map(r => r.key));
@@ -120,6 +122,7 @@ try {
       const newRow = page.getByTestId(`row-${fresh}`);
       await newRow.scrollIntoViewIfNeeded();
       check("arrival line names the new event", arrivedText.includes(fresh.replace(/^fleet:/, "").replace(/\.log$/, "")), arrivedText, await shot(page, "5-new-event-row"));
+      check("new event row is marked new in the timeline", (await newRow.innerText()).includes("new ·"));
       await newRow.tap();
       await page.getByTestId("trace-provenance").waitFor();
       const newProv = await page.getByTestId("trace-provenance").innerText();
@@ -130,6 +133,23 @@ try {
       await page.getByRole("button", { name: "Close", exact: true }).tap();
       await page.getByTestId("trace-detail").waitFor({ state: "hidden" });
     }
+
+    const label = page.getByTestId(`row-${selected.key}`);
+    await label.scrollIntoViewIfNeeded();
+    const lb = await label.boundingBox(), plot = await page.getByTestId("trace-timeline-plot").boundingBox();
+    assert(lb && plot, "row and plot are laid out");
+    const tMenu = Date.now();
+    await page.mouse.move(plot.x + plot.width / 3, lb.y + lb.height / 2);
+    await page.mouse.down(); await page.waitForTimeout(450); await page.mouse.up();
+    await page.getByTestId("trace-row-menu").waitFor({ timeout: 5000 });
+    const menuText = await page.getByTestId("trace-row-menu").innerText();
+    const mb = await page.getByTestId("trace-row-menu").boundingBox();
+    check("long-press opens this row's own menu under the row, inside the viewport", menuText.includes("Open details") && menuText.includes("Copy original request") && Boolean(mb && mb.y >= lb.y && mb.x >= 0 && mb.x + mb.width <= width), `${Date.now() - tMenu} ms incl. 450 ms hold`, await shot(page, "6b-row-menu"));
+    await page.getByRole("menuitem", { name: "Open details" }).click();
+    await page.getByTestId("trace-provenance").waitFor();
+    check("menu Open details opens the pressed row", (await page.getByTestId("trace-provenance").innerText()).includes(`Event · ${selected.key}`));
+    await page.getByRole("button", { name: "Close", exact: true }).tap();
+    await page.getByTestId("trace-detail").waitFor({ state: "hidden" });
 
     await page.getByRole("button", { name: "Component lab", exact: true }).click();
     await page.getByTestId("lab-demo-label").waitFor();
