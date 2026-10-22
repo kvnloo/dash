@@ -11,11 +11,49 @@ mock.module("@react-native-async-storage/async-storage", () => ({
 }));
 Object.defineProperty(globalThis, "requestAnimationFrame", { configurable: true, value: (fn: FrameRequestCallback) => setTimeout(() => fn(0), 0) });
 const app = await import("./app");
+const { sendConversation } = await import("../net/send-conversation");
 const { replyText } = await import("./text");
 const { profileFromAgent } = await import("../lib/roster");
 
 beforeEach(() => {
   app.store.set({ hydrated: true, settings: null, connection: { status: "online", harnesses: [], hosts: [] }, conversations: [], activeId: null });
+});
+
+test("attached identity survives leaving the chat and storage hydration; switch and detach are explicit", async () => {
+  const a = app.createConversation("hermes", { sessionId: "attached-native", profileId: "clean" });
+  const b = app.createConversation("omp");
+  app.setActive(a.id);
+  // Navigation does not call setActive(null); no screen name is part of the attachment.
+  expect(app.store.get().activeId).toBe(a.id);
+  await new Promise(resolve => setTimeout(resolve, 450));
+  app.store.set(s => ({ ...s, conversations: [], activeId: null }));
+  await app.hydrate();
+  expect(app.store.get().activeId).toBe(a.id);
+  expect(app.store.get().conversations.find(c => c.id === a.id)?.sessionId).toBe("attached-native");
+  app.setActive(b.id);
+  expect(app.store.get().activeId).toBe(b.id);
+  app.setActive(null);
+  await new Promise(resolve => setTimeout(resolve, 450));
+  await app.hydrate();
+  expect(app.store.get().activeId).toBeNull();
+});
+
+test("shared dock send routes exact attached identity, queues busy work, and never retries failed steer", () => {
+  const attached = app.createConversation("hermes", { sessionId: "attached-session", cwd: "/attached" });
+  const other = app.createConversation("omp");
+  const sent: Parameters<typeof import("../net/bridge").sendChat>[0][] = [];
+  const send = (input: Parameters<typeof import("../net/bridge").sendChat>[0]) => { sent.push(input); return true; };
+  expect(sendConversation(attached, "first", [], "queue", "idle", false, send)).toBe(true);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ sessionId: "attached-session", harness: "hermes", cwd: "/attached", text: "first", mode: "queue" });
+  expect(app.store.get().activeId).toBe(other.id);
+  expect(app.store.get().conversations.find(c => c.id === other.id)?.messages).toHaveLength(0);
+  expect(sendConversation(attached, "next", [], "queue", "thinking", true, send)).toBe(true);
+  expect(sent).toHaveLength(1);
+  const queued = app.store.get().conversations.find(c => c.id === attached.id)?.messages.at(-1);
+  expect(queued).toMatchObject({ role: "assistant", state: "pending" });
+  expect(sendConversation(attached, "steer", [], "steer", "thinking", true, () => false)).toBe(true);
+  expect(app.store.get().conversations.find(c => c.id === attached.id)?.messages.at(-1)).toMatchObject({ role: "assistant", state: "error", error: expect.stringContaining("will not be retried") });
 });
 
 test("summary toggle and final summaries persist; stale replay cannot overwrite keyed text", async () => {

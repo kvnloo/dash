@@ -6,7 +6,7 @@ import { useHandedness } from "../lib/useHandedness";
 import { MicButton } from "./MicButton";
 import { dictate } from "../lib/dictation";
 import { insertAtCursor, type Selection } from "../lib/mic-gesture";
-import { type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AttachmentChooser, type AttachmentAnchor } from "./AttachmentChooser";
 import { dismissKeyboard } from "../lib/dismiss-keyboard";
@@ -25,6 +25,7 @@ import {
   type PickedFile,
 } from "../lib/attachments";
 import { store } from "../store/app";
+import { useComposerDraft } from "../store/composer-draft";
 import { colors, fonts, glass, radius, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 import { PressScale } from "./PressScale";
@@ -34,6 +35,8 @@ import { haptic } from "../haptics";
 import type { IncomingShare } from "../lib/incoming-share";
 
 interface Props {
+  draftKey?: string;
+  agentControl?: ReactNode;
   context?: ContextControl;
   disabled: boolean;
   streaming: boolean;
@@ -50,7 +53,7 @@ interface Props {
   initialAttachments?: DraftAttachment[];
   sharedDraft?: IncomingShare;
   onSharedDraftConsumed?(id: string): void;
-  onSend(text: string, attachments: ChatAttachment[], mode?: SendMode): void;
+  onSend(text: string, attachments: ChatAttachment[], mode?: SendMode): boolean | void;
   onStop(): void;
   onVoice(): void;
   /** A live z0live call's orb state: the mic shows a small live orb instead of the glyph. */
@@ -59,14 +62,13 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
+export const Composer = memo(function Composer({ draftKey, agentControl, context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
   const thumb = useHandedness();
   const [choice, setChoice] = useState<SendMode>("steer");
   useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
   const sendMode = composerMode(steerBusy, choice);
   const switchMode = () => { setChoice(value => value === "steer" ? "queue" : "steer"); haptic.select(); };
-  const [text, setText] = useState(initialText ?? "");
-  const [drafts, setDrafts] = useState<DraftAttachment[]>(initialAttachments ?? []);
+  const { text, setText, drafts, setDrafts } = useComposerDraft(draftKey, initialText, initialAttachments);
   const lastShare = useRef<string | undefined>(undefined);
   const blockedShare = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -91,24 +93,38 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
   const [cursor, setCursor] = useState<Selection | undefined>(undefined);
   /** While dictating, focus the field without raising the keyboard; a tap on the field restores normal typing. */
   const [dictating, setDictating] = useState(false);
+  const recognitionPending = useRef(false);
   const onDictate = useCallback(async () => {
+    if (recognitionPending.current) return;
+    recognitionPending.current = true;
+    const at = selection.current;
     setDictating(true);
+    Keyboard.dismiss();
     const result = await dictate();
+    recognitionPending.current = false;
     if (!mounted.current) return;
     if (result.ok) {
-      setText(current => {
-        const next = insertAtCursor(current, selection.current, result.text);
+      if (queuePreview !== undefined) {
+        const next = insertAtCursor(queuePreview, at, result.text);
+        onQueuePreviewChange?.(next.text);
         const sel = { start: next.cursor, end: next.cursor };
         selection.current = sel;
         setCursor(sel);
-        return next.text;
-      });
+      } else {
+        setText(current => {
+          const next = insertAtCursor(current, at, result.text);
+          const sel = { start: next.cursor, end: next.cursor };
+          selection.current = sel;
+          setCursor(sel);
+          return next.text;
+        });
+      }
       requestAnimationFrame(() => inputRef.current?.focus());
     } else if (result.reason !== "canceled") {
       Alert.alert("Dictation", result.message ? `System speech recognizer unavailable: ${result.message}` : "System speech recognizer unavailable.");
     }
-  }, []);
-  useEffect(() => () => { mounted.current = false; }, []);
+  }, [queuePreview, onQueuePreviewChange]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const editingQueue = queuePreview !== undefined;
   const draftText = queuePreview ?? text;
@@ -116,9 +132,9 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
   const canSend = editingQueue ? Boolean(draftText.trim()) : canSendDrafts(draftText, drafts) && !disabled;
 
   const update = useCallback((key: string, patch: Partial<DraftAttachment>) => {
-    if (!mounted.current) return;
+    if (!mounted.current && !draftKey) return;
     setDrafts(list => list.map(d => (d.key === key ? { ...d, ...patch } : d)));
-  }, []);
+  }, [draftKey, setDrafts]);
 
   const addFiles = useCallback((picked: PickedFile[]) => {
     const settings = store.get().settings;
@@ -181,12 +197,12 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
     if (queuePreview !== undefined) { onSaveQueuePreview?.(); return; }
     const refs = readyRefs(drafts);
     const value = text.trim();
+    if (onSend(value, refs, sendMode.mode) === false) return;
     setText("");
     setDrafts([]);
-    onSend(value, refs, sendMode.mode);
   }, [canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
 
-  return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
+  return <View style={styles.wrap}>{agentControl ? <View style={thumb.row}>{agentControl}</View> : null}{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
     {drafts.length > 0 ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips} accessibilityLabel="Attachments">
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}

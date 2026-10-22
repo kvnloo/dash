@@ -14,8 +14,15 @@ import {
   type DebugScenarioId,
 } from "./scenarios";
 import { debugUi } from "./ui-store";
+import { parseConversation } from "../model";
+import { applyGateMessage } from "../store/approvals";
+import type { GateItem } from "../../../shared/gate";
+import { parseRecentModels } from "../../../shared/recent-models";
 
 export type DebugCommand =
+  | { action: "inputSnapshot"; conversation: unknown }
+  | { action: "inputModels"; snapshot: unknown }
+  | { action: "scopedGateFixture" }
   | { action: "scenario"; id: DebugScenarioId }
   | { action: "navigate"; screen: keyof RootStackParamList; params?: RootStackParamList[keyof RootStackParamList] }
   | { action: "reset"; seed?: DebugSeedVariant }
@@ -66,6 +73,31 @@ export async function runScenario(id: DebugScenarioId): Promise<void> {
 
 export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
   switch (cmd.action) {
+    case "inputSnapshot": {
+      // Read-only screenshot snapshot, explicitly offline: never connects to or submits to its source.
+      const conversation = parseConversation(cmd.conversation);
+      if (!conversation) return { ok: false, error: "Invalid snapshot" };
+      store.set(s => ({ ...s, settings: null, activeId: conversation.id, conversations: [conversation], connection: { status: "offline", harnesses: [], hosts: [] } }));
+      applyGateMessage({ type: "gate_snapshot", dry_run: true, owner_decisions: false, items: [] });
+      debugUi.set(s => ({ ...s, mainTabIndex: 1, mainSearchQuery: null }));
+      debugResetTo("Main", { tab: 1 }); flushPendingDebugNavigation();
+      return { ok: true, readOnly: true };
+    }
+    case "inputModels": {
+      const body = cmd.snapshot;
+      if (!body || typeof body !== "object" || !("profile" in body) || typeof body.profile !== "string") return { ok: false };
+      const snapshot = { profile: body.profile, models: parseRecentModels("models" in body ? body.models : undefined), catalog: parseRecentModels("catalog" in body ? body.catalog : undefined), current: parseRecentModels("current" in body ? [body.current] : [])[0], note: "Read-only native metadata snapshot, not a live connection. Model application is unavailable; nothing was sent." };
+      debugUi.set(s => ({ ...s, inputModels: snapshot }));
+      return { ok: true, readOnly: true };
+    }
+    case "scopedGateFixture": {
+      // Dry-run proposals: one owned by the attached session, one by another session. Nothing can post.
+      const session = store.get().conversations.find(c => c.id === store.get().activeId)?.sessionId;
+      if (!session) return { ok: false, error: "Attached conversation has no session" };
+      const item = (id: string, origin: string, title: string): GateItem => ({ id, kind: "pr_comment", state: "pending", target: { repo: "kvnloo/dash", number: 1, title }, body: "Fixture proposal.", evidence: [{ label: "Fixture", url_or_path: "docs/evidence/fixture.md" }], origin: { agent: "Hermes", session: origin, created_at: "2026-10-22T12:00:00Z" }, policy: { bulk_ok: false, requires_human_text: false, reason: "Fixture", rules: [] }, trail: [] });
+      applyGateMessage({ type: "gate_snapshot", dry_run: true, owner_decisions: false, items: [item("00000000-0000-4000-8000-0000000000a1", session, "Attached session proposal"), item("00000000-0000-4000-8000-0000000000b2", "another-session", "Other session proposal")] });
+      return { ok: true, dryRun: true };
+    }
     case "contextTarget": {
       // Debug-only loopback proof target. Never import a user's live transcript into a fixture.
       if (!/^(localhost|127\.0\.0\.1):\d+$/.test(cmd.address)) return { ok: false };

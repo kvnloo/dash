@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
+import { attachedUi } from "../store/attached-ui";
 import { KeyboardDock } from "../components/KeyboardDock";
 import { AppNav, type AppNavHandle } from "../components/AppNav";
 import { SearchResultRow } from "../components/SearchResultRow";
@@ -162,6 +163,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const hosts = store.use((s) => s.connection.hosts);
   const cwd = store.use((s) => s.connection.cwd);
   const settings = store.use((s) => s.settings);
+  const attached = store.use(s => s.conversations.some(c => c.id === s.activeId));
+  const attachedSearch = attachedUi.use(s => s.search);
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
   const searchActive = parsed.mode !== "discover" && parsed.scope !== "unknown" && composerTrigger(query) === null;
@@ -343,7 +346,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
         )}
       </BlurTargetView>
 
-      <KeyboardDock style={styles.searchDock}>
+      {!attached || attachedSearch ? <KeyboardDock style={styles.searchDock}>
         <GlobalSearchBar
           value={query}
           blurTarget={blurTarget}
@@ -374,7 +377,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             setQuery("");
           }}
         />
-      </KeyboardDock>
+      </KeyboardDock> : null}
     </View>
   );
 }
