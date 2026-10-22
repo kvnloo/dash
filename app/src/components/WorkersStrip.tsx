@@ -6,6 +6,7 @@ import type { TreeNode } from "../lib/tree";
 import type { Settings } from "../model";
 import { colors, fonts } from "../theme";
 import { haptic } from "../haptics";
+import { executionToken } from "../lib/bridge-auth";
 
 /** One delegated worker, as reported by the bridge's /hermes/workers (status only, never transcript). */
 export type Worker = { id: string; title: string; phase: string; tool?: string; startedAt: number; lastActivityAt: number };
@@ -39,11 +40,12 @@ export function useSessionWorkers(settings: Settings | null, online: boolean, pr
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 2500);
       try {
+        const token = await executionToken(settings);
         const response = await fetch(`http://${settings.address}/hermes/workers?profile=${encodeURIComponent(profile)}&session=${encodeURIComponent(session)}`, {
-          headers: { Authorization: `Bearer ${settings.token}` }, signal: controller.signal,
+          headers: { Authorization: `Bearer ${token}` }, signal: controller.signal,
         });
-        if (!disposed && response.ok) setWorkers(parseWorkers(await response.json()));
-      } catch { /* Offline or bridge without /hermes/workers: keep the last list until the next poll. */ }
+        if (!disposed) setWorkers(response.ok ? parseWorkers(await response.json()) : []);
+      } catch { if (!disposed) setWorkers([]); }
       finally { clearTimeout(timeout); if (!disposed) timer = setTimeout(poll, 3000); }
     };
     void poll();
