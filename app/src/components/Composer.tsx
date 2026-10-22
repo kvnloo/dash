@@ -7,12 +7,13 @@ import { MicButton } from "./MicButton";
 import { dictate } from "../lib/dictation";
 import { insertAtCursor, type Selection } from "../lib/mic-gesture";
 import { type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Image, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { AttachmentChooser, type AttachmentAnchor } from "./AttachmentChooser";
+import { dismissKeyboard } from "../lib/dismiss-keyboard";
 import type { ChatAttachment } from "../../../shared/protocol";
 import { pickFiles, pickPhotos } from "../lib/attachment-picker";
 import { uploadPickedFile } from "../lib/attachment-upload";
 import {
-  LIMIT_LABEL,
   MAX_ATTACHMENTS_PER_TURN,
   canSendDrafts,
   formatSize,
@@ -83,6 +84,9 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
   }, [sharedDraft, onSharedDraftConsumed, drafts.length]);
   const mounted = useRef(true);
   const inputRef = useRef<TextInput>(null);
+  const attachRef = useRef<View>(null);
+  const [attachAnchor, setAttachAnchor] = useState<AttachmentAnchor | null>(null);
+  const attachRequest = useRef(0);
   const selection = useRef<Selection | null>(null);
   const [cursor, setCursor] = useState<Selection | undefined>(undefined);
   /** While dictating, focus the field without raising the keyboard; a tap on the field restores normal typing. */
@@ -145,15 +149,18 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
     }
   }, [addFiles, drafts]);
 
-  const onAttach = useCallback(() => {
-    // React Native Web has no multi-button Alert; its file dialog covers photos too.
-    if (Platform.OS === "web") { void pick("files"); return; }
-    Alert.alert("Attach", `Up to ${LIMIT_LABEL} per file, sent to the paired computer over Tailscale.`, [
-      { text: "Photos", onPress: () => void pick("photos") },
-      { text: "Files", onPress: () => void pick("files") },
-      { text: "Cancel", style: "cancel" },
-    ]);
-  }, [pick]);
+  const onAttach = useCallback(async () => {
+    const request = ++attachRequest.current;
+    await dismissKeyboard();
+    if (!mounted.current || request !== attachRequest.current) return;
+    // Measure after the dock has returned from the IME; draft text and selection stay intact.
+    requestAnimationFrame(() => attachRef.current?.measureInWindow((x, y, width, height) => {
+      if (mounted.current && request === attachRequest.current) setAttachAnchor({ x, y, width, height });
+    }));
+  }, []);
+  useEffect(() => {
+    if (disabled || editingQueue) { attachRequest.current++; setAttachAnchor(null); }
+  }, [disabled, editingQueue]);
 
   const uploadShared = () => {
     const local = drafts.filter(d => d.state === "local");
@@ -191,14 +198,21 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
       <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={changeText} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
       <View style={[styles.controls, thumb.row, editingQueue && thumb.align]}>
         {context ? <ContextGauge control={context} /> : null}
-        <PressScale accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttach} disabled={disabled || editingQueue} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale>
+        <View ref={attachRef} collapsable={false}><PressScale accessibilityRole="button" accessibilityLabel="Attach file" accessibilityState={{ expanded: attachAnchor !== null }} onPress={onAttach} disabled={disabled || editingQueue} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale></View>
         <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onTap={voiceCall ? onVoice : undefined} accessibilityLabel={voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
 
         {streaming ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale> : null}
         <PressScale accessibilityRole="button" accessibilityLabel={editingQueue ? "Save queued merge" : streaming && !steerBusy ? "Queue" : sendMode.action} accessibilityHint={editingQueue ? "Keep this merged message queued for the next turn" : sendMode.label} onPress={submit} disabled={!canSend} style={[styles.hit, editingQueue && styles.previewSave]}>{editingQueue ? <Text style={styles.chipName}>Save queued</Text> : <View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View>}</PressScale>
       </View>
     </View>
-  </GlassSurface></View>;
+  </GlassSurface>
+  {attachAnchor ? <AttachmentChooser anchor={attachAnchor} onClose={() => setAttachAnchor(null)} onPick={kind => {
+    setAttachAnchor(null);
+    Keyboard.dismiss();
+    // Keep this synchronous on web: the OS picker requires the row's user activation.
+    void pick(kind);
+  }} /> : null}
+  </View>;
 });
 
 const AttachmentChip = memo(function AttachmentChip({ draft, onRemove }: { draft: DraftAttachment; onRemove(key: string): void }) {
