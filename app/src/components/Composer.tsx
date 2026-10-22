@@ -25,6 +25,7 @@ import {
   type PickedFile,
 } from "../lib/attachments";
 import { store } from "../store/app";
+import { useComposerDraft } from "../store/composer-draft";
 import { colors, fonts, glass, radius, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 import { PressScale } from "./PressScale";
@@ -34,6 +35,8 @@ import { haptic } from "../haptics";
 import type { IncomingShare } from "../lib/incoming-share";
 
 interface Props {
+  /** Conversation id: the unsent text and attachments outlive this view (window close, surface switch). */
+  draftKey?: string;
   context?: ContextControl;
   disabled: boolean;
   streaming: boolean;
@@ -58,15 +61,15 @@ interface Props {
 }
 
 let draftSeq = 0;
+const NO_ATTACHMENTS: DraftAttachment[] = [];
 
-export const Composer = memo(function Composer({ context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
+export const Composer = memo(function Composer({ draftKey, context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
   const thumb = useHandedness();
   const [choice, setChoice] = useState<SendMode>("steer");
   useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
   const sendMode = composerMode(steerBusy, choice);
   const switchMode = () => { setChoice(value => value === "steer" ? "queue" : "steer"); haptic.select(); };
-  const [text, setText] = useState(initialText ?? "");
-  const [drafts, setDrafts] = useState<DraftAttachment[]>(initialAttachments ?? []);
+  const { text, setText, drafts, setDrafts } = useComposerDraft(draftKey, initialText ?? "", initialAttachments ?? NO_ATTACHMENTS);
   const lastShare = useRef<string | undefined>(undefined);
   const blockedShare = useRef<string | undefined>(undefined);
   useEffect(() => {

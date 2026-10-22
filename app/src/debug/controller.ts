@@ -4,7 +4,8 @@ import { replyParts, replyText } from "../store/text";
 import { parseSummary, type SummaryInfo } from "../../../shared/thinking-summary";
 import type { ThinkingPhase } from "../lib/thinking";
 import type { RootStackParamList } from "../navigation";
-import { setActive, store } from "../store/app";
+import { saveSettings, setActive, store } from "../store/app";
+import type { Z0LiveState } from "../../../shared/z0live-state";
 import { debugNavigate, debugResetTo, flushPendingDebugNavigation, waitForDebugNavigation } from "./nav";
 import { applyDebugSeed, type DebugSeedVariant } from "./seed";
 import {
@@ -24,6 +25,8 @@ export type DebugCommand =
   | { action: "setHarnessPicker"; open: boolean }
   | { action: "setActiveChat"; conversationId: string | null }
   | { action: "setThinking"; phase: ThinkingPhase }
+  | { action: "setHandedness"; side: "left" | "right" }
+  | { action: "setVoiceFixture"; state: Z0LiveState | null }
   | { action: "setConnection"; status: "online" | "offline" | "connecting" | "idle" }
   | { action: "setBridgePull"; open: boolean }
   | { action: "wait"; ms: number }
@@ -137,6 +140,15 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
       return { ok: true };
     case "setActiveChat":
       setActive(cmd.conversationId);
+      return { ok: true };
+    case "setHandedness": {
+      const settings = store.get().settings;
+      if (!settings) return { ok: false };
+      saveSettings({ ...settings, handedness: cmd.side });
+      return { ok: true };
+    }
+    case "setVoiceFixture":
+      debugUi.set(s => ({ ...s, z0liveFixture: cmd.state }));
       return { ok: true };
     case "setThinking": {
       const current = store.get();

@@ -139,7 +139,7 @@ export default function App() {
                 <Stack.Screen name="Main" component={MainScreen} />
                 <Stack.Screen name="Approvals" component={ApprovalsScreen} />
                 <Stack.Screen name="ArtifactStage" component={ArtifactStageScreen} />
-                <Stack.Screen name="Chat" component={ChatScreen} />
+                <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => route.params?.window ? CHAT_WINDOW : {}} />
                 <Stack.Screen name="OrchestraDetail" component={OrchestraDetailScreen} />
                 <Stack.Screen name="Voice" component={VoiceScreen} options={{ presentation: "fullScreenModal" }} />
                 <Stack.Screen name="Pair" component={PairScreen} />
@@ -163,4 +163,9 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   splash: { flex: 1, backgroundColor: colors.bg },
+  clear: { flex: 1, backgroundColor: "transparent" },
 });
+
+// A chat opened from the Chats list is a window over the still-painted workspace (list, page,
+// scroll stay mounted). Its own morph runs inside ChatScreen; the platform transition stays off.
+const CHAT_WINDOW = { presentation: "transparentModal" as const, animation: "none" as const, contentStyle: styles.clear };

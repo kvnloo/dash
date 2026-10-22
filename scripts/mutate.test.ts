@@ -57,6 +57,7 @@ describe("targets", () => {
       "shared/thinking-summary.ts",
       "bridge/src/turn-summaries.ts",
       "app/src/lib/rail-turns.ts",
+      "app/src/lib/chat-window.ts",
       "app/src/components/golden-nav.ts",
       "app/src/components/bridge-pull.ts",
       "app/src/motion.ts",
