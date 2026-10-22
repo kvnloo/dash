@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { hermesProfileFor, sessionModelCommand } from "./agent-controls";
+import { hermesProfileFor, sessionApprovals, sessionModelCommand } from "./agent-controls";
+import type { GateItem } from "../../../shared/gate";
 import { parseRecentModels, rankRecentModels } from "../../../shared/recent-models";
 import { scrubIndex } from "./filter-gesture";
 test("profile resolution preserves exact identity and rejects malformed or traversal tokens", () => {
@@ -23,4 +24,15 @@ test("model scrub reuses filter geometry and clamps selection", () => {
   expect(scrubIndex(1, 40, 4)).toBe(2);
   expect(scrubIndex(1, -1000, 4)).toBe(0);
   expect(scrubIndex(1, 1000, 4)).toBe(3);
+});
+test("composer approval badge counts only the attached session's pending decisions", () => {
+  const item = (id: string, session: string, state: GateItem["state"]): GateItem => ({
+    id, kind: "pr_comment", target: { repo: "kvnloo/dash", number: 1 }, body: "b", evidence: [{ label: "e", url_or_path: "p" }],
+    origin: { agent: "hermes", session, created_at: "2026-10-22T00:00:00Z" },
+    policy: { bulk_ok: false, requires_human_text: false, reason: "", rules: [] }, state, trail: [],
+  });
+  const items = [item("a", "s1", "pending"), item("b", "s1", "edited"), item("c", "s1", "approved"), item("d", "s2", "pending")];
+  expect(sessionApprovals(items, "s1").map(i => i.id)).toEqual(["a", "b"]);
+  expect(sessionApprovals(items, "s2").map(i => i.id)).toEqual(["d"]);
+  expect(sessionApprovals(items, undefined)).toEqual([]);
 });

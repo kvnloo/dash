@@ -3,9 +3,10 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { parseRecentModels, rankRecentModels, type RecentModel } from "../../../shared/recent-models";
 import type { Conversation } from "../model";
 import { executionToken } from "../lib/bridge-auth";
-import { hermesProfileFor, sessionModelCommand } from "../lib/agent-controls";
+import { hermesProfileFor, sessionApprovals, sessionModelCommand } from "../lib/agent-controls";
+import { measuredTokenSpeed, tokenSpeedLabel } from "../lib/token-speed";
 import type { Thinking } from "../lib/thinking";
-import { actionable, approvals } from "../store/approvals";
+import { approvals } from "../store/approvals";
 import { store } from "../store/app";
 import { colors, glass, radius, type } from "../theme";
 import { AgentOrb } from "./AgentOrb";
@@ -17,7 +18,7 @@ export function AgentPopup({ conversation, thinking, onHarness, onApprovals }: {
   const settings = store.use(s => s.settings);
   const online = store.use(s => s.connection.status === "online");
   const harness = conversation?.harness ?? settings?.harness ?? "hermes";
-  const count = approvals.use(s => s.items.filter(actionable).length);
+  const count = approvals.use(s => sessionApprovals(s.items, conversation?.sessionId).length);
 
   const [models, setModels] = useState<RecentModel[]>([]);
   const [catalog, setCatalog] = useState<RecentModel[]>([]);
@@ -62,6 +63,8 @@ export function AgentPopup({ conversation, thinking, onHarness, onApprovals }: {
     { id: "harness", label: "Harness", value: harness, run: onHarness },
     ...(count ? [{ id: "approvals", label: "Needs OK", value: `${count} pending`, run: onApprovals }] : []),
     { id: "models", label: "Model", value: current?.model ?? "unavailable", run: () => openModels(), values: quick.map(m => m.model), index: Math.max(0, quick.findIndex(m => m.model === current?.model && m.provider === current?.provider)), inspect: index => openModels(index) },
+    // Read-only. The wire protocol carries no provider token timing yet, so this never estimates from text.
+    { id: "speed", label: "Speed", value: tokenSpeedLabel(measuredTokenSpeed(undefined)), run: () => undefined },
   ];
   const filtered = useMemo(() => {
     // Recent count wins over a zero-count catalog entry; never inflate usage counts.
