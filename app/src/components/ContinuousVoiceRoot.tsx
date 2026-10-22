@@ -20,6 +20,7 @@ export function useContinuousVoice(): VoiceContext {
 
 export function ContinuousVoiceRoot({ children }: { children: ReactNode }): React.JSX.Element {
   const [state, setState] = useState(initial);
+  const [bindingGeneration, setBindingGeneration] = useState(0);
   const call = useRef<ContinuousVoice | null>(null);
   const attached = useRef<Conversation | null>(null);
   const epoch = useRef(0);
@@ -36,6 +37,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const target = { profile: conversation.profileId, session: conversation.sessionId };
     attached.current = conversation;
     const generation = ++epoch.current;
+    setBindingGeneration(generation);
     starting.current = true;
     // Frozen for the call: navigating/switching chats never retargets spoken requests.
     const request = async (path: string, body?: unknown): Promise<unknown> => {
@@ -68,7 +70,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     } catch { if (generation === epoch.current) setState({ ...initial, phase: "error", note: "Native voice is not ready: bridge bootstrap, broker identity verification and explicit z0live:voice grant must be deployed. No external app opened." }); }
     finally { if (generation === epoch.current) starting.current = false; }
   };
-  const stop = async () => { epoch.current++; starting.current = false; await call.current?.stop(); setState(initial); };
+  const stop = async () => { epoch.current++; starting.current = false; const cleanup = call.current?.stop(); setState(initial); await cleanup; };
   useEffect(() => {
     const subscription = AppState.addEventListener("change", next => { if (next === "background") { epoch.current++; starting.current = false; void call.current?.stop("Mic stopped because Dash left the foreground. Tap Start to resume."); setState(previous => ["idle", "error"].includes(previous.phase) ? previous : { ...previous, phase: "error", note: "Mic stopped because Dash left the foreground. Tap Start to resume." }); } });
     return () => { epoch.current++; subscription.remove(); void call.current?.stop(); };
@@ -81,11 +83,11 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     return registerSink({ label: "attached voice conversation", live: true, steerable: () => false,
       send: (text, attachments) => sendVoiceAnnotation(target, text, attachments, (id, reply) => { if (generation === epoch.current) call.current?.deliverFinal(`annotation:${id}`, reply); }),
     });
-  }, [active]);
+  }, [active, bindingGeneration]);
   return <Context.Provider value={{ state, start, stop, mute: () => call.current?.mute(!state.muted) }}>
     {children}
     {active ? <View style={[styles.bar, { top: insets.top }]} accessibilityLiveRegion="polite">
-      <Text style={styles.text}>{state.muted ? "Mic muted" : state.phase === "connecting" ? "Voice connecting · mic off" : `● Mic active · ${state.phase}`}</Text>
+      <Text style={styles.text}>{state.muted ? "Mic muted" : state.phase === "connecting" ? "Voice connecting · mic muted" : `● Mic active · ${state.phase}`}</Text>
       <Pressable accessibilityRole="button" accessibilityLabel={state.muted ? "Unmute microphone" : "Mute microphone"} onPress={() => call.current?.mute(!state.muted)} style={styles.button}><Text style={styles.text}>{state.muted ? "Unmute" : "Mute"}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Stop continuous voice" onPress={() => void stop()} style={styles.button}><Text style={styles.text}>Stop</Text></Pressable>
     </View> : null}

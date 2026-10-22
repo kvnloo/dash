@@ -3,6 +3,7 @@ import type { Conversation } from "../model";
 import { sendChat } from "../net/bridge";
 import { annotate } from "../store/annotate";
 import { applyTurnEvent, beginTurn, store } from "../store/app";
+import { annotationReceipt } from "./voice-annotation-receipt";
 
 /** One exact bridge turn. A lost ack preserves the drawing and the original turn id.
  * Retrying checks that receipt; it never submits a second message.
@@ -38,14 +39,15 @@ export async function sendVoiceAnnotation(conversation: Conversation, text: stri
       const current = store.get().conversations.find(c => c.id === conversation.id);
       const reply = current?.messages.find(m => m.role === "assistant" && m.turnId === exactTurn);
       if (!reply || reply.role !== "assistant") return;
-      if (reply.state === "error" || reply.state === "interrupted") {
+      const receipt = annotationReceipt(reply);
+      if (receipt === "failed") {
         off(); clearTimeout(receiptTimer); clearTimeout(lifetime);
         if (!settled) { settled = true; reject(new Error("The annotation turn failed or was interrupted. Check its receipt before retrying; drawing is kept.")); }
-      } else if (reply.state === "done") {
+      } else if (receipt === "final") {
         off(); clearTimeout(receiptTimer); clearTimeout(lifetime);
         if (reply.text.trim()) final(exactTurn, reply.text);
         if (!settled) { settled = true; resolve(); }
-      } else if (reply.delivery === "started" || reply.state === "streaming") {
+      } else if (receipt === "accepted") {
         // A local/pre-submit 'queued' marker is not proof of gateway acceptance.
         clearTimeout(receiptTimer);
         if (!settled) { settled = true; resolve(); }

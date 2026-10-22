@@ -35,7 +35,7 @@ export async function createVoicePeer(event: (raw: string) => void, ready: () =>
     },
     async answer(sdp) { if (!closed) await peer.setRemoteDescription({ type: "answer", sdp }); },
     mute(value) { for (const track of stream.getAudioTracks()) track.enabled = !value && !closed; },
-    send(value) { if (!closed && channel.readyState === "open" && channel.bufferedAmount < 262144) channel.send(JSON.stringify(value)); },
+    send(value) { if (closed) return; if (channel.readyState !== "open" || channel.bufferedAmount >= 262144) { lost(); return; } channel.send(JSON.stringify(value)); },
     close() {
       if (closed) return;
       closed = true;

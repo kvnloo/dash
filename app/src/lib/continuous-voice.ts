@@ -74,7 +74,7 @@ export class ContinuousVoice {
       const peer = await this.io.peer(raw => { if (this.live(generation)) void this.event(raw, generation).catch(() => { if (this.live(generation)) void this.stop("Voice delivery unconfirmed. Microphone stopped; do not resend until checked."); }); }, () => {
         if (!this.live(generation)) return;
         this.send({ type: "session.update", session: { type: "realtime", audio: { input: { noise_reduction: { type: "far_field" }, turn_detection: { type: "semantic_vad", eagerness: "high", interrupt_response: false, create_response: false } } } } });
-        this.peer?.mute(false);
+        this.peer?.mute(this.state.muted);
         clearTimeout(this.timeout);
         this.update({ phase: "listening" });
       }, () => { if (this.live(generation)) void this.stop("Voice disconnected. Mic stopped; tap Start to reconnect."); });
@@ -178,8 +178,8 @@ export class ContinuousVoice {
     void this.observation("barge_in").catch(() => {});
   }
   mute(muted: boolean): void {
-    this.peer?.mute(muted); this.user = false;
-    this.send({ type: "input_audio_buffer.clear" });
+    this.peer?.mute(muted || this.state.phase === "connecting"); this.user = false;
+    if (this.state.phase !== "connecting") this.send({ type: "input_audio_buffer.clear" });
     this.update({ muted }); this.floor(this.response ? "assistant" : "quiet");
   }
   deliverFinal(id: string, text: string): void {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ContinuousVoice, realWords, type VoicePeer } from "./continuous-voice";
 
-function harness(holdIntent = false) {
+function harness(holdIntent = false, readyOnAnswer = true) {
   const requests: { path: string; body?: unknown }[] = [];
   const sent: object[] = [];
   let closed = 0;
@@ -9,7 +9,7 @@ function harness(holdIntent = false) {
   let event = (_raw: string) => {};
   let ready = () => {};
   let lost = () => {};
-  const peer: VoicePeer = { offer: async () => "v=0\r\n", answer: async () => { ready(); }, mute: value => { muted = value; }, send: value => { sent.push(value); }, close: () => { closed++; } };
+  const peer: VoicePeer = { offer: async () => "v=0\r\n", answer: async () => { if (readyOnAnswer) ready(); }, mute: value => { muted = value; }, send: value => { sent.push(value); }, close: () => { closed++; } };
   const call = new ContinuousVoice({ changed: () => {}, transcript: () => {}, holdIntent: () => holdIntent, request: async (path, body) => {
     requests.push({ path, body });
     if (path === "/v1/realtime/session") return { session_id: "test-session", transport: "realtime", value: "ephemeral-test" };
@@ -17,10 +17,16 @@ function harness(holdIntent = false) {
     if (path === "provider:answer") return "v=0\r\n";
     return { ok: true, speech: "silent" };
   }, peer: async (onEvent, onReady, onLost) => { event = onEvent; ready = onReady; lost = onLost; return peer; } });
-  return { call, requests, sent, get closed() { return closed; }, get muted() { return muted; }, event: (value: object) => event(JSON.stringify(value)), lost: () => lost() };
+  return { call, requests, sent, get closed() { return closed; }, get muted() { return muted; }, event: (value: object) => event(JSON.stringify(value)), lost: () => lost(), ready: () => ready() };
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 describe("root continuous WebRTC lifecycle", () => {
+  test("mute during connecting survives late peer readiness; unmute cannot transmit before ready", async () => {
+    const h = harness(false, false); await h.call.start({ profile: "test", session: "attached" });
+    h.call.mute(false); expect(h.muted).toBe(true);
+    h.call.mute(true); h.ready(); expect(h.call.state.phase).toBe("listening");
+    expect(h.call.state.muted).toBe(true); expect(h.muted).toBe(true); await h.call.stop();
+  });
   test("a real final utterance is dispatched once with its provider item id; acceptance is silent", async () => {
     const h = harness(); await h.call.start({ profile: "test", session: "attached" });
     const event = { type: "conversation.item.input_audio_transcription.completed", event_id: "utterance", item_id: "provider-item", transcript: "Fix the marked button" };
