@@ -1,3 +1,4 @@
+import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
 import { useHandedness } from "../lib/useHandedness";
 import { BlurTargetView } from "expo-blur";
@@ -139,6 +140,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
   const workers = useSessionWorkers(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
   const [chatOptions, setChatOptions] = useState(false);
+  const context = useContextView(settings, online && (!conversation?.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)), harnessId, conversation?.profileId, conversation?.sessionId, thinking.phase !== "idle");
   const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
   const callFixture = debugUi.use((s) => s.z0liveFixture ?? null);
   const call = useZ0LiveState(settings, online && callFixture === null, 3000);
@@ -305,6 +307,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         </> : null}
         {conversation && !liveOn ? <QueuedStack conversation={conversation} canSteer={online && !targetError && canSteer(harnessId, conversation.sessionId, thinking.phase, liveOn)} onSteer={() => { const payload = takeQueuedForSteer(conversation.id); if (payload) sendTurn(payload.text, payload.attachments, conversation, "steer"); }} /> : null}
         <Composer
+          context={context}
           key={`${conversation?.id ?? harnessId}:${composerDraft ?? (debugAttachments ? "debug-attachments" : "composer")}`}
           initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
           disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}

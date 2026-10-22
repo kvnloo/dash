@@ -1,3 +1,4 @@
+import { ContextCard, ContextGauge, type ContextControl } from "./ContextCard";
 import { Feather } from "@expo/vector-icons";
 import { AgentOrb } from "./AgentOrb";
 import type { OrbState } from "../lib/orb-phase";
@@ -31,6 +32,7 @@ import { composerMode, type SendMode } from "../lib/composer-mode";
 import { haptic } from "../haptics";
 
 interface Props {
+  context?: ContextControl;
   disabled: boolean;
   streaming: boolean;
   steerBusy?: boolean;
@@ -53,7 +55,7 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice, voiceCall }: Props) {
+export const Composer = memo(function Composer({ context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, onSend, onStop, onVoice, voiceCall }: Props) {
   const thumb = useHandedness();
   const [choice, setChoice] = useState<SendMode>("steer");
   useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
@@ -147,7 +149,7 @@ export const Composer = memo(function Composer({ disabled, streaming, steerBusy 
     onSend(value, refs, sendMode.mode);
   }, [canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
 
-  return <View style={styles.wrap}><ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
+  return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
     {drafts.length > 0 ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips} accessibilityLabel="Attachments">
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}
@@ -157,6 +159,7 @@ export const Composer = memo(function Composer({ disabled, streaming, steerBusy 
     <View style={[styles.field, thumb.row, editingQueue && styles.previewField]}>
       <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={changeText} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
       <View style={[styles.controls, thumb.row, editingQueue && thumb.align]}>
+        {context ? <ContextGauge control={context} /> : null}
         <PressScale accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttach} disabled={disabled || editingQueue} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale>
         <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onTap={voiceCall ? onVoice : undefined} accessibilityLabel={voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
         {streaming ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale> : null}
