@@ -32,6 +32,7 @@ import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
 import { nextPrefill } from "../lib/deep-link";
 import { saveSettings, store } from "../store/app";
+import type { Settings } from "../model";
 import { colors, radius, space, type } from "../theme";
 import { screenBack } from "../lib/screen-back";
 
@@ -197,9 +198,17 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
       const link = parseIdentityPairLink(identityLink);
       if (!link) throw new Error("Paste a valid Dash v2 z0bridge pairing link");
       if (!/^[A-Za-z0-9.-]+:\d{1,5}$/.test(computer.trim())) throw new Error("Enter the Dash bridge address and port (not the identity service)");
-      const claim = await claimIdentity(link);
-      await setSecret(identitySecretKey(claim.enrollment.credentialId), claim.credential);
-      const settings = { address: computer.trim(), token: "", harness: "hermes", inAppFeedback: true, identity: claim.enrollment };
+      // Enrollment codes are single-use. A previous successful claim may already have saved a
+      // credential even if connecting timed out. Retry that connection, never spend the code again.
+      const saved = store.get().settings;
+      let settings: Settings;
+      if (saved?.identity && saved.address === computer.trim() && saved.identity.url === link.url && saved.identity.kid === link.kid) {
+        settings = saved;
+      } else {
+        const claim = await claimIdentity(link);
+        await setSecret(identitySecretKey(claim.enrollment.credentialId), claim.credential);
+        settings = { address: computer.trim(), token: "", harness: "hermes", inAppFeedback: true, identity: claim.enrollment };
+      }
       const attempt = new AbortController();
       attemptRef.current?.abort(); attemptRef.current = attempt;
       await connectSettings({ settings, connection: store, save: saveSettings, start: s => bridge.start(s), signal: attempt.signal,

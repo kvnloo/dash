@@ -1,6 +1,7 @@
 import { IdentityTokens, type IdentityEnrollment } from "./identity-client";
+import { loadIdentitySecret } from "./identity-secret";
 
-const tokens = new IdentityTokens(async key => (await import("./secure")).getSecret(key), (url, init) => fetch(url, init));
+const tokens = new IdentityTokens(key => loadIdentitySecret(key), (url, init) => fetch(url, init));
 export function clearIdentityTokens(): void { tokens.clear(); }
 export interface AuthSettings { token: string; identity?: IdentityEnrollment }
 
