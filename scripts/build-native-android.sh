@@ -15,6 +15,9 @@ if [ ! -e .git ]; then git init -q; fi
 bun install --frozen-lockfile
 (cd bridge && bun install --frozen-lockfile)
 (cd app && bun install --frozen-lockfile)
+if [ ! -f app/node_modules/@shopify/react-native-skia/libs/android/arm64-v8a/libskia.a ]; then
+  node app/node_modules/@shopify/react-native-skia/scripts/install-libs.js
+fi
 if [ "${DASH_NATIVE_ONLY:-0}" != 1 ]; then
   bun app/node_modules/typescript/bin/tsc -p app --noEmit > .native-receipts/typecheck.log 2>&1
   bun test app/src bridge/src shared > .native-receipts/unit.log 2>&1
