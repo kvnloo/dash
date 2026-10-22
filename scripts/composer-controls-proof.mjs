@@ -191,7 +191,23 @@ try {
       await page.waitForFunction(probe => document.body.innerText.includes(probe) || [...document.querySelectorAll('textarea,input')].some(el => el.value === probe), PROBE, { timeout: 10000 });
       assert.equal((await page.evaluate(() => window.__DASH_DEBUG__.state())).activeId, attachedId, `${tag}: Chat opened the same session`);
       await page.screenshot({ path: path.join(out, `${tag}-chat-after-dock-send.png`) });
-      result.checks.push('full width chat/dock', 'agent menu contained', 'speed honest unavailable', 'draft+selection kept', 'model search read-only', 'keyboard raised', 'dock draft shared', 'compact peek', 'switch/search kept session', 'outside send targets attached chat');
+      // Approvals in the composer are scoped to the attached session and are never decided here.
+      const fixture = { id: 'fixture-attached', sessionId: 'fixture-session-1', harness: 'hermes', profileId: 'clean', profileName: 'clean', title: 'Fixture attached session', createdAt: 1, updatedAt: 2,
+        messages: [{ id: 'fu', role: 'user', text: 'Fixture question', at: 1 }, { id: 'fa', role: 'assistant', text: 'Fixture reply', at: 2, state: 'done', turnId: 'ft', seq: 0 }] };
+      assert.equal((await page.evaluate(c => window.__DASH_DEBUG__.run({ action: 'inputSnapshot', conversation: c }), fixture)).ok, true);
+      assert.equal((await page.evaluate(() => window.__DASH_DEBUG__.run({ action: 'scopedGateFixture' }))).ok, true);
+      await visible(page, 'button', 'Agent controls, 1 approvals pending').waitFor();
+      await visible(page, 'button', 'Review approval before deciding').waitFor();
+      await page.screenshot({ path: path.join(out, `${tag}-dock-approval.png`) });
+      await visible(page, 'button', 'Not now, keep approval pending').click();
+      assert.equal(await visible(page, 'button', 'Review approval before deciding').count(), 0, `${tag}: Not now hides the prompt`);
+      await visible(page, 'button', 'Agent controls, 1 approvals pending').click();
+      await visible(page, 'button', 'Needs OK, 1 pending').click();
+      await page.getByText('Attached session proposal').filter({ visible: true }).first().waitFor();
+      assert(await page.getByText('Other session proposal').filter({ visible: true }).count() >= 1, `${tag}: Approvals screen still lists every proposal`);
+      assert.equal(await page.getByText(/^(Approved|Posted|Rejected)/).filter({ visible: true }).count(), 0, `${tag}: nothing was decided`);
+      await page.screenshot({ path: path.join(out, `${tag}-approvals-opened.png`) });
+      result.checks.push('full width chat/dock', 'agent menu contained', 'speed honest unavailable', 'draft+selection kept', 'model search read-only', 'keyboard raised', 'dock draft shared', 'compact peek', 'switch/search kept session', 'outside send targets attached chat', 'approval badge scoped, Not now and Needs OK never decide');
       receipt.cases.push(result);
       await context.close();
     }
