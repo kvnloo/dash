@@ -1,7 +1,7 @@
 import { parseReplyParts } from "../../shared/reply-parts";
 import type { ReplyPart } from "../../shared/protocol";
 import type { DetailMode } from "./lib/reply-details";
-import { parseChatAttachment, type ChatAttachment, type HarnessInfo, type HostInfo } from "../../shared/protocol";
+import { parseChatAttachments, type ChatAttachment, type HarnessInfo, type HostInfo } from "../../shared/protocol";
 
 import { parseSummary, type SummaryInfo } from "../../shared/thinking-summary";
 import { unwrapHermesHistoryText } from "./lib/history-display";
@@ -134,15 +134,33 @@ function isAssistantState(value: unknown): value is AssistantState {
   return typeof value === "string" && ASSISTANT_STATES.some((s) => s === value);
 }
 
+/** Finite numbers only: NaN/Infinity from a corrupt row must not become timestamps or metrics. */
+function finite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/** Identifiers used as keys or routing targets must contain a non-space character. */
+function nonBlank(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function optionalId(value: unknown): string | undefined {
+  return nonBlank(value) ? value : undefined;
+}
+
 function parseMessage(raw: unknown): Message | null {
-  if (!isRecord(raw) || typeof raw.id !== "string" || typeof raw.text !== "string" || typeof raw.at !== "number") {
+  if (!isRecord(raw) || !nonBlank(raw.id) || typeof raw.text !== "string" || !finite(raw.at)) {
     return null;
   }
   if (raw.role === "user") {
-    const attachments = Array.isArray(raw.attachments) ? raw.attachments.flatMap(item => { const parsed = parseChatAttachment(item); return parsed ? [parsed] : []; }) : [];
-    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(attachments.length ? { attachments } : {}), delivery: raw.delivery === "steering" || raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" || raw.delivery === "failed" ? raw.delivery : undefined, deliveryAt: typeof raw.deliveryAt === "number" ? raw.deliveryAt : undefined, deliveryNote: typeof raw.deliveryNote === "string" ? raw.deliveryNote : undefined };
+    // A present-but-malformed upload list drops the row rather than replaying it as text-only.
+    const attachments = parseChatAttachments(raw.attachments);
+    if (attachments === null) return null;
+    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(attachments?.length ? { attachments } : {}), delivery: raw.delivery === "steering" || raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" || raw.delivery === "failed" ? raw.delivery : undefined, deliveryAt: finite(raw.deliveryAt) ? raw.deliveryAt : undefined, deliveryNote: typeof raw.deliveryNote === "string" ? raw.deliveryNote : undefined };
   }
-  if (raw.role === "assistant" && isAssistantState(raw.state) && typeof raw.turnId === "string") {
+  if (raw.role === "assistant" && isAssistantState(raw.state) && nonBlank(raw.turnId)) {
+    // A corrupt sequence would make re-attach resume from a nonsensical offset.
+    if (raw.seq !== undefined && !(typeof raw.seq === "number" && Number.isSafeInteger(raw.seq) && raw.seq >= 0)) return null;
     return {
       id: raw.id,
       role: "assistant",
@@ -167,19 +185,24 @@ function parseMessage(raw: unknown): Message | null {
 export function parseConversation(raw: unknown): Conversation | null {
   if (
     !isRecord(raw) ||
-    typeof raw.id !== "string" ||
+    !nonBlank(raw.id) ||
     typeof raw.harness !== "string" ||
     typeof raw.title !== "string" ||
-    typeof raw.createdAt !== "number" ||
-    typeof raw.updatedAt !== "number" ||
+    !finite(raw.createdAt) ||
+    !finite(raw.updatedAt) ||
     !Array.isArray(raw.messages)
   ) {
     return null;
   }
   const messages: Message[] = [];
+  const seen = new Set<string>();
   for (const m of raw.messages) {
     const parsed = parseMessage(m);
-    if (parsed) messages.push(parsed);
+    // Rows are React keys and turn-reattach targets; the first occurrence wins.
+    if (parsed && !seen.has(parsed.id)) {
+      seen.add(parsed.id);
+      messages.push(parsed);
+    }
   }
   // Project already-received Hermes history for display on app restart.
   // An unsent/pending user turn must retain its exact bytes for replay.
@@ -202,12 +225,12 @@ export function parseConversation(raw: unknown): Conversation | null {
     queuePreview: typeof raw.queuePreview === "string" ? raw.queuePreview : undefined,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
-    sessionId: typeof raw.sessionId === "string" ? raw.sessionId : undefined,
+    sessionId: optionalId(raw.sessionId),
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
-    targetHostId: typeof raw.targetHostId === "string" ? raw.targetHostId : undefined,
-    profileId: typeof raw.profileId === "string" ? raw.profileId : undefined,
+    targetHostId: optionalId(raw.targetHostId),
+    profileId: optionalId(raw.profileId),
     profileName: typeof raw.profileName === "string" ? raw.profileName : undefined,
-    messageCount: typeof raw.messageCount === "number" ? raw.messageCount : undefined,
+    messageCount: finite(raw.messageCount) ? raw.messageCount : undefined,
     stale: raw.stale === true,
     messages: displayedMessages,
   };
