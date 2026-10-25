@@ -24,12 +24,12 @@ mock.module("react-native", () => ({
   View: host("div"),
   Text: host("span"),
   Pressable: host("button"),
-  StyleSheet: { create: <T>(styles: T) => styles, hairlineWidth: 1 },
+  StyleSheet: { create: <T,>(styles: T) => styles, hairlineWidth: 1 },
   BackHandler: { addEventListener: () => ({ remove() {} }) },
 }));
 mock.module("react-native-reanimated", () => ({
   default: { View: host("div") },
-  useSharedValue: <T>(value: T) => ({ value }),
+  useSharedValue: <T,>(value: T) => ({ value }),
   runOnJS: <Args extends unknown[], Result>(callback: (...args: Args) => Result) => callback,
 }));
 mock.module("../haptics", () => ({ haptic: { select() {} } }));
