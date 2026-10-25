@@ -7,7 +7,7 @@ export async function createVoicePeer(event: (raw: string) => void, ready: () =>
   if (Platform.OS !== "android" || Constants.executionEnvironment === ExecutionEnvironment.StoreClient) throw new Error("Native continuous voice is unavailable in Expo Go. Install the reviewed native Dash APK.");
   const permission = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
   if (permission !== PermissionsAndroid.RESULTS.GRANTED) throw new Error("Microphone permission denied.");
-  const { RTCPeerConnection, mediaDevices } = await import("react-native-webrtc");
+  const { RTCPeerConnection, mediaDevices } = require("react-native-webrtc") as typeof import("react-native-webrtc");
   const peer = new RTCPeerConnection({ iceServers: [] });
   let closed = false;
   let notified = false;

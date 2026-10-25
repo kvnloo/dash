@@ -14,7 +14,7 @@ export async function clipboardImageFile(): Promise<PickedFile | null> {
   const name = `paste-${Date.now()}-${++sequence}.png`;
   const reason = rejectReason({ name, size: payload.size });
   if (reason) throw new Error(reason);
-  const { File, Paths } = await import("expo-file-system");
+  const { File, Paths } = require("expo-file-system") as typeof import("expo-file-system");
   const file = new File(Paths.cache, name);
   try {
     file.create();

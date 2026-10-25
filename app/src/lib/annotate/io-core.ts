@@ -62,7 +62,7 @@ export type CropMarkedPng = (png: Uint8Array, screen: ScreenInfo, region: Circle
  */
 export async function cropMarkedPng(png: Uint8Array, screen: ScreenInfo, region: CircleRegion): Promise<CroppedPng> {
   if (png.byteLength === 0) throw new Error("The marked screenshot is empty.");
-  const { Skia } = await import("@shopify/react-native-skia");
+  const { Skia } = require("@shopify/react-native-skia") as typeof import("@shopify/react-native-skia");
   const image = Skia.Image.MakeImageFromEncoded(Skia.Data.fromBytes(png));
   if (!image) throw new Error("Could not decode the marked screenshot.");
   const rect = pixelCrop(region, screen, image.width(), image.height());

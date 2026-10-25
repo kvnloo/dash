@@ -11,7 +11,7 @@ let loaded: Promise<typeof import("expo-notifications") | null> | undefined;
 function api() {
   loaded ??= (async () => {
     if (Platform.OS !== "android" || Constants.executionEnvironment === ExecutionEnvironment.StoreClient || !requireOptionalNativeModule("ExpoNotificationScheduler")) return null;
-    return import("expo-notifications");
+    return Promise.resolve().then(() => require("expo-notifications") as typeof import("expo-notifications"));
   })();
   return loaded;
 }
