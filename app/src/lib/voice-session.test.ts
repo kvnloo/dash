@@ -148,6 +148,7 @@ describe("legacy voice session lifecycle", () => {
     await session.start();
     const end = session.stop();
     const restart = session.start();
+    await Promise.resolve(); // Native stop is scheduled on the next microtask.
     expect(started).toBe(1);
     expect(stopCalls).toBe(1);
     expect(levels.at(-1)).toBe(-160);
