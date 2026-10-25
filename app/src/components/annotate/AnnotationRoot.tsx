@@ -93,6 +93,8 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   useEffect(() => { penSv.value = penMode; }, [penMode, penSv]);
   const inkFailed = useCallback((error: unknown) => {
     setInk(null);
+    // A pen-mode preload can fail after Exit; only a visible session gets a retry/banner.
+    if (!annotate.get().active) return;
     if (!inkRetryUsed.current) {
       inkRetryUsed.current = true;
       setInkRetryPending(true);
@@ -109,13 +111,13 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     if (__DEV__) console.warn("[dash-ink] unavailable", error instanceof Error ? error.message : "renderer failed");
   }, []);
   useEffect(() => {
-    if (active || penMode) return;
+    if (active) return;
     if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
     inkRetryTimer.current = null;
     inkRetryUsed.current = false;
     setInkRetryPending(false);
     setInkError(undefined);
-  }, [active, penMode]);
+  }, [active]);
   useEffect(() => () => {
     if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
   }, []);
