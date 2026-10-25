@@ -2,13 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hydrateLiveConversation, mergeLiveConversations, shouldRequestHistory } from "../../app/src/lib/live-sessions";
-import type { AgentInfo } from "../../shared/protocol";
 import { HARNESSES } from "./harnesses";
 import { assembleRoster, attachOmpSessions, findOmpJsonl, ompSessionDirName, readLiveTranscript } from "./roster";
 
 const ID = "01J-DASH20-NATIVE";
-const NOW = Date.parse("2026-10-25T10:30:00Z");
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
@@ -43,34 +40,31 @@ test("#20: adopt native OMP tab, retain same session/cwd for history and --resum
   expect(tabs[0]?.sessionId).toBe(ID);
   const roster = assembleRoster({ nodes: [], ompTabs: tabs,
     harnesses: [{ id: "omp", name: "OMP", available: true }], selfFallback: { hostname: "paired" } });
-  const rows = mergeLiveConversations([], roster, NOW);
-  expect(rows).toHaveLength(1);
-  const row = rows[0];
-  if (!row) throw new Error("No live chat");
-  expect(row).toMatchObject({ id: `live:omp:${ID}`, harness: "omp", sessionId: ID,
-    targetHostId: "paired", profileId: "omp:tern-42", cwd: f.cwd, stale: false, messages: [] });
-  expect(mergeLiveConversations(rows, roster, NOW + 1)).toBe(rows);
-  expect(shouldRequestHistory(row)).toBe(true);
-  const history = readLiveTranscript("omp", ID, f.sessionRoot, row.cwd, f.home);
-  expect(history.map(m => m.text)).toEqual(["continue this session", "prior answer"]);
-  const hydrated = hydrateLiveConversation(row, history);
-  expect(hydrated.messages.map(m => m.role)).toEqual(["user", "assistant"]);
-  expect(hydrated.sessionId).toBe(ID);
-  const omp = HARNESSES.find(h => h.id === "omp");
+  expect(roster).toHaveLength(1);
+  expect(roster[0]).toMatchObject({ id: "paired", self: true });
+  const agent = roster[0]?.agents.find((candidate) => candidate.id === "omp:tern-42");
+  if (!agent) throw new Error("Native OMP session missing from roster");
+  expect(agent).toMatchObject({ kind: "omp", status: "running", sessionId: ID, cwd: f.cwd });
+  const history = readLiveTranscript("omp", ID, f.sessionRoot, agent.cwd, f.home);
+  expect(history.map((message) => ({ role: message.role, text: message.text }))).toEqual([
+    { role: "user", text: "continue this session" },
+    { role: "assistant", text: "prior answer" },
+  ]);
+  const omp = HARNESSES.find((h) => h.id === "omp");
   if (!omp) throw new Error("OMP adapter missing");
-  const argv = omp.argv({ text: "phone follow-up", cwd: hydrated.cwd ?? "", sessionId: hydrated.sessionId });
+  const argv = omp.argv({ text: "phone follow-up", cwd: agent.cwd ?? f.cwd, sessionId: agent.sessionId });
   expect(argv[argv.indexOf("--resume") + 1]).toBe(ID);
   expect(argv[argv.indexOf("--cwd") + 1]).toBe(f.cwd);
   expect(argv).toContain("phone follow-up");
 });
 
-test("#20: incomplete transcript does not hide an identified live OMP tab", () => {
+test("#20: incomplete transcript retains the native OMP session in the bridge roster", () => {
   const f = fixture();
-  const rows = mergeLiveConversations([], hosts(f.cwd), NOW);
-  expect(rows).toHaveLength(1);
-  expect(rows[0]?.sessionId).toBe(ID);
-  expect(rows[0]?.messages).toEqual([]);
-  expect(shouldRequestHistory(rows[0])).toBe(true);
+  const roster = hosts(f.cwd);
+  expect(roster).toHaveLength(1);
+  expect(roster[0]?.agents[0]).toMatchObject({
+    id: "omp:tern-42", kind: "omp", status: "running", sessionId: ID, cwd: f.cwd,
+  });
   expect(readLiveTranscript("omp", ID, f.sessionRoot, f.cwd, f.home)).toEqual([]);
 });
 
@@ -98,14 +92,3 @@ test("#20: duplicate native id in two cwd layouts stays scoped", () => {
   expect(readLiveTranscript("omp", "../bad", f.sessionRoot, f.cwd, f.home)).toEqual([]);
 });
 
-test("#20: foreign hosts and unknown harness ids fail closed", () => {
-  const f = fixture();
-  const paired = hosts(f.cwd)[0];
-  if (!paired) throw new Error("Paired host missing");
-  const rogue: AgentInfo = { id: "cursor-cloud", name: "Cursor", kind: "cursor-cloud", status: "running", sessionId: "foreign" };
-  const rows = mergeLiveConversations([], [{ ...paired, agents: [...paired.agents, rogue] },
-    { ...paired, id: "remote", self: false }], NOW);
-  expect(rows).toHaveLength(1);
-  expect(rows[0]?.harness).toBe("omp");
-  expect(mergeLiveConversations([], [{ ...paired, self: false }], NOW)).toEqual([]);
-});
