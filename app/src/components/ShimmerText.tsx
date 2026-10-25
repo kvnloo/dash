@@ -1,10 +1,44 @@
-import { memo, useEffect, useMemo, useState } from "react";
-import { PixelRatio, Platform, Text, View, type TextStyle } from "react-native";
+import { memo, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { AppState, PixelRatio, Platform, Text, View, type TextStyle } from "react-native";
 import { Canvas, LinearGradient, Text as SkText, matchFont, vec } from "@shopify/react-native-skia";
 import { cancelAnimation, Easing, useDerivedValue, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from "react-native-reanimated";
 import { SHIMMER_END, SHIMMER_REST_MS, SHIMMER_START, SHIMMER_SWEEP_MS, shimmerStops } from "../lib/activity-shimmer";
 import { colors } from "../theme";
 import { useAmbientRunning } from "./OrbMotion";
+
+/** One native subscription for every visible shimmer. No row-per-listener overhead. */
+const appSubscribers = new Set<() => void>();
+let appListener: { remove(): void } | null = null;
+let appActive = AppState.currentState === "active";
+
+function appIsActive(): boolean {
+  return appActive;
+}
+
+function subscribeAppActive(onChange: () => void): () => void {
+  appSubscribers.add(onChange);
+  if (!appListener) {
+    // Synchronize across intervals when no shimmer was mounted.
+    const nowActive = AppState.currentState === "active";
+    if (nowActive !== appActive) {
+      appActive = nowActive;
+      for (const listener of appSubscribers) listener();
+    }
+    appListener = AppState.addEventListener("change", state => {
+      const next = state === "active";
+      if (next === appActive) return;
+      appActive = next;
+      for (const listener of appSubscribers) listener();
+    });
+  }
+  return () => {
+    appSubscribers.delete(onChange);
+    if (appSubscribers.size === 0) {
+      appListener?.remove();
+      appListener = null;
+    }
+  };
+}
 
 /**
  * Actual text-paint shimmer, not a bright overlay sliding behind static text.
@@ -18,7 +52,9 @@ export const ShimmerText = memo(function ShimmerText({
   text: string; size?: number; family?: string; dim?: string; bright?: string; style?: TextStyle;
 }) {
   const reduced = useReducedMotion();
-  const running = useAmbientRunning();
+  const screenActive = useAmbientRunning();
+  const foreground = useSyncExternalStore(subscribeAppActive, appIsActive, appIsActive);
+  const running = screenActive && foreground;
   const [max, setMax] = useState(0);
   // Skia does not apply the font scale that React Native Text applies.
   const px = size * PixelRatio.getFontScale();
