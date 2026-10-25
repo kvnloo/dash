@@ -70,6 +70,14 @@ test('file chooser uploads real bytes to isolated bridge',async({page,bridge})=>
  await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
 });
 
+// Turbo renders the context card as a native Modal whose backdrop covers the gauge, so the
+// gauge cannot toggle it closed; the backdrop is the close affordance. Accept either design.
+async function closeContextCard(page:any,gauge:any){
+ const backdrop=page.getByRole('button',{name:'Dismiss usage details',exact:true});
+ if(await backdrop.count())await backdrop.first().click({noWaitAfter:true,position:{x:8,y:8}});else await gauge.click({noWaitAfter:true});
+ await expect(page.getByLabel('Context window details',{exact:true})).toHaveCount(0);
+}
+
 test('context gauge opens a readable card inside the viewport',async({page,bridge})=>{
  await openChat(page,bridge);await send(page,'context card journey');
  await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
@@ -78,7 +86,7 @@ test('context gauge opens a readable card inside the viewport',async({page,bridg
  const card=page.getByLabel('Context window details',{exact:true});
  await expect(card).toBeVisible();await expect(card).toBeInViewport({ratio:1});
  await expect(card.getByText(/This harness has no native context snapshot/)).toBeVisible();
- await gauge.click({noWaitAfter:true});await expect(card).toHaveCount(0);
+ await closeContextCard(page,gauge);
 });
 
 test('prompt rail mouse scrub, Jump and Latest on real transcript',async({page,bridge})=>{
@@ -156,7 +164,7 @@ for(const width of [390,800])test('safe exploratory controls and context hit tar
  let seed=width;const next=()=>{seed=(seed*1664525+1013904223)>>>0;return seed%3;};
  for(let i=0;i<9;i++){
   const n=next();
-  if(n===0){const g=page.getByRole('button',{name:/^Context window,/});await g.click({noWaitAfter:true});await expect(page.getByLabel('Context window details',{exact:true})).toBeInViewport({ratio:1});await g.click({noWaitAfter:true});}
+  if(n===0){const g=page.getByRole('button',{name:/^Context window,/});await g.click({noWaitAfter:true});await expect(page.getByLabel('Context window details',{exact:true})).toBeInViewport({ratio:1});await closeContextCard(page,g);}
   else if(n===1){await page.getByTestId('chat-window-badge').click({noWaitAfter:true});await expect(page.getByTestId('chat-window-identity')).toBeVisible();await page.getByTestId('chat-window-badge').click({noWaitAfter:true});}
   else {await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});await chatRow(page).click({noWaitAfter:true});await expect(composer(page)).toBeInViewport();}
  }
