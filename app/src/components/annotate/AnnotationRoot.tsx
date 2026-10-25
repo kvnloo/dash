@@ -38,6 +38,7 @@ export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f05
 const MIN_EXTENT = 6;
 
 type InkModule = typeof import("./InkCanvas");
+let circleSequence = 0;
 let inkModule: Promise<InkModule> | undefined;
 function loadInk(): Promise<InkModule> {
   inkModule ??= loadSkia().then(() => import("./InkCanvas")).catch(error => { inkModule = undefined; throw error; });
@@ -75,15 +76,20 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     const id = store.get().activeId, settings = store.get().settings;
     if (!id || !settings || !captureTarget.current) return;
     if ((composerDrafts.get()[id]?.attachments.length ?? 0) >= MAX_ATTACHMENTS_PER_TURN) { setAnnotationStatus("error", { error: "Remove an attachment before circling another region." }); return; }
-    const key = `circle-${Date.now()}`;
+    const key = `circle-${Date.now()}-${++circleSequence}`;
+    const name = `${key}.png`;
+    // Reserve a slot before asynchronous capture; rapid circles cannot exceed the draft limit.
+    updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ ...draft, attachments: [...draft.attachments, { key, name, mime: "image/png", uri: "", state: "uploading" }] }));
+    const routeKey = debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute()?.key : undefined;
+    const current = annotate.get().drawing.strokes;
     try {
       const origin = await new Promise<{ x: number; y: number }>(resolve => captureTarget.current?.measureInWindow((x, y) => resolve({ x, y })));
       const text = await regionText(origin.x + region.x, origin.y + region.y, region.width, region.height);
       const { composite } = await loadInk();
-      const current = annotate.get().drawing.strokes;
       const { bytes, dataUri } = await composite(captureTarget, current, size, INK, colors.bg, region);
-      const name = `${key}.png`;
-      updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ text: quoteSelection(draft.text, text || "Marked region (image attached)"), attachments: [...draft.attachments, { key, name, mime: "image/png", size: bytes.length, uri: dataUri, state: "uploading" }] }));
+      if (routeKey !== (debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute()?.key : undefined)) throw new Error("Screen changed during capture. Ink is kept; circle again on the intended screen.");
+      updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ text: quoteSelection(draft.text, text || "Marked region (image attached)"), attachments: draft.attachments.map(file => file.key === key ? { ...file, size: bytes.length, uri: dataUri } : file) }));
+      if (!composerDrafts.get()[id]?.attachments.some(file => file.key === key)) return;
       const ref = await uploadBytes(settings, name, "image/png", bytes);
       updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ ...draft, attachments: draft.attachments.map(file => file.key === key ? { ...file, state: "ready", ref } : file) }));
     } catch (error) {
