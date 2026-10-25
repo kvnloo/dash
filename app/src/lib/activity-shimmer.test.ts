@@ -1,16 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AssistantMessage } from "../model";
+import type { AssistantMessage, ConnectionStatus } from "../model";
+import type { ThinkingPhase } from "./thinking";
 import { conversationThinking } from "./thinking";
 import { activityShimmerEnabled, SHIMMER_END, SHIMMER_REST_MS, SHIMMER_START, SHIMMER_SWEEP_MS, shimmerStops } from "./activity-shimmer";
 
 describe("live activity shimmer", () => {
   test("only live thinking, tool calls and streaming replies animate", () => {
-    for (const phase of ["thinking", "tool", "streaming"] as const) {
+    const livePhases: ThinkingPhase[] = ["thinking", "tool", "streaming"];
+    for (const phase of livePhases) {
       expect(activityShimmerEnabled(phase, "online", false)).toBe(true);
       expect(activityShimmerEnabled(phase, "online", true)).toBe(false);
-      for (const connection of ["idle", "connecting", "offline"] as const) {
+      const offlineStatuses: ConnectionStatus[] = ["idle", "connecting", "offline"];
+      for (const connection of offlineStatuses) {
         expect(activityShimmerEnabled(phase, connection, false)).toBe(false);
       }
     }
