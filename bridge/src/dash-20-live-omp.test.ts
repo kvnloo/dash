@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hydrateLiveConversation, mergeLiveConversations, shouldRequestHistory } from "../../app/src/lib/live-sessions";
+import type { AgentInfo } from "../../shared/protocol";
 import { HARNESSES } from "./harnesses";
 import { assembleRoster, attachOmpSessions, findOmpJsonl, ompSessionDirName, readLiveTranscript } from "./roster";
 
@@ -101,7 +102,7 @@ test("#20: foreign hosts and unknown harness ids fail closed", () => {
   const f = fixture();
   const paired = hosts(f.cwd)[0];
   if (!paired) throw new Error("Paired host missing");
-  const rogue = { id: "cursor-cloud", name: "Cursor", kind: "cursor-cloud", status: "running" as const, sessionId: "foreign" };
+  const rogue: AgentInfo = { id: "cursor-cloud", name: "Cursor", kind: "cursor-cloud", status: "running", sessionId: "foreign" };
   const rows = mergeLiveConversations([], [{ ...paired, agents: [...paired.agents, rogue] },
     { ...paired, id: "remote", self: false }], NOW);
   expect(rows).toHaveLength(1);
