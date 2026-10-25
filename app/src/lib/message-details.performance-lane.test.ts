@@ -5,8 +5,8 @@ import { appendActivity, splitThinking } from "./message-details";
  * Optional reproducible profiling recipe — NOT RUN.
  *
  * At the PR head, warm Bun with 100 calls, then take 1,000 samples each of
- * splitThinking("<thinking>" + "reason\\n".repeat(16_384) +
- *   "</thinking>" + "answer\\n".repeat(16_384))
+ * splitThinking("<thinking>" + "reason\n".repeat(16_384) +
+ *   "</thinking>" + "answer\n".repeat(16_384))
  * and appendActivity(a fixed 65,536-entry status array, "next").
  * Record the head SHA, Bun/OS/CPU versions, median/p95 and allocations.
  * Timing: NOT RUN. Memory: NOT RUN. Device: NOT RUN.
@@ -106,7 +106,7 @@ describe("appendActivity performance lane", () => {
     const observedIndices: number[] = [];
     const watchedHistory = new Proxy(history, {
       get(target, property, receiver) {
-        if (typeof property === "string" && /^(0|[1-9]\\d*)$/.test(property)) {
+        if (typeof property === "string" && /^(0|[1-9]\d*)$/.test(property)) {
           observedIndices.push(Number(property));
         }
         return Reflect.get(target, property, receiver);
