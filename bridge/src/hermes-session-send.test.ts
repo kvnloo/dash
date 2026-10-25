@@ -60,7 +60,7 @@ const expected = [
 function fakeNetwork(options: TestOptions = {}) {
   const seen: HttpRecord[] = [];
   let read = 0;
-  const fetcher: typeof fetch = async (input, init) => {
+  const handler = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     const record: HttpRecord = {
       path: url.pathname + url.search,
@@ -90,6 +90,7 @@ function fakeNetwork(options: TestOptions = {}) {
     }
     return Response.json({ error: { code: "not_found" } }, { status: 404 });
   };
+  const fetcher: typeof fetch = Object.assign(handler, { preconnect: globalThis.fetch.preconnect });
   return { seen, fetcher };
 }
 
@@ -160,7 +161,8 @@ test("steer is explicit, owns no second reply and does not queue a new turn", as
 });
 
 test("403 revoked send scope and 409 idle steer are final; no CLI/ACP fallback", async () => {
-  for (const [status, code] of [[403, "insufficient_scope"], [409, "no_running_turn"]] ) {
+  const cases: Array<[number, string]> = [[403, "insufficient_scope"], [409, "no_running_turn"]];
+  for (const [status, code] of cases) {
     const n = fakeNetwork({ admissionStatus: status, admissionCode: code });
     await expect(sendViaZ0Bridge({ ...sendOptions(n), mode: "steer" }))
       .rejects.toThrow("HTTP " + status + ", " + code);
