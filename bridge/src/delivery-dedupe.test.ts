@@ -240,6 +240,29 @@ describe("authenticated delivery admission", () => {
     expect(persisted).toContain("fingerprint");
   });
 
+  test("attachment and start work cannot begin before durable reservation completes", async () => {
+    let releaseReservation = () => {};
+    const commit = new Promise<void>(resolve => { releaseReservation = resolve; });
+    const ledger = new class extends MemoryLedger {
+      override async reserve(candidate: DeliveryAdmissionRecord): Promise<{ record: DeliveryAdmissionRecord; created: boolean }> {
+        await commit;
+        return super.reserve(candidate);
+      }
+    }();
+    let observedState = "not started";
+    const controller = new DeliveryAdmissionController(ledger, async admission => {
+      const stored = await ledger.get(deliveryPrincipalScope(admission.principal), admission.clientId);
+      observedState = stored?.state ?? "missing";
+    });
+    const pending = controller.admit(input());
+    expect(observedState).toBe("not started");
+    expect(ledger.records.size).toBe(0);
+    releaseReservation();
+    await pending;
+    expect(observedState).toBe("admitted");
+    expect((await controller.lookup(alice, "client-1"))?.state).toBe("started");
+  });
+
   test("durability failure before reserve forbids start; retry after repair may start", async () => {
     const ledger = new MemoryLedger();
     ledger.failReserveBefore = true;
