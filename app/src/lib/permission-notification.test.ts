@@ -106,8 +106,10 @@ describe("Needs OK background notification observer", () => {
     const sent: DashNotice[] = [];
     await createPermissionNoticeObserver(notice => { sent.push(notice); })([record], background);
     const notice = sent[0];
+    const expectedKey = permissionNoticeKey(record);
+    if (expectedKey === null) throw new Error("Expected a key for a valid permission request");
     expect(notice).toEqual({
-      key: permissionNoticeKey(record),
+      key: expectedKey,
       title: "Needs OK",
       body: "An agent needs a decision. Open Dash to review.",
       target: { kind: "chat", chatId: record.chatId },
