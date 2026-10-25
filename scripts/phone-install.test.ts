@@ -52,7 +52,7 @@ describe("phone install surface", () => {
     const code = read("app/src/components/CodeBlock.tsx");
     expect(names.has("react-native-marked")).toBe(true);
     expect(md).toContain("react-native-marked");
-    expect(md).toContain("useMarkdown(text");
+    expect(md).toContain("useMarkdown(prepared");
     expect(md).not.toContain("WebView");
     expect(code).toContain("expo-clipboard");
     expect(code).toContain("Prism.tokenize");

@@ -18,21 +18,30 @@ export interface KeyedStore {
 export function createKeyedStore(): KeyedStore {
   const values = new Map<string, string>();
   const listeners = new Map<string, Set<() => void>>();
-  const dirty = new Set<string>();
+  // Each dirty id remembers the listeners registered when it was written. A
+  // listener that unsubscribes before the frame is skipped, and one that
+  // subscribes later reads the current value itself (useSyncExternalStore
+  // checks the snapshot on subscribe), so it never inherits an older frame.
+  const dirty = new Map<string, Set<() => void>>();
   let scheduled = false;
 
   const flush = (): void => {
     scheduled = false;
-    const ids = Array.from(dirty);
+    const pending = Array.from(dirty);
     dirty.clear();
-    for (const id of ids) {
-      const set = listeners.get(id);
-      if (set) for (const listener of set) listener();
+    for (const [id, written] of pending) {
+      const live = listeners.get(id);
+      if (!live) continue;
+      for (const listener of written) if (live.has(listener)) listener();
     }
   };
 
   const mark = (id: string): void => {
-    dirty.add(id);
+    const live = listeners.get(id);
+    if (!live || live.size === 0) return;
+    const written = dirty.get(id);
+    if (written) for (const listener of live) written.add(listener);
+    else dirty.set(id, new Set(live));
     if (!scheduled) {
       scheduled = true;
       requestAnimationFrame(flush);

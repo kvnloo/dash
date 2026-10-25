@@ -11,6 +11,7 @@ import { annotate } from "../store/annotate";
 import { store } from "../store/app";
 import { haptic } from "../haptics";
 import { readableReplyText, replyToSelection, selectedReplyText, type SelectionRange } from "./selection-quote";
+import { prepareGenerativeMarkdown } from "../lib/generative-stream";
 
 class TranscriptRenderer extends Renderer {
   onIntent?: (intent: LiveIntent) => boolean;
@@ -86,9 +87,11 @@ function ReplySelectionSheet({ source, selection, onSelection, onCancel, onReply
 export const Markdown = memo(function Markdown({ text, onIntent, streaming = false }: { text: string; onIntent?: (intent: LiveIntent) => boolean; streaming?: boolean }) {
   const [pendingSelection, setPendingSelection] = useState<PendingReplySelection | null>(null);
   const [range, setRange] = useState<SelectionRange | null>(null);
+  // Unfinished UI fences are buffered before Markdown can expose model source.
+  const prepared = useMemo(() => prepareGenerativeMarkdown(text), [text]);
   // Android routes the long press to Dash's selection sheet; other platforms retain OS selection.
-  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: Platform.OS !== "android" }); renderer.onIntent = onIntent; renderer.streaming = streaming; return renderer; }, [text, onIntent, streaming]);
-  const nodes = useMarkdown(text, { renderer, styles, colorScheme: "dark" });
+  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: Platform.OS !== "android" }); renderer.onIntent = onIntent; renderer.streaming = streaming; return renderer; }, [prepared, onIntent, streaming]);
+  const nodes = useMarkdown(prepared, { renderer, styles, colorScheme: "dark" });
   const onLongPress = () => {
     if (Platform.OS !== "android" || annotate.get().active) return;
     const state = store.get();
