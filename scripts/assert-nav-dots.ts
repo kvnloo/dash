@@ -38,7 +38,11 @@ function manhattan(r: number, g: number, b: number, t: readonly number[]): numbe
 }
 
 function isGold(r: number, g: number, b: number): boolean {
-  return manhattan(r, g, b, GOLD) <= 90 && r >= 120 && r > b + 20;
+  // The native pill is GOLD_68 over glass, not opaque GOLD_SRGB.
+  // Approx. (150, 130, 95) on dark chrome; the old <=90 color distance
+  // detected only its 1px rim and missed the 68%-opacity fill on device.
+  return r >= 110 && r > g + 11 && g > b + 14 &&
+    manhattan(r, g, b, GOLD) <= 190;
 }
 
 function isPager(r: number, g: number, b: number): boolean {
@@ -57,23 +61,30 @@ function pixel(img: RgbaImage, x: number, y: number): readonly [number, number, 
 
 type Blob = { minX: number; minY: number; maxX: number; maxY: number; count: number };
 
-function goldRect(img: RgbaImage): Rect | null {
-  let minX = img.width;
-  let minY = img.height;
-  let maxX = -1;
-  let maxY = -1;
-  for (let y = 0; y < img.height; y++) {
-    for (let x = 0; x < img.width; x++) {
-      const [r, g, b] = pixel(img, x, y);
-      if (!isGold(r, g, b)) continue;
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    }
-  }
-  if (maxX < 0) return null;
-  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+/**
+ * Maestro captures the whole screen, not a clipped pager. Keep the selection
+ * local to a pill-shaped, contiguous gold region rather than merging every
+ * gold pixel on Main into one impossible bounding box.
+ */
+function goldRects(img: RgbaImage): Rect[] {
+  const minH = img.width >= 512 && img.height >= 512 ? NAV_PILL_HEIGHT * 1.25 : NAV_DOT_SIZE * 4;
+  const maxY = img.height > img.width ? img.height * 0.35 : img.height;
+  return blobs(img, isGold)
+    .map((b) => {
+      const w = b.maxX - b.minX + 1;
+      const h = b.maxY - b.minY + 1;
+      return { x: b.minX, y: b.minY, w, h, count: b.count };
+    })
+    .filter((b) =>
+      b.y <= maxY &&
+      b.h >= minH &&
+      b.w >= NAV_DOT_SIZE * 4 &&
+      b.w / b.h >= 0.72 &&
+      b.w / b.h <= 1.45 &&
+      b.count / (b.w * b.h) >= 0.28,
+    )
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+    .map(({ x, y, w, h }) => ({ x, y, w, h }));
 }
 
 function blobs(img: RgbaImage, pred: (r: number, g: number, b: number) => boolean): Blob[] {
@@ -131,43 +142,62 @@ function toDot(b: Blob): Dot {
   };
 }
 
-export function checkNavDots(img: RgbaImage): NavDotResult {
-  const pill = goldRect(img);
-  if (!pill) return { ok: false, reason: "no gold pill in screenshot" };
-  if (pill.h < NAV_DOT_SIZE * 2) {
-    return { ok: false, reason: `gold pill too short (${pill.h}px)` };
-  }
+/**
+ * The flow selects Chats, so the gold pill is the middle of three equal slots.
+ * Match each dot to its expected x position near THAT pill. Global largest-
+ * blob selection could pass on unrelated glyphs elsewhere in a full screenshot.
+ */
+function checkPill(pill: Rect, candidates: readonly Blob[]): NavDotResult {
   const scale = pill.h / NAV_PILL_HEIGHT;
-  const minSide = Math.max(2, NAV_DOT_SIZE * scale * 0.4);
-  const maxSide = Math.max(8, NAV_DOT_SIZE * scale * 3);
-  const minArea = minSide * minSide;
+  const middleX = pill.x + pill.w / 2;
+  const middleY = pill.y + pill.h / 2;
+  const side = NAV_DOT_SIZE * scale;
+  const minSide = Math.max(2, side * 0.45);
+  const maxSide = Math.max(7, side * 1.85);
+  const minArea = minSide * minSide * 0.45;
   const maxArea = maxSide * maxSide;
-  const candidates = blobs(img, isDotColor)
+  const dotsInChrome = candidates
     .filter((b) => {
       const w = b.maxX - b.minX + 1;
       const h = b.maxY - b.minY + 1;
-      return w >= minSide && h >= minSide && w <= maxSide && h <= maxSide && b.count >= minArea && b.count <= maxArea;
+      const cx = (b.minX + b.maxX + 1) / 2;
+      const cy = (b.minY + b.maxY + 1) / 2;
+      return w >= minSide && h >= minSide &&
+        w <= maxSide && h <= maxSide &&
+        b.count >= minArea && b.count <= maxArea &&
+        cx >= middleX - NAV_SLOT_WIDTH * scale * 1.3 &&
+        cx <= middleX + NAV_SLOT_WIDTH * scale * 1.3 &&
+        cy >= pill.y - side && cy <= pill.y + pill.h + side;
     })
-    .sort((a, b) => b.count - a.count);
-
-  if (candidates.length < 3) {
-    return { ok: false, reason: `expected 3 dots, got ${candidates.length}` };
+    .map(toDot);
+  const used = new Set<Dot>();
+  const found: Dot[] = [];
+  const xTolerance = Math.max(3, side * 0.85, NAV_SLOT_WIDTH * scale * 0.32);
+  for (const slot of [-1, 0, 1]) {
+    const wantX = middleX + slot * NAV_SLOT_WIDTH * scale;
+    const dot = dotsInChrome
+      .filter((d) => !used.has(d) && Math.abs(d.cx - wantX) <= xTolerance)
+      .sort((a, b) =>
+        Math.abs(a.cx - wantX) - Math.abs(b.cx - wantX) ||
+        Math.abs(a.cy - middleY) - Math.abs(b.cy - middleY),
+      )[0];
+    if (!dot) return { ok: false, reason: "expected 3 dots in AppNav, got " + found.length };
+    used.add(dot);
+    found.push(dot);
   }
-  const chosen = candidates.slice(0, 3).map(toDot).sort((a, b) => a.cx - b.cx);
-  const a = chosen[0];
-  const b = chosen[1];
-  const c = chosen[2];
+  const a = found[0], b = found[1], c = found[2];
   if (!a || !b || !c) return { ok: false, reason: "expected 3 dots" };
   const dots: [Dot, Dot, Dot] = [a, b, c];
 
-  const pillCy = pill.y + pill.h / 2;
   const vTol = Math.max(1.5, 2 * scale);
   for (const dot of dots) {
-    const err = Math.abs(dot.cy - pillCy);
+    const err = Math.abs(dot.cy - middleY);
     if (err > vTol) {
       return {
         ok: false,
-        reason: `dots not vertically centered in gold pill (dot cy=${dot.cy.toFixed(1)} pill cy=${pillCy.toFixed(1)} err=${err.toFixed(1)}px)`,
+        reason: "dots not vertically centered in gold pill (dot cy=" +
+          dot.cy.toFixed(1) + " pill cy=" + middleY.toFixed(1) +
+          " err=" + err.toFixed(1) + "px)",
       };
     }
   }
@@ -178,7 +208,8 @@ export function checkNavDots(img: RgbaImage): NavDotResult {
   if (Math.abs(gap0 - gap1) > hTol) {
     return {
       ok: false,
-      reason: `dots not evenly spaced horizontally (gaps ${gap0.toFixed(1)}px, ${gap1.toFixed(1)}px)`,
+      reason: "dots not evenly spaced horizontally (gaps " +
+        gap0.toFixed(1) + "px, " + gap1.toFixed(1) + "px)",
     };
   }
   const expected = NAV_SLOT_WIDTH * scale;
@@ -186,10 +217,28 @@ export function checkNavDots(img: RgbaImage): NavDotResult {
   if (Math.abs(mean - expected) > Math.max(3, 0.2 * expected)) {
     return {
       ok: false,
-      reason: `dots not evenly spaced horizontally (mean gap ${mean.toFixed(1)}px, expected ${expected.toFixed(1)}px slot)`,
+      reason: "dots not evenly spaced horizontally (mean gap " +
+        mean.toFixed(1) + "px, expected " + expected.toFixed(1) + "px slot)",
     };
   }
   return { ok: true, pill, dots, scale };
+}
+
+export function checkNavDots(img: RgbaImage): NavDotResult {
+  if (!Number.isSafeInteger(img.width) || !Number.isSafeInteger(img.height) ||
+    img.width <= 0 || img.height <= 0 || img.data.length !== img.width * img.height * 4) {
+    return { ok: false, reason: "invalid RGBA screenshot dimensions" };
+  }
+  const pills = goldRects(img);
+  if (!pills.length) return { ok: false, reason: "no gold pill in screenshot" };
+  const dots = blobs(img, isDotColor);
+  let firstFailure: NavDotFail | null = null;
+  for (const pill of pills) {
+    const result = checkPill(pill, dots);
+    if (result.ok) return result;
+    if (!firstFailure) firstFailure = result;
+  }
+  return firstFailure ?? { ok: false, reason: "no AppNav dots near gold pill" };
 }
 
 export function requireNavDots(img: RgbaImage): NavDotOk {
