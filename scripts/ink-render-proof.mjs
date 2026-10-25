@@ -3,15 +3,18 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createRequire } from 'node:module';
+const require=createRequire(import.meta.url);
+const wasm=require.resolve('canvaskit-wasm/bin/full/canvaskit.wasm',{paths:[path.resolve('app')]});
 import { chromium } from 'playwright';
 const out=path.resolve('.repair-receipts'), port=8197;
 await mkdir(out,{recursive:true});
-const result={revision:process.env.DASH_PROOF_REVISION,scope:'Actual Expo Web raw pointer → gesture → store → Skia pixels, NOT Android/S Pen qualification',cases:[],errors:[]};
+const result={revision:process.env.DASH_PROOF_REVISION,wasm:'Pinned installed CanvasKit served locally instead of CDN (test infrastructure only)',scope:'Actual Expo Web raw pointer → gesture → store → Skia pixels, NOT Android/S Pen qualification',cases:[],errors:[]};
 const expo=spawn('bun',['x','expo','start','--web','--port',String(port)],{cwd:path.resolve('app'),env:{...process.env,CI:'1',EXPO_PUBLIC_DEBUG:'0',EXPO_PUBLIC_DEMO:'0'},detached:true,stdio:['ignore','pipe','pipe']});
 let log='',browser,page;
 expo.stdout.on('data',d=>log+=d);expo.stderr.on('data',d=>log+=d);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-async function wait(fn,label){for(let i=0;i<240;i++){try{if(await fn())return;}catch{}await sleep(500);}throw new Error(`Timeout: ${label}`);}
+async function wait(fn,label){for(let i=0;i<600;i++){try{if(await fn())return;}catch{}await sleep(500);}throw new Error(`Timeout: ${label}`);}
 async function pixels(png){
   return page.evaluate(async data=>{
     const image=new Image();image.src=data;await image.decode();
@@ -27,6 +30,7 @@ try{
   browser=await chromium.launch({headless:true});
   for(const width of [390,412]){
     const context=await browser.newContext({viewport:{width,height:915},deviceScaleFactor:1});
+    await context.route('https://unpkg.com/canvaskit-wasm@0.41.0/bin/full/canvaskit.wasm',route=>route.fulfill({path:wasm,contentType:'application/wasm'}));
     page=await context.newPage();page.on('pageerror',e=>result.errors.push(e.message));
     await page.goto(`http://127.0.0.1:${port}`,{waitUntil:'domcontentloaded',timeout:180000});
     await wait(()=>page.evaluate(()=>Boolean(window.__dashAnnotate)),'annotation mount');
@@ -78,6 +82,7 @@ try{
   }
   // An explicitly seeded, offline existing chat. No backend session is created or sent to.
   const context=await browser.newContext({viewport:{width:412,height:915},deviceScaleFactor:1});
+  await context.route('https://unpkg.com/canvaskit-wasm@0.41.0/bin/full/canvaskit.wasm',route=>route.fulfill({path:wasm,contentType:'application/wasm'}));
   page=await context.newPage();page.on('pageerror',e=>result.errors.push(e.message));
   let popups=0;page.on('popup',()=>popups++);
   const chat={id:'repair-existing-chat',title:'Existing attached conversation',harness:'hermes',sessionId:'repair-existing-session',profileId:'repair-existing-profile',createdAt:1,updatedAt:1,queueWaitForIdle:true,messages:[{id:'held-user',role:'user',text:'Original queued request',delivery:'queued',at:1},{id:'held-answer',role:'assistant',text:'',state:'pending',turnId:'held-existing-turn',seq:0,at:2}]};
