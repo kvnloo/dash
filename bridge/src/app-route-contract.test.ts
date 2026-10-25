@@ -82,6 +82,8 @@ describe("composed-app route contract against the compiled bridge", () => {
 
   test("native voice bootstrap remains denied to legacy-token clients (identity grant required)", async () => {
     const res = await fetch(`http://127.0.0.1:${port}/voice/bootstrap`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-    expect([404, 405]).toContain(res.status);
+    expect(res.status).toBe(401);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.json()).toEqual({ error: "z0bridge-authenticated native Dash required" });
   });
 });
