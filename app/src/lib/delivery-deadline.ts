@@ -37,7 +37,7 @@ interface PendingAck {
   id: string;
   generation: number;
   deadlineAt: number;
-  cancelTimer: () => void;
+  cancelTimer?: () => void;
   retryNeeded: boolean;
 }
 
@@ -76,7 +76,7 @@ export class DeliveryDeadlineController {
   beginGeneration(): number {
     if (this.disposed) throw new Error("Delivery deadline controller disposed");
     if (this.generation !== 0) this.disconnect(this.generation);
-    for (const entry of this.pending.values()) entry.cancelTimer();
+    for (const entry of this.pending.values()) entry.cancelTimer?.();
     this.pending.clear();
     this.generation += 1;
     this.connected = true;
@@ -94,7 +94,6 @@ export class DeliveryDeadlineController {
       id,
       generation,
       deadlineAt: this.clock.now() + this.timeoutMs,
-      cancelTimer: () => {},
       retryNeeded: false,
     };
     this.pending.set(id, entry);
@@ -111,7 +110,7 @@ export class DeliveryDeadlineController {
     if (this.disposed || generation !== this.generation) return false;
     const entry = this.pending.get(id);
     if (!entry || entry.generation !== generation) return false;
-    entry.cancelTimer();
+    entry.cancelTimer?.();
     this.pending.delete(id);
     this.emit({ type: "acknowledged", id, generation });
     return true;
@@ -123,7 +122,7 @@ export class DeliveryDeadlineController {
     this.connected = false;
     for (const entry of this.pending.values()) {
       if (entry.generation !== generation) continue;
-      entry.cancelTimer();
+      entry.cancelTimer?.();
       this.reportRetryNeeded(entry, "socket-drop");
     }
   }
@@ -138,7 +137,7 @@ export class DeliveryDeadlineController {
     if (this.disposed) return;
     this.disposed = true;
     this.connected = false;
-    for (const entry of this.pending.values()) entry.cancelTimer();
+    for (const entry of this.pending.values()) entry.cancelTimer?.();
     this.pending.clear();
   }
 
@@ -152,7 +151,7 @@ export class DeliveryDeadlineController {
     ) return;
 
     // Defend against an early timer: the injected clock owns the deadline.
-    entry.cancelTimer();
+    entry.cancelTimer?.();
     const remaining = entry.deadlineAt - this.clock.now();
     if (remaining > 0) {
       entry.cancelTimer = this.clock.setTimer(() => this.onDeadline(entry), remaining);
