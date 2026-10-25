@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { CommonActions, StackActions, StackRouter } from "@react-navigation/routers";
 import { ContinuousVoice, realWords, type VoicePeer } from "./continuous-voice";
 
 function harness(holdIntent = false, readyOnAnswer = true) {
@@ -111,5 +112,45 @@ describe("root continuous WebRTC lifecycle", () => {
     });
     await call.start({ profile: "test", session: "attached" });
     expect(call.state.phase).toBe("error"); await call.stop();
+  });
+
+  test("closing a chat route and switching Main pager tabs leaves the owned session live", async () => {
+    const h = harness();
+    const target = { profile: "original-hermes-profile", session: "original-hermes-session" };
+    await h.call.start(target);
+    expect(h.call.state.phase).toBe("listening");
+
+    // Actual React Navigation stack actions; ContinuousVoice is owned above this stack.
+    const router = StackRouter({});
+    const options = {
+      routeNames: ["Main", "Chat"],
+      routeParamList: { Main: undefined, Chat: undefined },
+      routeGetIdList: {},
+    };
+    let navigation = router.getInitialState(options);
+    navigation = router.getStateForAction(navigation, StackActions.push("Chat"), options) ?? navigation;
+    expect(navigation.routes.at(-1)?.name).toBe("Chat");
+    navigation = router.getStateForAction(navigation, StackActions.pop(), options) ?? navigation;
+    expect(navigation.routes.map(route => route.name)).toEqual(["Main"]);
+    for (const tab of [2, 0, 1]) {
+      navigation = router.getStateForAction(navigation, CommonActions.setParams({ tab }), options) ?? navigation;
+      expect(navigation.routes[0]?.params).toMatchObject({ tab });
+    }
+
+    expect(h.closed).toBe(0);
+    expect(h.requests.filter(request => request.path === "/v1/realtime/session")).toHaveLength(1);
+    expect(h.requests[0]?.body).toMatchObject({ context: { hermes_target: target } });
+    expect(h.requests.filter(request => request.path.endsWith("/end"))).toHaveLength(0);
+
+    // The same peer still accepts audio and dispatches to the original session.
+    h.event({ type: "conversation.item.input_audio_transcription.completed", event_id: "after-navigation", item_id: "after-navigation-item", transcript: "Continue the Hermes task" });
+    await settle();
+    expect(h.requests.filter(request => request.path === "/v1/tools/ask_z0")).toHaveLength(1);
+    expect(h.call.state.delivery).toBe("accepted");
+    expect(h.closed).toBe(0);
+
+    await h.call.stop();
+    expect(h.closed).toBe(1);
+    expect(h.requests.filter(request => request.path === "/v1/sessions/test-session/end")).toHaveLength(1);
   });
 });
