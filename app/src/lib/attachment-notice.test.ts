@@ -18,6 +18,7 @@ describe("H-117 Dash attachment notices", () => {
       { kind: "pair-required" },
       { kind: "limit-reached", limit: 5 },
       { kind: "picker-error", message: "Provider failed" },
+      { kind: "shared-files-waiting", count: 2 },
     ];
     for (const request of requests) {
       const notice = attachmentNoticeView(request);
@@ -26,8 +27,10 @@ describe("H-117 Dash attachment notices", () => {
       expect(notice.primary).toEqual({ label: "OK", action: "dismiss" });
       expect(notice.secondary).toBeNull();
     }
-    expect(attachmentNoticeView(requests[0]).detail).toContain("Pair with a computer");
-    expect(attachmentNoticeView(requests[1]).detail).toContain("Up to 5 files per message");
+    expect(attachmentNoticeView({ kind: "pair-required" }).detail).toContain("Pair with a computer");
+    expect(attachmentNoticeView({ kind: "limit-reached", limit: 5 }).detail).toContain("Up to 5 files per message");
+    expect(attachmentNoticeView({ kind: "shared-files-waiting", count: 2 }).detail).toContain("2 shared files");
+    expect(attachmentNoticeView({ kind: "shared-files-waiting", count: 1 }).detail).toContain("1 shared file.");
     expect(attachmentNoticeView({ kind: "limit-reached", limit: 1 }).detail).toContain("1 file per message");
     expect(attachmentNoticeView({ kind: "limit-reached", limit: 0 }).detail).toContain("cannot accept more");
     expect(attachmentNoticeView({ kind: "limit-reached", limit: Number.NaN }).secondary).toBeNull();
@@ -89,6 +92,7 @@ describe("H-117 Dash attachment notices", () => {
       { kind: "pair-required" },
       { kind: "limit-reached", limit: 3 },
       { kind: "picker-error", message: "Permission denied" },
+      { kind: "shared-files-waiting", count: 7 },
       { kind: "shared-upload", count: 0 },
     ] satisfies AttachmentNoticeRequest[]) {
       const events: string[] = [];
