@@ -88,7 +88,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       const text = await regionText(origin.x + region.x, origin.y + region.y, region.width, region.height);
       const { composite } = await loadInk();
       const { bytes, dataUri } = await composite(captureTarget, current, size, INK, colors.bg, region);
-      if (routeKey !== (debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute()?.key : undefined)) throw new Error("Screen changed during capture. Ink is kept; circle again on the intended screen.");
+      if (store.get().activeId !== id || routeKey !== (debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute()?.key : undefined)) throw new Error("Screen changed during capture. Ink is kept; circle again on the intended screen.");
       releaseSlot();
       if ((composerDrafts.get()[id]?.attachments.length ?? 0) >= MAX_ATTACHMENTS_PER_TURN) throw new Error("The draft filled during capture. Ink is kept; remove an attachment and circle again.");
       updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ text: quoteSelection(draft.text, text || "Marked region (image attached)"), attachments: [...draft.attachments, { key, name, mime: "image/png", size: bytes.length, uri: dataUri, state: "uploading" }] }));
