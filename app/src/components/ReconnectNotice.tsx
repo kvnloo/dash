@@ -1,19 +1,20 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { PRESS_SCALE } from "../motion";
-import { reconnectPresentation, type ReconnectSnapshot } from "../lib/reconnect-lifecycle";
+import { reconnectPresentation } from "../lib/reconnect-lifecycle";
+import { reconnectStore } from "../store/reconnect";
 import { colors, radius, space, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 import { PressScale } from "./PressScale";
 
 export interface ReconnectNoticeProps {
-  state: ReconnectSnapshot;
   onRetry(): void;
   onPair(): void;
 }
 
 /** No entrance animations: readable with reduced motion and TalkBack. */
-export function ReconnectNotice({ state, onRetry, onPair }: ReconnectNoticeProps) {
+export function ReconnectNotice({ onRetry, onPair }: ReconnectNoticeProps) {
+  const state = reconnectStore.use((current) => current);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (state.phase !== "waiting") return;
