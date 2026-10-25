@@ -22,7 +22,9 @@ describe("AttachmentChooser screen-reader semantics", () => {
     expect(modal).toContain("visible={pendingPick === null}");
     expect(modal).toContain("onShow={focusTitle}");
     expect(pane).toContain('testID="attachment-sheet"');
-    expect(pane).toContain('accessibilityPaneTitle="Attachment chooser"');
+    expect(pane).toContain('accessibilityLabel="Attachment chooser"');
+    // GlassSurface accepts ViewProps, which does not declare accessibilityPaneTitle.
+    expect(pane).not.toContain("accessibilityPaneTitle=");
     expect(pane).toContain("accessibilityViewIsModal");
     expect(heading).toContain('accessibilityRole="header"');
     expect(heading).toContain('accessibilityLabel="Attachment chooser"');
