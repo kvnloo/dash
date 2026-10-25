@@ -28,6 +28,8 @@ import {
 import { store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
 import { PressScale } from "../PressScale";
+import { NAV_CHROME_HEIGHT } from "../golden-nav";
+import { WORKSPACE_HEADER_HEIGHT } from "../WorkspaceHeader";
 import { targetsAt } from "./hit-test";
 import { loadSkia } from "./skia-ready";
 import { useContinuousVoice } from "../ContinuousVoiceRoot";
@@ -38,6 +40,9 @@ const MIN_EXTENT = 6;
 // Queue preview can reach 192dp, plus 44dp controls, 8dp wrapper and 24dp
 // closed keyboard pad. Leave another 12dp clear of the input, including on IME.
 const COMPOSER_CLEARANCE = 280;
+// The 60dp nav and 52dp settings/perf action row sit above annotation controls.
+// Keep the tray (including the sent toast) one 8dp gap below both.
+const TRAY_TOP_CLEARANCE = NAV_CHROME_HEIGHT + WORKSPACE_HEADER_HEIGHT + space.sm;
 
 function composerAvoidance(keyboardLift: number): number {
   "worklet";
@@ -243,6 +248,7 @@ const TOOLS: { id: Tool; label: string; a11y: string }[] = [
  */
 function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; atTop: boolean; screenHeight: number }): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const topInset = insets.top + TRAY_TOP_CLEARANCE;
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const progress = useSharedValue(atTop ? 0 : 1);
   const trayHeight = useSharedValue(0);
@@ -251,13 +257,17 @@ function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; 
       duration: 110, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System,
     });
   }, [atTop, progress]);
-  const clearDock = useAnimatedStyle(() => ({ bottom: composerAvoidance(-keyboardHeight.value) }));
+  // A tall IME may leave no room at all: show zero tray height rather than
+  // growing underneath the composer or the floating header controls.
+  const clearDock = useAnimatedStyle(() => ({
+    height: Math.max(0, screenHeight - topInset - composerAvoidance(-keyboardHeight.value)),
+  }));
   const placement = useAnimatedStyle(() => {
-    const room = Math.max(0, screenHeight - insets.top - space.sm - composerAvoidance(-keyboardHeight.value));
+    const room = Math.max(0, screenHeight - topInset - composerAvoidance(-keyboardHeight.value));
     return { transform: [{ translateY: Math.max(0, room - trayHeight.value) * progress.value }] };
   });
   return (
-    <Animated.View pointerEvents="box-none" style={[styles.trayViewport, { top: insets.top + space.sm }, clearDock]} {...overlayProps}>
+    <Animated.View pointerEvents="box-none" style={[styles.trayViewport, { top: topInset, left: insets.left + space.xs, right: insets.right + space.xs }, clearDock]} {...overlayProps}>
       <Animated.ScrollView testID="annotation-tray" bounces={false} showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="always" style={[styles.tray, placement]} contentContainerStyle={styles.trayContent}
         onLayout={e => { trayHeight.value = e.nativeEvent.layout.height; }}>
@@ -361,7 +371,7 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   inkError: { position: "absolute", top: 80, left: 12, right: 12, padding: 8, backgroundColor: colors.surfaceRaised, borderRadius: radius.sm },
   frame: { position: "absolute", top: 0, left: 0, right: 0, borderWidth: 2, borderColor: colors.accent, borderRadius: 2 },
-  trayViewport: { position: "absolute", left: space.xs, right: space.xs, overflow: "hidden" },
+  trayViewport: { position: "absolute", overflow: "hidden" },
   tray: { flexGrow: 0, flexShrink: 1, maxHeight: "100%", borderRadius: radius.md, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.hair },
   trayContent: { padding: space.xs, gap: 2 },
   row: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 2 },
