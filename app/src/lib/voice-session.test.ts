@@ -292,6 +292,7 @@ describe("realtime peer failures remain visible and free the microphone", () => 
     expect(voiceConnectionErrorLine("Voice disconnected. Mic stopped; tap Start to reconnect.")).toBe("Voice connection lost");
     expect(voiceConnectionErrorLine("Voice connection timed out. Microphone stopped.")).toBe("Voice connection lost");
     expect(voiceConnectionErrorLine("Realtime reported an error. Mic stopped; no automatic resend.")).toBe("Realtime session failed");
+    expect(voiceConnectionErrorLine("Voice authorization/network unavailable. Mic stopped; tap Start to reconnect.")).toBe("Voice authorization failed");
     expect(voiceConnectionErrorLine("  Permission denied\nRetry.  ")).toBe("Permission denied Retry.");
     expect(voiceConnectionErrorLine(undefined)).toBe("Voice unavailable");
     for (const kind of ["webrtc", "permission", "sdp", "ice", "token"] satisfies Array<"webrtc" | "permission" | "sdp" | "ice" | "token">) {
