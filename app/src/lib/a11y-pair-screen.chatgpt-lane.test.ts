@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { pairActionState, type PairAction, type PairFormState } from "./a11y-pair-screen";
+import { primaryButtonA11y } from "./a11y-primary-button";
 
 const ready: PairFormState = {
   computer: "laptop.tailnet:4747",
@@ -98,7 +99,8 @@ test("Every pairing field has an explicit stable label and credentials remain ma
 });
 
 test("Primary pairing actions keep their touch handlers, role, and matching disabled/busy state", () => {
-  expect(button).toContain('accessibilityRole="button"');
+  expect(primaryButtonA11y({ label: "Pair" }).accessibilityRole).toBe("button");
+  expect(button).toContain("accessibilityRole={a11y.accessibilityRole}");
   const identity = actionFor("pairWithIdentity", "PrimaryButton");
   expect(identity).toContain("disabled={identityA11y.disabled}");
   expect(identity).toContain("accessibilityState={identityA11y}");
