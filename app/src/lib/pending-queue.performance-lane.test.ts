@@ -158,8 +158,12 @@ describe("pending queue output and operation guards", () => {
     );
     const originalsById = new Map(input.messages.map(message => [message.id, message]));
     for (const part of movedParts) {
-      expect(part.user).toBe(originalsById.get(part.user.id));
-      expect(part.assistant).toBe(originalsById.get(part.assistant.id));
+      const originalUser = originalsById.get(part.user.id);
+      if (originalUser?.role !== "user") throw new Error("Missing original queue user: " + part.user.id);
+      const originalAssistant = originalsById.get(part.assistant.id);
+      if (originalAssistant?.role !== "assistant") throw new Error("Missing original queue assistant: " + part.assistant.id);
+      expect(part.user).toBe(originalUser);
+      expect(part.assistant).toBe(originalAssistant);
       expect(moved.messages[moved.messages.indexOf(part.user) + 1]).toBe(part.assistant);
     }
     for (const [index, message] of input.messages.entries()) {
@@ -205,10 +209,11 @@ describe("pending queue output and operation guards", () => {
     expect(combineQueued(empty)).toBe(empty);
     expect(reorderQueued(empty, 0, 0)).toBe(empty);
     const input = makeConversation(3);
-    for (const [from, to] of [
+    const invalidMoves: ReadonlyArray<readonly [number, number]> = [
       [-1, 0], [0, -1], [3, 0], [0, 3], [1, 1],
       [0.5, 1], [1, 0.5], [Number.NaN, 1], [0, Number.POSITIVE_INFINITY],
-    ]) expect(reorderQueued(input, from!, to!)).toBe(input);
+    ];
+    for (const [from, to] of invalidMoves) expect(reorderQueued(input, from, to)).toBe(input);
   });
 
   test("lazy text and attachment reads touch queued users once, never completed history", () => {
