@@ -44,7 +44,9 @@ const liveChat: Extract<SearchResult, { kind: "conversation" }> = {
     title: "Release notes",
     createdAt: 1,
     updatedAt: 10,
-    messages: [{ id: "a1", role: "assistant", text: "Writing", state: "streaming", at: 10 }],
+    messages: [
+      { id: "a1", role: "assistant", text: "Writing", state: "streaming", at: 10, turnId: "turn:release", seq: 1 },
+    ],
   },
   harnessName: "Hermes",
   subtitle: "Reviewing fixes",
