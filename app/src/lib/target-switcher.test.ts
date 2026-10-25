@@ -269,12 +269,12 @@ describe("H-129 compact badge and drill-down tree", () => {
     expect(tree.initialExpanded.length).toBe(4);
 
     const review = rows.find(row => row.kind === "session" && row.label === "Review");
-    expect(review?.onPress).toBeFunction();
+    expect(typeof review?.onPress).toBe("function");
     review?.onPress?.();
     expect(events).toEqual([{ kind: "target", route: nextRoute }]);
 
     const model = rows.find(row => row.label === "Model · Other LLM");
-    expect(model?.onPress).toBeFunction();
+    expect(typeof model?.onPress).toBe("function");
     model?.onPress?.();
     expect(events[1]).toEqual(change);
   });
