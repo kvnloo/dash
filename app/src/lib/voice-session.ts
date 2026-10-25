@@ -9,10 +9,72 @@
  */
 
 import { checkVoiceBootstrap, type VoiceBootstrapRequest, type VoiceBootstrapTarget } from "./voice-launch";
+import { VoiceAccessDenied, type VoicePeer } from "./continuous-voice";
 import { File } from "expo-file-system";
 import { bytesToBase64 } from "./pair-crypto";
 import { Vad } from "./vad";
 import { recordingPhase } from "./voice-orb";
+
+/** Only safe, concise connection diagnostics reach the phone; never show tokens or raw SDP. */
+export type VoiceConnectionFailure = "webrtc" | "permission" | "sdp" | "ice" | "token";
+
+export function voiceConnectionError(kind: VoiceConnectionFailure): string {
+  switch (kind) {
+    case "webrtc": return "WebRTC could not load";
+    case "permission": return "Microphone permission denied";
+    case "sdp": return "Voice signaling failed";
+    case "ice": return "Voice connection lost";
+    case "token": return "Voice authorization failed";
+  }
+}
+
+/** Normalize longer controller failure notes for the one-line error in the voice pill. */
+export function voiceConnectionErrorLine(note: string | undefined): string {
+  if (!note?.trim()) return "Voice unavailable";
+  if (note.startsWith("Voice disconnected.") || note.startsWith("Voice connection timed out.")) {
+    return voiceConnectionError("ice");
+  }
+  if (note.startsWith("Realtime reported an error.")) return "Realtime session failed";
+  if (note.startsWith("Voice unavailable.")) return "Voice connection failed";
+  if (note.startsWith("Mic stopped because Dash left the foreground.")) return "Voice stopped in background";
+  return note.replace(/\s+/g, " ").trim();
+}
+
+/** Preserve a specific SDP failure through ContinuousVoice's error teardown. */
+export function protectVoicePeer(peer: VoicePeer): VoicePeer {
+  return {
+    async offer() {
+      try { return await peer.offer(); }
+      catch { throw new VoiceAccessDenied(voiceConnectionError("sdp")); }
+    },
+    async answer(sdp) {
+      try { await peer.answer(sdp); }
+      catch { throw new VoiceAccessDenied(voiceConnectionError("sdp")); }
+    },
+    mute: value => peer.mute(value),
+    send: event => peer.send(event),
+    close: () => peer.close(),
+  };
+}
+
+/** Wait until native media cleanup, not merely an error state, before re-acquiring the mic. */
+export class VoiceMicReleaseGate {
+  private pending: Promise<void> = Promise.resolve();
+
+  wait(): Promise<void> { return this.pending; }
+
+  hold(release: () => void): () => void {
+    let complete: () => void = () => {};
+    const finished = new Promise<void>(resolve => { complete = resolve; });
+    this.pending = this.pending.then(() => finished);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      try { release(); } finally { complete(); }
+    };
+  }
+}
 
 /** Metering poll interval. Fast enough to resolve the 900ms end-of-speech pause. */
 export const POLL_MS = 100;
