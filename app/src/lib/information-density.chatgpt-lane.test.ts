@@ -103,6 +103,15 @@ describe("H-077 grounded stat information", () => {
     ]);
   });
 
+  test("a subset value can use an explicit, source-grounded denominator", () => {
+    expect(projectStatInformation("rich", { value: 2, segmentTotal: 5, segments })).toEqual([
+      { label: "Segments", value: "resumed 2 · not resumed 3 · sum 5 matches reference total 5" },
+    ]);
+    expect(projectStatInformation("rich", { value: 2, segmentTotal: 7, segments })).toEqual([
+      { label: "Segments", value: "resumed 2 · not resumed 3 · segment sum 5; reference total 7 (not reconciled)" },
+    ]);
+  });
+
   test("no added content is invented for a scalar lacking supporting evidence", () => {
     for (const level of ["essential", "standard", "rich"] satisfies InformationDetailChoice[]) {
       expect(projectStatInformation(level, { value: 12 })).toEqual([]);
@@ -161,7 +170,10 @@ describe("H-077 component wiring contract (source, not rendered/device evidence)
 
   test("StatTile consumes information detail and includes it in visible and accessible descriptions", () => {
     expect(tile).toContain("const { level } = useInformationDetail();");
-    expect(tile).toContain("projectStatInformation(level, { value, segments, series })");
+    expect(tile).toContain("projectStatInformation(level, { value, segments: evidenceSegments ?? segments, segmentTotal: evidenceTotal, series })");
+    expect(trace).toContain("evidenceTotal={st.workers}");
+    expect(trace).toContain("Number.isSafeInteger(st.workers)");
+    expect(trace).toContain('label: "not live"');
     expect(tile).toContain("summary={summary}");
     expect(tile).toContain("details.map(line => <Text key={line.label}");
     expect(tile).toContain("line.label + \": \" + line.value");
