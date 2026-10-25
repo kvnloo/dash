@@ -112,7 +112,9 @@ describe("H-050 main and open-chat suggestions", () => {
     expect(active.query).toBe("app");
     const rows = composerSuggestions(active, { commands: [], files: ["app/src/Chat.tsx", "docs/README.md"] }, conversations, []);
     expect(rows.map(row => row.id)).toEqual(["file:app/src/Chat.tsx"]);
-    expect(insertSuggestion(typed, active, rows[0].insert)).toBe("Inspect @app/src/Chat.tsx then continue");
+    const [file] = rows;
+    if (!file) throw new Error("Missing advertised file");
+    expect(insertSuggestion(typed, active, file.insert)).toBe("Inspect @app/src/Chat.tsx then continue");
     // No mention should be offered when the caret is after the completed token.
     expect(composerTrigger(typed)).toBeNull();
   });
@@ -144,7 +146,9 @@ describe("H-050 main and open-chat suggestions", () => {
   test("Local @ sessions remain actionable without the remote inventory", () => {
     const rows = composerSuggestions(trigger("@repair"), EMPTY_SUGGESTIONS, conversations, []);
     expect(rows.map(row => row.insert)).toEqual(["@native-session-123"]);
-    expect(insertSuggestion("@repair", trigger("@repair"), rows[0].insert)).toBe("@native-session-123 ");
+    const [session] = rows;
+    if (!session) throw new Error("Missing local session");
+    expect(insertSuggestion("@repair", trigger("@repair"), session.insert)).toBe("@native-session-123 ");
   });
 
   test("HTTP authentication, missing bridge, malformed data and transient failure remain distinct", async () => {
