@@ -126,7 +126,7 @@ export function HarnessVisualCore({ look, name, size }: Props) {
 
   return (
     <View accessibilityRole="image" accessibilityLabel={description} style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-      <View style={{ position: "absolute", width: size, height: size, borderRadius: size / 2, borderWidth: StyleSheet.hairlineWidth, borderColor: look.provider.hue, borderStyle: look.valueScore === null ? "dashed" : "solid", opacity: 0.75 }} />
+      <View style={{ position: "absolute", width: size, height: size, borderRadius: size / 2, borderWidth: StyleSheet.hairlineWidth, borderColor: look.provider.hue, borderStyle: look.valueScore === null ? "dashed" : "solid", opacity: look.valueScore === null ? 0.45 : 0.3 + look.valueScore / 100 * 0.7 }} />
       {Array.from({ length: look.effort.orbits }, (_, i) => {
         const diameter = size * (0.47 + i * 0.11);
         return (
@@ -139,7 +139,7 @@ export function HarnessVisualCore({ look, name, size }: Props) {
               borderRadius: diameter / 2,
               borderWidth: 1,
               borderColor: look.provider.hue,
-              opacity: isMoving ? pulsing : ringOpacity,
+              opacity: isMoving ? Animated.multiply(pulsing, ringOpacity * 2) : ringOpacity,
               transform: [{ rotate: isMoving && cadence.rotate ? rotation : "0deg" }],
             }}
           />
