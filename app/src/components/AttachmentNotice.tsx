@@ -69,52 +69,55 @@ export function AttachmentNotice({ request, onDismiss, onConfirmUpload }: Props)
           focusable={false}
           importantForAccessibility="no-hide-descendants"
         />
-        <GlassSurface
-          variant="raised"
-          borderRadius={radius.lg}
-          style={[styles.sheet, {
-            marginBottom: Math.max(insets.bottom, space.md),
-            maxHeight: Math.max(0, window.height - insets.top - insets.bottom - space.xl),
-          }]}
+        <View
           accessibilityViewIsModal
-          accessibilityPaneTitle={notice.title}
+          accessibilityLabel={notice.title}
           onAccessibilityEscape={close}
         >
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-            <View style={styles.header}>
-              <Text ref={titleRef} accessibilityRole="header" style={styles.title}>{notice.title}</Text>
-              <PressScale
-                accessibilityRole="button"
-                accessibilityLabel="Close attachment notice"
-                onPress={close}
-                style={styles.close}
-              >
-                <Feather name="x" size={20} color={colors.textMuted} />
-              </PressScale>
-            </View>
-            <Text style={styles.detail}>{notice.detail}</Text>
-            <View style={styles.actions}>
-              {secondary ? (
+          <GlassSurface
+            variant="raised"
+            borderRadius={radius.lg}
+            style={[styles.sheet, {
+              marginBottom: Math.max(insets.bottom, space.md),
+              maxHeight: Math.max(0, window.height - insets.top - insets.bottom - space.xl),
+            }]}
+          >
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+              <View style={styles.header}>
+                <Text ref={titleRef} accessibilityRole="header" style={styles.title}>{notice.title}</Text>
                 <PressScale
                   accessibilityRole="button"
-                  accessibilityLabel={secondary.label}
-                  onPress={() => { dispatch(secondary.action); }}
-                  style={[styles.action, styles.secondary]}
+                  accessibilityLabel="Close attachment notice"
+                  onPress={close}
+                  style={styles.close}
                 >
-                  <Text style={styles.secondaryLabel}>{secondary.label}</Text>
+                  <Feather name="x" size={20} color={colors.textMuted} />
                 </PressScale>
-              ) : null}
-              <PressScale
-                accessibilityRole="button"
-                accessibilityLabel={notice.primary.label}
-                onPress={() => { dispatch(notice.primary.action); }}
-                style={[styles.action, styles.primary]}
-              >
-                <Text style={styles.primaryLabel}>{notice.primary.label}</Text>
-              </PressScale>
-            </View>
-          </ScrollView>
-        </GlassSurface>
+              </View>
+              <Text style={styles.detail}>{notice.detail}</Text>
+              <View style={styles.actions}>
+                {secondary ? (
+                  <PressScale
+                    accessibilityRole="button"
+                    accessibilityLabel={secondary.label}
+                    onPress={() => { dispatch(secondary.action); }}
+                    style={[styles.action, styles.secondary]}
+                  >
+                    <Text style={styles.secondaryLabel}>{secondary.label}</Text>
+                  </PressScale>
+                ) : null}
+                <PressScale
+                  accessibilityRole="button"
+                  accessibilityLabel={notice.primary.label}
+                  onPress={() => { dispatch(notice.primary.action); }}
+                  style={[styles.action, styles.primary]}
+                >
+                  <Text style={styles.primaryLabel}>{notice.primary.label}</Text>
+                </PressScale>
+              </View>
+            </ScrollView>
+          </GlassSurface>
+        </View>
       </View>
     </Modal>
   );
