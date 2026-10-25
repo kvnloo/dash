@@ -5,6 +5,7 @@ const DEMO_SETTINGS: Settings = {
   address: "100.64.0.1:4747",
   token: "demo-token-not-real",
   harness: "omp",
+  inAppFeedback: true,
 };
 
 const now = Date.now();

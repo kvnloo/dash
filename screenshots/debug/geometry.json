@@ -1,0 +1,214 @@
+{
+  "sourceHash": "4e836b2a731b0b9a065e1e6dab3c2615dc8090533ed2ad0f1420dfc7fb3edd58",
+  "geometry": [
+    {
+      "scenario": "main-chats",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "ended": {
+        "x": 339,
+        "y": 553,
+        "width": 35,
+        "height": 16
+      },
+      "journey": [
+        "switch Bots / Chats / Orchestra / Chats",
+        "bridge details opens and dismisses without blocking tabs",
+        "compose opens chat; Back returns to Chats"
+      ]
+    },
+    {
+      "scenario": "main-chats-search",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "ended": {
+        "x": 339,
+        "y": 553,
+        "width": 35,
+        "height": 16
+      },
+      "chips": {
+        "x": 12,
+        "y": 734,
+        "width": 366,
+        "height": 42
+      },
+      "journey": [
+        "scope chips disappear on blur and reopen on focus"
+      ]
+    },
+    {
+      "scenario": "main-bots",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "journey": []
+    },
+    {
+      "scenario": "main-orchestra",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "journey": []
+    },
+    {
+      "scenario": "chat",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "composerControls": [
+        {
+          "x": 238,
+          "y": 784,
+          "width": 44,
+          "height": 44
+        },
+        {
+          "x": 282,
+          "y": 784,
+          "width": 44,
+          "height": 44
+        },
+        {
+          "x": 326,
+          "y": 784,
+          "width": 44,
+          "height": 44
+        }
+      ],
+      "input": {
+        "x": 20,
+        "y": 782,
+        "width": 218,
+        "height": 48
+      },
+      "journey": []
+    },
+    {
+      "scenario": "chat-streaming",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "composerControls": [
+        {
+          "x": 238,
+          "y": 784,
+          "width": 44,
+          "height": 44
+        },
+        {
+          "x": 282,
+          "y": 784,
+          "width": 44,
+          "height": 44
+        },
+        {
+          "x": 326,
+          "y": 784,
+          "width": 44,
+          "height": 44
+        }
+      ],
+      "input": {
+        "x": 20,
+        "y": 782,
+        "width": 218,
+        "height": 48
+      },
+      "journey": [
+        "Stop settles fixture turn and restores send"
+      ]
+    },
+    {
+      "scenario": "pair",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "journey": []
+    },
+    {
+      "scenario": "settings",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "journey": []
+    },
+    {
+      "scenario": "voice",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "journey": [
+        "appearance switches without claiming microphone activity"
+      ]
+    },
+    {
+      "scenario": "approvals",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "metrics": {
+        "x": 16,
+        "y": 124,
+        "width": 358,
+        "height": 98
+      },
+      "journey": [
+        "bulk selection opens exact confirmation; Cancel submits nothing"
+      ]
+    },
+    {
+      "scenario": "chat-picker",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "journey": []
+    },
+    {
+      "scenario": "orchestra-dash",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "journey": []
+    },
+    {
+      "scenario": "main",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "journey": []
+    },
+    {
+      "scenario": "main-products",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "journey": []
+    },
+    {
+      "scenario": "chat-omp",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "journey": []
+    }
+  ],
+  "errors": []
+}

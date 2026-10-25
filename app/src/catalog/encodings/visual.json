@@ -1,0 +1,401 @@
+{
+  "schemaVersion": 2,
+  "encodingVersion": "2026-09-10.0",
+  "semantics": {
+    "provider": "base hue family",
+    "model": "core geometry and secondary spectral shift",
+    "effort": "orbit count and energy amplitude",
+    "topology": "declared coordination silhouette; IR mapping is required and never inferred from the drawing",
+    "operatingMode": "temporal organization rune",
+    "state": "motion cadence and explicit text",
+    "economics": "bounded value-score perimeter; dashed when unmeasured"
+  },
+  "providers": {
+    "openai": {
+      "label": "OpenAI",
+      "hue": "#54d7c2"
+    },
+    "anthropic": {
+      "label": "Anthropic",
+      "hue": "#e6b86f"
+    },
+    "xai": {
+      "label": "xAI",
+      "hue": "#d875ef"
+    },
+    "moonshot": {
+      "label": "Moonshot",
+      "hue": "#7f91ff"
+    },
+    "cursor": {
+      "label": "Cursor",
+      "hue": "#5ea9ff"
+    },
+    "fable": {
+      "label": "Fable",
+      "hue": "#ef7d63"
+    },
+    "multi": {
+      "label": "Multi-provider",
+      "hue": "#d9bd7a"
+    },
+    "unknown": {
+      "label": "Unspecified",
+      "hue": "#9ca39a"
+    }
+  },
+  "models": {
+    "codex": {
+      "label": "Codex",
+      "core": "lattice",
+      "accent": "#54d7c2"
+    },
+    "codex-sol": {
+      "label": "Codex Sol",
+      "core": "lattice",
+      "accent": "#f2c75f"
+    },
+    "claude-haiku": {
+      "label": "Claude Haiku",
+      "core": "facet",
+      "accent": "#e6b86f"
+    },
+    "grok": {
+      "label": "Grok",
+      "core": "flare",
+      "accent": "#ef5b45"
+    },
+    "grok-lite": {
+      "label": "Grok Lite",
+      "core": "flare",
+      "accent": "#d875ef"
+    },
+    "kimi": {
+      "label": "Kimi",
+      "core": "crescent",
+      "accent": "#7f91ff"
+    },
+    "fable": {
+      "label": "Fable",
+      "core": "prism",
+      "accent": "#c56fe8"
+    },
+    "cursor": {
+      "label": "Cursor",
+      "core": "bracket",
+      "accent": "#5ea9ff"
+    },
+    "multi": {
+      "label": "Mixed models",
+      "core": "linked",
+      "accent": "#d9bd7a"
+    },
+    "unknown": {
+      "label": "Unspecified",
+      "core": "plain",
+      "accent": "#9ca39a"
+    }
+  },
+  "efforts": {
+    "min": {
+      "label": "Min",
+      "orbits": 1,
+      "energy": 0.35,
+      "accent": "#92a198"
+    },
+    "standard": {
+      "label": "Standard",
+      "orbits": 2,
+      "energy": 0.55,
+      "accent": "#7ee3a0"
+    },
+    "high": {
+      "label": "High",
+      "orbits": 3,
+      "energy": 0.78,
+      "accent": "#68dfff"
+    },
+    "max": {
+      "label": "Max",
+      "orbits": 4,
+      "energy": 1,
+      "accent": "#ffd34c"
+    },
+    "unknown": {
+      "label": "Unspecified",
+      "orbits": 1,
+      "energy": 0.2,
+      "accent": "#9ca39a"
+    }
+  },
+  "topologies": {
+    "solo": {
+      "label": "Solo",
+      "description": "One agent owns the bounded task.",
+      "pattern": "solo",
+      "satellites": 0,
+      "power": 0.16,
+      "nodeAccent": "#7ee3a0"
+    },
+    "paired": {
+      "label": "Paired",
+      "description": "Two agents work in direct partnership.",
+      "pattern": "paired",
+      "satellites": 1,
+      "power": 0.38,
+      "nodeAccent": "#68dfff"
+    },
+    "council": {
+      "label": "Council",
+      "description": "Specialists advise a central synthesis decision.",
+      "pattern": "council",
+      "satellites": 4,
+      "power": 0.72,
+      "nodeAccent": "#cf78ef"
+    },
+    "hierarchy": {
+      "label": "Hierarchy",
+      "description": "A manager delegates down a branching tree.",
+      "pattern": "hierarchy",
+      "satellites": 6,
+      "power": 0.64,
+      "nodeAccent": "#68dfff"
+    },
+    "mesh": {
+      "label": "Mesh",
+      "description": "Peers exchange work directly with one another.",
+      "pattern": "mesh",
+      "satellites": 6,
+      "power": 0.82,
+      "nodeAccent": "#ef8a43"
+    },
+    "ring": {
+      "label": "Ring",
+      "description": "Information circulates through a closed peer loop.",
+      "pattern": "ring",
+      "satellites": 7,
+      "power": 0.58,
+      "nodeAccent": "#ef5b45"
+    },
+    "star": {
+      "label": "Star",
+      "description": "A central hub distributes tasks to independent spokes.",
+      "pattern": "star",
+      "satellites": 6,
+      "power": 0.62,
+      "nodeAccent": "#68dfff"
+    },
+    "swarm": {
+      "label": "Swarm",
+      "description": "A decentralized group coordinates through local signals.",
+      "pattern": "swarm",
+      "satellites": 7,
+      "power": 1,
+      "nodeAccent": "#ff4b2f"
+    },
+    "cluster": {
+      "label": "Cluster",
+      "description": "Semi-independent agent groups coordinate at their edges.",
+      "pattern": "cluster",
+      "satellites": 7,
+      "power": 0.76,
+      "nodeAccent": "#68dfff"
+    },
+    "parallel": {
+      "label": "Parallel",
+      "description": "A task fans out across simultaneous independent lanes.",
+      "pattern": "parallel",
+      "satellites": 4,
+      "power": 0.7,
+      "nodeAccent": "#68dfff"
+    },
+    "pipeline": {
+      "label": "Pipeline",
+      "description": "Specialists hand work forward in a fixed sequence.",
+      "pattern": "pipeline",
+      "satellites": 4,
+      "power": 0.55,
+      "nodeAccent": "#cf78ef"
+    },
+    "supervisor": {
+      "label": "Supervisor",
+      "description": "A supervisor observes peers and intervenes on exceptions.",
+      "pattern": "supervisor",
+      "satellites": 5,
+      "power": 0.74,
+      "nodeAccent": "#ef5b45"
+    },
+    "blackboard": {
+      "label": "Blackboard",
+      "description": "Agents coordinate by reading and writing shared memory.",
+      "pattern": "blackboard",
+      "satellites": 6,
+      "power": 0.7,
+      "nodeAccent": "#7ee3a0"
+    },
+    "marketplace": {
+      "label": "Marketplace",
+      "description": "Agents claim or bid for work around a shared queue.",
+      "pattern": "marketplace",
+      "satellites": 6,
+      "power": 0.72,
+      "nodeAccent": "#ef8a43"
+    },
+    "hybrid": {
+      "label": "Hybrid",
+      "description": "Multiple coordination patterns coexist in one system.",
+      "pattern": "hybrid",
+      "satellites": 7,
+      "power": 0.88,
+      "nodeAccent": "#7f91ff"
+    },
+    "unknown": {
+      "label": "Unspecified",
+      "description": "Coordination topology has not been declared.",
+      "pattern": "unknown",
+      "satellites": 0,
+      "power": 0,
+      "nodeAccent": "#9ca39a"
+    }
+  },
+  "operatingModes": {
+    "copilot": {
+      "label": "Copilot",
+      "marker": "link",
+      "accent": "#7ee3a0",
+      "motion": "paired_sync",
+      "description": "Live paired work"
+    },
+    "overnight": {
+      "label": "Overnight",
+      "marker": "crescent",
+      "accent": "#7f91ff",
+      "motion": "slow_nocturne",
+      "description": "Autonomous long-running harness"
+    },
+    "continuous": {
+      "label": "Continuous",
+      "marker": "cycle",
+      "accent": "#54d7c2",
+      "motion": "closed_cycle",
+      "description": "Closed steady improvement cycle"
+    },
+    "tournament": {
+      "label": "Tournament",
+      "marker": "fork",
+      "accent": "#cf78ef",
+      "motion": "fork_alternation",
+      "description": "Forked competitive variants"
+    },
+    "batch": {
+      "label": "Batch",
+      "marker": "stack",
+      "accent": "#d9bd7a",
+      "motion": "finite_scan",
+      "description": "Bounded queued run"
+    },
+    "unknown": {
+      "label": "Unspecified",
+      "marker": "unknown",
+      "accent": "#9ca39a",
+      "motion": "none",
+      "description": "Mode not declared"
+    }
+  },
+  "runtimeStates": {
+    "claimed": {
+      "label": "Claimed",
+      "marker": "hollow",
+      "accent": "#d9bd7a"
+    },
+    "running": {
+      "label": "Running",
+      "marker": "flow",
+      "accent": "#7ee3a0"
+    },
+    "paused": {
+      "label": "Paused",
+      "marker": "pause",
+      "accent": "#9ca39a"
+    },
+    "stale": {
+      "label": "Stale evidence",
+      "marker": "expired",
+      "accent": "#777e78"
+    },
+    "blocked": {
+      "label": "Blocked",
+      "marker": "contain",
+      "accent": "#e8513a"
+    },
+    "unknown": {
+      "label": "Unspecified",
+      "marker": "unknown",
+      "accent": "#9ca39a"
+    }
+  },
+  "economics": {
+    "valueScore": {
+      "label": "Value score",
+      "unit": "points",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "tokenCost": {
+      "label": "Token cost",
+      "unit": "tokens",
+      "minimum": 0
+    }
+  },
+  "ownerRules": [
+    {
+      "prefix": "codex-sol",
+      "provider": "openai",
+      "model": "codex-sol",
+      "effort": "unknown"
+    },
+    {
+      "prefix": "codex",
+      "provider": "openai",
+      "model": "codex",
+      "effort": "unknown"
+    },
+    {
+      "prefix": "haiku",
+      "provider": "anthropic",
+      "model": "claude-haiku",
+      "effort": "unknown"
+    },
+    {
+      "prefix": "grok-lite",
+      "provider": "xai",
+      "model": "grok-lite",
+      "effort": "unknown"
+    },
+    {
+      "prefix": "grok",
+      "provider": "xai",
+      "model": "grok",
+      "effort": "unknown"
+    },
+    {
+      "prefix": "kimi",
+      "provider": "moonshot",
+      "model": "kimi",
+      "effort": "unknown"
+    },
+    {
+      "prefix": "fable",
+      "provider": "fable",
+      "model": "fable",
+      "effort": "unknown"
+    },
+    {
+      "prefix": "cursor",
+      "provider": "cursor",
+      "model": "cursor",
+      "effort": "unknown"
+    }
+  ],
+  "ownedBy": "kvnloo/aodl"
+}

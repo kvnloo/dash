@@ -15,7 +15,7 @@
 
 **Good PR practices:**
 
-- **Focus**: One logical change per PR. Avoid bundling unrelated fixes.
+- **Focus**: One logical change per PR. Avoid bundling unrelated fixes. Day-pass PRs target `preview`; overnight PRs target `nightly`. Do not pile duplicate slices onto `main`.
 - **Title**: Clear and descriptive (e.g., "Add support for Codex streaming", "Fix WebSocket reconnect on iOS").
 - **Description**: Explain *why* the change is needed, not just *what* changed. Include:
   - Problem statement or motivation.

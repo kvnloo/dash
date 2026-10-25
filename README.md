@@ -21,7 +21,7 @@ Optional env:
 | Var | Default |
 |-----|---------|
 | `DASH_PORT` | `4747` |
-| `DASH_HOST` | Tailscale IPv4 |
+| `DASH_HOST` | `0.0.0.0` (LAN + Tailscale) |
 | `DASH_CWD` | directory you launched from |
 
 ```bash
@@ -69,9 +69,12 @@ See `AGENTS.md` for multi-agent ownership rules.
   - `tdd` — fail-then-pass + mutation. Use this for every behavior change.
   - `dash-onboard` — first-run for any agent (layout, ownership, conventions).
   - `dash-bridge` — bridge architecture and harness adapter patterns (read-only guidance).
+  - `dash-debug` — pair → roster → WS hello/attach on :4747. Never paste tokens.
   - `dash-contribute` — PR hygiene, fail-then-pass proofs, community norms.
   - `dash-android-ui` / `dash-motion` — phone UI (only if the issue assigns UI work).
   - `verify-dash` — runtime proofs against the live bridge.
+
+Pixel language: [docs/design/language.md](docs/design/language.md). Competitor + AODL + frontier-kb UI map: [docs/design/ai-ui-patterns/](docs/design/ai-ui-patterns/README.md).
 
 ## Harness notes
 
@@ -85,4 +88,19 @@ See `AGENTS.md` for multi-agent ownership rules.
 
 Each harness keeps its own session id for multi-turn threads.
 
+The authenticated `GET /roster` also lists existing interactive OMP sessions on
+Linux. It reads live `omp` processes and their open session JSONL handles under
+`~/.omp/agent/sessions` (or `$PI_CODING_AGENT_DIR/sessions`); `TERN_PANE` supplies
+the stable pane identity when available. Worker brokers and noninteractive
+turns are not frontends, and nested subagent transcripts are not separate chats.
+If process inspection is unavailable, broker discovery remains the fallback.
+Both current `--absolute-cwd--` and older single-dash session folders are read.
+An unreadable frontend handle is listed without guessing another session's ID.
+
 Canonical ids: [kvnloo/aodl `harnesses/catalog.json`](https://github.com/kvnloo/aodl/blob/main/harnesses/catalog.json). `o8` is a control room; firstmate is a distro — neither is a Dash spawn target.
+
+## Related
+
+- IR: [kvnloo/aodl](https://github.com/kvnloo/aodl)
+- Research: [kvnloo/frontier-kb](https://github.com/kvnloo/frontier-kb)
+- Hermes governance: [kvnloo/hermes-keel](https://github.com/kvnloo/hermes-keel)

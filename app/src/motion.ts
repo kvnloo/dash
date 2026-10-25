@@ -1,16 +1,56 @@
-/** Shared Reanimated springs. Press is snappier than the nav gel. */
+import { dsh } from "./turbo";
+/** Fast first: motion confirms an action, never gates it.
+ * A normalized critically damped response has a hard timing deadline.
+ * Duration springs are not deadlines: their energy tail can run longer.
+ * System reduced-motion handling is applied by the renderer, keeping these
+ * tokens dependency-free and mutation-testable.
+ */
+export function criticalProgress(t: number): number {
+  "worklet";
+  return (1 - (1 + 9 * t) * Math.exp(-9 * t)) / (1 - 10 * Math.exp(-9));
+}
+export const snappy = { duration: dsh(150, 100), easing: criticalProgress };
+/** Only for direct-manipulation release; not layout or graph movement. */
+export const settle = { duration: dsh(180, 120), easing: criticalProgress };
+export const fade = { duration: dsh(120, 100) };
+/** Reserve two display frames of scheduling headroom inside the 180 ms release budget. */
+export const nav = { duration: dsh(140, 120) };
+export const press = { duration: dsh(70, 60) };
 
-export const GEL = {
-  mass: 0.4,
-  stiffness: 240,
-  damping: 13,
-} as const;
+/** Compatibility names for existing consumers; no elastic nav spring. */
+export const GEL = snappy;
+export const SNAP = snappy;
 
-export const SNAP = {
-  mass: 0.32,
-  stiffness: 420,
-  damping: 22,
-} as const;
+/** Signed velocity in the same units as distance. Bounded, monotone settle. */
+export function navDuration(distance: number, velocity: number, reduced = false): number {
+  "worklet";
+  if (reduced) return 0;
+  const toward = distance * velocity > 0;
+  return toward ? Math.max(80, Math.min(nav.duration, Math.abs(distance / velocity) * 1000)) : nav.duration;
+}
+
+/** Monotone Hermite settle; preserves release velocity unless it would overshoot. */
+export function navProgress(t: number, distance: number, velocity: number, duration: number): number {
+  "worklet";
+  const slope = distance === 0 ? 0 : Math.max(0, Math.min(3, velocity * duration / (1000 * distance)));
+  return (slope - 2) * t * t * t + (3 - 2 * slope) * t * t + slope * t;
+}
+
+/** Release velocity uses the same units as the animated value, not screen pixels. */
+export function settleTiming(distance: number, velocity: number) {
+  "worklet";
+  const duration = navDuration(distance, velocity);
+  return { duration, easing: (t: number) => {
+    "worklet";
+    return navProgress(t, distance, velocity, duration);
+  } };
+}
+
+/** Drop stagger entirely: every item is usable immediately, even in long lists. */
+export function entranceDelay(_index: number): number {
+  "worklet";
+  return 0;
+}
 
 export const PRESS_SCALE = {
   row: 0.985,
@@ -19,7 +59,7 @@ export const PRESS_SCALE = {
 } as const;
 
 export const MOTION_MS = {
-  enter: 240,
-  exit: 140,
-  stagger: 36,
+  enter: dsh(150, 0),
+  exit: dsh(120, 0),
+  stagger: 0,
 } as const;
