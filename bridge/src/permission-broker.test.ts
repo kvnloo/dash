@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import {
-  AcpPermissionResponse,
   PERMISSION_TIMEOUT_MS,
   PermissionBroker,
-  PermissionBrokerOption,
-  PermissionNotice,
-  PermissionScheduler,
-  PermissionScope,
+  type AcpPermissionResponse,
+  type PermissionBrokerOption,
+  type PermissionNotice,
+  type PermissionScheduler,
+  type PermissionScope,
 } from "./permission-broker";
 
 type NoticeRecord = { recipient: string; notice: PermissionNotice };
