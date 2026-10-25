@@ -43,21 +43,22 @@ class DashStylusModule : Module() {
       if (root == null) "" else {
         val d = root.resources.displayMetrics.density
         val rect = Rect((x*d).toInt(), (y*d).toInt(), ((x+width)*d).toInt(), ((y+height)*d).toInt())
-        textViews(root).mapNotNull { view ->
+        textViews(topScreen(root) ?: root).mapNotNull { view ->
           val visible = Rect()
-          if (!view.getGlobalVisibleRect(visible) || !Rect.intersects(rect, visible)) null
+          val clipped = Rect(rect)
+          if (!view.getGlobalVisibleRect(visible) || !clipped.intersect(visible)) null
           else {
             val layout = view.layout
             if (layout == null || view.text.isEmpty()) null else {
               val loc = IntArray(2); view.getLocationOnScreen(loc)
-              val localTop = (rect.top - loc[1] - view.totalPaddingTop + view.scrollY).coerceAtLeast(0)
-              val localBottom = (rect.bottom - loc[1] - view.totalPaddingTop + view.scrollY).coerceAtMost(layout.height - 1)
+              val localTop = (clipped.top - loc[1] - view.totalPaddingTop + view.scrollY).coerceAtLeast(0)
+              val localBottom = (clipped.bottom - loc[1] - view.totalPaddingTop + view.scrollY).coerceAtMost(layout.height - 1)
               if (localBottom < localTop) null else {
                 val first = layout.getLineForVertical(localTop)
                 val last = layout.getLineForVertical(localBottom)
                 (first..last).map { line ->
-                  val left = (rect.left-loc[0]-view.totalPaddingLeft+view.scrollX).toFloat()
-                  val right = (rect.right-loc[0]-view.totalPaddingLeft+view.scrollX).toFloat()
+                  val left = (clipped.left-loc[0]-view.totalPaddingLeft+view.scrollX).toFloat()
+                  val right = (clipped.right-loc[0]-view.totalPaddingLeft+view.scrollX).toFloat()
                   val a = layout.getOffsetForHorizontal(line, left)
                   val b = layout.getOffsetForHorizontal(line, right)
                   view.text.subSequence(minOf(a,b), maxOf(a,b)).toString()
@@ -70,6 +71,14 @@ class DashStylusModule : Module() {
     }.runOnQueue(Queues.MAIN)
   }
 
+  /** Native-stack keeps the covered workspace mounted; never quote its occluded text. */
+  private fun topScreen(root: View): View? {
+    if (!root.isShown) return null
+    if (root is ViewGroup) {
+      for (i in root.childCount - 1 downTo 0) topScreen(root.getChildAt(i))?.let { return it }
+    }
+    return if (root.javaClass.name == "com.swmansion.rnscreens.Screen") root else null
+  }
   private fun textViews(root: View): List<TextView> {
     if (!root.isShown) return emptyList()
     if (root is TextView) return listOf(root)
