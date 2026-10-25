@@ -3,6 +3,7 @@ set -euo pipefail
 mkdir -p .spen-voice-receipts
 cache="$HOME/.cache/dash-interaction-repair-native-20261022"
 [ -d "$cache/app/node_modules" ]
+[ ! -L app/node_modules ] || rm app/node_modules
 ln -s "$cache/app/node_modules" app/node_modules
 ln -s "$cache/bridge/node_modules" bridge/node_modules
 if [ -d "$cache/node_modules" ]; then ln -s "$cache/node_modules" node_modules; fi
