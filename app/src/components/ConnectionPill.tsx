@@ -4,6 +4,7 @@ import { PRESS_SCALE } from "../motion";
 import { bridge } from "../net/bridge";
 import { store } from "../store/app";
 import { colors, controlMin, glass, radius, space, type } from "../theme";
+import { connectionBannerFor, createConnectionRetry } from "./connection-banner";
 import { GlassSurface } from "./GlassSurface";
 import { PressScale } from "./PressScale";
 
@@ -13,29 +14,12 @@ const exit = FadeOut.duration(110).easing(Easing.out(Easing.cubic)).reduceMotion
 /** One non-blocking connection banner. The bridge owns reconnects and the queued drafts. */
 export function ConnectionPill() {
   const connection = store.use((s) => s.connection);
-  if (connection.status === "online" || connection.status === "idle") return null;
+  const banner = connectionBannerFor(connection);
+  if (!banner) return null;
 
-  const connecting = connection.status === "connecting";
-  const heading = connecting ? "Connecting to bridge" : "Bridge unreachable";
-  const failure = connection.error?.trim();
-  const detail = connecting
-    ? "Waiting for the saved bridge to respond."
-    : `${failure || "No response. Check Tailscale on your phone and computer."} · Queued drafts kept`;
-
-  // A double tap on the same mounted banner must not restart an in-flight retry.
-  // bridge.retry() synchronously changes the store to "connecting"; a later
-  // "offline" render gives the next failed attempt its own retry action.
-  let requested = false;
-  const retry = () => {
-    if (connecting || requested) return;
-    requested = true;
-    try {
-      bridge.retry();
-    } catch (error) {
-      requested = false;
-      throw error;
-    }
-  };
+  // bridge.retry() synchronously switches the store to "connecting". The
+  // next offline render gives the next failed attempt a fresh retry guard.
+  const retry = createConnectionRetry(banner.connecting, () => bridge.retry());
 
   return (
     <Animated.View testID="connection-banner" entering={enter} exiting={exit} style={styles.wrap}>
@@ -44,25 +28,25 @@ export function ConnectionPill() {
           testID="connection-banner-copy"
           accessible
           accessibilityRole="text"
-          accessibilityLiveRegion={connecting ? "none" : "polite"}
-          accessibilityLabel={`${heading}. ${detail}`}
+          accessibilityLiveRegion={banner.liveRegion}
+          accessibilityLabel={banner.heading + ". " + banner.detail}
           style={styles.copy}
         >
-          <Text numberOfLines={1} style={[styles.heading, connecting && styles.connecting]}>{heading}</Text>
-          <Text numberOfLines={2} style={styles.detail}>{detail}</Text>
+          <Text numberOfLines={1} style={[styles.heading, banner.connecting && styles.connecting]}>{banner.heading}</Text>
+          <Text numberOfLines={2} style={styles.detail}>{banner.detail}</Text>
         </View>
         <PressScale
           testID="connection-retry"
           accessibilityRole="button"
-          accessibilityLabel={connecting ? "Connecting to bridge" : "Retry bridge connection"}
+          accessibilityLabel={banner.retryLabel}
           accessibilityHint="Retries the saved bridge connection. Queued drafts stay on this phone."
-          accessibilityState={{ disabled: connecting, busy: connecting }}
-          disabled={connecting}
+          accessibilityState={{ disabled: banner.connecting, busy: banner.connecting }}
+          disabled={banner.connecting}
           onPress={retry}
           scaleTo={PRESS_SCALE.control}
-          style={[styles.retry, connecting && styles.retryDisabled]}
+          style={[styles.retry, banner.connecting && styles.retryDisabled]}
         >
-          <Text style={styles.retryText}>{connecting ? "Trying…" : "Retry"}</Text>
+          <Text style={styles.retryText}>{banner.retryText}</Text>
         </PressScale>
       </GlassSurface>
     </Animated.View>

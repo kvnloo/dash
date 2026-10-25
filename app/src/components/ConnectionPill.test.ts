@@ -1,168 +1,132 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import type { Connection } from "../model";
+import { connectionBannerFor, createConnectionRetry } from "./connection-banner";
 
-let connection: Pick<Connection, "status" | "error"> = { status: "idle" };
-let retryCalls = 0;
+describe("bridge connection banner decisions", () => {
+  test("no warning for online or idle, even with a stale error", () => {
+    expect(connectionBannerFor({ status: "online", error: "Old network failure" })).toBeNull();
+    expect(connectionBannerFor({ status: "idle" })).toBeNull();
+  });
 
-// Render the component tree without booting the native bridge or a phone.
-mock.module("react-native", () => ({
-  StyleSheet: { create: <T extends object>(styles: T): T => styles },
-  Text: "Text",
-  View: "View",
-}));
-const animation = {
-  duration(_ms: number) { return this; },
-  easing(_ease: unknown) { return this; },
-  reduceMotion(_setting: unknown) { return this; },
-};
-mock.module("react-native-reanimated", () => ({
-  default: { View: "Animated.View" },
-  Easing: { out: () => "ease-out", cubic: () => "cubic" },
-  FadeIn: animation,
-  FadeOut: animation,
-  ReduceMotion: { System: "system" },
-}));
-mock.module("../motion", () => ({ PRESS_SCALE: { control: 0.92 } }));
-mock.module("../net/bridge", () => ({ bridge: { retry: () => { retryCalls += 1; } } }));
-mock.module("../store/app", () => ({
-  store: {
-    use: (selector: (state: { connection: typeof connection }) => unknown): unknown =>
-      selector({ connection }),
-  },
-}));
-mock.module("../theme", () => ({
-  colors: { warn: "#ffb020", text: "#f2f2f2", textMuted: "#8b8b8b" },
-  controlMin: 44,
-  glass: { hair2: "#262626", fillChipOn: "#121212" },
-  radius: { md: 16, pill: 999 },
-  space: { xs: 4, sm: 8, md: 12 },
-  type: { small: { fontSize: 13 }, label: { fontSize: 12 } },
-}));
-mock.module("./GlassSurface", () => ({ GlassSurface: "GlassSurface" }));
-mock.module("./PressScale", () => ({ PressScale: "PressScale" }));
+  test("offline shows the actual trimmed failure and keeps queued drafts visible", () => {
+    const banner = connectionBannerFor({ status: "offline", error: "  Timed out connecting  " });
+    expect(banner).toEqual({
+      connecting: false,
+      heading: "Bridge unreachable",
+      detail: "Timed out connecting · Queued drafts kept",
+      retryLabel: "Retry bridge connection",
+      retryText: "Retry",
+      liveRegion: "polite",
+    });
+    expect(banner?.detail).not.toContain("Tailscale is down");
+  });
 
-const { ConnectionPill } = await import("./ConnectionPill");
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function propsFor(node: unknown, testID: string): Record<string, unknown> | undefined {
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      const found = propsFor(child, testID);
-      if (found) return found;
+  test("no response uses an honest check, not an invented outage diagnosis", () => {
+    for (const error of [undefined, "", "  \n  "]) {
+      const banner = connectionBannerFor({ status: "offline", error });
+      expect(banner?.detail).toBe(
+        "No response. Check Tailscale on your phone and computer. · Queued drafts kept",
+      );
     }
-    return undefined;
-  }
-  if (!isRecord(node) || !isRecord(node.props)) return undefined;
-  if (node.props.testID === testID) return node.props;
-  return propsFor(node.props.children, testID);
-}
+  });
 
-function visibleText(node: unknown): string {
-  if (typeof node === "string") return node;
-  if (Array.isArray(node)) return node.map(visibleText).join("");
-  if (isRecord(node) && isRecord(node.props)) return visibleText(node.props.children);
-  return "";
-}
+  test("connecting ignores stale failures and disables retry with non-live copy", () => {
+    expect(connectionBannerFor({ status: "connecting", error: "Previous timeout" })).toEqual({
+      connecting: true,
+      heading: "Connecting to bridge",
+      detail: "Waiting for the saved bridge to respond.",
+      retryLabel: "Connecting to bridge",
+      retryText: "Trying…",
+      liveRegion: "none",
+    });
+  });
 
-function render(status: Connection["status"], error?: string) {
-  connection = { status, error };
-  return ConnectionPill();
-}
-
-function pressRetry(tree: unknown): void {
-  const retry = propsFor(tree, "connection-retry");
-  if (typeof retry?.onPress !== "function") throw new Error("Retry control missing");
-  retry.onPress();
-}
-
-beforeEach(() => {
-  connection = { status: "idle" };
-  retryCalls = 0;
+  test("the banner decision does not mutate connection data or queued drafts", () => {
+    const drafts = [{ id: "queued-1", text: "Unsaved prompt" }];
+    const connection: { status: "offline"; error: string; queuedDrafts: typeof drafts } = {
+      status: "offline",
+      error: "  Connection closed  ",
+      queuedDrafts: drafts,
+    };
+    const result = connectionBannerFor(connection);
+    expect(result?.detail).toContain("Connection closed");
+    expect(connection.error).toBe("  Connection closed  ");
+    expect(connection.queuedDrafts).toBe(drafts);
+    expect(drafts).toEqual([{ id: "queued-1", text: "Unsaved prompt" }]);
+  });
 });
 
-describe("bridge connection banner", () => {
-  test("does not claim an outage while online or unpaired", () => {
-    expect(render("online")).toBeNull();
-    expect(render("idle")).toBeNull();
-  });
-
-  test("unreachable bridge shows the actual failure, a retry, and keeps drafts visible", () => {
-    const tree = render("offline", "  Timed out connecting  ");
-    const copy = propsFor(tree, "connection-banner-copy");
-    const retry = propsFor(tree, "connection-retry");
-
-    expect(propsFor(tree, "connection-banner")).toBeDefined();
-    expect(visibleText(tree)).toContain("Bridge unreachable");
-    expect(visibleText(tree)).toContain("Timed out connecting");
-    expect(visibleText(tree)).toContain("Queued drafts kept");
-    expect(visibleText(tree)).not.toContain("Tailscale is down");
-    expect(copy?.accessibilityLabel).toContain("Timed out connecting");
-    expect(copy?.accessibilityLiveRegion).toBe("polite");
-    expect(retry?.accessibilityLabel).toBe("Retry bridge connection");
-    expect(retry?.disabled).toBe(false);
-  });
-
-  test("unknown cellular failure offers a check, not an invented diagnosis", () => {
-    const tree = render("offline");
-    expect(visibleText(tree)).toContain("No response");
-    expect(visibleText(tree)).toContain("Check Tailscale on your phone and computer.");
-    expect(visibleText(tree)).toContain("Queued drafts kept");
-  });
-
-  test("Retry invokes only one immediate reconnect per failed attempt", () => {
-    const offline = render("offline", "Can't reach the bridge");
-    pressRetry(offline);
-    pressRetry(offline);
+describe("bridge retry guard", () => {
+  test("a rapid double-tap requests one retry and a later offline attempt can retry", () => {
+    let retryCalls = 0;
+    const retryBridge = () => { retryCalls += 1; };
+    const failedAttempt = createConnectionRetry(false, retryBridge);
+    failedAttempt();
+    failedAttempt();
     expect(retryCalls).toBe(1);
 
-    const connecting = render("connecting");
-    pressRetry(connecting);
+    const stillConnecting = createConnectionRetry(true, retryBridge);
+    stillConnecting();
+    stillConnecting();
     expect(retryCalls).toBe(1);
 
-    const failedAgain = render("offline", "Timed out connecting");
-    pressRetry(failedAgain);
+    const failedAgain = createConnectionRetry(false, retryBridge);
+    failedAgain();
+    failedAgain();
     expect(retryCalls).toBe(2);
   });
 
-  test("connection attempt remains visible but cannot spawn another retry", () => {
-    const tree = render("connecting");
-    const retry = propsFor(tree, "connection-retry");
-    const copy = propsFor(tree, "connection-banner-copy");
-    expect(visibleText(tree)).toContain("Connecting to bridge");
-    expect(visibleText(tree)).not.toContain("Bridge unreachable");
-    expect(retry?.disabled).toBe(true);
-    expect(retry?.accessibilityState).toEqual({ disabled: true, busy: true });
-    expect(copy?.accessibilityLiveRegion).toBe("none");
-    pressRetry(tree);
-    expect(retryCalls).toBe(0);
+  test("an immediate bridge exception does not permanently consume retry", () => {
+    let attempts = 0;
+    const retry = createConnectionRetry(false, () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("Bridge unavailable");
+    });
+
+    expect(retry).toThrow("Bridge unavailable");
+    expect(retry).not.toThrow();
+    retry();
+    expect(attempts).toBe(2);
+  });
+});
+
+describe("native connection banner source contracts", () => {
+  const source = readFileSync(new URL("./ConnectionPill.tsx", import.meta.url), "utf8");
+
+  test("component uses the independently tested decisions and only retries the bridge", () => {
+    expect(source).toContain("const banner = connectionBannerFor(connection);");
+    expect(source).toContain("const retry = createConnectionRetry(banner.connecting, () => bridge.retry());");
+    expect(source).toContain("onPress={retry}");
+    expect(source).not.toMatch(/clearQueued|removeQueued|dequeue|flushPendingSends|clearDrafts|setConnection\(/);
   });
 
-  test("retry has a native 44-DIP target, clear TalkBack copy, and reduced motion", () => {
-    const tree = render("offline", "Connection closed");
-    const retry = propsFor(tree, "connection-retry");
-    expect(retry?.accessibilityRole).toBe("button");
-    expect(retry?.accessibilityHint).toContain("Queued drafts stay on this phone");
-    expect(retry?.accessibilityState).toEqual({ disabled: false, busy: false });
-    expect(retry?.style).toEqual(expect.arrayContaining([
-      expect.objectContaining({ minHeight: 44, minWidth: 44 }),
-    ]));
+  test("native accessibility and 44-DIP hit target remain wired", () => {
+    expect(source).toContain('testID="connection-banner"');
+    expect(source).toContain('testID="connection-retry"');
+    expect(source).toContain('accessibilityRole="button"');
+    expect(source).toContain("accessibilityLabel={banner.retryLabel}");
+    expect(source).toContain("accessibilityLiveRegion={banner.liveRegion}");
+    expect(source).toContain("accessibilityState={{ disabled: banner.connecting, busy: banner.connecting }}");
+    expect(source).toContain("disabled={banner.connecting}");
+    expect(source).toContain("Queued drafts stay on this phone.");
+    expect(source).toContain("minHeight: controlMin");
+    expect(source).toContain("minWidth: controlMin");
+    const theme = readFileSync(new URL("../theme.ts", import.meta.url), "utf8");
+    expect(theme).toMatch(/export const controlMin = 44\b/);
+  });
 
-    const source = readFileSync(new URL("./ConnectionPill.tsx", import.meta.url), "utf8");
+  test("banner has 110ms ease-out and reduced-motion behavior without spring", () => {
     expect(source).toContain("FadeIn.duration(110)");
     expect(source).toContain("FadeOut.duration(110)");
     expect(source).toContain("Easing.out(Easing.cubic)");
     expect(source).toContain("reduceMotion(ReduceMotion.System)");
     expect(source).not.toContain("withSpring");
+    expect(source).toContain("numberOfLines={2}");
   });
 
-  test("banner only requests bridge retry; it never clears or drains queued drafts", () => {
-    const source = readFileSync(new URL("./ConnectionPill.tsx", import.meta.url), "utf8");
-    expect(source).toContain("bridge.retry()");
-    expect(source).not.toMatch(/clearQueued|removeQueued|dequeue|flushPendingSends|clearDrafts/);
-    expect(source).not.toContain("setConnection(");
+  test("test imports are isolated: no process-wide Bun module mocks", () => {
+    const self = readFileSync(new URL("./ConnectionPill.test.ts", import.meta.url), "utf8");
+    expect(self).not.toContain("mock" + ".module(");
+    expect(self).not.toMatch(/from ["']\.\.\/(theme|store\/app|net\/bridge)["']/);
   });
 });
