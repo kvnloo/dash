@@ -19,13 +19,22 @@ function setup(legacyEnabled: boolean) {
       checks++;
       const body: unknown = JSON.parse(String(init?.body));
       const token = typeof body === "object" && body !== null && "token" in body ? body.token : undefined;
+      let claims: unknown;
+      try {
+        const encoded = typeof token === "string" ? token.split(".")[1] : undefined;
+        claims = encoded ? JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) : null;
+      } catch {
+        claims = null;
+      }
+      const valid = typeof claims === "object" && claims !== null &&
+        "sub" in claims && "exp" in claims && "aud" in claims && "scope" in claims;
       return Response.json({
-        active: !revoked && typeof token === "string",
+        active: !revoked && valid,
         token_type: "access",
-        aud: "dash",
-        scope: "dash:chat",
-        sub: "cred_0123456789abcdef",
-        exp: Math.floor(Date.now() / 1000) + 120,
+        aud: valid ? claims.aud : null,
+        scope: valid ? claims.scope : null,
+        sub: valid ? claims.sub : null,
+        exp: valid ? claims.exp : null,
       });
     },
   });
