@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import pinnedCatalog from "./aodl-catalog.json";
-import { AODL_HARNESS_IDS, loadAodlNetworkView, networkViewFromCatalog } from "./network-view";
-import { AODL_NETWORK_IDS } from "./orchestra";
+import { AODL_HARNESS_IDS, loadAodlNetworkView, networkViewFromCatalog, type AodlHarnessId } from "./network-view";
+import { AODL_NETWORK_IDS, type AodlNetworkId } from "./orchestra";
 
-const expectedNetwork = [
+const expectedNetwork: AodlNetworkId[] = [
   "aodl", "dash", "frontier-kb", "hermes-keel", "hermes-agent", "blueprint", "evolve",
 ];
-const expectedHarnesses = [
+const expectedHarnesses: AodlHarnessId[] = [
   "hermes", "omp", "o8", "grok", "codex", "claude", "pi", "fx",
 ];
 
