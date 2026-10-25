@@ -18,6 +18,10 @@ import type {
   DeliveryLedgerReservation,
 } from "./delivery-ledger";
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 const A = "a".repeat(64);
 const B = "b".repeat(64);
 
@@ -111,7 +115,8 @@ describe("crash-safe bridge delivery ledger", () => {
       await ledger.update(identity("three"), { state: "completed", at: 160 });
 
       const raw = await fs.readFile(join(root, LEDGER_FILENAME), "utf8");
-      expect(JSON.parse(raw).version).toBe(1);
+      const stored: unknown = JSON.parse(raw);
+      expect(isObject(stored) && stored.version).toBe(1);
       expect(raw).toContain(A);
       expect(raw).not.toContain("authorization");
       expect(raw).not.toContain("messageBody");
@@ -286,7 +291,8 @@ describe("crash-safe bridge delivery ledger", () => {
     await withDir(async (root) => {
       const seed = await opened(root);
       await seed.reserve(reservation("persisted"));
-      for (const fault of ["write", "file-sync"] as const) {
+      const faults: Fault[] = ["write", "file-sync"];
+      for (const fault of faults) {
         const ledger = await opened(root, faultyFilesystem(fault));
         await expect(ledger.update(identity("persisted"), { state: "started", at: 120 }))
           .rejects.toThrow("injected");
@@ -305,7 +311,8 @@ describe("crash-safe bridge delivery ledger", () => {
     await withDir(async (root) => {
       const initial = await opened(root);
       await initial.reserve(reservation("existing"));
-      for (const fault of ["rename", "directory-sync"] as const) {
+      const faults: Fault[] = ["rename", "directory-sync"];
+      for (const fault of faults) {
         const ledger = await opened(root, faultyFilesystem(fault));
         await expect(ledger.reserve(reservation("candidate-" + fault))).rejects.toThrow("injected");
         await expect(ledger.get(identity("existing"))).rejects.toBeInstanceOf(DeliveryLedgerUnavailableError);
@@ -359,7 +366,7 @@ describe("crash-safe bridge delivery ledger", () => {
       await ledger.load();
       await ledger.reserve(reservation("one"));
       await expect(ledger.reserve(reservation("two"))).rejects.toBeInstanceOf(DeliveryLedgerCapacityError);
-      expect((await opened(root)).get(identity("one"))).resolves.toMatchObject({ turnId: "turn:one" });
+      await expect((await opened(root)).get(identity("one"))).resolves.toMatchObject({ turnId: "turn:one" });
       expect(await ledger.get(identity("two"))).toBeUndefined();
       const tooSmall = new DeliveryLedger({ root, maxBytes: 256 });
       await expect(tooSmall.load()).rejects.toBeInstanceOf(DeliveryLedgerCorruptError);
@@ -373,8 +380,10 @@ describe("crash-safe bridge delivery ledger", () => {
       await seed.reserve(reservation("a"));
       const path = join(root, LEDGER_FILENAME);
       const raw = await fs.readFile(path, "utf8");
-      const document = JSON.parse(raw);
-      const first = document.records[0];
+      const document: unknown = JSON.parse(raw);
+      if (!isObject(document) || !Array.isArray(document.records)) throw new Error("invalid fixture");
+      const first: unknown = document.records[0];
+      if (!isObject(first) || !isObject(first.receipt)) throw new Error("invalid record fixture");
       await fs.writeFile(path, JSON.stringify({ version: 1, records: [first, first] }));
       await expect(new DeliveryLedger({ root }).load()).rejects.toBeInstanceOf(DeliveryLedgerCorruptError);
       await fs.writeFile(path, JSON.stringify({
@@ -383,7 +392,7 @@ describe("crash-safe bridge delivery ledger", () => {
       }));
       await expect(new DeliveryLedger({ root }).load()).rejects.toBeInstanceOf(DeliveryLedgerCorruptError);
       await fs.writeFile(path, raw);
-      expect((await opened(root)).get(identity("a"))).resolves.toMatchObject({
+      await expect((await opened(root)).get(identity("a"))).resolves.toMatchObject({
         turnId: "turn:a", reconciliationRequired: true,
       });
     });
