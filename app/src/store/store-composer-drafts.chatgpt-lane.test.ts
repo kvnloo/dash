@@ -55,7 +55,6 @@ if (selectedCase === undefined) {
   });
 
   test("an older in-flight write must not overwrite a newer persisted draft", () => {
-    // Regression: currently red until Hermes serializes AsyncStorage.setItem calls.
     isolatedCase("out-of-order");
   });
 } else {
@@ -260,18 +259,23 @@ if (selectedCase === undefined) {
         await changeAppState("background");
         edit("a", "newer");
         await changeAppState("background");
+        // Writes are serialized: the newer snapshot waits for the in-flight write
+        // instead of racing it, so completion order cannot reorder edits.
+        expect(heldWrites).toHaveLength(1);
+        const first = heldWrites[0];
+        if (!first) throw new Error("Expected one in-flight storage write");
+        first();
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(storedText("a")).toBe("older");
         expect(heldWrites).toHaveLength(2);
         const second = heldWrites[1];
-        const first = heldWrites[0];
-        if (!first || !second) throw new Error("Expected two in-flight storage writes");
+        if (!second) throw new Error("Expected the queued newer storage write");
         second();
         await Promise.resolve();
         expect(storedText("a")).toBe("newer");
-        first();
-        await Promise.resolve();
-        // Intentional failing regression on current producer: completion order
-        // currently determines durable value instead of edit order.
-        expect(storedText("a")).toBe("newer");
+        // No older write remains that could still land after the newer one.
+        expect(heldWrites).toHaveLength(2);
         break;
       }
       default:
