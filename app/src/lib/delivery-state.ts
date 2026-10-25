@@ -119,7 +119,7 @@ export function createDelivery(input: NewDelivery): DeliveryRecord {
       !validId(input.target.harness) || !validTime(input.at)) {
     throw new Error("Delivery identity and timestamp must be valid");
   }
-  return Object.freeze({
+  const record: DeliveryRecord = {
     clientId: input.clientId,
     turnId: input.turnId,
     conversationId: input.conversationId,
@@ -130,7 +130,8 @@ export function createDelivery(input: NewDelivery): DeliveryRecord {
     attempts: 0,
     createdAt: input.at,
     updatedAt: input.at,
-  });
+  };
+  return Object.freeze(record);
 }
 
 export function deliveryIdentity(record: DeliveryRecord): DeliveryIdentity {
@@ -181,10 +182,14 @@ function admit(record: DeliveryRecord, at: number, stage: "acked-by-bridge" | "s
   });
 }
 
+function failure(kind: DeliveryFailure["kind"], at: number, message: string): DeliveryFailure {
+  return Object.freeze({ kind, at, message });
+}
+
 function deny(record: DeliveryRecord, at: number, message: string): DeliveryRecord {
   return changed(record, at, {
     status: "rejected",
-    failure: Object.freeze({ kind: "rejected", at, message }),
+    failure: failure("rejected", at, message),
   });
 }
 
@@ -198,18 +203,14 @@ export function reduceDelivery(record: DeliveryRecord, event: DeliveryEvent): De
 
   switch (event.type) {
     case "transport":
-      if (record.status !== "ready") return record;
+      if (record.status !== "ready" || event.at < record.updatedAt) return record;
       return changed(record, event.at, {
         phase: event.accepted ? "sent" : record.phase,
         status: event.accepted ? "awaiting-ack" : "retry-needed",
         attempts: record.attempts + 1,
         lastAttemptAt: event.at,
         ...(event.accepted ? { sentAt: event.at } : {}),
-        failure: event.accepted ? undefined : Object.freeze({
-          kind: "transport",
-          at: event.at,
-          message: "Socket did not accept the send",
-        }),
+        failure: event.accepted ? undefined : failure("transport", event.at, "Socket did not accept the send"),
       });
 
     case "receipt":
@@ -226,44 +227,33 @@ export function reduceDelivery(record: DeliveryRecord, event: DeliveryEvent): De
           event.at < (record.lastAttemptAt ?? record.createdAt)) return record;
       return changed(record, event.at, {
         status: "reconcile-required",
-        failure: Object.freeze({
-          kind: "timeout",
-          at: event.at,
-          message: "Bridge receipt missing; execution outcome unknown",
-        }),
+        failure: failure("timeout", event.at, "Bridge receipt missing; execution outcome unknown"),
       });
 
     case "disconnect":
       if ((record.status !== "ready" && record.status !== "awaiting-ack") ||
-          event.at < (record.lastAttemptAt ?? record.createdAt)) return record;
+          event.at < record.updatedAt) return record;
       return changed(record, event.at, {
         status: record.status === "awaiting-ack" ? "reconcile-required" : "retry-needed",
-        failure: Object.freeze({
-          kind: "disconnected",
-          at: event.at,
-          message: record.status === "awaiting-ack"
-            ? "Socket closed before bridge receipt; execution outcome unknown"
-            : "Connection closed before send",
-        }),
+        failure: failure("disconnected", event.at, record.status === "awaiting-ack"
+          ? "Socket closed before bridge receipt; execution outcome unknown"
+          : "Connection closed before send"),
       });
 
     case "reconcile":
-      if (record.status !== "reconcile-required" || event.outcome === "unknown") return record;
+      if (record.status !== "reconcile-required" || event.outcome === "unknown" ||
+          event.at < record.updatedAt) return record;
       if (event.outcome === "not-admitted") {
         return changed(record, event.at, {
           status: "retry-needed",
-          failure: Object.freeze({
-            kind: "not-admitted",
-            at: event.at,
-            message: event.message ?? "Bridge confirms turn was not admitted",
-          }),
+          failure: failure("not-admitted", event.at, event.message ?? "Bridge confirms turn was not admitted"),
         });
       }
       if (event.outcome === "rejected") return deny(record, event.at, event.message ?? "Bridge rejected turn");
       return admit(record, event.at, event.outcome);
 
     case "retry":
-      if (record.status !== "retry-needed") return record;
+      if (record.status !== "retry-needed" || event.at < record.updatedAt) return record;
       return changed(record, event.at, { status: "ready", failure: undefined });
   }
 }
