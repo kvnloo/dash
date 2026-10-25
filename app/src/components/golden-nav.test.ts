@@ -461,10 +461,10 @@ describe("workspace header under the bar", () => {
   const src = readFileSync(join(import.meta.dir, "WorkspaceHeader.tsx"), "utf8");
   test("names the current pane and keeps compose, settings and approvals reachable", () => {
     expect(src).toContain("TAB_LABELS[clampTab(tab)]");
-    expect(src).toContain('label="New chat"');
-    expect(src).toContain('label="Settings"');
+    expect(src).toContain("label={WORKSPACE_ACTION_LABELS.newChat}");
+    expect(src).toContain("label={WORKSPACE_ACTION_LABELS.settings}");
     expect(src).toContain("createConversation");
-    expect(src).toContain("pending > 0");
+    expect(src).toContain("upstreamApprovalAction(pending)");
     expect(src).toContain("s.items.filter(actionable).length");
     expect(src).toContain('navigation.navigate("Approvals")');
     expect(src).toContain("backgroundColor: colors.gold");
