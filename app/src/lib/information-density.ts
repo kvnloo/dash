@@ -35,6 +35,8 @@ export function resolveInformationDetail(layout: Density, selected: InformationD
 export type StatEvidenceSegment = { label: string; n: number };
 export type StatInformationInput = {
   value: number;
+  /** Optional source denominator for a breakdown of a subset rather than the tile value. */
+  segmentTotal?: number;
   segments?: readonly StatEvidenceSegment[];
   series?: readonly number[];
 };
@@ -61,10 +63,12 @@ export function projectStatInformation(level: InformationDetail, input: StatInfo
     const pieces = segments.map(item => item.label.trim() + " " + item.n);
     let value = pieces.join(" · ");
     if (level === "rich") {
-      value += Number.isSafeInteger(input.value) && input.value >= 0
-        ? sum === input.value
-          ? " · sum " + sum + " matches displayed " + input.value
-          : " · segment sum " + sum + "; displayed " + input.value + " (not reconciled)"
+      const denominator = input.segmentTotal ?? input.value;
+      const label = input.segmentTotal === undefined ? "displayed " : "reference total ";
+      value += Number.isSafeInteger(denominator) && denominator >= 0
+        ? sum === denominator
+          ? " · sum " + sum + " matches " + label + denominator
+          : " · segment sum " + sum + "; " + label + denominator + " (not reconciled)"
         : " · segment sum " + sum;
     }
     result.push({ label: "Segments", value });
