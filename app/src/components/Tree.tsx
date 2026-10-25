@@ -8,6 +8,7 @@ import { PanResponder, Platform, Pressable, StyleSheet, Text, View, type ViewPro
 import Animated, { FadeIn, FadeOut, LinearTransition, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { haptic } from "../haptics";
 import { childNodes, treeIndex, type TreeKind, type TreeNode } from "../lib/tree";
+import { treePlaceholderFor, treeRowA11yAction, treeRowAccessibility, treeRowTarget, type TreePlaceholder } from "../lib/a11y-tree";
 import { SNAP, MOTION_MS, fade } from "../motion";
 import { colors, controlMin, glass, radius, space, type } from "../theme";
 import { TreeKeyboard } from "./TreeKeyboard";
@@ -28,12 +29,15 @@ function TreeCell({ children, ...props }: ViewProps) {
   return <Animated.View {...props} layout={Platform.OS === "web" || TURBO ? undefined : layout}>{children}</Animated.View>;
 }
 
-function Row({ item, selected, activate, toggle, collapse, inline }: {
-  inline: boolean; item: ItemInstance<TreeNode>; selected: boolean; activate(): void; toggle(): void; collapse(): void;
+function Row({ item, selected, activate, toggle, collapse, inline, pendingChildren, placeholder }: {
+  inline: boolean; item: ItemInstance<TreeNode>; selected: boolean; pendingChildren: boolean; placeholder: TreePlaceholder;
+  activate(): void; toggle(): void; collapse(): void;
 }) {
   const node = item.getItemData();
   const expanded = item.isExpanded();
   const depth = item.getItemMeta().level;
+  const a11y = treeRowAccessibility(node, { selected, expanded, pendingChildren, placeholder });
+  const longPress = node.onLongPress ? () => { haptic.select(); node.onLongPress?.(); } : undefined;
   const rotation = useSharedValue(expanded ? 90 : 0);
   useEffect(() => { rotation.value = withTiming(expanded ? 90 : 0, { ...SNAP, reduceMotion: ReduceMotion.System }); }, [expanded, rotation]);
   const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }));
@@ -47,18 +51,25 @@ function Row({ item, selected, activate, toggle, collapse, inline }: {
         {Array.from({ length: depth }, (_, level) => <View pointerEvents="none" key={level} style={[styles.guide, { left: space.md + level * space.lg }]} />)}
         <Pressable
           testID={`tree-row-${node.id}`}
-          accessibilityRole="button"
-          role={Platform.OS === "web" ? "treeitem" : "button"}
-          accessibilityLabel={`${node.label}${node.meta ? `, ${node.meta}` : ""}${node.status ? `, ${node.status}` : ""}`}
-          accessibilityState={{ selected, ...(node.children ? { expanded } : {}) }}
+          accessibilityRole={a11y.role}
+          role={Platform.OS === "web" ? "treeitem" : undefined}
+          accessibilityLabel={a11y.label}
+          accessibilityHint={a11y.hint}
+          accessibilityState={a11y.state}
+          accessibilityActions={a11y.actions}
+          accessibilityLiveRegion={placeholder ? "polite" : "none"}
+          disabled={a11y.disabled}
           aria-level={depth + 1}
           aria-posinset={item.getItemMeta().posInSet + 1}
           aria-setsize={item.getItemMeta().setSize}
           aria-expanded={node.children ? expanded : undefined}
-          accessibilityActions={node.children ? [{ name: "expand" }, { name: "collapse" }] : []}
-          onAccessibilityAction={e => { if (e.nativeEvent.actionName === "expand" && !expanded) toggle(); if (e.nativeEvent.actionName === "collapse") collapse(); }}
+          onAccessibilityAction={e => {
+            const action = treeRowA11yAction(node, expanded, e.nativeEvent.actionName, placeholder);
+            if (action === "toggle") toggle();
+            else if (action === "longpress") longPress?.();
+          }}
           onPress={activate}
-          onLongPress={node.onLongPress ? () => { haptic.select(); node.onLongPress?.(); } : undefined}
+          onLongPress={longPress}
           style={({ pressed }) => [styles.content, { paddingLeft: space.xs + depth * space.lg }, (selected || pressed) && styles.selected]}
         >
           <View style={styles.chevronSpace}>{node.children && <Animated.View style={chevron}><Feather name="chevron-right" size={space.md} color={colors.textTertiary} /></Animated.View>}</View>
@@ -70,7 +81,14 @@ function Row({ item, selected, activate, toggle, collapse, inline }: {
           {node.meta ? <Text style={styles.meta}>{node.meta}</Text> : null}
           {node.status ? <View style={[styles.dot, { backgroundColor: node.status === "running" ? colors.accent : node.status === "offline" ? colors.textFaint : colors.textTertiary }]} /> : null}
         </Pressable>
-        {node.onPress && node.children ? <Pressable accessibilityRole="button" accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${node.label}`} onPress={toggle} style={styles.disclosure}><Feather name={expanded ? "minus" : "plus"} size={space.md} color={colors.textMuted} /></Pressable> : null}
+        {node.onPress && node.children ? <Pressable
+          testID={`tree-disclosure-${node.id}`}
+          accessibilityRole="button"
+          accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${node.label}`}
+          accessibilityState={{ expanded }}
+          onPress={toggle}
+          style={styles.disclosure}
+        ><Feather name={expanded ? "minus" : "plus"} size={space.md} color={colors.textMuted} /></Pressable> : null}
       </View>
     </Animated.View>
   );
@@ -128,12 +146,29 @@ export function Tree({ nodes, label = "Tree", initialExpanded = [], inline = fal
   tree.scheduleRebuildTree();
   const items = tree.getItems();
   const toggle = (item: ItemInstance<TreeNode>) => { list.current?.prepareForLayoutAnimationRender(); haptic.select(); item.isExpanded() ? item.collapse() : item.expand(); };
-  const activate = (item: ItemInstance<TreeNode>) => {
+  const activate = (item: ItemInstance<TreeNode>, placeholder: TreePlaceholder) => {
+    const node = item.getItemData();
+    const target = treeRowTarget(node, placeholder);
+    if (!target) return;
     setSelected(item.getId());
-    if (item.getItemData().onPress) { haptic.select(); item.getItemData().onPress?.(); }
-    else toggle(item);
+    if (target === "press") { haptic.select(); node.onPress?.(); }
+    else if (target === "toggle") toggle(item);
   };
-  const render = (item: ItemInstance<TreeNode>) => <Row key={item.getId()} inline={inline} item={item} selected={selected === item.getId()} activate={() => activate(item)} toggle={() => toggle(item)} collapse={() => { haptic.select(); (item.isExpanded() ? item : item.getParent())?.collapse(); }} />;
+  const render = (item: ItemInstance<TreeNode>) => {
+    const parentId = item.getParent()?.getId();
+    const placeholder = treePlaceholderFor(item.getItemData(), parentId, parentId ? pending.has(parentId) : false);
+    return <Row
+      key={item.getId()}
+      inline={inline}
+      item={item}
+      selected={selected === item.getId()}
+      pendingChildren={pending.has(item.getId())}
+      placeholder={placeholder}
+      activate={() => activate(item, placeholder)}
+      toggle={() => toggle(item)}
+      collapse={() => { haptic.select(); (item.isExpanded() ? item : item.getParent())?.collapse(); }}
+    />;
+  };
   const focus = (item: ItemInstance<TreeNode> | undefined) => {
     if (!item || item.getId() === source.root.id) return;
     list.current?.scrollToIndex({ index: item.getItemMeta().index, animated: false });
@@ -164,5 +199,5 @@ const styles = StyleSheet.create({
   label: { flex: 1, minWidth: 0 }, text: { color: colors.text },
   detail: { ...type.mono, color: colors.textTertiary }, meta: { ...type.mono, color: colors.textTertiary, flexShrink: 1 },
   dot: { width: space.sm, height: space.sm, borderRadius: radius.pill },
-  dimmed: { opacity: 0.48 }, disclosure: { width: controlMin, alignItems: "center", justifyContent: "center" },
+  dimmed: { opacity: 0.48 }, disclosure: { width: controlMin, minHeight: controlMin, alignItems: "center", justifyContent: "center" },
 });
