@@ -168,6 +168,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const sendTurn = useCallback(
     (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId), mode: SendMode = "queue") => {
       const { turnId } = beginTurn(active.id, text, { attachments, mode });
+      voice.followReply(active.id, turnId);
       haptic.tap();
       const current = store.get().conversations.find((c) => c.id === active.id) ?? active;
       const ok = sendChat({
@@ -185,7 +186,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       }
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
-    [conversation, harnessId],
+    [conversation, harnessId, voice.followReply],
   );
 
   const flushQueue = useCallback(
@@ -201,14 +202,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       if (mode === "steer") { sendTurn(text, attachments, active, "steer"); return; }
       if (conversationBusy(active.id) || thinking.phase !== "idle") {
         if (!streamingMessage && thinking.phase !== "idle") setQueueWaiting(active.id, true);
-        beginTurn(active.id, text, { pending: true, attachments });
+        const { turnId } = beginTurn(active.id, text, { pending: true, attachments });
+        voice.followReply(active.id, turnId);
         haptic.tap();
         requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
         return;
       }
       sendTurn(text, attachments, active);
     },
-    [conversation, harnessId, sendTurn, setFollow, thinking.phase, streamingMessage],
+    [conversation, harnessId, sendTurn, setFollow, thinking.phase, streamingMessage, voice.followReply],
   );
 
   // Annotation mode sends into this chat: steer a running Hermes turn, else send/queue.

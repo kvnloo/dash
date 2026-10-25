@@ -6,6 +6,7 @@ import { executionToken, voiceAccessToken } from "../lib/bridge-auth";
 import { ContinuousVoice, object, VoiceAccessDenied, type VoiceState } from "../lib/continuous-voice";
 import { createVoicePeer } from "../lib/voice-peer";
 import { addSegment, annotate, registerSink } from "../store/annotate";
+import { finalVoiceReply } from "../lib/voice-replies";
 import type { Conversation } from "../model";
 import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { store } from "../store/app";
@@ -23,7 +24,7 @@ const DeviceInsets = createContext<EdgeInsets | null>(null);
 export function useDeviceInsets(): EdgeInsets {
   const device = useContext(DeviceInsets); const app = useSafeAreaInsets(); return device ?? app;
 }
-interface VoiceContext { state: VoiceState; start(): Promise<void>; stop(): Promise<void>; mute(): void }
+interface VoiceContext { state: VoiceState; start(): Promise<void>; stop(): Promise<void>; mute(): void; followReply(conversationId: string, turnId: string): void }
 const Context = createContext<VoiceContext | null>(null);
 export function useContinuousVoice(): VoiceContext {
   const value = useContext(Context); if (!value) throw new Error("Voice root not mounted"); return value;
@@ -36,6 +37,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const attached = useRef<Conversation | null>(null);
   const epoch = useRef(0);
   const starting = useRef(false);
+  const pendingReplies = useRef(new Set<string>());
   const releaseMic = useRef<(() => void) | undefined>(undefined);
   const insets = useSafeAreaInsets();
   const windowOpen = voiceWindowOpen.use(open => open);
@@ -54,6 +56,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const release = microphone.acquire("live");
     if (!release) { setState({ ...initial, phase: "error", note: `Microphone is in use by ${microphone.owner}. Stop that capture before starting Live voice.` }); return; }
     releaseMic.current = release;
+    pendingReplies.current.clear();
     call.current = null;
     attached.current = conversation;
     const generation = ++epoch.current;
@@ -99,7 +102,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     finally { if (generation === epoch.current) starting.current = false; }
   };
   const stop = async () => {
-    epoch.current++; starting.current = false;
+    epoch.current++; starting.current = false; pendingReplies.current.clear();
     const controller = call.current;
     const cleanup = controller?.stop();
     if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
@@ -118,6 +121,21 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
     };
   }, []);
+  useEffect(() => store.subscribe(() => {
+    const controller = call.current, target = attached.current;
+    if (!controller || !target || ["idle", "error", "connecting"].includes(controller.state.phase)) return;
+    const current = store.get().conversations.find(c => c.id === target.id);
+    if (!current || current.sessionId !== target.sessionId || current.profileId !== target.profileId) return;
+    for (const turnId of pendingReplies.current) {
+      const result = finalVoiceReply(current.messages, turnId);
+      if (result === undefined) continue;
+      pendingReplies.current.delete(turnId);
+      if (result) controller.deliverFinal(`composer:${turnId}`, result);
+    }
+  }), []);
+  const followReply = (conversationId: string, turnId: string) => {
+    if (attached.current?.id === conversationId && call.current && !["idle", "error"].includes(call.current.state.phase)) pendingReplies.current.add(turnId);
+  };
   const shown = fixture ?? state;
   const active = !["idle", "error"].includes(shown.phase);
   useEffect(() => {
@@ -131,7 +149,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   // The bar owns a band under the status bar (screens inset below it); it never floats over AppNav or content.
   // Space stays allocated while a chat window covers the app, so the list underneath never jumps on close.
   const home = voiceControlHome(active, windowOpen);
-  return <Context.Provider value={{ state: shown, start, stop, mute: () => call.current?.mute(!state.muted) }}>
+  return <Context.Provider value={{ state: shown, start, stop, followReply, mute: () => call.current?.mute(!state.muted) }}>
     <DeviceInsets.Provider value={insets}>
       <SafeAreaInsetsContext.Provider value={appInsets(insets, active, barRow)}>{children}</SafeAreaInsetsContext.Provider>
     </DeviceInsets.Provider>
