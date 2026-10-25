@@ -108,7 +108,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const finish = useCallback((flat: number[], pointerType: number) => {
     const { width, height } = size;
     const s = annotate.get();
-    if (!width || !height || flat.length < 8) return;
+    if (!width || !height || flat.length < 8) { live.value = []; return; }
     const screenPoints: { x: number; y: number }[] = [];
     const points: StrokePoint[] = [];
     for (let i = 0; i + 3 < flat.length; i += 4) {
@@ -117,8 +117,8 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       points.push({ x: x / width, y: y / height, p: flat[i + 2] ?? 0.5, t: flat[i + 3] ?? Date.now() });
     }
     const xs = screenPoints.map(p => p.x), ys = screenPoints.map(p => p.y);
-    if (Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) < MIN_EXTENT) return;
-    if (s.tool === "eraser") { eraseStrokes(points); return; }
+    if (Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) < MIN_EXTENT) { live.value = []; return; }
+    if (s.tool === "eraser") { eraseStrokes(points); live.value = []; return; }
     const pointer: PointerKind = pointerKind(pointerType);
     const shape = s.tool === "pen" ? recognizeShape(points) : null;
     const first = points[0], last = points.at(-1);
@@ -128,7 +128,10 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     const region = circleRegion(screenPoints);
     if (region) void attachCircle(region);
     haptic.select();
-  }, [size, attachCircle]);
+  }, [size, attachCircle, live]);
+
+  // Keep the UI-thread stroke visible across pen-up until the committed canvas has rendered.
+  useEffect(() => { if (pointerSv.value < 0) live.value = []; }, [strokes, live, pointerSv]);
 
   const send = useCallback((keep: boolean) => { void sendAnnotation(keep, captureTarget, size); }, [size]);
   const tracePointer = useCallback((pointerType: number, touches: number) => {
@@ -166,7 +169,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         pointerSv.value = -1;
         runOnJS(finish)(flat, kindSv.value);
       })
-      .onFinalize(() => { live.value = []; pointerSv.value = -1; });
+      .onFinalize(() => { if (pointerSv.value >= 0) live.value = []; pointerSv.value = -1; });
     const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(active)
       .onEnd((e, success) => { if (success && pointerKind(e.pointerType) === "stylus") runOnJS(send)(false); });
     return Gesture.Simultaneous(draw, penDoubleTap);
