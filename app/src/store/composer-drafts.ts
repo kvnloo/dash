@@ -100,7 +100,12 @@ function createDraftRuntime(): DraftRuntime {
 
 // A new JS runtime restores from AsyncStorage; Fast Refresh retains this singleton
 // and its pending write even if this module and its consumers are re-evaluated.
-const runtime = globalThis.__dashComposerDraftsRuntime ??= createDraftRuntime();
+// The same initializer runs on first import and when Metro evaluates this module again.
+// Keeping it callable also lets Bun tests verify HMR even if it deduplicates URL imports.
+export function ensureComposerDraftRuntime(): DraftRuntime {
+  return globalThis.__dashComposerDraftsRuntime ??= createDraftRuntime();
+}
+const runtime = ensureComposerDraftRuntime();
 
 /** Keyed by conversation id. Never keyed by host-global/latest session or copied to another chat. */
 export const composerDrafts = runtime.store;
