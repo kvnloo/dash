@@ -103,7 +103,8 @@ function parseOptions(raw: unknown): AcpPermissionChoice[] | null {
   if (!Array.isArray(raw) || raw.length < 1 || raw.length > 16) return null;
   const seen = new Set<string>();
   const options: AcpPermissionChoice[] = [];
-  for (const value of raw) {
+  const items: unknown[] = raw;
+  for (const value of items) {
     if (!record(value) || !identifier(value.optionId, 128) || seen.has(value.optionId)) return null;
     const kind = value.kind;
     if (kind !== "allow_once" && kind !== "allow_always" && kind !== "reject_once" && kind !== "reject_always") return null;
