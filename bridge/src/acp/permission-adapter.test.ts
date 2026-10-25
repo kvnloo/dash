@@ -179,17 +179,16 @@ test("no broker, no controller, and throwing broker all fail closed visibly", ()
   noController.adapter.receive(permission("no-controller"));
   const throws = fixture({ register: () => { throw new Error("secret=never-report"); } });
   throws.adapter.receive(permission("throws"));
-  for (const [f, id] of [
-    [noBroker, "no-broker"],
-    [noController, "no-controller"],
-    [throws, "throws"],
-  ] as const) {
+  function assertDenied(f: ReturnType<typeof fixture>, id: string) {
     expect(f.replies).toEqual([{ ...cancelled, id }]);
     expect(f.resolutions).toHaveLength(1);
     expect(f.resolutions[0]?.outcome).toBe("denied");
     expect(JSON.stringify(f.resolutions)).not.toContain("secret=never-report");
     expect(f.timers.size).toBe(0);
   }
+  assertDenied(noBroker, "no-broker");
+  assertDenied(noController, "no-controller");
+  assertDenied(throws, "throws");
 });
 
 test("invalid envelopes, options and unsupported kinds never reach the broker", () => {
