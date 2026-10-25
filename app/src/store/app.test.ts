@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 const persisted = new Map<string, string>();
 mock.module("@react-native-async-storage/async-storage", () => ({
   default: {
+    async getItem(key: string) { return persisted.get(key) ?? null; },
     async multiGet(keys: string[]) { return keys.map((key) => [key, persisted.get(key) ?? null]); },
     async multiSet(entries: [string, string][]) { for (const [key, value] of entries) persisted.set(key, value); },
     async setItem(key: string, value: string) { persisted.set(key, value); },
