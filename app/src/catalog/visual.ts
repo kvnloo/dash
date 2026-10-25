@@ -26,6 +26,22 @@ export interface VisualProvider {
   hue: string;
 }
 
+/** Model geometry is defined by AODL visual.json, not the harness icon asset. */
+export interface VisualModel {
+  id: string;
+  label: string;
+  core: string;
+  accent: string;
+}
+
+export interface VisualOperatingMode {
+  id: string;
+  label: string;
+  marker: string;
+  accent: string;
+  motion: string;
+}
+
 export interface VisualEffort {
   id: string;
   label: string;
@@ -67,6 +83,8 @@ export interface CompiledTopology {
 export interface VisualCatalog {
   topologies: Map<string, VisualTopology>;
   providers: Map<string, VisualProvider>;
+  models: Map<string, VisualModel>;
+  operatingModes: Map<string, VisualOperatingMode>;
   graphs: Map<string, TopologyGraph>;
   ir: Map<string, IrTopologyStatus>;
   efforts: Map<string, VisualEffort>;
@@ -154,6 +172,39 @@ function parseProviders(raw: unknown): Map<string, VisualProvider> {
       id,
       label: readString(row, "label", `providers.${id}`),
       hue: readString(row, "hue", `providers.${id}`),
+    });
+  }
+  return out;
+}
+
+function parseModels(raw: unknown): Map<string, VisualModel> {
+  if (!isRecord(raw)) fail("Unknown visual.models");
+  const out = new Map<string, VisualModel>();
+  for (const id of Object.keys(raw)) {
+    const row = raw[id];
+    if (!isRecord(row)) fail(`Unknown model ${id}`);
+    out.set(id, {
+      id,
+      label: readString(row, "label", `models.${id}`),
+      core: readString(row, "core", `models.${id}`),
+      accent: readString(row, "accent", `models.${id}`),
+    });
+  }
+  return out;
+}
+
+function parseOperatingModes(raw: unknown): Map<string, VisualOperatingMode> {
+  if (!isRecord(raw)) fail("Unknown visual.operatingModes");
+  const out = new Map<string, VisualOperatingMode>();
+  for (const id of Object.keys(raw)) {
+    const row = raw[id];
+    if (!isRecord(row)) fail(`Unknown operatingMode ${id}`);
+    out.set(id, {
+      id,
+      label: readString(row, "label", `operatingModes.${id}`),
+      marker: readString(row, "marker", `operatingModes.${id}`),
+      accent: readString(row, "accent", `operatingModes.${id}`),
+      motion: readString(row, "motion", `operatingModes.${id}`),
     });
   }
   return out;
@@ -251,10 +302,13 @@ export function parseVisualCatalog(visualRaw: unknown, irRaw: unknown, graphsRaw
   if (!isRecord(visualRaw)) fail("Unknown visual catalog");
   const topologies = parseTopologies(visualRaw.topologies);
   const providers = parseProviders(visualRaw.providers);
+  const models = parseModels(visualRaw.models);
+  const operatingModes = parseOperatingModes(visualRaw.operatingModes);
   const graphs = parseGraphs(graphsRaw);
   const ir = parseIr(irRaw);
   const efforts = parseEfforts(visualRaw.efforts);
   const runtimeStates = parseRuntimeStates(visualRaw.runtimeStates);
+  if (!providers.has("unknown") || !models.has("unknown") || !operatingModes.has("unknown")) fail("Missing unknown visual identity");
   if (!efforts.has("unknown")) fail("Unknown effort id: unknown");
   if (!runtimeStates.has("unknown")) fail("Unknown runtime state id: unknown");
   for (const id of topologies.keys()) {
@@ -266,6 +320,8 @@ export function parseVisualCatalog(visualRaw: unknown, irRaw: unknown, graphsRaw
   return {
     topologies,
     providers,
+    models,
+    operatingModes,
     graphs,
     ir,
     efforts,
@@ -311,6 +367,17 @@ export function resolveProvider(catalog: VisualCatalog, id: string): VisualProvi
   return provider;
 }
 
+export function resolveModel(catalog: VisualCatalog, id: string): VisualModel {
+  const model = catalog.models.get(id);
+  if (!model) fail(`Unknown model id: ${id}`);
+  return model;
+}
+
+/** Unrecognized runes remain the catalog's explicit unknown marker. */
+export function resolveOperatingMode(catalog: VisualCatalog, id: string | undefined): VisualOperatingMode {
+  return catalog.operatingModes.get(id ?? "unknown") ?? catalog.operatingModes.get("unknown") ?? fail("Missing unknown operating mode");
+}
+
 export function compileTopology(catalog: VisualCatalog, id: string): CompiledTopology {
   const topology = resolveTopology(catalog, id);
   const status = catalog.irStatus(id);
@@ -321,7 +388,7 @@ export function compileTopology(catalog: VisualCatalog, id: string): CompiledTop
 }
 
 const HARNESS_PROVIDER_ID: Record<string, string> = {
-  omp: "cursor",
+  omp: "multi",
   grok: "xai",
   codex: "openai",
   claude: "anthropic",
@@ -361,3 +428,60 @@ export function resolveRuntimeState(catalog: VisualCatalog, id: string | undefin
   return catalog.runtimeStates.get(id) ?? unknownRuntimeState(catalog);
 }
 
+
+/**
+ * An executor/harness is not necessarily a model or provider. Only AODL ownerRules
+ * may supply a default model; generic Claude/OMP remain model=unknown until
+ * runtime gives a declared AODL model ID. Never translate pixels into topology.
+ */
+export interface HarnessVisualLook {
+  provider: VisualProvider;
+  model: VisualModel;
+  effort: VisualEffort;
+  state: VisualRuntimeState;
+  operatingMode: VisualOperatingMode;
+  topologyId?: string;
+  valueScore: number | null;
+}
+
+export function resolveHarnessVisual(input: {
+  harnessId?: string;
+  modelId?: string;
+  effortId?: string;
+  stateId?: string;
+  operatingModeId?: string;
+  topologyId?: string;
+  valueScore?: number | null;
+}): HarnessVisualLook {
+  const catalog = loadVisualCatalog();
+  const harnessId = input.harnessId ?? "";
+  const provider = resolveProvider(catalog, providerIdForHarness(harnessId));
+  const ownerRule = visualJson.ownerRules.find(rule => rule.prefix === harnessId);
+  const candidateModel = input.modelId ?? (ownerRule?.provider === provider.id ? ownerRule.model : "unknown");
+  // Known geometries are only valid for a corresponding declared provider.
+  // "multi" explicitly labels a multi-model harness, not a guessed active model.
+  const validModel =
+    candidateModel === "unknown" ||
+    (candidateModel === "multi" && provider.id === "multi") ||
+    visualJson.ownerRules.some(rule => rule.model === candidateModel && rule.provider === provider.id);
+  const model = catalog.models.get(validModel ? candidateModel : "unknown") ?? resolveModel(catalog, "unknown");
+  let topologyId: string | undefined;
+  if (input.topologyId !== undefined) {
+    try {
+      topologyId = compileTopology(catalog, input.topologyId).id;
+    } catch {
+      // An undeclared or not-inferred silhouette must never render.
+    }
+  }
+  const score = input.valueScore;
+  const valueScore = typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 100 ? score : null;
+  return {
+    provider,
+    model,
+    effort: resolveEffort(catalog, input.effortId),
+    state: resolveRuntimeState(catalog, input.stateId),
+    operatingMode: resolveOperatingMode(catalog, input.operatingModeId),
+    topologyId,
+    valueScore,
+  };
+}
