@@ -1,5 +1,6 @@
 import type { AgentInfo, HistoryMessage, HostInfo } from "../../../shared/protocol";
 import { isCatalogHarness } from "../../../shared/catalog";
+import { unwrapHermesHistoryText } from "./history-display";
 import type { Conversation, Message } from "../model";
 
 export function liveConversationId(harness: string, sessionId: string): string {
@@ -36,6 +37,32 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     const matches = reported.filter(({ host, agent }) => agent.kind === c.harness && agent.sessionId === c.sessionId && (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
     const match = matches.length === 1 ? matches[0] : undefined;
     if (!match) {
+      // A bridge-owned ACP session may be running without a native session row.
+      // A uniquely identified, online local harness profile plus an in-flight
+      // reply is evidence to retain this exact route, not to adopt another one.
+      // Native sessions, stale rows, unknown profiles and offline hosts still
+      // need an authoritative roster match.
+      // Chats created without a profile route to the one paired bridge. Do
+      // not invent a host/profile identity when retaining that live chat.
+      const unscoped = c.targetHostId === undefined && c.profileId === undefined;
+      const genericProfileId = `harness:${c.harness}`;
+      const scopedHarness = c.targetHostId !== undefined && c.profileId === genericProfileId;
+      const targetHosts = c.targetHostId
+        ? hosts.filter(host => host.id === c.targetHostId)
+        : hosts.filter(host => host.self);
+      const targetHost = targetHosts.length === 1 ? targetHosts[0] : undefined;
+      const profiles = targetHost?.agents.filter(agent => agent.id === genericProfileId);
+      const bridgeOwnedStreaming =
+        c.stale !== true &&
+        isCatalogHarness(c.harness) &&
+        (unscoped || scopedHarness) &&
+        c.messages.some(message => message.role === "assistant" && message.state === "streaming") &&
+        targetHost !== undefined && targetHost.self && targetHost.online &&
+        profiles?.length === 1 &&
+        profiles[0]?.kind === c.harness &&
+        profiles[0]?.status !== "offline" &&
+        !profiles[0]?.sessionId;
+      if (bridgeOwnedStreaming) return c;
       if (c.stale && c.openIn === undefined) return c;
       changed = true; return { ...c, stale: true, openIn: undefined };
     }
@@ -65,10 +92,10 @@ export function shouldRequestHistory(c: Conversation | undefined): boolean {
 export function hydrateLiveConversation(conversation: Conversation, history: HistoryMessage[]): Conversation {
   if (conversation.messages.some(m => m.role === "assistant" && (m.state === "streaming" || m.state === "pending"))) return conversation;
   if (conversation.messages.length > 0 && conversation.harness !== "hermes") return conversation;
-  const messages = historyToMessages(history, conversation.id);
+  const messages = historyToMessages(history, conversation.id, conversation.harness === "hermes");
   if (!messages.length) return conversation;
   return { ...conversation, messages, updatedAt: Math.max(messages.at(-1)?.at ?? 0, conversation.updatedAt) };
 }
-function historyToMessages(history: HistoryMessage[], conversationId: string): Message[] {
-  return history.map(h => h.role === "user" ? { id: h.id, role: "user", text: h.text, at: h.at } : { id: h.id, role: "assistant", text: h.text, at: h.at, state: "done", parts: h.parts, turnId: `history:${conversationId}:${h.id}`, seq: 0 });
+function historyToMessages(history: HistoryMessage[], conversationId: string, hermes: boolean): Message[] {
+  return history.map(h => h.role === "user" ? { id: h.id, role: "user", text: hermes ? unwrapHermesHistoryText(h.text) : h.text, at: h.at } : { id: h.id, role: "assistant", text: h.text, at: h.at, state: "done", parts: h.parts, turnId: `history:${conversationId}:${h.id}`, seq: 0 });
 }
