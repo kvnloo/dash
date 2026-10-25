@@ -130,6 +130,13 @@ describe("additive delivery chat extension", () => {
     expect(parseDeliveryChatExtension(retry)).toEqual({ clientId: receipt.clientId });
   });
 
+  test("legacy chats without clientId retain old id acceptance rules", () => {
+    const oldChat = { ...legacyChat, id: "" };
+    expect(parseClientMessage(oldChat)).toMatchObject(oldChat);
+    expect(parseDeliveryChatExtension(oldChat)).toEqual({});
+    expect(parseDeliveryChatExtension({ ...oldChat, clientId: "send-123" })).toBeNull();
+  });
+
   test("invalid optional identities fail closed rather than disappearing", () => {
     for (const clientId of [null, 0, "", " ", "with space", "\n", "x".repeat(MAX_DELIVERY_ID_LENGTH + 1)]) {
       expect(parseDeliveryChatExtension({ ...legacyChat, clientId })).toBeNull();
