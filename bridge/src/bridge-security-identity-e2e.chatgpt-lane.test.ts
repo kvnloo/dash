@@ -26,15 +26,16 @@ function setup(legacyEnabled: boolean) {
       } catch {
         claims = null;
       }
-      const valid = typeof claims === "object" && claims !== null &&
-        "sub" in claims && "exp" in claims && "aud" in claims && "scope" in claims;
+      const parsed = typeof claims === "object" && claims !== null &&
+        "sub" in claims && "exp" in claims && "aud" in claims && "scope" in claims ? claims : null;
+      const valid = parsed !== null;
       return Response.json({
         active: !revoked && valid,
         token_type: "access",
-        aud: valid ? claims.aud : null,
-        scope: valid ? claims.scope : null,
-        sub: valid ? claims.sub : null,
-        exp: valid ? claims.exp : null,
+        aud: parsed ? parsed.aud : null,
+        scope: parsed ? parsed.scope : null,
+        sub: parsed ? parsed.sub : null,
+        exp: parsed ? parsed.exp : null,
       });
     },
   });
