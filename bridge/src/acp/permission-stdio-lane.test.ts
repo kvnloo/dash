@@ -367,3 +367,64 @@ test("unavailable filesystem remains denied by the existing ACP client over real
   }
   expect(client.exited).toBe(true);
 });
+
+test.each(["no-controller", "wrong-session"])("%s is visibly denied over real stdio", async mode => {
+  const agent = new StdioAgent();
+  const clock = new PermissionClock();
+  const broker = new PermissionBroker(clock);
+  const notices: Notified[] = [];
+  const resolutions: AcpPermissionResolution[] = [];
+  const adapter = new AcpPermissionAdapter({
+    activeSessionId: () => SESSION,
+    principalId: PRINCIPAL,
+    turnId: TURN,
+    ...(mode === "no-controller" ? {} : { broker: brokerPort(broker, notices) }),
+    send: response => agent.send(response),
+    resolved: value => resolutions.push(value),
+    timeoutMs: 50,
+    schedule: (callback, ms) => clock.schedule(callback, ms),
+  });
+  try {
+    const incoming = await agent.begin();
+    const frame = mode === "wrong-session"
+      ? { ...incoming, params: {
+          sessionId: "another-session",
+          options: record(incoming.params) ? incoming.params.options : undefined,
+        } }
+      : incoming;
+    expect(adapter.receive(frame)).toBe(true);
+    expect(await agent.textAndFinish()).toBe("DENIED");
+    expect(resolutions.map(value => value.outcome)).toEqual(["denied"]);
+    expect(notices).toHaveLength(0);
+    expect(broker.pendingCount(PRINCIPAL)).toBe(0);
+  } finally {
+    adapter.cleanup();
+    broker.dispose();
+    await agent.close();
+  }
+});
+
+test("real session/cancel ends a pending fixture prompt without allowing it", async () => {
+  const agent = new StdioAgent();
+  try {
+    await agent.begin();
+    agent.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: SESSION } });
+    const cancelled = await agent.take(frame => frame.id === 3);
+    expect(record(cancelled.result) && cancelled.result.stopReason).toBe("cancelled");
+    expect(agent.received.some(frame => frame.method === "session/update")).toBe(false);
+  } finally {
+    await agent.close();
+  }
+});
+
+test("fixture exits nonzero for structurally malformed permission results", async () => {
+  const agent = new StdioAgent();
+  try {
+    const request = await agent.begin();
+    agent.send({ jsonrpc: "2.0", id: request.id, result: { outcome: { outcome: "selected" } } });
+    expect((await agent.waitExit()).code).toBe(13);
+    expect(agent.received.some(frame => frame.method === "session/update")).toBe(false);
+  } finally {
+    await agent.close();
+  }
+});
