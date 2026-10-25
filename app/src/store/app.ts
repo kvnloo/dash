@@ -167,10 +167,10 @@ export function setConnection(patch: Partial<Connection>): void {
 export async function forgetEverything(): Promise<void> {
   const enrollment = store.get().settings?.identity;
   if (enrollment) {
-    const { setSecret } = await import("../lib/secure");
-    const { identitySecretKey } = await import("../lib/identity-client");
+    const { setSecret }: typeof import("../lib/secure") = require("../lib/secure");
+    const { identitySecretKey }: typeof import("../lib/identity-client") = require("../lib/identity-client");
     await setSecret(identitySecretKey(enrollment.credentialId), "");
-    const { clearIdentityTokens } = await import("../lib/bridge-auth");
+    const { clearIdentityTokens }: typeof import("../lib/bridge-auth") = require("../lib/bridge-auth");
     clearIdentityTokens();
   }
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = undefined; }
