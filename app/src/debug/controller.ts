@@ -177,7 +177,7 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
       store.set((s) => ({ ...s, connection: { ...s.connection, status: cmd.status } }));
       return { ok: true };
     case "setBridgePull": {
-      const { debugSetBridgePull } = await import("../components/BridgePull");
+      const { debugSetBridgePull }: typeof import("../components/BridgePull") = require("../components/BridgePull");
       debugSetBridgePull(cmd.open);
       return { ok: true };
     }
