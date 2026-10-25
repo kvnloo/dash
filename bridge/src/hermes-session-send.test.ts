@@ -40,7 +40,7 @@ function stream(events: Record<string, unknown>[]): Response {
   const bytes = new TextEncoder().encode(text);
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      // Force a multi-byte and CRLF boundary through the incremental SSE reader.
+      // Force CRLF/frame boundaries through the incremental SSE reader.
       for (let at = 0; at < bytes.length; at += 7) controller.enqueue(bytes.slice(at, at + 7));
       controller.close();
     },
@@ -94,7 +94,9 @@ function fakeNetwork(options: TestOptions = {}) {
 }
 
 function sink() {
-  const result = { delta: "", statuses: [] as string[], parts: [] as ReplyPart[], deliveries: [] as string[] };
+  const result: { delta: string; statuses: string[]; parts: ReplyPart[]; deliveries: string[] } = {
+    delta: "", statuses: [], parts: [], deliveries: [],
+  };
   return {
     result,
     value: {
@@ -257,4 +259,15 @@ test("only the enrolled hermes:session.send scope authorizes this client, never 
     ...sendOptions(n), env: { ...baseEnv, DASH_Z0BRIDGE_URL: "http://192.168.1.2:4787" },
   })).rejects.toThrow("loopback HTTP");
   expect(n.seen).toHaveLength(0);
+});
+
+test("revocation during SSE never resumes through CLI or ACP", async () => {
+  const n = fakeNetwork({ streams: [
+    Response.json({ error: { code: "insufficient_scope" } }, { status: 403 }),
+  ] });
+  await expect(sendViaZ0Bridge(sendOptions(n))).rejects.toThrow("send stream refused (HTTP 403, insufficient_scope)");
+  expect(n.seen.filter(request => request.method === "POST")).toHaveLength(1);
+  expect(n.seen.map(request => request.path)).toEqual([
+    "/v1/health", "/v1/sessions/hermes/clean/local-123/send", "/v1/sends/send_1/events",
+  ]);
 });
