@@ -4,7 +4,7 @@ import { Gesture } from "react-native-gesture-handler";
 import Animated, { ReduceMotion, runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { haptic } from "../haptics";
 import { useHandedness } from "../lib/useHandedness";
-import { radialCenter, radialPosition, radialSector } from "../lib/tile-layout";
+import { isRadialActionCountValid, radialCenter, radialPosition, radialSector } from "../lib/tile-layout";
 import { SNAP, fade, press as pressMotion } from "../motion";
 import { colors, fonts } from "../theme";
 
@@ -47,7 +47,7 @@ export function useTileGestures({ onOpen, onPrimary, onSecondary, actions }: Til
   const scale = useSharedValue(1), tilt = useSharedValue(0), start = useSharedValue({ x: 0, y: 0 });
   const { x, y, selected, bloom, show, hide } = wheel;
   const actionCount = actions.length;
-  const valid = actionCount >= 4 && actionCount <= 8;
+  const valid = isRadialActionCountValid(actionCount);
   const showActions = () => show(actions);
   const commit = (index: number) => { hide(); if (index >= 0 && actions[index]) { haptic.success(); actions[index].run(); } };
   const armed = useSharedValue(false);

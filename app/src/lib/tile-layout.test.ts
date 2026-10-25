@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { componentSizing, DENSITIES, radialCenter, radialPosition, radialSector, tileColumns } from "./tile-layout";
+import { componentSizing, DENSITIES, isRadialActionCountValid, radialCenter, radialPosition, radialSector, tileColumns } from "./tile-layout";
 
 describe("component sizing contract", () => {
   test("density grows intrinsic minima; never fixes an aspect ratio", () => {
@@ -32,10 +32,13 @@ test("stat grids reflow all requested widths before large type becomes character
 });
 
 describe("radial wheel geometry", () => {
+  test("three through eight actions enable the hold wheel", () => {
+    expect([0, 1, 2, 3, 4, 8, 9].map(isRadialActionCountValid)).toEqual([false, false, false, true, true, true, false]);
+  });
   test("centre and invalid action counts cancel", () => {
-    expect(radialSector(0, 0, 4, false)).toBe(-1);
-    expect(radialSector(29, 0, 4, false)).toBe(-1);
-    expect(radialSector(100, 0, 3, false)).toBe(-1);
+    expect(radialSector(0, 0, 3, false)).toBe(-1);
+    expect(radialSector(29, 0, 3, false)).toBe(-1);
+    expect(radialSector(100, 0, 2, false)).toBe(-1);
     expect(radialSector(100, 0, 9, false)).toBe(-1);
   });
   test("cardinals match readable labels and mirror direction, never text", () => {
@@ -46,8 +49,8 @@ describe("radial wheel geometry", () => {
     expect(radialSector(-80, 0, 4, true)).toBe(1);
     expect(radialSector(80, 0, 4, true)).toBe(3);
   });
-  test("all 4–8 action centres round-trip on both hands", () => {
-    for (const count of [4, 5, 6, 7, 8]) for (const left of [false, true]) for (let i = 0; i < count; i++) {
+  test("all 3–8 action centres round-trip on both hands", () => {
+    for (const count of [3, 4, 5, 6, 7, 8]) for (const left of [false, true]) for (let i = 0; i < count; i++) {
       const p = radialPosition(i, count, left, 106);
       expect(radialSector(p.x, p.y, count, left)).toBe(i);
     }
