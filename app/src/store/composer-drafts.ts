@@ -32,10 +32,24 @@ function snapshot(): Saved {
   return next;
 }
 
+// One storage write at a time: a newer snapshot waits for the in-flight write, so completion
+// order can never let an older draft land after a newer one. Only the latest snapshot is queued.
+let writing = false;
+let rewrite = false;
+function persist(): void {
+  if (writing) { rewrite = true; return; }
+  writing = true;
+  const done = (): void => {
+    writing = false;
+    if (rewrite) { rewrite = false; persist(); }
+  };
+  AsyncStorage.setItem(KEY, JSON.stringify(saved)).then(done, done);
+}
+
 function flush(): void {
   if (timer) { clearTimeout(timer); timer = undefined; }
   saved = snapshot();
-  void AsyncStorage.setItem(KEY, JSON.stringify(saved)).catch(() => undefined);
+  persist();
 }
 
 export const draftsRestored: Promise<void> = AsyncStorage.getItem(KEY).then(raw => {

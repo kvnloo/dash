@@ -2,6 +2,7 @@ import { createContext, forwardRef, useContext, useMemo, useState, type Componen
 import { StyleSheet, Text, View, useWindowDimensions, type TextProps } from "react-native";
 import Animated from "react-native-reanimated";
 import { componentSizing, DENSITIES, type Density } from "../lib/tile-layout";
+import { largeTypePreviewControl } from "../lib/a11y-density";
 import { colors, fonts } from "../theme";
 import { PressScale } from "./PressScale";
 
@@ -31,10 +32,21 @@ export const DensityAnimatedText = Animated.createAnimatedComponent(DensityText)
 
 export function DensityPicker() {
   const { density, setDensity, typeScale, setTypeScale } = useDensity();
+  const preview = largeTypePreviewControl(typeScale);
   return <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 16, paddingVertical: 8 }} accessibilityLabel="Information density">
-    {DENSITIES.map(value => <PressScale key={value} onPress={() => setDensity(value)} accessibilityRole="button" accessibilityLabel={`${value} density`} accessibilityState={{ selected: density === value }} testID={`density-${value}`} style={{ minHeight: 44, paddingHorizontal: 12, borderRadius: 24, borderWidth: 1, borderColor: density === value ? colors.text : colors.border, backgroundColor: density === value ? colors.surfaceRaised : colors.bg }}>
-      <Text style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.text }}>{value.charAt(0).toUpperCase() + value.slice(1)}</Text>
+    {DENSITIES.map(value => <PressScale key={value} onPress={() => setDensity(value)} accessibilityRole="button" accessibilityLabel={`${value} density`} accessibilityState={{ selected: density === value }} accessibilityHint={density === value ? "Current density" : `Activate to use ${value} density`} testID={`density-${value}`} style={{ minHeight: 44, paddingHorizontal: 12, borderRadius: 24, borderWidth: 1, borderColor: density === value ? colors.text : colors.border, backgroundColor: density === value ? colors.surfaceRaised : colors.bg }}>
+      <Text allowFontScaling style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.text }}>{value.charAt(0).toUpperCase() + value.slice(1)}</Text>
     </PressScale>)}
-    <PressScale onPress={() => setTypeScale(typeScale === 1 ? 1.6 : 1)} accessibilityRole="button" accessibilityLabel="Toggle large type preview" testID="large-type" style={{ minHeight: 44, paddingHorizontal: 12 }}><Text style={{ color: colors.textMuted, fontFamily: fonts.mono, fontSize: 11 }}>Aa {Math.round(typeScale * 100)}%</Text></PressScale>
+    <PressScale
+      onPress={() => { if (preview.nextScale !== undefined) setTypeScale(preview.nextScale); }}
+      accessibilityRole="button"
+      accessibilityLabel={preview.accessibilityLabel}
+      accessibilityState={preview.accessibilityState}
+      disabled={preview.accessibilityState.disabled}
+      testID="large-type"
+      style={{ minHeight: 44, paddingHorizontal: 12 }}
+    >
+      <Text allowFontScaling style={{ color: colors.textMuted, fontFamily: fonts.mono, fontSize: 11 }}>Aa {preview.accessibilityState.disabled ? "unavailable" : `${Math.round(typeScale * 100)}%`}</Text>
+    </PressScale>
   </View>;
 }
