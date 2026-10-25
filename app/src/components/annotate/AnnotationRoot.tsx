@@ -6,9 +6,10 @@
 // and preview are siblings outside it so a thumb on the mic never cancels the pen.
 
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image, PixelRatio, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { Image, PixelRatio, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { runOnJS, useSharedValue } from "react-native-reanimated";
+import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { debugNavigationRef } from "../../debug/nav";
 import { haptic } from "../../haptics";
@@ -32,6 +33,14 @@ import { useContinuousVoice } from "../ContinuousVoiceRoot";
 export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
 /** Strokes whose extent is under this many points are taps (e.g. a pen double-tap). */
 const MIN_EXTENT = 6;
+// Queue preview can reach 192dp, plus 44dp controls, 8dp wrapper and 24dp
+// closed keyboard pad. Leave another 12dp clear of the input, including on IME.
+const COMPOSER_CLEARANCE = 280;
+
+function composerAvoidance(keyboardLift: number): number {
+  "worklet";
+  return COMPOSER_CLEARANCE + Math.max(0, keyboardLift);
+}
 
 type InkModule = typeof import("./InkCanvas");
 let inkModule: Promise<InkModule> | undefined;
@@ -54,6 +63,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const color = annotate.use(s => s.color);
   const strokes = annotate.use(s => s.drawing.strokes);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const [ink, setInk] = useState<InkModule | null>(null);
   const [inkError, setInkError] = useState<string>();
   const captureTarget = useRef<View>(null);
@@ -104,14 +114,15 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       .manualActivation(true)
       .enabled((active || penMode) && !inkError)
       .onTouchesDown((e, manager) => {
+        const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
+        // The dock rides the IME without resizing Expo Go: never swallow input touches.
+        if (!point || point.y >= size.height - composerAvoidance(-keyboardHeight.value)) { manager.fail(); return; }
         const kind = pointerKind(e.pointerType);
         if (stylusEnters(kind, penSv.value, activeSv.value)) {
           activeSv.value = true;
           runOnJS(enterAnnotation)();
         }
         if (!activeSv.value || routePointer(kind, penSv.value, e.numberOfTouches) === "pass") { manager.fail(); return; }
-        const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
-        if (!point) { manager.fail(); return; }
         kindSv.value = e.pointerType; pointerSv.value = point.id;
         live.value = appendInkSample([], point.x, point.y, pressureOf(kind, undefined), Date.now());
         runOnJS(tracePointer)(e.pointerType, e.numberOfTouches);
@@ -136,9 +147,9 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       })
       .onFinalize(() => { live.value = []; pointerSv.value = -1; });
     const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(active)
-      .onEnd((e, success) => { if (success && pointerKind(e.pointerType) === "stylus") runOnJS(send)(false); });
+      .onEnd((e, success) => { if (success && e.y < size.height - composerAvoidance(-keyboardHeight.value) && pointerKind(e.pointerType) === "stylus") runOnJS(send)(false); });
     return Gesture.Simultaneous(draw, penDoubleTap);
-  }, [active, penMode, inkError, finish, send, live, activeSv, penSv, kindSv, pointerSv, tracePointer]);
+  }, [active, penMode, inkError, finish, send, live, activeSv, penSv, kindSv, pointerSv, tracePointer, size.height, keyboardHeight]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -146,6 +157,8 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     if (__DEV__) console.log("[dash-ink] bounds", { width, height, fontScale: PixelRatio.getFontScale() });
   }, []);
 
+  // Use the same moving boundary for the frame and the finger-blocking overlay.
+  const frameStyle = useAnimatedStyle(() => ({ bottom: composerAvoidance(-keyboardHeight.value) }));
   const Ink = ink?.InkCanvas;
   return (
     <View style={styles.root}>
@@ -153,12 +166,12 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         <View style={styles.root} collapsable={false} onLayout={onLayout}>
           <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
           {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
-          {active && !penMode && !inkError ? <View style={StyleSheet.absoluteFill} {...overlayProps} /> : null}
+          {active && !penMode && !inkError ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
           {active && Ink ? <InkBoundary onError={inkFailed}><View style={StyleSheet.absoluteFill} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></View></InkBoundary> : null}
         </View>
       </GestureDetector>
-      {active ? <View pointerEvents="none" style={styles.frame} accessibilityLabel="Annotation mode on" {...overlayProps} /> : null}
-      {active ? <Tray onSend={send} /> : <Toast />}
+      {active ? <Animated.View pointerEvents="none" style={[styles.frame, frameStyle]} accessibilityLabel="Annotation mode on" {...overlayProps} /> : null}
+      {active ? <Tray onSend={send} screenHeight={size.height} /> : <Toast screenHeight={size.height} />}
       {active && inkError ? <View style={styles.inkError}>
         <Text accessibilityRole="alert" style={styles.error}>{inkError}</Text>
         <Chip label="Retry ink" a11y="Retry ink renderer" onPress={() => setInkError(undefined)} />
@@ -213,16 +226,44 @@ const TOOLS: { id: Tool; label: string; a11y: string }[] = [
   { id: "eraser", label: "Erase", a11y: "Eraser" },
 ];
 
-function Tray({ onSend }: { onSend(keep: boolean): void }): React.JSX.Element {
+/** Clip every annotation surface to the area above the lifted composer.
+ * The pane scrolls when 390/412dp wrapping or a preview exceeds that space.
+ */
+function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; atTop: boolean; screenHeight: number }): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const progress = useSharedValue(atTop ? 0 : 1);
+  const trayHeight = useSharedValue(0);
+  useEffect(() => {
+    progress.value = withTiming(atTop ? 0 : 1, {
+      duration: 110, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System,
+    });
+  }, [atTop, progress]);
+  const clearDock = useAnimatedStyle(() => ({ bottom: composerAvoidance(-keyboardHeight.value) }));
+  const placement = useAnimatedStyle(() => {
+    const room = Math.max(0, screenHeight - insets.top - space.sm - composerAvoidance(-keyboardHeight.value));
+    return { transform: [{ translateY: Math.max(0, room - trayHeight.value) * progress.value }] };
+  });
+  return (
+    <Animated.View pointerEvents="box-none" style={[styles.trayViewport, { top: insets.top + space.sm }, clearDock]} {...overlayProps}>
+      <Animated.ScrollView testID="annotation-tray" bounces={false} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="always" style={[styles.tray, placement]} contentContainerStyle={styles.trayContent}
+        onLayout={e => { trayHeight.value = e.nativeEvent.layout.height; }}>
+        {children}
+      </Animated.ScrollView>
+    </Animated.View>
+  );
+}
+
+function Tray({ onSend, screenHeight }: { onSend(keep: boolean): void; screenHeight: number }): React.JSX.Element {
   const thumb = useHandedness();
   const s = annotate.use(x => x);
   const busy = s.status === "capturing" || s.status === "sending";
   const count = s.drawing.strokes.length;
   // The tray can hop to the top so it never hides the part of the screen being marked.
-  const [top, setTop] = useState(false);
+  const [top, setTop] = useState(true);
   return (
-    <View style={[styles.tray, top ? { top: insets.top + space.sm } : { bottom: insets.bottom + space.sm }]} {...overlayProps}>
+    <TrayViewport atTop={top} screenHeight={screenHeight}>
       {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `Sending to ${s.sink ?? "chat"}…`} /> : null}
       {s.status === "error" && s.error ? <Text accessibilityRole="alert" style={styles.error}>{s.error}</Text> : null}
       <View style={[styles.row, thumb.row]}>
@@ -241,11 +282,11 @@ function Tray({ onSend }: { onSend(keep: boolean): void }): React.JSX.Element {
         <Chip label={busy ? "…" : "Send"} a11y="Send annotation" primary disabled={busy || count === 0} onPress={() => onSend(false)} />
       </View>
       <Text style={styles.hint} numberOfLines={1}>{s.sink ? `→ ${s.sink}` : "Open a chat to send"} · {s.segments.length ? `${s.segments.length} spoken` : "hold Talk to speak"}{s.penMode ? " · fingers scroll" : ""}</Text>
-    </View>
+    </TrayViewport>
   );
 }
 
-function Toast(): React.JSX.Element | null {
+function Toast({ screenHeight }: { screenHeight: number }): React.JSX.Element | null {
   const s = annotate.use(x => x);
   useEffect(() => {
     if (s.status !== "sent") return;
@@ -253,7 +294,7 @@ function Toast(): React.JSX.Element | null {
     return () => clearTimeout(id);
   }, [s.status]);
   if (s.status !== "sent" || !s.preview) return null;
-  return <View style={[styles.tray, styles.toast]}><Preview image={s.preview.image} text={s.preview.text} label={`Sent to ${s.sink ?? "chat"} · ${s.preview.strokes} strokes`} /></View>;
+  return <TrayViewport atTop screenHeight={screenHeight}><Preview image={s.preview.image} text={s.preview.text} label={`Sent to ${s.sink ?? "chat"} · ${s.preview.strokes} strokes`} /></TrayViewport>;
 }
 
 function Preview({ image, text, label }: { image: string; text: string; label: string }): React.JSX.Element {
@@ -307,11 +348,12 @@ function HoldToTalk(): React.JSX.Element {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   inkError: { position: "absolute", top: 80, left: 12, right: 12, padding: 8, backgroundColor: colors.surfaceRaised, borderRadius: radius.sm },
-  frame: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderWidth: 2, borderColor: colors.accent, borderRadius: 2 },
-  tray: { position: "absolute", left: space.xs, right: space.xs, padding: space.xs, gap: 2, borderRadius: radius.md, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.hair },
-  toast: { bottom: 120 },
+  frame: { position: "absolute", top: 0, left: 0, right: 0, borderWidth: 2, borderColor: colors.accent, borderRadius: 2 },
+  trayViewport: { position: "absolute", left: space.xs, right: space.xs, overflow: "hidden" },
+  tray: { flexGrow: 0, flexShrink: 1, maxHeight: "100%", borderRadius: radius.md, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.hair },
+  trayContent: { padding: space.xs, gap: 2 },
   row: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 2 },
-  chip: { minHeight: 40, minWidth: 36, paddingHorizontal: 6, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
+  chip: { minHeight: 44, minWidth: 44, paddingHorizontal: 6, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
   chipOn: { backgroundColor: colors.goldLo },
   primary: { backgroundColor: colors.accent, paddingHorizontal: space.sm },
   recording: { backgroundColor: "#f0503c" },
