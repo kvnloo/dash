@@ -292,10 +292,10 @@ describe("realtime peer failures remain visible and free the microphone", () => 
     expect(voiceConnectionErrorLine("Voice disconnected. Mic stopped; tap Start to reconnect.")).toBe("Voice connection lost");
     expect(voiceConnectionErrorLine("Voice connection timed out. Microphone stopped.")).toBe("Voice connection lost");
     expect(voiceConnectionErrorLine("Realtime reported an error. Mic stopped; no automatic resend.")).toBe("Realtime session failed");
-    expect(voiceConnectionErrorLine("  Permission denied\\nRetry.  ")).toBe("Permission denied Retry.");
+    expect(voiceConnectionErrorLine("  Permission denied\nRetry.  ")).toBe("Permission denied Retry.");
     expect(voiceConnectionErrorLine(undefined)).toBe("Voice unavailable");
     for (const kind of ["webrtc", "permission", "sdp", "ice", "token"] satisfies Array<"webrtc" | "permission" | "sdp" | "ice" | "token">) {
-      expect(voiceConnectionError(kind)).not.toContain("\\n");
+      expect(voiceConnectionError(kind)).not.toContain("\n");
     }
   });
 
@@ -331,7 +331,7 @@ describe("realtime peer failures remain visible and free the microphone", () => 
       const native: VoicePeer = {
         offer: async () => {
           if (broken === "offer") throw new Error("native SDP offer rejected");
-          return "v=0\\r\\n";
+          return "v=0\r\n";
         },
         answer: async () => { if (broken === "answer") throw new Error("remote SDP rejected"); },
         mute: value => { muted = value; },
@@ -347,7 +347,7 @@ describe("realtime peer failures remain visible and free the microphone", () => 
         },
         request: async path => {
           if (path === "/v1/realtime/session") return { session_id: broken, transport: "realtime", value: "ephemeral" };
-          if (path === "provider:answer") return "v=0\\r\\n";
+          if (path === "provider:answer") return "v=0\r\n";
           if (path === "/v1/tools/cancel_work") { discarded++; return {}; }
           return { messages: [], after: 0 };
         },
@@ -368,7 +368,7 @@ describe("realtime peer failures remain visible and free the microphone", () => 
     let closed = 0;
     let released = 0;
     const peer: VoicePeer = {
-      offer: async () => "v=0\\r\\n",
+      offer: async () => "v=0\r\n",
       answer: async () => ready(),
       mute: () => {},
       send: () => {},
@@ -380,7 +380,7 @@ describe("realtime peer failures remain visible and free the microphone", () => 
       captureReleased: () => { released++; },
       request: async path => {
         if (path === "/v1/realtime/session") return { session_id: "ice", transport: "realtime", value: "ephemeral" };
-        if (path === "provider:answer") return "v=0\\r\\n";
+        if (path === "provider:answer") return "v=0\r\n";
         return { messages: [], after: 0 };
       },
       peer: async (_event, onReady, onLost) => {
