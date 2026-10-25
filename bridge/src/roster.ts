@@ -337,6 +337,8 @@ export function findOmpJsonl(sessionRoot: string, sessionId: string, cwd?: strin
       const hit = jsonlMatchingSession(dir, sessionId);
       if (hit) return hit;
     }
+    // A scoped live OMP tab must never read another project's transcript.
+    return undefined;
   }
   if (!existsSync(sessionRoot)) return undefined;
   for (const name of readdirSync(sessionRoot)) {
