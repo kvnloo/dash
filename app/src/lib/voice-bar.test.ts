@@ -132,7 +132,7 @@ describe("coordinate-free Android voice journeys", () => {
     expect(source).toMatch(/<Text testID="voice-phase" accessible accessibilityLabel=\{voiceStatusAccessibilityLabel\(shown\)\}/);
     expect(source).toContain('accessibilityLiveRegion="polite"');
     expect(source).toMatch(/testID="voice-mute"\s+accessibilityRole="button"\s+accessibilityLabel=\{voiceMuteAccessibilityLabel\(shown\.muted\)\}/);
-    expect(source).toMatch(/testID=\{pill\.action === "start" \? "voice-start" : "voice-end"\}\s+accessibilityRole="button"\s+accessibilityLabel=\{pill\.primaryLabel\}/);
+    expect(source).toMatch(/testID=\{pill\.phase === "error" \? "voice-retry" : pill\.action === "start" \? "voice-start" : "voice-end"\}\s+accessibilityRole="button"\s+accessibilityLabel=\{pill\.primaryLabel\}/);
     expect(source).toContain("onPress={mute}");
     expect(source).toContain('accessibilityState={{ selected: shown.muted }}');
   });

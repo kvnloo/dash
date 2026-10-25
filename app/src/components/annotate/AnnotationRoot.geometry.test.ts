@@ -114,7 +114,7 @@ describe("S Pen annotation tray / composer geometry", () => {
 
   test("toggle mode and native side-button stay intact without intercepting composer taps", () => {
     expect(source).toContain('subscribeStylusButton(requireOptionalNativeModule<StylusButtonSource>("DashStylus"), stylusButton)');
-    expect(source).toContain('.enabled(active && !inkError)');
+    expect(source).toContain('.enabled(active && !!ink && !inkError)');
     expect(source).not.toContain('stylusEnters(');
     const panStart = source.indexOf('.onTouchesDown((e, manager) => {');
     const inputGuard = source.indexOf('if (!point || point.y >= size.height - composerAvoidance(-keyboardHeight.value))', panStart);

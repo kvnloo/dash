@@ -1,9 +1,22 @@
-import { beforeEach, expect, test } from "bun:test";
+import { afterAll, beforeEach, expect, test } from "bun:test";
+import { copyFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { EMPTY_DRAWING } from "../lib/annotate/strokes";
 import { addSegment, annotate, commitStroke, currentSink, enterAnnotation, exitAnnotation, finishSend, registerSink, setPenMode, stylusButton, toggleAnnotation, type AnnotationSink } from "./annotate";
 
 const sink = (label: string): AnnotationSink => ({ label, steerable: () => false, send: () => {} });
 const line = { tool: "pen" as const, color: "accent" as const, pointer: "stylus" as const, points: [{ x: 0, y: 0, p: 0.5, t: 1 }, { x: 1, y: 1, p: 0.5, t: 2 }] };
+
+// Bun caches a module by path and ignores URL queries, so a sibling copy forces
+// a real second evaluation, the way Metro re-runs the module on Fast Refresh.
+const copies: string[] = [];
+async function freshAnnotate(tag: string): Promise<typeof import("./annotate")> {
+  const file = join(import.meta.dir, `annotate.refresh-${tag}-${process.pid}.tmp.ts`);
+  copyFileSync(join(import.meta.dir, "annotate.ts"), file);
+  copies.push(file);
+  return import(file);
+}
+afterAll(() => { for (const file of copies) rmSync(file, { force: true }); });
 
 // Capture module evaluation before the test reset hook can mask a bad default.
 const coldStartState = annotate.get();
@@ -17,14 +30,14 @@ test("cold start leaves annotation and S Pen mode inactive", () => {
 test("Fast Refresh re-evaluates annotation without restoring a prior open ink tray", async () => {
   // Distinct module URLs simulate Metro evaluating the module for two app runs.
   // Both are independent of the already-imported store and any saved session.
-  const cold: typeof import("./annotate") = await import(new URL("./annotate.ts?turbo-cold", import.meta.url).href);
+  const cold = await freshAnnotate("cold");
   expect(cold.annotate.get()).toMatchObject({ active: false, penMode: false });
   cold.enterAnnotation();
   cold.setPenMode(true);
   const priorSession = cold.annotate.get();
   expect(priorSession).toMatchObject({ active: true, penMode: true });
 
-  const refreshed: typeof import("./annotate") = await import(new URL("./annotate.ts?turbo-refresh", import.meta.url).href);
+  const refreshed = await freshAnnotate("refresh");
   expect(refreshed.annotate).not.toBe(cold.annotate);
   expect(refreshed.annotate.get()).not.toBe(priorSession);
   expect(refreshed.annotate.get()).toMatchObject({ active: false, penMode: false, buttonDown: false });
