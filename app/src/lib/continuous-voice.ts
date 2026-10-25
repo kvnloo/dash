@@ -112,7 +112,7 @@ export class ContinuousVoice {
     const generation = ++this.generation;
     this.update({ phase: "connecting", muted: false, note: undefined, lines: [] });
     try {
-      const typedTurns = this.io.typedTurns ?? (await import("../store/app")).store;
+      const typedTurns = this.io.typedTurns ?? lazyAppStore();
       if (!this.live(generation)) return;
       this.watchTyped(typedTurns, target, generation);
       const mint = await this.io.request("/v1/realtime/session", { client: "dash", transports: ["realtime"], context: { app: "app.dash.mobile", hermes_target: target }, tools: [] });
@@ -299,4 +299,10 @@ export class ContinuousVoice {
       try { await this.io.request(`/v1/sessions/${encodeURIComponent(sid)}/end`, {}); } catch { /* Broker idle expiry is independent. */ }
     }
   }
+}
+
+// Lazy require, not import(): Metro bundles it, so nothing can 404 behind the turbo relay (G4).
+function lazyAppStore() {
+  const { store }: typeof import("../store/app") = require("../store/app");
+  return store;
 }
