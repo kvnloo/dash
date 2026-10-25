@@ -68,7 +68,7 @@ describe("WorkspaceHeader accessibility decisions", () => {
     expect(componentSource).toContain('label={WORKSPACE_ACTION_LABELS.trace} onPress={() => navigation.navigate("Trace")}');
     expect(componentSource).toContain('label={WORKSPACE_ACTION_LABELS.newChat} onPress={() => { createConversation(store.get().settings?.harness ?? "omp"); navigation.navigate("Chat"); }}');
     expect(componentSource).toContain('label={WORKSPACE_ACTION_LABELS.settings} onPress={() => navigation.navigate("Settings")}');
-    expect(iconButtonSource).toContain('<PressScale accessibilityRole="button" accessibilityLabel={label}');
+    expect(iconButtonSource).toMatch(/<PressScale[^>]*?accessibilityRole="button"[^>]*?accessibilityLabel=\{(?:label|model\.label)\}/);
   });
 
   test("retains touch targets, scalable badge text and honest absent states", () => {
