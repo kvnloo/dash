@@ -5,10 +5,10 @@ import { useTree } from "@headless-tree/react";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { PanResponder, Platform, Pressable, StyleSheet, Text, View, type ViewProps } from "react-native";
-import Animated, { FadeIn, FadeOut, LinearTransition, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { LinearTransition, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { haptic } from "../haptics";
 import { childNodes, treeIndex, type TreeKind, type TreeNode } from "../lib/tree";
-import { SNAP, MOTION_MS, fade } from "../motion";
+import { SNAP, MOTION_MS } from "../motion";
 import { colors, controlMin, glass, radius, space, type } from "../theme";
 import { TreeKeyboard } from "./TreeKeyboard";
 import { AgentOrb } from "./AgentOrb";
@@ -42,7 +42,7 @@ function Row({ item, selected, activate, toggle, collapse, inline }: {
     onPanResponderRelease: (_, g) => { if (g.dx < -space.xxxl) collapse(); },
   }), [collapse]);
   return (
-    <Animated.View layout={inline && !TURBO ? layout : undefined} entering={FadeIn.duration(fade.duration).reduceMotion(ReduceMotion.System)} exiting={FadeOut.duration(fade.duration).reduceMotion(ReduceMotion.System)} {...swipe.panHandlers}>
+    <Animated.View layout={inline && !TURBO ? layout : undefined} {...swipe.panHandlers}>
       <View style={[styles.row, node.dimmed && styles.dimmed]}>
         {Array.from({ length: depth }, (_, level) => <View pointerEvents="none" key={level} style={[styles.guide, { left: space.md + level * space.lg }]} />)}
         <Pressable

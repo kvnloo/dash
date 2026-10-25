@@ -35,7 +35,7 @@ export type DebugCommand =
   | { action: "setConnection"; status: "online" | "offline" | "connecting" | "idle" }
   | { action: "setBridgePull"; open: boolean }
   | { action: "wait"; ms: number }
-  | { action: "replyFixture"; reset?: boolean; part?: ReplyPart; text?: string; seq: number }
+  | { action: "replyFixture"; reset?: boolean; part?: ReplyPart; text?: string; outcome?: "error" | "interrupted"; seq: number }
   | { action: "thinkingSummary"; summary: SummaryInfo }
   | { action: "uxOutput"; text: string }
   | { action: "genuiReply"; text: string }
@@ -98,6 +98,10 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
         replyText.clear("detail-fixture-turn"); replyParts.clear("detail-fixture-turn");
         store.set(s => ({ ...s, activeId: "detail-fixture", conversations: [{ id: "detail-fixture", harness: "hermes", title: "Wrapped thinking & tools", createdAt: 1, updatedAt: 1, messages: [{ id: "detail-fixture-user", role: "user", text: "Check the streaming pipeline", at: 1 }, { id: "detail-fixture-answer", role: "assistant", text: "", at: 2, turnId: "detail-fixture-turn", state: "streaming", seq: 0 }] }] }));
         debugResetTo("Chat", {}); flushPendingDebugNavigation();
+      }
+      if (cmd.outcome) {
+        const outcome = cmd.outcome;
+        store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id !== "detail-fixture" ? c : { ...c, messages: c.messages.map(m => m.role !== "assistant" ? m : { ...m, state: outcome, error: outcome === "error" ? "Fixture: host refused the request. No automatic retry was sent." : undefined, status: outcome === "interrupted" ? "Fixture: connection ended before the reply completed." : undefined }) }) }));
       }
       if (cmd.part) applyTurnEvent({ type: "status", id: "detail-fixture-turn", seq: cmd.seq, text: "", part: cmd.part });
       if (cmd.text) applyDeltas(new Map([["detail-fixture-turn", { seq: cmd.seq, text: cmd.text }]]));

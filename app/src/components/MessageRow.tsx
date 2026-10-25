@@ -3,7 +3,7 @@ import { memo, useState } from "react";
 import { Alert, Platform, StyleSheet, Text, View } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
 import { baseName, fileRefs, formatSize, isImage, sendToPhone } from "../lib/attachments";
-import type { AssistantMessage, AssistantState, Message } from "../model";
+import type { AssistantMessage, Message } from "../model";
 import { store } from "../store/app";
 import { replyText, useKeyed } from "../store/text";
 import { colors, fonts, glass, radius, space, type } from "../theme";
@@ -20,6 +20,7 @@ import type { DetailMode } from "../lib/reply-details";
 import { bridge } from "../net/bridge";
 import { StageLinks } from "./artifact-stage/StageLinks";
 import { PressScale } from "./PressScale";
+import { replyFeedback } from "../lib/turn-feedback";
 
 export const MessageRow = memo(function MessageRow({
   message,
@@ -58,7 +59,7 @@ export const MessageRow = memo(function MessageRow({
         const history = message.seq === 0 && chat?.harness === "hermes";
         bridge.send({ type: "tool_detail", id: message.turnId, callId, ...(history ? { messageId: message.id, sessionId: chat?.sessionId, profileId: chat?.profileId, hostId: chat?.targetHostId } : {}) });
       }} />
-      <AssistantBody key={message.id} message={message} harnessId={harnessId} detailMode={detailMode} />
+      <AssistantBody key={message.id} message={message} detailMode={detailMode} />
       {thinking && thinking.phase !== "idle" ? <View style={styles.statusRow}><AgentOrb size={20} thinking={thinking} /><Text style={styles.statusText}>working · {thinking.tool ?? "terminal"}</Text></View> : null}
       {!message.parts?.length && detailMode !== "Hide" && (message.activity?.length || (message.state === "done" && message.status)) ? <Disclosure key={`${message.id}:activity`} label={`Activity · ${message.activity?.length ?? 1} ${(message.activity?.length ?? 1) === 1 ? "update" : "updates"}`} text={(message.activity ?? [message.status ?? ""]).join("\n")} /> : null}
     </View>
@@ -80,13 +81,7 @@ function Answer({ text, turnId, detailMode, streaming = false }: { text: string;
   return <>{parts.thinking ? <ReplyBlocks turnId={turnId} parts={[{ kind: "reasoning", text: parts.thinking }]} mode={detailMode} /> : null}{parts.text ? <Markdown text={parts.text} streaming={streaming} onIntent={intent => sendInlineIntent(turnId, intent)} /> : null}</>;
 }
 
-function ThinkingMarker({ turnState, waiting = false }: { harnessId?: string; turnState: AssistantState; waiting?: boolean }) {
-  // A reply held for a host handoff is not work in progress: faint, never gold.
-  const color = waiting ? colors.textTertiary : turnState === "done" ? colors.ok : turnState === "error" ? colors.danger : colors.gold;
-  return <View accessibilityLabel={waiting ? "queued" : turnState} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: color }} />;
-}
-
-function AssistantBody({ message, harnessId, detailMode }: { message: AssistantMessage; harnessId?: string; detailMode: DetailMode }) {
+function AssistantBody({ message, detailMode }: { message: AssistantMessage; detailMode: DetailMode }) {
   const liveText = useKeyed(replyText, message.turnId);
   const connection = store.use(s => s.connection.status);
   switch (message.state) {
@@ -97,10 +92,10 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
       return (
         <>
           {liveText || message.text ? <Answer streaming turnId={message.turnId} detailMode={detailMode} text={liveText || message.text} /> : null}
-          <View style={styles.statusRow}>
+          <View style={styles.statusRow} accessibilityLiveRegion="polite" testID="reply-progress">
             <AgentOrb size={20} thinking={messageThinking(message, { liveText, connection })} label={message.handoff === "queued" ? "queued" : "streaming"} />
             <Text style={styles.statusText} numberOfLines={1}>
-              {message.status ?? "Working"}
+              {replyFeedback(message, connection === "online", Boolean(liveText || message.text))}
             </Text>
           </View>
         </>
@@ -111,9 +106,9 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
       return (
         <>
           {message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
-          <View style={styles.statusRow}>
-            <ThinkingMarker harnessId={harnessId} turnState={message.state} />
-            <Text style={styles.noteText}>{message.status ?? "Connection to the bridge was lost mid-reply."}</Text>
+          <View style={styles.noticeRow} accessibilityLiveRegion="polite">
+            <Feather name="pause-circle" size={16} color={colors.warn} />
+            <View style={styles.noticeBody}><Text style={styles.noticeTitle}>Reply interrupted</Text><Text selectable style={styles.noteText}>{message.status ?? "Connection to the bridge was lost mid-reply."}</Text></View>
           </View>
         </>
       );
@@ -121,11 +116,9 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
       return (
         <>
           {message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
-          <View style={styles.statusRow}>
-            <ThinkingMarker harnessId={harnessId} turnState={message.state} />
-            <Text selectable style={styles.errorText}>
-              {message.error ?? "Something went wrong"}
-            </Text>
+          <View style={[styles.noticeRow, styles.failedNotice]} accessibilityRole="alert">
+            <Feather name="alert-circle" size={16} color={colors.danger} />
+            <View style={styles.noticeBody}><Text style={[styles.noticeTitle, styles.errorText]}>Reply failed</Text><Text selectable style={styles.noteText}>{message.error ?? "The reply could not be completed."}</Text></View>
           </View>
         </>
       );
@@ -214,6 +207,10 @@ const styles = StyleSheet.create({
   userText: { color: colors.text, ...type.body },
   assistantRow: { paddingHorizontal: space.lg, paddingVertical: 6 },
   assistantText: { color: colors.text, ...type.body },
+  noticeRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 8, padding: 10, borderLeftWidth: 2, borderColor: colors.warn, backgroundColor: glass.fill, borderRadius: 6 },
+  failedNotice: { borderColor: colors.danger },
+  noticeBody: { flex: 1, minWidth: 0, gap: 3 },
+  noticeTitle: { ...type.label, color: colors.text },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, minHeight: 22 },
   statusText: { color: colors.textTertiary, ...type.mono, flexShrink: 1 },
   noteText: { color: colors.textMuted, ...type.small, flexShrink: 1 },

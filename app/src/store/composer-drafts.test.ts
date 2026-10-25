@@ -1,5 +1,12 @@
-import { expect, test } from "bun:test";
-import { composerDrafts, updateComposerDraft, type ComposerDraft } from "./composer-drafts";
+import { expect, mock, test } from "bun:test";
+import type { ComposerDraft } from "./composer-drafts";
+// Own the storage boundary: other store suites intentionally install partial mocks.
+mock.module("@react-native-async-storage/async-storage", () => ({ default: {
+  async getItem() { return null; }, async setItem() {},
+  async multiGet() { return []; }, async multiSet() {}, async multiRemove() {},
+} }));
+mock.module("react-native", () => ({ Platform: { OS: "android" }, AppState: { currentState: "active", addEventListener() { return { remove() {} }; } } }));
+const { composerDrafts, updateComposerDraft } = await import("./composer-drafts");
 
 test("a draft and late upload completion stay bound to the original conversation across navigation", () => {
   composerDrafts.set({});

@@ -1,5 +1,5 @@
-import { memo, useContext, type ReactNode } from "react";
-import { Pressable, StyleSheet, type PressableProps, type ViewStyle } from "react-native";
+import { memo, useContext, useEffect, type ReactNode } from "react";
+import { Platform, Pressable, StyleSheet, type PressableProps, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   ReduceMotion,
@@ -40,11 +40,13 @@ export const PressScale = memo(function PressScale({
   onPressIn,
   onPressOut,
   disabled,
+  accessibilityState,
   children,
   ...rest
 }: PressScaleProps) {
   const swiping = useContext(PagerGestureContext);
   const scale = useSharedValue(1);
+  useEffect(() => { if (disabled) scale.value = 1; }, [disabled, scale]);
   const gesture = Gesture.Manual().enabled(!disabled)
     .onTouchesDown(() => { scale.value = withTiming(scaleTo, spring); })
     .onTouchesUp((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); })
@@ -54,13 +56,16 @@ export const PressScale = memo(function PressScale({
     <GestureDetector gesture={gesture}><Pressable
       disabled={disabled}
       {...rest}
+      accessibilityState={{ ...accessibilityState, disabled: Boolean(disabled) }}
       style={style}
       onPress={e => { if (!swiping?.value) onPress?.(e); }}
       onLongPress={e => { if (!swiping?.value) onLongPress?.(e); }}
       onPressIn={(e) => {
+        if (Platform.OS === "web") scale.value = withTiming(scaleTo, spring);
         onPressIn?.(e);
       }}
       onPressOut={(e) => {
+        if (Platform.OS === "web") scale.value = withTiming(1, spring);
         onPressOut?.(e);
       }}
     >

@@ -124,11 +124,13 @@ describe("AODL visual encodings", () => {
     expect(resolveRuntimeState(catalog, undefined).id).toBe("unknown");
   });
 
-  test("Living Night status uses a dot; identity is a static catalog orb", () => {
+  test("Living Night status is explicit; identity is a static catalog orb", () => {
     const row = readFileSync(join(import.meta.dir, "../components/MessageRow.tsx"), "utf8");
     const avatar = readFileSync(join(import.meta.dir, "../components/HarnessAvatar.tsx"), "utf8");
     const orbs = readFileSync(join(import.meta.dir, "../components/EffortOrbs.tsx"), "utf8");
-    expect(row).toContain("width: 4, height: 4");
+    expect(row).toContain('accessibilityRole="alert"');
+    expect(row).toContain("Reply interrupted");
+    expect(row).toContain("replyFeedback(message");
     expect(row).not.toContain("PulseDot");
     expect(avatar).toContain("<Image");
     expect(avatar).not.toContain("withRepeat");

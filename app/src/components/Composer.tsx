@@ -31,6 +31,7 @@ import { PressScale } from "./PressScale";
 import { ComposerSuggestions } from "./ComposerSuggestions";
 import { composerMode, type SendMode } from "../lib/composer-mode";
 import { haptic } from "../haptics";
+import { PRESS_SCALE } from "../motion";
 import type { IncomingShare } from "../lib/incoming-share";
 import { composerDrafts, updateComposerDraft, type ComposerDraft } from "../store/composer-drafts";
 
@@ -94,6 +95,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
   }, [sharedDraft, onSharedDraftConsumed, drafts.length]);
   const mounted = useRef(true);
   const inputRef = useRef<TextInput>(null);
+  const [focused, setFocused] = useState(false);
   const attachRef = useRef<View>(null);
   const [attachAnchor, setAttachAnchor] = useState<AttachmentAnchor | null>(null);
   const attachRequest = useRef(0);
@@ -197,7 +199,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
     onSend(value, refs, sendMode.mode);
   }, [canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
 
-  return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
+  return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet} style={focused ? styles.focusedSheet : undefined}>
     {drafts.length > 0 ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips} accessibilityLabel="Attachments">
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}
@@ -211,12 +213,12 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
       {speech.state.phase === "error" ? <PressScale accessibilityRole="button" accessibilityLabel="Retry dictation" onPress={onDictate} style={styles.modeToggle}><Text style={styles.chipName}>Retry</Text></PressScale> : null}
     </View> : null}
     <View testID="composer-field" style={[styles.field, editingQueue && styles.previewField]}>
-      <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={changeText} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
+      <TextInput ref={inputRef} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} accessibilityHint={disabled ? "Draft is saved. Sending is unavailable until connected." : "Write a message. Sending keeps the keyboard open."} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={changeText} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
       <View testID="composer-controls" style={[styles.controls, { flexDirection: "row", justifyContent: "flex-start" }, editingQueue && thumb.align]}>
         {/* One primary button at the text's leading edge: Send/Steer/Queue when there is a draft, Stop while a turn runs with an empty draft. */}
         {editingQueue ? <PressScale accessibilityRole="button" accessibilityLabel="Save queued merge" accessibilityHint="Keep this merged message queued for the next turn" onPress={submit} disabled={!canSend} style={[styles.hit, styles.previewSave]}><Text style={styles.chipName}>Save queued</Text></PressScale>
-          : (streaming || steerBusy) && !canSend ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale>
-          : <PressScale accessibilityRole="button" accessibilityLabel={streaming && !steerBusy ? "Queue" : sendMode.action} accessibilityHint={sendMode.label} onPress={submit} disabled={!canSend} style={styles.hit}><View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View></PressScale>}
+          : (streaming || steerBusy) && !canSend ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" scaleTo={PRESS_SCALE.control} onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale>
+          : <PressScale accessibilityRole="button" scaleTo={PRESS_SCALE.control} accessibilityLabel={streaming && !steerBusy ? "Queue" : sendMode.action} accessibilityHint={sendMode.label} onPress={submit} disabled={!canSend} style={styles.hit}><View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View></PressScale>}
         {context ? <ContextGauge control={context} /> : null}
         <View ref={attachRef} collapsable={false}><PressScale accessibilityRole="button" accessibilityLabel="Attach file" accessibilityState={{ expanded: attachAnchor !== null }} onPress={onAttach} disabled={disabled || editingQueue} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale></View>
         <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onTap={speechBusy ? onDictate : voiceCall ? onVoice : undefined} accessibilityLabel={speechBusy ? "Stop dictation" : voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
@@ -252,6 +254,7 @@ const AttachmentChip = memo(function AttachmentChip({ draft, onRemove }: { draft
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 12, paddingTop: 8, gap: 8 },
   sheet: { paddingHorizontal: 8 },
+  focusedSheet: { outlineWidth: 1, outlineColor: glass.highlight, outlineStyle: "solid" },
   field: { flexDirection: "column", alignItems: "stretch", minHeight: 96 },
   previewField: { flexDirection: "column", alignItems: "stretch" },
   previewInput: { flex: 0, minHeight: 168, maxHeight: 192 },
