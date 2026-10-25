@@ -220,9 +220,11 @@ if (process.env[CHILD] !== "1") {
       app.markTurnLost(active.turnId);
       app.markTurnLost("unknown-turn");
       expect(assistant(id, active.turnId)).toMatchObject({
-        state: "interrupted", text: "Partial streamed transcript", status: undefined,
+        state: "interrupted", text: "Partial streamed transcript", status: undefined, parts: [part],
       });
-      expect(partsFor(active.turnId)).toEqual([part]);
+      // Turbo 278984d releases per-turn working caches once a reply settles; the
+      // checkpointed message, not the scratch cache, is what must keep the parts.
+      expect(partsFor(active.turnId)).toEqual([]);
     });
 
     test("cannot turn a pending or completed reply into a lost streaming reply", () => {
