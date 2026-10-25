@@ -8,6 +8,7 @@ import {
   loadSuggestionInventory,
   selectSuggestionTarget,
   suggestionRequestKey,
+  type SuggestionFetcher,
   type SuggestionSource,
 } from "./composer-suggestion-request";
 
@@ -50,7 +51,7 @@ describe("H-050 main and open-chat suggestions", () => {
 
     const calls: { url: string; authorization: string | null; signal?: AbortSignal }[] = [];
     const controller = new AbortController();
-    const fakeFetch: typeof fetch = async (url, init) => {
+    const fakeFetch: SuggestionFetcher = async (url, init) => {
       calls.push({
         url: String(url),
         authorization: new Headers(init?.headers).get("Authorization"),
@@ -153,7 +154,7 @@ describe("H-050 main and open-chat suggestions", () => {
 
   test("HTTP authentication, missing bridge, malformed data and transient failure remain distinct", async () => {
     const controller = new AbortController();
-    const broken = (status: number): typeof fetch => async () => response({ error: "unavailable" }, status);
+    const broken = (status: number): SuggestionFetcher => async () => response({ error: "unavailable" }, status);
     await expect(loadSuggestionInventory(pair, controller.signal, broken(401))).rejects.toThrow("Pairing expired");
     await expect(loadSuggestionInventory(pair, controller.signal, broken(404))).rejects.toThrow("Update the paired bridge");
     await expect(loadSuggestionInventory(pair, controller.signal, broken(503))).rejects.toThrow("Could not load suggestions");
@@ -161,7 +162,7 @@ describe("H-050 main and open-chat suggestions", () => {
       .rejects.toThrow("Invalid suggestion inventory");
 
     let attempts = 0;
-    const flaky: typeof fetch = async () => {
+    const flaky: SuggestionFetcher = async () => {
       attempts += 1;
       return attempts === 1
         ? brokenResponse()
