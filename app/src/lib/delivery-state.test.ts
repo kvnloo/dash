@@ -6,7 +6,6 @@ import {
   reduceDelivery,
   type DeliveryIdentity,
   type DeliveryRecord,
-  type DeliveryTarget,
 } from "./delivery-state";
 
 function queued(): DeliveryRecord {
@@ -278,5 +277,12 @@ describe("pure delivery state machine", () => {
     }
     expect(reconcile(written, "not-admitted", 111)).toBe(written); // no uncertainty
     expect(retry(written, 112)).toBe(written);
+    const uncertain = timeout(written, 120);
+    expect(reconcile(uncertain, "not-admitted", 119)).toBe(uncertain); // stale lookup
+    const retryNeeded = reconcile(uncertain, "not-admitted", 121);
+    expect(retry(retryNeeded, 120)).toBe(retryNeeded); // stale local action
+    const ready = retry(retryNeeded, 122);
+    expect(send(ready, true, 121)).toBe(ready); // stale socket callback
+    expect(reduceDelivery(ready, { ...deliveryIdentity(ready), type: "disconnect", at: 121 })).toBe(ready);
   });
 });
