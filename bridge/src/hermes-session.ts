@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { approvalArgs } from "./argv-policy";
+import { decodeGatewayReply, decodePeerReply, sameOriginGatewayEndpoint, verifyNativeHermesSession } from "./hermes-reply-guard";
 
 // Discovery may select another transport. A send never retries on another path.
 
@@ -9,6 +10,7 @@ export type HermesTurnInput = {
   text: string;
   cwd: string;
   sessionId?: string;
+  profileId?: string;
 };
 
 export type HermesPath = "gateway" | "peer" | "cli";
@@ -262,7 +264,7 @@ async function fetchJson(
 ): Promise<{ ok: boolean; status: number; body: unknown }> {
   const timeout = AbortSignal.timeout(timeoutMs);
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
-  const response = await fetchFn(url, { ...init, signal: combined });
+  const response = await fetchFn(url, { ...init, redirect: "error", signal: combined });
   const text = await response.text();
   return { ok: response.ok, status: response.status, body: text ? parseJsonText(text) : undefined };
 }
@@ -307,27 +309,6 @@ function loadHermesEnvFile(path: string): EnvMap {
   }
 }
 
-function requireReply(path: "gateway" | "peer", body: unknown): string {
-  if (!isRecord(body)) throw new Error(`Hermes ${path} returned an invalid response.`);
-  if (body.error !== undefined) {
-    const message = isRecord(body.error) && typeof body.error.message === "string"
-      ? body.error.message
-      : "JSON-RPC request failed";
-    throw new Error(`Hermes ${path}: ${message}`);
-  }
-  if (path === "gateway" && !isRecord(body.result)) {
-    throw new Error("Hermes gateway returned no JSON-RPC result.");
-  }
-  const result = isRecord(body.result) ? body.result : body;
-  const task = isRecord(result.task) ? result.task : result;
-  const status = isRecord(task.status) ? task.status.state : task.status;
-  if (typeof status === "string" && ["failed", "canceled", "cancelled", "rejected"].includes(status.toLowerCase())) {
-    throw new Error(`Hermes ${path} task ${status}.`);
-  }
-  const text = extractA2AText(isRecord(body.message) && body.message.role === "assistant" ? body.message : body);
-  if (!text) throw new Error(`Hermes ${path} returned an empty reply.`);
-  return text;
-}
 
 const activeNativeSessions = new Set<string>();
 
@@ -354,13 +335,16 @@ export async function runHermesSession(options: {
     try {
       const request = buildPeerRequest({ origin: options.api.url, sessionId, text: options.input.text, token: options.api.key });
       const identity = await fetchJson(fetchFn, `${options.api.url}/api/sessions/${encodeURIComponent(sessionId)}`, { method: "GET", headers: request.headers }, CARD_TIMEOUT_MS, options.signal);
-      if (!identity.ok || !isRecord(identity.body) || !isRecord(identity.body.session) || identity.body.session.id !== sessionId) throw new Error("Hermes API does not own this profile/session. No send attempted.");
+      if (!identity.ok) throw new Error("Hermes API identity HTTP " + identity.status + ". No send attempted.");
+      verifyNativeHermesSession(identity.body, { sessionId, cwd: options.input.cwd, profileId: options.input.profileId });
+      options.signal?.throwIfAborted();
       const sent = await fetchJson(fetchFn, request.url, { method: request.method, headers: request.headers, body: JSON.stringify(request.body) }, SEND_TIMEOUT_MS, options.signal);
+      options.signal?.throwIfAborted();
       if (!sent.ok) throw new Error(`Hermes API HTTP ${sent.status}. No fallback attempted; the host may still own this session.`);
       if (sent.status === 202) throw new Error("Hermes queued this turn with its live owner. Refresh history; do not resend.");
-      const reply = requireReply("peer", sent.body);
+      const reply = decodePeerReply(sent.body, sessionId);
       options.log("hermes.path", { path: "api" });
-      return { path: "api", text: reply, sessionId: extractA2ASessionId(sent.body) ?? sessionId };
+      return { path: "api", text: reply.text, sessionId: reply.sessionId };
     } finally { activeNativeSessions.delete(identityKey); }
   }
   const origin = gatewayOrigin(env);
@@ -386,7 +370,11 @@ export async function runHermesSession(options: {
   if (cardResponse && !cardResponse.ok && ![404, 405, 501, 502, 503, 504].includes(cardResponse.status)) {
     throw new Error(`Hermes gateway discovery HTTP ${cardResponse.status}.`);
   }
-  const endpoint = cardResponse?.ok ? jsonRpcEndpoint(cardResponse.body, origin) : undefined;
+  if (cardResponse?.ok && !isRecord(cardResponse.body)) {
+    throw new Error("Hermes gateway returned a malformed agent card. No fallback attempted.");
+  }
+  const advertised = cardResponse?.ok ? jsonRpcEndpoint(cardResponse.body, origin) : undefined;
+  const endpoint = advertised ? sameOriginGatewayEndpoint(advertised, origin) : undefined;
   if (endpoint) {
     const request = buildGatewayRequest({ endpoint, text: options.input.text, sessionId: options.input.sessionId, token });
     const sent = await fetchJson(fetchFn, request.url,
@@ -394,10 +382,10 @@ export async function runHermesSession(options: {
       SEND_TIMEOUT_MS, options.signal);
     options.signal?.throwIfAborted();
     if (!sent.ok) throw new Error(`Hermes gateway HTTP ${sent.status}. Send outcome may be unknown; no fallback attempted.`);
-    const text = requireReply("gateway", sent.body);
-    const sessionId = extractA2ASessionId(sent.body) ?? options.input.sessionId;
+    if (sent.status === 202) throw new Error("Hermes gateway accepted a queued turn; confirm completion in history before retrying.");
+    const reply = decodeGatewayReply(sent.body, request.body.id, options.input.sessionId);
     options.log("hermes.path", { path: "gateway", origin });
-    return { path: "gateway", text, sessionId };
+    return { path: "gateway", text: reply.text, sessionId: reply.sessionId };
   }
   options.log("hermes.path", { path: "gateway", origin, reason });
 
@@ -421,10 +409,10 @@ export async function runHermesSession(options: {
     );
     options.signal?.throwIfAborted();
     if (!sent.ok) throw new Error(`Hermes peer HTTP ${sent.status}. Send outcome may be unknown; no fallback attempted.`);
-    const text = requireReply("peer", sent.body);
-    const nextSession = extractA2ASessionId(sent.body) ?? sessionId;
+    if (sent.status === 202) throw new Error("Hermes peer accepted a queued turn. Refresh history; do not resend.");
+    const reply = decodePeerReply(sent.body, sessionId);
     options.log("hermes.path", { path: "peer", origin: peer });
-    return { path: "peer", text, sessionId: nextSession };
+    return { path: "peer", text: reply.text, sessionId: reply.sessionId };
   }
 
   options.signal?.throwIfAborted();
