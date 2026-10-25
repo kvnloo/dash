@@ -371,6 +371,7 @@ test("invalid identities and ambiguous or malformed choice sets fail before inst
   const broker = new PermissionBroker(clock.scheduler);
   const source = { ...scope, respond() {}, notify() {} };
   expect(() => broker.register({ ...source, turnId: "", options })).toThrow(/identity/);
+  expect(() => broker.register({ ...source, requestId: "   ", options })).toThrow(/identity/);
   expect(() => broker.register({ ...source, options: [] })).toThrow(/1–32/);
   expect(() => broker.register({ ...source, options: [
     { optionId: "no", name: "Reject", kind: "reject_once" },
