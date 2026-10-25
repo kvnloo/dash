@@ -44,7 +44,7 @@ describe("Orchestra AODL catalog projection", () => {
     expect(view.harnesses.map((harness) => harness.id)).toEqual(expectedHarnesses);
     expect(view.harnesses.find((harness) => harness.id === "o8")?.kind).toBe("control-room");
     expect(view.distro).toEqual({ id: "firstmate", name: "firstmate" });
-    expect(view.harnesses.some((harness) => harness.id === "firstmate")).toBe(false);
+    expect(view.harnesses.map((harness) => harness.id)).not.toContain("firstmate");
   });
 
   test("rejects unknown or missing network/harness/distro ids", () => {
