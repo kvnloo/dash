@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { ConversationPersistence, CACHE_ENTRIES, CACHE_ENTRY_BYTES, durableConversation, cacheConversation, type ConversationFiles } from "./conversation-persistence";
+import { ConversationPersistence, CACHE_ENTRIES, CACHE_ENTRY_BYTES, uniqueConversationIds, durableConversation, cacheConversation, type ConversationFiles } from "./conversation-persistence";
 import type { Conversation } from "../model";
 
 class Files implements ConversationFiles {
@@ -17,6 +17,18 @@ function chat(id = "chat"): Conversation {
   return { id, harness: "hermes", sessionId: `host-${id}`, title: "chat", createdAt: 1, updatedAt: 2,
     messages: [{ id: "u", role: "user", text: "hello", at: 1 }, { id: "a", role: "assistant", text: "host answer", at: 2, state: "done", turnId: "turn", seq: 5 }] };
 }
+
+test("duplicate legacy client IDs with different host routes survive as separate conversations", async () => {
+  const files = new Files();
+  const chats = uniqueConversationIds([chat(), { ...chat(), sessionId: "other-host-session", targetHostId: "other-host" }, chat("chat:recovered:2")]);
+  expect(new Set(chats.map(chat => chat.id)).size).toBe(3);
+  expect(chats[0]?.id).toBe("chat");
+  expect(chats[1]?.id).toBe("chat:recovered:3");
+  await new ConversationPersistence(files).save(chats);
+  const restored = await new ConversationPersistence(files).load();
+  expect(restored).toHaveLength(3);
+  expect(restored.find(chat => chat.id === "chat:recovered:3")?.targetHostId).toBe("other-host");
+});
 
 test("host history is cache only; local-only conversations remain durable", async () => {
   const files = new Files(); const store = new ConversationPersistence(files);

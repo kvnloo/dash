@@ -1,18 +1,19 @@
 import { mkdir, readFile, writeFile, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { ConversationPersistence, type ConversationFiles } from "../app/src/store/conversation-persistence";
+import { ConversationPersistence, uniqueConversationIds, type ConversationFiles } from "../app/src/store/conversation-persistence";
 import { parseConversation, type Conversation } from "../app/src/model";
 
 const [input, output] = process.argv.slice(2);
 if (!input || !output) throw Error("Usage: bun scripts/recover-conversation-storage.ts <private-legacy-json> <private-output-directory>");
 const parsed: unknown = JSON.parse(await readFile(input, "utf8"));
 if (!Array.isArray(parsed)) throw Error("Legacy snapshot is not an array");
-const chats: Conversation[] = [];
+const parsedChats: Conversation[] = [];
 for (const raw of parsed) {
   const chat = parseConversation(raw);
   if (!chat) throw Error("Recovery refuses to discard an invalid legacy record");
-  chats.push(chat);
+  parsedChats.push(chat);
 }
+const chats = uniqueConversationIds(parsedChats);
 for (const area of ["durable", "cache"]) await mkdir(join(output, area), { recursive: true, mode: 0o700 });
 const files: ConversationFiles = {
   list: area => readdir(join(output, area)),

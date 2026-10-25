@@ -12,6 +12,18 @@ const CACHE_MESSAGES = 80;
 const CACHE_VERSION = 1;
 
 function filename(id: string): string { return `${encodeURIComponent(id)}.json`; }
+export function uniqueConversationIds(chats: readonly Conversation[]): Conversation[] {
+  const used = new Set(chats.map(chat => chat.id));
+  const seen = new Set<string>();
+  return chats.map(chat => {
+    if (!seen.has(chat.id)) { seen.add(chat.id); return chat; }
+    let suffix = 2;
+    while (used.has(`${chat.id}:recovered:${suffix}`)) suffix++;
+    const id = `${chat.id}:recovered:${suffix}`;
+    used.add(id); seen.add(id);
+    return { ...chat, id };
+  });
+}
 function parse(raw: string | null): Conversation | null {
   if (!raw) return null;
   try { const value: unknown = JSON.parse(raw); return parseConversation(value); } catch { return null; }
