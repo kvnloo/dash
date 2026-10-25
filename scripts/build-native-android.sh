@@ -70,12 +70,16 @@ cp app/android/app/build/intermediates/merged_manifests/debug/processDebugManife
 python3 scripts/verify-native-manifest.py .native-receipts/AndroidManifest.xml > .native-receipts/manifest-check.json
 sha256sum .native-receipts/dash-native-arm64.apk | tee .native-receipts/apk.sha256
 signer=$(printf '%s\n' "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-"$signer" verify --verbose --print-certs .native-receipts/dash-native-arm64.apk | tee .native-receipts/signature.txt
+bash "$signer" verify --verbose --print-certs .native-receipts/dash-native-arm64.apk | tee .native-receipts/signature.txt
 (cd app && node -e 'for (const n of ["expo", "react-native", "react-native-webrtc", "expo-dev-client"]) console.log(n + " " + require(n + "/package.json").version)') > .native-receipts/runtime-dependencies.txt
 mkdir -p .native-receipts/runtime-packages
 for package in react-native-webrtc base64-js debug ms; do
   rsync -a --exclude=android/ --exclude=ios/ --exclude=common/ "app/node_modules/$package" .native-receipts/runtime-packages/
 done
 
-printf 'js_gates_exit=%s\n' "$gate_status" > .native-receipts/gates.exit
+if [ "${DASH_NATIVE_ONLY:-0}" = 1 ]; then
+  printf 'js_gates=not-rerun; use exact-JS companion receipts\n' > .native-receipts/gates.exit
+else
+  printf 'js_gates_exit=%s\n' "$gate_status" > .native-receipts/gates.exit
+fi
 exit "$gate_status"
