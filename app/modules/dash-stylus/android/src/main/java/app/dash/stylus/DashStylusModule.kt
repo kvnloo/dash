@@ -1,6 +1,8 @@
 package app.dash.stylus
 
 import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
 import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
@@ -31,6 +33,9 @@ class DashStylusModule : Module() {
     OnStartObserving { observing = true; install() }
     OnStopObserving { observing = false; uninstall() }
     OnActivityEntersForeground { if (observing) install() }
+    OnActivityEntersBackground {
+      edges.sample(false)?.let { sendEvent("button", mapOf("pressed" to it)) }
+    }
     OnActivityDestroys { uninstall() }
     OnDestroy { uninstall() }
     AsyncFunction("regionText") { x: Double, y: Double, width: Double, height: Double ->
@@ -137,5 +142,5 @@ class DashStylusModule : Module() {
     if (window?.callback === observer && original != null) window?.callback = original
     window = null; original = null; observer = null
   }
-  private fun uninstall() { appContext.currentActivity?.runOnUiThread { restore() } }
+  private fun uninstall() { Handler(Looper.getMainLooper()).post { restore() } }
 }
