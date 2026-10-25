@@ -79,7 +79,7 @@ type PendingPermission = {
 };
 
 function validId(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\x00-\x1f\x7f]/.test(value);
+  return typeof value === "string" && value.trim().length > 0 && value.length <= 256 && !/[\x00-\x1f\x7f]/.test(value);
 }
 
 function validScope(scope: PermissionScope): boolean {
