@@ -305,7 +305,8 @@ describe("outbox queued-turn policy", () => {
     expect(snapshot.text).toBe("Message a\n\nMessage b");
     const sent: OutboxQueueItem = { ...combined, phase: "sent" };
     expect(snapshotForAdmission(sent)).toBeNull();
-    blocked(planQueueEdit([sent], "a", "new text"), "sent-unconfirmed", [sent], "reconcile");
+    const sentQueue = [sent];
+    blocked(planQueueEdit(sentQueue, "a", "new text"), "sent-unconfirmed", sentQueue, "reconcile");
     expect(snapshotForAdmission({ ...sent, phase: "started" })).toBeNull();
   });
 });
