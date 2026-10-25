@@ -70,7 +70,7 @@ describe("toolTree lazy boundaries and call identity (DASH2-185)", () => {
 
   test("preserves exact turn and distinct call IDs through grouped lazy inspect actions", async () => {
     const turnId = "turn:session/a#13";
-    const callIds = ["read:one/A?x=1", "read:two:B/β#2"];
+    const callIds: readonly [string, string] = ["read:one/A?x=1", "read:two:B/β#2"];
     const inspected: string[] = [];
     const root = toolTree({
       id: "different-message-id",
