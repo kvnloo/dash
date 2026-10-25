@@ -32,6 +32,7 @@ try{
     await wait(()=>page.evaluate(()=>Boolean(window.__dashAnnotate)),'annotation mount');
     await page.evaluate(()=>window.__dashAnnotate.enterAnnotation());
     await page.getByLabel('Annotation mode on',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Pen mode: only the S Pen draws, fingers scroll',exact:true}).click();
     await page.getByRole('radio',{name:'Red ink',exact:true}).click();
     await wait(()=>page.locator('canvas').count(),'Skia canvas');await sleep(1500);
     const before=await page.screenshot({path:path.join(out,`${width}-before.png`)});
@@ -54,6 +55,15 @@ try{
     assert.equal(await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes.length),0);
     await page.getByRole('button',{name:'Pen mode: only the S Pen draws, fingers scroll',exact:true}).click();
     const cdp=await context.newCDPSession(page);
+    // Native button events are simulated here; actual pen contact remains a real browser input.
+    await page.evaluate(()=>{const a=window.__dashAnnotate;a.stylusButton(true);a.stylusButton(false);});
+    assert.equal(await page.evaluate(()=>window.__dashAnnotate.annotate.get().active),false);
+    await cdp.send('Input.dispatchMouseEvent',{type:'mousePressed',x:65,y:285,button:'left',buttons:1,clickCount:1,pointerType:'pen'});
+    await cdp.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:215,y:385,button:'left',buttons:0,clickCount:1,pointerType:'pen'});
+    assert.equal(await page.evaluate(()=>window.__dashAnnotate.annotate.get().active),false,'normal pen contact never enters marking');
+    assert.equal(await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes.length),0);
+    await page.evaluate(()=>{const a=window.__dashAnnotate;a.stylusButton(true);a.stylusButton(false);});
+    await page.getByLabel('Annotation mode on',{exact:true}).waitFor();
     // Coalesced native-style stylus stroke: DOWN/UP can arrive with no Pan UPDATE.
     await cdp.send('Input.dispatchMouseEvent',{type:'mousePressed',x:65,y:285,button:'left',buttons:1,clickCount:1,pointerType:'pen',force:0.7});
     await cdp.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:215,y:385,button:'left',buttons:0,clickCount:1,pointerType:'pen'});
@@ -83,6 +93,7 @@ try{
   await page.getByTestId('chat-window').waitFor({state:'visible'});
   const input=page.getByRole('textbox',{name:'Message',exact:true});await input.fill('Original unsent draft\nKeep this exact text');
   await page.evaluate(()=>window.__dashAnnotate.enterAnnotation());await wait(()=>page.locator('canvas').count(),'chat canvas');
+  await page.getByRole('button',{name:'Pen mode: only the S Pen draws, fingers scroll',exact:true}).click();
   await page.mouse.move(60,280);await page.mouse.down();await page.mouse.move(210,380,{steps:20});await page.mouse.up();await sleep(250);
   const originalInk=await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes);
   assert.equal(originalInk.length,1);
@@ -95,7 +106,7 @@ try{
   assert.equal(await input.inputValue(),'Original unsent draft\nKeep this exact text',JSON.stringify(reopenDiag));
   assert.deepEqual(await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes),originalInk);
   // Keep the annotation open, but use its existing tray relocation so it cannot cover the mic.
-  await page.getByRole('button',{name:'Move tray to the top',exact:true}).click();
+  // Tray defaults to the top to leave the dock reachable.
   const mic=page.getByRole('button',{name:'Dictate',exact:true});const bounds=await mic.boundingBox();assert(bounds);
   await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);await page.mouse.down();await sleep(350);
   await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2-48,{steps:8});await page.mouse.up();

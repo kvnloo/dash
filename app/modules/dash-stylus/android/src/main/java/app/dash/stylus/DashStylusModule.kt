@@ -30,8 +30,8 @@ class DashStylusModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("DashStylus")
     Events("button", "replySelection")
-    OnStartObserving { observing = true; install() }
-    OnStopObserving { observing = false; uninstall() }
+    OnStartObserving("button") { observing = true; install() }
+    OnStopObserving("button") { observing = false; uninstall() }
     OnActivityEntersForeground { if (observing) install() }
     OnActivityEntersBackground {
       edges.sample(false)?.let { sendEvent("button", mapOf("pressed" to it)) }

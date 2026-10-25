@@ -1,7 +1,9 @@
 import { Platform } from "react-native";
-import { requireOptionalNativeModule, type NativeModule } from "expo-modules-core";
+import { requireOptionalNativeModule } from "expo-modules-core";
 import type { StylusButton } from "./stylus";
-interface StylusModule extends NativeModule<{ button: (event: StylusButton) => void; replySelection: (event: { text: string }) => void }> {
+interface StylusModule {
+  addListener(event: "button", listener: (event: StylusButton) => void): { remove(): void };
+  addListener(event: "replySelection", listener: (event: { text: string }) => void): { remove(): void };
   regionText(x: number, y: number, width: number, height: number): Promise<string>;
 }
 const native = Platform.OS === "android" ? requireOptionalNativeModule<StylusModule>("DashStylus") : null;
