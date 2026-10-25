@@ -78,8 +78,10 @@ describe("host display label precedence and opaque route identity", () => {
       const parsed = parseHosts([host]);
       expect(parsed).toBeDefined();
       if (!parsed) throw new Error("synthetic valid host was rejected");
-      expect(parsed[0]).toBe(host);
-      expect(hostDisplayName(parsed[0])).toBe(example.expected);
+      const parsedHost = parsed[0];
+      if (!parsedHost) throw new Error("valid synthetic roster lost its host");
+      expect(parsedHost).toBe(host);
+      expect(hostDisplayName(parsedHost)).toBe(example.expected);
       expect(host).toEqual(before);
       expect(host.id).toBe(example.id);
     });
@@ -127,7 +129,15 @@ describe("host display label precedence and opaque route identity", () => {
       "host:dash2-180/A",
       "host:dash2-180/B",
     ]);
-    expect(parsed[1].agents[0].sessionId).toBe("session:dash2-180/B%2Fopaque");
+    const parsedRight = parsed[1];
+    if (!parsedRight) throw new Error("valid synthetic roster lost its second host");
+    const parsedRightAgent = parsedRight.agents[0];
+    const rightAgent = right.agents[0];
+    const leftAgent = left.agents[0];
+    if (!parsedRightAgent || !rightAgent || !leftAgent) {
+      throw new Error("synthetic host fixture lost its routing agent");
+    }
+    expect(parsedRightAgent.sessionId).toBe("session:dash2-180/B%2Fopaque");
 
     const request = {
       type: "chat",
@@ -135,8 +145,8 @@ describe("host display label precedence and opaque route identity", () => {
       harness: "omp",
       text: "synthetic request",
       hostId: right.id,
-      profileId: right.agents[0].profileId,
-      sessionId: right.agents[0].sessionId,
+      profileId: rightAgent.profileId,
+      sessionId: rightAgent.sessionId,
     };
     const routed = parseClientMessage(request);
     expect(routed?.type).toBe("chat");
@@ -145,8 +155,8 @@ describe("host display label precedence and opaque route identity", () => {
     expect(routed.hostId).toBe("host:dash2-180/B");
     expect(routed.profileId).toBe("profile:dash2-180/B");
     expect(routed.sessionId).toBe("session:dash2-180/B%2Fopaque");
-    expect(right.agents[0].hostId).toBe(right.id);
-    expect(left.agents[0].sessionId).toBe("session:dash2-180/A");
+    expect(rightAgent.hostId).toBe(right.id);
+    expect(leftAgent.sessionId).toBe("session:dash2-180/A");
 
     for (const field of ["hostId", "profileId", "sessionId"]) {
       for (const malformed of [null, 180, {}, []]) {
