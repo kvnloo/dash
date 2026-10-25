@@ -43,7 +43,7 @@ export function AttachmentChooser({ anchor, onClose, onPick }: {
   return <Modal transparent visible={pendingPick === null} animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose} onShow={focusTitle} onDismiss={() => { if (pendingPick) onPick(pendingPick); }}>
     <View style={styles.overlay}>
       <Pressable style={StyleSheet.absoluteFill} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" onPress={onClose} />
-      <GlassSurface testID="attachment-sheet" variant="raised" accessibilityPaneTitle="Attachment chooser" accessibilityViewIsModal borderRadius={radius.md} style={[styles.sheet, { left, bottom, width }]} contentStyle={{ maxHeight: Math.max(44, anchor.y - insets.top - 16) }}>
+      <GlassSurface testID="attachment-sheet" variant="raised" accessibilityLabel="Attachment chooser" accessibilityViewIsModal borderRadius={radius.md} style={[styles.sheet, { left, bottom, width }]} contentStyle={{ maxHeight: Math.max(44, anchor.y - insets.top - 16) }}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
           <Text ref={titleRef} style={styles.title} accessibilityRole="header" accessibilityLabel="Attachment chooser">Attach</Text>
           <Text style={styles.hint}>Up to {LIMIT_LABEL} per file, sent to the paired computer over Tailscale.</Text>
