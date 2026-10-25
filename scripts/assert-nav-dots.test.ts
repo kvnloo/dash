@@ -26,6 +26,8 @@ const GOLD = hex(GOLD_SRGB);
 const PAGER = [12, 13, 11, 255] as const;
 const DOT_ON = [0x21, 0x1b, 0x10, 255] as const;
 const DOT_OFF = [0x83, 0x7f, 0x74, 255] as const;
+// GOLD_68 composited over near-black native chrome (not an opaque mock).
+const GLASS_GOLD: readonly number[] = [150, 130, 95, 255];
 
 function hex(s: string): readonly [number, number, number, number] {
   const body = s.startsWith("#") ? s.slice(1) : s;
@@ -68,11 +70,15 @@ function fillRect(
 }
 
 /** 144×50 pager: gold pill on tab 1, three 4px dots. `dotTop` is the Yoga top inside each 44px slot. */
-function paintPager(dotTop: number, gaps: readonly [number, number] = [NAV_SLOT_WIDTH, NAV_SLOT_WIDTH]): RgbaImage {
+function paintPager(
+  dotTop: number,
+  gaps: readonly [number, number] = [NAV_SLOT_WIDTH, NAV_SLOT_WIDTH],
+  gold: readonly number[] = GOLD,
+): RgbaImage {
   const img = image(NAV_PAGER_WIDTH, NAV_PAGER_HEIGHT, PAGER);
   const pillX = NAV_PAGER_PAD + NAV_SLOT_WIDTH;
   const pillY = NAV_PAGER_PAD;
-  fillRect(img, pillX, pillY, NAV_SLOT_WIDTH, NAV_PILL_HEIGHT, GOLD);
+  fillRect(img, pillX, pillY, NAV_SLOT_WIDTH, NAV_PILL_HEIGHT, gold);
   const x0 = NAV_PAGER_PAD + NAV_DOT_LEFT;
   const xs = [x0, x0 + gaps[0], x0 + gaps[0] + gaps[1]];
   for (let i = 0; i < 3; i++) {
@@ -87,7 +93,7 @@ function paintDeviceFrame(
   gaps: readonly [number, number] = [NAV_SLOT_WIDTH, NAV_SLOT_WIDTH],
 ): RgbaImage {
   const frame = image(360, 760, PAGER);
-  const pager = paintPager(dotTop, gaps);
+  const pager = paintPager(dotTop, gaps, GLASS_GOLD);
   const x = 100, y = 90;
   for (let row = 0; row < pager.height; row++) {
     const source = pager.data.subarray(row * pager.width * 4, (row + 1) * pager.width * 4);
@@ -158,6 +164,13 @@ describe("checkNavDots", () => {
     const gap1 = result.dots[2].cx - result.dots[1].cx;
     expect(gap0).toBe(NAV_SLOT_WIDTH);
     expect(gap1).toBe(NAV_SLOT_WIDTH);
+  });
+
+  test("recognizes 68%-opacity gold composited over dark native chrome", () => {
+    const result = checkNavDots(paintPager(NAV_DOT_TOP, [NAV_SLOT_WIDTH, NAV_SLOT_WIDTH], GLASS_GOLD));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.dots).toHaveLength(3);
   });
 
   test("fails when Yoga collapses the dots to the top of the pill", () => {
