@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { ConversationPersistence, CACHE_ENTRIES, CACHE_ENTRY_BYTES, durableConversation, cacheConversation, type ConversationFiles } from "./conversation-persistence";
+import { ConversationPersistence, CACHE_ENTRIES, CACHE_ENTRY_BYTES, uniqueConversationIds, durableConversation, cacheConversation, type ConversationFiles } from "./conversation-persistence";
 import type { Conversation } from "../model";
 
 class Files implements ConversationFiles {
@@ -18,6 +18,18 @@ function chat(id = "chat"): Conversation {
     messages: [{ id: "u", role: "user", text: "hello", at: 1 }, { id: "a", role: "assistant", text: "host answer", at: 2, state: "done", turnId: "turn", seq: 5 }] };
 }
 
+test("duplicate legacy client IDs with different host routes survive as separate conversations", async () => {
+  const files = new Files();
+  const chats = uniqueConversationIds([chat(), { ...chat(), sessionId: "other-host-session", targetHostId: "other-host" }, chat("chat:recovered:2")]);
+  expect(new Set(chats.map(chat => chat.id)).size).toBe(3);
+  expect(chats[0]?.id).toBe("chat");
+  expect(chats[1]?.id).toBe("chat:recovered:3");
+  await new ConversationPersistence(files).save(chats);
+  const restored = await new ConversationPersistence(files).load();
+  expect(restored).toHaveLength(3);
+  expect(restored.find(chat => chat.id === "chat:recovered:3")?.targetHostId).toBe("other-host");
+});
+
 test("host history is cache only; local-only conversations remain durable", async () => {
   const files = new Files(); const store = new ConversationPersistence(files);
   const host = chat(); const local = { ...chat("local"), sessionId: undefined };
@@ -25,6 +37,9 @@ test("host history is cache only; local-only conversations remain durable", asyn
   expect(JSON.parse(files.durable.get("chat.json") ?? "null").messages).toEqual([]);
   expect(files.cache.get("chat.json")).toContain("host answer");
   expect(files.durable.get("local.json")).toContain("host answer");
+  const unknown = { ...chat("api"), harness: "custom-api" };
+  expect(durableConversation(unknown)).toBe(unknown);
+  expect(cacheConversation(unknown)).toBeNull();
   files.cache.clear();
   const restored = await new ConversationPersistence(files).load();
   expect(restored.find(c => c.id === "chat")?.messages).toEqual([]);
@@ -58,12 +73,18 @@ test("repeated saves and unrelated active-chat changes do not rewrite history", 
   expect(files.writes.every(name => name.includes("a.json"))).toBe(true);
 });
 
-test("oversized text and nested tool payloads are not cached", () => {
+test("oversized text is not cached and nested host tool payloads are omitted", () => {
   const host = chat(); host.messages[0] = { id: "big", role: "user", at: 1, text: "x".repeat(CACHE_ENTRY_BYTES) };
-  expect(cacheConversation(host)).toBeNull();
+  const suffix = cacheConversation(host);
+  expect(suffix).toContain("host answer");
+  expect(suffix).not.toContain("x".repeat(100));
+  expect(cacheConversation({ ...host, messages: host.messages.slice(0, 1) })).toBeNull();
   const nested = chat(); nested.messages.push({ id: "tool", role: "assistant", at: 3, text: "small", state: "done", turnId: "t", seq: 1,
     parts: [{ kind: "tool_output", callId: "tool", text: "x".repeat(CACHE_ENTRY_BYTES), truncated: false }] });
-  expect(cacheConversation(nested)).toBeNull();
+  const cached = cacheConversation(nested);
+  expect(cached).not.toBeNull();
+  expect(cached).toContain("small");
+  expect(cached).not.toContain("tool_output");
 });
 
 test("bounded cache evicts history without deleting durable metadata or queues", async () => {

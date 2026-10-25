@@ -1,4 +1,7 @@
 import { parseConversation, type Conversation, type Message } from "../model";
+import { isCatalogHarness } from "../../../shared/catalog";
+
+export function hasHostHistory(chat: Conversation): boolean { return Boolean(chat.sessionId) && isCatalogHarness(chat.harness); }
 
 export interface ConversationFiles {
   list(area: "durable" | "cache"): Promise<string[]>;
@@ -12,6 +15,18 @@ const CACHE_MESSAGES = 80;
 const CACHE_VERSION = 1;
 
 function filename(id: string): string { return `${encodeURIComponent(id)}.json`; }
+export function uniqueConversationIds(chats: readonly Conversation[]): Conversation[] {
+  const used = new Set(chats.map(chat => chat.id));
+  const seen = new Set<string>();
+  return chats.map(chat => {
+    if (!seen.has(chat.id)) { seen.add(chat.id); return chat; }
+    let suffix = 2;
+    while (used.has(`${chat.id}:recovered:${suffix}`)) suffix++;
+    const id = `${chat.id}:recovered:${suffix}`;
+    used.add(id); seen.add(id);
+    return { ...chat, id };
+  });
+}
 function parse(raw: string | null): Conversation | null {
   if (!raw) return null;
   try { const value: unknown = JSON.parse(raw); return parseConversation(value); } catch { return null; }
@@ -21,7 +36,7 @@ function pending(message: Message): boolean {
     : message.state === "pending" || message.state === "streaming";
 }
 export function durableConversation(chat: Conversation): Conversation {
-  if (!chat.sessionId) return chat;
+  if (!hasHostHistory(chat)) return chat;
   const messages = chat.messages.filter((message, index, all) => {
     const next = all[index + 1];
     return pending(message) || (message.role === "user" && next?.role === "assistant" && pending(next));
@@ -49,12 +64,22 @@ function sameHistory(before: Conversation | undefined, after: Conversation): boo
   return a.length === b.length && a.every((message, index) => message === b[index]);
 }
 export function cacheConversation(chat: Conversation): string | null {
+  if (!hasHostHistory(chat)) return null;
+  const snapshot: Conversation & { cacheVersion: number } = { ...chat, cacheVersion: CACHE_VERSION, messages: [] };
+  let budget = { left: CACHE_ENTRY_BYTES };
+  if (!fitsCache(snapshot, budget)) return null;
   const messages = cacheMessages(chat);
-  if (!messages.length) return null;
-  const snapshot = { ...chat, cacheVersion: CACHE_VERSION, messages };
-  // Bound nested tool payloads as well as text before allocating the JSON string.
-  if (!fitsCache(snapshot, { left: CACHE_ENTRY_BYTES })) return null;
-  return JSON.stringify(snapshot);
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (!message) continue;
+    // Tool payloads remain host-owned; keep a bounded suffix of the visible transcript.
+    const projected = message.role === "assistant" ? { ...message, parts: undefined } : message;
+    const remaining = { left: budget.left - 1 };
+    if (!fitsCache(projected, remaining)) break;
+    snapshot.messages.unshift(projected);
+    budget = remaining;
+  }
+  return snapshot.messages.length ? JSON.stringify(snapshot) : null;
 }
 
 /** Serializes disk commits while coalescing waiting snapshots to the newest state. */
@@ -76,7 +101,7 @@ export class ConversationPersistence {
       for (const chat of batch) if (chat) {
         chats.push(chat);
         this.saved.set(chat.id, chat);
-        if (chat.sessionId) this.durableValues.set(chat.id, JSON.stringify(chat));
+        if (hasHostHistory(chat)) this.durableValues.set(chat.id, JSON.stringify(chat));
       }
     }
     this.cacheOrder = (await this.files.list("cache")).filter(name => name.endsWith(".json"));
@@ -84,7 +109,7 @@ export class ConversationPersistence {
   }
 
   async cached(chat: Conversation): Promise<Conversation> {
-    if (!chat.sessionId) return chat;
+    if (!hasHostHistory(chat)) return chat;
     try {
       const raw = await this.files.read("cache", filename(chat.id));
       if (!raw || raw.length > CACHE_ENTRY_BYTES) return chat;
@@ -123,10 +148,10 @@ export class ConversationPersistence {
           const durable = JSON.stringify(durableConversation(chat));
           if (this.durableValues.get(chat.id) !== durable) {
             await this.files.write("durable", name, durable);
-            if (chat.sessionId) this.durableValues.set(chat.id, durable);
+            if (hasHostHistory(chat)) this.durableValues.set(chat.id, durable);
             else this.durableValues.delete(chat.id);
           }
-          if (chat.sessionId && !sameHistory(this.saved.get(chat.id), chat)) {
+          if (hasHostHistory(chat) && !sameHistory(this.saved.get(chat.id), chat)) {
             const cache = cacheConversation(chat);
             try {
               if (cache) {

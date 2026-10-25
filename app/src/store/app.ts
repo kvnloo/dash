@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ConversationPersistence } from "./conversation-persistence";
+import { ConversationPersistence, hasHostHistory, uniqueConversationIds } from "./conversation-persistence";
 import { conversationFiles } from "./conversation-files";
 import { hostDisplayName } from "../../../shared/host-display";
 import { appendReplyPart, partsFor, replyParts } from "./text";
@@ -81,7 +81,7 @@ function scheduleSave(): void {
   saveTimer ??= setTimeout(() => {
     saveTimer = undefined;
     const { conversations, activeId } = store.get();
-    const snapshots = conversations.map(chat => !chat.sessionId && chat.messages.some(message => message.role === "assistant" && message.state === "streaming")
+    const snapshots = conversations.map(chat => !hasHostHistory(chat) && chat.messages.some(message => message.role === "assistant" && message.state === "streaming")
       ? { ...chat, messages: chat.messages.map(message => message.role === "assistant" && message.state === "streaming"
         ? { ...message, parts: partsFor(message.turnId).length ? partsFor(message.turnId) : message.parts, text: replyText.get(message.turnId) || message.text, seq: Math.max(message.seq, liveSequences.get(message.turnId) ?? 0) } : message) }
       : chat);
@@ -102,24 +102,27 @@ export async function hydrate(): Promise<void> {
   let conversations: Conversation[] = [];
   try {
     conversations = await persistence.load();
-    const migrated = await AsyncStorage.getItem("dash.conversations.migrated.v2") || await conversationFiles.read("durable", ".migration-complete.json");
-    if (!migrated) {
+    const migrated = await AsyncStorage.getItem("dash.conversations.migrated.v2");
+    const recovered = migrated || await conversationFiles.read("durable", ".migration-complete.json");
+    if (!recovered) {
       // Leave an unreadable legacy row untouched. The host can repopulate its cache.
       const rawLegacy = await AsyncStorage.getItem(KEYS.conversations);
       const legacy = safeJson(rawLegacy);
       if (rawLegacy && !Array.isArray(legacy)) throw new Error("Invalid legacy conversations");
       if (Array.isArray(legacy)) {
         const existing = new Set(conversations.map(chat => chat.id));
-        for (const raw of legacy) {
-          const chat = parseConversation(raw);
-          if (chat && !existing.has(chat.id)) conversations.push(chat);
+        const parsed = legacy.flatMap(raw => { const chat = parseConversation(raw); return chat ? [chat] : []; });
+        for (const chat of uniqueConversationIds(parsed)) {
+          if (!existing.has(chat.id)) { conversations.push(chat); existing.add(chat.id); }
         }
         await persistence.save(conversations);
       }
       await conversationFiles.write("durable", ".migration-complete.json", "true");
+    }
+    if (!migrated) {
+      await AsyncStorage.removeItem(KEYS.conversations);
       await AsyncStorage.setItem("dash.conversations.migrated.v2", "true");
     }
-    await AsyncStorage.removeItem(KEYS.conversations);
   } catch { persistenceFailure(); }
   const activeId = activeIdText || null;
   const active = conversations.find(chat => chat.id === activeId);

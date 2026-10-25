@@ -507,6 +507,7 @@ test("completion times survive persistence and error followed by done keeps the 
 
 test("oversized legacy CursorWindow row cannot block pairing hydration or delete the legacy row", async () => {
   persisted.delete("dash.conversations.migrated.v2");
+  persisted.delete("dash.durable.files.v2/.migration-complete.json");
   persisted.set("dash.settings.v1", JSON.stringify({ address: "fixture:4747", token: "fixture", harness: "hermes" }));
   persisted.set("dash.conversations.v1", "unreadable-original");
   rejectLegacy = true;
