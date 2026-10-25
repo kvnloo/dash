@@ -69,6 +69,9 @@ describe("live activity shimmer", () => {
     expect(source).toContain("useDerivedValue(() => shimmerStops(progress.value))");
     expect(source).toContain("cancelAnimation(progress)");
     expect(source).toContain("useAmbientRunning()");
+    expect(source).toContain("useSyncExternalStore(subscribeAppActive, appIsActive, appIsActive)");
+    expect(source).toContain('AppState.addEventListener("change"');
+    expect(source).toContain("appListener?.remove()");
     expect(source).toContain("reduced || !running");
     expect(source).toContain("color: bright");
     expect(source).toContain("accessibilityLabel={text}");
