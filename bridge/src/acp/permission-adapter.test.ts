@@ -297,6 +297,43 @@ test("synchronous broker decisions still unregister exactly once", () => {
   expect(unregistered).toBe(1);
 });
 
+test("a broker that calls back but reports no controller cannot approve", () => {
+  const f = fixture({
+    register(_request, settle) {
+      settle({ outcome: "selected", optionId: "allow-once" });
+      return null;
+    },
+  });
+  f.adapter.receive(permission("no-controller-sync"));
+  expect(f.replies).toEqual([{ ...cancelled, id: "no-controller-sync" }]);
+  expect(f.resolutions[0]?.outcome).toBe("denied");
+  expect(f.timers.size).toBe(0);
+});
+
+test("broker throwing after a synchronous offer still fails closed", () => {
+  const f = fixture({
+    register(_request, settle) {
+      settle({ outcome: "selected", optionId: "allow-once" });
+      throw new Error("failed-to-register");
+    },
+  });
+  f.adapter.receive(permission("throws-after-callback"));
+  expect(f.replies).toEqual([{ ...cancelled, id: "throws-after-callback" }]);
+  expect(f.resolutions[0]?.outcome).toBe("denied");
+});
+
+test("session switching while a decision is pending invalidates late approvals", () => {
+  let current = SESSION;
+  const broker = controlledBroker();
+  const f = fixture(broker.port, { activeSessionId: () => current });
+  f.adapter.receive(permission("session-changes"));
+  current = "other-owned-session";
+  broker.pending.get(broker.requests[0]?.requestId ?? "")?.({ outcome: "selected", optionId: "allow-once" });
+  expect(f.replies).toEqual([{ ...cancelled, id: "session-changes" }]);
+  expect(f.resolutions[0]?.outcome).toBe("denied");
+  expect(f.timers.size).toBe(0);
+});
+
 test("a broken response writer cannot create a second approval or report successful delivery", () => {
   const broker = controlledBroker();
   let attempts = 0;
