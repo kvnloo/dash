@@ -85,10 +85,10 @@ try{
   await context.route('https://unpkg.com/canvaskit-wasm@0.41.0/bin/full/canvaskit.wasm',route=>route.fulfill({path:wasm,contentType:'application/wasm'}));
   page=await context.newPage();page.on('pageerror',e=>result.errors.push(e.message));
   let popups=0;page.on('popup',()=>popups++);
-  const chat={id:'repair-existing-chat',title:'Existing attached conversation',harness:'hermes',sessionId:'repair-existing-session',profileId:'repair-existing-profile',createdAt:1,updatedAt:1,queueWaitForIdle:true,messages:[{id:'held-user',role:'user',text:'Original queued request',delivery:'queued',at:1},{id:'held-answer',role:'assistant',text:'',state:'pending',turnId:'held-existing-turn',seq:0,at:2}]};
+  const chat={id:'repair-existing-chat',title:'Existing attached conversation',harness:'hermes',sessionId:'repair-existing-session',profileId:'repair-existing-profile',createdAt:1,updatedAt:1,queueWaitForIdle:true,messages:[{id:'prior-answer',role:'assistant',text:'Circle this exact phrase',state:'done',turnId:'prior-turn',seq:1,at:0},{id:'held-user',role:'user',text:'Original queued request',delivery:'queued',at:1},{id:'held-answer',role:'assistant',text:'',state:'pending',turnId:'held-existing-turn',seq:0,at:2}]};
   await page.addInitScript(chat=>{
     if(sessionStorage.getItem('repair-seeded'))return;
-    localStorage.setItem('dash.settings.v1',JSON.stringify({address:'127.0.0.1:9',token:'offline-proof-only',harness:'hermes',inAppFeedback:false}));
+    localStorage.setItem('dash.settings.v1',JSON.stringify({address:'127.0.0.1:18379',token:'offline-proof-only',harness:'hermes',inAppFeedback:false}));
     localStorage.setItem('dash.conversations.v1',JSON.stringify([chat]));localStorage.setItem('dash.activeId.v1',chat.id);sessionStorage.setItem('repair-seeded','yes');
   },chat);
   await page.goto(`http://127.0.0.1:${port}`,{waitUntil:'domcontentloaded',timeout:180000});
@@ -104,12 +104,30 @@ try{
   assert.equal(originalInk.length,1);
   // Pen mode lets ordinary touch/mouse navigation pass without discarding the root-owned ink.
   await page.getByRole('button',{name:'Pen mode: only the S Pen draws, fingers scroll',exact:true}).click();
+  const uploads=[];
+  await context.route('http://127.0.0.1:18379/attachments?*',async route=>{
+    const request=route.request(), bytes=request.postDataBuffer(), name=new URL(request.url()).searchParams.get('name');
+    uploads.push({name,size:bytes?.length??0});
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'1234567890abcdef1234567890abcdef',name,mime:'image/png',size:bytes?.length??0})});
+  });
+  const phrase=page.getByText('Circle this exact phrase',{exact:true});const box=await phrase.boundingBox();assert(box);
+  const pen=await context.newCDPSession(page), cx=box.x+box.width/2, cy=box.y+box.height/2, rx=box.width/2+10, ry=box.height/2+12;
+  await pen.send('Input.dispatchMouseEvent',{type:'mousePressed',x:cx+rx,y:cy,button:'left',buttons:1,clickCount:1,pointerType:'pen',force:0.7});
+  for(let i=1;i<=64;i++){const a=i*Math.PI/32;await pen.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:cx+rx*Math.cos(a),y:cy+ry*Math.sin(a),button:'left',buttons:1,pointerType:'pen',force:0.7});}
+  await pen.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:cx+rx,y:cy,button:'left',buttons:0,clickCount:1,pointerType:'pen'});
+  await wait(async()=>uploads.length===1,'circled-region image upload');
+  assert((await input.inputValue()).includes('> Circle this exact phrase'),'painted circled text is quoted in the existing draft');
+  assert(uploads[0].size>100,'region contains actual PNG bytes');
+  await page.screenshot({path:path.join(out,'412-circle-attached.png')});
+  result.circle={scope:'Real Web pen loop/capture/quote; isolated HTTP upload fixture, no send or model turn',uploads};
+  const expectedDraft=await input.inputValue();
+  const expectedInk=await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes);
   // Composition: Chats rows open the chat as a full-screen window; its X (not a header Back) returns to the list.
   await page.getByRole('button',{name:'Close chat window',exact:true}).click();await page.getByTestId('chat-window').waitFor({state:'detached'});
   await page.getByRole('tab').nth(1).click();await page.getByText(chat.title,{exact:true}).first().click();await page.getByTestId('chat-window').waitFor({state:'visible'});
   const reopenDiag=await page.evaluate(()=>({boxes:[...document.querySelectorAll('textarea,input')].map(e=>[e.getAttribute('aria-label'),e.value.slice(0,40)]),windows:document.querySelectorAll('[data-testid="chat-window"]').length,title:document.querySelector('[data-testid="chat-window-pill-title"]')?.textContent??null}));
-  assert.equal(await input.inputValue(),'Original unsent draft\nKeep this exact text',JSON.stringify(reopenDiag));
-  assert.deepEqual(await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes),originalInk);
+  assert.equal(await input.inputValue(),expectedDraft,JSON.stringify(reopenDiag));
+  assert.deepEqual(await page.evaluate(()=>window.__dashAnnotate.annotate.get().drawing.strokes),expectedInk);
   // Keep the annotation open, but use its existing tray relocation so it cannot cover the mic.
   // Tray defaults to the top to leave the dock reachable.
   const mic=page.getByRole('button',{name:'Dictate',exact:true});const bounds=await mic.boundingBox();assert(bounds);
@@ -118,7 +136,7 @@ try{
   await page.getByRole('button',{name:'Live voice',exact:true}).click();
   await page.getByRole('button',{name:'Retry Live voice',exact:true}).waitFor();
   assert.equal(await page.getByText('Dash voice',{exact:true}).count(),0,'composer stays in this chat, not a Voice route');
-  assert.equal(await input.inputValue(),'Original unsent draft\nKeep this exact text');assert.equal(popups,0);
+  assert.equal(await input.inputValue(),expectedDraft);assert.equal(popups,0);
   const persisted=await page.evaluate(()=>({active:localStorage.getItem('dash.activeId.v1'),chats:JSON.parse(localStorage.getItem('dash.conversations.v1')??'[]')}));
   assert.equal(persisted.active,chat.id);assert.equal(persisted.chats.length,1);
   assert.equal(persisted.chats[0].messages.find(m=>m.id==='held-answer')?.state,'pending');
