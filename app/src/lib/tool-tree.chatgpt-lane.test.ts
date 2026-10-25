@@ -134,8 +134,12 @@ describe("toolTree lazy boundaries and call identity (DASH2-185)", () => {
 
     const calls = await expand(sections[0]);
     expect(calls).toHaveLength(1);
-    expect(outputReads).toBeGreaterThan(0);
+    expect(calls[0]?.label).toBe("read_file");
+    expect(calls[0]?.detail).toBeUndefined();
+    expect(outputReads).toBe(0);
+    expect(JSON.stringify(calls[0])).not.toContain("SYNTHETIC-HEAD");
     const leaves = await expand(calls[0]);
+    expect(outputReads).toBe(1);
     expect(leaves.map(node => node.kind)).toEqual(["args", "output", "note"]);
     expect(leaves[0]?.detail?.length).toBeLessThanOrEqual(400);
     expect(leaves[1]?.detail?.length).toBe(300);
@@ -143,6 +147,34 @@ describe("toolTree lazy boundaries and call identity (DASH2-185)", () => {
     expect(leaves[1]?.detail).not.toContain("SYNTHETIC-HEAD");
     expect(leaves[1]?.label).toContain("truncated");
     expect(leaves[2]?.detail).toBeUndefined();
+  });
+
+  test("group expansion keeps both call outputs unread until their own leaves open", async () => {
+    const first = makeTool("group/first");
+    const second = makeTool("group/second");
+    const reads: string[] = [];
+    Object.defineProperty(first, "output", {
+      configurable: true, get: () => { reads.push("first"); return "first response"; },
+    });
+    Object.defineProperty(second, "output", {
+      configurable: true, get: () => { reads.push("second"); return "second response"; },
+    });
+
+    const root = toolTree({ id: "group-lazy", tools: [first, second] })[0];
+    const sections = await expand(root);
+    const groups = await expand(sections[0]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.id).toBe("group-lazy:group:group/first");
+    expect(reads).toEqual([]);
+
+    const calls = await expand(groups[0]);
+    expect(calls.map(call => call.id)).toEqual(["group-lazy:call:group/first", "group-lazy:call:group/second"]);
+    expect(calls.map(call => call.detail)).toEqual([undefined, undefined]);
+    expect(reads).toEqual([]);
+    expect((await expand(calls[1]))[1]?.detail).toBe("second response");
+    expect(reads).toEqual(["second"]);
+    expect((await expand(calls[0]))[1]?.detail).toBe("first response");
+    expect(reads).toEqual(["second", "first"]);
   });
 
   test("unknown tool names and non-JSON arguments still keep exact call identity", async () => {
@@ -207,6 +239,10 @@ describe("toolTree lazy boundaries and call identity (DASH2-185)", () => {
     const wrongStatus = makeTool("valid-id");
     Reflect.set(wrongStatus, "status", "unknown");
     expect(await callOrGroupNodes({ id: "root", tools: [wrongStatus] })).toEqual([]);
+
+    const wrongOutput = makeTool("valid-id");
+    Reflect.set(wrongOutput, "output", null);
+    expect(await callOrGroupNodes({ id: "root", tools: [wrongOutput] })).toEqual([]);
   });
 
   test("REGRESSION: malformed reasoning/activity and turn IDs must not synthesize identity", async () => {
