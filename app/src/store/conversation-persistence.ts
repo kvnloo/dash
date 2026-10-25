@@ -65,12 +65,21 @@ function sameHistory(before: Conversation | undefined, after: Conversation): boo
 }
 export function cacheConversation(chat: Conversation): string | null {
   if (!hasHostHistory(chat)) return null;
+  const snapshot: Conversation & { cacheVersion: number } = { ...chat, cacheVersion: CACHE_VERSION, messages: [] };
+  let budget = { left: CACHE_ENTRY_BYTES };
+  if (!fitsCache(snapshot, budget)) return null;
   const messages = cacheMessages(chat);
-  if (!messages.length) return null;
-  const snapshot = { ...chat, cacheVersion: CACHE_VERSION, messages };
-  // Bound nested tool payloads as well as text before allocating the JSON string.
-  if (!fitsCache(snapshot, { left: CACHE_ENTRY_BYTES })) return null;
-  return JSON.stringify(snapshot);
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (!message) continue;
+    // Tool payloads remain host-owned; keep a bounded suffix of the visible transcript.
+    const projected = message.role === "assistant" ? { ...message, parts: undefined } : message;
+    const remaining = { left: budget.left - 1 };
+    if (!fitsCache(projected, remaining)) break;
+    snapshot.messages.unshift(projected);
+    budget = remaining;
+  }
+  return snapshot.messages.length ? JSON.stringify(snapshot) : null;
 }
 
 /** Serializes disk commits while coalescing waiting snapshots to the newest state. */

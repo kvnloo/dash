@@ -73,12 +73,18 @@ test("repeated saves and unrelated active-chat changes do not rewrite history", 
   expect(files.writes.every(name => name.includes("a.json"))).toBe(true);
 });
 
-test("oversized text and nested tool payloads are not cached", () => {
+test("oversized text is not cached and nested host tool payloads are omitted", () => {
   const host = chat(); host.messages[0] = { id: "big", role: "user", at: 1, text: "x".repeat(CACHE_ENTRY_BYTES) };
-  expect(cacheConversation(host)).toBeNull();
+  const suffix = cacheConversation(host);
+  expect(suffix).toContain("host answer");
+  expect(suffix).not.toContain("x".repeat(100));
+  expect(cacheConversation({ ...host, messages: host.messages.slice(0, 1) })).toBeNull();
   const nested = chat(); nested.messages.push({ id: "tool", role: "assistant", at: 3, text: "small", state: "done", turnId: "t", seq: 1,
     parts: [{ kind: "tool_output", callId: "tool", text: "x".repeat(CACHE_ENTRY_BYTES), truncated: false }] });
-  expect(cacheConversation(nested)).toBeNull();
+  const cached = cacheConversation(nested);
+  expect(cached).not.toBeNull();
+  expect(cached).toContain("small");
+  expect(cached).not.toContain("tool_output");
 });
 
 test("bounded cache evicts history without deleting durable metadata or queues", async () => {
