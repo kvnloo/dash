@@ -6,6 +6,8 @@ import Svg, { Path } from "react-native-svg";
 import { InteractiveTile } from "../InteractiveTile";
 import { NumberTicker } from "../NumberTicker";
 import { useDensity } from "../Density";
+import { useInformationDetail } from "../InformationDensityPicker";
+import { projectStatInformation } from "../../lib/information-density";
 import { haptic } from "../../haptics";
 import { SNAP, fade, MOTION_MS } from "../../motion";
 import { fonts, radius, space, type } from "../../theme";
@@ -31,12 +33,15 @@ export function StatTile({ label, value, sub, tone = tc.text, variant = "number"
   const [focus, setFocus] = useState<number | null>(null);
   const shown = focus !== null && segments?.[focus] ? segments[focus].n : value;
   const { sizing } = useDensity();
+  const { level } = useInformationDetail();
+  const details = projectStatInformation(level, { value, segments, series });
+  const summary = [label + ": " + value, sub, ...details.map(line => line.label + ": " + line.value)].filter(Boolean).join(". ");
   return (
     <InteractiveTile
       key={replay}
       extraActions={segments?.length ? [{ id: "segment", label: "Segment", run: () => { haptic.select(); setFocus(f => f === null ? 0 : f + 1 >= segments.length ? null : f + 1); } }] : []}
       title={label}
-      summary={`${label}: ${value}. ${sub ?? ""}`}
+      summary={summary}
       style={[styles.tile, { minHeight: sizing.tileMin }]}
       testID={`stat-${variant}-${label}`}
     >
@@ -46,6 +51,7 @@ export function StatTile({ label, value, sub, tone = tc.text, variant = "number"
         {variant === "meter" && segments ? <DotMeter segments={segments} focus={focus} reduced={reduced} /> : null}
         {variant === "spark" && series ? <Spark series={series} tone={tone} /> : null}
         {sub ? <Text style={styles.sub}>{sub}</Text> : null}
+        {details.map(line => <Text key={line.label} style={styles.detail} testID={"stat-detail-" + line.label.toLowerCase()}>{line.label}: {line.value}</Text>)}
         {segments?.length ? <Text style={styles.sub}>Hold → Segment</Text> : null}
       </View>
     </InteractiveTile>
@@ -90,6 +96,7 @@ const styles = StyleSheet.create({
   label: { ...type.label, color: tc.text3, fontSize: 11, textTransform: "uppercase" },
   value: { fontFamily: fonts.mono, fontSize: 26, lineHeight: 32, fontVariant: ["tabular-nums"] },
   sub: { fontFamily: fonts.mono, fontSize: 11, color: tc.text3 },
+  detail: { fontFamily: fonts.mono, fontSize: 11, lineHeight: 16, color: tc.text2, flexShrink: 1, marginTop: 2 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 2, marginTop: 4 },
   dot: { width: 6, height: 6, borderRadius: 1.5 },
 });
