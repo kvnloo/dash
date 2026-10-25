@@ -5,11 +5,12 @@ import {
   isDeliveryId,
   parseDeliveryChatExtension,
   parseDeliveryReceipt,
+  type DeliveryReceipt,
   type DeliveryStage,
 } from "./delivery";
 import { PROTOCOL_VERSION, parseClientMessage, parseServerMessage } from "./protocol";
 
-const receipt = {
+const receipt: DeliveryReceipt = {
   type: "delivery_receipt",
   clientId: "send-123",
   turnId: "turn-456",
@@ -130,18 +131,21 @@ describe("additive delivery chat extension", () => {
     expect(parseDeliveryChatExtension(retry)).toEqual({ clientId: receipt.clientId });
   });
 
-  test("legacy chats without clientId retain old id acceptance rules", () => {
+  test("the old parser remains unchanged while an invalid present id fails closed", () => {
     const oldChat = { ...legacyChat, id: "" };
     expect(parseClientMessage(oldChat)).toMatchObject(oldChat);
-    expect(parseDeliveryChatExtension(oldChat)).toEqual({});
+    expect(parseDeliveryChatExtension(oldChat)).toBeNull();
     expect(parseDeliveryChatExtension({ ...oldChat, clientId: "send-123" })).toBeNull();
+    const absentId = { ...legacyChat, id: undefined };
+    expect(parseClientMessage(absentId)).toBeNull();
+    expect(parseDeliveryChatExtension(absentId)).toEqual({});
   });
 
   test("invalid optional identities fail closed rather than disappearing", () => {
     for (const clientId of [null, 0, "", " ", "with space", "\n", "x".repeat(MAX_DELIVERY_ID_LENGTH + 1)]) {
       expect(parseDeliveryChatExtension({ ...legacyChat, clientId })).toBeNull();
     }
-    for (const id of [null, "", " ", "\n", "x".repeat(MAX_DELIVERY_ID_LENGTH + 1)]) {
+    for (const id of [null, false, 0, "", " ", "\t", "\n", "x".repeat(MAX_DELIVERY_ID_LENGTH + 1)]) {
       expect(parseDeliveryChatExtension({ ...legacyChat, id })).toBeNull();
     }
     expect(parseDeliveryChatExtension(null)).toBeNull();
