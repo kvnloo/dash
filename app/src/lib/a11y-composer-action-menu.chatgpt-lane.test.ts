@@ -10,6 +10,7 @@ import {
   dispatchComposerMenuChoiceAction,
   shouldRestoreComposerMenuFocus,
 } from "./a11y-composer-action-menu";
+import type { ComposerA11yChoice } from "./a11y-composer-action-menu";
 
 describe("composer menu trigger accessibility", () => {
   test("announces the exact label and truthful collapsed/expanded state", () => {
@@ -145,7 +146,7 @@ describe("composer menu row and real choice semantics", () => {
 
   test("a real choice's activation invokes exactly that choice, not its neighbor", () => {
     const events: string[] = [];
-    const choices = [
+    const choices: [ComposerA11yChoice, ComposerA11yChoice] = [
       { label: "Chat", selected: true, run: () => events.push("Chat") },
       { label: "Live surface", selected: false, run: () => events.push("Live surface") },
     ];
