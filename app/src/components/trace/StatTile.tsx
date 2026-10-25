@@ -9,7 +9,7 @@ import { useDensity } from "../Density";
 import { useInformationDetail } from "../InformationDensityPicker";
 import { projectStatInformation } from "../../lib/information-density";
 import { haptic } from "../../haptics";
-import { SNAP, fade, MOTION_MS } from "../../motion";
+import { SNAP, fade } from "../../motion";
 import { fonts, radius, space, type } from "../../theme";
 import { tc } from "./tokens";
 
