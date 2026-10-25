@@ -8,6 +8,7 @@
  * pause that ended the utterance in the first place.
  */
 
+import { checkVoiceBootstrap, type VoiceBootstrapRequest, type VoiceBootstrapTarget } from "./voice-launch";
 import { File } from "expo-file-system";
 import { bytesToBase64 } from "./pair-crypto";
 import { Vad } from "./vad";
@@ -166,5 +167,67 @@ export class VoiceSession {
     if (this.phase === phase) return;
     this.phase = phase;
     this.hooks.onPhase(phase);
+  }
+}
+
+/** Presentation contract for a compact voice pill. Error always exposes Retry. */
+export type VoiceBootstrapPillState =
+  | { phase: "idle"; message: "" }
+  | { phase: "connecting"; message: "Connecting to voice…" }
+  | { phase: "ready"; message: "Voice ready" }
+  | { phase: "error"; message: string; actionLabel: "Retry" };
+
+/**
+ * A per-target bootstrap attempt. Explicit Retry reuses the exact attached
+ * conversation, never replays a spoken request and never retries automatically.
+ * Cancel invalidates in-flight responses before they can update the pill.
+ */
+export class VoiceBootstrapSession {
+  private current: VoiceBootstrapPillState = { phase: "idle", message: "" };
+  private target: VoiceBootstrapTarget | null = null;
+  private generation = 0;
+
+  constructor(
+    private readonly request: VoiceBootstrapRequest,
+    private readonly changed: (state: VoiceBootstrapPillState) => void,
+  ) {}
+
+  get state(): VoiceBootstrapPillState {
+    return this.current;
+  }
+
+  async start(target: VoiceBootstrapTarget): Promise<void> {
+    if (this.current.phase === "connecting" || this.current.phase === "ready") return;
+    // Freeze the target: Retry must never drift to another active chat.
+    this.target = { profile: target.profile, session: target.session };
+    await this.connect(this.target);
+  }
+
+  async retry(): Promise<void> {
+    if (this.current.phase !== "error" || !this.target) return;
+    await this.connect(this.target);
+  }
+
+  cancel(): void {
+    ++this.generation;
+    this.target = null;
+    this.publish({ phase: "idle", message: "" });
+  }
+
+  private async connect(target: VoiceBootstrapTarget): Promise<void> {
+    const generation = ++this.generation;
+    this.publish({ phase: "connecting", message: "Connecting to voice…" });
+    const outcome = await checkVoiceBootstrap(target, this.request);
+    if (generation !== this.generation) return;
+    if (outcome.kind === "ready") {
+      this.publish({ phase: "ready", message: "Voice ready" });
+    } else {
+      this.publish({ phase: "error", message: outcome.reason, actionLabel: outcome.retryLabel });
+    }
+  }
+
+  private publish(state: VoiceBootstrapPillState): void {
+    this.current = state;
+    this.changed(state);
   }
 }
