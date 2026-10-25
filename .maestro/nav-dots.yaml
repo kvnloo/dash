@@ -4,18 +4,17 @@ tags:
   - nav
   - ci
 ---
-# Opens Main. Do not relaunch Expo Go: that kills the live Metro session on 8097.
+# Expo Go must already be attached to Metro. Never launchApp/stopApp here.
+# The Chats tab returns to Main and positions the selected gold pill between two dots.
 - extendedWaitUntil:
-    visible: "Bots"
+    visible: "Chats"
     timeout: 15000
+- tapOn: "Chats"
+- waitForAnimationToEnd
 - assertVisible: "Bots"
 - assertVisible: "Chats"
 - assertVisible: "Orchestra"
 - assertVisible: "Primary mobile workspace"
-# 60px AppNav chrome (pager is the 144×50 stadium inside it).
-- takeScreenshot:
-    path: artifacts/verify-dash/maestro-nav-chrome
-    cropOn:
-      text: "Primary mobile workspace"
-# Pixel proof that the three 4px dots sit in the gold-pill center:
-#   bun scripts/assert-nav-dots.ts artifacts/verify-dash/maestro-nav-chrome.png
+# Capture the real device frame. CI's wrapper removes stale output, runs Maestro,
+# then checks pixels; Maestro's screenshot command alone is not an assertion.
+- takeScreenshot: artifacts/verify-dash/maestro-nav-chrome
