@@ -61,7 +61,10 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
           ))}
         </View>
         <TileGrid>
-          <StatTile label="live" value={st.live} sub={`of ${st.workers}`} tone={tc.live} variant="number" />
+          <StatTile label="live" value={st.live} sub={`of ${st.workers}`} tone={tc.live} variant="number"
+            evidenceSegments={Number.isSafeInteger(st.workers) && Number.isSafeInteger(st.live) && st.workers >= st.live && st.live >= 0
+              ? [{ n: st.live, color: tc.live, label: "live" }, { n: st.workers - st.live, color: tc.text3, label: "not live" }]
+              : undefined} />
           <StatTile label="cut" value={st.cut} sub={`${st.resumed} resumed`} tone={tc.cut} variant="meter"
             segments={[{ n: st.resumed, color: tc.ok, label: "resumed" }, { n: st.cut - st.resumed, color: tc.cut, label: "not resumed" }]} />
           <StatTile label="active" value={series[series.length - 1] ?? 0} sub={`peak ${Math.max(...series)}`} variant="spark" series={series} />
