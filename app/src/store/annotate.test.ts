@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { EMPTY_DRAWING } from "../lib/annotate/strokes";
-import { addSegment, annotate, commitStroke, currentSink, enterAnnotation, exitAnnotation, finishSend, registerSink, type AnnotationSink } from "./annotate";
+import { addSegment, annotate, commitStroke, currentSink, enterAnnotation, exitAnnotation, finishSend, registerSink, stylusButton, type AnnotationSink } from "./annotate";
 
 const sink = (label: string): AnnotationSink => ({ label, steerable: () => false, send: () => {} });
 const line = { tool: "pen" as const, color: "accent" as const, pointer: "stylus" as const, points: [{ x: 0, y: 0, p: 0.5, t: 1 }, { x: 1, y: 1, p: 0.5, t: 2 }] };
@@ -67,4 +67,15 @@ test("segments replace by id and age out after ten minutes", () => {
   expect(annotate.get().segments.map(s => s.text)).toEqual(["new"]);
   addSegment({ id: "b", text: "later", start: 700_000, end: 700_500, source: "voice" });
   expect(annotate.get().segments.map(s => s.id)).toEqual(["b"]);
+});
+
+test("side-button mode switches preserve unsent ink and voice words", () => {
+  annotate.set(s=>({...s,buttonDown:false}));
+  stylusButton(true); stylusButton(false); commitStroke(line);
+  addSegment({id:"held-voice",text:"fix this",start:1,end:2,source:"voice"});
+  const drawing=annotate.get().drawing;
+  stylusButton(true); expect(annotate.get().active).toBe(false);
+  expect(annotate.get().drawing).toBe(drawing); expect(annotate.get().segments[0]?.text).toBe("fix this");
+  stylusButton(false); stylusButton(true); expect(annotate.get().active).toBe(true);
+  expect(annotate.get().drawing).toBe(drawing); stylusButton(false);
 });

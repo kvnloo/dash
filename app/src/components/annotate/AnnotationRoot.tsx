@@ -1,7 +1,7 @@
 // Annotation mode: draw over whatever screen is showing, talk, and send it to the
 // agent as one message (composited screenshot + strokes JSON + marked transcript).
 //
-// Entry: Options → Annotate, or an S Pen touch while pen mode is on.
+// Entry: Options → Annotate, or the S Pen side button. Contact never switches mode.
 // No page-global long press: row holds keep their own actions. The tray, frame
 // and preview are siblings outside it so a thumb on the mic never cancels the pen.
 
@@ -202,7 +202,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
 const overlayProps = { testID: "annotation-overlay" };
 
 // Dev-only web hook so a browser harness can feed transcript segments when host STT is unavailable.
-if (__DEV__ && typeof window !== "undefined") Reflect.set(window, "__dashAnnotate", { addSegment, annotate, enterAnnotation });
+if (__DEV__ && typeof window !== "undefined") Reflect.set(window, "__dashAnnotate", { addSegment, annotate, enterAnnotation, stylusButton });
 
 async function sendAnnotation(keep: boolean, target: React.RefObject<View | null>, size: { width: number; height: number }): Promise<void> {
   const s = annotate.get();
