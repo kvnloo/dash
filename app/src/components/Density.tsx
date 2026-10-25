@@ -46,7 +46,7 @@ export function DensityPicker() {
       testID="large-type"
       style={{ minHeight: 44, paddingHorizontal: 12 }}
     >
-      <Text allowFontScaling style={{ color: colors.textMuted, fontFamily: fonts.mono, fontSize: 11 }}>Aa {Math.round(typeScale * 100)}%</Text>
+      <Text allowFontScaling style={{ color: colors.textMuted, fontFamily: fonts.mono, fontSize: 11 }}>Aa {preview.accessibilityState.disabled ? "unavailable" : `${Math.round(typeScale * 100)}%`}</Text>
     </PressScale>
   </View>;
 }
