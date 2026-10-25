@@ -3,8 +3,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ComposerDraft } from "../store/composer-drafts";
 
+// Bun keeps a file-level react-native mock for the rest of the run and later
+// suites link named imports against its export list, so expose every native
+// boundary later suites import (Platform, PermissionsAndroid), not only AppState.
 mock.module("react-native", () => ({
   Platform: { OS: "web" },
+  PermissionsAndroid: { PERMISSIONS: {}, RESULTS: { GRANTED: "granted" }, request: async () => "granted" },
   AppState: { currentState: "active", addEventListener() { return { remove() {} }; } },
 }));
 mock.module("@react-native-async-storage/async-storage", () => ({
