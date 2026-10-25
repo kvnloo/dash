@@ -183,10 +183,14 @@ function parseModels(raw: unknown): Map<string, VisualModel> {
   for (const id of Object.keys(raw)) {
     const row = raw[id];
     if (!isRecord(row)) fail(`Unknown model ${id}`);
+    const core = readString(row, "core", `models.${id}`);
+    if (!["lattice", "facet", "flare", "crescent", "prism", "bracket", "linked", "plain"].includes(core)) {
+      fail(`Unsupported AODL model geometry: ${id}`);
+    }
     out.set(id, {
       id,
       label: readString(row, "label", `models.${id}`),
-      core: readString(row, "core", `models.${id}`),
+      core,
       accent: readString(row, "accent", `models.${id}`),
     });
   }
