@@ -92,7 +92,7 @@ describe("transcript scroll frame isolation", () => {
     expect(source).toContain("setMax(previous => previous === width ? previous : width)");
     // A gesture must freeze the current Skia shader, not restart its colour band
     // on each scroll transition or render a visually different text fallback.
-    expect(source).not.toContain("progress.value = SHIMMER_START;");
+    expect(source).toMatch(/if \\(!running \\|\\| !font \\|\\| !hasText\\) \\{\\s*cancelAnimation\\(progress\\);\\s*return;\\s*\\}\\s*\\/\\/ A newly active sweep always starts at its original off-glyph phase\\.\\s*progress\\.value = SHIMMER_START;/);
     expect(source).not.toMatch(/\bimport\s*\(/);
   });
 });
