@@ -79,7 +79,8 @@ function boundedOptionName(value: unknown): value is string {
     value.length > 0 &&
     value.length <= MAX_PERMISSION_OPTION_NAME_LENGTH &&
     value.trim() === value &&
-    !CONTROL.test(value);
+    !CONTROL.test(value) &&
+    !CREDENTIAL_HINT.test(value);
 }
 
 function optionKind(value: unknown): value is PermissionOptionKind {
@@ -113,8 +114,9 @@ export function parsePermissionRequest(raw: unknown): PermissionRequest | null {
       raw.options.length > MAX_PERMISSION_OPTIONS) return null;
 
   const options: PermissionOption[] = [];
+  const candidates: unknown[] = raw.options;
   const ids = new Set<string>();
-  for (const candidate of raw.options) {
+  for (const candidate of candidates) {
     const option = parsePermissionOption(candidate);
     if (!option || ids.has(option.optionId)) return null;
     ids.add(option.optionId);
@@ -157,17 +159,22 @@ export function parsePermissionDecisionForRequest(raw: unknown, request: unknown
 export function parsePermissionResolution(raw: unknown): PermissionResolution | null {
   if (!isRecord(raw) || raw.type !== "permission_resolved" ||
       !boundedId(raw.requestId) || !boundedId(raw.turnId) ||
-      (raw.outcome !== "allowed" && raw.outcome !== "denied" && raw.outcome !== "timeout") ||
-      (raw.optionId !== undefined && !boundedId(raw.optionId)) ||
-      (raw.outcome === "allowed" && raw.optionId === undefined) ||
-      (raw.outcome === "timeout" && raw.optionId !== undefined)) return null;
+      (raw.outcome !== "allowed" && raw.outcome !== "denied" && raw.outcome !== "timeout")) return null;
+
+  let optionId: string | undefined;
+  if (raw.optionId !== undefined) {
+    if (!boundedId(raw.optionId)) return null;
+    optionId = raw.optionId;
+  }
+  if ((raw.outcome === "allowed" && optionId === undefined) ||
+      (raw.outcome === "timeout" && optionId !== undefined)) return null;
 
   return {
     type: "permission_resolved",
     requestId: raw.requestId,
     turnId: raw.turnId,
     outcome: raw.outcome,
-    ...(raw.optionId === undefined ? {} : { optionId: raw.optionId }),
+    ...(optionId === undefined ? {} : { optionId }),
   };
 }
 
