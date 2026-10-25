@@ -1,8 +1,8 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { BotInfo, HostInfo } from "../../../shared/protocol";
 import type { OrchestraProject } from "../catalog/orchestra";
 import type { Conversation } from "../model";
-import { parseSearchQuery, runGlobalSearch } from "./global-search";
+import { parseSearchQuery, runGlobalSearch, type SearchResult } from "./global-search";
 
 /**
  * Deterministic performance guards, not wall-clock benchmarks.
@@ -174,25 +174,25 @@ describe("runGlobalSearch source-defined operation bounds", () => {
       products: [...Array.from({ length: 512 }, (_, n) => product(n)), targetProject],
       harnesses,
     };
-    const expectedBot = {
+    const expectedBot: SearchResult = {
       kind: "bot", key: "bot:host-a:bot-2048", bot: targetBot,
       hostName: "Bench", target: undefined, subtitle: "Bench · Telegram connected",
     };
-    const expectedChat = {
+    const expectedChat: SearchResult = {
       kind: "conversation", key: "conv:chat-2048", conversation: targetChat,
       harnessName: "OMP", subtitle: "Needle payload",
     };
-    const expectedProject = {
+    const expectedProject: SearchResult = {
       kind: "product", key: "prod:project-2048", project: targetProject,
       subtitle: "Source 2048",
     };
-    const expectedHarness = {
+    const expectedHarness: SearchResult = {
       kind: "harness", key: "harness:needle-harness",
       id: "needle-harness", name: "Needle Harness",
       available: false, subtitle: "Not installed on laptop",
     };
 
-    const cases = [
+    const cases: { query: string; expected: SearchResult[] }[] = [
       { query: "  NeEdLe  ", expected: [expectedBot, expectedChat, expectedProject] },
       { query: "@bots needle", expected: [expectedBot] },
       { query: "@conversations needle", expected: [expectedChat] },
@@ -273,16 +273,35 @@ describe("runGlobalSearch source-defined operation bounds", () => {
   });
 
   test("pure local searches neither fetch nor create global timers, and restore guards", () => {
-    const fetchGuard = spyOn(globalThis, "fetch").mockImplementation(() => {
+    // Bun's fetch and setTimeout have callable static members, so a plain
+    // spy implementation is not assignable to their complete global types.
+    // Replace the values under their existing descriptors and restore those
+    // exact descriptors even if an assertion or a forbidden call throws.
+    const originalFetch = Object.getOwnPropertyDescriptor(globalThis, "fetch");
+    const originalTimeout = Object.getOwnPropertyDescriptor(globalThis, "setTimeout");
+    const originalInterval = Object.getOwnPropertyDescriptor(globalThis, "setInterval");
+    if (!originalFetch || !originalTimeout || !originalInterval) {
+      throw new Error("global search guards require own global descriptors");
+    }
+    let fetchCalls = 0;
+    let timeoutCalls = 0;
+    let intervalCalls = 0;
+    function forbidFetch(..._args: Parameters<typeof globalThis.fetch>): ReturnType<typeof globalThis.fetch> {
+      fetchCalls += 1;
       throw new Error("global search must not fetch");
-    });
-    const timeoutGuard = spyOn(globalThis, "setTimeout").mockImplementation(() => {
+    }
+    function forbidTimeout(..._args: Parameters<typeof globalThis.setTimeout>): ReturnType<typeof globalThis.setTimeout> {
+      timeoutCalls += 1;
       throw new Error("global search must not schedule a timeout");
-    });
-    const intervalGuard = spyOn(globalThis, "setInterval").mockImplementation(() => {
+    }
+    function forbidInterval(..._args: Parameters<typeof globalThis.setInterval>): ReturnType<typeof globalThis.setInterval> {
+      intervalCalls += 1;
       throw new Error("global search must not schedule an interval");
-    });
+    }
     try {
+      Object.defineProperty(globalThis, "fetch", { configurable: true, writable: true, value: forbidFetch });
+      Object.defineProperty(globalThis, "setTimeout", { configurable: true, writable: true, value: forbidTimeout });
+      Object.defineProperty(globalThis, "setInterval", { configurable: true, writable: true, value: forbidInterval });
       const chats = [conversation(1)];
       const bots = [bot(1)];
       const products = [product(1)];
@@ -293,13 +312,13 @@ describe("runGlobalSearch source-defined operation bounds", () => {
       expect(parseSearchQuery(" /harness omp ")).toEqual({
         mode: "slash", scope: "harness", rawScope: "harness", text: "omp",
       });
-      expect(fetchGuard).not.toHaveBeenCalled();
-      expect(timeoutGuard).not.toHaveBeenCalled();
-      expect(intervalGuard).not.toHaveBeenCalled();
+      expect(fetchCalls).toBe(0);
+      expect(timeoutCalls).toBe(0);
+      expect(intervalCalls).toBe(0);
     } finally {
-      intervalGuard.mockRestore();
-      timeoutGuard.mockRestore();
-      fetchGuard.mockRestore();
+      Object.defineProperty(globalThis, "setInterval", originalInterval);
+      Object.defineProperty(globalThis, "setTimeout", originalTimeout);
+      Object.defineProperty(globalThis, "fetch", originalFetch);
     }
   });
 });
