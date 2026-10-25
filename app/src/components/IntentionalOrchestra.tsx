@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Linking, ScrollView, StyleSheet, Text, View } from "react-native";
-import Animated, { cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { MOTION_MS } from "../motion";
 import { colors, space, type } from "../theme";
 import { matchesFilter, projectMap, type MapFilter, type MapKind, type MapNode, type MapRelation, type OrchestraMap } from "../lib/orchestra-map";
 import { defaultView, ORCHESTRA_VIEWS, TRIAGE_LANES, viewGraph, type OrchestraView } from "../lib/orchestra-views";
 import { PressScale } from "./PressScale";
+import { useAmbientRunning } from "./OrbMotion";
 import { InteractiveTile } from "./InteractiveTile";
 import { Tree } from "./Tree";
 import type { TreeNode } from "../lib/tree";
@@ -19,12 +20,12 @@ function Glyph({ kind }: { kind: MapKind | MapRelation }) {
   return isKind(kind) ? <View style={{ width: 11, height: 11, borderRadius: kind === "repo" ? 1 : 6, borderWidth: 1.5, borderColor: kindColor[kind], backgroundColor: kind === "host" ? "transparent" : kindColor[kind] }} /> : <View style={{ width: 20, height: 0, borderTopWidth: kind === "hosted" ? 1 : 2, borderColor: relationColor[kind], borderStyle: kind === "workspace" ? "dotted" : "solid" }} />;
 }
 function Wire({ relation, active }: { relation: MapRelation; active: boolean }) {
-  const reduced = useReducedMotion(), opacity = useSharedValue(1);
+  const running = useAmbientRunning(), opacity = useSharedValue(1);
   useEffect(() => {
-    if (active && relation === "delegated" && !reduced) opacity.value = withRepeat(withTiming(0.3, { duration: 650 }), -1, true);
+    if (active && relation === "delegated" && running) opacity.value = withRepeat(withTiming(0.3, { duration: 650 }), -1, true);
     else { cancelAnimation(opacity); opacity.value = 1; }
     return () => cancelAnimation(opacity);
-  }, [active, relation, reduced, opacity]);
+  }, [active, relation, running, opacity]);
   const animated = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return <Animated.View style={[{ width: 18, height: 24, borderLeftWidth: relation === "hosted" ? 1 : 2, borderBottomWidth: relation === "hosted" ? 1 : 2, borderColor: relationColor[relation], borderStyle: relation === "workspace" ? "dotted" : "solid", marginLeft: 10 }, animated]} />;
 }

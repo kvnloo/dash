@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
+import { NavigationContext } from "@react-navigation/native";
 import { cancelAnimation, useReducedMotion, useSharedValue, withRepeat, withTiming, type SharedValue } from "react-native-reanimated";
 
 import { ambient } from "../motion-ambient";
@@ -30,4 +31,22 @@ export function OrbActivity({ active, children }: { active: boolean; children: R
 
 export function useOrbMotion() {
   return { clock: useContext(Clock), active: useContext(Activity) };
+}
+
+/** Whether an ambient loop may run: its screen is focused, its subtree is active and motion is allowed.
+ * Reanimated keeps loops on blurred screens running and every animated frame commits the whole tree,
+ * so loops under the chat window made the UI thread miss every frame. Safe outside a navigator. */
+export function useAmbientRunning() {
+  const nav = useContext(NavigationContext);
+  const [focused, setFocused] = useState(() => nav?.isFocused() ?? true);
+  useEffect(() => {
+    if (!nav) return;
+    setFocused(nav.isFocused());
+    const offFocus = nav.addListener("focus", () => setFocused(true));
+    const offBlur = nav.addListener("blur", () => setFocused(false));
+    return () => { offFocus(); offBlur(); };
+  }, [nav]);
+  const active = useContext(Activity);
+  const reduced = useReducedMotion();
+  return focused && active && !reduced;
 }

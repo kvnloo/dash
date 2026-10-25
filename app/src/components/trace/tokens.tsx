@@ -3,12 +3,12 @@ import { StyleSheet, type ViewStyle } from "react-native";
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
 import { ambient } from "../../motion-ambient";
+import { useAmbientRunning } from "../OrbMotion";
 import { colors, glass } from "../../theme";
 
 /** Trace palette: one neutral base and three accents (round 3). */
@@ -36,13 +36,13 @@ export const tc = {
  * Holds still under reduced motion.
  */
 export function LivePulse({ size = 6, color = tc.live, style }: { size?: number; color?: string; style?: ViewStyle }) {
-  const reduced = useReducedMotion();
+  const running = useAmbientRunning();
   const p = useSharedValue(0);
   useEffect(() => {
-    if (reduced) { p.value = 1; return; }
+    if (!running) { cancelAnimation(p); p.value = 1; return; }
     p.value = withRepeat(withTiming(1, ambient(800)), -1, true);
     return () => cancelAnimation(p);
-  }, [p, reduced]);
+  }, [p, running]);
   const halo = useAnimatedStyle(() => ({ opacity: 0.35 * (1 - p.value), transform: [{ scale: 1 + p.value * 1.4 }] }));
   const dot = useAnimatedStyle(() => ({ opacity: 0.55 + 0.45 * p.value }));
   const box = { width: size, height: size, borderRadius: size / 2 };

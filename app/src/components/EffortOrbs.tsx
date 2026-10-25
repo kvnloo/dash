@@ -12,6 +12,7 @@ import Animated, {
 import type { VisualEffort, VisualRuntimeState } from "../catalog/visual";
 
 import { ambient } from "../motion-ambient";
+import { useAmbientRunning } from "./OrbMotion";
 
 function Orbit({
   angle,
@@ -65,9 +66,10 @@ export const EffortOrbs = memo(function EffortOrbs({
   const orbitCount = cadence.rotate ? effort.orbits : 0;
   const orbSize = Math.max(3, Math.round(size * (0.08 + 0.06 * effort.energy)));
   const color = effort.accent || hue;
+  const running = useAmbientRunning();
 
   useEffect(() => {
-    if (cadence.rotate) {
+    if (running && cadence.rotate) {
       const duration = Math.max(280, Math.round(cadence.periodMs * (1.15 - 0.55 * effort.energy)));
       spin.value = 0;
       spin.value = withRepeat(withTiming(1, ambient(duration, true)), -1, false);
@@ -75,7 +77,7 @@ export const EffortOrbs = memo(function EffortOrbs({
       cancelAnimation(spin);
       spin.value = 0;
     }
-    if (cadence.periodMs > 0 && cadence.opacityMin !== cadence.opacityMax) {
+    if (running && cadence.periodMs > 0 && cadence.opacityMin !== cadence.opacityMax) {
       const half = cadence.periodMs / 2;
       pulse.value = cadence.opacityMin;
       pulse.value = withRepeat(
@@ -89,7 +91,7 @@ export const EffortOrbs = memo(function EffortOrbs({
       cancelAnimation(pulse);
       pulse.value = cadence.opacityMax;
     }
-  }, [cadence, effort.energy, pulse, spin]);
+  }, [cadence, effort.energy, pulse, running, spin]);
 
   const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
