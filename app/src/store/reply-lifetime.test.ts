@@ -2,7 +2,7 @@ import { beforeEach, expect, mock, test } from "bun:test";
 
 mock.module("@react-native-async-storage/async-storage", () => ({ default: {
   multiSet: async () => {}, setItem: async () => {}, multiRemove: async () => {},
-  getItem: async () => null, removeItem: async () => {},
+  getItem: async () => null, getAllKeys: async () => [], removeItem: async () => {},
   multiGet: async (keys: string[]) => keys.map(key => [key, null]),
 } }));
 Object.defineProperty(globalThis, "requestAnimationFrame", { configurable: true, value: (callback: FrameRequestCallback) => setTimeout(() => callback(0), 0) });

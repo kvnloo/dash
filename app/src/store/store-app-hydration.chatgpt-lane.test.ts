@@ -13,6 +13,9 @@ const writes: string[] = [];
 
 mock.module("@react-native-async-storage/async-storage", () => ({
   default: {
+    async getItem(key: string) { return persisted.get(key) ?? null; },
+    async getAllKeys() { return [...persisted.keys()]; },
+    async removeItem(key: string) { writes.push(key); persisted.delete(key); },
     async multiGet(keys: string[]) {
       readBatches.push([...keys]);
       return keys.map((key) => [key, persisted.get(key) ?? null]);
@@ -149,8 +152,9 @@ describe("app conversation persistence hydration", () => {
     }
 
     const state = app.store.get();
-    expect(readBatches).toEqual([[KEYS.settings, KEYS.conversations, KEYS.activeId]]);
-    expect(writes).toEqual([]);
+    expect(readBatches).toEqual([]);
+    expect(writes).not.toContain(KEYS.settings);
+    expect(writes).not.toContain(KEYS.activeId);
     expect(changes).toHaveLength(1);
     expect(state.hydrated).toBe(true);
     expect(state.activeId).toBe("chat-older");
@@ -208,7 +212,8 @@ describe("app conversation persistence hydration", () => {
       conversationId: "good-chat", messageId: "valid-assistant",
     });
     expect(app.streamingTurns()).toEqual([]);
-    expect(writes).toEqual([]);
+    expect(writes).not.toContain(KEYS.settings);
+    expect(writes).not.toContain(KEYS.activeId);
   });
 
   test("bad JSON and non-array persistence replace stale in-memory state safely", async () => {
@@ -235,7 +240,8 @@ describe("app conversation persistence hydration", () => {
     await expect(app.hydrate()).resolves.toBeUndefined();
     expect(app.store.get().conversations).toEqual([]);
     expect(app.store.get().activeId).toBeNull();
-    expect(writes).toEqual([]);
+    expect(writes).not.toContain(KEYS.settings);
+    expect(writes).not.toContain(KEYS.activeId);
   });
 
   test("missing, empty, and orphaned active IDs never select a different chat", async () => {
@@ -247,7 +253,8 @@ describe("app conversation persistence hydration", () => {
       expect(app.store.get().conversations.map((chat) => chat.id)).toEqual(["first", "second"]);
       expect(app.store.get().activeId).toBeNull();
     }
-    expect(writes).toEqual([]);
+    expect(writes).not.toContain(KEYS.settings);
+    expect(writes).not.toContain(KEYS.activeId);
   });
 
   test("rehydrates two independent streaming text snapshots into keyed store only", async () => {
@@ -292,7 +299,8 @@ describe("app conversation persistence hydration", () => {
         state: "streaming", text: "Partial B", seq: 3,
       });
       expect(app.store.get().activeId).toBe("chat-stream-two");
-      expect(writes).toEqual([]);
+      expect(writes).not.toContain(KEYS.settings);
+      expect(writes).not.toContain(KEYS.activeId);
     } finally {
       offOne();
       offTwo();

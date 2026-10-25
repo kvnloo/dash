@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ConversationPersistence } from "./conversation-persistence";
+import { conversationFiles } from "./conversation-files";
 import { hostDisplayName } from "../../../shared/host-display";
 import { appendReplyPart, partsFor, replyParts } from "./text";
 import type { DetailMode } from "../lib/reply-details";
@@ -68,46 +70,69 @@ export const store = createStore<AppState>({
 // ---- persistence -----------------------------------------------------------
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+const persistence = new ConversationPersistence(conversationFiles);
+let lastActiveId: string | null | undefined;
 
+function persistenceFailure(): void {
+  console.error("[dash.persistence] storage_operation_failed");
+}
 function scheduleSave(): void {
+  if (!store.get().hydrated) return;
   saveTimer ??= setTimeout(() => {
     saveTimer = undefined;
     const { conversations, activeId } = store.get();
-    const snapshots = conversations.map((c) => ({ ...c, messages: c.messages.map((m) =>
-      m.role === "assistant" && m.state === "streaming"
-        ? { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, seq: Math.max(m.seq, liveSequences.get(m.turnId) ?? 0) }
-        : m,
-    ) }));
-    void AsyncStorage.multiSet([
-      [KEYS.conversations, JSON.stringify(snapshots)],
-      [KEYS.activeId, activeId ?? ""],
-    ]);
+    const snapshots = conversations.map(chat => !chat.sessionId && chat.messages.some(message => message.role === "assistant" && message.state === "streaming")
+      ? { ...chat, messages: chat.messages.map(message => message.role === "assistant" && message.state === "streaming"
+        ? { ...message, parts: partsFor(message.turnId).length ? partsFor(message.turnId) : message.parts, text: replyText.get(message.turnId) || message.text, seq: Math.max(message.seq, liveSequences.get(message.turnId) ?? 0) } : message) }
+      : chat);
+    void persistence.save(snapshots).catch(persistenceFailure);
+    if (lastActiveId !== activeId) {
+      void AsyncStorage.setItem(KEYS.activeId, activeId ?? "").then(() => { lastActiveId = activeId; }, persistenceFailure);
+    }
   }, 400);
 }
 
 export async function hydrate(): Promise<void> {
-  const entries = await AsyncStorage.multiGet([KEYS.settings, KEYS.conversations, KEYS.activeId]);
-  const byKey = new Map(entries);
-  const settings = parseSettings(safeJson(byKey.get(KEYS.settings)));
-  const rawConversations = safeJson(byKey.get(KEYS.conversations));
-  const conversations: Conversation[] = [];
-  if (Array.isArray(rawConversations)) {
-    for (const raw of rawConversations) {
-      const c = parseConversation(raw);
-      if (c) conversations.push(c);
+  // Read tiny durable settings independently: a broken transcript must not prevent pairing.
+  const [settingsText, activeIdText] = await Promise.all([
+    AsyncStorage.getItem(KEYS.settings).catch(() => null),
+    AsyncStorage.getItem(KEYS.activeId).catch(() => null),
+  ]);
+  const settings = parseSettings(safeJson(settingsText));
+  let conversations: Conversation[] = [];
+  try {
+    conversations = await persistence.load();
+    const migrated = await AsyncStorage.getItem("dash.conversations.migrated.v2") || await conversationFiles.read("durable", ".migration-complete.json");
+    if (!migrated) {
+      // Leave an unreadable legacy row untouched. The host can repopulate its cache.
+      const rawLegacy = await AsyncStorage.getItem(KEYS.conversations);
+      const legacy = safeJson(rawLegacy);
+      if (rawLegacy && !Array.isArray(legacy)) throw new Error("Invalid legacy conversations");
+      if (Array.isArray(legacy)) {
+        const existing = new Set(conversations.map(chat => chat.id));
+        for (const raw of legacy) {
+          const chat = parseConversation(raw);
+          if (chat && !existing.has(chat.id)) conversations.push(chat);
+        }
+        await persistence.save(conversations);
+      }
+      await conversationFiles.write("durable", ".migration-complete.json", "true");
+      await AsyncStorage.setItem("dash.conversations.migrated.v2", "true");
     }
+    await AsyncStorage.removeItem(KEYS.conversations);
+  } catch { persistenceFailure(); }
+  const activeId = activeIdText || null;
+  const active = conversations.find(chat => chat.id === activeId);
+  if (active) {
+    const cached = await persistence.cached(active);
+    conversations = conversations.map(chat => chat.id === cached.id ? cached : chat);
   }
-  const activeId = byKey.get(KEYS.activeId) || null;
-  for (const c of conversations) for (const m of c.messages) {
-    if (m.role === "assistant" && m.state === "streaming") replyText.set(m.turnId, m.text);
+  for (const chat of conversations) for (const message of chat.messages) {
+    if (message.role === "assistant" && message.state === "streaming") replyText.set(message.turnId, message.text);
   }
-  store.set((s) => ({
-    ...s,
-    hydrated: true,
-    settings,
-    conversations,
-    activeId: conversations.some((c) => c.id === activeId) ? activeId : null,
-  }));
+  lastActiveId = activeId;
+  store.set(s => ({ ...s, hydrated: true, settings, conversations,
+    activeId: conversations.some(chat => chat.id === activeId) ? activeId : null }));
 }
 
 function safeJson(text: string | null | undefined): unknown {
@@ -145,7 +170,10 @@ export async function forgetEverything(): Promise<void> {
     const { clearIdentityTokens } = await import("../lib/bridge-auth");
     clearIdentityTokens();
   }
-  await AsyncStorage.multiRemove([KEYS.settings, KEYS.conversations, KEYS.activeId]);
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = undefined; }
+  await persistence.clear();
+  await AsyncStorage.multiRemove([KEYS.settings, KEYS.conversations, KEYS.activeId, "dash.conversations.migrated.v2"]);
+  lastActiveId = undefined;
   for (const chat of store.get().conversations) for (const message of chat.messages) releaseReply(message);
   store.set((s) => ({
     ...s,
@@ -191,6 +219,12 @@ export function setActive(id: string | null): void {
   scheduleSave();
   if (!id) return;
   const current = store.get().conversations.find((c) => c.id === id);
+  if (current && current.messages.length === 0 && current.sessionId) {
+    void persistence.cached(current).then(cached => {
+      if (cached === current || store.get().activeId !== id) return;
+      store.set(state => ({ ...state, conversations: state.conversations.map(chat => chat === current ? cached : chat) }));
+    }).catch(persistenceFailure);
+  }
   if (!current || !shouldRequestHistory(current) || !current.sessionId) return;
   if (conversationTargetError(current)) return;
   requestLiveHistory?.({ harness: current.harness, sessionId: current.sessionId, cwd: current.cwd, hostId: current.targetHostId, profileId: current.profileId });
