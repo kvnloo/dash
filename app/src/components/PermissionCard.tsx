@@ -19,8 +19,8 @@ export type PermissionCardProps = Readonly<{
   options: readonly PermissionCardOption[];
   deadlineAt: number;
   phase: PermissionCardPhase;
-  /** An exact ACP optionId. A rejected promise unlocks for a safe retry. */
-  onChoose: (optionId: string) => void | Promise<void>;
+  /** An exact ACP optionId. Rejection or a false send receipt unlocks retry. */
+  onChoose: (optionId: string) => void | Promise<unknown>;
 }>;
 
 /**
@@ -70,7 +70,9 @@ export function PermissionCard({
   const locallyBusy = busyKey === key;
   const status = failedKey === key && phase === "pending"
     ? "Decision not sent · try again"
-    : permissionStatus(phase, deadlineAt, now);
+    : locallyBusy && phase === "pending"
+      ? "Submitting decision · awaiting host confirmation"
+      : permissionStatus(phase, deadlineAt, now);
 
   function onPressOption(optionId: string): void {
     if (busyRef.current === key) return;
@@ -88,7 +90,7 @@ export function PermissionCard({
       setFailedKey(null);
       try {
         const sending = onChoose(exactId);
-        void Promise.resolve(sending).catch(failed);
+        void Promise.resolve(sending).then(result => { if (result === false) failed(); }, failed);
       } catch {
         failed();
       }
