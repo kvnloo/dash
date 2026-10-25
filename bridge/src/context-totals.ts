@@ -26,6 +26,7 @@ export function parseHarnessTotal(harness: string, text: string, sessionId: stri
       if (count !== undefined) { used = count; maximum = positive(info.model_context_window) ?? 0; }
     }
     const message = record(event.message) ? event.message : undefined;
+    if (harness === "omp" && (message?.stopReason === "aborted" || message?.stopReason === "error")) continue;
     if (message?.role === "assistant" && record(message.usage)) {
       const count = harness === "claude" ? sum(message.usage, ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"]) : harness === "omp" ? sum(message.usage, ["input", "cacheRead", "cacheWrite", "output"]) : undefined;
       if (count !== undefined) { used = count; if (typeof message.provider === "string") provider = message.provider.slice(0, 120); if (typeof message.model === "string") model = message.model.slice(0, 120); }

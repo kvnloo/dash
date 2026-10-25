@@ -44,3 +44,10 @@ test("OMP capacity is the exact cached provider/model, with missing metadata kep
     expect(ompModelWindow("observed", "specific-model-variant", root)).toBeUndefined();
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("aborted OMP zero-usage placeholders cannot reset context occupancy to zero", () => {
+  const good = { type: "message", message: { role: "assistant", model: "observed", stopReason: "stop", usage: { input: 100, output: 20, cacheRead: 1000 } } };
+  const aborted = { type: "message", message: { role: "assistant", model: "observed", stopReason: "aborted", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } } };
+  expect(parseHarnessTotal("omp", [good, aborted].map(v => JSON.stringify(v)).join("\n"), "s")?.used).toBe(1120);
+  expect(parseHarnessTotal("omp", JSON.stringify(aborted), "s")).toBeUndefined();
+});
