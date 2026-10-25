@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaInsetsContext, useSafeAreaInsets, type EdgeInsets } from "react-native-safe-area-context";
-import { appInsets, VOICE_BAR_ROW, voiceControlHome } from "../lib/voice-bar";
+import { appInsets, VOICE_BAR_ROW, voiceBarPresentation, voiceBarVisible, voiceControlHome } from "../lib/voice-bar";
 import { executionToken, voiceAccessToken } from "../lib/bridge-auth";
 import { ContinuousVoice, object, VoiceAccessDenied, type VoiceState } from "../lib/continuous-voice";
 import { createVoicePeer } from "../lib/voice-peer";
@@ -9,7 +9,7 @@ import { addSegment, annotate, registerSink } from "../store/annotate";
 import type { Conversation } from "../model";
 import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { store } from "../store/app";
-import { colors } from "../theme";
+import { colors, glass, radius } from "../theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { microphone } from "../lib/recorded-speech";
 import { createStore } from "../store/createStore";
@@ -37,14 +37,18 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const epoch = useRef(0);
   const starting = useRef(false);
   const releaseMic = useRef<(() => void) | undefined>(undefined);
+  const desiredMute = useRef(false);
   const insets = useSafeAreaInsets();
   const windowOpen = voiceWindowOpen.use(open => open);
   const [barRow, setBarRow] = useState(0);
+  const [attempted, setAttempted] = useState(false);
   // SYNTHETIC debug-only state for rendered proofs (never set outside the debug controller).
   const fixture = debugUi.use(s => s.voiceStateFixture ?? null);
   const start = async () => {
     if (starting.current) return;
     if (call.current && !["idle", "error"].includes(call.current.state.phase)) return;
+    setAttempted(true);
+    desiredMute.current = false;
     const settings = store.get().settings;
     const conversation = store.get().conversations.find(c => c.id === store.get().activeId);
     if (!settings?.identity || conversation?.harness !== "hermes" || !conversation.sessionId || !conversation.profileId) {
@@ -91,7 +95,10 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
         cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
         transcript: (id, text, start, end) => { if (annotate.get().active) addSegment({ id, text, start, end, source: "voice" }); } });
       call.current = controller;
-      await controller.start(target);
+      // A Mute tap during authenticated bootstrap must also apply when the native peer arrives.
+      const connecting = controller.start(target);
+      if (desiredMute.current) controller.mute(true);
+      await connecting;
     } catch (error) {
       release(); if (releaseMic.current === release) releaseMic.current = undefined;
       if (generation === epoch.current) setState({ ...initial, phase: "error", note: `${error instanceof Error ? error.message : "Native voice unavailable."} No external app opened. Retry after the blocker is resolved.` });
@@ -99,11 +106,19 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     finally { if (generation === epoch.current) starting.current = false; }
   };
   const stop = async () => {
-    epoch.current++; starting.current = false;
+    epoch.current++; starting.current = false; desiredMute.current = false;
     const controller = call.current;
     const cleanup = controller?.stop();
     if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
     setState(initial); await cleanup;
+  };
+  const mute = () => {
+    if (state.phase === "idle" || state.phase === "error") return;
+    const next = !desiredMute.current;
+    desiredMute.current = next;
+    const controller = call.current;
+    if (controller) controller.mute(next);
+    else setState(previous => previous.phase === "connecting" ? { ...previous, muted: next } : previous);
   };
   useEffect(() => {
     const subscription = AppState.addEventListener("change", next => { if (next === "background") {
@@ -120,6 +135,8 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   }, []);
   const shown = fixture ?? state;
   const active = !["idle", "error"].includes(shown.phase);
+  const visible = voiceBarVisible(shown.phase, attempted);
+  const pill = voiceBarPresentation(shown);
   useEffect(() => {
     const target = attached.current;
     if (!active || !target) return;
@@ -130,18 +147,53 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   }, [active, bindingGeneration]);
   // The bar owns a band under the status bar (screens inset below it); it never floats over AppNav or content.
   // Space stays allocated while a chat window covers the app, so the list underneath never jumps on close.
-  const home = voiceControlHome(active, windowOpen);
-  return <Context.Provider value={{ state: shown, start, stop, mute: () => call.current?.mute(!state.muted) }}>
+  const home = voiceControlHome(visible, windowOpen);
+  return <Context.Provider value={{ state: shown, start, stop, mute }}>
     <DeviceInsets.Provider value={insets}>
-      <SafeAreaInsetsContext.Provider value={appInsets(insets, active, barRow)}>{children}</SafeAreaInsetsContext.Provider>
+      <SafeAreaInsetsContext.Provider value={appInsets(insets, visible, barRow)}>{children}</SafeAreaInsetsContext.Provider>
     </DeviceInsets.Provider>
-    {home === "bar" ? <View testID="voice-mic-bar" style={[styles.bar, { paddingTop: insets.top }]} accessibilityLiveRegion="polite">
+    {home === "bar" ? <View testID="voice-mic-bar" style={[styles.bar, { paddingTop: insets.top }]}>
       <View style={styles.row} onLayout={e => setBarRow(e.nativeEvent.layout.height)}>
-        <Text style={[styles.text, styles.label]} numberOfLines={1}>{shown.muted ? "Mic muted" : shown.phase === "connecting" ? "Voice connecting · mic muted" : `● Mic active · ${shown.phase}`}</Text>
-        <Pressable testID="voice-mute" accessibilityRole="button" accessibilityLabel={shown.muted ? "Unmute voice microphone" : "Mute voice microphone"} onPress={() => call.current?.mute(!shown.muted)} style={styles.button}><Text style={styles.text}>{shown.muted ? "Unmute" : "Mute"}</Text></Pressable>
-        <Pressable testID="voice-end" accessibilityRole="button" accessibilityLabel="End voice call" onPress={() => void stop()} style={styles.button}><Text style={styles.text}>End voice</Text></Pressable>
+        <View accessible={false} style={[styles.dot, { backgroundColor: pill.phase === "error" ? colors.danger : pill.phase === "connecting" || pill.phase === "muted" ? colors.warn : pill.phase === "live" ? colors.ok : colors.textFaint }]} />
+        <View style={styles.status}>
+          <Text testID="voice-phase" accessibilityLiveRegion="polite" style={styles.label} numberOfLines={1}>{pill.label}</Text>
+          {pill.action === "start" && pill.detail ? <Text testID="voice-error" accessibilityRole="alert" style={styles.detail} numberOfLines={2}>{pill.detail}</Text> : null}
+        </View>
+        <View style={styles.actions}>
+          {pill.action === "end" ? <Pressable
+            testID="voice-mute"
+            accessibilityRole="button"
+            accessibilityLabel={pill.muteText === "Mute" ? "Mute voice microphone" : "Unmute voice microphone"}
+            accessibilityState={{ selected: shown.muted }}
+            onPress={mute}
+            style={[styles.button, styles.muteButton]}
+          ><Text style={styles.buttonText}>{pill.muteText}</Text></Pressable> : null}
+          <Pressable
+            testID={pill.action === "start" ? "voice-start" : "voice-end"}
+            accessibilityRole="button"
+            accessibilityLabel={pill.primaryLabel}
+            onPress={pill.action === "start" ? () => void start() : () => void stop()}
+            style={styles.button}
+          ><Text style={pill.action === "end" ? styles.endText : styles.buttonText}>{pill.primaryText}</Text></Pressable>
+        </View>
       </View>
     </View> : null}
   </Context.Provider>;
 }
-const styles = StyleSheet.create({ bar: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: colors.bg, zIndex: 1000 }, row: { minHeight: VOICE_BAR_ROW, marginHorizontal: 8, borderColor: colors.accent, borderWidth: 1, flexDirection: "row", alignItems: "center", paddingLeft: 8 }, label: { flex: 1, minWidth: 0 }, text: { color: colors.text, fontSize: 12 }, button: { minHeight: 44, minWidth: 52, alignItems: "center", justifyContent: "center", paddingHorizontal: 6 } });
+const styles = StyleSheet.create({
+  bar: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: colors.bg, zIndex: 1000 },
+  row: {
+    minHeight: VOICE_BAR_ROW, marginHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 8,
+    paddingLeft: 12, paddingRight: 3, borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: glass.hair2, backgroundColor: glass.fillRaised,
+  },
+  dot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  status: { flex: 1, minWidth: 0, paddingVertical: 4 },
+  label: { color: colors.text, fontSize: 12, fontWeight: "600" },
+  detail: { color: colors.textMuted, fontSize: 11, lineHeight: 14 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
+  button: { minHeight: 44, minWidth: 56, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
+  muteButton: { backgroundColor: glass.quiet },
+  buttonText: { color: colors.text, fontSize: 12, fontWeight: "600" },
+  endText: { color: colors.danger, fontSize: 12, fontWeight: "600" },
+});
