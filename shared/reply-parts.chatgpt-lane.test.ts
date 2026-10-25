@@ -134,7 +134,7 @@ describe("ReplyPart enum, numeric and truncation boundaries", () => {
 
   test("tool_output and tool_detail require explicit boolean truncation flags", () => {
     for (const value of [output, detail]) {
-      const missing = { ...value };
+      const missing: Record<string, unknown> = { ...value };
       delete missing.truncated;
       expect(parseReplyPart(missing)).toBeNull();
       for (const truncated of [undefined, null, 0, 1, "false", [], {}]) {
