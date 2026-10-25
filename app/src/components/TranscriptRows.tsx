@@ -1,4 +1,4 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, type ReactElement } from "react";
 import type { Message } from "../model";
 import type { DetailMode } from "../lib/reply-details";
 import type { Thinking } from "../lib/thinking";
@@ -39,7 +39,7 @@ export function useTranscriptRenderItem({
   detailMode,
   latestAssistantId,
   thinking,
-}: TranscriptRenderOptions): ({ item }: { item: Message }) => ReturnType<typeof TranscriptRow> {
+}: TranscriptRenderOptions): ({ item }: { item: Message }) => ReactElement {
   return useCallback(({ item }: { item: Message }) => (
     <TranscriptRow
       conversationId={conversationId}
