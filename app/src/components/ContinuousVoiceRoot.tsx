@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaInsetsContext, useSafeAreaInsets, type EdgeInsets } from "react-native-safe-area-context";
-import { appInsets, VOICE_BAR_ROW, voiceBarPresentation, voiceBarVisible, voiceControlHome } from "../lib/voice-bar";
+import { appInsets, VOICE_BAR_ROW, voiceBarPresentation, voiceBarVisible, voiceControlHome, voiceMuteAccessibilityLabel, voiceStatusAccessibilityLabel } from "../lib/voice-bar";
 import { executionToken, voiceAccessToken } from "../lib/bridge-auth";
 import { ContinuousVoice, object, VoiceAccessDenied, type VoiceState } from "../lib/continuous-voice";
 import { createVoicePeer } from "../lib/voice-peer";
@@ -156,14 +156,14 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       <View style={styles.row} onLayout={e => setBarRow(e.nativeEvent.layout.height)}>
         <View accessible={false} style={[styles.dot, { backgroundColor: pill.phase === "error" ? colors.danger : pill.phase === "connecting" || pill.phase === "muted" ? colors.warn : pill.phase === "live" ? colors.ok : colors.textFaint }]} />
         <View style={styles.status}>
-          <Text testID="voice-phase" accessibilityLiveRegion="polite" style={styles.label} numberOfLines={1}>{pill.label}</Text>
+          <Text testID="voice-phase" accessible accessibilityLabel={voiceStatusAccessibilityLabel(shown)} accessibilityLiveRegion="polite" style={styles.label} numberOfLines={1}>{pill.label}</Text>
           {pill.action === "start" && pill.detail ? <Text testID="voice-error" accessibilityRole="alert" style={styles.detail} numberOfLines={2}>{pill.detail}</Text> : null}
         </View>
         <View style={styles.actions}>
           {pill.action === "end" ? <Pressable
             testID="voice-mute"
             accessibilityRole="button"
-            accessibilityLabel={pill.muteText === "Mute" ? "Mute voice microphone" : "Unmute voice microphone"}
+            accessibilityLabel={voiceMuteAccessibilityLabel(shown.muted)}
             accessibilityState={{ selected: shown.muted }}
             onPress={mute}
             style={[styles.button, styles.muteButton]}
