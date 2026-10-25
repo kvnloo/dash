@@ -1,5 +1,6 @@
 import type { AgentInfo, HistoryMessage, HostInfo } from "../../../shared/protocol";
 import { isCatalogHarness } from "../../../shared/catalog";
+import { unwrapHermesHistoryText } from "./history-display";
 import type { Conversation, Message } from "../model";
 
 export function liveConversationId(harness: string, sessionId: string): string {
@@ -65,10 +66,10 @@ export function shouldRequestHistory(c: Conversation | undefined): boolean {
 export function hydrateLiveConversation(conversation: Conversation, history: HistoryMessage[]): Conversation {
   if (conversation.messages.some(m => m.role === "assistant" && (m.state === "streaming" || m.state === "pending"))) return conversation;
   if (conversation.messages.length > 0 && conversation.harness !== "hermes") return conversation;
-  const messages = historyToMessages(history, conversation.id);
+  const messages = historyToMessages(history, conversation.id, conversation.harness === "hermes");
   if (!messages.length) return conversation;
   return { ...conversation, messages, updatedAt: Math.max(messages.at(-1)?.at ?? 0, conversation.updatedAt) };
 }
-function historyToMessages(history: HistoryMessage[], conversationId: string): Message[] {
-  return history.map(h => h.role === "user" ? { id: h.id, role: "user", text: h.text, at: h.at } : { id: h.id, role: "assistant", text: h.text, at: h.at, state: "done", parts: h.parts, turnId: `history:${conversationId}:${h.id}`, seq: 0 });
+function historyToMessages(history: HistoryMessage[], conversationId: string, hermes: boolean): Message[] {
+  return history.map(h => h.role === "user" ? { id: h.id, role: "user", text: hermes ? unwrapHermesHistoryText(h.text) : h.text, at: h.at } : { id: h.id, role: "assistant", text: h.text, at: h.at, state: "done", parts: h.parts, turnId: `history:${conversationId}:${h.id}`, seq: 0 });
 }
