@@ -113,3 +113,21 @@ describe("root continuous WebRTC lifecycle", () => {
     expect(call.state.phase).toBe("error"); await call.stop();
   });
 });
+
+test("unmute speaks a final held while muted without waiting for another turn", async () => {
+  const h=harness(); await h.call.start({profile:"test",session:"attached"});
+  h.call.mute(true); h.call.deliverFinal("muted-final", "The verified change is ready.");
+  expect(h.sent.filter(x=>Reflect.get(x,"type")==="response.create")).toHaveLength(0);
+  h.call.mute(false);
+  expect(h.sent.filter(x=>Reflect.get(x,"type")==="response.create")).toHaveLength(1);
+  await h.call.stop();
+});
+test("noise-only turn releases a held final and returns to listening", async () => {
+  const h=harness(); await h.call.start({profile:"test",session:"attached"});
+  h.event({type:"input_audio_buffer.speech_started"});
+  h.call.deliverFinal("noise-final", "The marked control is fixed.");
+  h.event({type:"conversation.item.input_audio_transcription.completed",item_id:"noise",transcript:"[noise]"}); await settle();
+  expect(h.call.state.phase).toBe("listening");
+  expect(h.sent.filter(x=>Reflect.get(x,"type")==="response.create")).toHaveLength(1);
+  await h.call.stop();
+});

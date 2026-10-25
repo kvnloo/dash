@@ -125,7 +125,7 @@ export class ContinuousVoice {
       this.user = false;
       if (this.state.muted || !realWords(text)) {
         if (typeof event.item_id === "string") this.send({ type: "conversation.item.delete", item_id: event.item_id });
-        this.floor(this.response ? "assistant" : "quiet"); return;
+        this.floor(this.response ? "assistant" : "quiet"); this.update({ phase: this.response || this.playing ? "speaking" : "listening" }); this.drain(); return;
       }
       this.interrupt();
       this.update({ phase: "thinking", lines: this.line("user", text) });
@@ -188,6 +188,7 @@ export class ContinuousVoice {
     this.peer?.mute(muted || this.state.phase === "connecting"); this.user = false;
     if (this.state.phase !== "connecting") this.send({ type: "input_audio_buffer.clear" });
     this.update({ muted }); this.floor(this.response ? "assistant" : "quiet");
+    if (!muted) this.drain();
   }
   deliverFinal(id: string, text: string): void {
     if (!this.sid || this.seen.has(id) || !text.trim()) return;
