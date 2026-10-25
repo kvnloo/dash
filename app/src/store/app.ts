@@ -19,12 +19,28 @@ import { createStore } from "./createStore";
 import { dequeue, enqueue, notifyTurnSettled } from "./queue";
 import { nextPendingSend, parkMessage } from "./offline-send";
 import { combineQueued, mergedQueue, queuedParts, reorderQueued, queueMergeError } from "../lib/pending-queue";
-import { replyText, replySummaries } from "./text";
+import { replyText, replySummaries, replyStatus } from "./text";
 import { appendActivity } from "../lib/message-details";
 import type { AgentTarget } from "../mock/agents";
 import { chatKind } from "../lib/roster";
 
 const liveSequences = new Map<string, number>();
+
+/** Streaming stores own only the working copy; the conversation owns checkpointed history. */
+function releaseReply(message: Message): void {
+  if (message.role !== "assistant") return;
+  replyText.clear(message.turnId);
+  replyParts.clear(message.turnId);
+  replyStatus.clear(message.turnId);
+  replySummaries.clearPrefix(`${message.turnId}:`);
+  liveSequences.delete(message.turnId);
+}
+
+function releaseSettledReply(conversationId: string, messageId: string): void {
+  const message = store.get().conversations.find(c => c.id === conversationId)?.messages.find(m => m.id === messageId);
+  // A stale done event must not discard a newer, still-streaming working copy.
+  if (message?.role === "assistant" && message.state !== "streaming" && message.state !== "pending") releaseReply(message);
+}
 
 export interface AppState {
   hydrated: boolean;
@@ -130,6 +146,7 @@ export async function forgetEverything(): Promise<void> {
     clearIdentityTokens();
   }
   await AsyncStorage.multiRemove([KEYS.settings, KEYS.conversations, KEYS.activeId]);
+  for (const chat of store.get().conversations) for (const message of chat.messages) releaseReply(message);
   store.set((s) => ({
     ...s,
     settings: null,
@@ -237,12 +254,15 @@ export function openAgentConversation(profile: AgentTarget): { conversation: Con
 }
 
 export function clearEndedConversations(): void {
-  const ids = store.get().conversations.filter(c => c.stale).map(c => c.id);
+  const ended = store.get().conversations.filter(c => c.stale);
+  const ids = ended.map(c => c.id);
+  for (const chat of ended) for (const message of chat.messages) releaseReply(message);
   store.set(s => ({ ...s, conversations: s.conversations.filter(c => !c.stale), activeId: ids.includes(s.activeId ?? "") ? null : s.activeId }));
   scheduleSave();
 }
 
 export function deleteConversation(id: string): void {
+  for (const message of store.get().conversations.find(c => c.id === id)?.messages ?? []) releaseReply(message);
   store.set((s) => ({
     ...s,
     conversations: s.conversations.filter((c) => c.id !== id),
@@ -442,22 +462,29 @@ export function applyTurnEvent(
         event.seq <= m.seq || m.state !== "streaming" ? m : { ...m, status: event.text, activity: event.handoff ? m.activity : appendActivity(m.activity, event.text), seq: event.seq, handoff: event.handoff?.state },
       );
       return;
-    case "done":
+    case "done": {
+      let checkpointed = false;
       updateMessage(where.conversationId, where.messageId, (m) => {
         if (event.seq <= m.seq || m.state === "interrupted") return m;
+        checkpointed = true;
         const text = replyText.get(event.id) || m.text;
         const error = m.error ?? (event.exitCode !== 0 ? `Process exited with code ${event.exitCode}` : text || m.delivery === "steered" ? undefined : "No response");
         return { ...m, text, parts: partsFor(event.id).length ? partsFor(event.id) : m.parts, state: error ? "error" : "done", error, status: undefined, handoff: undefined, seq: event.seq };
       });
-      liveSequences.delete(event.id);
       notifyTurnSettled(where.conversationId);
+      if (checkpointed) releaseSettledReply(where.conversationId, where.messageId);
       return;
-    case "error":
+    }
+    case "error": {
+      let checkpointed = false;
       updateConversation(where.conversationId, c => {
         const index = c.messages.findIndex(m => m.id === where.messageId);
         return { ...c, messages: c.messages.map((m, i) => i === index - 1 && m.role === "user" && m.delivery ? { ...m, delivery: "failed", deliveryNote: event.message } : m) };
       });
-      updateMessage(where.conversationId, where.messageId, (m) => m.state === "interrupted" ? m : ({
+      updateMessage(where.conversationId, where.messageId, (m) => {
+        if (m.state === "interrupted") return m;
+        checkpointed = true;
+        return {
         ...m,
         parts: partsFor(event.id).length ? partsFor(event.id) : m.parts,
         text: replyText.get(event.id) || m.text,
@@ -466,9 +493,12 @@ export function applyTurnEvent(
         status: undefined,
         handoff: undefined,
         seq: Math.max(m.seq, event.seq),
-      }));
+        };
+      });
       notifyTurnSettled(where.conversationId);
+      if (checkpointed) releaseSettledReply(where.conversationId, where.messageId);
       return;
+    }
     default: {
       const _exhaustive: never = event;
       return _exhaustive;
@@ -505,6 +535,7 @@ export function conversationBusy(conversationId: string): boolean {
 
 export function stopConversation(conversationId: string, cancel: (turnId: string) => void): void {
   const running: string[] = [];
+  const stopped: AssistantMessage[] = [];
   updateConversation(conversationId, (c) => ({
     ...c,
     queuePreview: undefined,
@@ -512,6 +543,7 @@ export function stopConversation(conversationId: string, cancel: (turnId: string
     messages: c.messages.map((m) => {
       if (m.role !== "assistant" || (m.state !== "streaming" && m.state !== "pending")) return m;
       if (m.state === "streaming") running.push(m.turnId);
+      stopped.push(m);
       liveSequences.delete(m.turnId);
       return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", status: "Stopped" };
     }),
@@ -519,16 +551,21 @@ export function stopConversation(conversationId: string, cancel: (turnId: string
   while (dequeue(conversationId)) { /* Drain canceled turns before settlement listeners run. */ }
   for (const turnId of running) cancel(turnId);
   notifyTurnSettled(conversationId);
+  for (const message of stopped) releaseReply(message);
 }
 
 /** The bridge no longer has this turn (it restarted). Keep whatever text arrived. */
 export function markTurnLost(turnId: string): void {
   const where = locateTurn(turnId);
   if (!where) return;
-  updateMessage(where.conversationId, where.messageId, (m) =>
-    m.state === "streaming" ? { ...m, parts: partsFor(turnId).length ? partsFor(turnId) : m.parts, text: replyText.get(turnId) || m.text, state: "interrupted", status: undefined } : m,
-  );
+  let checkpointed = false;
+  updateMessage(where.conversationId, where.messageId, (m) => {
+    if (m.state !== "streaming") return m;
+    checkpointed = true;
+    return { ...m, parts: partsFor(turnId).length ? partsFor(turnId) : m.parts, text: replyText.get(turnId) || m.text, state: "interrupted", status: undefined };
+  });
   notifyTurnSettled(where.conversationId);
+  if (checkpointed) releaseSettledReply(where.conversationId, where.messageId);
 }
 
 /** Socket was down: keep the user text and retry after hello. */

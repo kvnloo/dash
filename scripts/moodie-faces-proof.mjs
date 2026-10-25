@@ -20,6 +20,17 @@ const server = createServer(async (req, res) => {
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const browser = await chromium.launch({ headless: true });
 const errors = [], checks = [];
+// Inspect the rendered eye layer, not the removed SVG <G>. SVG animatedProps are
+// unsafe on Fabric; the independently transformed native View is the contract.
+const gazeTransform = face => face.evaluate(root => {
+  const eyeSvg = root.querySelector('[data-testid="moodie-eye-left"]')?.closest('svg');
+  const bodySvg = root.querySelector('[data-testid="moodie-body"]')?.closest('svg');
+  const layer = eyeSvg?.parentElement;
+  if (!eyeSvg || eyeSvg === bodySvg || !(layer instanceof HTMLElement)) {
+    throw new Error('Moodie gaze must use its own rendered View layer, not SVG animatedProps');
+  }
+  return getComputedStyle(layer).transform;
+});
 try {
   for (const width of [390, 412]) {
     const context = await browser.newContext({ viewport: { width, height: 915 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
@@ -80,9 +91,9 @@ try {
     await page.getByRole('button', { name: 'Face state idle', exact: true }).click();
     assert.deepEqual(await lab.getByTestId('moodie-eye-left').evaluateAll(els => els.map(el => el.getAttribute('d'))), paths.idle);
     const face = lab.getByTestId('bot-face-hermes:clean');
-    const before = await face.locator('svg > g').getAttribute('transform');
+    const before = await gazeTransform(face);
     await page.waitForTimeout(220);
-    assert.equal(await face.locator('svg > g').getAttribute('transform'), before, 'reduced motion stays still');
+    assert.equal(await gazeTransform(face), before, 'reduced motion stays still');
     await context.close();
     checks.push({ width, states: Object.keys(paths), fourDistinctRestFaces: true, persistentDistinctBodyFills: bodyFills, rowFacePixels: 32, reducedMotionStatic: true });
   }
@@ -99,10 +110,10 @@ try {
   }
   await motionPage.getByTestId('lab-bot-faces').evaluate(el => { const sc = document.querySelector('[data-testid="lab-scroll"]'); sc.scrollTop += el.getBoundingClientRect().top - sc.getBoundingClientRect().top; });
   await motionPage.waitForTimeout(250);
-  const movingEye = motionPage.getByTestId('bot-face-hermes:clean').locator('svg > g');
-  const motionBefore = await movingEye.getAttribute('transform');
+  const movingFace = motionPage.getByTestId('lab-bot-faces').getByTestId('bot-face-hermes:clean');
+  const motionBefore = await gazeTransform(movingFace);
   await motionPage.waitForTimeout(400);
-  assert.notEqual(await movingEye.getAttribute('transform'), motionBefore, 'bloub gaze moves on the real renderer');
+  assert.notEqual(await gazeTransform(movingFace), motionBefore, 'bloub gaze moves on the real renderer');
   await motionPage.screenshot({ path: `${out}/412-motion.png` });
   checks.push({ animatedBloubGaze: true });
   await motionContext.close();

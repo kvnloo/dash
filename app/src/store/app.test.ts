@@ -4,6 +4,8 @@ const persisted = new Map<string, string>();
 mock.module("@react-native-async-storage/async-storage", () => ({
   default: {
     async multiGet(keys: string[]) { return keys.map((key) => [key, persisted.get(key) ?? null]); },
+    async getItem(key: string) { return persisted.get(key) ?? null; },
+    async removeItem(key: string) { persisted.delete(key); },
     async multiSet(entries: [string, string][]) { for (const [key, value] of entries) persisted.set(key, value); },
     async setItem(key: string, value: string) { persisted.set(key, value); },
     async multiRemove(keys: string[]) { for (const key of keys) persisted.delete(key); },
@@ -67,9 +69,13 @@ test("interleaved reasoning/tools bypass conversation updates, dedupe replay and
   expect(partsFor(turn.turnId).filter(p => p.kind === "tool_start")).toHaveLength(3);
   expect(partsFor(turn.turnId).find(p => p.kind === "reasoning")).toMatchObject({ text: ".".repeat(180) });
   app.applyDeltas(new Map([[turn.turnId, { seq: ++seq, text: "answer" }]]));
+  const expectedParts = partsFor(turn.turnId);
   app.applyTurnEvent({ type: "done", id: turn.turnId, seq: ++seq, exitCode: 0 });
   const reply = app.store.get().conversations.find(c => c.id === chat.id)?.messages.find(m => m.id === turn.messageId);
-  expect(reply).toMatchObject({ state: "done", text: "answer", parts: partsFor(turn.turnId) });
+  expect(reply).toMatchObject({ state: "done", text: "answer" });
+  expect(expectedParts).toHaveLength(7);
+  expect(reply?.role === "assistant" ? reply.parts : undefined).toEqual(expectedParts);
+  expect(partsFor(turn.turnId)).toEqual([]);
 });
 
 describe("host roster reconciliation", () => {

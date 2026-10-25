@@ -11,6 +11,7 @@ export interface KeyedStore {
   set(id: string, value: string): void;
   append(id: string, delta: string): void;
   clear(id: string): void;
+  clearPrefix(prefix: string): void;
   subscribe(id: string, listener: () => void): () => void;
 }
 
@@ -50,6 +51,9 @@ export function createKeyedStore(): KeyedStore {
     },
     clear(id) {
       if (values.delete(id)) mark(id);
+    },
+    clearPrefix(prefix) {
+      for (const id of values.keys()) if (id.startsWith(prefix)) { values.delete(id); mark(id); }
     },
     subscribe(id, listener) {
       const existing = listeners.get(id);
