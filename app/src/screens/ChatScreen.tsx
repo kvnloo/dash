@@ -11,6 +11,7 @@ import { BackHandler, Platform, StyleSheet, Text, View, Pressable, useWindowDime
 import Animated from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 import { ComposerActionMenu, type ComposerMenuRow } from "../components/ComposerActionMenu";
+import { OrbActivity } from "../components/OrbMotion";
 import { WindowDock, WindowPill, useDisplayCutout, useWindowMorph } from "../components/ChatWindow";
 import { backTarget, hostIdentity, pillGeometry, pillPrimary, pillReserve, pillStatus, surfaceValue, type IdentityInput } from "../lib/chat-window";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -405,7 +406,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     </View>
   </ComposerActionMenu>;
 
+  // Ambient orb loops force a Fabric commit of the whole transcript every frame (UI thread 100%, p50 36 ms).
+  // Keep them still in the chat; ShimmerText (Skia) still shows live activity.
   return (
+    <OrbActivity active={false}>
     <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
       {windowed ? <>
         <WindowPill geometry={pill} title={conversation?.title || harnessName} thinking={thinking}
@@ -498,6 +502,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         onClose={() => setPickerVisible(false)}
       />
     </Animated.View>
+    </OrbActivity>
   );
 }
 
