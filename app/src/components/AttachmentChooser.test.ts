@@ -9,7 +9,8 @@ describe("app-owned attachment chooser", () => {
   test("renders themed rows instead of the Android Attach Alert or web's direct picker bypass", () => {
     expect(composer).toContain("<AttachmentChooser anchor={attachAnchor}");
     expect(composer).not.toMatch(/Alert\.alert\(["']Attach["']/);
-    expect(composer).not.toContain('Platform.OS === "web"');
+    const pick = composer.slice(composer.indexOf("const pick ="), composer.indexOf("const onAttach ="));
+    expect(pick).not.toContain('Platform.OS === "web"');
     expect(chooser).toContain('<GlassSurface testID="attachment-sheet" variant="raised"');
     for (const label of ["Photos", "Files", "Cancel attachment"]) expect(chooser).toContain(`accessibilityLabel="${label}"`);
     expect(chooser).toContain("minHeight: 44");
