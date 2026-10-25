@@ -390,7 +390,11 @@ export async function runHermesSession(options: {
   options.log("hermes.path", { path: "gateway", origin, reason });
 
   const peer = peerOrigin(env);
-  if (peer) {
+  // A failed discovery never admitted the turn. With no resumable peer session,
+  // only explicit CLI opt-in can bypass the peer; never create a shared session.
+  const cliBeforeAdmission =
+    !cardResponse?.ok && !options.input.sessionId && env.DASH_HERMES_CLI_FALLBACK === "1";
+  if (peer && !cliBeforeAdmission) {
     const sessionId = options.input.sessionId;
     if (!sessionId) throw new Error("Hermes peer requires an existing sessionId; session creation is unavailable.");
     options.signal?.throwIfAborted();
