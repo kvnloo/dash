@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { harnessTotal, parseHarnessTotal } from "./context-totals";
+import { harnessTotal, parseHarnessTotal, ompModelWindow } from "./context-totals";
 test("Codex totals use last request, never lifetime or cached-input double counting", () => {
   const text = JSON.stringify({ type: "event_msg", payload: { type: "token_count", info: { total_token_usage: { input_tokens: 90000000 }, last_token_usage: { input_tokens: 604100, cached_input_tokens: 500000, output_tokens: 50 }, model_context_window: 1000000 } } });
   expect(parseHarnessTotal("codex", text, "s")).toMatchObject({ used: 604150, maximum: 1000000, categories: [], threshold: 0 });
@@ -28,4 +28,19 @@ test("renamed OMP sessions resolve their UUID header instead of requiring the fi
     process.env.PI_CODING_AGENT_DIR = root;
     expect(harnessTotal("omp", session)).toMatchObject({ used: 1120, model: "observed-model", provider: "observed-provider", maximum: 0 });
   } finally { if (before === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = before; rmSync(root, { recursive: true, force: true }); }
+});
+
+test("OMP capacity is the exact cached provider/model, with missing metadata kept unknown", async () => {
+  const { Database } = await import("bun:sqlite"); const { mkdtempSync, rmSync } = await import("node:fs");
+  const { join } = await import("node:path"); const { tmpdir } = await import("node:os");
+  const root = mkdtempSync(join(tmpdir(), "dash-omp-catalog-"));
+  try {
+    const db = new Database(join(root, "models.db"));
+    db.exec("CREATE TABLE model_cache(provider_id TEXT,models TEXT,updated_at INTEGER)");
+    db.query("INSERT INTO model_cache VALUES(?,?,?)").run("observed", JSON.stringify([{ id: "specific-model", contextWindow: 500000, apiKey: "not-for-phone" }]), 1000);
+    db.close();
+    expect(ompModelWindow("observed", "specific-model", root)).toEqual({ maximum: 500000, updatedAt: 1000 });
+    expect(ompModelWindow("other", "specific-model", root)).toBeUndefined();
+    expect(ompModelWindow("observed", "specific-model-variant", root)).toBeUndefined();
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

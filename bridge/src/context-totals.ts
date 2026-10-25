@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { openSync, closeSync, readSync, fstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -73,6 +74,27 @@ export function harnessTotal(harness: string, session: string): ContextSnapshot 
     const length = Math.min(size, 4 * 1024 * 1024);
     const buffer = Buffer.alloc(length);
     readSync(fd, buffer, 0, length, size - length);
-    return parseHarnessTotal(harness, buffer.toString("utf8"), session);
+    const snapshot = parseHarnessTotal(harness, buffer.toString("utf8"), session);
+    if (snapshot && harness === "omp" && snapshot.provider) {
+      const cached = ompModelWindow(snapshot.provider, snapshot.model);
+      if (cached) return { ...snapshot, maximum: cached.maximum, notes: [...snapshot.notes, `Window from OMP provider catalog cached ${new Date(cached.updatedAt).toISOString()}; runtime overrides may differ.`] };
+    }
+    return snapshot;
   } catch { return; } finally { if (fd !== undefined) closeSync(fd); }
+}
+
+/** Read ONLY the observed provider/model's cached metadata, never auth or settings. */
+export function ompModelWindow(provider: string, model: string, root = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".omp", "agent")): { maximum: number; updatedAt: number } | undefined {
+  let db: Database | undefined;
+  try {
+    db = new Database(join(root, "models.db"), { readonly: true });
+    db.exec("PRAGMA query_only=ON; PRAGMA busy_timeout=100;");
+    const row = db.query<{ models: string; updated_at: number }, [string]>("SELECT models,updated_at FROM model_cache WHERE provider_id=? AND length(models)<16777216").get(provider);
+    if (!row || !Number.isFinite(row.updated_at) || row.updated_at < 0 || row.updated_at > 8.64e15) return;
+    const models: unknown = JSON.parse(row.models);
+    if (!Array.isArray(models)) return;
+    const entry: unknown = models.find(m => record(m) && m.id === model);
+    if (!record(entry) || typeof entry.contextWindow !== "number" || !Number.isFinite(entry.contextWindow) || entry.contextWindow <= 0) return;
+    return { maximum: entry.contextWindow, updatedAt: row.updated_at };
+  } catch { return; } finally { db?.close(); }
 }
