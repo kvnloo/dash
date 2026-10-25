@@ -8,7 +8,7 @@ const source = readFileSync(join(import.meta.dir, "../components/AttachmentChoos
 const options = Array.from(source.matchAll(/<PressScale\b[\s\S]*?<\/PressScale>/g), (match) => match[0]);
 
 function openingTag(name: string): string {
-  const tag = source.match(new RegExp(`<${name}\\b[^>]*>`))?.[0];
+  const tag = source.match(new RegExp(`<${name}\\b[^\\n]*>`))?.[0];
   if (tag === undefined) throw new Error(`Missing ${name} opening tag`);
   return tag;
 }
