@@ -43,7 +43,7 @@ function evidenceGraph() {
   const repo = { ...node("repo:opaque:%2F", "repo", hostNode.id), path: "/work/dash?query=1" };
   const orphan = node("chat:opaque:%2F-extra", "chat", hostNode.id);
   const hosted = { id: "edge:hosted/%2F", from: hostNode.id, to: chat.id, relation: "hosted", active: false } satisfies OrchestraMap["edges"][number];
-  const delegated = { id: "edge:delegated/%2F", from: chat.id, to: child.id, relation: "delegated", active: true, provenance: ["exact:manifest#184"] } satisfies OrchestraMap["edges"][number];
+  const delegated = { id: "edge:delegated/%2F", from: chat.id, to: child.id, relation: "delegated", active: true, provenance: ["exact:manifest#184"] } satisfies OrchestraMap["edges"][number] & { provenance: string[] };
   const touched = { id: "edge:touched/%2F", from: chat.id, to: repo.id, relation: "touched", active: false } satisfies OrchestraMap["edges"][number];
   const graph: OrchestraMap = {
     nodes: [hostNode, chat, child, repo, orphan],
