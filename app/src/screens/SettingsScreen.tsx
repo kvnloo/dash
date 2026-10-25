@@ -13,6 +13,7 @@ import { GlassSurface } from "../components/GlassSurface";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { haptic } from "../haptics";
 import { connectSettings } from "../lib/settings-flow";
+import { settingsConnectA11y, settingsHarnessA11y, settingsModelsA11y, settingsThumbA11y } from "../lib/a11y-settings-screen";
 import { normalizeAddress } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
@@ -42,6 +43,14 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
     (cwd.trim() || undefined) !== settings?.cwd;
   const identity = settings?.identity && !token.trim() ? settings.identity : undefined;
   const canSave = !saving && normalizeAddress(address).length > 0 && (token.trim().length > 0 || identity !== undefined) && (dirty || connection.status !== "online");
+  const connectA11y = settingsConnectA11y({
+    firstRun,
+    dirty,
+    saving,
+    canSave,
+    hasAddress: normalizeAddress(address).length > 0,
+    hasCredential: token.trim().length > 0 || identity !== undefined,
+  });
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("blur", () => attemptRef.current?.abort());
@@ -129,7 +138,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           keyboardDismissMode="on-drag"
         >
           {firstRun ? (
-            <Pressable onPress={() => navigation.replace("Pair")} style={({ pressed }) => [styles.linkWrap, pressed && styles.pressed]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Pair with sonic code instead" accessibilityHint="Opens the pairing screen" onPress={() => navigation.replace("Pair")} style={({ pressed }) => [styles.linkWrap, pressed && styles.pressed]}>
               <Text style={styles.link}>← Pair with sonic code instead</Text>
             </Pressable>
           ) : null}
@@ -139,7 +148,14 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             </Text>
           ) : null}
 
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: modelsOpen }} onPress={() => setModelsOpen(!modelsOpen)} style={styles.secondary}><Text style={styles.secondaryText}>Models {modelsOpen ? "−" : "+"}</Text></Pressable>
+          <Pressable
+            {...settingsModelsA11y(modelsOpen)}
+            accessibilityRole="button"
+            onPress={() => setModelsOpen((open) => !open)}
+            style={styles.secondary}
+          >
+            <Text style={styles.secondaryText}>Models {modelsOpen ? "−" : "+"}</Text>
+          </Pressable>
           {modelsOpen ? <ModelsPanel /> : null}
           <NotificationSettings />
           <Text style={styles.label}>Display</Text>
@@ -147,9 +163,9 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             <View style={styles.harnessRow}><Text style={styles.harnessName}>Thumb side</Text></View>
             <View style={{ flexDirection: "row", paddingHorizontal: space.md, gap: space.sm }}>
               {(["right", "left", "auto"] satisfies Handedness[]).map(value => <Pressable key={value}
-                accessibilityRole="radio" accessibilityLabel={`${value[0]?.toUpperCase()}${value.slice(1)} handedness`}
-                accessibilityState={{ checked: thumb.preference === value, disabled: !settings }}
-                aria-checked={thumb.preference === value} disabled={!settings}
+                accessibilityRole="radio"
+                {...settingsThumbA11y(value, thumb.preference, settings !== null)}
+                disabled={!settings}
                 onPress={() => { setHandedness(value); haptic.select(); }}
                 style={{ flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, borderWidth: 1, borderColor: thumb.preference === value ? colors.gold : colors.border }}>
                 <Text style={{ ...type.body, color: thumb.preference === value ? colors.gold : colors.textMuted }}>{value[0]?.toUpperCase()}{value.slice(1)}</Text>
@@ -161,6 +177,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field
               label="Address"
+              hint="Required bridge network address"
               value={address}
               onChangeText={setAddress}
               placeholder="100.64.0.1:4747"
@@ -171,6 +188,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             <View style={styles.divider} />
             <Field
               label="Token"
+              hint="Private bridge execution token"
               value={token}
               onChangeText={setToken}
               placeholder="from ~/.dash/token (private)"
@@ -181,6 +199,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             <View style={styles.divider} />
             <Field
               label="Folder"
+              hint="Optional working folder; leave blank for bridge default"
               value={cwd}
               onChangeText={setCwd}
               placeholder={connection.cwd ? `${connection.cwd} (bridge default)` : "optional, e.g. ~/code/myapp"}
@@ -188,29 +207,38 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
               autoComplete="off"
             />
           </GlassSurface>
-          <View style={styles.statusRow}>
+          <View style={styles.statusRow} accessible accessibilityRole="text" accessibilityLabel={statusLine.text} accessibilityLiveRegion="polite">
             <View style={[styles.statusDot, { backgroundColor: statusLine.color }]} />
             <Text style={styles.statusText} numberOfLines={2}>
               {statusLine.text}
             </Text>
           </View>
 
-          <PrimaryButton onPress={() => void save()} disabled={!canSave} label={saving ? "Connecting…" : firstRun ? "Connect" : dirty ? "Save and reconnect" : "Reconnect"} />
+          <PrimaryButton
+            onPress={() => void save()}
+            disabled={!canSave}
+            label={connectA11y.label}
+            accessibilityLabel={connectA11y.label}
+            accessibilityHint={connectA11y.accessibilityHint}
+            accessibilityState={connectA11y.accessibilityState}
+          />
           {saveError ? <Text style={[styles.help, styles.dangerText]} accessibilityRole="alert">{saveError}</Text> : null}
 
           {connection.harnesses.length > 0 ? (
             <>
-              <Text style={styles.label}>Harnesses on {connection.host}</Text>
+              <Text style={styles.label}>Harnesses on {connection.host ?? "bridge"}</Text>
               <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
                 {connection.harnesses.map((h, i) => (
                   <View key={h.id}>
                     {i > 0 ? <View style={styles.divider} /> : null}
-                    <View style={styles.harnessRow}>
+                    <View
+                      style={styles.harnessRow}
+                      accessible
+                      accessibilityRole="text"
+                      accessibilityLabel={settingsHarnessA11y(h.name, h.available)}
+                    >
                       <Text style={styles.harnessName}>{h.name}</Text>
-                      <View
-                        style={[styles.statusDot, { backgroundColor: h.available ? colors.ok : colors.textFaint }]}
-                        accessibilityLabel={h.available ? "Installed" : "Not found"}
-                      />
+                      <View style={[styles.statusDot, { backgroundColor: h.available ? colors.ok : colors.textFaint }]} />
                     </View>
                   </View>
                 ))}
@@ -218,7 +246,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             </>
           ) : null}
 
-          <Pressable accessibilityRole="button" accessibilityLabel="Approvals" onPress={() => navigation.navigate("Approvals")} style={styles.secondary}><Text style={styles.secondaryText}>Review approvals</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Review approvals" onPress={() => navigation.navigate("Approvals")} style={styles.secondary}><Text style={styles.secondaryText}>Review approvals</Text></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Component lab" onPress={() => navigation.navigate("Lab")} style={styles.secondary}><Text style={styles.secondaryText}>Component lab</Text></Pressable>
           <Text style={styles.label}>On your computer</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
@@ -228,7 +256,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             Run this from the Dash repository. The bridge prints its Tailscale address, never credentials. Transfer ~/.dash/token privately for manual setup, or use Pair with ~/.dash/bootstrap-token. Both devices need the same tailnet.
           </Text>
 
-          <Pressable onPress={() => navigation.navigate("Pair")} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Pair nearby with sonic code" accessibilityHint="Opens the pairing screen" onPress={() => navigation.navigate("Pair")} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
             <Text style={styles.secondaryText}>Pair nearby (sonic)</Text>
           </Pressable>
 
@@ -245,6 +273,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
                   accessibilityRole="switch"
                   accessibilityState={{ checked: settings.inAppFeedback }}
                   accessibilityLabel="In-app feedback"
+                  accessibilityHint="Turn feedback to Dash secondmate on or off"
                 >
                   <Text style={styles.harnessName}>In-app feedback</Text>
                   <Text style={styles.statusText}>{settings.inAppFeedback ? "On" : "Off"}</Text>
@@ -256,8 +285,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             </>
           ) : null}
 
-          {!firstRun ? (
-            <Pressable onPress={forget} style={({ pressed }) => [styles.danger, pressed && styles.pressed]}>
+          {!firstRun && settings ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Forget this bridge" accessibilityHint="Opens confirmation before removing the saved bridge and chats" onPress={forget} style={({ pressed }) => [styles.danger, pressed && styles.pressed]}>
               <Text style={styles.dangerText}>Forget this bridge</Text>
             </Pressable>
           ) : null}
@@ -270,10 +299,12 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
 function Field({
   label,
   secure,
+  hint,
   ...input
 }: {
   label: string;
   secure?: boolean;
+  hint?: string;
 } & Pick<
   React.ComponentProps<typeof TextInput>,
   "value" | "onChangeText" | "placeholder" | "autoCapitalize" | "keyboardType" | "autoComplete"
@@ -289,6 +320,7 @@ function Field({
         secureTextEntry={secure}
         keyboardAppearance="dark"
         accessibilityLabel={label}
+        accessibilityHint={hint}
       />
     </View>
   );
@@ -342,6 +374,6 @@ const styles = StyleSheet.create({
   help: { color: colors.textMuted, ...type.small, marginTop: space.sm, marginLeft: space.xs },
   danger: { marginTop: space.xxl, alignItems: "center", paddingVertical: 14 },
   dangerText: { color: colors.danger, ...type.body },
-  linkWrap: { marginBottom: space.md, alignItems: "center" },
+  linkWrap: { marginBottom: space.md, minHeight: 44, alignItems: "center", justifyContent: "center" },
   link: { color: colors.textMuted, ...type.body, textDecorationLine: "underline" },
 });
