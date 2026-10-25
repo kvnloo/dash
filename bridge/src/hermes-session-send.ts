@@ -59,7 +59,9 @@ function parseReceipt(value: unknown, mode: HermesSendMode): SendReceipt {
       (mode === "steer" ? value.accepted !== "steered" : value.accepted !== "queued" && value.accepted !== "started")) {
     throw new Error("Invalid z0bridge send receipt; outcome unknown. Check session history before resending.");
   }
-  return { sendId: value.sendId, mode, accepted: value.accepted, eventsUrl: value.eventsUrl };
+  const accepted: SendDelivery = value.accepted === "queued" ? "queued"
+    : value.accepted === "steered" ? "steered" : "started";
+  return { sendId: value.sendId, mode, accepted, eventsUrl: value.eventsUrl };
 }
 
 function parseEvent(text: string): SendEvent {
@@ -76,7 +78,7 @@ function parseEvent(text: string): SendEvent {
       if (typeof raw.text !== "string") break;
       return { seq: raw.seq, type: raw.type, text: raw.text };
     case "tool":
-      if (typeof raw.toolCallId !== "string" || !validId(raw.toolCallId, 256) ||
+      if (typeof raw.toolCallId !== "string" || !raw.toolCallId || raw.toolCallId.length > 256 ||
           (raw.title !== undefined && typeof raw.title !== "string") ||
           (raw.status !== undefined && typeof raw.status !== "string")) break;
       return {
@@ -105,7 +107,6 @@ async function* sseData(body: ReadableStream<Uint8Array>): AsyncGenerator<string
     for (;;) {
       const { done, value } = await reader.read();
       pending += decoder.decode(done ? undefined : value, { stream: !done });
-      if (pending.length > 131_072) throw new Error("Oversized z0bridge send event; outcome unknown.");
       for (let cut = pending.indexOf("\n"); cut >= 0; cut = pending.indexOf("\n")) {
         const line = pending.slice(0, cut).replace(/\r$/, "");
         pending = pending.slice(cut + 1);
@@ -120,6 +121,7 @@ async function* sseData(body: ReadableStream<Uint8Array>): AsyncGenerator<string
           fields.push(data);
         }
       }
+      if (pending.length > 131_072) throw new Error("Oversized z0bridge send event; outcome unknown.");
       if (done) break;
     }
   } finally {
@@ -210,7 +212,7 @@ export async function sendViaZ0Bridge(options: SendOptions): Promise<LiveResult 
   options.delivery?.(receipt.accepted, receipt.accepted === "steered"
     ? "Steered the running Hermes turn. Applied at its next tool boundary."
     : receipt.accepted === "started" ? "Next Hermes turn started." : "Queued for the next Hermes turn.");
-  const phase = new TurnPhase(options.sink.status);
+  const phase = new TurnPhase(text => options.sink.status(text));
   const parts = new PartEmitter(part => options.sink.part?.(part));
   const knownTools = new Set<string>();
   const streamSignal = options.signal
