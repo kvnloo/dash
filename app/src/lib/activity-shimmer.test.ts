@@ -50,11 +50,15 @@ describe("live activity shimmer", () => {
     expect(shimmerStops(SHIMMER_END)).toEqual([0, 1, 1, 1, 1]);
     for (let step = -40; step <= 140; step++) {
       const stops = shimmerStops(step / 100);
-      for (let index = 0; index < stops.length; index++) {
-        expect(Number.isFinite(stops[index])).toBe(true);
-        expect(stops[index]).toBeGreaterThanOrEqual(0);
-        expect(stops[index]).toBeLessThanOrEqual(1);
-        if (index > 0) expect(stops[index]).toBeGreaterThanOrEqual(stops[index - 1]);
+      for (const [index, stop] of stops.entries()) {
+        expect(Number.isFinite(stop)).toBe(true);
+        expect(stop).toBeGreaterThanOrEqual(0);
+        expect(stop).toBeLessThanOrEqual(1);
+        if (index > 0) {
+          const previous = stops[index - 1];
+          if (previous === undefined) throw new Error(`Missing shimmer stop at index ${index - 1}`);
+          expect(stop).toBeGreaterThanOrEqual(previous);
+        }
       }
     }
     expect(shimmerStops(Number.NaN)).toEqual(shimmerStops(SHIMMER_START));
