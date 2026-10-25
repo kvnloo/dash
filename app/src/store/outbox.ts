@@ -75,13 +75,13 @@ export type OutboxResult<T> =
 export interface OutboxDispatch {
   readonly record: OutboxRecord;
   /** 'unconfirmed' includes a transport/write outcome we cannot establish durably. */
-  readonly transport: "sent" | "not-sent" | "confirmed" | "unconfirmed" | "storage-blocked";
+  readonly transport: "queued" | "sent" | "not-sent" | "confirmed" | "unconfirmed" | "storage-blocked";
   readonly note?: string;
 }
 
 export interface OutboxStore {
   hydrate(): Promise<OutboxResult<readonly OutboxRecord[]>>;
-  enqueue(message: NewOutboxMessage): Promise<OutboxResult<OutboxDispatch>>;
+  enqueue(message: NewOutboxMessage, options?: { readonly dispatch?: boolean }): Promise<OutboxResult<OutboxDispatch>>;
   receiveReceipt(receipt: OutboxReceipt): Promise<OutboxResult<OutboxRecord>>;
   retry(clientId: string, options: { readonly dedupeSupported: boolean }): Promise<OutboxResult<OutboxDispatch>>;
   disconnect(): Promise<OutboxResult<number>>;
@@ -335,7 +335,7 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
       if (disposed) return failed("disposed", "Outbox disposed while hydration was pending.");
       return { ok: true, value: records };
     },
-    async enqueue(message) {
+    async enqueue(message, options) {
       const persisted = await exclusive(async (): Promise<OutboxResult<OutboxRecord>> => {
         if (disposed) return failed("disposed", "Outbox store is disposed.");
         try { await ensureHydrated(); } catch (error) {
@@ -355,6 +355,9 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
         return { ok: true, value: entry };
       });
       if (!persisted.ok) return persisted; // Caller may clear draft ONLY after this durable commit.
+      if (options?.dispatch === false) {
+        return { ok: true, value: { record: persisted.value, transport: "queued" } };
+      }
       const delivered = await attempt(persisted.value.clientId, false);
       if (delivered.ok) return delivered;
       if (delivered.reason === "confirmed") {
