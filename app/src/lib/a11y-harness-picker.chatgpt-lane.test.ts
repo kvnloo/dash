@@ -53,7 +53,7 @@ test("incomplete or malformed bridge data stays honestly unavailable", () => {
     const row = harnessPickerRowA11y(fixture, "agent");
     expect(row.disabled).toBe(true);
     expect(row.state.disabled).toBe(true);
-    expect(row.label).toEndWith(", unavailable");
+    expect(row.label.endsWith(", unavailable")).toBe(true);
   }
   expect(harnessPickerRowA11y({ name: "Agent", available: true }, "").hint).toBe("Harness identifier missing");
   expect(harnessPickerRowA11y({ id: "agent", available: true }, "").hint).toBe("Harness name missing");
