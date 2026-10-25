@@ -89,12 +89,7 @@ describe("versioned outbox storage", () => {
     const restarted = createOutboxStorage(mem.io);
     const restored = await restarted.load();
     expect(restored.revision).toBe(1);
-    expect(restored.records).toEqual([first, {
-      ...second,
-      lastSentAt: undefined,
-      retryNeeded: undefined,
-      error: undefined,
-    }]);
+    expect(JSON.parse(JSON.stringify(restored.records))).toEqual(JSON.parse(JSON.stringify([first, second])));
     expect(restored.records[1]?.payload.attachments?.[0]?.id).toBe("b".repeat(32));
     expect(restored.problems).toEqual([{
       kind: "local-file-reselect",
@@ -160,6 +155,11 @@ describe("versioned outbox storage", () => {
     const store = createOutboxStorage(mem.io);
     await store.save({ revision: 0, records: [entry()] });
     await expect(store.save({ revision: 1, records: [] })).rejects.toMatchObject({ kind: "unsafe-removal" });
+    await expect(store.save({
+      revision: 1,
+      records: [],
+      removals: [{ clientId: "client-A", reason: "canceled" }],
+    })).rejects.toMatchObject({ kind: "unsafe-removal" });
     await expect(store.save({ revision: 1, records: [entry({ payload: { text: "changed" } })] }))
       .rejects.toMatchObject({ kind: "immutable-send" });
     await expect(store.save({ revision: 1, records: [entry({ stage: "queued" })] }))
@@ -196,11 +196,12 @@ describe("versioned outbox storage", () => {
     const first = store.save({ revision: 0, records: [entry()] });
     await entered;
     const obsolete = store.save({ revision: 0, records: [entry({ clientId: "obsolete", turnId: "old" })] });
+    const obsoleteRejected = expect(obsolete).rejects.toMatchObject({ kind: "stale-revision" });
     const newestRecord = entry({ clientId: "client-B", turnId: "turn-B", conversationId: "conversation-B", stage: "queued", attempts: 0 });
     const newest = store.save({ revision: 1, records: [entry(), newestRecord] });
     releaseFirst?.();
     expect((await first).revision).toBe(1);
-    await expect(obsolete).rejects.toMatchObject({ kind: "stale-revision" });
+    await obsoleteRejected;
     expect((await newest).revision).toBe(2);
     expect((await createOutboxStorage(io).load()).records).toEqual([entry(), newestRecord]);
     expect(writes).toBe(2);
