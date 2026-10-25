@@ -206,8 +206,8 @@ function parseRecord(value: unknown): DeliveryLedgerRecord {
     principalId: value.principalId, clientId: value.clientId,
     fingerprint: value.fingerprint, turnId: value.turnId, at: value.at,
     state: value.state, admittedAt: value.admittedAt, updatedAt: value.updatedAt,
-    startedAt: typeof value.startedAt === "number" ? value.startedAt : undefined,
-    finishedAt: typeof value.finishedAt === "number" ? value.finishedAt : undefined,
+    ...(typeof value.startedAt === "number" ? { startedAt: value.startedAt } : {}),
+    ...(typeof value.finishedAt === "number" ? { finishedAt: value.finishedAt } : {}),
     receipt, reconciliationRequired: value.reconciliationRequired,
   };
 }
@@ -402,8 +402,8 @@ export class DeliveryLedger {
         ...previous,
         state: change.state,
         updatedAt: change.at,
-        startedAt,
-        finishedAt: terminal(change.state) ? change.at : undefined,
+        ...(startedAt === undefined ? {} : { startedAt }),
+        ...(terminal(change.state) ? { finishedAt: change.at } : {}),
         receipt: change.state === "started"
           ? { type: "delivery_receipt", clientId: previous.clientId,
             turnId: previous.turnId, stage: "started", at: change.at }
