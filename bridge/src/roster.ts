@@ -5,6 +5,7 @@ import { isCatalogHarness } from "../../shared/catalog";
 import { hermesSessions } from "./hermes-sessions";
 import { grokDesktopBot, hermesBots, hostBotSources, serviceBots } from "./bots";
 import { z0bridgeHermes } from "./z0bridge-hermes";
+import { GatewayListSnapshot, isLocalRoute, localRoutingIds } from "./roster-reliability";
 import type { AgentInfo, HarnessInfo, HistoryMessage, HostInfo } from "../../shared/protocol";
 
 export type TailscaleNode = {
@@ -564,23 +565,31 @@ function spawnText(argv: string[], seconds = 1): string {
   }
 }
 
-let hermesListCache = "";
+const gatewayList = new GatewayListSnapshot();
 function refreshHermesList(): void {
-  if (Bun.which("hermes") === null) return;
-  try {
+  gatewayList.refresh((settle) => {
+    if (Bun.which("hermes") === null) {
+      settle(null);
+      return;
+    }
     const proc = Bun.spawn(["hermes", "gateway", "list"], { stdout: "pipe", stderr: "ignore" });
     const timer = setTimeout(() => proc.kill(), 2500);
-    void proc.exited.then(async () => {
+    void proc.exited.then(async (exitCode) => {
       clearTimeout(timer);
-      if (proc.exitCode !== 0) return;
-      const text = await new Response(proc.stdout).text();
-      if (text.trim()) hermesListCache = text;
+      if (exitCode !== 0) {
+        settle(null);
+        return;
+      }
+      try {
+        settle(await new Response(proc.stdout).text());
+      } catch {
+        settle(null);
+      }
     }).catch(() => {
       clearTimeout(timer);
+      settle(null);
     });
-  } catch {
-    return;
-  }
+  });
 }
 
 let rosterCache: { at: number; key: string; hosts: HostInfo[] } | null = null;
@@ -600,13 +609,13 @@ export class SelfHost {
   remember(hosts: HostInfo[]): void {
     const self = hosts.find(h => h.self);
     if (!self) return;
-    this.ids = new Set([this.hostname, self.id, self.name, self.hostname].filter(id => id.length > 0));
+    this.ids = localRoutingIds(hosts, this.hostname);
     this.canonical = self.id;
   }
   /** The roster id the phone stores for this computer. */
   id(): string { return this.canonical; }
   /** An absent host means "this bridge". */
-  matches(hostId: string | undefined): boolean { return !hostId || this.ids.has(hostId); }
+  matches(hostId: string | undefined): boolean { return isLocalRoute(hostId, this.ids); }
 }
 
 export function selfHostFrom(hosts: HostInfo[], hostname: string): SelfHost {
@@ -674,7 +683,7 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
   const ompTabs = collectOmpSessions(home, join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions"));
   const selfNode = nodes.find((n) => n.self);
   const selfAddress = self.address ?? firstV4(selfNode?.ips ?? []);
-  const hermesProfiles = listedHermesProfiles(parseHermesGatewayList(hermesListCache));
+  const hermesProfiles = listedHermesProfiles(parseHermesGatewayList(gatewayList.read()));
   const a2aUrl = hermesA2AUrl(process.env, selfAddress);
   const hosts = assembleRoster({
     nodes,
