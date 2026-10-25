@@ -15,6 +15,7 @@ export interface OutboxReplayTarget {
 export interface OutboxReplayPayload {
   readonly text: string;
   readonly attachments?: readonly ChatAttachment[];
+  readonly summariesEnabled?: boolean;
 }
 
 export type OutboxReplayState = "queued" | "sent" | "acked-by-bridge" | "started";
@@ -224,4 +225,43 @@ export function planOutboxReplay(input: OutboxReplayInput): ReplayDecision[] {
     held.add(record.conversationId);
   }
   return decisions;
+}
+
+/**
+ * Build the additive chat wire extension WITHOUT querying the current
+ * conversation, recomputing ids, or downgrading a steer to queue mode.
+ * The caller sends this only for a "replay" decision, never for reconcile.
+ * It remains assignable to the legacy ClientMessage chat variant.
+ */
+export interface ReplayChatMessage {
+  readonly type: "chat";
+  readonly clientId: string;
+  readonly id: string;
+  readonly harness: string;
+  readonly text: string;
+  readonly mode?: "steer" | "queue";
+  readonly hostId?: string;
+  readonly profileId?: string;
+  readonly sessionId?: string;
+  readonly cwd?: string;
+  readonly summariesEnabled?: boolean;
+  readonly attachments?: ChatAttachment[];
+}
+
+export function replayChatMessage(record: OutboxReplayRecord): ReplayChatMessage {
+  return {
+    type: "chat",
+    clientId: record.clientId,
+    id: record.turnId,
+    harness: record.target.harness,
+    text: record.payload.text,
+    ...(record.mode === "normal" ? {} : { mode: record.mode }),
+    hostId: record.target.hostId,
+    profileId: record.target.profileId,
+    sessionId: record.target.sessionId,
+    cwd: record.target.cwd,
+    summariesEnabled: record.payload.summariesEnabled,
+    // Fresh wire array protects durable snapshot from downstream mutation.
+    attachments: record.payload.attachments?.map((attachment) => ({ ...attachment })),
+  };
 }
