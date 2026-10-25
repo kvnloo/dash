@@ -56,6 +56,10 @@ export class VoiceSession {
   private busy = false;
   private running = false;
   private generation = 0;
+  /** A new capture cannot begin until the previous native stop has completed. */
+  private stopping: Promise<void> | undefined;
+  private preparing: Promise<void> | undefined;
+  private recorderStopping: Promise<void> | undefined;
   private phase: VoicePhase = "idle";
   private replyActive = false;
   private awaitingReply = false;
@@ -67,6 +71,13 @@ export class VoiceSession {
 
   async start(): Promise<void> {
     if (this.running) return;
+    const generationBeforeWait = this.generation;
+    if (this.stopping) await this.stopping;
+    // A cancelled preparation still owns the native recorder until it settles.
+    if (this.preparing) {
+      try { await this.preparing; } catch { /* A fresh start may retry a failed preparation. */ }
+    }
+    if (this.running || this.generation !== generationBeforeWait) return;
     this.running = true;
     const generation = ++this.generation;
     await this.beginRecording(generation);
@@ -82,11 +93,22 @@ export class VoiceSession {
     this.vad.reset();
     this.replyActive = false;
     this.awaitingReply = false;
+    this.hooks.onLevel(NO_SIGNAL_DB);
     this.setPhase("idle");
-    try {
-      if (this.recorder.getStatus().isRecording) await this.recorder.stop();
-    } catch {
-      // Already stopped, or the recorder was torn down with the screen.
+
+    if (this.stopping) return this.stopping;
+    const stopping = (async () => {
+      try {
+        // Reuse an in-flight utterance stop rather than stopping the same mic twice.
+        if (this.recorderStopping) await this.recorderStopping;
+        else if (this.recorder.getStatus().isRecording) await this.endRecording();
+      } catch {
+        // Already stopped, or the recorder was torn down with the screen.
+      }
+    })();
+    this.stopping = stopping;
+    try { await stopping; } finally {
+      if (this.stopping === stopping) this.stopping = undefined;
     }
   }
 
@@ -106,8 +128,11 @@ export class VoiceSession {
   }
 
   private async beginRecording(generation: number): Promise<void> {
+    let preparing: Promise<void> | undefined;
     try {
-      await this.recorder.prepareToRecordAsync();
+      preparing = this.recorder.prepareToRecordAsync();
+      this.preparing = preparing;
+      await preparing;
       if (!this.running || generation !== this.generation) return;
       this.recorder.record();
       this.setPhase(recordingPhase(this.replyActive, this.awaitingReply));
@@ -115,6 +140,17 @@ export class VoiceSession {
       if (!this.running || generation !== this.generation) return;
       this.hooks.onError(error instanceof Error ? error.message : String(error));
       await this.stop();
+    } finally {
+      if (this.preparing === preparing) this.preparing = undefined;
+    }
+  }
+
+  private async endRecording(): Promise<void> {
+    if (this.recorderStopping) return this.recorderStopping;
+    const stopping = Promise.resolve().then(() => this.recorder.stop());
+    this.recorderStopping = stopping;
+    try { await stopping; } finally {
+      if (this.recorderStopping === stopping) this.recorderStopping = undefined;
     }
   }
 
@@ -145,7 +181,7 @@ export class VoiceSession {
 
   private async finishUtterance(send: boolean): Promise<void> {
     const generation = this.generation;
-    await this.recorder.stop();
+    await this.endRecording();
     if (!this.running || generation !== this.generation) return;
     const uri = this.recorder.uri;
     if (send && uri) {

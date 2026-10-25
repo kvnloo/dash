@@ -112,4 +112,44 @@ describe("root continuous WebRTC lifecycle", () => {
     await call.start({ profile: "test", session: "attached" });
     expect(call.state.phase).toBe("error"); await call.stop();
   });
+
+  test("End closes the realtime peer, releases capture and permits a fresh session", async () => {
+    let minted = 0;
+    let released = 0;
+    let closed = 0;
+    let muted = false;
+    const call = new ContinuousVoice({
+      changed: () => {}, transcript: () => {},
+      captureReleased: () => { released++; },
+      request: async path => {
+        if (path === "/v1/realtime/session") return { session_id: `mic-${++minted}`, transport: "realtime", value: "ephemeral" };
+        if (path.startsWith("/v1/inbox")) return { messages: [], after: 0 };
+        if (path === "provider:answer") return "v=0\r\n";
+        return { ok: true };
+      },
+      peer: async (_event, ready) => ({
+        offer: async () => "v=0\r\n",
+        answer: async () => ready(),
+        mute: value => { muted = value; },
+        send: () => {},
+        close: () => { closed++; },
+      }),
+    });
+    const target = { profile: "test", session: "attached" };
+    await call.start(target);
+    expect(call.state.phase).toBe("listening");
+    expect(muted).toBe(false);
+    await call.stop();
+    expect(closed).toBe(1);
+    expect(muted).toBe(true);
+    expect(released).toBe(1);
+    expect(call.state).toMatchObject({ phase: "idle", muted: false });
+
+    await call.start(target);
+    expect(minted).toBe(2);
+    expect(call.state.phase).toBe("listening");
+    await call.stop();
+    expect(closed).toBe(2);
+    expect(released).toBe(2);
+  });
 });

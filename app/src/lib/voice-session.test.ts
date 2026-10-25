@@ -125,4 +125,82 @@ describe("legacy voice session lifecycle", () => {
     expect(voice.recording()).toBe(false);
     expect(voice.phases).toEqual(["listening", "idle"]);
   });
+
+  test("End waits for native stop, clears the level and safely permits another call", async () => {
+    const stopped = deferred();
+    let recording = false;
+    let started = 0;
+    let stopCalls = 0;
+    const levels: number[] = [];
+    const phases: VoicePhase[] = [];
+    const recorder: Recorder = {
+      uri: null,
+      prepareToRecordAsync: async () => {},
+      record: () => { started++; recording = true; },
+      stop: async () => { stopCalls++; await stopped.promise; recording = false; },
+      getStatus: () => ({ isRecording: recording }),
+    };
+    const session = new VoiceSession(recorder, {
+      onPhase: phase => phases.push(phase), onLevel: level => levels.push(level),
+      onUtterance: () => false, onBargeIn: () => {},
+      onError: message => { throw new Error(message); },
+    });
+    await session.start();
+    const end = session.stop();
+    const restart = session.start();
+    expect(started).toBe(1);
+    expect(stopCalls).toBe(1);
+    expect(levels.at(-1)).toBe(-160);
+    expect(phases.at(-1)).toBe("idle");
+    stopped.finish();
+    await Promise.all([end, restart]);
+    expect(started).toBe(2);
+    expect(recording).toBe(true);
+    expect(phases.at(-1)).toBe("listening");
+    await session.stop();
+    expect(recording).toBe(false);
+  });
+
+  test("a second End cancels a restart queued behind microphone teardown", async () => {
+    const stopped = deferred();
+    let recording = false;
+    let starts = 0;
+    const recorder: Recorder = {
+      uri: null,
+      prepareToRecordAsync: async () => {},
+      record: () => { starts++; recording = true; },
+      stop: async () => { await stopped.promise; recording = false; },
+      getStatus: () => ({ isRecording: recording }),
+    };
+    const session = new VoiceSession(recorder, {
+      onPhase: () => {}, onLevel: () => {},
+      onUtterance: () => false, onBargeIn: () => {},
+      onError: message => { throw new Error(message); },
+    });
+    await session.start();
+    const end = session.stop();
+    const queuedStart = session.start();
+    const cancel = session.stop();
+    stopped.finish();
+    await Promise.all([end, queuedStart, cancel]);
+    expect(starts).toBe(1);
+    expect(recording).toBe(false);
+    await session.stop();
+  });
+
+  test("a fresh call does not overlap a cancelled native preparation", async () => {
+    const preparing = deferred();
+    let preparations = 0;
+    const voice = harness(() => ++preparations === 1 ? preparing.promise : Promise.resolve());
+    const oldStart = voice.session.start();
+    await voice.session.stop();
+    const newStart = voice.session.start();
+    expect(preparations).toBe(1);
+    preparing.finish();
+    await Promise.all([oldStart, newStart]);
+    expect(preparations).toBe(2);
+    expect(voice.records()).toBe(1);
+    expect(voice.recording()).toBe(true);
+    await voice.session.stop();
+  });
 });
