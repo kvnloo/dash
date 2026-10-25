@@ -241,7 +241,7 @@ test("credential permissions and invalid request values are rejected before POST
   chmodSync(credentialFile, 0o644);
   try {
     await expect(sendViaZ0Bridge(sendOptions(n))).rejects.toThrow("Missing private Dash credential");
-    expect(n.seen).toHaveLength(0);
+    expect(n.seen.map(request => request.path)).toEqual(["/v1/health"]);
   } finally {
     chmodSync(credentialFile, 0o600);
   }
@@ -254,11 +254,11 @@ test("only the enrolled hermes:session.send scope authorizes this client, never 
   await expect(sendViaZ0Bridge({
     ...sendOptions(n), env: { ...baseEnv, DASH_Z0BRIDGE_SEND_CREDENTIAL_FILE: wrongFile },
   })).rejects.toThrow("hermes:session.send");
-  expect(n.seen).toHaveLength(0);
+  expect(n.seen.map(request => request.path)).toEqual(["/v1/health"]);
   await expect(sendViaZ0Bridge({
     ...sendOptions(n), env: { ...baseEnv, DASH_Z0BRIDGE_URL: "http://192.168.1.2:4787" },
   })).rejects.toThrow("loopback HTTP");
-  expect(n.seen).toHaveLength(0);
+  expect(n.seen.map(request => request.path)).toEqual(["/v1/health"]);
 });
 
 test("revocation during SSE never resumes through CLI or ACP", async () => {
