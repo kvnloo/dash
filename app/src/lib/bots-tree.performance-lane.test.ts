@@ -221,13 +221,17 @@ describe("botsTree performance-lane correctness guards", () => {
         host.online ? "running" : "offline", !host.online,
       ]);
       expect(typeof root.children).toBe("function");
+      // Earlier hosts have already been expanded. Their cwd reads are retained.
+      const readsFromExpandedHosts = h * 4 * 3;
+      expect(graph.cwdReads()).toBe(readsFromExpandedHosts);
       allIds.push(root.id);
       const top = children(root);
       expect(top.map(node => node.id)).toEqual([
         ...Array.from({ length: 4 }, (_, b) => `${expectedHostId}:bot:bot-${b}`),
         `${expectedHostId}:harness:omp`,
       ]);
-      expect(graph.cwdReads()).toBe(0);
+      // Opening a host must not materialize any bot's session/repo nodes.
+      expect(graph.cwdReads()).toBe(readsFromExpandedHosts);
       allIds.push(...top.map(node => node.id));
       for (let b = 0; b < 4; b++) {
         const bot = required(top[b]);
@@ -236,7 +240,10 @@ describe("botsTree performance-lane correctness guards", () => {
           identity: botFaceIdentity(`profile-${b}`),
           state: b === 0 && host.online ? "working" : "idle",
         });
+        // Only this bot's expansion should read its three sessions' cwd values.
+        expect(graph.cwdReads()).toBe(readsFromExpandedHosts + b * 3);
         const sessions = children(bot);
+        expect(graph.cwdReads()).toBe(readsFromExpandedHosts + (b + 1) * 3);
         expect(sessions.map(node => node.id)).toEqual(
           Array.from({ length: 3 }, (_, s) => `${expectedHostId}:session:session-${b}-${s}`),
         );
