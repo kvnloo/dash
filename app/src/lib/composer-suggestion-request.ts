@@ -58,10 +58,12 @@ export function appendMentionTrigger(text: string): string {
 }
 
 /** The bridge is the only source of real commands and workspace files. */
+export type SuggestionFetcher = (input: string, init?: RequestInit) => Promise<Response>;
+
 export async function loadSuggestionInventory(
   source: SuggestionSource,
   signal: AbortSignal,
-  request: typeof fetch = fetch,
+  request: SuggestionFetcher = fetch,
 ): Promise<SuggestionInventory> {
   const query = `harness=${encodeURIComponent(source.harness)}${source.cwd ? `&cwd=${encodeURIComponent(source.cwd)}` : ""}`;
   const response = await request(`http://${source.address}/suggestions?${query}`, {
