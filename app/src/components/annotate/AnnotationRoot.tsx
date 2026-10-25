@@ -69,6 +69,9 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const [ink, setInk] = useState<InkModule | null>(null);
   const [inkError, setInkError] = useState<string>();
+  const [inkRetryPending, setInkRetryPending] = useState(false);
+  const inkRetryUsed = useRef(false);
+  const inkRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const captureTarget = useRef<View>(null);
 
   useEffect(() => {
@@ -89,10 +92,51 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   useEffect(() => { activeSv.value = active; }, [active, activeSv]);
   useEffect(() => { penSv.value = penMode; }, [penMode, penSv]);
   const inkFailed = useCallback((error: unknown) => {
-    setInk(null); setInkError("Ink couldn't load. Annotation is paused; your drawing is kept.");
+    setInk(null);
+    if (!inkRetryUsed.current) {
+      inkRetryUsed.current = true;
+      setInkRetryPending(true);
+      inkRetryTimer.current = setTimeout(() => {
+        inkRetryTimer.current = null;
+        setInkRetryPending(false);
+      }, 2000);
+    } else {
+      if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
+      inkRetryTimer.current = null;
+      setInkRetryPending(false);
+      setInkError("Ink couldn't load. Annotation is paused; your drawing is kept.");
+    }
     if (__DEV__) console.warn("[dash-ink] unavailable", error instanceof Error ? error.message : "renderer failed");
   }, []);
-  useEffect(() => { if ((active || penMode) && !ink && !inkError) void loadInk().then(setInk).catch(inkFailed); }, [active, penMode, ink, inkError, inkFailed]);
+  useEffect(() => {
+    if (active || penMode) return;
+    if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
+    inkRetryTimer.current = null;
+    inkRetryUsed.current = false;
+    setInkRetryPending(false);
+    setInkError(undefined);
+  }, [active, penMode]);
+  useEffect(() => () => {
+    if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
+  }, []);
+  useEffect(() => {
+    if ((!active && !penMode) || ink || inkError || inkRetryPending) return;
+    let cancelled = false;
+    void loadInk().then(module => {
+      if (!cancelled) setInk(module);
+    }).catch(error => {
+      if (!cancelled) inkFailed(error);
+    });
+    return () => { cancelled = true; };
+  }, [active, penMode, ink, inkError, inkRetryPending, inkFailed]);
+  const retryInk = useCallback(() => {
+    if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
+    inkRetryTimer.current = null;
+    inkRetryUsed.current = false;
+    setInk(null);
+    setInkRetryPending(false);
+    setInkError(undefined);
+  }, []);
 
   const finish = useCallback((flat: number[], pointerType: number) => {
     const { width, height } = size;
@@ -125,7 +169,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const gesture = useMemo(() => {
     const draw = Gesture.Pan()
       .manualActivation(true)
-      .enabled(active && !inkError)
+      .enabled(active && !!ink && !inkError)
       .onTouchesDown((e, manager) => {
         const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
         // The dock rides the IME without resizing Expo Go: never swallow input touches.
@@ -158,7 +202,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(active)
       .onEnd((e, success) => { if (success && e.y < size.height - composerAvoidance(-keyboardHeight.value) && pointerKind(e.pointerType) === "stylus") runOnJS(send)(false); });
     return Gesture.Simultaneous(draw, penDoubleTap);
-  }, [active, penMode, inkError, finish, send, live, activeSv, penSv, kindSv, pointerSv, tracePointer, size.height, keyboardHeight]);
+  }, [active, penMode, ink, inkError, finish, send, live, activeSv, penSv, kindSv, pointerSv, tracePointer, size.height, keyboardHeight]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -184,7 +228,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       {active && inkError ? <View style={styles.inkError}>
         <Text accessibilityRole="alert" style={styles.error}>{inkError}</Text>
         <View style={styles.row}>
-          <Chip label="Retry ink" a11y="Retry ink renderer" onPress={() => setInkError(undefined)} />
+          <Chip label="Retry ink" a11y="Retry ink renderer" onPress={retryInk} />
           <Chip label="Exit" a11y="Exit annotation" onPress={exitAnnotation} />
         </View>
       </View> : null}
