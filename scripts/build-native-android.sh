@@ -55,12 +55,13 @@ if [ ! -d "$ANDROID_HOME/ndk/27.1.12297006" ] || [ ! -d "$ANDROID_HOME/platforms
   fi
 fi
 (cd app && CI=1 bun x expo prebuild --platform android --no-install)
-(cd app/android && ./gradlew :app:assembleDebug :dash-share:testDebugUnitTest :dash-cutout:testDebugUnitTest -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
+(cd app/android && ./gradlew :app:assembleDebug :dash-share:testDebugUnitTest :dash-cutout:testDebugUnitTest :dash-stylus:testDebugUnitTest -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
 cp app/android/app/build/outputs/apk/debug/app-debug.apk .native-receipts/dash-native-arm64.apk
 cp -r app/modules/dash-share/android/build/test-results .native-receipts/native-test-results
 cp -r app/modules/dash-cutout/android/build/test-results .native-receipts/cutout-test-results
+cp -r app/modules/dash-stylus/android/build/test-results .native-receipts/stylus-test-results
 # Module inclusion: the class and its autolinked registration must be in the APK's dex.
-for module in 'Lapp/dash/cutout/DashCutoutModule;' 'Lapp/dash/share/DashShareModule;' 'Lcom/oney/WebRTCModule/WebRTCModule;' 'Lorg/webrtc/PeerConnectionFactory;' 'app.dash.cutout.DashCutoutModule' 'app.dash.share.DashShareModule'; do
+for module in 'Lapp/dash/stylus/DashStylusModule;' 'app.dash.stylus.DashStylusModule' 'Lapp/dash/cutout/DashCutoutModule;' 'Lapp/dash/share/DashShareModule;' 'Lcom/oney/WebRTCModule/WebRTCModule;' 'Lorg/webrtc/PeerConnectionFactory;' 'app.dash.cutout.DashCutoutModule' 'app.dash.share.DashShareModule'; do
   printf '%s %s\n' "$(unzip -p .native-receipts/dash-native-arm64.apk 'classes*.dex' | grep -a -c -F "$module" || true)" "$module"
 done | tee .native-receipts/module-inclusion.txt
 unzip -l .native-receipts/dash-native-arm64.apk 'lib/*' | tee .native-receipts/native-libs.txt | { grep -c 'libjingle_peerconnection_so.so' || true; } | sed 's/^/libjingle_peerconnection_so.so entries: /' | tee -a .native-receipts/module-inclusion.txt

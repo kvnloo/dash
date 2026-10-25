@@ -15,18 +15,22 @@ import { haptic } from "../../haptics";
 import { annotationDoc, annotationSendMode, attachmentNames, composeMessage } from "../../lib/annotate/compose";
 import { uploadBytes } from "../../lib/annotate/io";
 import { useRecordedSpeech } from "../../lib/useRecordedSpeech";
-import { appendInkSample, pointerKind, pressureOf, routePointer, stylusEnters } from "../../lib/annotate/pointer";
+import { appendInkSample, pointerKind, pressureOf, routePointer } from "../../lib/annotate/pointer";
 import { recognizeShape, type InkColor, type PointerKind, type StrokePoint, type Tool } from "../../lib/annotate/strokes";
 import { useHandedness } from "../../lib/useHandedness";
 import {
   addSegment, annotate, clearStrokes, commitStroke, currentSink, enterAnnotation, eraseStrokes, exitAnnotation, finishSend,
-  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, undoStroke,
+  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, undoStroke, stylusButton,
 } from "../../store/annotate";
 import { store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
 import { PressScale } from "../PressScale";
 import { targetsAt } from "./hit-test";
 import { loadSkia } from "./skia-ready";
+import { circleRegion, quoteSelection, type InkRegion } from "../../lib/annotate/mode";
+import { observeStylus, regionText } from "../../lib/stylus";
+import { composerDrafts, updateComposerDraft } from "../../store/composer-drafts";
+import { MAX_ATTACHMENTS_PER_TURN } from "../../lib/attachments";
 import { useContinuousVoice } from "../ContinuousVoiceRoot";
 
 export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
@@ -57,6 +61,36 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const [ink, setInk] = useState<InkModule | null>(null);
   const [inkError, setInkError] = useState<string>();
   const captureTarget = useRef<View>(null);
+
+  useEffect(() => observeStylus(event => stylusButton(event.pressed), text => {
+    const id = store.get().activeId;
+    if (id) updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ ...draft, text: quoteSelection(draft.text, text) }));
+  }), []);
+  // Prewarm outside the input path: opening the mode never waits for a lazy renderer import.
+  useEffect(() => { void loadInk().then(setInk).catch(inkFailedEarly => {
+    if (__DEV__) console.warn("[dash-ink] prewarm", String(inkFailedEarly));
+  }); }, []);
+
+  const attachCircle = useCallback(async (region: InkRegion) => {
+    const id = store.get().activeId, settings = store.get().settings;
+    if (!id || !settings || !captureTarget.current) return;
+    if ((composerDrafts.get()[id]?.attachments.length ?? 0) >= MAX_ATTACHMENTS_PER_TURN) { setAnnotationStatus("error", { error: "Remove an attachment before circling another region." }); return; }
+    const key = `circle-${Date.now()}`;
+    try {
+      const origin = await new Promise<{ x: number; y: number }>(resolve => captureTarget.current?.measureInWindow((x, y) => resolve({ x, y })));
+      const text = await regionText(origin.x + region.x, origin.y + region.y, region.width, region.height);
+      const { composite } = await loadInk();
+      const current = annotate.get().drawing.strokes;
+      const { bytes, dataUri } = await composite(captureTarget, current, size, INK, colors.bg, region);
+      const name = `${key}.png`;
+      updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ text: quoteSelection(draft.text, text || "Marked region (image attached)"), attachments: [...draft.attachments, { key, name, mime: "image/png", size: bytes.length, uri: dataUri, state: "uploading" }] }));
+      const ref = await uploadBytes(settings, name, "image/png", bytes);
+      updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ ...draft, attachments: draft.attachments.map(file => file.key === key ? { ...file, state: "ready", ref } : file) }));
+    } catch (error) {
+      updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ ...draft, attachments: draft.attachments.map(file => file.key === key ? { ...file, state: "error", error: "Region upload failed; remove and circle again." } : file) }));
+      setAnnotationStatus("error", { error: error instanceof Error ? error.message : "Could not attach marked region. Ink is kept." });
+    }
+  }, [size]);
 
   const live = useSharedValue<number[]>([]);
   const activeSv = useSharedValue(false);
@@ -91,8 +125,10 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     const shaped = shape && first && last ? [{ ...first, ...shape.from }, { ...last, ...shape.to }] : points;
     commitStroke({ tool: shape?.tool ?? s.tool, color: s.color, pointer, points: shaped, targets: targetsAt(screenPoints) });
     if (__DEV__) console.log("[dash-ink] committed", { pointer, points: shaped.length, width, height });
+    const region = circleRegion(screenPoints);
+    if (region) void attachCircle(region);
     haptic.select();
-  }, [size]);
+  }, [size, attachCircle]);
 
   const send = useCallback((keep: boolean) => { void sendAnnotation(keep, captureTarget, size); }, [size]);
   const tracePointer = useCallback((pointerType: number, touches: number) => {
@@ -102,13 +138,9 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const gesture = useMemo(() => {
     const draw = Gesture.Pan()
       .manualActivation(true)
-      .enabled((active || penMode) && !inkError)
+      .enabled(active && !inkError)
       .onTouchesDown((e, manager) => {
         const kind = pointerKind(e.pointerType);
-        if (stylusEnters(kind, penSv.value, activeSv.value)) {
-          activeSv.value = true;
-          runOnJS(enterAnnotation)();
-        }
         if (!activeSv.value || routePointer(kind, penSv.value, e.numberOfTouches) === "pass") { manager.fail(); return; }
         const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
         if (!point) { manager.fail(); return; }
@@ -154,7 +186,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
           <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
           {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
           {active && !penMode && !inkError ? <View style={StyleSheet.absoluteFill} {...overlayProps} /> : null}
-          {active && Ink ? <InkBoundary onError={inkFailed}><View style={StyleSheet.absoluteFill} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></View></InkBoundary> : null}
+          {strokes.length > 0 || active ? Ink ? <InkBoundary onError={inkFailed}><View style={StyleSheet.absoluteFill} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></View></InkBoundary> : null : null}
         </View>
       </GestureDetector>
       {active ? <View pointerEvents="none" style={styles.frame} accessibilityLabel="Annotation mode on" {...overlayProps} /> : null}
@@ -220,7 +252,7 @@ function Tray({ onSend }: { onSend(keep: boolean): void }): React.JSX.Element {
   const busy = s.status === "capturing" || s.status === "sending";
   const count = s.drawing.strokes.length;
   // The tray can hop to the top so it never hides the part of the screen being marked.
-  const [top, setTop] = useState(false);
+  const [top, setTop] = useState(true);
   return (
     <View style={[styles.tray, top ? { top: insets.top + space.sm } : { bottom: insets.bottom + space.sm }]} {...overlayProps}>
       {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `Sending to ${s.sink ?? "chat"}…`} /> : null}

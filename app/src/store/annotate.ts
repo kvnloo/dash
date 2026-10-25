@@ -3,6 +3,7 @@
 import type { ChatAttachment } from "../../../shared/protocol";
 import type { Segment } from "../lib/annotate/align";
 import { EMPTY_DRAWING, addStroke, clear, eraseAlong, undo, type Drawing, type InkColor, type Stroke, type Tool } from "../lib/annotate/strokes";
+import { penButton } from "../lib/annotate/mode";
 import { createStore } from "./createStore";
 
 export interface AnnotationPreview {
@@ -14,6 +15,7 @@ export interface AnnotationPreview {
 
 export interface AnnotateState {
   active: boolean;
+  buttonDown: boolean;
   /** Palm rejection: only the S Pen draws; fingers scroll. Persisted per app run. */
   penMode: boolean;
   tool: Tool;
@@ -32,7 +34,7 @@ export interface AnnotateState {
 }
 
 export const annotate = createStore<AnnotateState>({
-  active: false, penMode: false, tool: "pen", color: "accent", drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle",
+  active: false, buttonDown: false, penMode: true, tool: "pen", color: "accent", drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle",
 });
 
 export interface AnnotationSink {
@@ -69,6 +71,12 @@ export function enterAnnotation(): void {
 export function exitAnnotation(): void {
   annotate.set(s => ({ ...s, active: false, drawing: EMPTY_DRAWING, segments: [], recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined }));
 }
+
+/** Mode switch preserves unsent ink/words; Discard is a separate, explicit action. */
+export function stylusButton(pressed: boolean): void {
+  annotate.set(s => ({ ...s, ...penButton(s, pressed), penMode: true }));
+}
+export function toggleAnnotation(): void { annotate.set(s => ({ ...s, active: !s.active })); }
 
 export function setPenMode(on: boolean): void { annotate.set(s => ({ ...s, penMode: on })); }
 export function setTool(tool: Tool): void { annotate.set(s => ({ ...s, tool })); }

@@ -35,7 +35,7 @@ describe("pointer routing", () => {
   });
 
   test("a stylus touch enters annotation only in pen mode and only when inactive", () => {
-    expect(stylusEnters("stylus", true, false)).toBe(true);
+    expect(stylusEnters("stylus", true, false)).toBe(false);
     expect(stylusEnters("stylus", true, true)).toBe(false);
     expect(stylusEnters("stylus", false, false)).toBe(false);
     expect(stylusEnters("touch", true, false)).toBe(false);

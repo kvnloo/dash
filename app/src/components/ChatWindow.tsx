@@ -25,6 +25,7 @@ import type { TreeNode } from "../lib/tree";
 import { useHandedness } from "../lib/useHandedness";
 import { fade, snappy } from "../motion";
 import { colors, glass, radius, space, type } from "../theme";
+import { annotate } from "../store/annotate";
 import { AgentOrb } from "./AgentOrb";
 import { Tree } from "./Tree";
 
@@ -79,16 +80,18 @@ export function WindowPill({ geometry, title, thinking, status, primary, open, o
   open: boolean;
   onToggle(): void;
 }) {
-  const statusText = status.join(" · ");
+  const marking = annotate.use(s => s.active);
+  const modeLabel = marking ? "Annotate" : "Normal";
+  const statusText = [modeLabel, ...status].join(" · ");
   const label = `Navigation, collapsed. ${title}${statusText ? `, ${statusText}` : ""}. Double-tap to ${open ? "hide" : "show"} navigation.`;
   const hitPad = Math.max(0, (PILL_HIT - geometry.height) / 2);
   const left = <><AgentOrb size={14} thinking={thinking} label={`${title} ${thinking.phase}`} />
     <Text testID="chat-window-pill-title" style={styles.pillTitle} numberOfLines={1} maxFontSizeMultiplier={1.15}>{title}</Text></>;
   // Reserved slot: never shrinks, so the title is what truncates.
-  const right = primary ? <View testID="chat-window-pill-status" style={styles.pillStatusSlot}>
+  const right = <View style={styles.pillStatusSlot}><Text testID="pen-mode-label" style={styles.pillStatus}>{modeLabel}</Text>{primary ? <View testID="chat-window-pill-status" style={styles.pillStatusSlot}>
     <Feather name={primary.glyph} size={11} color={primary.glyph === "wifi-off" ? colors.danger : colors.gold} />
     <Text style={styles.pillStatus} numberOfLines={1} maxFontSizeMultiplier={1.1}>{primary.text}</Text>
-  </View> : null;
+  </View> : null}</View>;
   const hole = geometry.hole;
   const r = geometry.height / 2;
   // Cut-out mode: one pill painted around the camera with an even-odd circular hole, so nothing

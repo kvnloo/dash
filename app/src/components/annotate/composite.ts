@@ -38,7 +38,7 @@ export function drawStrokes(canvas: SkCanvas, strokes: readonly Stroke[], w: num
 }
 
 /** PNG bytes of `target` with the strokes composited, plus a data URI for preview. */
-export async function composite(target: RefObject<View | null>, strokes: readonly Stroke[], screen: { width: number; height: number }, ink: Record<InkColor, string>, background: string): Promise<{ bytes: Uint8Array; dataUri: string }> {
+export async function composite(target: RefObject<View | null>, strokes: readonly Stroke[], screen: { width: number; height: number }, ink: Record<InkColor, string>, background: string, region?: { x: number; y: number; width: number; height: number }): Promise<{ bytes: Uint8Array; dataUri: string }> {
   const base64 = await captureRef(target, { format: "png", result: "base64" });
   const image = Skia.Image.MakeImageFromEncoded(Skia.Data.fromBase64(base64.replace(/^data:image\/\w+;base64,/, "")));
   const w = image?.width() ?? Math.round(screen.width);
@@ -50,7 +50,8 @@ export async function composite(target: RefObject<View | null>, strokes: readonl
   if (image) canvas.drawImage(image, 0, 0);
   drawStrokes(canvas, strokes, w, h, w / screen.width, ink);
   surface.flush();
-  const snapshot = surface.makeImageSnapshot();
+  const scaleX = w / screen.width, scaleY = h / screen.height;
+  const snapshot = region ? surface.makeImageSnapshot({ x: Math.max(0, Math.floor(region.x * scaleX)), y: Math.max(0, Math.floor(region.y * scaleY)), width: Math.max(1, Math.min(w - Math.max(0, Math.floor(region.x * scaleX)), Math.ceil(region.width * scaleX))), height: Math.max(1, Math.min(h - Math.max(0, Math.floor(region.y * scaleY)), Math.ceil(region.height * scaleY))) }) : surface.makeImageSnapshot();
   const bytes = snapshot.encodeToBytes();
   return { bytes, dataUri: `data:image/png;base64,${snapshot.encodeToBase64()}` };
 }
