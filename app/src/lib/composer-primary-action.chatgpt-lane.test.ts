@@ -123,7 +123,7 @@ describe("H-141: one primary Send/Stop control", () => {
     expect(primaryRegion).toContain('justifyContent: "flex-start"');
     if (primaryRegion.includes("<ComposerPrimaryAction")) {
       // Once Hermes wires the standalone component, it must replace, not supplement, the inline button.
-      expect(primaryRegion.match(/<ComposerPrimaryAction\\b/g) ?? []).toHaveLength(1);
+      expect(primaryRegion.match(/<ComposerPrimaryAction\b/g) ?? []).toHaveLength(1);
       expect(primaryRegion).toContain("onStop={onStop}");
       expect(primaryRegion).toContain("onSubmit={submit}");
       expect(primaryRegion).not.toContain('accessibilityLabel="Stop"');
@@ -136,19 +136,19 @@ describe("H-141: one primary Send/Stop control", () => {
       expect(primaryRegion).toContain("onPress={submit}");
       expect(primaryRegion.match(/accessibilityLabel="Stop"/g) ?? []).toHaveLength(1);
     }
-    expect(composer).toMatch(/hit:\\s*\\{\\s*width:\\s*44,\\s*height:\\s*44/);
+    expect(composer).toMatch(/hit:\s*\{\s*width:\s*44,\s*height:\s*44/);
   });
 
   test("extracted visual target is one 44-DIP accessible PressScale with theme and reduced motion", () => {
-    expect(component.match(/<PressScale\\b/g) ?? []).toHaveLength(1);
+    expect(component.match(/<PressScale\b/g) ?? []).toHaveLength(1);
     expect(component).toContain('testID="composer-primary-action"');
     expect(component).toContain('accessibilityRole="button"');
     expect(component).toContain("accessibilityLabel={action.label}");
     expect(component).toContain("accessibilityState={{ disabled: action.disabled }}");
     expect(component).toContain("disabled={action.disabled}");
     expect(component).toContain("activateComposerPrimaryAction(action, onSubmit, onStop)");
-    expect(component).toMatch(/width:\\s*44/);
-    expect(component).toMatch(/height:\\s*44/);
+    expect(component).toMatch(/width:\s*44/);
+    expect(component).toMatch(/height:\s*44/);
     expect(component).toContain("colors.gold");
     expect(component).toContain("colors.text");
     expect(component).toContain("colors.bg");
