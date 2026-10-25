@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { ComposerDraft } from "../store/composer-drafts";
 
 mock.module("react-native", () => ({
+  Platform: { OS: "web" },
   AppState: { currentState: "active", addEventListener() { return { remove() {} }; } },
 }));
 mock.module("@react-native-async-storage/async-storage", () => ({
