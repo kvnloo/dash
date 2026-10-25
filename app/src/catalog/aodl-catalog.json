@@ -77,9 +77,9 @@
       "bin": "pi",
       "repo": "https://github.com/earendil-works/pi",
       "docs": "https://pi.dev",
-      "dash": "none",
+      "dash": "wired",
       "firstmate": "primary",
-      "role": "Earendil terminal harness. No Dash adapter as of 2026-09-10. Firstmate co-primary."
+      "role": "Earendil terminal harness. Dash adapter: pi --mode json --approve. Firstmate co-primary."
     },
     "fx": {
       "name": "fx",
@@ -87,9 +87,9 @@
       "bin": "fx",
       "repo": "https://github.com/vercel-labs/fx",
       "docs": "https://fx.sh",
-      "dash": "none",
+      "dash": "wired",
       "firstmate": "none",
-      "role": "Vercel Labs unix-like coding agent. Not antonmedv/fx."
+      "role": "Vercel Labs unix-like coding agent. Dash adapter: fx ask --json --full-access. Not antonmedv/fx."
     }
   },
   "distros": {
