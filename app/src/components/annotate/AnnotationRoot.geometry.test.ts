@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const source = readFileSync(join(import.meta.dir, "AnnotationRoot.tsx"), "utf8");
-const match = source.match(/const COMPOSER_CLEARANCE = (\\d+);/);
+const match = source.match(/const COMPOSER_CLEARANCE = (\d+);/);
 if (!match) throw new Error("AnnotationRoot must define a measured composer clearance");
 const clearance = Number(match[1]);
 
