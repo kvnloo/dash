@@ -94,7 +94,7 @@ describe("appendActivity performance lane", () => {
       expect(history.length).toBeLessThanOrEqual(32);
     }
     expect(history).toEqual(Array.from({ length: 32 }, (_, index) => `status ${index + 2_016}`));
-    expect(appendActivity(history, "status 2047")).toEqual(history);
+    expect(appendActivity(history, "status 2047")).toEqual(history.slice());
     expect(appendActivity(history, "status 2048")).toEqual([
       ...history.slice(1),
       "status 2048",
