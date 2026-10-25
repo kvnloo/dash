@@ -75,6 +75,7 @@ import { TurnSummaries } from "./src/turn-summaries";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
 import { createOrchestraHttpHandler } from "./src/orchestra-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
+import { acknowledgeSocketPing, BRIDGE_WS_IDLE_TIMEOUT_SECONDS } from "./src/ws-keepalive";
 
 // ---------------------------------------------------------------------------
 // Turns: one spawned process, a replayable event log, and a set of listeners
@@ -769,7 +770,7 @@ const server = Bun.serve<SocketData>({
     return new Response("upgrade failed", { status: 400 });
   },
   websocket: {
-    idleTimeout: 0,
+    idleTimeout: BRIDGE_WS_IDLE_TIMEOUT_SECONDS,
     async open(ws) {
       ws.data.stopIdentityWatch = bridgeAuth.identity?.watch(ws.data.principal, () => ws.close(1008, "Identity authorization expired or revoked"));
       log("ws.open", { remote: ws.remoteAddress });
@@ -788,7 +789,11 @@ const server = Bun.serve<SocketData>({
         ws.close(1008, "Identity authorization expired");
         return;
       }
-      const message = parseClientMessage(parseJson(raw));
+      const payload = parseJson(raw);
+      if (acknowledgeSocketPing(payload, response => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(response);
+      })) return;
+      const message = parseClientMessage(payload);
       if (!message) {
         log("ws.bad_message", { remote: ws.remoteAddress });
         return;
