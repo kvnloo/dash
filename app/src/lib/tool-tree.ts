@@ -11,12 +11,37 @@ export interface ToolTreeReply {
 }
 
 /** Pass only bridge-redacted details. Never fetch raw tool output from a tree row. */
+type ToolTreeCall = NonNullable<ToolTreeReply["tools"]>[number];
+
+const nonBlank = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
+
+/** Details arrive over the wire: keep only well-formed calls so a malformed row never becomes inspectable state. */
+function isToolCall(value: unknown): value is ToolTreeCall {
+  if (typeof value !== "object" || value === null) return false;
+  const status = Reflect.get(value, "status");
+  const durationMs = Reflect.get(value, "durationMs");
+  return nonBlank(Reflect.get(value, "id")) && typeof Reflect.get(value, "name") === "string"
+    && typeof Reflect.get(value, "summary") === "string" && typeof Reflect.get(value, "args") === "string"
+    && typeof Reflect.get(value, "output") === "string" && (status === "live" || status === "ok" || status === "error")
+    && typeof durationMs === "number" && Number.isFinite(durationMs) && typeof Reflect.get(value, "truncated") === "boolean";
+}
+
+function replyReasoning(reply: ToolTreeReply): string {
+  const reasoning: unknown = reply.reasoning;
+  if (typeof reasoning === "string") return reasoning;
+  const activity: unknown = reply.activity;
+  return Array.isArray(activity) ? activity.filter((line): line is string => typeof line === "string").join("\n") : "";
+}
+
 export function toolTree(reply: ToolTreeReply, inspect?: (id: string) => void): TreeNode[] {
-  const id = reply.turnId ?? reply.id ?? "reply";
-  const tools = reply.tools ?? [];
-  const reasoning = reply.reasoning ?? reply.activity?.join("\n") ?? "";
+  const turnId: unknown = reply.turnId;
+  const replyId: unknown = reply.id;
+  const id = nonBlank(turnId) ? turnId : nonBlank(replyId) ? replyId : "reply";
+  const rawTools: unknown = reply.tools;
+  const tools = Array.isArray(rawTools) ? rawTools.filter(isToolCall) : [];
+  const reasoning = replyReasoning(reply);
   const children: TreeNode[] = [];
-  const callNode = (tool: NonNullable<ToolTreeReply["tools"]>[number]): TreeNode => {
+  const callNode = (tool: ToolTreeCall): TreeNode => {
     const f = formatTool(tool);
     return { id: `${id}:call:${tool.id}`, kind: "call", label: `${tool.name} · ${f.title}`, detail: f.detail,
       meta: tool.status === "live" ? "running" : `${(tool.durationMs / 1000).toFixed(1)}s${tool.status === "error" ? " · error" : ""}`, status: tool.status === "live" ? "running" : tool.status === "error" ? "offline" : "available",
