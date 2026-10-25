@@ -206,7 +206,8 @@ function parseRecord(value: unknown): DeliveryLedgerRecord {
     principalId: value.principalId, clientId: value.clientId,
     fingerprint: value.fingerprint, turnId: value.turnId, at: value.at,
     state: value.state, admittedAt: value.admittedAt, updatedAt: value.updatedAt,
-    startedAt: value.startedAt, finishedAt: value.finishedAt,
+    startedAt: typeof value.startedAt === "number" ? value.startedAt : undefined,
+    finishedAt: typeof value.finishedAt === "number" ? value.finishedAt : undefined,
     receipt, reconciliationRequired: value.reconciliationRequired,
   };
 }
