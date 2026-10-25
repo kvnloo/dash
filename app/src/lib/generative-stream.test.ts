@@ -15,11 +15,12 @@ const json = JSON.stringify({
 const lang = 'root = Roadmap("dash-roadmap")';
 
 describe("streaming native UI fence protection", () => {
-  for (const [language, source] of [
+  const examples: [string, string][] = [
     ["genui", json],
     ["openui", json],
     ["openui-lang", lang],
-  ]) {
+  ];
+  for (const [language, source] of examples) {
     test(language + " keeps every unfinished source prefix behind a loader", () => {
       const prefix = "Prose above the UI.\n\n";
       for (let length = 0; length <= source.length; length++) {
@@ -33,7 +34,7 @@ describe("streaming native UI fence protection", () => {
   }
 
   test("an unfinished language tag is normalized into a native pending UI block", () => {
-    for (const [partial, full] of [
+    const prefixes: [string, string][] = [
       ["```g", "genui"],
       ["```ge", "genui"],
       ["```gen", "genui"],
@@ -42,7 +43,8 @@ describe("streaming native UI fence protection", () => {
       ["```openui", "openui"],
       ["```openui-l", "openui-lang"],
       ["```openui-lang", "openui-lang"],
-    ]) {
+    ];
+    for (const [partial, full] of prefixes) {
       expect(prepareGenerativeMarkdown(partial)).toBe(fencedPending(full));
     }
   });
