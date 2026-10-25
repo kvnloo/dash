@@ -174,6 +174,10 @@ describe("H-077 component wiring contract (source, not rendered/device evidence)
     expect(trace).toContain("evidenceTotal={st.workers}");
     expect(trace).toContain("Number.isSafeInteger(st.workers)");
     expect(trace).toContain('label: "not live"');
+    expect(trace).toContain('label="cut" value={st.cut}');
+    expect(trace).toContain('label: "not resumed"');
+    expect(trace).toContain('label="active" value={series[series.length - 1] ?? 0}');
+    expect(trace).toContain("variant=\"spark\" series={series}");
     expect(tile).toContain("summary={summary}");
     expect(tile).toContain("details.map(line => <Text key={line.label}");
     expect(tile).toContain("line.label + \": \" + line.value");
