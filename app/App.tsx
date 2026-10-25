@@ -154,7 +154,7 @@ export default function App() {
             </NavigationContainer>
           </BridgePullProvider>
           <DebugHost />
-          <StatusBar style="light" />
+          <StatusBar style="light" hidden />
         </KeyboardProvider>
       </SafeAreaProvider>
     </TileDetailProvider></TileGestureProvider></OrbMotionProvider></DensityProvider></GestureHandlerRootView>
