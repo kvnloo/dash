@@ -171,7 +171,7 @@ test("queue preview, message order and unrelated conversations survive interleav
     'assert.strictEqual(state.conversations[0].messages[0], savedUser);',
     'assert.deepEqual(state.conversations[0].messages.map(m => m.text), ["Keep this history", "", "Append without duplicating", ""]);',
     'assert.equal(state.conversations[1].queuePreview, "Existing preview\\n\\nFirst queued\\n\\nSecond queued");',
-    'assert.equal(state.conversations[1].title, "Queue title");',
+    'assert.equal(state.conversations[1].title, "First queued");',
     'assert.deepEqual(app.locateTurn(a.turnId), { conversationId: chat.id, messageId: a.messageId });',
     'assert.deepEqual(app.locateTurn(b.turnId), { conversationId: chat.id, messageId: b.messageId });',
   ]);
