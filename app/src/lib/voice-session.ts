@@ -37,7 +37,7 @@ export function voiceConnectionErrorLine(note: string | undefined): string {
   if (note.startsWith("Realtime reported an error.")) return "Realtime session failed";
   if (note.startsWith("Voice unavailable.")) return "Voice connection failed";
   if (note.startsWith("Mic stopped because Dash left the foreground.")) return "Voice stopped in background";
-  return note.replace(/\\s+/g, " ").trim();
+  return note.replace(/\s+/g, " ").trim();
 }
 
 /** Preserve a specific SDP failure through ContinuousVoice's error teardown. */
