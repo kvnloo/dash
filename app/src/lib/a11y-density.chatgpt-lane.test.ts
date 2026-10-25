@@ -45,7 +45,7 @@ describe("DensityPicker accessibility contract", () => {
 
   test("all three density choices remain labelled, selected and pressable by the same action", () => {
     expect(DENSITIES).toEqual(["compact", "comfortable", "rich"]);
-    expect(pickerSource).toContain("DENSITIES.map(value => (");
+    expect(pickerSource).toContain("DENSITIES.map(value => <PressScale");
     expect(pickerSource).toContain('accessibilityLabel={`${value} density`}');
     expect(pickerSource).toContain("accessibilityState={{ selected: density === value }}");
     expect(pickerSource).toContain('accessibilityHint={density === value ? "Current density" : `Activate to use ${value} density`}');
