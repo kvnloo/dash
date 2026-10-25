@@ -174,7 +174,7 @@ describe("composer suggestion inventory and identity boundaries", () => {
         detail: "Exact option",
         insert: "/CaseSensitive",
       }]);
-    expect(composerSuggestions(requiredTrigger("@valid"), parsed, [], []))
+    expect(composerSuggestions(requiredTrigger("@casesensitive"), parsed, [], []))
       .toEqual([]);
     expect(composerSuggestions(requiredTrigger("@src"), parsed, [], []))
       .toEqual([{
