@@ -59,6 +59,7 @@ describe("DensityPicker accessibility contract", () => {
     expect(pickerSource).toContain("accessibilityLabel={preview.accessibilityLabel}");
     expect(pickerSource).toContain("accessibilityState={preview.accessibilityState}");
     expect(pickerSource).toContain("disabled={preview.accessibilityState.disabled}");
+    expect(pickerSource).toContain('Aa {preview.accessibilityState.disabled ? "unavailable" : `${Math.round(typeScale * 100)}%`}');
     expect((pickerSource.match(/accessibilityRole="button"/g) ?? []).length).toBe(2);
     // PressScale forwards accessibility props to Pressable; native press and accessibility activation share onPress.
     expect(pressScaleSource).toContain("{...rest}");
