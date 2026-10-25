@@ -185,7 +185,8 @@ describe("readyRefs performance lane", () => {
 
 describe("canSendDrafts performance lane", () => {
   test("local or uploading drafts block a long text without scanning later entries", () => {
-    for (const blockedState of ["uploading", "local"] as const) {
+    const blockingStates: DraftAttachment["state"][] = ["uploading", "local"];
+    for (const blockedState of blockingStates) {
       const visited: number[] = [];
       const entries = Object.freeze(
         Array.from({ length: LARGE_COUNT }, (_, index) =>
