@@ -26,6 +26,8 @@ const GOLD = hex(GOLD_SRGB);
 const PAGER = [12, 13, 11, 255] as const;
 const DOT_ON = [0x21, 0x1b, 0x10, 255] as const;
 const DOT_OFF = [0x83, 0x7f, 0x74, 255] as const;
+// GOLD_68 composited over near-black native chrome (not an opaque mock).
+const GLASS_GOLD: readonly number[] = [150, 130, 95, 255];
 
 function hex(s: string): readonly [number, number, number, number] {
   const body = s.startsWith("#") ? s.slice(1) : s;
@@ -68,17 +70,41 @@ function fillRect(
 }
 
 /** 144×50 pager: gold pill on tab 1, three 4px dots. `dotTop` is the Yoga top inside each 44px slot. */
-function paintPager(dotTop: number, gaps: readonly [number, number] = [NAV_SLOT_WIDTH, NAV_SLOT_WIDTH]): RgbaImage {
+function paintPager(
+  dotTop: number,
+  gaps: readonly [number, number] = [NAV_SLOT_WIDTH, NAV_SLOT_WIDTH],
+  gold: readonly number[] = GOLD,
+): RgbaImage {
   const img = image(NAV_PAGER_WIDTH, NAV_PAGER_HEIGHT, PAGER);
   const pillX = NAV_PAGER_PAD + NAV_SLOT_WIDTH;
   const pillY = NAV_PAGER_PAD;
-  fillRect(img, pillX, pillY, NAV_SLOT_WIDTH, NAV_PILL_HEIGHT, GOLD);
+  fillRect(img, pillX, pillY, NAV_SLOT_WIDTH, NAV_PILL_HEIGHT, gold);
   const x0 = NAV_PAGER_PAD + NAV_DOT_LEFT;
   const xs = [x0, x0 + gaps[0], x0 + gaps[0] + gaps[1]];
   for (let i = 0; i < 3; i++) {
     fillRect(img, xs[i] ?? 0, NAV_PAGER_PAD + dotTop, NAV_DOT_SIZE, NAV_DOT_SIZE, i === 1 ? DOT_ON : DOT_OFF);
   }
   return img;
+}
+
+/** A full device frame with AppNav at the top and unrelated gold further down. */
+function paintDeviceFrame(
+  dotTop: number,
+  gaps: readonly [number, number] = [NAV_SLOT_WIDTH, NAV_SLOT_WIDTH],
+): RgbaImage {
+  const frame = image(360, 760, PAGER);
+  const pager = paintPager(dotTop, gaps, GLASS_GOLD);
+  const x = 100, y = 90;
+  for (let row = 0; row < pager.height; row++) {
+    const source = pager.data.subarray(row * pager.width * 4, (row + 1) * pager.width * 4);
+    frame.data.set(source, ((y + row) * frame.width + x) * 4);
+  }
+  // These must not influence which gold region or three dots are inspected.
+  fillRect(frame, 30, 490, 40, 40, GOLD);
+  fillRect(frame, 30, 540, 4, 4, DOT_OFF);
+  fillRect(frame, 76, 540, 4, 4, DOT_ON);
+  fillRect(frame, 122, 540, 4, 4, DOT_OFF);
+  return frame;
 }
 
 describe("inspect-nav.yaml is not enough", () => {
@@ -99,8 +125,19 @@ describe("nav-dots Maestro flow", () => {
     expect(yaml).toContain("Bots");
     expect(yaml).toContain("Chats");
     expect(yaml).toContain("Orchestra");
-    expect(yaml).toContain("takeScreenshot");
+    expect(yaml).toContain("takeScreenshot: artifacts/verify-dash/maestro-nav-chrome");
+    expect(yaml).toContain('- tapOn: "Chats"');
     expect(yaml).toContain("Primary mobile workspace");
+    expect(yaml).not.toContain("cropOn:");
+  });
+
+  test("device runner cannot pass on a stale or missing screenshot", () => {
+    const runner = readFileSync(join(ROOT, ".maestro/check-nav-dots.sh"), "utf8");
+    expect(runner).toContain("set -euo pipefail");
+    expect(runner).toContain('rm -f -- "$screenshot"');
+    expect(runner).toContain("maestro test .maestro/nav-dots.yaml");
+    expect(runner).toContain('[[ ! -s "$screenshot" ]]');
+    expect(runner).toContain('bun scripts/assert-nav-dots.ts "$screenshot"');
   });
 });
 
@@ -129,6 +166,13 @@ describe("checkNavDots", () => {
     expect(gap1).toBe(NAV_SLOT_WIDTH);
   });
 
+  test("recognizes 68%-opacity gold composited over dark native chrome", () => {
+    const result = checkNavDots(paintPager(NAV_DOT_TOP, [NAV_SLOT_WIDTH, NAV_SLOT_WIDTH], GLASS_GOLD));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.dots).toHaveLength(3);
+  });
+
   test("fails when Yoga collapses the dots to the top of the pill", () => {
     const result = checkNavDots(paintPager(0));
     expect(result.ok).toBe(false);
@@ -145,6 +189,36 @@ describe("checkNavDots", () => {
 
   test("requireNavDots throws on the top-collapse screenshot", () => {
     expect(() => requireNavDots(paintPager(0))).toThrow(/vertically centered/i);
+  });
+
+  test("reads a full Maestro device frame without combining unrelated gold surfaces", () => {
+    const result = checkNavDots(paintDeviceFrame(NAV_DOT_TOP));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.pill.y).toBe(90 + NAV_PAGER_PAD);
+    expect(result.dots).toHaveLength(3);
+    expect(result.dots[1].cx - result.dots[0].cx).toBe(NAV_SLOT_WIDTH);
+  });
+
+  test("fails for top-collapsed Yoga dots in a full frame", () => {
+    const result = checkNavDots(paintDeviceFrame(0));
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected off-center screenshot to fail");
+    expect(result.reason).toMatch(/vertically centered/i);
+  });
+
+  test("fails on uneven spacing in a full frame even with decoy dots elsewhere", () => {
+    const result = checkNavDots(paintDeviceFrame(NAV_DOT_TOP, [NAV_SLOT_WIDTH, NAV_SLOT_WIDTH + 12]));
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected uneven screenshot to fail");
+    expect(result.reason).toMatch(/evenly spaced/i);
+  });
+
+  test("rejects invalid RGBA frames without making a device assertion", () => {
+    expect(checkNavDots({ width: 144, height: 50, data: new Uint8Array(2) })).toEqual({
+      ok: false,
+      reason: "invalid RGBA screenshot dimensions",
+    });
   });
 });
 

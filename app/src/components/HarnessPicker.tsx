@@ -1,5 +1,7 @@
 import { Feather } from "@expo/vector-icons";
+import { useReducedMotion } from "react-native-reanimated";
 import { useHandedness } from "../lib/useHandedness";
+import { activateHarnessPickerRow, harnessPickerRowA11y } from "../lib/a11y-harness-picker";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { HarnessInfo } from "../../../shared/protocol";
@@ -18,38 +20,69 @@ interface Props {
 export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose }: Props) {
   const thumb = useHandedness();
   const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close">
-        <Pressable onPress={() => {}}>
-          <GlassSurface variant="raised" borderRadius={radius.md} style={styles.sheet} contentStyle={{ paddingBottom: Math.max(insets.bottom, space.lg) }}>
-            <Text style={styles.label}>Harness</Text>
-            {harnesses.map((h) => {
-              const active = h.id === selected;
-              return (
-                <PressScale
-                  key={h.id}
-                  disabled={!h.available}
-                  onPress={() => {
-                    onSelect(h.id);
-                    onClose();
-                  }}
-                  style={[styles.row, thumb.row]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active, disabled: !h.available }}
-                >
-                  <View style={styles.rowText}>
-                    <Text style={[styles.name, !h.available && styles.unavailable]}>{h.name}</Text>
-                    {!h.available ? <Text style={styles.hint}>Not installed on the bridge machine</Text> : null}
-                  </View>
-                  {active ? <Feather name="check" size={20} color={colors.text} /> : null}
-                </PressScale>
-              );
-            })}
-            {harnesses.length === 0 ? <Text style={styles.hint}>Connect to the bridge to see harnesses.</Text> : null}
-          </GlassSurface>
-        </Pressable>
-      </Pressable>
+    <Modal
+      visible={visible}
+      transparent
+      animationType={reducedMotion ? "none" : "fade"}
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View style={styles.backdrop}>
+        {/* Touch outside dismisses; keep the backdrop out of screen-reader focus. */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessible={false}
+          focusable={false}
+          importantForAccessibility="no-hide-descendants"
+        />
+        <GlassSurface
+          variant="raised"
+          borderRadius={radius.md}
+          style={styles.sheet}
+          contentStyle={{ paddingBottom: Math.max(insets.bottom, space.lg) }}
+          accessibilityViewIsModal
+          onAccessibilityEscape={onClose}
+        >
+          <View style={styles.header}>
+            <Text style={styles.label} accessibilityRole="header">Harness</Text>
+            <Pressable
+              style={styles.closeButton}
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close harness picker"
+              accessibilityHint="Return to chat"
+            >
+              <Feather name="x" size={20} color={colors.text} />
+            </Pressable>
+          </View>
+          {harnesses.map((h, index) => {
+            const row = harnessPickerRowA11y(h, selected);
+            return (
+              <PressScale
+                key={row.id ?? `unknown-${index}`}
+                disabled={row.disabled}
+                onPress={() => activateHarnessPickerRow(row, onSelect, onClose)}
+                style={[styles.row, thumb.row]}
+                accessibilityRole="button"
+                accessibilityLabel={row.label}
+                accessibilityHint={row.hint}
+                accessibilityState={row.state}
+              >
+                <View style={styles.rowText}>
+                  <Text style={[styles.name, row.disabled && styles.unavailable]}>{row.name}</Text>
+                  {row.disabled ? <Text style={styles.hint}>{row.hint}</Text> : null}
+                </View>
+                {row.state.selected ? <Feather name="check" size={20} color={colors.text} /> : null}
+              </PressScale>
+            );
+          })}
+          {harnesses.length === 0 ? <Text style={styles.hint}>Connect to the bridge to see harnesses.</Text> : null}
+        </GlassSurface>
+      </View>
     </Modal>
   );
 }
@@ -65,11 +98,20 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.lg + 6,
     borderTopRightRadius: radius.lg + 6,
   },
-  label: { color: colors.gold, ...type.cardTitle, marginBottom: space.sm, marginLeft: space.sm },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space.sm },
+  label: { color: colors.gold, ...type.cardTitle, marginLeft: space.sm },
+  closeButton: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+  },
   row: {
     flexDirection: "row",
     gap: space.sm,
     alignItems: "center",
+    minHeight: 44,
     paddingVertical: 14,
     paddingHorizontal: space.sm,
     borderRadius: radius.md,
