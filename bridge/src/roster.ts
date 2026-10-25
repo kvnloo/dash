@@ -331,12 +331,17 @@ function jsonlMatchingSession(dir: string, sessionId: string): string | undefine
 
 export function findOmpJsonl(sessionRoot: string, sessionId: string, cwd?: string, home?: string): string | undefined {
   if (!SESSION_ID_OK.test(sessionId)) return undefined;
-  if (cwd && home) {
+  if (cwd !== undefined) {
+    // A live OMP tab identifies its own working directory. Never substitute
+    // a different project's history when its session file has disappeared.
+    if (!cwd.trim() || !home) return undefined;
     for (const dir of ompSessionDirectories(sessionRoot, cwd, home)) {
       const hit = jsonlMatchingSession(dir, sessionId);
       if (hit) return hit;
     }
+    return undefined;
   }
+  // Older callers without cwd can still resolve an exact native session ID.
   if (!existsSync(sessionRoot)) return undefined;
   for (const name of readdirSync(sessionRoot)) {
     const path = join(sessionRoot, name);
