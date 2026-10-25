@@ -15,9 +15,10 @@ function section(start: string, end: string): string {
 
 describe("annotation ink auto-retry", () => {
   test("first failure delays one retry by 2 s without showing the error banner", () => {
-    const failure = section("const inkFailed = useCallback", "  useEffect(() => {\n    if (active || penMode)");
+    const failure = section("const inkFailed = useCallback", "  useEffect(() => {\n    if (active) return;");
     const first = section("if (!inkRetryUsed.current) {", "} else {");
     const terminal = failure.slice(failure.indexOf("} else {"));
+    expect(failure).toContain("if (!annotate.get().active) return;");
     expect(first).toContain("inkRetryUsed.current = true;");
     expect(first).toContain("setInkRetryPending(true);");
     expect(first).toContain("inkRetryTimer.current = setTimeout(() => {");
@@ -39,7 +40,7 @@ describe("annotation ink auto-retry", () => {
 
   test("leaving annotation or unmounting cancels the timer", () => {
     const effects = section("const inkFailed = useCallback", "  const retryInk = useCallback");
-    expect(effects).toContain("if (active || penMode) return;");
+    expect(effects).toContain("if (active) return;");
     expect(effects).toContain("clearTimeout(inkRetryTimer.current);");
     expect(effects).toContain("inkRetryTimer.current = null;");
     expect(effects).toContain("inkRetryUsed.current = false;");
