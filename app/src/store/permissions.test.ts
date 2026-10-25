@@ -156,6 +156,10 @@ describe("conversation-scoped ACP Needs OK store", () => {
     expect(permissions.recordFor(scope())?.phase).toBe("deciding");
     expect(permissions.receiveResolution("chat-1", "session-1", {
       type: "permission_resolved", turnId: "turn-1", requestId: "request-1",
+      outcome: "allowed",
+    })).toBe(false);
+    expect(permissions.receiveResolution("chat-1", "session-1", {
+      type: "permission_resolved", turnId: "turn-1", requestId: "request-1",
       outcome: "denied", optionId: "no-once",
     })).toBe(true);
     expect(permissions.recordFor(scope())?.phase).toBe("denied");
