@@ -62,7 +62,9 @@ export function projectStatInformation(level: InformationDetail, input: StatInfo
     let value = pieces.join(" · ");
     if (level === "rich") {
       value += Number.isSafeInteger(input.value) && input.value >= 0
-        ? " · sum " + sum + " of displayed " + input.value
+        ? sum === input.value
+          ? " · sum " + sum + " matches displayed " + input.value
+          : " · segment sum " + sum + "; displayed " + input.value + " (not reconciled)"
         : " · segment sum " + sum;
     }
     result.push({ label: "Segments", value });
@@ -76,7 +78,10 @@ export function projectStatInformation(level: InformationDetail, input: StatInfo
     value += " · " + series.length + (series.length === 1 ? " sample" : " samples");
     result.push({ label: "Samples", value });
     if (level === "rich") {
-      result.push({ label: "Range", value: "min " + Math.min(...series) + " · max " + Math.max(...series) });
+      let min = Infinity;
+      let max = -Infinity;
+      for (const observed of series) { min = Math.min(min, observed); max = Math.max(max, observed); }
+      result.push({ label: "Range", value: "min " + min + " · max " + max });
     }
   }
   return result;
