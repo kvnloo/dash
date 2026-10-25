@@ -25,6 +25,19 @@ export function voiceControlHome(visible: boolean, windowOpen: boolean): "none" 
   return !visible ? "none" : windowOpen ? "window" : "bar";
 }
 
+/** Stable native accessibility labels for coordinate-free Android voice journeys. */
+export function voiceStatusAccessibilityLabel(state: Pick<VoiceState, "phase" | "muted">): string {
+  if (state.muted && state.phase !== "idle" && state.phase !== "error" && state.phase !== "connecting") {
+    return "Voice status: muted";
+  }
+  return `Voice status: ${state.phase}`;
+}
+
+/** The Mute control describes its next action after each toggle. */
+export function voiceMuteAccessibilityLabel(muted: boolean): "Mute voice" | "Unmute voice" {
+  return muted ? "Unmute voice" : "Mute voice";
+}
+
 export type VoiceBarPresentation =
   | {
       phase: "idle" | "error";
@@ -55,7 +68,7 @@ export function voiceBarPresentation(state: Pick<VoiceState, "phase" | "muted" |
       detail: state.note,
       action: "start",
       primaryText: "Retry",
-      primaryLabel: "Retry voice in Dash",
+      primaryLabel: "Start voice",
     };
   }
   if (state.phase === "idle") {
@@ -64,7 +77,7 @@ export function voiceBarPresentation(state: Pick<VoiceState, "phase" | "muted" |
       label: "Voice idle",
       action: "start",
       primaryText: "Start",
-      primaryLabel: "Start voice in Dash",
+      primaryLabel: "Start voice",
     };
   }
   if (state.phase === "connecting") {
@@ -73,7 +86,7 @@ export function voiceBarPresentation(state: Pick<VoiceState, "phase" | "muted" |
       label: state.muted ? "Voice connecting · mic muted" : "Voice connecting",
       action: "end",
       primaryText: "Cancel",
-      primaryLabel: "Cancel voice connection",
+      primaryLabel: "End voice",
       muteText: state.muted ? "Unmute" : "Mute",
     };
   }
@@ -83,7 +96,7 @@ export function voiceBarPresentation(state: Pick<VoiceState, "phase" | "muted" |
       label: "Voice live · mic muted",
       action: "end",
       primaryText: "End",
-      primaryLabel: "End voice call",
+      primaryLabel: "End voice",
       muteText: "Unmute",
     };
   }
@@ -92,7 +105,7 @@ export function voiceBarPresentation(state: Pick<VoiceState, "phase" | "muted" |
     label: "Voice live · " + state.phase,
     action: "end",
     primaryText: "End",
-    primaryLabel: "End voice call",
+    primaryLabel: "End voice",
     muteText: "Mute",
   };
 }
