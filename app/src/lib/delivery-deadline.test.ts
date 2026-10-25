@@ -100,8 +100,8 @@ describe("DeliveryDeadlineController", () => {
     clock.advance(60_000);
     expect(retries(events)).toHaveLength(1);
     expect(clock.timerCount).toBe(0);
-    // The controller does not send a retry or claim that the host never saw it.
-    expect(events.every((event) => event.type !== "auto-resend")).toBe(true);
+    // No network/send callback exists: only waiting/retry status was emitted.
+    expect(events.map((event) => event.type)).toEqual(["waiting-for-ack", "retry-needed"]);
   });
 
   test("ack before deadline only cancels the matching turn timer", () => {
@@ -171,10 +171,17 @@ describe("DeliveryDeadlineController", () => {
     const { clock, events, controller } = fixture(10);
     const generation = controller.beginGeneration();
     controller.trackSent("already-due", generation);
+    clock.advance(5);
     controller.trackSent("not-yet-due", generation);
-    clock.advance(10);
-    expect(retries(events)).toHaveLength(2);
+    clock.advance(5);
+    expect(retries(events).map((event) => [event.id, event.reason])).toEqual([
+      ["already-due", "ack-timeout"],
+    ]);
     controller.disconnect(generation);
+    expect(retries(events).map((event) => [event.id, event.reason])).toEqual([
+      ["already-due", "ack-timeout"], ["not-yet-due", "socket-drop"],
+    ]);
+    clock.advance(100);
     expect(retries(events)).toHaveLength(2);
     expect(clock.timerCount).toBe(0);
   });
