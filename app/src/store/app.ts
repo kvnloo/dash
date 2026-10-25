@@ -596,7 +596,7 @@ export function cancelQueuePreview(id: string): void {
 }
 
 export function saveQueuePreview(id: string): void {
-  updateConversation(id, c => c.queuePreview?.trim() ? combineQueued(c, c.queuePreview.trim()) : c);
+  updateConversation(id, c => c.queuePreview?.trim() && !queueMergeError(c) ? combineQueued(c, c.queuePreview.trim()) : c);
   notifyTurnSettled(id);
 }
 
