@@ -162,10 +162,12 @@ describe("menu dismissal and source-backed native boundary", () => {
   test("restore focus only on a real dismissal transition, not on selection or first render", () => {
     expect(shouldRestoreComposerMenuFocus(true, false, true)).toBe(true);
     for (const state of [
-      [false, false, true], [false, true, true], [true, true, true],
-      [true, false, false],
+      { wasOpen: false, isOpen: false, dismissed: true },
+      { wasOpen: false, isOpen: true, dismissed: true },
+      { wasOpen: true, isOpen: true, dismissed: true },
+      { wasOpen: true, isOpen: false, dismissed: false },
     ]) {
-      expect(shouldRestoreComposerMenuFocus(state[0], state[1], state[2])).toBe(false);
+      expect(shouldRestoreComposerMenuFocus(state.wasOpen, state.isOpen, state.dismissed)).toBe(false);
     }
   });
 
