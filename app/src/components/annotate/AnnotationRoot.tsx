@@ -6,7 +6,7 @@
 // and preview are siblings outside it so a thumb on the mic never cancels the pen.
 
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image, PixelRatio, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { Image, PixelRatio, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
