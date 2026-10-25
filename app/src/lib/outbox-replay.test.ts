@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { ChatAttachment } from "../../../shared/protocol";
+import type { ChatAttachment, ClientMessage } from "../../../shared/protocol";
 import {
   planOutboxReplay,
+  replayChatMessage,
   type OutboxReplayInput,
   type OutboxReplayMode,
   type OutboxReplayRecord,
@@ -306,4 +307,41 @@ describe("pure outbox reconnect replay planner", () => {
     expect(steps).toEqual([{ kind: "replay", record: pending }]);
     expect(source[0]?.payload.attachments).toBe(attachments);
   });
+  test("wire replay preserves clientId, turnId, route, steering, text, flags and attachment order", () => {
+    const attachments: ChatAttachment[] = [
+      { id: "a1", name: "first.png", mime: "image/png", size: 1 },
+      { id: "a2", name: "second.png", mime: "image/png", size: 2 },
+    ];
+    const steer: OutboxReplayRecord = {
+      ...record("client-stable", "turn-stable", "sent", "steer"),
+      payload: { text: "Steer here", summariesEnabled: false, attachments },
+    };
+    const planned = planOutboxReplay(snapshot([steer], {
+      activeTurns: [{ conversationId: "c1", turnId: "live-turn" }],
+    }));
+    expect(planned[0]?.kind).toBe("replay");
+    const wire = replayChatMessage(steer);
+    const compatibleLegacyChat: ClientMessage = wire;
+    expect(compatibleLegacyChat.type).toBe("chat");
+    expect(wire).toMatchObject({
+      type: "chat",
+      clientId: "client-stable",
+      id: "turn-stable",
+      harness: "hermes",
+      hostId: "groot",
+      profileId: "hermes:primary",
+      sessionId: "session-1",
+      cwd: "/workspace",
+      text: "Steer here",
+      mode: "steer",
+      summariesEnabled: false,
+      attachments,
+    });
+    expect(wire.attachments).not.toBe(attachments);
+    expect(wire.attachments?.[0]).not.toBe(attachments[0]);
+    expect(steer.payload.attachments).toBe(attachments);
+    expect("mode" in replayChatMessage(record("normal", "another"))).toBe(false);
+    expect(replayChatMessage(record("queue", "queued-turn", "queued", "queue")).mode).toBe("queue");
+  });
+
 });
