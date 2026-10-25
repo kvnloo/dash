@@ -73,7 +73,10 @@ export function useContextView(settings: Settings | null, online: boolean, harne
     } catch (error) { if (identity.current === startKey) setNotice(error instanceof Error && error.message.startsWith("Compaction") ? error.message : "Outcome unknown. Check the session before retrying."); }
     finally { clearTimeout(timeout); if (identity.current === startKey) { pending.current = false; setPhase("idle"); } }
   }, [key, settings, session, profile, snapshot, online, harness, busy, plans]);
-  return { open, toggle: () => setOpen(v => !v), snapshot, plans, phase, notice, compact, canCompact: online && harness === "hermes" && Boolean(snapshot) && phase === "idle" && unsupportedHost !== settings?.address, compactUnavailable: unsupportedHost !== undefined && unsupportedHost === settings?.address };
+  return { open, toggle: () => setOpen(v => {
+    if (__DEV__) console.log("[context] toggle", !v);
+    return !v;
+  }), snapshot, plans, phase, notice, compact, canCompact: online && harness === "hermes" && Boolean(snapshot) && phase === "idle" && unsupportedHost !== settings?.address, compactUnavailable: unsupportedHost !== undefined && unsupportedHost === settings?.address };
 }
 export type ContextControl = ReturnType<typeof useContextView>;
 export function ContextGauge({ control }: { control: ContextControl }) {
@@ -95,9 +98,7 @@ function resetLabel(reset?: string): string {
 export function ContextCard({ control }: { control: ContextControl }) {
   const { height } = useWindowDimensions();
   const [selected, setSelected] = useState<string>();
-  const opacity = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(.3)).current;
-  useEffect(() => { Animated.timing(opacity, { toValue: control.open ? 1 : 0, duration: MOTION_MS.exit, easing: Easing.out(Easing.cubic), useNativeDriver: Platform.OS !== "web" }).start(); }, [control.open, opacity]);
   const compressing = control.phase !== "idle";
   useEffect(() => {
     if (!compressing) { pulse.setValue(1); return; }
@@ -108,7 +109,7 @@ export function ContextCard({ control }: { control: ContextControl }) {
   const s = control.snapshot;
   const detail = s?.categories.find(c => c.id === selected);
   const total = s?.categories.reduce((n, c) => n + c.tokens, 0) || 1;
-  return <Animated.View style={[styles.card, { opacity, maxHeight: Math.min(560, height * .62) }]} accessibilityLabel="Context window details">
+  return <View style={[styles.card, { maxHeight: Math.min(560, height * .62) }]} accessibilityLabel="Context window details">
     <View style={styles.row}><Text style={styles.title}>Context {s?.maximum ? `~${Math.round(s.used / s.maximum * 100)}%` : "unavailable"}</Text><Text style={styles.meta}>{s ? `~${tokenLabel(s.used)} of ~${s.maximum ? tokenLabel(s.maximum) : "unknown"}` : "No native reading"}</Text></View>
     <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 9 }} keyboardShouldPersistTaps="handled">
     {s ? <>
@@ -122,11 +123,11 @@ export function ContextCard({ control }: { control: ContextControl }) {
     </ScrollView>
     {s ? <View style={styles.footer}><Text style={[styles.meta, { flex: 1 }]}>{control.phase === "waiting" ? "Waiting for the running turn" : compressing ? "Summarizing messages" : s.threshold ? `~${tokenLabel(Math.max(0, s.threshold - s.used))} until auto-compact` : "Auto-compact unavailable"}</Text><PressScale accessibilityRole="button" accessibilityLabel={control.compactUnavailable ? "Compaction unavailable on this host" : "Compact now"} disabled={!control.canCompact} onPress={() => void control.compact()} style={[styles.compact, !control.canCompact && { opacity: .4 }]}><Text style={styles.compactText}>{control.compactUnavailable ? "Unavailable" : "Compact now"}</Text></PressScale></View> : null}
     {control.notice ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.notice}>{control.notice}</Text> : null}
-  </Animated.View>;
+  </View>;
 }
 const styles = StyleSheet.create({
   gauge: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  card: { position: "absolute", bottom: 72, left: 12, right: 12, zIndex: 20, backgroundColor: colors.bg, borderWidth: 1, borderColor: glass.hair, borderRadius: 16, padding: 14, gap: 9 },
+  card: { position: "absolute", bottom: 72, left: 12, right: 12, zIndex: 20, elevation: 20, backgroundColor: colors.bg, borderWidth: 1, borderColor: glass.hair, borderRadius: 16, padding: 14, gap: 9 },
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 6 },
   title: { ...type.small, color: colors.text }, meta: { ...type.mono, color: colors.textMuted, fontSize: 10, lineHeight: 15 },
   bar: { height: 8, flexDirection: "row", overflow: "hidden", borderRadius: 3, gap: 1 },
