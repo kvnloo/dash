@@ -206,18 +206,43 @@ export class AcpPermissionAdapter {
       stopTimer = (this.options.schedule ?? scheduleDefault)(
         () => finish(CANCELLED, "timeout"), timeoutMs,
       );
-      const unsubscribe = this.options.broker.register(request, rawDecision => {
+      // A custom scheduler may have expired synchronously during registration.
+      if (finished) {
+        stopTimer();
+        return true;
+      }
+      let registering = true;
+      let earlyDecision: unknown;
+      let hasEarlyDecision = false;
+      const onDecision = (rawDecision: unknown): void => {
+        // Do not accept synchronous decisions until registration confirms that
+        // an authenticated controller exists (a non-null unsubscribe).
+        if (registering) {
+          if (!hasEarlyDecision) {
+            hasEarlyDecision = true;
+            earlyDecision = rawDecision;
+          }
+          return;
+        }
+        if (finished) return;
+        if (this.closed || this.options.activeSessionId() !== active) {
+          finish(CANCELLED, "denied");
+          return;
+        }
         const decision = parseDecision(rawDecision);
-        if (decision === "timeout") return finish(CANCELLED, "timeout");
-        if (!decision || decision.outcome === "cancelled") return finish(CANCELLED, "denied");
+        if (decision === "timeout") { finish(CANCELLED, "timeout"); return; }
+        if (!decision || decision.outcome === "cancelled") { finish(CANCELLED, "denied"); return; }
         const chosen = offered.find(option => option.optionId === decision.optionId);
-        if (!chosen) return finish(CANCELLED, "denied");
+        if (!chosen) { finish(CANCELLED, "denied"); return; }
         finish(decision, chosen.kind.startsWith("reject_") ? "denied" : "allowed");
-      });
+      };
+      const unsubscribe = this.options.broker.register(request, onDecision);
+      registering = false;
       if (unsubscribe === null) finish(CANCELLED, "denied");
-      else if (finished) {
-        try { unsubscribe(); } catch { /* already resolved */ }
-      } else unregister = unsubscribe;
+      else {
+        unregister = unsubscribe;
+        if (hasEarlyDecision) onDecision(earlyDecision);
+      }
     } catch {
       // No controller, throwing broker or scheduling failure must never approve.
       finish(CANCELLED, "denied");
