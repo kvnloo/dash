@@ -6,6 +6,7 @@ import { isDebugMode } from "../debug/mode";
 import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf } from "../store/live";
 import { fetchRoster } from "../lib/roster";
 import { executionToken, socketUrl } from "../lib/bridge-auth";
+import { shouldRequestHistory } from "../lib/live-sessions";
 import { headerSocket } from "../lib/native-socket";
 import type { Settings } from "../model";
 import {
@@ -244,7 +245,7 @@ class Bridge {
     if (!hosts || this.settings !== settings || !this.isOpen()) return;
     setConnection({ hosts });
     const current = store.get().conversations.find(c => c.id === store.get().activeId);
-    if (current?.harness === "hermes" && !current.stale && current.sessionId && !current.messages.some(m => m.role === "assistant" && (m.state === "streaming" || m.state === "pending"))) {
+    if (current?.sessionId && shouldRequestHistory(current)) {
       this.send({ type: "history", harness: current.harness, sessionId: current.sessionId, hostId: current.targetHostId, profileId: current.profileId });
     }
   }

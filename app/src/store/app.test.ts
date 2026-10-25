@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const persisted = new Map<string, string>();
+let rejectLegacy = false;
 mock.module("@react-native-async-storage/async-storage", () => ({
   default: {
-    async getItem(key: string) { return persisted.get(key) ?? null; },
+    async getAllKeys() { return [...persisted.keys()]; },
+    async getItem(key: string) { if (rejectLegacy && key === "dash.conversations.v1") throw Error("Row too big to fit into CursorWindow requiredPos=1, totalRows=2"); return persisted.get(key) ?? null; },
     async multiGet(keys: string[]) { return keys.map((key) => [key, persisted.get(key) ?? null]); },
     async removeItem(key: string) { persisted.delete(key); },
     async multiSet(entries: [string, string][]) { for (const [key, value] of entries) persisted.set(key, value); },
@@ -501,4 +503,18 @@ test("completion times survive persistence and error followed by done keeps the 
     expect(message.endedAt).toBeLessThanOrEqual(Date.now());
     if (failed && first?.role === "assistant") expect(message.endedAt).toBe(first.endedAt);
   }
+});
+
+test("oversized legacy CursorWindow row cannot block pairing hydration or delete the legacy row", async () => {
+  persisted.delete("dash.conversations.migrated.v2");
+  persisted.delete("dash.durable.files.v2/.migration-complete.json");
+  persisted.set("dash.settings.v1", JSON.stringify({ address: "fixture:4747", token: "fixture", harness: "hermes" }));
+  persisted.set("dash.conversations.v1", "unreadable-original");
+  rejectLegacy = true;
+  try {
+    await app.hydrate();
+    expect(app.store.get().hydrated).toBe(true);
+    expect(app.store.get().settings?.address).toBe("fixture:4747");
+    expect(persisted.get("dash.conversations.v1")).toBe("unreadable-original");
+  } finally { rejectLegacy = false; persisted.delete("dash.conversations.v1"); }
 });

@@ -5,7 +5,7 @@ import type { sendChat as ChatSend } from "../net/bridge";
 const sent: Parameters<typeof ChatSend>[0][] = [];
 const liveSent: { conversationId: string; intent: LiveIntent }[] = [];
 let online = true;
-mock.module("@react-native-async-storage/async-storage", () => ({ default: { multiSet: async () => {}, getItem: async () => null } }));
+mock.module("@react-native-async-storage/async-storage", () => ({ default: { multiSet: async () => {}, setItem: async () => {}, removeItem: async () => {}, getAllKeys: async () => [], getItem: async () => null } }));
 mock.module("../net/bridge", () => ({ sendChat: (payload: Parameters<typeof ChatSend>[0]) => { sent.push(payload); return online; }, sendLiveIntent: (conversationId: string, intent: LiveIntent) => { liveSent.push({ conversationId, intent }); return online; } }));
 const { sendInlineIntent } = await import("./inline-intent");
 const { store } = await import("../store/app");
