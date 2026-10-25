@@ -71,15 +71,15 @@ describe("AODL visual encodings", () => {
   });
 
   test("catalog harnesses map to visual.json providers and fail closed", () => {
-    expect(providerIdForHarness("omp")).toBe("cursor");
+    expect(providerIdForHarness("omp")).toBe("multi");
     expect(providerIdForHarness("codex")).toBe("openai");
     expect(providerIdForHarness("grok")).toBe("xai");
     expect(providerIdForHarness("claude")).toBe("anthropic");
     expect(providerIdForHarness("not-a-harness")).toBe("unknown");
     const avatar = readFileSync(join(import.meta.dir, "../components/HarnessAvatar.tsx"), "utf8");
-    expect(avatar).toContain("avatarPresetForHarness");
-    expect(avatar).toContain("assets/orbs/");
-    expect(avatar).not.toContain("<Text");
+    expect(avatar).toContain("resolveHarnessVisual");
+    expect(avatar).toContain("HarnessVisualCore");
+    expect(avatar).not.toContain("assets/orbs/");
     expect(avatar).not.toContain("toUpperCase");
   });
 
@@ -124,14 +124,20 @@ describe("AODL visual encodings", () => {
     expect(resolveRuntimeState(catalog, undefined).id).toBe("unknown");
   });
 
-  test("Living Night status uses a dot; identity is a static catalog orb", () => {
+  test("Living Night keeps status dots; AODL identity animates only with reduced-motion consent", () => {
     const row = readFileSync(join(import.meta.dir, "../components/MessageRow.tsx"), "utf8");
     const avatar = readFileSync(join(import.meta.dir, "../components/HarnessAvatar.tsx"), "utf8");
     const orbs = readFileSync(join(import.meta.dir, "../components/EffortOrbs.tsx"), "utf8");
     expect(row).toContain("width: 4, height: 4");
     expect(row).not.toContain("PulseDot");
-    expect(avatar).toContain("<Image");
-    expect(avatar).not.toContain("withRepeat");
+    const core = readFileSync(join(import.meta.dir, "../components/HarnessVisualCore.tsx"), "utf8");
+    expect(avatar).toContain("HarnessVisualCore");
+    expect(core).toContain("AccessibilityInfo.isReduceMotionEnabled");
+    expect(core).toContain("reduceMotionChanged");
+    expect(core).toContain("Animated.loop");
+    expect(core).toContain("cadence.periodMs");
+    expect(core).toContain('borderStyle: look.valueScore === null ? "dashed" : "solid"');
+    expect(core).not.toContain("OpenAvatar");
     expect(orbs).toContain("useAnimatedStyle");
     expect(orbs).toContain("transform");
     expect(orbs).toContain("opacity");
