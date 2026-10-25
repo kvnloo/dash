@@ -1,7 +1,7 @@
 import { useHandedness } from "../lib/useHandedness";
 import { Feather } from "@expo/vector-icons";
 import { forwardRef, memo, useEffect, useImperativeHandle, type ReactNode } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   type SharedValue,
@@ -14,7 +14,7 @@ import { PRESS_SCALE } from "../motion";
 import type { RootStackParamList } from "../navigation";
 import { useBridgePullOptional, useBridgePullPan } from "./BridgePull";
 import { PressScale } from "./PressScale";
-import { colors, glass, proofMono } from "../theme";
+import { colors, fonts, glass, proofMono } from "../theme";
 import {
   GOLD_68,
   GOLD_RIM,
@@ -36,6 +36,7 @@ import {
   indicatorTranslateX,
 } from "./golden-nav";
 import { toMain } from "../lib/main-nav";
+import { annotate } from "../store/annotate";
 
 const RIPPLE = { color: "transparent" as const };
 
@@ -62,6 +63,7 @@ export const AppNav = memo(
     }
   >(function AppNav({ navigation, tab, onTab, progress: progressProp }, ref) {
     const thumb = useHandedness();
+    const annotationActive = annotate.use(s => s.active);
     const internal = useSharedValue(clampProgress(tab));
     // A single source of truth: no second spring between the finger and indicator.
     const progress = progressProp ?? internal;
@@ -162,6 +164,24 @@ export const AppNav = memo(
             <View pointerEvents="none" style={styles.hair} />
           </View>
           <PressScale
+            testID="spen-mode-pill"
+            accessibilityRole="button"
+            accessibilityLabel={`S Pen mode: ${annotationActive ? "Annotate" : "Normal"}. Switch to ${annotationActive ? "Normal" : "Annotate"}`}
+            accessibilityState={{ selected: annotationActive }}
+            android_ripple={RIPPLE}
+            scaleTo={PRESS_SCALE.nav}
+            onPress={() => {
+              haptic.tap();
+              // Switching modes keeps unsent ink; Discard in the tray is explicit.
+              annotate.set(s => ({ ...s, active: !s.active, penMode: true }));
+            }}
+            style={styles.modePill}
+          >
+            <Text testID="spen-mode-label" allowFontScaling={false} numberOfLines={1} style={styles.modeText}>
+              {annotationActive ? "Annotate" : "Normal"}
+            </Text>
+          </PressScale>
+          <PressScale
             accessibilityRole="button"
             accessibilityLabel="Bridge details"
             android_ripple={RIPPLE}
@@ -194,7 +214,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     overflow: "visible",
   },
   circle: {
@@ -209,6 +229,30 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 11,
     shadowOffset: { width: 0, height: 8 },
+  },
+  modePill: {
+    width: 88,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: glass.fillNavStrong,
+    borderWidth: 1,
+    borderColor: glass.hair2,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.22,
+    shadowRadius: 11,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  modeText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0,
+    textAlign: "center",
+    includeFontPadding: false,
+    flexShrink: 0,
+    color: colors.text,
   },
   // A fixed face: PressScale lays children out in a centred inner view that would otherwise
   // shrink to the icon's width.
