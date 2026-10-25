@@ -6,6 +6,7 @@ import Animated, { FadeInUp, FadeOutUp, useReducedMotion } from "react-native-re
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TileGrid } from "../components/TileGrid";
 import { DensityPicker } from "../components/Density";
+import { InformationDensityPicker } from "../components/InformationDensityPicker";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { ActionChip } from "../components/trace/ActionChip";
 import { ReadStrip } from "../components/trace/ReadStrip";
@@ -48,6 +49,7 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
     <SafeAreaView style={styles.root} edges={["top"]}>
       <ScreenHeader title="Trace" compact onBack={() => navigation.goBack()} onAction={() => navigation.navigate("Lab")} action="Component lab" icon="layers" />
       <DensityPicker />
+      <InformationDensityPicker />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} testID="trace-scroll">
         <Text style={styles.sub}>
           {clock(snapshot.t0, 0)} to now {clock(snapshot.t0, snapshot.now)} · {st.workers} workers · {origin === "bundled" ? "bundled snapshot" : "live from bridge"}
@@ -59,7 +61,11 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
           ))}
         </View>
         <TileGrid>
-          <StatTile label="live" value={st.live} sub={`of ${st.workers}`} tone={tc.live} variant="number" />
+          <StatTile label="live" value={st.live} sub={`of ${st.workers}`} tone={tc.live} variant="number"
+            evidenceTotal={st.workers}
+            evidenceSegments={Number.isSafeInteger(st.workers) && Number.isSafeInteger(st.live) && st.workers >= st.live && st.live >= 0
+              ? [{ n: st.live, color: tc.live, label: "live" }, { n: st.workers - st.live, color: tc.text3, label: "not live" }]
+              : undefined} />
           <StatTile label="cut" value={st.cut} sub={`${st.resumed} resumed`} tone={tc.cut} variant="meter"
             segments={[{ n: st.resumed, color: tc.ok, label: "resumed" }, { n: st.cut - st.resumed, color: tc.cut, label: "not resumed" }]} />
           <StatTile label="active" value={series[series.length - 1] ?? 0} sub={`peak ${Math.max(...series)}`} variant="spark" series={series} />
