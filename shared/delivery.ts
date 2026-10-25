@@ -80,14 +80,16 @@ export function parseDeliveryReceipt(raw: unknown): DeliveryReceipt | null {
  * Parse just the additive fields of a chat frame; the existing
  * parseClientMessage must also validate the complete legacy chat payload.
  *
- * Returns {} for valid legacy identities with no clientId. Returns null when
- * an explicitly supplied extension is invalid, so it cannot be silently
- * stripped by the old parser. Do not use this as a full chat parser.
+ * Returns {} when clientId is absent; the legacy parser alone validates
+ * those frames so old clients keep their existing acceptance rules. When the
+ * extension is present, both identities are bounded. Returns null for an
+ * invalid extension, so it cannot be silently stripped by the old parser.
+ * Do not use this as a full chat parser.
  */
 export function parseDeliveryChatExtension(raw: unknown): DeliveryChatExtension | null {
-  if (!isRecord(raw) || raw.type !== "chat" || !isDeliveryId(raw.id)) return null;
+  if (!isRecord(raw) || raw.type !== "chat") return null;
   if (raw.clientId === undefined) return {};
-  if (!isDeliveryId(raw.clientId)) return null;
+  if (!isDeliveryId(raw.id) || !isDeliveryId(raw.clientId)) return null;
   return { clientId: raw.clientId };
 }
 
