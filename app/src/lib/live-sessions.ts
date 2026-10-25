@@ -36,6 +36,25 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     const matches = reported.filter(({ host, agent }) => agent.kind === c.harness && agent.sessionId === c.sessionId && (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
     const match = matches.length === 1 ? matches[0] : undefined;
     if (!match) {
+      // A bridge-owned ACP session may be running without a native session row.
+      // A uniquely identified, online local harness profile plus an in-flight
+      // reply is evidence to retain this exact route, not to adopt another one.
+      // Native sessions, stale rows, unknown profiles and offline hosts still
+      // need an authoritative roster match.
+      const targetHosts = c.targetHostId ? hosts.filter(host => host.id === c.targetHostId) : [];
+      const targetHost = targetHosts.length === 1 ? targetHosts[0] : undefined;
+      const profiles = targetHost?.agents.filter(agent => agent.id === c.profileId);
+      const bridgeOwnedStreaming =
+        c.stale !== true &&
+        isCatalogHarness(c.harness) &&
+        c.profileId === `harness:${c.harness}` &&
+        c.messages.some(message => message.role === "assistant" && message.state === "streaming") &&
+        targetHost !== undefined && targetHost.self && targetHost.online &&
+        profiles?.length === 1 &&
+        profiles[0]?.kind === c.harness &&
+        profiles[0]?.status !== "offline" &&
+        !profiles[0]?.sessionId;
+      if (bridgeOwnedStreaming) return c;
       if (c.stale && c.openIn === undefined) return c;
       changed = true; return { ...c, stale: true, openIn: undefined };
     }
