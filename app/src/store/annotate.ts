@@ -34,9 +34,16 @@ export interface AnnotateState {
   pendingTurn?: { id: string; conversationId: string; fingerprint: string };
 }
 
-export const annotate = createStore<AnnotateState>({
-  active: false, buttonDown: false, penMode: false, tool: "pen", color: "accent", drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle",
-});
+/** Annotation is a volatile session: cold starts and module refreshes begin closed.
+ * Never seed active or penMode from stored settings or a prior module instance. */
+function initialAnnotationState(): AnnotateState {
+  return {
+    active: false, buttonDown: false, penMode: false, tool: "pen", color: "accent",
+    drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle",
+  };
+}
+
+export const annotate = createStore<AnnotateState>(initialAnnotationState());
 
 export interface AnnotationSink {
   label: string;
