@@ -30,10 +30,12 @@ export interface AodlNetworkView {
   distro: { id: "firstmate"; name: string };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function record(value: unknown, label: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Invalid AODL " + label);
-  }
+  if (!isRecord(value)) throw new Error("Invalid AODL " + label);
   return value;
 }
 
@@ -72,7 +74,7 @@ export function networkViewFromCatalog(raw: unknown): AodlNetworkView {
   const supported: unknown = source.supported;
   if (!Array.isArray(supported) || supported.length !== AODL_HARNESS_IDS.length ||
       new Set(supported).size !== AODL_HARNESS_IDS.length ||
-      supported.some((id: unknown) => typeof id !== "string" || !AODL_HARNESS_IDS.includes(id))) {
+      supported.some((id: unknown) => typeof id !== "string" || !AODL_HARNESS_IDS.some((known) => known === id))) {
     throw new Error("Unknown or missing AODL supported harness ids");
   }
 

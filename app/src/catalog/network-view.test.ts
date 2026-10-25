@@ -17,13 +17,10 @@ describe("Orchestra AODL catalog projection", () => {
     const view = loadAodlNetworkView();
     expect(view.nodes.map((node) => node.id)).toEqual(expectedNetwork);
     expect([...AODL_NETWORK_IDS]).toEqual(expectedNetwork);
-    expect(view.nodes.map((node) => node.owns)).toEqual(
-      expectedNetwork.map((id) => {
-        const node = view.nodes.find((entry) => entry.id === id);
-        if (!node) throw new Error("Missing expected node " + id);
-        return node.owns;
-      }),
-    );
+    expect(view.nodes.find((node) => node.id === "aodl")?.owns).toBe(pinnedCatalog.network.aodl.owns);
+    expect(view.nodes.find((node) => node.id === "dash")?.owns).toBe(pinnedCatalog.network.dash.owns);
+    expect(view.nodes.find((node) => node.id === "hermes-agent")?.owns).toBe(pinnedCatalog.network["hermes-agent"].owns);
+    expect(view.nodes.find((node) => node.id === "blueprint")?.owns).toBe(pinnedCatalog.network.blueprint.owns);
     expect(view.nodes.every((node) => node.owns.length > 0 && node.repo.startsWith("https://github.com/"))).toBe(true);
     for (const id of ["orch-dash", "orch-auth", "o8", "firstmate"]) {
       expect(view.nodes.some((node) => node.id === id)).toBe(false);
