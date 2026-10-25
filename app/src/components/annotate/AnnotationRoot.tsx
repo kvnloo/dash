@@ -6,7 +6,7 @@
 // and preview are siblings outside it so a thumb on the mic never cancels the pen.
 
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image, PixelRatio, Platform, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { BackHandler, Image, PixelRatio, Platform, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -80,6 +80,17 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       // Optional native-module lookup can fail on incompatible dev clients.
     }
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "android" || !active) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      // State can change before React removes the subscription.
+      if (!annotate.get().active) return false;
+      exitAnnotation();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [active]);
 
   const live = useSharedValue<number[]>([]);
   const activeSv = useSharedValue(false);
