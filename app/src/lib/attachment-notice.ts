@@ -2,6 +2,7 @@ export type AttachmentNoticeRequest =
   | { kind: "pair-required" }
   | { kind: "limit-reached"; limit: number }
   | { kind: "picker-error"; message: string }
+  | { kind: "shared-files-waiting"; count: number }
   | { kind: "shared-upload"; count: number };
 
 export type AttachmentNoticeAction = "dismiss" | "confirm-upload";
@@ -49,6 +50,14 @@ export function attachmentNoticeView(request: AttachmentNoticeRequest): Attachme
       );
     case "picker-error":
       return acknowledgement("Could not open attachments", pickerErrorDetail(request.message));
+    case "shared-files-waiting":
+      return acknowledgement(
+        "Shared files waiting",
+        positiveInteger(request.count)
+          ? "Remove attachments to make room for " + request.count +
+            (request.count === 1 ? " shared file." : " shared files.")
+          : "Remove attachments to make room for shared files.",
+      );
     case "shared-upload":
       if (!positiveInteger(request.count)) {
         return acknowledgement("No shared files", "There are no shared files waiting to upload.");
