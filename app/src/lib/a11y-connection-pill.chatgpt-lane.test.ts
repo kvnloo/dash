@@ -55,17 +55,18 @@ describe("ConnectionPill accessibility", () => {
     expect(calls).toBe(1);
   });
 
-  test("the PressScale binds one touch/TalkBack action, accessible state, and 44 DIP hit size", () => {
-    // No React Native renderer is available in Bun: check the actual UI binding,
-    // not just the pure presentation contract. TalkBack/device focus remains a gate.
+  test("the turbo connection banner binds one TalkBack retry, busy state, live region and 44 DIP hit size", () => {
+    // ConnectionPill.tsx was replaced on turbo by the non-blocking connection banner
+    // (connection-banner.ts); assert the same accessibility contract on that renderer.
+    // No React Native renderer is available in Bun; TalkBack/device focus remains a gate.
     const source = readFileSync(new URL("../components/ConnectionPill.tsx", import.meta.url), "utf8");
     expect(source).toContain("accessible");
-    expect(source).toContain("disabled={!presentation.canRetry}");
-    expect(source).toContain("accessibilityRole={presentation.accessibilityRole}");
-    expect(source).toContain("accessibilityLabel={presentation.accessibilityLabel}");
-    expect(source).toContain("accessibilityState={presentation.accessibilityState}");
-    expect(source).toContain('accessibilityLiveRegion="polite"');
-    expect(source).toContain("onPress={() => retryConnectionFromPill(presentation, () => bridge.retry())}");
+    expect(source).toContain("disabled={banner.connecting}");
+    expect(source).toContain('accessibilityRole="button"');
+    expect(source).toContain("accessibilityLabel={banner.retryLabel}");
+    expect(source).toContain("accessibilityState={{ disabled: banner.connecting, busy: banner.connecting }}");
+    expect(source).toContain("accessibilityLiveRegion={banner.liveRegion}");
+    expect(source).toContain("onPress={retry}");
     expect(source).toContain("minHeight: controlMin");
     expect(source).toContain("numberOfLines={2}");
   });
