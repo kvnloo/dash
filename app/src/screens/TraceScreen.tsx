@@ -62,6 +62,7 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
         </View>
         <TileGrid>
           <StatTile label="live" value={st.live} sub={`of ${st.workers}`} tone={tc.live} variant="number"
+            evidenceTotal={st.workers}
             evidenceSegments={Number.isSafeInteger(st.workers) && Number.isSafeInteger(st.live) && st.workers >= st.live && st.live >= 0
               ? [{ n: st.live, color: tc.live, label: "live" }, { n: st.workers - st.live, color: tc.text3, label: "not live" }]
               : undefined} />
