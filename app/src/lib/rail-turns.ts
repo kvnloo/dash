@@ -8,6 +8,7 @@ export const railColors: Record<RailState, string> = { done: "#777777", "needs-y
 export interface RailTurn extends PromptAnchor {
   summary: string;
   characters: number;
+  durationMs: number;
   state: RailState;
   question: boolean;
   code: boolean;
@@ -44,7 +45,7 @@ export class RailSummaryCache {
   }
 }
 const summaries = new RailSummaryCache();
-export function railTurns(messages: readonly Message[]): RailTurn[] {
+export function railTurns(messages: readonly Message[], now = Date.now()): RailTurn[] {
   const turns: RailTurn[] = [];
   for (let index = 0; index < messages.length; index++) {
     const prompt = messages[index];
@@ -57,9 +58,15 @@ export function railTurns(messages: readonly Message[]): RailTurn[] {
     }
     const answer = replies.filter(m => m.role === "assistant").map(m => splitThinking(m.text).text).join("\n");
     const last = replies.find(m => m.role === "assistant" && m.state === "error") ?? replies.at(-1);
+    const assistants = replies.filter(m => m.role === "assistant");
+    const running = assistants.some(m => m.state === "streaming" || m.state === "pending");
+    let ended = running ? now : Math.max(prompt.at, ...assistants.map(m => m.endedAt ?? m.at));
+    const nextPrompt = messages[end];
+    if (!running && !assistants.some(m => m.endedAt !== undefined) && ended - prompt.at < 1000 && nextPrompt?.role === "user") ended = nextPrompt.at;
+    const durationMs = Math.max(0, ended - prompt.at);
     turns.push({ id: prompt.id, index, text: prompt.text || "Attached files",
       summary: last ? summaries.get(last) : "No result text yet",
-      characters: answer.length, state: railState(replies),
+      characters: answer.length, durationMs, state: railState(replies),
       question: /\?\s*$/.test(answer.trim()), code: /```(?:diff|patch)|^diff --git /m.test(answer),
       activityUpdates: replies.reduce((count, m) => count + (m.role === "assistant" ? m.activity?.length ?? (m.status ? 1 : 0) : 0), 0),
       files: fileRefs(answer), pr: answer.match(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/)?.[0],

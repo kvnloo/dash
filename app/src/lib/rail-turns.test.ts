@@ -40,10 +40,27 @@ test("turn metadata is scoped, deduplicated, and does not pretend activity equal
   const answer = "```diff\n+ fix\n```\n/home/user/file.ts /home/user/file.ts https://github.com/kvnloo/dash/pull/77\nWhich option?";
   const turns = railTurns([reply("orphan"), prompt, reply(answer, { activity: ["read", "read"] }), { ...prompt, id: "u2", text: "" }]);
   expect(turns).toHaveLength(2);
-  expect(turns[0]).toEqual({ id: "u", index: 1, text: "Fix\nDetails", summary: "```diff", characters: answer.length, state: "done", question: true, code: true, activityUpdates: 2, files: ["/home/user/file.ts"], pr: "https://github.com/kvnloo/dash/pull/77" });
-  expect(turns[1]).toEqual({ id: "u2", index: 3, text: "Attached files", summary: "No result text yet", characters: 0, state: "done", question: false, code: false, activityUpdates: 0, files: [], pr: undefined });
+  expect(turns[0]).toEqual({ id: "u", index: 1, text: "Fix\nDetails", summary: "```diff", characters: answer.length, durationMs: 0, state: "done", question: true, code: true, activityUpdates: 2, files: ["/home/user/file.ts"], pr: "https://github.com/kvnloo/dash/pull/77" });
+  expect(turns[1]).toEqual({ id: "u2", index: 3, text: "Attached files", summary: "No result text yet", characters: 0, durationMs: 0, state: "done", question: false, code: false, activityUpdates: 0, files: [], pr: undefined });
   expect(railTurns([prompt, reply("No code", { status: "Read file" }), reply("Final")])[0]?.activityUpdates).toBe(1);
   expect(railTurns([prompt, reply("First"), reply("Final")])[0]?.summary).toBe("Final");
   expect(railTurns([prompt, reply("No code")])[0]?.question).toBe(false);
   expect(railTurns([prompt, reply("No code")])[0]?.code).toBe(false);
+});
+
+test("run durations use final reply completion, not time until the next prompt", () => {
+  expect(railTurns([prompt, reply("", { endedAt: 300001 }), reply("", { endedAt: 500001 }), { ...prompt, at: 900001 }])[0]?.durationMs).toBe(500000);
+  expect(railTurns([prompt, reply("", { endedAt: 0 })])[0]?.durationMs).toBe(0);
+});
+test("streaming and pending durations use now, without legacy next-prompt fallback", () => {
+  for (const state of ["streaming", "pending"] satisfies AssistantMessage["state"][]) {
+    expect(railTurns([prompt, reply("", { state }), { ...prompt, at: 10000 }], 501)[0]?.durationMs).toBe(500);
+  }
+});
+test("legacy durations fall back only for sub-second replies lacking completion times", () => {
+  const next = { ...prompt, at: 10001 };
+  expect(railTurns([prompt, reply(), next])[0]?.durationMs).toBe(10000);
+  expect(railTurns([prompt, reply("", { at: 2001 }), next])[0]?.durationMs).toBe(2000);
+  expect(railTurns([prompt, reply("", { endedAt: 101 }), next])[0]?.durationMs).toBe(100);
+  expect(railTurns([prompt, reply()])[0]?.durationMs).toBe(1);
 });

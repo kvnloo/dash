@@ -447,7 +447,7 @@ export function applyTurnEvent(
         if (event.seq <= m.seq || m.state === "interrupted") return m;
         const text = replyText.get(event.id) || m.text;
         const error = m.error ?? (event.exitCode !== 0 ? `Process exited with code ${event.exitCode}` : text || m.delivery === "steered" ? undefined : "No response");
-        return { ...m, text, parts: partsFor(event.id).length ? partsFor(event.id) : m.parts, state: error ? "error" : "done", error, status: undefined, handoff: undefined, seq: event.seq };
+        return { ...m, text, parts: partsFor(event.id).length ? partsFor(event.id) : m.parts, state: error ? "error" : "done", endedAt: m.endedAt ?? Date.now(), error, status: undefined, handoff: undefined, seq: event.seq };
       });
       liveSequences.delete(event.id);
       notifyTurnSettled(where.conversationId);
@@ -462,6 +462,7 @@ export function applyTurnEvent(
         parts: partsFor(event.id).length ? partsFor(event.id) : m.parts,
         text: replyText.get(event.id) || m.text,
         state: "error",
+        endedAt: m.endedAt ?? Date.now(),
         error: event.message,
         status: undefined,
         handoff: undefined,
@@ -513,7 +514,7 @@ export function stopConversation(conversationId: string, cancel: (turnId: string
       if (m.role !== "assistant" || (m.state !== "streaming" && m.state !== "pending")) return m;
       if (m.state === "streaming") running.push(m.turnId);
       liveSequences.delete(m.turnId);
-      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", status: "Stopped" };
+      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", endedAt: Date.now(), status: "Stopped" };
     }),
   }));
   while (dequeue(conversationId)) { /* Drain canceled turns before settlement listeners run. */ }
@@ -526,7 +527,7 @@ export function markTurnLost(turnId: string): void {
   const where = locateTurn(turnId);
   if (!where) return;
   updateMessage(where.conversationId, where.messageId, (m) =>
-    m.state === "streaming" ? { ...m, parts: partsFor(turnId).length ? partsFor(turnId) : m.parts, text: replyText.get(turnId) || m.text, state: "interrupted", status: undefined } : m,
+    m.state === "streaming" ? { ...m, parts: partsFor(turnId).length ? partsFor(turnId) : m.parts, text: replyText.get(turnId) || m.text, state: "interrupted", endedAt: Date.now(), status: undefined } : m,
   );
   notifyTurnSettled(where.conversationId);
 }
