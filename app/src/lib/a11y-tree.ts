@@ -3,7 +3,7 @@ import type { TreeNode } from "./tree";
 /** These sentinels are created by Tree's lazy child loader, not server data. */
 export type TreePlaceholder = "loading" | "error" | null;
 export type TreeActivation = "press" | "toggle" | "select" | null;
-export type TreeAccessibleActionTarget = "toggle" | "longpress" | null;
+export type TreeAccessibleActionTarget = "activate" | "longpress" | null;
 
 export interface TreeAccessibilityContext {
   selected: boolean;
@@ -110,8 +110,8 @@ export function treeRowA11yAction(
   if (placeholder) return null;
   if (actionName === "longpress") return node.onLongPress ? "longpress" : null;
   if (node.children && !node.onPress) {
-    if (actionName === "expand" && !expanded) return "toggle";
-    if (actionName === "collapse" && expanded) return "toggle";
+    if (actionName === "expand" && !expanded) return "activate";
+    if (actionName === "collapse" && expanded) return "activate";
   }
   return null;
 }
