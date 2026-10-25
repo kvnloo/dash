@@ -89,7 +89,7 @@ export class DeliveryDeadlineController {
    */
   trackSent(id: string, generation: number): boolean {
     if (this.disposed || !this.connected || generation !== this.generation || !id.trim()) return false;
-    this.pending.get(id)?.cancelTimer();
+    this.pending.get(id)?.cancelTimer?.();
     const entry: PendingAck = {
       id,
       generation,
