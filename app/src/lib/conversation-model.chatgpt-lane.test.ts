@@ -190,7 +190,7 @@ describe("parseConversation: valid persisted control", () => {
     expect(result?.sessionId).toBeUndefined();
     expect(result?.targetHostId).toBeUndefined();
     expect(result?.profileId).toBeUndefined();
-    expect(result && Object.hasOwn(result, "optionId")).toBe(false);
+    expect(result && Object.prototype.hasOwnProperty.call(result, "optionId")).toBe(false);
   });
 });
 
@@ -262,10 +262,10 @@ describe("parseConversation: fail-closed regressions for Hermes", () => {
   }
 
   for (const id of ["", "   "]) {
-    test("empty/blank conversation id cannot become a real conversation", () => {
+    test("empty/blank conversation id cannot become a real conversation: " + JSON.stringify(id), () => {
       expect(parseConversation(diskConversation("empty-conversation-id", { id }))).toBeNull();
     });
-    test("empty/blank message and bridge turn ids cannot be reattached", () => {
+    test("empty/blank message and bridge turn ids cannot be reattached: " + JSON.stringify(id), () => {
       const parsed = parseConversation(diskConversation("empty-message-ids", {
         messages: [diskUser(id), { ...diskAssistant("assistant-" + id), turnId: id }],
       }));
