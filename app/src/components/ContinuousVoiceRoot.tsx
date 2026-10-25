@@ -4,6 +4,7 @@ import { SafeAreaInsetsContext, useSafeAreaInsets, type EdgeInsets } from "react
 import { appInsets, VOICE_BAR_ROW, voiceBarPresentation, voiceBarVisible, voiceControlHome } from "../lib/voice-bar";
 import { executionToken, voiceAccessToken } from "../lib/bridge-auth";
 import { ContinuousVoice, object, VoiceAccessDenied, type VoiceState } from "../lib/continuous-voice";
+import { protectVoicePeer, VoiceMicReleaseGate, voiceConnectionError, voiceConnectionErrorLine } from "../lib/voice-session";
 import { createVoicePeer } from "../lib/voice-peer";
 import { addSegment, annotate, registerSink } from "../store/annotate";
 import type { Conversation } from "../model";
@@ -37,6 +38,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const epoch = useRef(0);
   const starting = useRef(false);
   const releaseMic = useRef<(() => void) | undefined>(undefined);
+  const micRelease = useRef(new VoiceMicReleaseGate());
   const desiredMute = useRef(false);
   const insets = useSafeAreaInsets();
   const windowOpen = voiceWindowOpen.use(open => open);
@@ -47,50 +49,88 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const start = async () => {
     if (starting.current) return;
     if (call.current && !["idle", "error"].includes(call.current.state.phase)) return;
+    starting.current = true;
+    const beforeWait = epoch.current;
+    // An error is published before ContinuousVoice finishes native teardown.
+    await micRelease.current.wait();
+    if (beforeWait !== epoch.current) return; // End/background already cancelled this attempt.
     setAttempted(true);
     desiredMute.current = false;
     const settings = store.get().settings;
-    const conversation = store.get().conversations.find(c => c.id === store.get().activeId);
+    // Retry is pinned to the original conversation, even if the user navigated elsewhere.
+    const conversation = (state.phase === "error" ? attached.current : null) ??
+      store.get().conversations.find(c => c.id === store.get().activeId);
     if (!settings?.identity || conversation?.harness !== "hermes" || !conversation.sessionId || !conversation.profileId) {
-      setState({ ...initial, phase: "error", note: "Attach the intended Hermes conversation and pair Dash through z0bridge before starting voice." }); return;
+      setState({ ...initial, phase: "error", note: "Attach a Hermes chat and pair Dash" });
+      starting.current = false;
+      return;
     }
     const target = { profile: conversation.profileId, session: conversation.sessionId };
     const release = microphone.acquire("live");
-    if (!release) { setState({ ...initial, phase: "error", note: `Microphone is in use by ${microphone.owner}. Stop that capture before starting Live voice.` }); return; }
-    releaseMic.current = release;
+    if (!release) {
+      setState({ ...initial, phase: "error", note: `Microphone in use by ${microphone.owner}` });
+      starting.current = false;
+      return;
+    }
+    const releaseWhenStopped = micRelease.current.hold(release);
+    releaseMic.current = releaseWhenStopped;
     call.current = null;
     attached.current = conversation;
     const generation = ++epoch.current;
     setBindingGeneration(generation);
-    starting.current = true;
     // Frozen for the call: navigating/switching chats never retargets spoken requests.
     const request = async (path: string, body?: unknown): Promise<unknown> => {
       if (path === "provider:answer") {
-        if (!object(body) || typeof body.sdp !== "string" || typeof body.secret !== "string") throw new Error("Invalid offer");
-        const response = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", headers: { authorization: `Bearer ${body.secret}`, "content-type": "application/sdp" }, body: body.sdp, signal: AbortSignal.timeout(20_000), redirect: "error" });
-        if (!response.ok) throw new Error("Realtime signaling unavailable"); return response.text();
+        if (!object(body) || typeof body.sdp !== "string" || typeof body.secret !== "string") {
+          throw new VoiceAccessDenied(voiceConnectionError("sdp"));
+        }
+        let response: Response;
+        try {
+          response = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", headers: { authorization: `Bearer ${body.secret}`, "content-type": "application/sdp" }, body: body.sdp, signal: AbortSignal.timeout(20_000), redirect: "error" });
+        } catch { throw new VoiceAccessDenied(voiceConnectionError("sdp")); }
+        if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(voiceConnectionError("token"));
+        if (!response.ok) throw new VoiceAccessDenied(voiceConnectionError("sdp"));
+        let sdp: string;
+        try { sdp = await response.text(); } catch { throw new VoiceAccessDenied(voiceConnectionError("sdp")); }
+        if (!sdp.startsWith("v=0")) throw new VoiceAccessDenied(voiceConnectionError("sdp"));
+        return sdp;
       }
       let token: string;
-      try { token = await voiceAccessToken(settings); } catch (error) { throw new VoiceAccessDenied(error instanceof Error ? error.message : "Voice identity unavailable"); }
+      try { token = await voiceAccessToken(settings); }
+      catch { throw new VoiceAccessDenied(voiceConnectionError("token")); }
       const response = await fetch(`https://0.taila30dc.ts.net:8791${path}`, { method: body === undefined ? "GET" : "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000), redirect: "error" });
-      if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(`Voice broker: HTTP ${response.status}. The separate z0live:voice grant/introspection must be reviewed.`);
+      if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(voiceConnectionError("token"));
       if (!response.ok) throw new Error("Voice broker request refused"); return response.json();
     };
     // Bootstrap is authenticated independently using the existing Dash identity, not an owner bearer.
     try {
       setState({ ...initial, phase: "connecting" });
-      const response = await fetch(`http://${settings.address}/voice/bootstrap`, { method: "POST", headers: { authorization: `Bearer ${await executionToken(settings)}`, "content-type": "application/json" }, body: JSON.stringify(target), signal: AbortSignal.timeout(8000), redirect: "error" });
-      if (!response.ok) throw new Error(`Dash /voice/bootstrap: HTTP ${response.status}. ${response.status === 404 ? "Running bridge lacks native voice bootstrap." : response.status === 503 ? "Native voice is not enabled on the running bridge." : "Review Dash identity and the exact attached target."}`);
+      let bootstrapToken: string;
+      try { bootstrapToken = await executionToken(settings); }
+      catch { throw new VoiceAccessDenied(voiceConnectionError("token")); }
+      const response = await fetch(`http://${settings.address}/voice/bootstrap`, { method: "POST", headers: { authorization: `Bearer ${bootstrapToken}`, "content-type": "application/json" }, body: JSON.stringify(target), signal: AbortSignal.timeout(8000), redirect: "error" });
+      if (!response.ok) {
+        throw new Error(response.status === 401 || response.status === 403 ? voiceConnectionError("token") :
+          response.status === 404 ? "Bridge lacks native voice" :
+          response.status === 503 ? "Native voice disabled on bridge" : "Voice bootstrap failed");
+      }
       const bootstrap: unknown = await response.json();
-      if (!object(bootstrap) || bootstrap.profile !== target.profile || bootstrap.session !== target.session || bootstrap.ready !== true) throw new Error("Voice bootstrap did not confirm this exact profile/session. No call started.");
+      if (!object(bootstrap) || bootstrap.profile !== target.profile || bootstrap.session !== target.session || bootstrap.ready !== true) throw new Error("Voice target not confirmed");
       if (generation !== epoch.current) return;
       if (AppState.currentState !== "active") throw new Error("Dash is backgrounded");
       const cursorKey = `dash.voice.inbox.${settings.identity.credentialId}`;
-      const controller = new ContinuousVoice({ request, peer: createVoicePeer, changed: next => {
+      const controller = new ContinuousVoice({ request, peer: async (event, ready, lost) => {
+        try { return protectVoicePeer(await createVoicePeer(event, ready, lost)); }
+        catch (error) {
+          throw new VoiceAccessDenied(voiceConnectionError(
+            error instanceof Error && /permission denied/i.test(error.message) ? "permission" : "webrtc",
+          ));
+        }
+      }, changed: next => {
         if (generation !== epoch.current) return;
-        setState(next);
+        setState(next.phase === "error" ? { ...next, note: voiceConnectionErrorLine(next.note) } : next);
       },
-        captureReleased: () => { release(); if (releaseMic.current === release) releaseMic.current = undefined; },
+        captureReleased: () => { releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined; },
         holdIntent: () => annotate.get().active,
         cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
         transcript: (id, text, start, end) => { if (annotate.get().active) addSegment({ id, text, start, end, source: "voice" }); } });
@@ -100,14 +140,16 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       if (desiredMute.current) controller.mute(true);
       await connecting;
     } catch (error) {
-      release(); if (releaseMic.current === release) releaseMic.current = undefined;
-      if (generation === epoch.current) setState({ ...initial, phase: "error", note: `${error instanceof Error ? error.message : "Native voice unavailable."} No external app opened. Retry after the blocker is resolved.` });
+      releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined;
+      if (generation === epoch.current) setState({ ...initial, phase: "error", note: voiceConnectionErrorLine(error instanceof Error ? error.message : undefined) });
     }
     finally { if (generation === epoch.current) starting.current = false; }
   };
   const stop = async () => {
     epoch.current++; starting.current = false; desiredMute.current = false;
     const controller = call.current;
+    call.current = null;
+    attached.current = null;
     const cleanup = controller?.stop();
     if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
     setState(initial); await cleanup;
@@ -156,8 +198,9 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       <View style={styles.row} onLayout={e => setBarRow(e.nativeEvent.layout.height)}>
         <View accessible={false} style={[styles.dot, { backgroundColor: pill.phase === "error" ? colors.danger : pill.phase === "connecting" || pill.phase === "muted" ? colors.warn : pill.phase === "live" ? colors.ok : colors.textFaint }]} />
         <View style={styles.status}>
-          <Text testID="voice-phase" accessibilityLiveRegion="polite" style={styles.label} numberOfLines={1}>{pill.label}</Text>
-          {pill.action === "start" && pill.detail ? <Text testID="voice-error" accessibilityRole="alert" style={styles.detail} numberOfLines={2}>{pill.detail}</Text> : null}
+          {pill.phase === "error"
+            ? <Text testID="voice-error" accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.errorLabel} numberOfLines={1}>{pill.detail ?? "Voice unavailable"}</Text>
+            : <Text testID="voice-phase" accessibilityLiveRegion="polite" style={styles.label} numberOfLines={1}>{pill.label}</Text>}
         </View>
         <View style={styles.actions}>
           {pill.action === "end" ? <Pressable
@@ -169,12 +212,19 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
             style={[styles.button, styles.muteButton]}
           ><Text style={styles.buttonText}>{pill.muteText}</Text></Pressable> : null}
           <Pressable
-            testID={pill.action === "start" ? "voice-start" : "voice-end"}
+            testID={pill.phase === "error" ? "voice-retry" : pill.action === "start" ? "voice-start" : "voice-end"}
             accessibilityRole="button"
             accessibilityLabel={pill.primaryLabel}
             onPress={pill.action === "start" ? () => void start() : () => void stop()}
             style={styles.button}
           ><Text style={pill.action === "end" ? styles.endText : styles.buttonText}>{pill.primaryText}</Text></Pressable>
+          {pill.phase === "error" ? <Pressable
+            testID="voice-end"
+            accessibilityRole="button"
+            accessibilityLabel="End voice call and dismiss error"
+            onPress={() => void stop()}
+            style={styles.button}
+          ><Text style={styles.endText}>End</Text></Pressable> : null}
         </View>
       </View>
     </View> : null}
@@ -190,8 +240,8 @@ const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
   status: { flex: 1, minWidth: 0, paddingVertical: 4 },
   label: { color: colors.text, fontSize: 12, fontWeight: "600" },
-  detail: { color: colors.textMuted, fontSize: 11, lineHeight: 14 },
-  actions: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 0 },
+  errorLabel: { color: colors.danger, fontSize: 12, fontWeight: "600" },
+  actions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
   button: { minHeight: 44, minWidth: 56, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
   muteButton: { backgroundColor: glass.quiet },
   buttonText: { color: colors.text, fontSize: 12, fontWeight: "600" },
