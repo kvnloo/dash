@@ -4,7 +4,7 @@
  * This is not a topology renderer; use TopologyBadge with declared IR ids for that.
  */
 import { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from "react-native";
+import { AccessibilityInfo, Animated, Easing, StyleSheet, View, type ViewStyle } from "react-native";
 import type { HarnessVisualLook } from "../catalog/visual";
 
 interface Props {
@@ -16,7 +16,7 @@ interface Props {
 function ModelCore({ core, color, size }: { core: string; color: string; size: number }) {
   const unit = size * 0.12;
   const line = { backgroundColor: color, borderRadius: unit / 3 };
-  const center = { alignItems: "center" as const, justifyContent: "center" as const };
+  const center: ViewStyle = { alignItems: "center", justifyContent: "center" };
   switch (core) {
     case "lattice":
       return (
@@ -86,6 +86,7 @@ export function HarnessVisualCore({ look, name, size }: Props) {
   const phase = useRef(new Animated.Value(0)).current;
   const { cadence } = look.state;
   useEffect(() => {
+    if (cadence.periodMs <= 0) return;
     let mounted = true;
     void AccessibilityInfo.isReduceMotionEnabled().then(enabled => {
       if (mounted) setReducedMotion(enabled);
@@ -94,7 +95,7 @@ export function HarnessVisualCore({ look, name, size }: Props) {
     });
     const listener = AccessibilityInfo.addEventListener("reduceMotionChanged", setReducedMotion);
     return () => { mounted = false; listener.remove(); };
-  }, []);
+  }, [cadence.periodMs]);
   useEffect(() => {
     phase.stopAnimation();
     phase.setValue(0);
