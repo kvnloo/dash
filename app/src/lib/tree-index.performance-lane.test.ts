@@ -100,7 +100,7 @@ describe("treeIndex: visible-branch performance contract", () => {
       id: "host:guard",
       label: "Do not expand",
       kind: "host",
-      get children() {
+      get children(): TreeNode["children"] {
         childrenReads++;
         throw new Error("treeIndex must not traverse unopened children");
       },
