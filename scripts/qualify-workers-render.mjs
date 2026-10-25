@@ -40,13 +40,13 @@ export default function WorkersProof() {
     <Text style={{ color: '#B4AFA3', padding: 16 }}>Delegation fixture · not a live model turn</Text>
     <WorkersStrip workers={workers} />
     <Pressable accessibilityRole="button" accessibilityLabel="Other chat" onPress={() => setSession('other')}><Text style={{ color: 'white', padding: 16 }}>Other chat</Text></Pressable>
-    <Text style={{ color: '#B4AFA3', padding: 16 }}>Unsent draft remains here.</Text>
+    <Text style={{ color: '#B4AFA3', padding: 16 }}>Isolated status view.</Text>
   </View>;
 }
 `);
   await writeFile(bootstrapPath, original.replace('import("../App")', 'import("../workers-proof")'));
   const build = Bun.spawn(['bun', 'node_modules/expo/bin/cli', 'export', '--platform', 'web', '--output-dir', '../qualification/web'], {
-    cwd: 'app', env: { ...process.env, EXPO_PUBLIC_DASH_TURBO: '1' }, stdout: Bun.file(`${out}/export.log`), stderr: 'stdout',
+    cwd: 'app', env: { ...process.env, EXPO_PUBLIC_DASH_TURBO: '1' }, stdout: Bun.file(`${out}/export.log`), stderr: Bun.file(`${out}/export-errors.log`),
   });
   assert.equal(await build.exited, 0, 'Expo export failed; see export.log');
   server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {

@@ -65,3 +65,19 @@ with disposable identity tokens and worker fixtures, not a live model turn.
 No shared Dash service was restarted, no APK was installed and no phone was
 operated. Turbo integration and physical-device acceptance remain with the
 parent/integration lane.
+
+## Executed checks
+
+- MBP `fleet-mbp-15a743159877430b`: `bun test app/src bridge/src shared`
+  **1018 passed, 1 skipped, 0 failed**, 6161 assertions across 152 files.
+  The skip is the existing environment-gated native Hermes pinned-context test.
+- Same job: full `bun run typecheck` **exit 0** (app, bridge and scripts).
+- MBP `fleet-mbp-674869ebc65744a9`: mutation **88**, threshold **80**;
+  156 mutants: 137 killed, 18 survived, 1 timeout, 0 invalid. This earlier
+  snapshot has identical production repair bytes; the later changes complete
+  test doubles and add the isolated render runner/evidence.
+- Initial fleet snapshot lacked Git metadata; initializing/indexing the owned
+  snapshot resolved the workspace-inventory fixture failure. The missing
+  AsyncStorage.getItem mock was then corrected in the test-only files above.
+- Render runner's first attempt failed before export because Bun does not accept
+  `stderr: "stdout"`; the runner now writes a separate export-errors.log.
