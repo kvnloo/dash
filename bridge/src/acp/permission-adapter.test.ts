@@ -64,7 +64,7 @@ function fixture(broker?: AcpPermissionBrokerPort, overrides: Partial<AcpPermiss
   return { adapter, replies, resolutions, timers, expire };
 }
 
-const cancelled = { jsonrpc: "2.0", result: { outcome: { outcome: "cancelled" } } };
+const cancelled: Omit<AcpPermissionResponse, "id"> = { jsonrpc: "2.0", result: { outcome: { outcome: "cancelled" } } };
 
 test("preserves both numeric and string JSON-RPC ids while uniquely correlating them", () => {
   const broker = controlledBroker();
@@ -243,7 +243,7 @@ test("broker sees only canonical choices and trusted identity, not tool data or 
   expect(f.adapter.receive(envelope)).toBe(true);
   expect(broker.requests).toHaveLength(1);
   expect(broker.requests[0]).toEqual({
-    requestId: broker.requests[0]?.requestId,
+    requestId: expect.any(String),
     principalId: "authenticated-controller",
     turnId: "turn-owned",
     sessionId: SESSION,
