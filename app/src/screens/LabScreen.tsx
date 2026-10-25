@@ -13,6 +13,7 @@ import { BotFaceLab } from "../components/BotFaceLab";
 const HERO_PHASES: OrbPhase[] = ["listening", "speaking", "thinking", "tool", "connecting", "idle"];
 import { PressScale } from "../components/PressScale";
 import { DensityPicker, useDensity } from "../components/Density";
+import { InformationDensityPicker } from "../components/InformationDensityPicker";
 import { TileGrid } from "../components/TileGrid";
 import { InteractiveTile } from "../components/InteractiveTile";
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -160,6 +161,7 @@ Hold + slide: action wheel · centre: cancel</Text>
     <SafeAreaView style={styles.root} edges={["top"]}>
       <ScreenHeader title="Component lab" compact onBack={() => navigation.goBack()} onAction={() => navigation.navigate("Trace")} action="Open trace" icon="activity" />
       <DensityPicker />
+      <InformationDensityPicker />
       <FlashList testID="lab-scroll" contentContainerStyle={styles.scroll} drawDistance={915}
         data={items} getItemType={(_item, index) => index}
         renderItem={({ item, index }) => <LabCell active={visible.has(index)}>{item}</LabCell>}
