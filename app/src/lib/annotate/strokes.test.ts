@@ -1,11 +1,49 @@
 import { describe, expect, test } from "bun:test";
 import {
-  EMPTY_DRAWING, MAX_UNDO, TOOL_CODE, addStroke, bounds, clear, eraseAlong, meanPressure, recognizeShape,
+  EMPTY_DRAWING, EMPTY_INK_CARRY, MAX_UNDO, TOOL_CODE, addStroke, bounds, carryInkUntilCommit, clear, eraseAlong, hasVisibleInk, meanPressure, recognizeShape,
   segmentDistance2, strokeHit, strokeOutline, strokeWidth, undo, type Drawing, type StrokePoint,
 } from "./strokes";
 
 const pts = (...xy: [number, number, number?][]): StrokePoint[] => xy.map(([x, y, t], i) => ({ x, y, p: 0.5, t: t ?? 1000 + i * 10 }));
 const pen = (points: StrokePoint[]) => ({ tool: "pen" as const, color: "accent" as const, pointer: "stylus" as const, points });
+
+describe("ink after S Pen lift", () => {
+  const samples = [20, 50, 0.4, 1000, 180, 140, 0.9, 1020];
+
+  test("keeps a lifted preview until its saved stroke is rendered", () => {
+    const moving = carryInkUntilCommit(EMPTY_INK_CARRY, samples, 0, "pen");
+    expect(moving.samples).toEqual(samples);
+    const lifted = carryInkUntilCommit(moving, [], 0, "pen");
+    expect(lifted).toBe(moving);
+    expect(hasVisibleInk(lifted.samples)).toBe(true);
+
+    const saved = addStroke(EMPTY_DRAWING, pen(pts([0.05, 0.1, 1000], [0.45, 0.3, 1020])));
+    expect(saved.strokes).toHaveLength(1);
+    expect(saved.strokes[0]?.points).toEqual(pts([0.05, 0.1, 1000], [0.45, 0.3, 1020]));
+    const acknowledged = carryInkUntilCommit(lifted, [], saved.strokes[0]?.id ?? 0, "pen");
+    expect(acknowledged.samples).toEqual([]);
+    expect(saved.strokes[0]?.id).toBe(1);
+  });
+
+  test("retains the pressure samples and repeated lift stays stable", () => {
+    const moving = carryInkUntilCommit({ samples: [], afterStrokeId: 4 }, samples, 4, "highlighter");
+    const held = carryInkUntilCommit(moving, [], 4, "highlighter");
+    expect(held.samples[6]).toBe(0.9);
+    expect(carryInkUntilCommit(held, [], 4, "highlighter")).toBe(held);
+    expect(carryInkUntilCommit(held, [], 5, "highlighter").samples).toEqual([]);
+  });
+
+  test("never leaves a ghost for rejected taps or eraser gestures", () => {
+    const tap = carryInkUntilCommit(EMPTY_INK_CARRY, [20, 50, 0.5, 1000, 22, 52, 0.5, 1010], 0, "pen");
+    expect(hasVisibleInk(tap.samples)).toBe(false);
+    expect(carryInkUntilCommit(tap, [], 0, "pen").samples).toEqual([]);
+    const down = carryInkUntilCommit(EMPTY_INK_CARRY, [20, 50, 0.5, 1000], 0, "pen");
+    expect(carryInkUntilCommit(down, [], 0, "pen").samples).toEqual([]);
+    const moving = carryInkUntilCommit(EMPTY_INK_CARRY, samples, 0, "pen");
+    expect(carryInkUntilCommit(moving, [], 0, "eraser").samples).toEqual([]);
+    expect(carryInkUntilCommit(EMPTY_INK_CARRY, samples, 0, "eraser").samples).toEqual([]);
+  });
+});
 
 describe("drawing edits", () => {
   test("adds strokes with sequential ids and timestamps from the points", () => {
