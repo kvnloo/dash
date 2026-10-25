@@ -77,7 +77,7 @@ test("a current streaming row updates without waking older settled rows", () => 
   expect(sameTranscriptRowProps(activeThinking, { ...activeThinking, thinking: { phase: "thinking" } })).toBe(true);
   expect(sameTranscriptRowProps(activeThinking, { ...activeThinking, thinking: { phase: "tool", tool: "terminal" } })).toBe(false);
   expect(sameTranscriptRowProps(active, { ...active, message: { ...active.message, text: "partial" } })).toBe(false);
-  expect(sameTranscriptRowProps(previous, { ...previous, detailMode: "Rich" })).toBe(false);
+  expect(sameTranscriptRowProps(previous, { ...previous, detailMode: "Full" })).toBe(false);
   expect(sameTranscriptRowProps(previous, { ...previous, harnessId: "omp" })).toBe(false);
   expect(sameTranscriptRowProps(previous, { ...previous, conversationId: "chat-2" })).toBe(false);
 });
