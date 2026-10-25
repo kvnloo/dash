@@ -4,6 +4,7 @@ import { type RefObject, memo, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { applyScopePrefix } from "../lib/global-search";
+import { appendMentionTrigger } from "../lib/composer-suggestion-request";
 import { PRESS_SCALE } from "../motion";
 import { colors, radius, space, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
@@ -38,17 +39,24 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
   const thumb = useHandedness();
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
+  const [selection, setSelection] = useState<{ value: string; offset: number } | null>(null);
+  const activeCursor = selection?.value === value ? selection.offset : value.length;
   const canSend = value.trim().length > 0;
 
+  const changeValue = (next: string) => {
+    setSelection(null);
+    onChange(next);
+  };
+
   const insertMention = () => {
-    if (!value.trim()) onChange("@");
-    else if (!value.startsWith("@") && !value.startsWith("/")) onChange(`@${value}`);
+    const next = appendMentionTrigger(value);
+    if (next !== value) changeValue(next);
     inputRef.current?.focus();
   };
 
   return (
     <View style={[styles.wrap, dock === "bottom" && styles.wrapBottom]}>
-      <ComposerSuggestions text={value} onChange={onChange} />
+      <ComposerSuggestions text={value} cursor={activeCursor} onChange={changeValue} />
 
       <GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={radius.pill} style={[styles.shell, focused && { borderWidth: 1, borderColor: colors.gold }]} contentStyle={[styles.field, thumb.row]}>
         <PressScale
@@ -64,7 +72,8 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
         <TextInput
           ref={inputRef}
           value={value}
-          onChangeText={onChange}
+          onChangeText={changeValue}
+          onSelectionChange={event => setSelection({ value, offset: event.nativeEvent.selection.start })}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           placeholder={placeholder}
