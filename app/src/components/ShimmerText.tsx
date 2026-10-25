@@ -100,6 +100,8 @@ export const ShimmerText = memo(function ShimmerText({
       cancelAnimation(progress);
       return;
     }
+    // A newly active sweep always starts at its original off-glyph phase.
+    progress.value = SHIMMER_START;
     progress.value = withRepeat(withDelay(SHIMMER_REST_MS, withTiming(SHIMMER_END, {
       duration: SHIMMER_SWEEP_MS, easing: Easing.linear,
     })), -1, false);
