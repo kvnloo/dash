@@ -73,18 +73,21 @@ describe("H-117 Dash attachment notices", () => {
   });
 
   test("Cancel, Back and backdrop share a dismiss-only gate", () => {
-    for (const source of ["Cancel", "Android Back", "backdrop"]) {
-      const events: string[] = [];
-      const act = createAttachmentNoticeController(
-        { kind: "shared-upload", count: 1 },
-        { onDismiss: () => events.push("closed"), onConfirmUpload: () => events.push("uploaded") },
-      );
-      expect(act("dismiss")).toBe(true);
-      expect(act("confirm-upload")).toBe(false);
-      expect(act("dismiss")).toBe(false);
-      expect(events).toEqual(["closed"]);
-      expect(source.length).toBeGreaterThan(0);
-    }
+    // All three entry points must dispatch the same pure dismiss action.
+    expect(component).toContain('onPress={close}');
+    expect(component).toContain('onRequestClose={close}');
+    expect(component).toContain('onAccessibilityEscape={close}');
+    expect(component).toContain('onPress={() => { dispatch(secondary.action); }}');
+
+    const events: string[] = [];
+    const act = createAttachmentNoticeController(
+      { kind: "shared-upload", count: 1 },
+      { onDismiss: () => events.push("closed"), onConfirmUpload: () => events.push("uploaded") },
+    );
+    expect(act("dismiss")).toBe(true);
+    expect(act("confirm-upload")).toBe(false);
+    expect(act("dismiss")).toBe(false);
+    expect(events).toEqual(["closed"]);
   });
 
   test("warnings and empty shared lists cannot confirm, even from a stale action", () => {
