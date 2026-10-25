@@ -1,5 +1,9 @@
-import { expect, test } from "bun:test";
-import { composerDrafts, updateComposerDraft, type ComposerDraft } from "./composer-drafts";
+import { expect, mock, test } from "bun:test";
+import type { ComposerDraft } from "./composer-drafts";
+// This file must run alone too; depending on another test's RN mock makes CI order-dependent.
+mock.module("react-native", () => ({ AppState: { currentState: "active", addEventListener() { return { remove() {} }; } } }));
+mock.module("@react-native-async-storage/async-storage", () => ({ default: { getItem: async () => null, setItem: async () => undefined } }));
+const { composerDrafts, updateComposerDraft } = await import("./composer-drafts");
 
 test("a draft and late upload completion stay bound to the original conversation across navigation", () => {
   composerDrafts.set({});
