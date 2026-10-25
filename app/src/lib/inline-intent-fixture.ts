@@ -7,9 +7,13 @@ const liveSent: { conversationId: string; intent: LiveIntent }[] = [];
 let online = true;
 mock.module("@react-native-async-storage/async-storage", () => ({ default: { multiSet: async () => {}, setItem: async () => {}, removeItem: async () => {}, getAllKeys: async () => [], getItem: async () => null } }));
 mock.module("../net/bridge", () => ({ sendChat: (payload: Parameters<typeof ChatSend>[0]) => { sent.push(payload); return online; }, sendLiveIntent: (conversationId: string, intent: LiveIntent) => { liveSent.push({ conversationId, intent }); return online; } }));
-const { sendInlineIntent } = await import("./inline-intent");
-const { store } = await import("../store/app");
-const { beginOpen, applyLiveMessage } = await import("../store/live");
+function loadFixtureModules() {
+  const { sendInlineIntent }: typeof import("./inline-intent") = require("./inline-intent");
+  const { store }: typeof import("../store/app") = require("../store/app");
+  const { beginOpen, applyLiveMessage }: typeof import("../store/live") = require("../store/live");
+  return { sendInlineIntent, store, beginOpen, applyLiveMessage };
+}
+const { sendInlineIntent, store, beginOpen, applyLiveMessage } = loadFixtureModules();
 const intent: LiveIntent = { controlId: "next", value: "inspect", label: "Inspect changes", surface: "dash-inline-genui" };
 function reset(harness = "omp", stale = false) {
   store.set({ hydrated: true, settings: null, activeId: "chat", connection: { status: "online", harnesses: [], hosts: [] }, conversations: [{ id: "chat", title: "Source", harness, sessionId: "original-session", cwd: "/owned/project", createdAt: 1, updatedAt: 2, stale, messages: [{ id: "answer", role: "assistant", state: "done", turnId: "source", text: "choice", at: 1, seq: 1 }] }] });
