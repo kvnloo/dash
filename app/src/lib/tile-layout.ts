@@ -26,9 +26,15 @@ export function radialCenter(x: number, y: number, width: number, height: number
   return { x: Math.max(inset, Math.min(width - inset, x)), y: Math.max(inset, Math.min(height - inset, y)) };
 }
 
+/** The hold wheel supports three through eight commands. Keep the recognizer and sectors in sync. */
+export function isRadialActionCountValid(count: number): boolean {
+  "worklet";
+  return count >= 3 && count <= 8;
+}
+
 export function radialSector(dx: number, dy: number, count: number, left: boolean, deadZone = 30): number {
   "worklet";
-  if (count < 4 || count > 8 || Math.hypot(dx, dy) < deadZone) return -1;
+  if (!isRadialActionCountValid(count) || Math.hypot(dx, dy) < deadZone) return -1;
   const angle = Math.atan2(dy, left ? -dx : dx) + Math.PI / 2;
   return ((Math.round(angle / (2 * Math.PI / count)) % count) + count) % count;
 }
