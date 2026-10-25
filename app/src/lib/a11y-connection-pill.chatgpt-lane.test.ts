@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   connectionPillPresentation,
   retryConnectionFromPill,
+  type ConnectionPillPresentation,
 } from "./a11y-connection-pill";
 
 describe("ConnectionPill accessibility", () => {
@@ -22,7 +23,7 @@ describe("ConnectionPill accessibility", () => {
   });
 
   test("offline without an error gives a truthful status and explicit retry", () => {
-    const expected = {
+    const expected: ConnectionPillPresentation = {
       text: "Offline · Retry connection",
       accessibilityLabel: "Bridge offline. Retry connection",
       accessibilityRole: "button",
