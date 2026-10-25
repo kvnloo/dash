@@ -141,6 +141,11 @@ function optionalText(value: unknown, max = 4096): boolean {
   return value === undefined || nonEmpty(value, max);
 }
 
+/** Paths and filenames may legitimately contain leading/trailing whitespace. */
+function nonBlankBytes(value: unknown, max: number): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= max;
+}
+
 function natural(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
@@ -152,7 +157,8 @@ function optionalNatural(value: unknown): boolean {
 function parseTarget(value: unknown): OutboxTarget | null {
   if (!isRecord(value) || !onlyKeys(value, ["harness", "hostId", "profileId", "sessionId", "cwd"])
     || !nonEmpty(value.harness) || !optionalText(value.hostId) || !optionalText(value.profileId)
-    || !optionalText(value.sessionId) || !optionalText(value.cwd)) return null;
+    || !optionalText(value.sessionId)
+    || (value.cwd !== undefined && !nonBlankBytes(value.cwd, 8192))) return null;
   return {
     harness: value.harness,
     ...(typeof value.hostId === "string" ? { hostId: value.hostId } : {}),
@@ -164,8 +170,8 @@ function parseTarget(value: unknown): OutboxTarget | null {
 
 function parseLocalFile(value: unknown): OutboxLocalFile | null {
   if (!isRecord(value) || !onlyKeys(value, ["uri", "name", "mime", "size"])
-    || !nonEmpty(value.uri, 8192) || !nonEmpty(value.name, 255)
-    || !nonEmpty(value.mime, 256) || !optionalNatural(value.size)) return null;
+    || !nonBlankBytes(value.uri, 8192) || !nonBlankBytes(value.name, 255)
+    || !nonBlankBytes(value.mime, 256) || !optionalNatural(value.size)) return null;
   return {
     uri: value.uri,
     name: value.name,
@@ -218,7 +224,7 @@ function parseOutboxRecord(value: unknown): OutboxRecord | null {
     || !optionalNatural(value.lastSentAt) || !optionalNatural(value.ackedAt)
     || !optionalNatural(value.startedAt)
     || (value.retryNeeded !== undefined && typeof value.retryNeeded !== "boolean")
-    || (value.error !== undefined && !nonEmpty(value.error, 4096))) return null;
+    || (value.error !== undefined && (typeof value.error !== "string" || value.error.length > 8192))) return null;
 
   return {
     clientId: value.clientId,
@@ -281,7 +287,7 @@ function decode(raw: string): DiskSnapshot {
 }
 
 function fileProblems(records: readonly OutboxRecord[]): OutboxRecoveryProblem[] {
-  return records.flatMap(record => (record.payload.localFiles ?? []).map(file => ({
+  return records.flatMap(record => (record.payload.localFiles ?? []).map((file): OutboxRecoveryProblem => ({
     kind: "local-file-reselect",
     clientId: record.clientId,
     turnId: record.turnId,
@@ -321,8 +327,12 @@ function checkRemovals(
   for (const item of prior) {
     const updated = remaining.get(item.clientId);
     if (!updated) {
-      if (!removed.has(item.clientId)) {
+      const reason = removed.get(item.clientId);
+      if (!reason) {
         throw new OutboxStorageError("unsafe-removal", "An unresolved outbox turn disappeared without explicit settlement or cancellation.");
+      }
+      if (reason === "canceled" && item.stage !== "queued") {
+        throw new OutboxStorageError("unsafe-removal", "A sent or acknowledged turn cannot be canceled locally. Reconcile host execution before removing it.");
       }
       continue;
     }
