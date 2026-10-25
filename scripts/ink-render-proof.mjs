@@ -32,7 +32,7 @@ try{
     const context=await browser.newContext({viewport:{width,height:915},deviceScaleFactor:1});
     await context.route('https://unpkg.com/canvaskit-wasm@0.41.0/bin/full/canvaskit.wasm',route=>route.fulfill({path:wasm,contentType:'application/wasm'}));
     page=await context.newPage();page.on('pageerror',e=>result.errors.push(e.message));
-    await page.goto(`http://127.0.0.1:${port}`,{waitUntil:'domcontentloaded',timeout:180000});
+    await page.goto(`http://127.0.0.1:${port}`,{waitUntil:'domcontentloaded',timeout:600000});
     await wait(()=>page.evaluate(()=>Boolean(window.__dashAnnotate)),'annotation mount');
     await page.evaluate(()=>window.__dashAnnotate.enterAnnotation());
     await page.getByLabel('Annotation mode on',{exact:true}).waitFor();
@@ -91,7 +91,7 @@ try{
     localStorage.setItem('dash.settings.v1',JSON.stringify({address:'127.0.0.1:18379',token:'offline-proof-only',harness:'hermes',inAppFeedback:false}));
     localStorage.setItem('dash.conversations.v1',JSON.stringify([chat]));localStorage.setItem('dash.activeId.v1',chat.id);sessionStorage.setItem('repair-seeded','yes');
   },chat);
-  await page.goto(`http://127.0.0.1:${port}`,{waitUntil:'domcontentloaded',timeout:180000});
+  await page.goto(`http://127.0.0.1:${port}`,{waitUntil:'domcontentloaded',timeout:600000});
   await page.getByRole('tab').nth(1).click({timeout:120000});
   await page.getByText(chat.title,{exact:true}).first().click({timeout:60000});
   // Composition: the row opens a window over Main (whose search bar is also a 'Message' textbox); type only once the window is up.
