@@ -248,6 +248,7 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
         try { await ensureHydrated(); } catch (error) {
           return failed("storage", `Could not hydrate outbox: ${errorText(error)}`);
         }
+        if (disposed) return failed("disposed", "Outbox disposed while hydration was pending.");
         const record = lookup(clientId);
         if (!record) return failed("not-found", "Unknown clientId.");
         if (confirmed(record.stage)) return failed("confirmed", "Bridge has already acknowledged this turn; reconcile instead.");
@@ -285,12 +286,13 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
         if (confirmed(current.stage)) {
           return { ok: true, value: { record: current, transport: "confirmed" } };
         }
+        const completedAt = now();
         const nextRecord = immutable({
           ...current,
           stage: accepted && current.stage === "queued" ? "sent" : current.stage,
           retryNeeded: !accepted,
           error: problem,
-          updatedAt: Math.max(timestamp(now()) ? now() : current.updatedAt, current.updatedAt),
+          updatedAt: timestamp(completedAt) ? Math.max(completedAt, current.updatedAt) : current.updatedAt,
         });
         const next = records.map(item => item.clientId === clientId ? nextRecord : item);
         try {
@@ -330,6 +332,7 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
       try { await ensureHydrated(); } catch (error) {
         return failed("storage", `Could not hydrate outbox: ${errorText(error)}`);
       }
+      if (disposed) return failed("disposed", "Outbox disposed while hydration was pending.");
       return { ok: true, value: records };
     },
     async enqueue(message) {
@@ -338,6 +341,7 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
         try { await ensureHydrated(); } catch (error) {
           return failed("storage", `Could not hydrate outbox: ${errorText(error)}`);
         }
+        if (disposed) return failed("disposed", "Outbox disposed while hydration was pending.");
         if (!isMessage(message)) return failed("invalid", "Missing or invalid delivery identity, target or payload.");
         if (records.some(item => item.clientId === message.clientId || item.turnId === message.turnId)) {
           return failed("duplicate", "clientId or turnId already belongs to an outbox entry.");
@@ -371,6 +375,7 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
         try { await ensureHydrated(); } catch (error) {
           return failed("storage", `Could not hydrate outbox: ${errorText(error)}`);
         }
+        if (disposed) return failed("disposed", "Outbox disposed while hydration was pending.");
         if (!identifier(receipt.clientId) || !identifier(receipt.turnId)
           || !timestamp(receipt.at) || receipt.type !== "delivery_receipt"
           || (receipt.stage !== "acked-by-bridge" && receipt.stage !== "started")) {
@@ -400,6 +405,7 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
         try { await ensureHydrated(); } catch (error) {
           return failed("storage", `Could not hydrate outbox: ${errorText(error)}`);
         }
+        if (disposed) return failed("disposed", "Outbox disposed while hydration was pending.");
         const affected = records.filter(item => !confirmed(item.stage)
           && (item.stage === "sent" || item.attempts > 0) && !item.retryNeeded);
         if (!affected.length) return { ok: true, value: 0 };
