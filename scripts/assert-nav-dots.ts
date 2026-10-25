@@ -38,7 +38,11 @@ function manhattan(r: number, g: number, b: number, t: readonly number[]): numbe
 }
 
 function isGold(r: number, g: number, b: number): boolean {
-  return manhattan(r, g, b, GOLD) <= 90 && r >= 120 && r > b + 20;
+  // The native pill is GOLD_68 over glass, not opaque GOLD_SRGB.
+  // Approx. (150, 130, 95) on dark chrome; the old <=90 color distance
+  // detected only its 1px rim and missed the 68%-opacity fill on device.
+  return r >= 110 && r > g + 11 && g > b + 14 &&
+    manhattan(r, g, b, GOLD) <= 190;
 }
 
 function isPager(r: number, g: number, b: number): boolean {
