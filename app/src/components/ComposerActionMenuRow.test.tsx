@@ -20,11 +20,43 @@ const host = (tag: "div" | "span" | "button") =>
       "aria-selected": accessibilityState?.selected,
     }, children);
 
+// Bun's module mocks persist across test files in the same process. Keep the
+// native surface used by neighboring suites, not just this rendered fixture.
+function flattenStyle(style: unknown): unknown {
+  if (!Array.isArray(style)) return style;
+  return style.reduce<Record<string, unknown>>((result, entry: unknown) => {
+    const nested = flattenStyle(entry);
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      Object.assign(result, nested);
+    }
+    return result;
+  }, {});
+}
 mock.module("react-native", () => ({
   View: host("div"),
   Text: host("span"),
   Pressable: host("button"),
-  StyleSheet: { create: <T,>(styles: T) => styles, hairlineWidth: 1 },
+  Platform: {
+    OS: "android",
+    Version: 35,
+    select: <T,>(values: { android?: T; ios?: T; native?: T; web?: T; default?: T }): T | undefined =>
+      values.android ?? values.native ?? values.default,
+  },
+  AppState: {
+    currentState: "active",
+    addEventListener: () => ({ remove() {} }),
+  },
+  StyleSheet: {
+    create: <T,>(styles: T) => styles,
+    flatten: flattenStyle,
+    hairlineWidth: 1,
+  },
+  PixelRatio: {
+    get: () => 1,
+    getFontScale: () => 1,
+    getPixelSizeForLayoutSize: (size: number) => Math.round(size),
+    roundToNearestPixel: (size: number) => size,
+  },
   BackHandler: { addEventListener: () => ({ remove() {} }) },
 }));
 mock.module("react-native-reanimated", () => ({
@@ -32,12 +64,8 @@ mock.module("react-native-reanimated", () => ({
   useSharedValue: <T,>(value: T) => ({ value }),
   runOnJS: <Args extends unknown[], Result>(callback: (...args: Args) => Result) => callback,
 }));
-mock.module("../haptics", () => ({ haptic: { select() {} } }));
-mock.module("../theme", () => ({
-  colors: { bg: "#000000", text: "#f2f2f2", textMuted: "#8b8b8b" },
-  glass: { hair: "#262626", fillChipOn: "#191919" },
-  radius: { md: 16 },
-  type: { small: {}, mono: {} },
+mock.module("../haptics", () => ({
+  haptic: { tap() {}, select() {}, success() {}, error() {} },
 }));
 
 type Touch = { y: number };
@@ -66,6 +94,13 @@ mock.module("react-native-gesture-handler", () => ({
 
 // Import only after the native mocks are registered.
 const { ComposerActionMenuRow } = await import("./ComposerActionMenuRow");
+
+test("SSR shim leaves the complete theme palette intact for other test files", async () => {
+  const { colors } = await import("../theme");
+  for (const color of [colors.text, colors.information, colors.warn, colors.ok, colors.surfaceRaised]) {
+    expect(color).toMatch(/^#[0-9a-f]{6}$/i);
+  }
+});
 
 describe("rendered ComposerActionMenuRow gesture contract", () => {
   test("holding an exact row reveals its own anchored options; sliding down and releasing selects", () => {
