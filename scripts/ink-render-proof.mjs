@@ -104,7 +104,7 @@ try{
   assert.equal(originalInk.length,1);
   // Pen mode lets ordinary touch/mouse navigation pass without discarding the root-owned ink.
   await page.getByRole('button',{name:'Pen mode: only the S Pen draws, fingers scroll',exact:true}).click();
-  await page.getByTestId('pen-mode-label').getByText('Annotate',{exact:true}).waitFor();
+  await page.getByTestId('pen-mode-label').filter({hasText:/^Annotate$/}).waitFor();
   const pillBox=await page.getByTestId('chat-window-pill').boundingBox(), trayBox=await page.getByRole('button',{name:'Pen',exact:true}).boundingBox();
   assert(pillBox&&trayBox&&trayBox.y>=pillBox.y+pillBox.height,'annotation tray must leave the mode pill visible');
   const uploads=[];
