@@ -87,12 +87,23 @@ test("real ContextGauge exposes expanded/collapsed on web, without falsifying mi
   expect(exitCode).toBe(0);
 
   const actual: unknown = JSON.parse(stdout);
-  expect(actual).toEqual([
+  const expected = [
     { role: "button", label: "Context window, unavailable", nativeExpanded: false, hasAriaExpanded: true, ariaExpanded: false, target: "unknown", presses: 1, width: 44, height: 44 },
     { role: "button", label: "Context window, unavailable", nativeExpanded: true, hasAriaExpanded: true, ariaExpanded: true, target: "unknown", presses: 1, width: 44, height: 44 },
     { role: "button", label: "Context window, approximately 65 percent", nativeExpanded: false, hasAriaExpanded: true, ariaExpanded: false, target: "chat-A", presses: 1, width: 44, height: 44 },
     { role: "button", label: "Context window, approximately 65 percent", nativeExpanded: true, hasAriaExpanded: true, ariaExpanded: true, target: "chat-A", presses: 1, width: 44, height: 44 },
     { role: "button", label: "Context window, approximately 65 percent", nativeExpanded: true, hasAriaExpanded: true, ariaExpanded: true, target: "chat-B", presses: 1, width: 44, height: 44 },
     { role: "button", label: "Context window, unavailable", nativeExpanded: true, hasAriaExpanded: true, ariaExpanded: true, target: "chat-B", presses: 1, width: 44, height: 44 },
-  ]);
+  ];
+  // Diagnose the disclosure-attribute gap, not a large array diff.
+  // A native expanded state alone cannot satisfy web accessibility.
+  expect(actual).toHaveLength(expected.length);
+  if (!Array.isArray(actual)) throw new Error("ContextGauge probe must return a case array");
+  for (let index = 0; index < expected.length; index++) {
+    const probe: unknown = actual[index];
+    if (typeof probe !== "object" || probe === null) throw new Error(`ContextGauge probe #${index + 1} is not an object`);
+    expect(Reflect.get(probe, "hasAriaExpanded")).toBe(true);
+    expect(Reflect.get(probe, "ariaExpanded")).toBe(expected[index].ariaExpanded);
+    expect(probe).toEqual(expected[index]);
+  }
 });
