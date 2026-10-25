@@ -140,11 +140,18 @@ class StdioAgent {
     return text;
   }
 
-  waitExit(timeoutMs = 2500): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
-    return Promise.race([
-      this.exit,
-      Bun.sleep(timeoutMs).then(() => { throw new Error("Permission fixture failed to exit"); }),
-    ]);
+  async waitExit(timeoutMs = 2500): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        this.exit,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Permission fixture failed to exit")), timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private kill(signal: NodeJS.Signals): void {
@@ -157,7 +164,12 @@ class StdioAgent {
     if (!this.ended) {
       this.child.stdin.end();
       this.kill("SIGTERM");
-      await Promise.race([this.exit, Bun.sleep(200)]);
+      let grace: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        this.exit,
+        new Promise<void>(resolve => { grace = setTimeout(resolve, 200); }),
+      ]);
+      clearTimeout(grace);
       if (!this.ended) this.kill("SIGKILL");
     }
     await this.waitExit();
