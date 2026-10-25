@@ -21,7 +21,8 @@ test("Pair announces enabled actions only when their actual inputs are available
 
   const withoutBootstrap = { ...ready, bootstrapToken: "  " };
   expect(pairActionState("identity", withoutBootstrap).disabled).toBe(false);
-  for (const action of ["tailscale", "sound", "code"] as const) {
+  const legacyActions: PairAction[] = ["tailscale", "sound", "code"];
+  for (const action of legacyActions) {
     expect(pairActionState(action, withoutBootstrap).disabled).toBe(true);
   }
 
