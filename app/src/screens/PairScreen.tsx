@@ -35,6 +35,7 @@ import { saveSettings, store } from "../store/app";
 import type { Settings } from "../model";
 import { colors, radius, space, type } from "../theme";
 import { screenBack } from "../lib/screen-back";
+import { pairActionState, type PairAction } from "../lib/a11y-pair-screen";
 
 const RECORD_MS = 6500;
 
@@ -47,6 +48,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
   const [identityLink, setIdentityLink] = useState(route.params?.identityLink ?? "");
   useEffect(() => { if (route.params?.identityLink) { setIdentityLink(route.params.identityLink); if (route.params.address) setComputer(route.params.address); } }, [route.params?.identityLink, route.params?.address]);
   const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<PairAction | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const claimKeyRef = useRef<Uint8Array | null>(null);
@@ -115,6 +117,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
   const pairWithSound = useCallback(async () => {
     if (busy) return;
     setBusy(true);
+    setBusyAction("sound");
     setError(null);
     setStatus("Requesting microphone…");
     try {
@@ -152,6 +155,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
       }
     } finally {
       setBusy(false);
+      setBusyAction(null);
       setStatus(null);
     }
   }, [busy, computer, bootstrapToken, connectClaim, ensureClaimKey, recorder]);
@@ -159,6 +163,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
   const pairOverTailscale = useCallback(async () => {
     if (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0) return;
     setBusy(true);
+    setBusyAction("tailscale");
     setError(null);
     try {
       setStatus(`Connecting to ${computer.trim()}…`);
@@ -170,6 +175,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
       haptic.error();
     } finally {
       setBusy(false);
+      setBusyAction(null);
       setStatus(null);
     }
   }, [busy, computer, bootstrapToken, connectClaim]);
@@ -177,6 +183,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
   const pairWithCode = useCallback(async () => {
     if (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0 || manualCode.trim().length !== 6) return;
     setBusy(true);
+    setBusyAction("code");
     setError(null);
     try {
       await finishClaim(manualCode.trim());
@@ -186,13 +193,14 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
       haptic.error();
     } finally {
       setBusy(false);
+      setBusyAction(null);
       setStatus(null);
     }
   }, [busy, computer, bootstrapToken, finishClaim, manualCode]);
 
   const pairWithIdentity = async () => {
     if (busy) return;
-    setBusy(true); setError(null);
+    setBusy(true); setBusyAction("identity"); setError(null);
     try {
       if (Platform.OS === "web") throw new Error("Use the native Dash app for z0bridge pairing. Browser WebSockets cannot send authorization headers.");
       const link = parseIdentityPairLink(identityLink);
@@ -215,8 +223,14 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
         onConnected: () => { setIdentityLink(""); haptic.success(); navigation.replace("Main"); },
       });
     } catch (error) { setError(error instanceof Error ? error.message : "Identity pairing failed"); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setBusyAction(null); }
   };
+
+  const formA11y = { computer, bootstrapToken, identityLink, manualCode, busy, activeAction: busyAction };
+  const identityA11y = pairActionState("identity", formA11y);
+  const tailscaleA11y = pairActionState("tailscale", formA11y);
+  const soundA11y = pairActionState("sound", formA11y);
+  const codeA11y = pairActionState("code", formA11y);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}><Canvas />
@@ -230,6 +244,8 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
         <GlassSurface variant="raised" borderRadius={radius.sm} style={styles.inputWrap}>
           <TextInput
             value={computer}
+            accessibilityLabel="Laptop bridge address"
+            accessibilityHint="Enter the laptop Tailscale address or MagicDNS name."
             onChangeText={setComputer}
             placeholder="100.64.0.1"
             placeholderTextColor={colors.textFaint}
@@ -243,9 +259,12 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
 
         <Text style={styles.sectionLabel}>Optional: z0bridge identity</Text>
         <TextInput value={identityLink} onChangeText={setIdentityLink} accessibilityLabel="z0bridge pairing link"
+          accessibilityHint="Optional private identity pairing link from your laptop."
           placeholder="dash://pair?v=2…" secureTextEntry autoCapitalize="none" autoCorrect={false} style={styles.inputInner} />
         <Text style={styles.hint}>Opt in only when the host enables identity. Confirming switches this app to a scoped credential in Keychain/Keystore; legacy pairing is not revoked. Bridge address above is still required.</Text>
-        <PrimaryButton onPress={() => void pairWithIdentity()} disabled={busy || !identityLink || !computer.trim()} label="Confirm z0bridge pairing" />
+        <PrimaryButton onPress={() => void pairWithIdentity()} disabled={identityA11y.disabled}
+          accessibilityState={identityA11y} accessibilityLabel="Confirm z0bridge pairing"
+          label="Confirm z0bridge pairing" />
 
         <GlassSurface variant="raised" borderRadius={radius.sm} style={styles.inputWrap}>
           <TextInput
@@ -253,6 +272,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
             onChangeText={setBootstrapToken}
             placeholder="Bootstrap token"
             accessibilityLabel="Bootstrap token"
+            accessibilityHint="Private enrollment token from your computer. Its value is hidden."
             placeholderTextColor={colors.textFaint}
             secureTextEntry
             autoCapitalize="none"
@@ -263,24 +283,32 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
         </GlassSurface>
         <Text style={styles.hint}>Transfer ~/.dash/bootstrap-token privately from your computer. Used only for enrollment; not saved.</Text>
 
-        <PrimaryButton onPress={() => void pairOverTailscale()} disabled={busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0} label={busy ? "Pairing…" : "Pair over Tailscale"} />
+        <PrimaryButton onPress={() => void pairOverTailscale()} disabled={tailscaleA11y.disabled}
+          accessibilityState={tailscaleA11y} accessibilityLabel="Pair over Tailscale"
+          label={tailscaleA11y.busy ? "Pairing…" : "Pair over Tailscale"} />
 
         <Pressable
           onPress={() => void pairWithSound()}
-          disabled={busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0}
-          style={({ pressed }) => [styles.secondary, (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0) && styles.secondaryDisabled, pressed && styles.pressed]}
+          disabled={soundA11y.disabled}
+          accessibilityRole="button"
+          accessibilityLabel="Listen for pairing sound"
+          accessibilityHint="Listens for pairing tones from your laptop speakers."
+          accessibilityState={soundA11y}
+          style={({ pressed }) => [styles.secondary, soundA11y.disabled && styles.secondaryDisabled, pressed && styles.pressed]}
         >
           <Text style={styles.secondaryText}>Listen for pairing sound</Text>
         </Pressable>
 
-        {status ? <Text style={styles.status}>{status}</Text> : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {status ? <Text style={styles.status} accessibilityLiveRegion="polite">{status}</Text> : null}
+        {error ? <Text style={styles.error} accessibilityLiveRegion="assertive"
+          accessibilityLabel="Pairing failed. Check the connection details.">{error}</Text> : null}
 
         <Text style={styles.sectionLabel}>Have a code from the computer or a link?</Text>
         <GlassSurface variant="raised" borderRadius={radius.sm} style={styles.inputWrap}>
           <TextInput
             value={manualCode}
             accessibilityLabel="Pairing code"
+            accessibilityHint="Six-character code shown on your computer."
             onChangeText={(t) => setManualCode(t.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
             placeholder="ABC123"
             placeholderTextColor={colors.textFaint}
@@ -291,13 +319,19 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
         </GlassSurface>
         <Pressable
           onPress={() => void pairWithCode()}
-          disabled={busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0 || manualCode.length !== 6}
-          style={({ pressed }) => [styles.secondary, (busy || computer.trim().length === 0 || bootstrapToken.trim().length === 0 || manualCode.length !== 6) && styles.secondaryDisabled, pressed && styles.pressed]}
+          disabled={codeA11y.disabled}
+          accessibilityRole="button"
+          accessibilityLabel="Pair with code"
+          accessibilityHint="Pairs using the six-character code from your computer."
+          accessibilityState={codeA11y}
+          style={({ pressed }) => [styles.secondary, codeA11y.disabled && styles.secondaryDisabled, pressed && styles.pressed]}
         >
           <Text style={styles.secondaryText}>Pair with code</Text>
         </Pressable>
 
-        <Pressable onPress={() => navigation.navigate("Settings", { firstRun: true })} style={styles.linkWrap}>
+        <Pressable onPress={() => navigation.navigate("Settings", { firstRun: true })}
+          accessibilityRole="link" accessibilityLabel="Enter address and token manually"
+          accessibilityHint="Opens manual connection settings." style={styles.linkWrap}>
           <Text style={styles.link}>Enter address and token manually</Text>
         </Pressable>
       </ScrollView>
@@ -352,7 +386,7 @@ const styles = StyleSheet.create({
   secondaryText: { color: colors.text, ...type.heading },
   status: { color: colors.textMuted, ...type.small, marginTop: space.md, textAlign: "center" },
   error: { color: colors.danger, ...type.small, marginTop: space.md, textAlign: "center" },
-  linkWrap: { marginTop: space.xxl, alignItems: "center" },
+  linkWrap: { marginTop: space.xxl, alignItems: "center", minHeight: 44, justifyContent: "center" },
   link: { color: colors.textMuted, ...type.body, textDecorationLine: "underline" },
   pressed: { opacity: 0.75 },
 });
