@@ -65,7 +65,7 @@ function Row({ item, selected, activate, toggle, collapse, inline, pendingChildr
           aria-expanded={node.children ? expanded : undefined}
           onAccessibilityAction={e => {
             const action = treeRowA11yAction(node, expanded, e.nativeEvent.actionName, placeholder);
-            if (action === "toggle") toggle();
+            if (action === "activate") activate();
             else if (action === "longpress") longPress?.();
           }}
           onPress={activate}
