@@ -4,8 +4,9 @@ import { clearIdentityTokens, executionToken, socketUrl } from "./bridge-auth";
 import { headerSocket } from "./native-socket";
 import { uploadAttachment, sendToPhone } from "./attachments";
 import { fetchRoster } from "./roster";
+import { fetchSessionWorkers } from "./session-workers";
 
-test("roster and attachment paths mint identity tokens and send header-only credentials", async () => {
+test("roster, workers and attachment paths mint identity tokens and send header-only credentials", async () => {
   const f = identityFixture(); const access = f.token();
   const credential = `z0bc.cred_0123456789abcdef.${"x".repeat(43)}`;
   const secretKeys: string[] = [];
@@ -25,6 +26,11 @@ test("roster and attachment paths mint identity tokens and send header-only cred
     }
     expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${access}`);
     expect(url.includes("token=")).toBe(false);
+    if (url.includes("/hermes/workers?")) {
+      expect(new URL(url).searchParams.get("profile")).toBe("hermes:session:clean:parent/1");
+      expect(new URL(url).searchParams.get("session")).toBe("parent/1");
+      return Response.json({ workers: [{ id: "child", title: "Check tests", phase: "tool", tool: "terminal", startedAt: 10, lastActivityAt: 20 }] });
+    }
     if (url.endsWith("/roster")) return Response.json({ hosts: [] });
     if (url.endsWith("/share")) return Response.json({ ok: true, message: "fixture only; no sharing invoked" });
     return Response.json({ id: "a".repeat(32), name: "test.txt", mime: "text/plain", size: 4 });
@@ -32,6 +38,9 @@ test("roster and attachment paths mint identity tokens and send header-only cred
   try {
     clearIdentityTokens();
     expect(await fetchRoster(settings)).toEqual([]);
+    expect(await fetchSessionWorkers(settings, "hermes:session:clean:parent/1", "parent/1", new AbortController().signal)).toEqual([
+      { id: "child", title: "Check tests", phase: "tool", tool: "terminal", startedAt: 10, lastActivityAt: 20 },
+    ]);
     expect((await uploadAttachment(settings, { uri: "unused", name: "test.txt", mime: "text/plain", blob: new Blob(["test"]) }, fetch)).name).toBe("test.txt");
     expect((await sendToPhone(settings, "/fixture/test.txt", fetch)).ok).toBe(true);
     expect(minted).toBe(1);
