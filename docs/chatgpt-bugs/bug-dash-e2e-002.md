@@ -41,3 +41,11 @@ The new regression test imports the real ContextGauge from the producer module i
 ## Unverified / blocked
 
 The actual web DOM, screen-reader announcement, real bridge pairing, offline/ended lifecycle, phone hardware behavior and CI outcomes are **not verified** in this ChatGPT-only lane. ContextCard.tsx is Hermes-owned and not in this issue's write allowlist, so the production patch must be applied by Hermes. The adjacent test intentionally exposes the gap until that happens. No new production module is needed, and no other task's files should change.
+
+## PR #257 composed-lane rework (DASH3-FIX-257, 2026-10-25)
+
+- Owner-reported MBP composed-lane gate: `bun test app/src/lib/bug-dash-e2e-002.chatgpt-lane.test.ts` fails at the original array `toEqual` because the rendered `ContextGauge` JSX omits explicit `aria-expanded`. The reported composed revision `eaeca82` was not accessible as a GitHub commit through this connector, so no claim is made about that revision's entire tree.
+- Re-read `app/src/components/ContextCard.tsx` on `integrate/chatgpt-lane-20261025` and on this PR's head. Both still pass `accessibilityState={{ expanded: control.open }}` only. `PressScale.tsx` spreads remaining props to `Pressable`, so the exact producer-side attribute addition documented above remains sufficient for the source-level contract.
+- Updated the **owned** regression to assert the explicit attribute presence and value per case before comparing the rest of the production-rendered props, replacing the opaque six-object array diff. It must remain **red** until the real producer changes. Do not mock an ARIA attribute into existence, drop the web requirement, map a missing reading to 0%, or substitute a new conversation identity.
+- **Write-scope blocker:** `app/src/components/ContextCard.tsx` is a Hermes-owned hot file, not one of PR #257's two allowed files. Only Hermes may apply the one-attribute fix there. This PR cannot make the real web gauge emit the attribute without violating the owner-approved disjoint file scope.
+- Hermes must run the dedicated test before and after applying that source fix, then the full test/typecheck/lint/mutation commands and actual Expo-web accessibility, session-isolation, and native device checks above. No runtime or device test was performed here.
