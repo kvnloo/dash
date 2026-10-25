@@ -260,10 +260,9 @@ function Tray({ onSend }: { onSend(keep: boolean): void }): React.JSX.Element {
   const s = annotate.use(x => x);
   const busy = s.status === "capturing" || s.status === "sending";
   const count = s.drawing.strokes.length;
-  // The tray can hop to the top so it never hides the part of the screen being marked.
-  const [top, setTop] = useState(true);
+  // Reserve the navigation pill band; never relocate the tray onto the composer or IME.
   return (
-    <View style={[styles.tray, top ? { top: insets.top + space.sm } : { bottom: insets.bottom + space.sm }]} {...overlayProps}>
+    <View style={[styles.tray, { top: insets.top + 48 + space.sm }]} {...overlayProps}>
       {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `Sending to ${s.sink ?? "chat"}…`} /> : null}
       {s.status === "error" && s.error ? <Text accessibilityRole="alert" style={styles.error}>{s.error}</Text> : null}
       <View style={[styles.row, thumb.row]}>
@@ -276,7 +275,6 @@ function Tray({ onSend }: { onSend(keep: boolean): void }): React.JSX.Element {
         <Chip label="Clear" a11y="Clear" disabled={count === 0} onPress={clearStrokes} />
         <Chip label={s.penMode ? "S Pen ✓" : "S Pen"} a11y="Pen mode: only the S Pen draws, fingers scroll" selected={s.penMode} onPress={() => setPenMode(!s.penMode)} />
         <HoldToTalk />
-        <Chip label="⇅" a11y={top ? "Move tray to the bottom" : "Move tray to the top"} onPress={() => setTop(!top)} />
         <Chip label="✕" a11y="Discard annotation" onPress={exitAnnotation} />
         <Chip label="Keep" a11y="Send and keep drawing" disabled={busy || count === 0} onPress={() => onSend(true)} />
         <Chip label={busy ? "…" : "Send"} a11y="Send annotation" primary disabled={busy || count === 0} onPress={() => onSend(false)} />

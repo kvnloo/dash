@@ -104,13 +104,16 @@ try{
   assert.equal(originalInk.length,1);
   // Pen mode lets ordinary touch/mouse navigation pass without discarding the root-owned ink.
   await page.getByRole('button',{name:'Pen mode: only the S Pen draws, fingers scroll',exact:true}).click();
+  await page.getByTestId('pen-mode-label').getByText('Annotate',{exact:true}).waitFor();
+  const pillBox=await page.getByTestId('chat-window-pill').boundingBox(), trayBox=await page.getByRole('button',{name:'Pen',exact:true}).boundingBox();
+  assert(pillBox&&trayBox&&trayBox.y>=pillBox.y+pillBox.height,'annotation tray must leave the mode pill visible');
   const uploads=[];
   await context.route('http://127.0.0.1:18379/attachments?*',async route=>{
     const request=route.request(), bytes=request.postDataBuffer(), name=new URL(request.url()).searchParams.get('name');
     uploads.push({name,size:bytes?.length??0});
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'1234567890abcdef1234567890abcdef',name,mime:'image/png',size:bytes?.length??0})});
   });
-  const phrase=page.getByText('Circle this exact phrase',{exact:true});const box=await phrase.boundingBox();assert(box);
+  const phrase=page.getByTestId('transcript-viewport').getByText('Circle this exact phrase',{exact:true});const box=await phrase.boundingBox();assert(box);
   const pen=await context.newCDPSession(page), cx=box.x+box.width/2, cy=box.y+box.height/2, rx=box.width/2+10, ry=box.height/2+12;
   await pen.send('Input.dispatchMouseEvent',{type:'mousePressed',x:cx+rx,y:cy,button:'left',buttons:1,clickCount:1,pointerType:'pen',force:0.7});
   for(let i=1;i<=64;i++){const a=i*Math.PI/32;await pen.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:cx+rx*Math.cos(a),y:cy+ry*Math.sin(a),button:'left',buttons:1,pointerType:'pen',force:0.7});}
