@@ -1,13 +1,14 @@
 // Annotation mode: draw over whatever screen is showing, talk, and send it to the
 // agent as one message (composited screenshot + strokes JSON + marked transcript).
 //
-// Entry: Options → Annotate, or an S Pen touch while pen mode is on.
+// Entry: Options → Annotate, the UI pill, or an S Pen side-button press. Pen contact alone never enters.
 // No page-global long press: row holds keep their own actions. The tray, frame
 // and preview are siblings outside it so a thumb on the mic never cancels the pen.
 
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image, PixelRatio, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { Image, PixelRatio, Platform, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { requireOptionalNativeModule } from "expo-modules-core";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { debugNavigationRef } from "../../debug/nav";
@@ -15,12 +16,13 @@ import { haptic } from "../../haptics";
 import { annotationDoc, annotationSendMode, attachmentNames, composeMessage } from "../../lib/annotate/compose";
 import { uploadBytes } from "../../lib/annotate/io";
 import { useRecordedSpeech } from "../../lib/useRecordedSpeech";
-import { appendInkSample, pointerKind, pressureOf, routePointer, stylusEnters } from "../../lib/annotate/pointer";
+import { appendInkSample, pointerKind, pressureOf, routePointer } from "../../lib/annotate/pointer";
+import { subscribeStylusButton, type StylusButtonSource } from "../../lib/stylus-mode";
 import { recognizeShape, type InkColor, type PointerKind, type StrokePoint, type Tool } from "../../lib/annotate/strokes";
 import { useHandedness } from "../../lib/useHandedness";
 import {
   addSegment, annotate, clearStrokes, commitStroke, currentSink, enterAnnotation, eraseStrokes, exitAnnotation, finishSend,
-  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, undoStroke,
+  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, undoStroke, stylusButton,
 } from "../../store/annotate";
 import { store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
@@ -57,6 +59,16 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const [ink, setInk] = useState<InkModule | null>(null);
   const [inkError, setInkError] = useState<string>();
   const captureTarget = useRef<View>(null);
+
+  useEffect(() => {
+    // DashStylus is unavailable in Expo Go and older APKs; manual mode still works.
+    if (Platform.OS !== "android") return;
+    try {
+      return subscribeStylusButton(requireOptionalNativeModule<StylusButtonSource>("DashStylus"), stylusButton);
+    } catch {
+      // Optional native-module lookup can fail on incompatible dev clients.
+    }
+  }, []);
 
   const live = useSharedValue<number[]>([]);
   const activeSv = useSharedValue(false);
@@ -102,13 +114,9 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const gesture = useMemo(() => {
     const draw = Gesture.Pan()
       .manualActivation(true)
-      .enabled((active || penMode) && !inkError)
+      .enabled(active && !inkError)
       .onTouchesDown((e, manager) => {
         const kind = pointerKind(e.pointerType);
-        if (stylusEnters(kind, penSv.value, activeSv.value)) {
-          activeSv.value = true;
-          runOnJS(enterAnnotation)();
-        }
         if (!activeSv.value || routePointer(kind, penSv.value, e.numberOfTouches) === "pass") { manager.fail(); return; }
         const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
         if (!point) { manager.fail(); return; }
