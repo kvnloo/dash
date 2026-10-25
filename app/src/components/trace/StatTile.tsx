@@ -17,7 +17,7 @@ export type StatVariant = "number" | "meter" | "spark";
 export type Segment = { n: number; color: string; label: string };
 
 
-export function StatTile({ label, value, sub, tone = tc.text, variant = "number", segments, evidenceSegments, series, replay = 0 }: {
+export function StatTile({ label, value, sub, tone = tc.text, variant = "number", segments, evidenceSegments, evidenceTotal, series, replay = 0 }: {
   label: string;
   value: number;
   sub?: string;
@@ -27,6 +27,8 @@ export function StatTile({ label, value, sub, tone = tc.text, variant = "number"
   segments?: Segment[];
   /** Independent source-backed counts for non-meter variants; does not add a segment gesture. */
   evidenceSegments?: Segment[];
+  /** Denominator for evidenceSegments when the tile value represents only a subset. */
+  evidenceTotal?: number;
   /** spark: values over time. */
   series?: number[];
   replay?: number;
@@ -36,7 +38,7 @@ export function StatTile({ label, value, sub, tone = tc.text, variant = "number"
   const shown = focus !== null && segments?.[focus] ? segments[focus].n : value;
   const { sizing } = useDensity();
   const { level } = useInformationDetail();
-  const details = projectStatInformation(level, { value, segments: evidenceSegments ?? segments, series });
+  const details = projectStatInformation(level, { value, segments: evidenceSegments ?? segments, segmentTotal: evidenceTotal, series });
   const summary = [label + ": " + value, sub, ...details.map(line => line.label + ": " + line.value)].filter(Boolean).join(". ");
   return (
     <InteractiveTile
