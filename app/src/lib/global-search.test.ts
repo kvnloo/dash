@@ -137,6 +137,80 @@ describe("runGlobalSearch /live", () => {
   });
 });
 
+describe("live slash evidence and activation safety", () => {
+  test("only running paired-host sessions are listed, not parked or blank session IDs", () => {
+    const host: HostInfo = {
+      ...liveOmp,
+      agents: [
+        ...liveOmp.agents,
+        { id: "omp:parked", name: "OMP parked", kind: "omp", status: "available", sessionId: "parked", cwd: "/work/parked" },
+        { id: "omp:blank", name: "OMP blank", kind: "omp", status: "running", sessionId: "  " },
+        { id: "codex:parked", name: "Codex parked", kind: "codex", status: "available", sessionId: "codex-id" },
+      ],
+    };
+    const results = runGlobalSearch({ query: "/live", conversations: [], harnesses, hosts: [host, groot] });
+    expect(results).toHaveLength(1);
+    const row = results[0];
+    if (row?.kind !== "conversation") throw new Error("expected one running catalog session");
+    expect(row.conversation.sessionId).toBe("01liveomp");
+    expect(row.conversation.targetHostId).toBe("mbp");
+    expect(row.conversation.profileId).toBe("omp:aaa");
+  });
+
+  test("colliding synthetic live IDs fail closed instead of activating an arbitrary profile", () => {
+    const running = liveOmp.agents.find((agent) => agent.id === "omp:aaa");
+    if (!running) throw new Error("missing running fixture");
+    const host: HostInfo = {
+      ...liveOmp,
+      agents: [
+        { ...running, id: "omp:first", cwd: "/work/first" },
+        { ...running, id: "omp:second", cwd: "/work/second" },
+        { ...running, id: "omp:unique", sessionId: "different-session", cwd: "/work/different" },
+      ],
+    };
+    const results = runGlobalSearch({ query: "/live", conversations: [], harnesses, hosts: [host] });
+    expect(results).toHaveLength(1);
+    const row = results[0];
+    if (row?.kind !== "conversation") throw new Error("expected unambiguous live session");
+    expect(row.conversation.sessionId).toBe("different-session");
+    expect(row.conversation.profileId).toBe("omp:unique");
+    expect(row.conversation.targetHostId).toBe("mbp");
+  });
+
+  test("live search selects a same-host chat rather than a remote chat sharing its session ID", () => {
+    const remote: Conversation = {
+      id: "remote-chat",
+      harness: "omp",
+      title: "remote workspace",
+      createdAt: now,
+      updatedAt: now,
+      targetHostId: "another-host",
+      profileId: "omp:aaa",
+      sessionId: "01liveomp",
+      messages: [],
+    };
+    const local: Conversation = {
+      ...remote,
+      id: "paired-chat",
+      title: "paired workspace",
+      targetHostId: "mbp",
+      messages: [{ id: "u1", role: "user", text: "continue locally", at: now }],
+    };
+    const results = runGlobalSearch({
+      query: "/live",
+      conversations: [remote, local],
+      harnesses,
+      hosts: [liveOmp, groot],
+    });
+    expect(results).toHaveLength(1);
+    const row = results[0];
+    if (row?.kind !== "conversation") throw new Error("expected paired conversation");
+    expect(row.conversation.id).toBe("paired-chat");
+    expect(row.conversation.sessionId).toBe("01liveomp");
+    expect(row.conversation.messages).toEqual(local.messages);
+  });
+});
+
 describe("search uses bridge evidence", () => {
   test("an empty connection has no invented bots, projects, or resources", () => {
     for (const query of ["", "@bots", "@product", "/skill", "/plugin", "/tool", "/file"]) {

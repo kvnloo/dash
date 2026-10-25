@@ -211,8 +211,22 @@ export function runGlobalSearch(params: {
   }
 
   if (parsed.mode === "slash" && parsed.scope === "live") {
-    const listed = mergeLiveConversations([], (params.hosts ?? []).filter((host) => host.online), Date.now());
+    // A stale sessionId on an available profile is not proof of a running session.
+    // Keep the same roster projection as Chats, restricted to running paired-host agents.
+    const runningHosts = (params.hosts ?? [])
+      .filter((host) => host.self && host.online)
+      .map((host) => ({
+        ...host,
+        agents: host.agents.filter((agent) => agent.status === "running" && Boolean(agent.sessionId?.trim())),
+      }));
+    const listed = mergeLiveConversations([], runningHosts, Date.now());
+
+    // The store uses the synthetic id as its activation key. If two profiles
+    // report that same key, neither is safe to open from search.
+    const idCounts = new Map<string, number>();
+    for (const live of listed) idCounts.set(live.id, (idCounts.get(live.id) ?? 0) + 1);
     for (const live of listed) {
+      if (idCounts.get(live.id) !== 1) continue;
       const conversation = findLiveConversation(params.conversations, live) ?? live;
       const harnessName = params.harnesses.find((h) => h.id === conversation.harness)?.name ?? conversation.harness;
       const preview = conversationPreview(conversation);
