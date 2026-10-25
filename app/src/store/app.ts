@@ -612,6 +612,9 @@ export function parkUnsentTurn(turnId: string): boolean {
   if (!where) return false;
   const message = store.get().conversations.find((c) => c.id === where.conversationId)?.messages.find((m) => m.id === where.messageId);
   if (message?.role !== "assistant" || message.state !== "streaming") return false;
+  // A bridge delivery receipt (started/queued/steered) proves the host already has
+  // this turn; requeueing it locally would send the same prompt twice.
+  if (message.delivery) return false;
   updateMessage(where.conversationId, where.messageId, parkMessage);
   enqueue(where.conversationId, turnId);
   return true;

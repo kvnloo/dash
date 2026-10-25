@@ -1,6 +1,6 @@
 /**
- * Pinned from kvnloo/aodl@8e41ef024262339d28a968d71113fc52819d4bd4
- * harnesses/catalog.json blob daecbb11a30af9ca4975912455576bcb10a7952c
+ * Pinned from kvnloo/aodl@55db6314f9e05c145dc47710ea6a7dba21d5af60
+ * harnesses/catalog.json blob 9a16a928524088ade7518ae2f0d7dd25121668c8
  * Do not fetch at runtime. Unknown ids fail closed.
  */
 import type { AgentInfo, HostInfo } from "../../../shared/protocol";

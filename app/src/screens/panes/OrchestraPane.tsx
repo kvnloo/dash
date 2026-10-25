@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useWindowDimensions } from "react-native";
 import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
 import { OrchestraGraph } from "../../components/OrchestraGraph";
+import { AodlCatalogNetwork } from "../../components/AodlCatalogNetwork";
 import { WorkspaceActions } from "../../components/WorkspaceHeader";
 import { debugUi } from "../../debug/ui-store";
 import { isDebugActive } from "../../debug/expose";
@@ -38,6 +39,7 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
       if ("conversation" in result) navigation.navigate("Chat");
     }
   }} actions={<WorkspaceActions navigation={navigation} />}>
+    <AodlCatalogNetwork />
     <TraceEntryCard onOpen={() => navigation.navigate("Trace")} />
   </OrchestraGraph>;
 }

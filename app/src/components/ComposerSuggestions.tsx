@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
-import { parseSuggestionInventory, type SuggestionInventory } from "../../../shared/suggestions";
 import { composerSuggestions, composerTrigger, insertSuggestion } from "../lib/composer-suggestions";
+import {
+  EMPTY_SUGGESTIONS, currentSuggestionLoad, loadSuggestionInventory,
+  selectSuggestionTarget, suggestionRequestKey, type SuggestionLoadState,
+} from "../lib/composer-suggestion-request";
 import { store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { PressScale } from "./PressScale";
 
-const EMPTY: SuggestionInventory = { commands: [], files: [] };
-
+/** Shared by the Main search/message dock and by the open Chat composer. */
 export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, onChange, onUsage }: {
   text: string; cursor?: number; harness?: string; cwd?: string; onChange(text: string): void; onUsage?(): void;
 }) {
@@ -15,42 +17,73 @@ export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, 
   const connection = store.use(s => s.connection);
   const conversations = store.use(s => s.conversations);
   const trigger = composerTrigger(text, cursor);
-  const harnessId = harness ?? settings?.harness ?? connection.harnesses[0]?.id ?? "hermes";
-  const directory = cwd ?? settings?.cwd ?? connection.cwd;
+  const target = selectSuggestionTarget({
+    chatHarness: harness,
+    selectedHarness: settings?.harness,
+    connectedHarness: connection.harnesses[0]?.id,
+    chatCwd: cwd,
+    selectedCwd: settings?.cwd,
+    connectedCwd: connection.cwd,
+  });
   const address = settings?.address;
   const token = settings?.token;
+  const source = address && token ? { ...target, address, token } : null;
+  const key = suggestionRequestKey(source);
   const active = trigger !== null;
-  const [state, setState] = useState<{ inventory: SuggestionInventory; loading: boolean; error?: string }>({ inventory: EMPTY, loading: false });
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<SuggestionLoadState>({ key: null, inventory: EMPTY_SUGGESTIONS, loading: false });
+
   useEffect(() => {
-    if (!active) return;
-    if (!address || !token) { setState({ inventory: EMPTY, loading: false, error: "Pair with your computer to load commands and workspace files." }); return; }
+    if (!active) {
+      setState({ key: null, inventory: EMPTY_SUGGESTIONS, loading: false });
+      return;
+    }
+    if (!address || !token) {
+      setState({ key: null, inventory: EMPTY_SUGGESTIONS, loading: false, error: "Pair with your computer to load commands and workspace files." });
+      return;
+    }
+
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20000);
-    setState({ inventory: EMPTY, loading: true });
-    const query = `harness=${encodeURIComponent(harnessId)}${directory ? `&cwd=${encodeURIComponent(directory)}` : ""}`;
-    void fetch(`http://${address}/suggestions?${query}`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }).then(async response => {
-      if (!response.ok) throw new Error(response.status === 404 ? "Update the paired bridge to load suggestions." : "Could not load suggestions. Check the paired bridge.");
-      return parseSuggestionInventory(await response.json());
-    }).then(inventory => { if (!controller.signal.aborted) setState({ inventory, loading: false }); }, error => {
-      if (!controller.signal.aborted) setState({ inventory: EMPTY, loading: false, error: error instanceof Error ? error.message : "Could not reach the bridge." });
-    }).finally(() => clearTimeout(timer));
-    const timeout = setTimeout(() => setState(previous => previous.loading ? { inventory: EMPTY, loading: false, error: "Suggestions timed out. Check the paired bridge and try again." } : previous), 20000);
-    return () => { controller.abort(); clearTimeout(timer); clearTimeout(timeout); };
-  }, [active, harnessId, directory, address, token]);
+    setState({ key, inventory: EMPTY_SUGGESTIONS, loading: true });
+    const timeout = setTimeout(() => {
+      controller.abort();
+      setState(previous => previous.key === key && previous.loading
+        ? { key, inventory: EMPTY_SUGGESTIONS, loading: false, error: "Suggestions timed out. Check the paired bridge and try again." }
+        : previous);
+    }, 20000);
+
+    void loadSuggestionInventory({ address, token, harness: target.harness, cwd: target.cwd }, controller.signal).then(
+      inventory => {
+        if (!controller.signal.aborted) setState({ key, inventory, loading: false });
+      },
+      error => {
+        if (!controller.signal.aborted) setState({
+          key, inventory: EMPTY_SUGGESTIONS, loading: false,
+          error: error instanceof Error ? error.message : "Could not reach the bridge.",
+        });
+      },
+    ).finally(() => clearTimeout(timeout));
+    return () => { controller.abort(); clearTimeout(timeout); };
+  }, [active, key, address, token, target.harness, target.cwd, attempt]);
+
   if (!trigger) return null;
-  const rows = composerSuggestions(trigger, state.inventory, conversations, connection.hosts);
-  const warning = state.error ?? (trigger.prefix === "/" ? state.inventory.commandError : state.inventory.fileError);
+  // The render immediately after a chat/harness/cwd/pairing switch must never show old rows.
+  const current = currentSuggestionLoad(key, state);
+  const rows = composerSuggestions(trigger, current.inventory, conversations, connection.hosts);
+  const warning = current.error ?? (trigger.prefix === "/" ? current.inventory.commandError : current.inventory.fileError);
+
   return <View style={styles.panel} accessibilityLabel="Composer suggestions">
-    <Text style={styles.heading}>{trigger.prefix === "/" ? `${harnessId} commands` : "Mention a file, session, bot or agent"}</Text>
-    {state.loading ? <View style={styles.loading}><ActivityIndicator size="small" color={colors.gold} /><Text style={styles.detail}>Loading from bridge…</Text></View> : null}
+    <Text style={styles.heading}>{trigger.prefix === "/" ? `${target.harness} commands` : "Mention a file, session, bot or agent"}</Text>
+    {current.loading ? <View style={styles.loading}><ActivityIndicator size="small" color={colors.gold} /><Text style={styles.detail}>Loading from bridge…</Text></View> : null}
     {warning ? <Text accessibilityRole="alert" style={styles.detail}>{warning}</Text> : null}
+    {warning && source ? <PressScale accessibilityRole="button" accessibilityLabel="Retry loading suggestions" onPress={() => setAttempt(value => value + 1)} style={styles.retry}><Text style={styles.retryText}>Retry suggestions</Text></PressScale> : null}
     <ScrollView keyboardShouldPersistTaps="always" style={styles.list}>
       {onUsage && trigger.prefix === "/" && "usage".startsWith(trigger.query) ? <PressScale accessibilityRole="button" accessibilityLabel="/usage" onPress={onUsage} style={styles.row}><Text style={styles.label}>/usage</Text><Text style={styles.detail}>This chat’s context and account quotas</Text></PressScale> : null}
       {rows.filter(row => !onUsage || row.insert !== "/usage").map(row => <PressScale key={row.id} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => onChange(insertSuggestion(text, trigger, row.insert))} style={styles.row}>
         <Text numberOfLines={1} style={styles.label}>{row.label}</Text><Text numberOfLines={1} style={styles.detail}>{row.detail}</Text>
       </PressScale>)}
     </ScrollView>
-    {!state.loading && !warning && rows.length === 0 ? <Text style={styles.detail}>{trigger.prefix === "/" ? "No matching commands advertised by this harness." : "No matching files, sessions, bots or agents. Try another name."}</Text> : null}
+    {!current.loading && !warning && rows.length === 0 ? <Text style={styles.detail}>{trigger.prefix === "/" ? "No matching commands advertised by this harness." : "No matching files, sessions, bots or agents. Try another name."}</Text> : null}
   </View>;
 }
 const styles = StyleSheet.create({
@@ -61,4 +94,6 @@ const styles = StyleSheet.create({
   label: { ...type.body, color: colors.text },
   detail: { ...type.small, color: colors.textMuted },
   loading: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  retry: { minHeight: 44, alignSelf: "flex-start", justifyContent: "center", paddingHorizontal: space.md },
+  retryText: { ...type.small, color: colors.gold },
 });
