@@ -97,10 +97,10 @@ test("context-only reads never require the usage endpoint", async () => {
   expect(paths).toEqual(["/chat/context"]);
 });
 
-for (const [status, expected] of [
-  [401, "Context access denied. Reconnect this computer."],
-  [500, "Could not read context. Retry when connected."],
-] as const) {
+for (const { status, expected } of [
+  { status: 401, expected: "Context access denied. Reconnect this computer." },
+  { status: 500, expected: "Could not read context. Retry when connected." },
+]) {
   test(`usage HTTP ${status} preserves real failures without falling back`, async () => {
     const paths: string[] = [];
     await withFetch(url => {
