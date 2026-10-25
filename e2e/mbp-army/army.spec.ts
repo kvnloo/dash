@@ -169,8 +169,13 @@ test.describe('ephemeral ACP regression',()=>{
  test('a missing roster row must not terminate a bridge-owned running turn',async({page,bridge})=>{
   await openChat(page,bridge);await send(page,'ARMY_HANG ephemeral ACP regression');
   await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
-  // Wait for at least one real subsequent roster snapshot. The turn is still bridge-owned.
-  await page.waitForTimeout(5500);
+  // A fixed 5.5 s sleep missed the real 10 s roster poll and could false-green.
+  // Observe an actual authenticated response, then let its React update paint.
+  await page.bringToFront();
+  const roster=await page.waitForResponse(response=>response.url().startsWith(`http://127.0.0.1:${bridge.port}/roster`)&&response.status()===200,{timeout:45000});
+  await roster.finished();
+  await page.waitForTimeout(500);
+  await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
   await composer(page).fill('queue behind still-running bridge turn');
   await expect(page.getByRole('button',{name:'Queue',exact:true})).toBeEnabled();
   await expect(page.getByText('This chat has ended on the host. Its saved history is still on this phone.',{exact:true})).toHaveCount(0);
