@@ -131,6 +131,15 @@ describe("H-117 Dash attachment notices", () => {
     expect(component).not.toContain("Alert.alert");
   });
 
+  test("modal accessibility props stay on the native View, outside GlassSurface", () => {
+    expect(component).toMatch(
+      /<View\s+accessibilityViewIsModal\s+accessibilityLabel=\{notice\.title\}\s+onAccessibilityEscape=\{close\}\s*>\s*<GlassSurface/,
+    );
+    expect(component).not.toContain("accessibilityPaneTitle");
+    expect(component).toContain('accessibilityRole="header"');
+    expect(component).toContain("AccessibilityInfo.setAccessibilityFocus(node)");
+  });
+
   test("the existing themed chooser and OS-safe picker handoff remain independent", () => {
     expect(chooser).toContain('<GlassSurface testID="attachment-sheet" variant="raised"');
     expect(chooser).toContain("minHeight: 44");
