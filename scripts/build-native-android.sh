@@ -25,11 +25,12 @@ git add .
 if [ ! -f app/node_modules/@shopify/react-native-skia/libs/android/arm64-v8a/libskia.a ]; then
   node app/node_modules/@shopify/react-native-skia/scripts/install-libs.js
 fi
+gate_status=0
 if [ "${DASH_NATIVE_ONLY:-0}" != 1 ]; then
-  bun app/node_modules/typescript/bin/tsc -p app --noEmit > .native-receipts/typecheck.log 2>&1
-  bun test app/src bridge/src shared > .native-receipts/unit.log 2>&1
-  bun scripts/mutate.ts > .native-receipts/mutation.log 2>&1
-  (cd app && CI=1 bun x expo export --platform android --output-dir ../.native-receipts/export) > .native-receipts/export.log 2>&1
+  bun app/node_modules/typescript/bin/tsc -p app --noEmit > .native-receipts/typecheck.log 2>&1 || gate_status=1
+  bun test app/src bridge/src shared > .native-receipts/unit.log 2>&1 || gate_status=1
+  bun scripts/mutate.ts > .native-receipts/mutation.log 2>&1 || gate_status=1
+  (cd app && CI=1 bun x expo export --platform android --output-dir ../.native-receipts/export) > .native-receipts/export.log 2>&1 || gate_status=1
 else
   printf 'Native-only retry: use the preceding unchanged-source JS gate receipts.\n'
 fi
@@ -75,3 +76,6 @@ mkdir -p .native-receipts/runtime-packages
 for package in react-native-webrtc base64-js debug ms; do
   rsync -a --exclude=android/ --exclude=ios/ --exclude=common/ "app/node_modules/$package" .native-receipts/runtime-packages/
 done
+
+printf 'js_gates_exit=%s\n' "$gate_status" > .native-receipts/gates.exit
+exit "$gate_status"
