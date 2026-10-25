@@ -106,7 +106,7 @@ test('harness picker switches OMP to Hermes without sending',async({page,bridge}
 
 test('approvals screen reads real dry-run outbox and persists rejection',async({page,bridge})=>{
  await pair(page,bridge);
- await page.getByRole('button',{name:'Approvals, 1 pending',exact:true}).first().click({noWaitAfter:true});
+ await page.getByRole('button',{name:/^(Upstream approvals|Approvals), 1 pending$/}).first().click({noWaitAfter:true});
  await expect(page.getByText('Dry run · Nothing will be posted',{exact:true})).toBeVisible();
  await expect(page.getByText(/ARMY_APPROVAL_FIXTURE:/)).toBeVisible();
  await page.getByRole('button',{name:'Reject',exact:true}).click({noWaitAfter:true});
