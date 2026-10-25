@@ -137,7 +137,7 @@ function isStage(value: unknown): value is OutboxStage {
 
 function isRecord(value: unknown): value is OutboxRecord {
   return isMessage(value) && isObject(value)
-    && isStage(value.stage) && Number.isSafeInteger(value.attempts) && typeof value.attempts === "number"
+    && isStage(value.stage) && typeof value.attempts === "number" && Number.isSafeInteger(value.attempts)
     && value.attempts >= 0 && timestamp(value.createdAt) && timestamp(value.updatedAt)
     && value.updatedAt >= value.createdAt
     && (value.lastAttemptAt === undefined || timestamp(value.lastAttemptAt))
@@ -269,11 +269,13 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
       if (disposed) return failed("disposed", "Outbox disposed before transport; saved message remains queued.");
 
       let accepted = false;
+      let uncertainTransport = false;
       let problem: string | undefined;
       try {
         accepted = (await deps.transport.send(prepared.value)) === true;
         if (!accepted) problem = "Transport did not accept the frame; bridge admission is unconfirmed.";
       } catch (error) {
+        uncertainTransport = true;
         problem = `Transport outcome unconfirmed: ${errorText(error)}`;
       }
       return await exclusive(async (): Promise<OutboxResult<OutboxDispatch>> => {
@@ -288,7 +290,7 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
           stage: accepted && current.stage === "queued" ? "sent" : current.stage,
           retryNeeded: !accepted,
           error: problem,
-          updatedAt: Math.max(now(), current.updatedAt),
+          updatedAt: Math.max(timestamp(now()) ? now() : current.updatedAt, current.updatedAt),
         });
         const next = records.map(item => item.clientId === clientId ? nextRecord : item);
         try {
@@ -302,7 +304,7 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
         const result = lookup(clientId) ?? nextRecord;
         return { ok: true, value: {
           record: result,
-          transport: accepted ? "sent" : current.attempts > 1 ? "unconfirmed" : "not-sent",
+          transport: accepted ? "sent" : uncertainTransport || current.stage === "sent" ? "unconfirmed" : "not-sent",
           ...(problem ? { note: problem } : {}),
         } };
       });
@@ -351,6 +353,9 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
       if (!persisted.ok) return persisted; // Caller may clear draft ONLY after this durable commit.
       const delivered = await attempt(persisted.value.clientId, false);
       if (delivered.ok) return delivered;
+      if (delivered.reason === "confirmed") {
+        return { ok: true, value: { record: lookup(persisted.value.clientId) ?? persisted.value, transport: "confirmed" } };
+      }
       return { ok: true, value: {
         record: lookup(persisted.value.clientId) ?? persisted.value,
         transport: "storage-blocked",
