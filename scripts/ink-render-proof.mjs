@@ -109,9 +109,12 @@ try{
   assert(pillBox&&trayBox&&trayBox.y>=pillBox.y+pillBox.height,'annotation tray must leave the mode pill visible');
   const uploads=[];
   await context.route('http://127.0.0.1:18379/attachments?*',async route=>{
-    const request=route.request(), bytes=request.postDataBuffer(), name=new URL(request.url()).searchParams.get('name');
+    const request=route.request();
+    const headers={'access-control-allow-origin':'*','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'POST,OPTIONS'};
+    if(request.method()==='OPTIONS'){await route.fulfill({status:204,headers});return;}
+    const bytes=request.postDataBuffer(), name=new URL(request.url()).searchParams.get('name');
     uploads.push({name,size:bytes?.length??0});
-    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'1234567890abcdef1234567890abcdef',name,mime:'image/png',size:bytes?.length??0})});
+    await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({id:'1234567890abcdef1234567890abcdef',name,mime:'image/png',size:bytes?.length??0})});
   });
   const phrase=page.getByTestId('transcript-viewport').getByText('Circle this exact phrase',{exact:true});const box=await phrase.boundingBox();assert(box);
   const pen=await context.newCDPSession(page), cx=box.x+box.width/2, cy=box.y+box.height/2, rx=box.width/2+10, ry=box.height/2+12;
