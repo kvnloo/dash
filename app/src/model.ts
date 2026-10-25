@@ -4,6 +4,7 @@ import type { DetailMode } from "./lib/reply-details";
 import { parseChatAttachment, type ChatAttachment, type HarnessInfo, type HostInfo } from "../../shared/protocol";
 
 import { parseSummary, type SummaryInfo } from "../../shared/thinking-summary";
+import { unwrapHermesHistoryText } from "./lib/history-display";
 import { parseIdentityEnrollment, type IdentityEnrollment } from "./lib/identity-client";
 
 import { parseHandedness, type Handedness } from "./lib/handedness";
@@ -180,6 +181,16 @@ export function parseConversation(raw: unknown): Conversation | null {
     const parsed = parseMessage(m);
     if (parsed) messages.push(parsed);
   }
+  // Project already-received Hermes history for display on app restart.
+  // An unsent/pending user turn must retain its exact bytes for replay.
+  const displayedMessages: Message[] = raw.harness === "hermes"
+    ? messages.map((message, index) => {
+        const next = messages[index + 1];
+        return message.role === "user" && !(next?.role === "assistant" && next.state === "pending")
+          ? { ...message, text: unwrapHermesHistoryText(message.text) }
+          : message;
+      })
+    : messages;
   return {
     id: raw.id,
     harness: raw.harness,
@@ -198,7 +209,7 @@ export function parseConversation(raw: unknown): Conversation | null {
     profileName: typeof raw.profileName === "string" ? raw.profileName : undefined,
     messageCount: typeof raw.messageCount === "number" ? raw.messageCount : undefined,
     stale: raw.stale === true,
-    messages,
+    messages: displayedMessages,
   };
 }
 
