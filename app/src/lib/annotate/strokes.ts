@@ -42,6 +42,43 @@ export const MAX_UNDO = 50;
 
 export const TOOL_CODE: Record<Tool, number> = { pen: 0, highlighter: 1, arrow: 2, box: 3, circle: 4, eraser: 5 };
 
+/** Live samples that stay painted between a pointer lift and the JS stroke commit. */
+export interface InkCarry {
+  samples: readonly number[];
+  /** ID of the last saved stroke when these samples were captured. */
+  afterStrokeId: number;
+}
+
+export const EMPTY_INK_CARRY: InkCarry = { samples: [], afterStrokeId: 0 };
+
+/** Match the annotation gesture's six-point tap filter; rejected taps leave no ghost. */
+export function hasVisibleInk(flat: readonly number[]): boolean {
+  "worklet";
+  if (flat.length < 8) return false;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i + 3 < flat.length; i += 4) {
+    const x = flat[i] ?? Number.NaN, y = flat[i + 1] ?? Number.NaN;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+  }
+  return maxX - minX >= 6 || maxY - minY >= 6;
+}
+
+/**
+ * A Pan finalizes on the UI thread before runOnJS(finish) saves its stroke.
+ * Keep the last valid preview until a new committed ID appears, then let
+ * InkCanvas show the saved stroke instead. Erasing never leaves preview ink.
+ */
+export function carryInkUntilCommit(previous: InkCarry, live: readonly number[], latestStrokeId: number, tool: Tool): InkCarry {
+  "worklet";
+  if (latestStrokeId !== previous.afterStrokeId) return { samples: [], afterStrokeId: latestStrokeId };
+  if (tool === "eraser") return previous.samples.length ? { samples: [], afterStrokeId: latestStrokeId } : previous;
+  if (live.length > 0) return { samples: live, afterStrokeId: latestStrokeId };
+  if (!previous.samples.length) return previous;
+  return hasVisibleInk(previous.samples) ? previous : { samples: [], afterStrokeId: latestStrokeId };
+}
+
 function commit(drawing: Drawing, strokes: Stroke[], nextId = drawing.nextId): Drawing {
   return { strokes, nextId, past: [...drawing.past, drawing.strokes].slice(-MAX_UNDO) };
 }
