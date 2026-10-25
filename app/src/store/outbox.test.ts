@@ -93,6 +93,25 @@ describe("durable delivery outbox orchestration", () => {
     expect(sent).toHaveLength(1);
   });
 
+  test("locally queued work commits without transport and later dispatches its same turn", async () => {
+    const disk = memoryStorage();
+    const calls: OutboxRecord[] = [];
+    const store = createOutboxStore({
+      persistence: disk.persistence,
+      transport: { send(record) { calls.push(record); return true; } },
+      now: () => 100,
+    });
+    const deferred = await store.enqueue(message("deferred"), { dispatch: false });
+    expect(deferred).toMatchObject({ ok: true, value: { transport: "queued", record: { attempts: 0, stage: "queued" } } });
+    expect(calls).toHaveLength(0);
+    expect(disk.read()[0]?.clientId).toBe("deferred");
+    const flush = await store.retry("deferred", { dedupeSupported: false });
+    expect(flush).toMatchObject({ ok: true, value: { transport: "sent" } });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.turnId).toBe("turn-deferred");
+    expect(calls[0]?.target.mode).toBe("queue");
+  });
+
   test("restart retains exact identifiers, target, attachments and requires dedupe on replay", async () => {
     const disk = memoryStorage();
     const first = createOutboxStore({
