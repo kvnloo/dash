@@ -2,23 +2,13 @@ import { Feather } from "@expo/vector-icons";
 import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { effortIdForTurn, lastAssistantState, runtimeStateFromOrchestra, runtimeStateFromTurn } from "../catalog/runtime-state";
+import { performSearchResultAction, SEARCH_RESULT_KIND_LABEL, searchResultAccessibility } from "../lib/a11y-search-result";
 import type { SearchResult } from "../lib/global-search";
 import { colors, space, type } from "../theme";
 import { PressScale } from "./PressScale";
 import { timeAgo } from "../util";
 import { GlassSurface } from "./GlassSurface";
 import { HarnessAvatar } from "./HarnessAvatar";
-
-const KIND_LABEL: Record<SearchResult["kind"], string> = {
-  bot: "Bot",
-  conversation: "Chat",
-  product: "Product",
-  harness: "Harness",
-  skill: "Skill",
-  plugin: "Plugin",
-  tool: "Tool",
-  file: "File",
-};
 
 function resultTitle(item: SearchResult): string {
   switch (item.kind) {
@@ -122,14 +112,28 @@ export const SearchResultRow = memo(function SearchResultRow({
   // Bots get a plain glyph: identity orbs mean a live agent or voice, not a messaging bot.
   const showFileIcon = item.kind === "file" || item.kind === "tool" || item.kind === "bot";
   const motion = avatarMotion(item);
+  const a11y = searchResultAccessibility(item, {
+    title,
+    meta,
+    hasLongPress: onLongPress !== undefined,
+  });
 
   return (
     <PressScale
-      onPress={() => onPress(item)}
-      onLongPress={onLongPress ? () => onLongPress(item) : undefined}
+      onPress={() => { performSearchResultAction(item, "activate", onPress, onLongPress); }}
+      onLongPress={onLongPress ? () => { performSearchResultAction(item, "longpress", onPress, onLongPress); } : undefined}
       delayLongPress={350}
       style={styles.row}
+      accessible
+      focusable
       accessibilityRole="button"
+      accessibilityLabel={a11y.label}
+      accessibilityHint={a11y.hint}
+      accessibilityState={a11y.state}
+      accessibilityActions={a11y.actions}
+      onAccessibilityAction={(event) => {
+        performSearchResultAction(item, event.nativeEvent.actionName, onPress, onLongPress);
+      }}
     >
       {showFileIcon ? (
         <GlassSurface variant="chip" blur={false} borderRadius={24} style={styles.iconWrap}>
@@ -157,7 +161,7 @@ export const SearchResultRow = memo(function SearchResultRow({
         <Text style={[styles.subtitle, stale && { color: colors.textTertiary }]} numberOfLines={1}>
           {item.subtitle}
         </Text>
-        <Text style={styles.kind}>{KIND_LABEL[item.kind]}</Text>
+        <Text style={styles.kind}>{SEARCH_RESULT_KIND_LABEL[item.kind]}</Text>
       </View>
     </PressScale>
   );
@@ -167,6 +171,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
+    minHeight: 44,
     gap: space.md,
     paddingHorizontal: space.lg,
     paddingVertical: 14,
