@@ -27,7 +27,7 @@ import { colors, radius, space, type } from "../../theme";
 import { PressScale } from "../PressScale";
 import { targetsAt } from "./hit-test";
 import { loadSkia } from "./skia-ready";
-import { circleRegion, quoteSelection, type InkRegion } from "../../lib/annotate/mode";
+import { circleRegion, quoteSelection, CircleSlots, type InkRegion } from "../../lib/annotate/mode";
 import { observeStylus, regionText } from "../../lib/stylus";
 import { composerDrafts, updateComposerDraft } from "../../store/composer-drafts";
 import { MAX_ATTACHMENTS_PER_TURN } from "../../lib/attachments";
@@ -39,6 +39,7 @@ const MIN_EXTENT = 6;
 
 type InkModule = typeof import("./InkCanvas");
 let circleSequence = 0;
+const circleSlots = new CircleSlots(MAX_ATTACHMENTS_PER_TURN);
 let inkModule: Promise<InkModule> | undefined;
 function loadInk(): Promise<InkModule> {
   inkModule ??= loadSkia().then(() => import("./InkCanvas")).catch(error => { inkModule = undefined; throw error; });
@@ -75,11 +76,11 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const attachCircle = useCallback(async (region: InkRegion) => {
     const id = store.get().activeId, settings = store.get().settings;
     if (!id || !settings || !captureTarget.current) return;
-    if ((composerDrafts.get()[id]?.attachments.length ?? 0) >= MAX_ATTACHMENTS_PER_TURN) { setAnnotationStatus("error", { error: "Remove an attachment before circling another region." }); return; }
+    const releaseSlot = circleSlots.reserve(id, composerDrafts.get()[id]?.attachments.length ?? 0);
+    if (!releaseSlot) { setAnnotationStatus("error", { error: "Remove an attachment before circling another region." }); return; }
     const key = `circle-${Date.now()}-${++circleSequence}`;
     const name = `${key}.png`;
-    // Reserve a slot before asynchronous capture; rapid circles cannot exceed the draft limit.
-    updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ ...draft, attachments: [...draft.attachments, { key, name, mime: "image/png", uri: "", state: "uploading" }] }));
+    // Do not insert a visible chip until capture completes: it grows the dock and moves the marked text.
     const routeKey = debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute()?.key : undefined;
     const current = annotate.get().drawing.strokes;
     try {
@@ -88,14 +89,15 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       const { composite } = await loadInk();
       const { bytes, dataUri } = await composite(captureTarget, current, size, INK, colors.bg, region);
       if (routeKey !== (debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute()?.key : undefined)) throw new Error("Screen changed during capture. Ink is kept; circle again on the intended screen.");
-      updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ text: quoteSelection(draft.text, text || "Marked region (image attached)"), attachments: draft.attachments.map(file => file.key === key ? { ...file, size: bytes.length, uri: dataUri } : file) }));
-      if (!composerDrafts.get()[id]?.attachments.some(file => file.key === key)) return;
+      releaseSlot();
+      if ((composerDrafts.get()[id]?.attachments.length ?? 0) >= MAX_ATTACHMENTS_PER_TURN) throw new Error("The draft filled during capture. Ink is kept; remove an attachment and circle again.");
+      updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ text: quoteSelection(draft.text, text || "Marked region (image attached)"), attachments: [...draft.attachments, { key, name, mime: "image/png", size: bytes.length, uri: dataUri, state: "uploading" }] }));
       const ref = await uploadBytes(settings, name, "image/png", bytes);
       updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ ...draft, attachments: draft.attachments.map(file => file.key === key ? { ...file, state: "ready", ref } : file) }));
     } catch (error) {
       updateComposerDraft(id, { text: "", attachments: [] }, draft => ({ ...draft, attachments: draft.attachments.map(file => file.key === key ? { ...file, state: "error", error: "Region upload failed; remove and circle again." } : file) }));
       setAnnotationStatus("error", { error: error instanceof Error ? error.message : "Could not attach marked region. Ink is kept." });
-    }
+    } finally { releaseSlot(); }
   }, [size]);
 
   const live = useSharedValue<number[]>([]);

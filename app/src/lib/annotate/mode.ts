@@ -20,3 +20,21 @@ export function circleRegion(points: readonly { x: number; y: number }[]): InkRe
   for (let i=0; i<points.length; i++) { const a=points[i]!, b=points[(i+1)%points.length]!; area += a.x*b.y-b.x*a.y; }
   return Math.abs(area)/2 > width*height*0.45 ? { x, y, width, height } : null;
 }
+
+/** Reserve capacity without changing composer layout while the screenshot is being taken. */
+export class CircleSlots {
+  private pending = new Map<string, number>();
+  constructor(private limit: number) {}
+  reserve(id: string, visible: number): (() => void) | null {
+    const count = this.pending.get(id) ?? 0;
+    if (visible + count >= this.limit) return null;
+    this.pending.set(id, count + 1);
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      const next = (this.pending.get(id) ?? 1) - 1;
+      if (next) this.pending.set(id, next); else this.pending.delete(id);
+    };
+  }
+}

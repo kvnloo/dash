@@ -114,6 +114,7 @@ try{
     if(request.method()==='OPTIONS'){await route.fulfill({status:204,headers});return;}
     const bytes=request.postDataBuffer(), name=new URL(request.url()).searchParams.get('name');
     uploads.push({name,size:bytes?.length??0});
+    if(bytes) await writeFile(path.join(out,'circle-region.png'),bytes);
     await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({id:'1234567890abcdef1234567890abcdef',name,mime:'image/png',size:bytes?.length??0})});
   });
   const phrase=page.getByTestId('transcript-viewport').getByText('Circle this exact phrase',{exact:true});const box=await phrase.boundingBox();assert(box);
