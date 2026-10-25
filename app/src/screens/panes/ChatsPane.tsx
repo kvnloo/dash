@@ -6,6 +6,8 @@ import type { WindowOrigin } from "../../lib/chat-window";
 import { chatAttention, chatPriority } from "../../lib/chat-attention";
 import { threadAppearance } from "../../components/thread-appearance";
 import { AgentOrb } from "../../components/AgentOrb";
+import { ShimmerText } from "../../components/ShimmerText";
+import { activityShimmerEnabled } from "../../lib/activity-shimmer";
 import { conversationThinking } from "../../lib/thinking";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
@@ -47,6 +49,7 @@ const Row = memo(function Row({
   const thinking = item.stale ? { phase: "idle" as const } : conversationThinking(item.messages, connectionStatus);
   const press = () => pressRow(frame.current, item.id, onPress);
   const content = useMemo(() => chatRow(item, harnessName, connectionStatus), [item, harnessName, connectionStatus]);
+  const activityShimmer = activityShimmerEnabled(thinking.phase, connectionStatus, stale);
   return (
     <View ref={frame} collapsable={false}>
     <PressScale
@@ -70,9 +73,11 @@ const Row = memo(function Row({
           <Text style={styles.rowFolder} numberOfLines={1} accessibilityLabel={content.folderPath ? `Working folder: ${content.folderPath}` : content.folder}>
             {content.folder}
           </Text>
-          <Text style={[styles.rowActivity, content.needsAttention && styles.attention]} numberOfLines={1}>
+          {activityShimmer ? <View style={styles.rowActivityHighlight}>
+            <ShimmerText text={content.activity} size={12} family="sans-serif" dim={colors.textMuted} bright={colors.text} />
+          </View> : <Text style={[styles.rowActivity, content.needsAttention && styles.attention]} numberOfLines={1}>
             {content.activity}
-          </Text>
+          </Text>}
         </View>
         {content.outcomeLabel ? <Text style={styles.rowLabel}>{content.outcomeLabel}</Text> : null}
         <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={2}>
@@ -222,6 +227,7 @@ const styles = StyleSheet.create({
   rowMeta: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.xs },
   rowFolder: { color: colors.goldLo, ...type.mono, flex: 1, minWidth: 0 },
   rowActivity: { color: colors.textTertiary, ...type.label, flexShrink: 1, maxWidth: "55%" },
+  rowActivityHighlight: { flex: 1, flexShrink: 1, minWidth: 0, maxWidth: "55%" },
   rowLabel: { color: colors.textTertiary, ...type.label, marginTop: space.xs },
   rowPreview: { color: colors.textMuted, ...type.small, marginTop: 2, textTransform: "none", letterSpacing: 0 },
   empty: { paddingTop: "40%", alignItems: "center" },
