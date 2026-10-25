@@ -109,10 +109,11 @@ describe("crash-safe bridge delivery ledger", () => {
         },
       });
       const started = await ledger.reserve(reservation("two", 120));
-      await ledger.update(identity("two"), { state: "started", at: 125 });
-      const completed = await ledger.reserve(reservation("three", 150));
+      const startedEntry = await ledger.update(identity("two"), { state: "started", at: 125 });
+      expect("finishedAt" in startedEntry).toBe(false);
+      await ledger.reserve(reservation("three", 150));
       await ledger.update(identity("three"), { state: "started", at: 155 });
-      await ledger.update(identity("three"), { state: "completed", at: 160 });
+      const completed = await ledger.update(identity("three"), { state: "completed", at: 160 });
 
       const raw = await fs.readFile(join(root, LEDGER_FILENAME), "utf8");
       const stored: unknown = JSON.parse(raw);
@@ -122,9 +123,10 @@ describe("crash-safe bridge delivery ledger", () => {
       expect(raw).not.toContain("messageBody");
 
       const recovered = await opened(root);
-      expect(await recovered.get(identity("one"))).toMatchObject({
-        ...admitted, reconciliationRequired: true,
-      });
+      const reopenedAdmitted = await recovered.get(identity("one"));
+      expect(reopenedAdmitted).toEqual({ ...admitted, reconciliationRequired: true });
+      expect("startedAt" in (reopenedAdmitted ?? {})).toBe(false);
+      expect("finishedAt" in (reopenedAdmitted ?? {})).toBe(false);
       expect(await recovered.get(identity("two"))).toEqual({
         ...started, state: "started", startedAt: 125, updatedAt: 125,
         receipt: {
@@ -133,10 +135,7 @@ describe("crash-safe bridge delivery ledger", () => {
         },
         reconciliationRequired: true,
       });
-      expect(await recovered.get(identity("three"))).toMatchObject({
-        ...completed, state: "completed", updatedAt: 160, finishedAt: 160,
-        reconciliationRequired: false,
-      });
+      expect(await recovered.get(identity("three"))).toEqual(completed);
       // An acknowledged reservation is not proof that a restarted bridge
       // may execute it: replay yields the old receipt, not a new turn.
       const replay = await recovered.reserve({
@@ -294,8 +293,12 @@ describe("crash-safe bridge delivery ledger", () => {
       const faults: Fault[] = ["write", "file-sync"];
       for (const fault of faults) {
         const ledger = await opened(root, faultyFilesystem(fault));
-        await expect(ledger.update(identity("persisted"), { state: "started", at: 120 }))
-          .rejects.toThrow("injected");
+        // Reloaded admissions require explicit host reconciliation; exercise
+        // the actual disk error rather than short-circuiting at that guard.
+        expect((await ledger.get(identity("persisted")))?.reconciliationRequired).toBe(true);
+        await expect(ledger.update(identity("persisted"), {
+          state: "started", at: 120, reconciled: true,
+        })).rejects.toThrow("injected");
         expect((await ledger.get(identity("persisted")))?.state).toBe("admitted");
         await expect(ledger.reserve(reservation("new-" + fault)))
           .rejects.toThrow("injected");
