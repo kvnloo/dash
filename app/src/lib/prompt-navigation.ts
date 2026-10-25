@@ -22,3 +22,31 @@ export function railTarget(y: number, tickHeight: number, count: number): number
 export function followsLatest(contentHeight: number, viewportHeight: number, offset: number): boolean {
   return contentHeight - viewportHeight - offset <= 48;
 }
+
+/** Tick centres sit at the start of their owned run segment, inset by half a marker gap.
+ * The distance AFTER a tick encodes its duration, not the duration before it. */
+export function railLayout(durations: readonly number[], height: number, minGap = 6): number[] {
+  if (!durations.length) return [];
+  const available = Number.isFinite(height) ? Math.max(0, height) : 0;
+  const gap = Number.isFinite(minGap) ? Math.max(0, minGap) : 6;
+  const count = durations.length;
+  if (count * gap > available) return durations.map((_, index) => (index + .5) * available / count);
+  const weights = durations.map(duration => Number.isFinite(duration) ? Math.max(0, duration) : 0);
+  const total = weights.reduce((sum, duration) => sum + duration, 0);
+  const spare = available - count * gap;
+  let offset = 0;
+  return weights.map(duration => {
+    const center = offset + gap / 2;
+    offset += gap + (total > 0 ? spare * duration / total : spare / count);
+    return center;
+  });
+}
+/** Nearest tick with midpoint boundaries; the rail bottom is the separate Latest target. */
+export function railTargetAt(y: number, positions: readonly number[], height: number): number {
+  "worklet";
+  if (!positions.length || height <= 0 || y >= height) return positions.length;
+  for (let index = 1; index < positions.length; index++) {
+    if (y < ((positions[index - 1] ?? 0) + (positions[index] ?? 0)) / 2) return index - 1;
+  }
+  return positions.length - 1;
+}

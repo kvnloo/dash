@@ -45,6 +45,8 @@ export interface AssistantMessage {
   text: string;
   at: number;
   state: AssistantState;
+  /** Local completion time, persisted for prompt-rail run durations. */
+  endedAt?: number;
   /** Latest tool/thinking status from the harness while streaming. */
   status?: string;
   /** Actual bridge tool/thinking statuses, retained for collapsed activity details. */
@@ -148,6 +150,7 @@ function parseMessage(raw: unknown): Message | null {
       text: raw.text,
       delivery: raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" ? raw.delivery : undefined,
       at: raw.at,
+      endedAt: typeof raw.endedAt === "number" && Number.isFinite(raw.endedAt) ? raw.endedAt : undefined,
       // A turn that was mid-stream when the app was killed can be re-attached on launch.
       state: raw.state,
       status: typeof raw.status === "string" ? raw.status : undefined,

@@ -1,5 +1,5 @@
 import { beforeEach, expect, mock, test } from "bun:test";
-mock.module("@react-native-async-storage/async-storage", () => ({ default: { async multiGet() { return []; }, async multiSet() {}, async setItem() {}, async multiRemove() {} } }));
+mock.module("@react-native-async-storage/async-storage", () => ({ default: { async getItem() { return null; }, async multiGet() { return []; }, async multiSet() {}, async setItem() {}, async multiRemove() {} } }));
 const app = await import("./app");
 const { parseConversation } = await import("../model");
 beforeEach(() => app.store.set({ hydrated: true, settings: null, connection: { status: "online", harnesses: [], hosts: [] }, conversations: [], activeId: null }));

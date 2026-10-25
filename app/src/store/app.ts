@@ -469,7 +469,7 @@ export function applyTurnEvent(
         checkpointed = true;
         const text = replyText.get(event.id) || m.text;
         const error = m.error ?? (event.exitCode !== 0 ? `Process exited with code ${event.exitCode}` : text || m.delivery === "steered" ? undefined : "No response");
-        return { ...m, text, parts: partsFor(event.id).length ? partsFor(event.id) : m.parts, state: error ? "error" : "done", error, status: undefined, handoff: undefined, seq: event.seq };
+        return { ...m, text, parts: partsFor(event.id).length ? partsFor(event.id) : m.parts, state: error ? "error" : "done", endedAt: m.endedAt ?? Date.now(), error, status: undefined, handoff: undefined, seq: event.seq };
       });
       notifyTurnSettled(where.conversationId);
       if (checkpointed) releaseSettledReply(where.conversationId, where.messageId);
@@ -489,6 +489,7 @@ export function applyTurnEvent(
         parts: partsFor(event.id).length ? partsFor(event.id) : m.parts,
         text: replyText.get(event.id) || m.text,
         state: "error",
+        endedAt: m.endedAt ?? Date.now(),
         error: event.message,
         status: undefined,
         handoff: undefined,
@@ -545,7 +546,7 @@ export function stopConversation(conversationId: string, cancel: (turnId: string
       if (m.state === "streaming") running.push(m.turnId);
       stopped.push(m);
       liveSequences.delete(m.turnId);
-      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", status: "Stopped" };
+      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", endedAt: Date.now(), status: "Stopped" };
     }),
   }));
   while (dequeue(conversationId)) { /* Drain canceled turns before settlement listeners run. */ }
@@ -562,7 +563,7 @@ export function markTurnLost(turnId: string): void {
   updateMessage(where.conversationId, where.messageId, (m) => {
     if (m.state !== "streaming") return m;
     checkpointed = true;
-    return { ...m, parts: partsFor(turnId).length ? partsFor(turnId) : m.parts, text: replyText.get(turnId) || m.text, state: "interrupted", status: undefined };
+    return { ...m, parts: partsFor(turnId).length ? partsFor(turnId) : m.parts, text: replyText.get(turnId) || m.text, state: "interrupted", endedAt: Date.now(), status: undefined };
   });
   notifyTurnSettled(where.conversationId);
   if (checkpointed) releaseSettledReply(where.conversationId, where.messageId);

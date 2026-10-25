@@ -4,6 +4,7 @@ import { clearIdentityTokens, executionToken, socketUrl } from "./bridge-auth";
 import { headerSocket } from "./native-socket";
 import { uploadAttachment, sendToPhone } from "./attachments";
 import { fetchRoster } from "./roster";
+import { fetchContextView } from "./context-api";
 
 test("roster and attachment paths mint identity tokens and send header-only credentials", async () => {
   const f = identityFixture(); const access = f.token();
@@ -25,6 +26,7 @@ test("roster and attachment paths mint identity tokens and send header-only cred
     }
     expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${access}`);
     expect(url.includes("token=")).toBe(false);
+    if ((url.includes("/chat/context?") || url.includes("/chat/usage?"))) return Response.json({ context: null, plans: [] });
     if (url.endsWith("/roster")) return Response.json({ hosts: [] });
     if (url.endsWith("/share")) return Response.json({ ok: true, message: "fixture only; no sharing invoked" });
     return Response.json({ id: "a".repeat(32), name: "test.txt", mime: "text/plain", size: 4 });
@@ -32,8 +34,11 @@ test("roster and attachment paths mint identity tokens and send header-only cred
   try {
     clearIdentityTokens();
     expect(await fetchRoster(settings)).toEqual([]);
+    expect((await fetchContextView(settings, "omp", "default", "session")).context).toBeUndefined();
+    expect((await fetchContextView(settings, "hermes", "clean", "session")).context).toBeUndefined();
     expect((await uploadAttachment(settings, { uri: "unused", name: "test.txt", mime: "text/plain", blob: new Blob(["test"]) }, fetch)).name).toBe("test.txt");
     expect((await sendToPhone(settings, "/fixture/test.txt", fetch)).ok).toBe(true);
+    await fetchContextView(settings, "hermes", "clean", "session", undefined, true);
     expect(minted).toBe(1);
     expect(secretKeys).toEqual(["dash.z0bridge.cred_0123456789abcdef"]);
     expect(calls.some(url => url.includes(credential) || url.includes(access))).toBe(false);

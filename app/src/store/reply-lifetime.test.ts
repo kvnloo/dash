@@ -23,7 +23,7 @@ for (const end of ["done", "error", "stop", "lost"] as const) {
     if (end === "error") app.applyTurnEvent({ type: "error", id: turn.turnId, seq: 3, message: "failed" });
     if (end === "stop") app.stopConversation(chat.id, () => {});
     if (end === "lost") app.markTurnLost(turn.turnId);
-    expect(app.store.get().conversations[0]?.messages.at(-1)).toMatchObject({ text: "answer", parts: [{ kind: "reasoning", text: "reason" }] });
+    expect(app.store.get().conversations[0]?.messages.at(-1)).toMatchObject({ text: "answer", parts: [{ kind: "reasoning", text: "reason" }], endedAt: expect.any(Number) });
     expect(replyText.get(turn.turnId)).toBe("");
     expect(replyParts.get(turn.turnId)).toBe("");
   });

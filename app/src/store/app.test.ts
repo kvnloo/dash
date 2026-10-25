@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 const persisted = new Map<string, string>();
 mock.module("@react-native-async-storage/async-storage", () => ({
   default: {
+    async getItem(key: string) { return persisted.get(key) ?? null; },
     async multiGet(keys: string[]) { return keys.map((key) => [key, persisted.get(key) ?? null]); },
     async getItem(key: string) { return persisted.get(key) ?? null; },
     async removeItem(key: string) { persisted.delete(key); },
@@ -480,4 +481,25 @@ describe("outbound target boundary", () => {
     expect(app.parkUnsentTurn(t.turnId)).toBe(false);
     expect(assistant(c.id).state).toBe("error");
   });
+});
+
+test("completion times survive persistence and error followed by done keeps the first end", async () => {
+  const { parseConversation } = await import("../model");
+  for (const failed of [false, true]) {
+    const chat = app.createConversation("omp");
+    const turn = app.beginTurn(chat.id, "Run");
+    const before = Date.now();
+    if (failed) app.applyTurnEvent({ type: "error", id: turn.turnId, seq: 1, message: "Failed" });
+    else replyText.set(turn.turnId, "Done");
+    const first = app.store.get().conversations.find(c => c.id === chat.id)?.messages.at(-1);
+    app.applyTurnEvent({ type: "done", id: turn.turnId, seq: 2, exitCode: failed ? 1 : 0 });
+    const saved = app.store.get().conversations.find(c => c.id === chat.id);
+    const restored = parseConversation(JSON.parse(JSON.stringify(saved)));
+    const message = restored?.messages.at(-1);
+    expect(message?.role).toBe("assistant");
+    if (message?.role !== "assistant") throw new Error("Missing assistant");
+    expect(message.endedAt).toBeGreaterThanOrEqual(before);
+    expect(message.endedAt).toBeLessThanOrEqual(Date.now());
+    if (failed && first?.role === "assistant") expect(message.endedAt).toBe(first.endedAt);
+  }
 });

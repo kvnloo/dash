@@ -1,7 +1,7 @@
 export type ContextCategory = { id: string; label: string; tokens: number; estimated: boolean; details: { label: string; tokens: number }[]; note?: string };
 export type ContextSnapshot = { sessionId: string; model: string; /** Effective runtime provider the host recorded for this session (additive, optional). */ provider?: string; /** Hermes parent session (compaction/delegation lineage), when recorded. */ parentSessionId?: string; used: number; maximum: number; threshold: number; estimated: boolean; source: string; categories: ContextCategory[]; revision: string; notes: string[] };
 export type PlanWindow = { label: string; percent: number; resetsAt?: string };
-export type PlanUsage = { provider: string; windows: PlanWindow[]; unavailable?: boolean };
+export type PlanUsage = { provider: string; windows: PlanWindow[]; unavailable?: boolean; burn?: { observed: number; sustainable: number; ratio?: number } };
 export type ContextView = { context: ContextSnapshot | null; plans: PlanUsage[] };
 export function record(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function count(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
@@ -21,7 +21,8 @@ export function parsePlan(value: unknown): PlanUsage | undefined {
   if (!record(value) || typeof value.provider !== "string" || !Array.isArray(value.windows)) return;
   const windows: PlanWindow[] = [];
   for (const w of value.windows) { if (!record(w) || typeof w.label !== "string" || !count(w.percent) || w.percent > 100 || (w.resetsAt !== undefined && typeof w.resetsAt !== "string")) return; windows.push({ label: w.label, percent: w.percent, ...(typeof w.resetsAt === "string" ? { resetsAt: w.resetsAt } : {}) }); }
-  return { provider: value.provider, windows, ...(value.unavailable === true ? { unavailable: true } : {}) };
+  const burn = record(value.burn) && count(value.burn.observed) && count(value.burn.sustainable) && (value.burn.ratio === undefined || count(value.burn.ratio)) ? { observed: value.burn.observed, sustainable: value.burn.sustainable, ...(typeof value.burn.ratio === "number" ? { ratio: value.burn.ratio } : {}) } : undefined;
+  return { provider: value.provider, windows, ...(burn ? { burn } : {}), ...(value.unavailable === true ? { unavailable: true } : {}) };
 }
 export function contextTone(snapshot: ContextSnapshot): "normal" | "amber" | "red" { return snapshot.threshold > 0 && snapshot.used >= snapshot.threshold ? "red" : snapshot.maximum > 0 && snapshot.used / snapshot.maximum > .8 ? "amber" : "normal"; }
 export function tokenLabel(tokens: number): string { return tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(Math.round(tokens)); }
