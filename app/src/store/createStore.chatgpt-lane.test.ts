@@ -146,21 +146,24 @@ describe("createStore state and listener lifecycle", () => {
     expect(store.get()).toBe(2);
   });
 
-  test("repeated NaN snapshots do not notify when their value is unchanged", () => {
+  test("repeated NaN sets notify each time under strict equality", () => {
     const store = createStore(Number.NaN);
-    let calls = 0;
+    const observed: number[] = [];
     const unsubscribe = store.subscribe(() => {
-      calls += 1;
+      observed.push(store.get());
     });
 
     store.set(Number.NaN);
+    store.set(Number.NaN);
+    store.set((previous) => previous);
 
     expect(Number.isNaN(store.get())).toBe(true);
-    expect(calls).toBe(0);
+    expect(observed).toHaveLength(3);
+    expect(observed.every((value) => Number.isNaN(value))).toBe(true);
     unsubscribe();
   });
 
-  test("changing between positive and negative zero notifies snapshot subscribers", () => {
+  test("positive and negative zero sets are no-ops when strictly equal", () => {
     const store = createStore(0);
     const observed: number[] = [];
     const unsubscribe = store.subscribe(() => {
@@ -168,13 +171,23 @@ describe("createStore state and listener lifecycle", () => {
     });
 
     store.set(-0);
-    expect(Object.is(store.get(), -0)).toBe(true);
-    expect(observed).toHaveLength(1);
-    expect(Object.is(observed[0], -0)).toBe(true);
+    expect(Object.is(store.get(), 0)).toBe(true);
+    expect(observed).toHaveLength(0);
 
     store.set(0);
+    expect(Object.is(store.get(), 0)).toBe(true);
+    expect(observed).toHaveLength(0);
+
+    store.set(1);
+    store.set(-0);
+    expect(Object.is(store.get(), -0)).toBe(true);
     expect(observed).toHaveLength(2);
-    expect(Object.is(observed[1], 0)).toBe(true);
+    expect(observed[0]).toBe(1);
+    expect(Object.is(observed[1], -0)).toBe(true);
+
+    store.set(0);
+    expect(Object.is(store.get(), -0)).toBe(true);
+    expect(observed).toHaveLength(2);
     unsubscribe();
   });
 });
