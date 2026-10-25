@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { HostInfo } from "../../shared/protocol";
+import type { Conversation } from "../../app/src/model";
 import { hydrateLiveConversation, mergeLiveConversations, shouldRequestHistory } from "../../app/src/lib/live-sessions";
 import { findOmpJsonl, ompSessionDirName, readLiveTranscript } from "./roster";
 
@@ -50,7 +52,7 @@ describe("issue #26: live OMP transcript hydration", () => {
   test("opens a live catalog row with exact user/assistant history and preserves its session identity", () => {
     inTemporarySessions(({ home, sessions, alpha }) => {
       writeSession(sessions, home, alpha, "omp-session-a", "History from alpha");
-      const hosts = [{
+      const hosts: HostInfo[] = [{
         id: "mbp", name: "mbp", hostname: "mbp", online: true, self: true,
         agents: [{
           id: "omp:tab-a", name: "OMP", kind: "omp", status: "running",
@@ -115,10 +117,10 @@ describe("issue #26: live OMP transcript hydration", () => {
         agents: [{ id: "omp:tab", name: "OMP", kind: "omp", status: "running", sessionId: "in-flight", cwd: alpha }],
       }], 1_700_000_000_000);
       if (!live) throw new Error("Missing live OMP row");
-      const streaming = {
+      const streaming: Conversation = {
         ...live,
         messages: [{
-          id: "a-running", role: "assistant" as const, state: "streaming" as const,
+          id: "a-running", role: "assistant", state: "streaming",
           text: "partial", at: 1_700_000_000_000, turnId: "turn-in-flight", seq: 3,
         }],
       };
