@@ -168,7 +168,7 @@ function checkPill(pill: Rect, candidates: readonly Blob[]): NavDotResult {
     .map(toDot);
   const used = new Set<Dot>();
   const found: Dot[] = [];
-  const xTolerance = Math.max(3, side * 0.85);
+  const xTolerance = Math.max(3, side * 0.85, NAV_SLOT_WIDTH * scale * 0.32);
   for (const slot of [-1, 0, 1]) {
     const wantX = middleX + slot * NAV_SLOT_WIDTH * scale;
     const dot = dotsInChrome
