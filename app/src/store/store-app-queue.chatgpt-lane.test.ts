@@ -189,8 +189,11 @@ if (process.env.DASH2_QUEUE_TEST_CHILD !== "1") {
       const conversation = seed();
       const historic = history(conversation.id);
       const initial = pairIds(conversation.id);
+      const firstPair = initial[0];
+      const thirdPair = initial[2];
+      if (!firstPair || !thirdPair) throw new Error("Expected three initial queued pairs");
       app.removeQueued(conversation.id, "primary-turn-2");
-      expect(pairIds(conversation.id)).toEqual([initial[0], initial[2]]);
+      expect(pairIds(conversation.id)).toEqual([firstPair, thirdPair]);
       expect(current(conversation.id).messages.some((message) => message.id === "primary-queued-u-2")).toBe(false);
       expect(current(conversation.id).messages.some((message) => message.id === "primary-queued-a-2")).toBe(false);
       for (const message of historic) {
@@ -214,9 +217,11 @@ if (process.env.DASH2_QUEUE_TEST_CHILD !== "1") {
       const historic = history(conversation.id);
       const beforeParts = queuedParts(current(conversation.id));
       const beforeIds = pairIds(conversation.id);
+      const [firstPair, secondPair, thirdPair] = beforeIds;
+      if (!firstPair || !secondPair || !thirdPair) throw new Error("Expected three queued pairs");
 
       app.moveQueued(conversation.id, 0, 2);
-      expect(pairIds(conversation.id)).toEqual([beforeIds[1], beforeIds[2], beforeIds[0]]);
+      expect(pairIds(conversation.id)).toEqual([secondPair, thirdPair, firstPair]);
       expect(queuedParts(current(conversation.id)).map((part) => part.user.attachments)).toEqual([
         beforeParts[1]?.user.attachments, beforeParts[2]?.user.attachments, beforeParts[0]?.user.attachments,
       ]);
@@ -224,9 +229,10 @@ if (process.env.DASH2_QUEUE_TEST_CHILD !== "1") {
         expect(current(conversation.id).messages.find((item) => item.id === message.id)).toBe(message);
       }
 
-      for (const [from, to] of [
+      const invalidMoves: ReadonlyArray<readonly [number, number]> = [
         [-1, 0], [0, -1], [3, 0], [0, 3], [0, 0], [1.5, 2], [0, Number.NaN], [Infinity, 1],
-      ]) {
+      ];
+      for (const [from, to] of invalidMoves) {
         const prior = app.store.get();
         app.moveQueued(conversation.id, from, to);
         expect(app.store.get()).toBe(prior);
