@@ -6,6 +6,7 @@ import type { LiveIntent } from "../../../shared/live";
 import { GenerativeBlock } from "./genui/GenerativeBlock";
 import { InlineImage } from "./genui/InlineImage";
 import { isImageRef } from "../lib/genui";
+import { prepareGenerativeMarkdown } from "../lib/generative-stream";
 
 class TranscriptRenderer extends Renderer {
   onIntent?: (intent: LiveIntent) => boolean;
@@ -25,9 +26,11 @@ class TranscriptRenderer extends Renderer {
   override linkImage(_href: string, imageUri: string, alt?: string): ReactNode { return this.image(imageUri, alt); }
 }
 export const Markdown = memo(function Markdown({ text, onIntent, streaming = false }: { text: string; onIntent?: (intent: LiveIntent) => boolean; streaming?: boolean }) {
+  // Unfinished UI fences are buffered before Markdown can expose model source.
+  const prepared = useMemo(() => prepareGenerativeMarkdown(text), [text]);
   // Reset renderer keys per parse so unchanged code blocks retain their identity.
-  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: true }); renderer.onIntent = onIntent; renderer.streaming = streaming; return renderer; }, [text, onIntent, streaming]);
-  const nodes = useMarkdown(text, { renderer, styles, colorScheme: "dark" });
+  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: true }); renderer.onIntent = onIntent; renderer.streaming = streaming; return renderer; }, [prepared, onIntent, streaming]);
+  const nodes = useMarkdown(prepared, { renderer, styles, colorScheme: "dark" });
   // Hook only, not the library's nested FlatList. FlashList owns vertical scroll.
   return <View>{nodes}</View>;
 });
