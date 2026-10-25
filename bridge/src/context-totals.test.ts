@@ -16,3 +16,16 @@ test("unsupported harnesses and unsafe session IDs never traverse the filesystem
   expect(harnessTotal("omp", "../../.env")).toBeUndefined();
   expect(harnessTotal("unknown", "01a15f23-b659-72a3-a6d9-61d9dabacff6")).toBeUndefined();
 });
+
+test("renamed OMP sessions resolve their UUID header instead of requiring the filename to match", async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { join } = await import("node:path"); const { tmpdir } = await import("node:os");
+  const root = mkdtempSync(join(tmpdir(), "dash-omp-context-")); const before = process.env.PI_CODING_AGENT_DIR;
+  try {
+    const { mkdirSync } = await import("node:fs"); mkdirSync(join(root, "sessions"));
+    const session = "01a15f23-b659-72a3-a6d9-61d9dabacff6";
+    writeFileSync(join(root, "sessions", "Named session.jsonl"), [JSON.stringify({ type: "session", id: session }), JSON.stringify({ type: "message", message: { role: "assistant", model: "observed-model", provider: "observed-provider", usage: { input: 100, cacheRead: 1000, output: 20 } } })].join("\n"));
+    process.env.PI_CODING_AGENT_DIR = root;
+    expect(harnessTotal("omp", session)).toMatchObject({ used: 1120, model: "observed-model", provider: "observed-provider", maximum: 0 });
+  } finally { if (before === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = before; rmSync(root, { recursive: true, force: true }); }
+});

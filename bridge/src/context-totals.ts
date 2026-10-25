@@ -13,6 +13,7 @@ export function parseHarnessTotal(harness: string, text: string, sessionId: stri
   let used: number | undefined;
   let maximum = 0;
   let model = harness;
+  let provider: string | undefined;
   for (const line of text.split("\n")) {
     let event: unknown;
     try { event = JSON.parse(line); } catch { continue; }
@@ -26,11 +27,11 @@ export function parseHarnessTotal(harness: string, text: string, sessionId: stri
     const message = record(event.message) ? event.message : undefined;
     if (message?.role === "assistant" && record(message.usage)) {
       const count = harness === "claude" ? sum(message.usage, ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"]) : harness === "omp" ? sum(message.usage, ["input", "cacheRead", "cacheWrite", "output"]) : undefined;
-      if (count !== undefined) { used = count; if (typeof message.model === "string") model = message.model.slice(0, 120); }
+      if (count !== undefined) { used = count; if (typeof message.provider === "string") provider = message.provider.slice(0, 120); if (typeof message.model === "string") model = message.model.slice(0, 120); }
     }
   }
   if (used === undefined) return;
-  return { sessionId, model, used, maximum, threshold: 0, estimated: true, source: "last provider request (best-effort total)", categories: [], revision: `${harness}:${sessionId}`, notes: ["Total only. Categories, current turn delta and auto-compact threshold are unavailable for this harness."] };
+  return { sessionId, model, provider, used, maximum, threshold: 0, estimated: true, source: "last provider request (best-effort total)", categories: [], revision: `${harness}:${sessionId}`, notes: ["Total only. Categories, current turn delta and auto-compact threshold are unavailable for this harness."] };
 }
 function findSession(root: string, session: string): string | undefined {
   const queue = [{ dir: root, depth: 0 }];
@@ -43,6 +44,18 @@ function findSession(root: string, session: string): string | undefined {
         // Never follow symlinks or inspect credential/config files.
         if (child.isDirectory() && entry.depth < 6) queue.push({ dir: join(entry.dir, child.name), depth: entry.depth + 1 });
         else if (child.isFile() && child.name.endsWith(".jsonl") && (child.name === `${session}.jsonl` || child.name.endsWith(`-${session}.jsonl`) || child.name.endsWith(`_${session}.jsonl`))) return join(entry.dir, child.name);
+        else if (child.isFile() && child.name.endsWith(".jsonl")) {
+          // Renamed OMP sessions keep their UUID in the header. Read at most 16 KiB, not the transcript.
+          let fd: number | undefined;
+          try {
+            fd = openSync(join(entry.dir, child.name), "r");
+            const buf = Buffer.alloc(16_384); const n = readSync(fd, buf, 0, buf.length, 0);
+            for (const line of buf.toString("utf8", 0, n).split("\n").slice(0, 4)) {
+              let header: unknown; try { header = JSON.parse(line); } catch { continue; }
+              if (record(header) && header.type === "session" && header.id === session) return join(entry.dir, child.name);
+            }
+          } catch { /* not a session file */ } finally { if (fd !== undefined) closeSync(fd); }
+        }
       }
     } catch { /* provider not installed */ }
   }

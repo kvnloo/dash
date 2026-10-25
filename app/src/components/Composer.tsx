@@ -1,3 +1,4 @@
+import { isUsageCommand } from "../lib/composer-command";
 import { ContextCard, ContextGauge, type ContextControl } from "./ContextCard";
 import { Feather } from "@expo/vector-icons";
 import { AgentOrb } from "./AgentOrb";
@@ -127,7 +128,8 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
   const editingQueue = queuePreview !== undefined;
   const draftText = queuePreview ?? text;
   const changeText = editingQueue ? onQueuePreviewChange ?? setText : setText;
-  const canSend = editingQueue ? Boolean(draftText.trim()) : canSendDrafts(draftText, drafts) && !disabled;
+  const localUsage = !editingQueue && Boolean(context) && isUsageCommand(draftText);
+  const canSend = localUsage || (editingQueue ? Boolean(draftText.trim()) : canSendDrafts(draftText, drafts) && !disabled);
 
   const update = useCallback((key: string, patch: Partial<DraftAttachment>) => {
     // An upload completion belongs to its original draft even while offscreen.
@@ -244,6 +246,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
   const remove = useCallback((key: string) => setDrafts(list => list.filter(d => d.key !== key)), []);
 
   const submit = useCallback(() => {
+    if (localUsage && context) { setText(""); Keyboard.dismiss(); context.showUsage(); return; }
     if (!canSend) return;
     if (queuePreview !== undefined) { onSaveQueuePreview?.(); return; }
     const refs = readyRefs(drafts);
@@ -251,9 +254,9 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
     setText("");
     setDrafts([]);
     onSend(value, refs, sendMode.mode);
-  }, [canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
+  }, [localUsage, context, canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
 
-  return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
+  return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} onUsage={context ? () => { if (isUsageCommand(draftText)) changeText(""); Keyboard.dismiss(); context.showUsage(); } : undefined} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
     {drafts.length > 0 ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips} accessibilityLabel="Attachments">
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}

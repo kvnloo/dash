@@ -25,6 +25,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     else reply({ sessionId: "fixture-session" });
   } else if (request.method === "session/load") {
     update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "old replay" } });
+    if (mode === "usage") update({ sessionUpdate: "usage_update", size: 500000, used: 150000 });
     reply({});
   } else if (request.method === "session/prompt") {
     promptId = request.id;
@@ -47,6 +48,10 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], { stdio: "ignore" });
       update({ sessionUpdate: "tool_call", title: `child:${child.pid}`, status: "pending" });
       child.unref();
+    }
+    if (mode === "usage") {
+      send({ jsonrpc: "2.0", method: "session/update", params: { sessionId: "not-our-session", update: { sessionUpdate: "usage_update", size: 10, used: 10 } } });
+      update({ sessionUpdate: "usage_update", size: 500000, used: 160000 });
     }
     reply({ stopReason: "end_turn" });
     if (mode === "orphan") process.exit(0);

@@ -39,7 +39,7 @@ export type DebugCommand =
   | { action: "thinkingSummary"; summary: SummaryInfo }
   | { action: "uxOutput"; text: string }
   | { action: "genuiReply"; text: string }
-  | { action: "contextTarget"; address: string; token: string; session: string; profile?: string }
+  | { action: "contextTarget"; address: string; token: string; session: string; profile?: string; harness?: "omp" | "hermes" }
   | { action: "listScenarios" };
 
 function sleep(ms: number): Promise<void> {
@@ -78,9 +78,9 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
       // Debug-only loopback proof target. Never import a user's live transcript into a fixture.
       if (!/^(localhost|127\.0\.0\.1):\d+$/.test(cmd.address)) return { ok: false };
       store.set(s => ({ ...s, settings: s.settings ? { ...s.settings, address: cmd.address, token: cmd.token } : null,
-        connection: { ...s.connection, status: "online" }, activeId: "context-proof", conversations: [{ id: "context-proof", title: "Context window · scratch", harness: "hermes", sessionId: cmd.session, profileId: cmd.profile ?? "default", createdAt: 1, updatedAt: 1, messages: [
-          { id: "proof-prompt", role: "user", text: "Inspect the context budget, then compact this disposable test session.", at: 1 },
-          { id: "proof-answer", role: "assistant", text: "The gauge reads the scratch Hermes transcript. No production session is modified.", at: 2, state: "done", turnId: "proof-turn", seq: 1 },
+        connection: { ...s.connection, status: "online" }, activeId: "context-proof", conversations: [{ id: "context-proof", title: "Context window · read-only proof", harness: cmd.harness ?? "hermes", sessionId: cmd.session, profileId: cmd.profile ?? "default", createdAt: 1, updatedAt: 1, messages: [
+          { id: "proof-prompt", role: "user", text: "Inspect the context budget (read-only render proof).", at: 1 },
+          { id: "proof-answer", role: "assistant", text: "This is a local test transcript around real host context counts. No production session is modified.", at: 2, state: "done", turnId: "proof-turn", seq: 1 },
         ] }] }));
       debugResetTo("Chat", {}); flushPendingDebugNavigation();
       return { ok: true };

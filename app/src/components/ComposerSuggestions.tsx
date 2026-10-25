@@ -8,8 +8,8 @@ import { PressScale } from "./PressScale";
 
 const EMPTY: SuggestionInventory = { commands: [], files: [] };
 
-export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, onChange }: {
-  text: string; cursor?: number; harness?: string; cwd?: string; onChange(text: string): void;
+export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, onChange, onUsage }: {
+  text: string; cursor?: number; harness?: string; cwd?: string; onChange(text: string): void; onUsage?(): void;
 }) {
   const settings = store.use(s => s.settings);
   const connection = store.use(s => s.connection);
@@ -45,7 +45,8 @@ export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, 
     {state.loading ? <View style={styles.loading}><ActivityIndicator size="small" color={colors.gold} /><Text style={styles.detail}>Loading from bridge…</Text></View> : null}
     {warning ? <Text accessibilityRole="alert" style={styles.detail}>{warning}</Text> : null}
     <ScrollView keyboardShouldPersistTaps="always" style={styles.list}>
-      {rows.map(row => <PressScale key={row.id} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => onChange(insertSuggestion(text, trigger, row.insert))} style={styles.row}>
+      {onUsage && trigger.prefix === "/" && "usage".startsWith(trigger.query) ? <PressScale accessibilityRole="button" accessibilityLabel="/usage" onPress={onUsage} style={styles.row}><Text style={styles.label}>/usage</Text><Text style={styles.detail}>This chat’s context and account quotas</Text></PressScale> : null}
+      {rows.filter(row => !onUsage || row.insert !== "/usage").map(row => <PressScale key={row.id} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => onChange(insertSuggestion(text, trigger, row.insert))} style={styles.row}>
         <Text numberOfLines={1} style={styles.label}>{row.label}</Text><Text numberOfLines={1} style={styles.detail}>{row.detail}</Text>
       </PressScale>)}
     </ScrollView>

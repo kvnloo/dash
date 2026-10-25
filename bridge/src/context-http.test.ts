@@ -45,3 +45,29 @@ test("context endpoint authenticates, resolves native identity, verifies compact
     expect(await response?.json()).toMatchObject({ ok: true, context: { used: 80_000, revision: "summary" } });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("read-only usage sheet separates context reads from provider work and keeps compaction unavailable", async () => {
+  const root = mkdtempSync(join(tmpdir(), "dash-usage-"));
+  try {
+    const db = new Database(join(root, "state.db"));
+    db.exec("CREATE TABLE sessions(id TEXT,source TEXT,title TEXT,started_at REAL,last_activity_at REAL,message_count INTEGER,cwd TEXT,archived INTEGER,hidden INTEGER,parent_session_id TEXT,end_reason TEXT,model_config TEXT); INSERT INTO sessions VALUES('scratch','cli','Scratch',1,1,2,'/workspace',0,0,NULL,NULL,'{}');"); db.close();
+    let plans = 0; let reads = 0;
+    const handler = contextHttp({ sessions: new HermesSessions({ root, env: {} }), read: async () => { reads++; return contextFixture(); }, plans: async () => { plans++; return [{ provider: "codex", windows: [], unavailable: true }]; } });
+    const url = "http://localhost/chat/context?profile=default&session=scratch";
+    expect((await handler(new Request(url.replace("context?", "usage?")), false))?.status).toBe(401);
+    expect(plans).toBe(0); expect(reads).toBe(0);
+    expect(await (await handler(new Request(url), true))?.json()).toMatchObject({ compactionSupported: false, plans: [] });
+    expect(plans).toBe(0);
+    expect(await (await handler(new Request(url.replace("context?", "usage?")), true))?.json()).toMatchObject({ plans: [{ provider: "codex", unavailable: true }] });
+    expect(plans).toBe(1);
+    expect((await handler(new Request(url.replace("context?", "context/compact?"), { method: "POST" }), true))?.status).toBe(501);
+    expect(reads).toBe(2);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+test("burn uses only valid observed weekly windows and never invents a reset or window length", () => {
+  const now = Date.parse("2026-10-25T00:00:00Z");
+  const weekly = { usedPercent: 50, resetsAt: "2026-10-25T12:00:00Z", windowMinutes: 1440 };
+  expect(parseProviderUsage({ provider: "codex", usage: { secondary: weekly } }, "codex", now).burn).toEqual({ observed: 50 / 12, sustainable: 50 / 12, ratio: 1 });
+  expect(parseProviderUsage({ provider: "codex", usage: { secondary: { ...weekly, windowMinutes: undefined } } }, "codex", now).burn).toBeUndefined();
+  expect(parseProviderUsage({ provider: "codex", usage: { secondary: { ...weekly, resetsAt: "invalid" } } }, "codex", now).burn).toBeUndefined();
+});

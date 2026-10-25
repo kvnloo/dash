@@ -6,13 +6,15 @@ function fixture(mode = "ok", timeoutMs = 2500) {
   const text: string[] = [];
   const statuses: string[] = [];
   const sessions: string[] = [];
+  const usages: { session: string; update: unknown }[] = [];
   const client = new AcpClient({
+    onUsage: (session, update) => usages.push({ session, update }),
     command: [process.execPath, join(import.meta.dir, "fixtures/agent.ts"), mode],
     cwd: import.meta.dir,
     timeoutMs,
     sink: { delta: value => text.push(value), status: value => statuses.push(value), session: value => sessions.push(value), error() {} },
   });
-  return { client, text, statuses, sessions };
+  return { client, text, statuses, sessions, usages };
 }
 
 test("real stdio negotiates, creates session, maps chunks and closes owned process", async () => {
@@ -86,4 +88,16 @@ test("close kills the owned process group even after the direct agent exits", as
     if (child) { try { process.kill(child, "SIGKILL"); } catch {} }
     await f.client.close();
   }
+});
+
+ test("usage updates survive session/load and prompt settlement, with exact session fencing", async () => {
+  const f = fixture("usage");
+  try {
+    await f.client.turn({ text: "hi", cwd: import.meta.dir, sessionId: "fixture-session" });
+    expect(f.usages).toEqual([
+      { session: "fixture-session", update: { sessionUpdate: "usage_update", size: 500000, used: 150000 } },
+      { session: "fixture-session", update: { sessionUpdate: "usage_update", size: 500000, used: 160000 } },
+    ]);
+    expect(f.text).toEqual(["DASH_ACP_OK"]);
+  } finally { await f.client.close(); }
 });
