@@ -111,16 +111,18 @@ describe("accessible actions agree with touch targets", () => {
   test("folder expand/collapse toggles only when matching current state", () => {
     let expanded = false;
     let toggles = 0;
-    const toggle = () => { expanded = !expanded; toggles++; };
+    let selected = false;
+    const activate = () => { selected = true; expanded = !expanded; toggles++; };
     expect(treeRowA11yAction(folder, expanded, "collapse")).toBeNull();
-    expect(treeRowA11yAction(folder, expanded, "expand")).toBe("toggle");
-    if (treeRowA11yAction(folder, expanded, "expand") === "toggle") toggle();
+    expect(treeRowA11yAction(folder, expanded, "expand")).toBe("activate");
+    if (treeRowA11yAction(folder, expanded, "expand") === "activate") activate();
     expect(expanded).toBe(true);
     expect(treeRowA11yAction(folder, expanded, "expand")).toBeNull();
-    expect(treeRowA11yAction(folder, expanded, "collapse")).toBe("toggle");
-    if (treeRowA11yAction(folder, expanded, "collapse") === "toggle") toggle();
+    expect(treeRowA11yAction(folder, expanded, "collapse")).toBe("activate");
+    if (treeRowA11yAction(folder, expanded, "collapse") === "activate") activate();
     expect(expanded).toBe(false);
     expect(toggles).toBe(2);
+    expect(selected).toBe(true);
     expect(treeRowA11yAction(folder, false, "decrement")).toBeNull();
     expect(treeRowA11yAction(folder, true, "activate")).toBeNull();
   });
@@ -173,7 +175,7 @@ describe("Tree native/web semantics wiring", () => {
 
   test("a11y action dispatch uses the row's actual disclosure/longpress callbacks and never parent-collapse fallback", () => {
     expect(source).toContain("treeRowA11yAction(node, expanded, e.nativeEvent.actionName, placeholder)");
-    expect(source).toContain('if (action === "toggle") toggle();');
+    expect(source).toContain('if (action === "activate") activate();');
     expect(source).toContain('else if (action === "longpress") longPress?.();');
     expect(source).toContain("treeRowTarget(node, placeholder)");
     expect(source).toContain('{node.onPress && node.children ? <Pressable');
