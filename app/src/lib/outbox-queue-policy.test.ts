@@ -123,7 +123,8 @@ describe("outbox queued-turn policy", () => {
     expect(reordered.flatMap(item => item.attachments.map(att => att.id))).toEqual([file("c").id, file("a").id, file("b").id]);
     expect(original).toEqual([a, b, c]);
     expect(allowed(planQueueReorder(original, 1, 1))).toBe(original);
-    for (const [from, to] of [[-1, 0], [0, -1], [3, 0], [0, 3], [0.2, 1], [1, Infinity]]) {
+    const invalidPositions: ReadonlyArray<readonly [number, number]> = [[-1, 0], [0, -1], [3, 0], [0, 3], [0.2, 1], [1, Infinity]];
+    for (const [from, to] of invalidPositions) {
       blocked(planQueueReorder(original, from, to), "invalid-position", original);
     }
   });
