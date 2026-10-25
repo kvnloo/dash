@@ -45,7 +45,7 @@ export function prepareGenerativeMarkdown(markdown: string): string {
     const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
     if (open) {
       const closing = closingFence.exec(line);
-      if (closing && closing[1]?.charAt(0) === open.marker && closing[1].length >= open.width) {
+      if (closing && closing[1]?.charAt(0) === open.marker && (closing[1]?.length ?? 0) >= open.width) {
         open = null;
       }
     } else {
