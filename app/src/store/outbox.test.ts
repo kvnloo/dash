@@ -308,6 +308,41 @@ describe("durable delivery outbox orchestration", () => {
     expect(disk.read()).toHaveLength(1);
   });
 
+  test("disposing during an unresolved hydration aborts queued mutations before disk or network", async () => {
+    let release: (rows: readonly OutboxRecord[]) => void = () => undefined;
+    const loading = new Promise<readonly OutboxRecord[]>(resolve => { release = resolve; });
+    let writes = 0;
+    let transmissions = 0;
+    const store = createOutboxStore({
+      persistence: {
+        load: () => loading,
+        async save() { writes += 1; },
+      },
+      transport: { send() { transmissions += 1; return true; } },
+      now: () => 100,
+    });
+    const pending = store.enqueue(message("pending-dispose"));
+    store.dispose();
+    release([]);
+    expect(await pending).toMatchObject({ ok: false, reason: "disposed" });
+    expect(writes).toBe(0);
+    expect(transmissions).toBe(0);
+  });
+
+  test("transport exceptions remain unconfirmed and cannot trigger unsafe retry", async () => {
+    const disk = memoryStorage();
+    const store = createOutboxStore({
+      persistence: disk.persistence,
+      transport: { send() { throw new Error("socket closed while writing"); } },
+      now: () => 100,
+    });
+    const result = await store.enqueue(message("socket-unknown"));
+    expect(result).toMatchObject({ ok: true, value: { transport: "unconfirmed" } });
+    expect(disk.read()[0]).toMatchObject({ stage: "queued", attempts: 1, retryNeeded: true });
+    expect(await store.retry("socket-unknown", { dedupeSupported: false }))
+      .toMatchObject({ ok: false, reason: "unsafe-retry" });
+  });
+
   test("corrupt hydration exposes the error rather than replacing unsent data", async () => {
     let writes = 0;
     const store = createOutboxStore({
