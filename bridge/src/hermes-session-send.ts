@@ -90,7 +90,7 @@ function parseEvent(text: string): SendEvent {
       if (typeof raw.stopReason !== "string") break;
       return { seq: raw.seq, type: "done", stopReason: raw.stopReason };
     case "error":
-      if (typeof raw.code !== "string") break;
+      if (typeof raw.code !== "string" || !/^[a-z_]{1,64}$/.test(raw.code)) break;
       return { seq: raw.seq, type: "error", code: raw.code };
   }
   throw new Error("Invalid z0bridge send event; outcome unknown. Check session history.");
@@ -182,12 +182,13 @@ export async function sendViaZ0Bridge(options: SendOptions): Promise<LiveResult 
   if (!credentialFile) return undefined;
   const base = loopbackUrl(env.DASH_Z0BRIDGE_URL || "http://127.0.0.1:4787");
   if (!base) throw new Error("z0bridge send requires a loopback HTTP endpoint; no fallback attempted.");
-  const credential = readLocalCredential(credentialFile, ["hermes:session.send"]);
-  if (!credential) throw new Error("Missing private Dash credential with hermes:session.send; no fallback attempted.");
   assertSendInput(options);
   if (options.signal?.aborted) throw new Error("z0bridge send cancelled before admission.");
   const fetcher = options.fetch ?? globalThis.fetch;
   if (!await preflight(fetcher, base, options.signal)) return undefined;
+  // Fail closed when a running daemon has no correctly scoped private credential.
+  const credential = readLocalCredential(credentialFile, ["hermes:session.send"]);
+  if (!credential) throw new Error("Missing private Dash credential with hermes:session.send; no fallback attempted.");
 
   // A network error during POST can mean z0bridge accepted the send. Never resubmit via CLI.
   let admission: Response;
