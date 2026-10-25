@@ -21,10 +21,10 @@ export function routePointer(kind: PointerKind, penMode: boolean, pointers: numb
   return kind === "other" ? "pass" : "draw";
 }
 
-/** A stylus touching the screen with pen mode on opens annotation mode. */
-export function stylusEnters(kind: PointerKind, penMode: boolean, active: boolean): boolean {
+/** Contact alone never enters Annotate, even when S Pen-only drawing is enabled. */
+export function stylusEnters(_kind: PointerKind, _penMode: boolean, _active: boolean): boolean {
   "worklet";
-  return !active && penMode && kind === "stylus";
+  return false;
 }
 
 /** Gesture Handler reports pressure only for styluses; others draw at mid pressure. */

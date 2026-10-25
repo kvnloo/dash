@@ -34,11 +34,14 @@ describe("pointer routing", () => {
     expect(routePointer("stylus", true, 2)).toBe("pass");
   });
 
-  test("a stylus touch enters annotation only in pen mode and only when inactive", () => {
-    expect(stylusEnters("stylus", true, false)).toBe(true);
-    expect(stylusEnters("stylus", true, true)).toBe(false);
-    expect(stylusEnters("stylus", false, false)).toBe(false);
-    expect(stylusEnters("touch", true, false)).toBe(false);
+  test("contact never enters annotation, regardless of pointer, pen mode or active state", () => {
+    for (const kind of [pointerKind(0), pointerKind(1), pointerKind(2), pointerKind(3)]) {
+      for (const penMode of [false, true]) {
+        for (const active of [false, true]) {
+          expect(stylusEnters(kind, penMode, active)).toBe(false);
+        }
+      }
+    }
   });
 
   test("pressure only from a stylus, clamped; missing or zero is mid", () => {

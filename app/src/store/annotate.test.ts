@@ -1,11 +1,11 @@
 import { beforeEach, expect, test } from "bun:test";
 import { EMPTY_DRAWING } from "../lib/annotate/strokes";
-import { addSegment, annotate, commitStroke, currentSink, enterAnnotation, exitAnnotation, finishSend, registerSink, type AnnotationSink } from "./annotate";
+import { addSegment, annotate, commitStroke, currentSink, enterAnnotation, exitAnnotation, finishSend, registerSink, setPenMode, stylusButton, toggleAnnotation, type AnnotationSink } from "./annotate";
 
 const sink = (label: string): AnnotationSink => ({ label, steerable: () => false, send: () => {} });
 const line = { tool: "pen" as const, color: "accent" as const, pointer: "stylus" as const, points: [{ x: 0, y: 0, p: 0.5, t: 1 }, { x: 1, y: 1, p: 0.5, t: 2 }] };
 
-beforeEach(() => { exitAnnotation(); });
+beforeEach(() => { exitAnnotation(); stylusButton(false); setPenMode(false); });
 
 test("root live voice sink remains pinned when another chat registers on navigation", () => {
   const voice = { ...sink("attached voice"), live: true };
@@ -67,4 +67,39 @@ test("segments replace by id and age out after ten minutes", () => {
   expect(annotate.get().segments.map(s => s.text)).toEqual(["new"]);
   addSegment({ id: "b", text: "later", start: 700_000, end: 700_500, source: "voice" });
   expect(annotate.get().segments.map(s => s.id)).toEqual(["b"]);
+});
+
+test("side-button toggles once per press and retains unsent ink and speech across Normal", () => {
+  stylusButton(true);
+  expect(annotate.get()).toMatchObject({ active: true, buttonDown: true, penMode: true });
+  commitStroke(line);
+  addSegment({ id: "kept", text: "note", start: 1, end: 2, source: "mic" });
+  const originalDrawing = annotate.get().drawing;
+  const originalSegments = annotate.get().segments;
+  stylusButton(true);
+  expect(annotate.get().active).toBe(true);
+  stylusButton(false);
+  expect(annotate.get().active).toBe(true);
+  stylusButton(true);
+  expect(annotate.get()).toMatchObject({ active: false, buttonDown: true, penMode: true });
+  expect(annotate.get().drawing).toBe(originalDrawing);
+  expect(annotate.get().segments).toBe(originalSegments);
+  stylusButton(false);
+  stylusButton(true);
+  expect(annotate.get().active).toBe(true);
+  expect(annotate.get().drawing.strokes).toHaveLength(1);
+  expect(annotate.get().segments.map(segment => segment.text)).toEqual(["note"]);
+});
+
+test("pill toggle is available without native stylus events and does not discard the draft", () => {
+  toggleAnnotation();
+  expect(annotate.get().active).toBe(true);
+  commitStroke(line);
+  const drawing = annotate.get().drawing;
+  toggleAnnotation();
+  expect(annotate.get().active).toBe(false);
+  expect(annotate.get().drawing).toBe(drawing);
+  toggleAnnotation();
+  expect(annotate.get().active).toBe(true);
+  expect(annotate.get().drawing.strokes).toHaveLength(1);
 });
