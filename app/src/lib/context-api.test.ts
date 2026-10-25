@@ -14,7 +14,12 @@ async function withFetch(
   handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
   check: () => Promise<void>,
 ): Promise<void> {
-  const spy = spyOn(globalThis, "fetch").mockImplementation((input, init) => Promise.resolve(handler(String(input), init)));
+  const fakeFetch = Object.assign(
+    (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> =>
+      Promise.resolve(handler(String(input), init)),
+    { preconnect: () => {} },
+  );
+  const spy = spyOn(globalThis, "fetch").mockImplementation(fakeFetch);
   try { await check(); }
   finally { spy.mockRestore(); }
 }
