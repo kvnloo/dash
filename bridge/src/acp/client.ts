@@ -49,7 +49,7 @@ export function acpRequestFailure(error: unknown, phase: string): string {
 }
 
 type Pending = { resolve(value: unknown): void; reject(error: Error): void };
-export type AcpOptions = { command: string[]; cwd: string; timeoutMs?: number; sink: Sink; env?: Record<string, string> };
+export type AcpOptions = { command: string[]; cwd: string; timeoutMs?: number; sink: Sink; env?: Record<string, string>; onUsage?(session: string, update: unknown): void };
 
 /** One owned stdio connection. Client capabilities are deliberately empty. */
 export class AcpClient {
@@ -174,7 +174,9 @@ export class AcpClient {
           if (params.sessionId === this.sessionId) this.commandReady?.();
           return;
         }
-        if (!this.prompting || !this.sessionId || params.sessionId !== this.sessionId || !record(params.update)) return;
+        if (!this.sessionId || params.sessionId !== this.sessionId || !record(params.update)) return;
+        if (params.update.sessionUpdate === "usage_update") { this.options.onUsage?.(this.sessionId, params.update); return; }
+        if (!this.prompting) return;
         const update = params.update;
         acpParts(update, this.parts);
         switch (update.sessionUpdate) {

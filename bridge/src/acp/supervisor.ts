@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { Sink, TurnInput } from "../harnesses";
+import { acpContextReadings } from "./context";
 import { AcpClient } from "./client";
 
 const adapterBin = join(import.meta.dir, "../../acp-adapters/node_modules/.bin");
@@ -29,7 +30,7 @@ export class AcpSupervisor {
 
   start(options: { id: string; command: string[]; input: TurnInput; sink: Sink; timeoutMs?: number; env?: Record<string, string> }): AcpHandle {
     if (this.active) throw new Error("ACP supervisor busy; concurrency is limited to one turn");
-    const client = new AcpClient({ command: options.command, cwd: options.input.cwd, sink: options.sink, timeoutMs: options.timeoutMs, env: options.env });
+    const client = new AcpClient({ command: options.command, cwd: options.input.cwd, sink: options.sink, timeoutMs: options.timeoutMs, env: options.env, onUsage: (session, update) => acpContextReadings.observe(options.id, session, update) });
     this.active = client;
     const done = client.turn(options.input).finally(async () => {
       await client.close();

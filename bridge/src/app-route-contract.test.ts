@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-// Executable route contract for the composed app at integrate/native-acceptance 31a3d4f.
+// Executable route contract: original 31a3d4f paths plus read-only usage in union 13fdf55.
 // Every HTTP call site the app makes (file:line at 31a3d4f) is replayed against the REAL compiled
 // bridge process (index.ts) in a hermetic temp environment: auth comes before any read (401 without
 // a credential, never 404/200), and each route exists with its defined unsupported/missing-data answer.
@@ -23,6 +23,9 @@ const CALLS: Call[] = [
   { site: "app/src/components/WorkersStrip.tsx:42", method: "GET", path: "/hermes/workers?profile=default&session=missing", authed: [200, 404] },
   { site: "app/src/components/ContextCard.tsx:37 (GET)", method: "GET", path: "/chat/context?profile=default&session=missing&harness=hermes", authed: [404], check: b => expect(b).toEqual({ error: "session not found" }) },
   { site: "app/src/components/ContextCard.tsx:37 (non-Hermes harness)", method: "GET", path: "/chat/context?profile=default&session=s1&harness=codex", authed: [200], check: b => expect(b).toMatchObject({ plans: expect.any(Array) }) },
+  { site: "13fdf55 useContextUsage Hermes usage", method: "GET", path: "/chat/usage?profile=default&session=missing&harness=hermes", authed: [404], check: b => expect(b).toEqual({ error: "session not found" }) },
+  { site: "13fdf55 useContextUsage OMP usage", method: "GET", path: "/chat/usage?profile=default&session=s1&harness=omp", authed: [200], check: b => expect(b).toMatchObject({ context: null, plans: expect.any(Array), compactionSupported: false }) },
+  { site: "read-only usage rejects writes", method: "POST", path: "/chat/usage?profile=default&session=s1&harness=omp", authed: [405] },
   { site: "app/src/components/ContextCard.tsx:62 (POST compact, EXCLUDED mutation)", method: "POST", path: "/chat/context/compact?profile=default&session=missing", authed: [501], check: b => expect(b).toMatchObject({ ok: false, code: "unavailable" }) },
   { site: "app/src/lib/z0live-state.ts:26", method: "GET", path: "/z0live/state", authed: [200], check: b => expect(b).toMatchObject({ live: false }) },
   { site: "app/src/lib/useOrchestraEvidence.ts:18", method: "GET", path: "/orchestra/graph", authed: [200] },
@@ -77,7 +80,7 @@ describe("composed-app route contract against the compiled bridge", () => {
     expect(messages.some(m => m.type === "history" || m.type === "error")).toBe(true);
   });
 
-  test("excluded on this line: native duplex voice bootstrap is not carried (grant-gated, separate rollout)", async () => {
+  test("native voice bootstrap remains denied to legacy-token clients (identity grant required)", async () => {
     const res = await fetch(`http://127.0.0.1:${port}/voice/bootstrap`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
     expect([404, 405]).toContain(res.status);
   });

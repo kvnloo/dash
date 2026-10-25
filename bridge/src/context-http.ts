@@ -2,10 +2,11 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { parseContext, record, type ContextSnapshot, type PlanUsage, type PlanWindow } from "../../shared/context";
+import { acpContextReadings } from "./acp/context";
 import { harnessTotal } from "./context-totals";
 import { HermesSessions } from "./hermes-sessions";
 
-export function parseProviderUsage(value: unknown, provider: "claude" | "codex"): PlanUsage {
+export function parseProviderUsage(value: unknown, provider: "claude" | "codex", now = Date.now()): PlanUsage {
   const rows = Array.isArray(value) ? value : [value];
   const row = rows.find(r => record(r) && r.provider === provider);
   const usage = record(row) && record(row.usage) ? row.usage : undefined;
@@ -22,11 +23,23 @@ export function parseProviderUsage(value: unknown, provider: "claude" | "codex")
   if (Array.isArray(usage?.extraRateWindows)) for (const item of usage.extraRateWindows) {
     if (record(item) && typeof item.title === "string" && item.title.length <= 80 && /^[\w .()%/-]+$/.test(item.title)) add(item.title, item.window);
   }
+  const weekly = usage?.secondary;
+  let burn: PlanUsage["burn"];
+  if (record(weekly) && typeof weekly.usedPercent === "number" && weekly.usedPercent >= 0 && weekly.usedPercent <= 100 && typeof weekly.resetsAt === "string" && typeof weekly.windowMinutes === "number" && Number.isFinite(weekly.windowMinutes) && weekly.windowMinutes > 0) {
+    const left = (Date.parse(weekly.resetsAt) - now) / 3_600_000;
+    const elapsed = weekly.windowMinutes / 60 - left;
+    if (left > 0 && elapsed > 0) {
+      const observed = weekly.usedPercent / elapsed;
+      const sustainable = (100 - weekly.usedPercent) / left;
+      burn = { observed, sustainable, ...(sustainable > 0 ? { ratio: observed / sustainable } : {}) };
+    }
+  }
   // Explicit projection: never return identity, OAuth, credentials or raw provider output.
-  return { provider, windows, ...(!windows.length ? { unavailable: true } : {}) };
+  return { provider, windows, ...(burn ? { burn } : {}), ...(!windows.length ? { unavailable: true } : {}) };
 }
 
 export async function providerUsage(provider: "claude" | "codex"): Promise<PlanUsage> {
+  try {
   const child = Bun.spawn(["codexbar", "usage", "--provider", provider, "--source", "oauth", "--json-only"], { stdout: "pipe", stderr: "ignore" });
   const timer = setTimeout(() => child.kill(), 15_000);
   try {
@@ -36,6 +49,7 @@ export async function providerUsage(provider: "claude" | "codex"): Promise<PlanU
     return parseProviderUsage(value, provider);
   } catch { return { provider, windows: [], unavailable: true }; }
   finally { clearTimeout(timer); }
+  } catch { return { provider, windows: [], unavailable: true }; }
 }
 
 export function planCache(read = providerUsage, now = Date.now) {
@@ -69,25 +83,25 @@ export function contextHttp(options: { sessions?: HermesSessions; read?: typeof 
   const plans = options.plans ?? planCache();
   return async (request: Request, authorized: boolean): Promise<Response | undefined> => {
     const url = new URL(request.url);
+    const usageSheet = url.pathname === "/chat/usage";
     const compress = url.pathname === "/chat/context/compact";
-    if (url.pathname !== "/chat/context" && !compress) return;
+    if (url.pathname !== "/chat/context" && !compress && !usageSheet) return;
     const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
     if (!authorized) return json({ error: "unauthorized" }, 401);
-    // Read-only rollout: session compaction (a mutation) is deliberately NOT carried by this bridge line.
-    // Answer explicitly so clients show "unavailable" instead of a 404/guess; nothing is read or executed.
+    // This bridge line carries read-only metadata only; reject before identity reads.
     if (compress) return json({ ok: false, code: "unavailable", error: "Compaction is not available on this host" }, 501);
     if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
     const session = url.searchParams.get("session");
     const profile = url.searchParams.get("profile");
     const harness = url.searchParams.get("harness") ?? "hermes";
     if (!session || session.length > 256 || !profile || profile.length > 1024) return json({ error: "invalid identity" }, 400);
-    if (harness !== "hermes") return json({ context: harnessTotal(harness, session) ?? null, plans: await plans() });
+    if (harness !== "hermes") return json({ context: acpContextReadings.read(harness, session, harnessTotal(harness, session)) ?? null, plans: usageSheet ? await plans() : [], compactionSupported: false });
     // Native resolution only: no profile APIs, gateway discovery or credential reads.
     const home = sessions.nativeHome(profile, session);
     if (!home) return json({ error: "session not found" }, 404);
     try {
-      const [context, usage] = await Promise.all([(options.read ?? nativeContext)(home, session), plans()]);
-      return json({ context: context ?? null, plans: usage });
+      const [context, usage] = await Promise.all([(options.read ?? nativeContext)(home, session), usageSheet ? plans() : Promise.resolve([])]);
+      return json({ context: acpContextReadings.read(harness, session, context) ?? null, plans: usage, compactionSupported: false });
     } catch { return json({ error: "Context unavailable" }, 503); }
   };
 }
