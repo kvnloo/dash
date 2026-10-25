@@ -196,7 +196,8 @@ export class DeliveryAdmissionController {
     const pending = this.inFlight.get(key);
     if (pending) {
       if (pending.fingerprint !== fingerprint) throw new DeliveryAdmissionConflict();
-      return { ...await pending.promise, replay: true };
+      const resolved = await pending.promise;
+      return { ...resolved, replay: true };
     }
     const task = this.reserveThenStart(input, scope, fingerprint);
     this.inFlight.set(key, { fingerprint, promise: task });
