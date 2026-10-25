@@ -31,24 +31,24 @@ describe("S Pen Annotate/Normal mode", () => {
 
   test("subscribes to button only, rejects malformed events and ignores late callbacks", () => {
     const observed: boolean[] = [];
-    let listener: ((payload: unknown) => void) | undefined;
+    const listeners: Array<(payload: unknown) => void> = [];
     let removals = 0;
     const stop = subscribeStylusButton({
       addListener(event, callback) {
         expect(event).toBe("button");
-        listener = callback;
+        listeners.push(callback);
         return { remove: () => { removals++; } };
       },
     }, pressed => observed.push(pressed));
-    listener?.({ pressed: true });
-    listener?.({ pressed: "true" });
-    listener?.({ pressed: 1 });
-    listener?.(null);
-    listener?.({ unrelated: true });
-    listener?.({ pressed: false });
+    listeners[0]?.({ pressed: true });
+    listeners[0]?.({ pressed: "true" });
+    listeners[0]?.({ pressed: 1 });
+    listeners[0]?.(null);
+    listeners[0]?.({ unrelated: true });
+    listeners[0]?.({ pressed: false });
     stop();
     stop();
-    listener?.({ pressed: true });
+    listeners[0]?.({ pressed: true });
     expect(observed).toEqual([true, false, false]);
     expect(removals).toBe(1);
   });

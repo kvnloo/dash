@@ -35,7 +35,7 @@ describe("pointer routing", () => {
   });
 
   test("contact never enters annotation, regardless of pointer, pen mode or active state", () => {
-    for (const kind of ["touch", "stylus", "mouse", "other"] as const) {
+    for (const kind of [pointerKind(0), pointerKind(1), pointerKind(2), pointerKind(3)]) {
       for (const penMode of [false, true]) {
         for (const active of [false, true]) {
           expect(stylusEnters(kind, penMode, active)).toBe(false);
