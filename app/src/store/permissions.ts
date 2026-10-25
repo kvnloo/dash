@@ -245,8 +245,11 @@ export function createPermissionsStore(deps: PermissionStoreDependencies) {
     if (record.chosenOptionId !== null && event.optionId !== undefined &&
       event.optionId !== record.chosenOptionId) return false;
     const offered = record.options.find(option => option.optionId === event.optionId);
-    if (event.outcome === "allowed" && offered &&
-      (offered.kind === "reject_once" || offered.kind === "reject_always")) return false;
+    const chosen = record.options.find(option => option.optionId === record.chosenOptionId);
+    // A missing optionId on a bridge result must not turn a local Reject into Allow.
+    if (event.outcome === "allowed" &&
+      ((offered && (offered.kind === "reject_once" || offered.kind === "reject_always")) ||
+        (chosen && (chosen.kind === "reject_once" || chosen.kind === "reject_always")))) return false;
 
     cancelTimer(key);
     change(key, current => ({
