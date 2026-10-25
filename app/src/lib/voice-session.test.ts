@@ -9,8 +9,8 @@ mock.module("expo-file-system", () => ({
   },
 }));
 
-const { VoiceSession } = await import("./voice-session");
-import type { Recorder, VoicePhase } from "./voice-session";
+const { VoiceSession, VoiceBootstrapSession } = await import("./voice-session");
+import type { Recorder, VoicePhase, VoiceBootstrapPillState } from "./voice-session";
 
 function deferred(): { promise: Promise<void>; finish(): void } {
   let finish = (): void => {
@@ -203,5 +203,68 @@ describe("legacy voice session lifecycle", () => {
     expect(voice.records()).toBe(1);
     expect(voice.recording()).toBe(true);
     await voice.session.stop();
+  });
+});
+
+
+describe("voice bootstrap pill and manual retry", () => {
+  const attached = { profile: "hermes", session: "attached-session" };
+
+  test("HTTP 503 publishes a short error with Retry, then succeeds only on tap", async () => {
+    const states: VoiceBootstrapPillState[] = [];
+    const targets: { profile: string; session: string }[] = [];
+    let count = 0;
+    const session = new VoiceBootstrapSession(async target => {
+      count++;
+      targets.push({ profile: target.profile, session: target.session });
+      return count === 1
+        ? Response.json({ error: "deployment disabled" }, { status: 503 })
+        : Response.json({ ready: true, profile: target.profile, session: target.session });
+    }, state => states.push(state));
+    await session.start(attached);
+    expect(session.state).toEqual({ phase: "error", message: "Voice is disabled on this bridge.", actionLabel: "Retry" });
+    expect(states.map(state => state.phase)).toEqual(["connecting", "error"]);
+    expect(count).toBe(1);
+    await session.retry();
+    expect(session.state).toEqual({ phase: "ready", message: "Voice ready" });
+    expect(states.map(state => state.phase)).toEqual(["connecting", "error", "connecting", "ready"]);
+    expect(targets).toEqual([attached, attached]);
+    await session.retry();
+    expect(count).toBe(2);
+  });
+
+  test("offline error exposes Retry and never retries by itself", async () => {
+    let requests = 0;
+    const session = new VoiceBootstrapSession(async () => {
+      requests++;
+      throw new TypeError("Network failed");
+    }, () => {});
+    await session.start(attached);
+    expect(session.state).toEqual({ phase: "error", message: "Can't reach Dash voice. Check connection.", actionLabel: "Retry" });
+    expect(requests).toBe(1);
+    await session.retry();
+    expect(requests).toBe(2);
+    expect(session.state.phase).toBe("error");
+  });
+
+  test("cancel discards an in-flight response and disables stale Retry", async () => {
+    const states: VoiceBootstrapPillState[] = [];
+    let finish: (reply: Response) => void = () => { throw new Error("deferred not initialized"); };
+    let requests = 0;
+    const pending = new Promise<Response>(resolve => { finish = resolve; });
+    const session = new VoiceBootstrapSession(() => {
+      requests++;
+      return pending;
+    }, state => states.push(state));
+    const starting = session.start(attached);
+    await session.start(attached);
+    expect(requests).toBe(1);
+    session.cancel();
+    finish(Response.json({ error: "unavailable" }, { status: 404 }));
+    await starting;
+    expect(session.state).toEqual({ phase: "idle", message: "" });
+    expect(states.map(state => state.phase)).toEqual(["connecting", "idle"]);
+    await session.retry();
+    expect(requests).toBe(1);
   });
 });
