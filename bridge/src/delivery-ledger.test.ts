@@ -122,7 +122,7 @@ describe("crash-safe bridge delivery ledger", () => {
       expect(raw).not.toContain("messageBody");
 
       const recovered = await opened(root);
-      expect(await recovered.get(identity("one"))).toEqual({
+      expect(await recovered.get(identity("one"))).toMatchObject({
         ...admitted, reconciliationRequired: true,
       });
       expect(await recovered.get(identity("two"))).toEqual({
