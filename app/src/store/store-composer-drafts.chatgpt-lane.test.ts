@@ -11,8 +11,9 @@ function isolatedCase(name: string, saved?: string): string {
   const environment: Record<string, string | undefined> = {
     ...process.env,
     [CASE_ENV]: name,
-    [INPUT_ENV]: saved,
   };
+  if (saved === undefined) delete environment[INPUT_ENV];
+  else environment[INPUT_ENV] = saved;
   const child = Bun.spawnSync({
     cmd: [process.execPath, "test", import.meta.path],
     cwd: import.meta.dir,
@@ -25,7 +26,7 @@ function isolatedCase(name: string, saved?: string): string {
   if (child.exitCode !== 0) {
     throw new Error("Isolated composer draft fixture " + name + " failed:\n" + stdout + "\n" + stderr);
   }
-  const output = stdout.split(/\r?\n/).find(line => line.includes(SNAPSHOT_MARKER));
+  const output = (stdout + "\n" + stderr).split(/\r?\n/).find(line => line.includes(SNAPSHOT_MARKER));
   if ((name === "persist" || name === "clear") && !output) {
     throw new Error("Missing persisted snapshot for " + name + ":\n" + stdout + "\n" + stderr);
   }
