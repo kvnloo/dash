@@ -47,7 +47,8 @@ function composerAvoidance(keyboardLift: number): number {
 type InkModule = typeof import("./InkCanvas");
 let inkModule: Promise<InkModule> | undefined;
 function loadInk(): Promise<InkModule> {
-  inkModule ??= loadSkia().then(() => import("./InkCanvas")).catch(error => { inkModule = undefined; throw error; });
+  // Synchronous require keeps InkCanvas in the main bundle: Metro's lazy split-chunk URL 404s behind the turbo relay.
+  inkModule ??= loadSkia().then(() => require("./InkCanvas") as InkModule).catch(error => { inkModule = undefined; throw error; });
   return inkModule;
 }
 
@@ -182,7 +183,10 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       {active ? <Tray onSend={send} screenHeight={size.height} /> : <Toast screenHeight={size.height} />}
       {active && inkError ? <View style={styles.inkError}>
         <Text accessibilityRole="alert" style={styles.error}>{inkError}</Text>
-        <Chip label="Retry ink" a11y="Retry ink renderer" onPress={() => setInkError(undefined)} />
+        <View style={styles.row}>
+          <Chip label="Retry ink" a11y="Retry ink renderer" onPress={() => setInkError(undefined)} />
+          <Chip label="Exit" a11y="Exit annotation" onPress={exitAnnotation} />
+        </View>
       </View> : null}
     </View>
   );
@@ -280,12 +284,12 @@ function Tray({ onSend, screenHeight }: { onSend(keep: boolean): void; screenHei
         <Swatch color="red" selected={s.color === "red"} />
       </View>
       <View style={[styles.row, thumb.row]}>
+        <Chip label="Exit" a11y="Exit annotation" onPress={exitAnnotation} />
         <Chip label="Undo" a11y="Undo" disabled={s.drawing.past.length === 0} onPress={undoStroke} />
         <Chip label="Clear" a11y="Clear" disabled={count === 0} onPress={clearStrokes} />
         <Chip label={s.penMode ? "S Pen ✓" : "S Pen"} a11y="Pen mode: only the S Pen draws, fingers scroll" selected={s.penMode} onPress={() => setPenMode(!s.penMode)} />
         <HoldToTalk />
         <Chip label="⇅" a11y={top ? "Move tray to the bottom" : "Move tray to the top"} onPress={() => setTop(!top)} />
-        <Chip label="✕" a11y="Discard annotation" onPress={exitAnnotation} />
         <Chip label="Keep" a11y="Send and keep drawing" disabled={busy || count === 0} onPress={() => onSend(true)} />
         <Chip label={busy ? "…" : "Send"} a11y="Send annotation" primary disabled={busy || count === 0} onPress={() => onSend(false)} />
       </View>
