@@ -1,4 +1,7 @@
 import { parseConversation, type Conversation, type Message } from "../model";
+import { isCatalogHarness } from "../../../shared/catalog";
+
+export function hasHostHistory(chat: Conversation): boolean { return Boolean(chat.sessionId) && isCatalogHarness(chat.harness); }
 
 export interface ConversationFiles {
   list(area: "durable" | "cache"): Promise<string[]>;
@@ -33,7 +36,7 @@ function pending(message: Message): boolean {
     : message.state === "pending" || message.state === "streaming";
 }
 export function durableConversation(chat: Conversation): Conversation {
-  if (!chat.sessionId) return chat;
+  if (!hasHostHistory(chat)) return chat;
   const messages = chat.messages.filter((message, index, all) => {
     const next = all[index + 1];
     return pending(message) || (message.role === "user" && next?.role === "assistant" && pending(next));
@@ -61,6 +64,7 @@ function sameHistory(before: Conversation | undefined, after: Conversation): boo
   return a.length === b.length && a.every((message, index) => message === b[index]);
 }
 export function cacheConversation(chat: Conversation): string | null {
+  if (!hasHostHistory(chat)) return null;
   const messages = cacheMessages(chat);
   if (!messages.length) return null;
   const snapshot = { ...chat, cacheVersion: CACHE_VERSION, messages };
@@ -88,7 +92,7 @@ export class ConversationPersistence {
       for (const chat of batch) if (chat) {
         chats.push(chat);
         this.saved.set(chat.id, chat);
-        if (chat.sessionId) this.durableValues.set(chat.id, JSON.stringify(chat));
+        if (hasHostHistory(chat)) this.durableValues.set(chat.id, JSON.stringify(chat));
       }
     }
     this.cacheOrder = (await this.files.list("cache")).filter(name => name.endsWith(".json"));
@@ -96,7 +100,7 @@ export class ConversationPersistence {
   }
 
   async cached(chat: Conversation): Promise<Conversation> {
-    if (!chat.sessionId) return chat;
+    if (!hasHostHistory(chat)) return chat;
     try {
       const raw = await this.files.read("cache", filename(chat.id));
       if (!raw || raw.length > CACHE_ENTRY_BYTES) return chat;
@@ -135,10 +139,10 @@ export class ConversationPersistence {
           const durable = JSON.stringify(durableConversation(chat));
           if (this.durableValues.get(chat.id) !== durable) {
             await this.files.write("durable", name, durable);
-            if (chat.sessionId) this.durableValues.set(chat.id, durable);
+            if (hasHostHistory(chat)) this.durableValues.set(chat.id, durable);
             else this.durableValues.delete(chat.id);
           }
-          if (chat.sessionId && !sameHistory(this.saved.get(chat.id), chat)) {
+          if (hasHostHistory(chat) && !sameHistory(this.saved.get(chat.id), chat)) {
             const cache = cacheConversation(chat);
             try {
               if (cache) {

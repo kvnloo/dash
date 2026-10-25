@@ -37,6 +37,9 @@ test("host history is cache only; local-only conversations remain durable", asyn
   expect(JSON.parse(files.durable.get("chat.json") ?? "null").messages).toEqual([]);
   expect(files.cache.get("chat.json")).toContain("host answer");
   expect(files.durable.get("local.json")).toContain("host answer");
+  const unknown = { ...chat("api"), harness: "custom-api" };
+  expect(durableConversation(unknown)).toBe(unknown);
+  expect(cacheConversation(unknown)).toBeNull();
   files.cache.clear();
   const restored = await new ConversationPersistence(files).load();
   expect(restored.find(c => c.id === "chat")?.messages).toEqual([]);

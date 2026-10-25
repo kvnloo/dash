@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { ConversationPersistence, uniqueConversationIds, type ConversationFiles } from "../app/src/store/conversation-persistence";
+import { ConversationPersistence, hasHostHistory, uniqueConversationIds, type ConversationFiles } from "../app/src/store/conversation-persistence";
 import { parseConversation, type Conversation } from "../app/src/model";
 
 const [input, output] = process.argv.slice(2);
@@ -25,9 +25,9 @@ const store = new ConversationPersistence(files);
 await store.save(chats);
 const restored = await new ConversationPersistence(files).load();
 if (restored.length !== chats.length) throw Error("Recovery changed the conversation count");
-for (const original of chats.filter(chat => !chat.sessionId)) {
+for (const original of chats.filter(chat => !hasHostHistory(chat))) {
   const copy = restored.find(chat => chat.id === original.id);
   if (JSON.stringify(copy) !== JSON.stringify(original)) throw Error("Local-only conversation did not roundtrip exactly");
 }
 await files.write("durable", ".migration-complete.json", "true");
-console.log(JSON.stringify({ chats: chats.length, hostBacked: chats.filter(chat => chat.sessionId).length, localOnly: chats.filter(chat => !chat.sessionId).length, restored: restored.length, cached: (await files.list("cache")).length, localRoundtrip: true }));
+console.log(JSON.stringify({ chats: chats.length, hostBacked: chats.filter(hasHostHistory).length, localOnly: chats.filter(chat => !hasHostHistory(chat)).length, restored: restored.length, cached: (await files.list("cache")).length, localRoundtrip: true }));
