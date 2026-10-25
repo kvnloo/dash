@@ -74,6 +74,7 @@ describe("additive ACP permission wire", () => {
     expect(parsePermissionOption({ optionId: "yes", name: "", kind: "allow_once" })).toBeNull();
     expect(parsePermissionOption({ optionId: "yes", name: " Deny", kind: "reject_once" })).toBeNull();
     expect(parsePermissionOption({ optionId: "yes", name: "Deny\nnow", kind: "reject_once" })).toBeNull();
+    expect(parsePermissionOption({ optionId: "yes", name: "Authorization: Bearer abc123", kind: "allow_once" })).toBeNull();
   });
 
   test("rejects empty, whitespace, malformed and oversize correlation ids", () => {
