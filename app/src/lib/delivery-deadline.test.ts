@@ -70,8 +70,10 @@ function fixture(timeoutMs?: number): {
   return { clock, events, controller };
 }
 
-function retries(events: DeliveryDeadlineEvent[]): DeliveryDeadlineEvent[] {
-  return events.filter((event) => event.type === "retry-needed");
+type RetryNeededEvent = Extract<DeliveryDeadlineEvent, { type: "retry-needed" }>;
+
+function retries(events: DeliveryDeadlineEvent[]): RetryNeededEvent[] {
+  return events.filter((event): event is RetryNeededEvent => event.type === "retry-needed");
 }
 
 describe("DeliveryDeadlineController", () => {
