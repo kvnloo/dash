@@ -241,12 +241,80 @@ describe("Hermes admission and no-fallback transport", () => {
   });
 
   test("pre-admission gateway downtime may select explicitly opted-in CLI", async () => {
-    const fetch: HermesFetch = async () => { throw new TypeError("fetch failed"); };
+    let discoveries = 0;
+    let posts = 0;
+    const fetch: HermesFetch = async (_input, init) => {
+      if (init?.method === "POST") {
+        posts++;
+        return Response.json({ message: "must not send without a session" });
+      }
+      discoveries++;
+      throw new TypeError("fetch failed");
+    };
     const result = await runHermesSession({
       input: { text: "hello", cwd: "/work" }, env, envFile: noFile, fetch, log() {},
     });
-    expect(result.path).toBe("cli");
-    if (result.path === "cli") expect(result.reason).toBe("gateway_down");
+    expect(discoveries).toBe(1);
+    expect(posts).toBe(0);
+    expect(result).toEqual({ path: "cli", reason: "gateway_down" });
+  });
+
+  test("gateway HTTP 503 before admission permits opted-in CLI without peer send", async () => {
+    let posts = 0;
+    const fetch: HermesFetch = async (_input, init) => {
+      if (init?.method === "POST") {
+        posts++;
+        return Response.json({ message: "must not send without a session" });
+      }
+      return new Response("unavailable", { status: 503 });
+    };
+    const result = await runHermesSession({
+      input: { text: "hello", cwd: "/work" }, env, envFile: noFile, fetch, log() {},
+    });
+    expect(result).toEqual({ path: "cli", reason: "gateway_unavailable" });
+    expect(posts).toBe(0);
+  });
+
+  test("reachable non-JSONRPC discovery cannot create a peer session, even with CLI opt-in", async () => {
+    let posts = 0;
+    const fetch: HermesFetch = async (_input, init) => {
+      if (init?.method === "POST") {
+        posts++;
+        return Response.json({ message: { content: "wrong session" } });
+      }
+      return Response.json({ supportedInterfaces: [{ protocolBinding: "GRPC", url: gateway + "/" }] });
+    };
+    await expect(runHermesSession({
+      input: { text: "hello", cwd: "/work" }, env, envFile: noFile, fetch, log() {},
+    })).rejects.toThrow("requires an existing sessionId");
+    expect(posts).toBe(0);
+  });
+
+  test("gateway downtime without CLI opt-in still refuses to create a peer session", async () => {
+    let posts = 0;
+    const fetch: HermesFetch = async (_input, init) => {
+      if (init?.method === "POST") posts++;
+      throw new TypeError("fetch failed");
+    };
+    await expect(runHermesSession({
+      input: { text: "hello", cwd: "/work" },
+      env: { ...env, DASH_HERMES_CLI_FALLBACK: "0" }, envFile: noFile, fetch, log() {},
+    })).rejects.toThrow("requires an existing sessionId");
+    expect(posts).toBe(0);
+  });
+
+  test("native API still requires an existing session even with CLI opt-in", async () => {
+    let calls = 0;
+    const fetch: HermesFetch = async () => {
+      calls++;
+      return Response.json({});
+    };
+    await expect(runHermesSession({
+      input: { text: "hello", cwd: "/work" },
+      api: { url: "http://127.0.0.1:8642", key: "in-memory-test-key" },
+      env, envFile: noFile, fetch, log() {},
+    })).rejects.toThrow("Hermes API requires an existing session.");
+    expect(calls).toBe(0);
   });
 
   test("aborted discovery never reaches POST or CLI even with a fallback opt-in", async () => {
