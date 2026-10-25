@@ -24,6 +24,10 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     if (mode === "auth") send({ jsonrpc: "2.0", id: request.id, error: { code: -32000, message: "credential secret must not be logged" } });
     else reply({ sessionId: "fixture-session" });
   } else if (request.method === "session/load") {
+    if (mode === "restore-model") {
+      send({ jsonrpc: "2.0", id: request.id, error: { code: -32603, message: "credential secret must not be logged", data: { details: "Could not restore model anthropic/claude-opus-5-5" } } });
+      return;
+    }
     update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "old replay" } });
     reply({});
   } else if (request.method === "session/prompt") {
