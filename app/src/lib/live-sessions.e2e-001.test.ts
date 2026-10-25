@@ -57,6 +57,20 @@ describe("DASH-E2E-001: bridge-owned ACP sessions absent from the native roster"
     expect(mergeLiveConversations(after, [paired], now + 2)).toBe(after);
   });
 
+  test("a new unscoped ACP chat stays live without inventing host or profile identity", () => {
+    const unscoped: Conversation = { ...streaming, targetHostId: undefined, profileId: undefined };
+    const before = [unscoped];
+    const after = mergeLiveConversations(before, [paired], now + 1);
+    expect(after).toBe(before);
+    expect(after[0]?.stale).toBe(false);
+    expect(after[0]?.sessionId).toBe("acp-session");
+    expect(after[0]?.targetHostId).toBeUndefined();
+    expect(after[0]?.profileId).toBeUndefined();
+    const settled = { ...unscoped, messages: withState("done").messages };
+    const ended = mergeLiveConversations([settled], [paired], now + 2);
+    expect(ended[0]?.stale).toBe(true);
+  });
+
   test("a follow-up stays queued against the same running session and retains its payload", () => {
     const queued: Conversation = {
       ...streaming,
@@ -127,8 +141,9 @@ describe("DASH-E2E-001: bridge-owned ACP sessions absent from the native roster"
       { label: "duplicate profile", hosts: [{ ...paired, agents: [...paired.agents, ...paired.agents] }] },
       { label: "duplicate host identity", hosts: [paired, paired] },
       { label: "native-profile identity", hosts: [paired], chat: { ...streaming, profileId: "omp:tab" } },
-      { label: "target host unknown", hosts: [paired], chat: { ...streaming, targetHostId: undefined } },
-      { label: "target profile unknown", hosts: [paired], chat: { ...streaming, profileId: undefined } },
+      { label: "partial scope missing host", hosts: [paired], chat: { ...streaming, targetHostId: undefined } },
+      { label: "partial scope missing profile", hosts: [paired], chat: { ...streaming, profileId: undefined } },
+      { label: "unscoped ambiguous paired hosts", hosts: [paired, { ...other, self: true }], chat: { ...streaming, targetHostId: undefined, profileId: undefined } },
       { label: "already authoritatively stale", hosts: [paired], chat: { ...streaming, stale: true } },
       { label: "unknown harness", hosts: [{ ...paired, agents: [{ id: "harness:not-catalog", name: "Unknown", kind: "not-catalog", status: "available" }] }], chat: { ...streaming, harness: "not-catalog", profileId: "harness:not-catalog" } },
     ];
