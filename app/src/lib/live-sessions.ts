@@ -41,13 +41,20 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
       // reply is evidence to retain this exact route, not to adopt another one.
       // Native sessions, stale rows, unknown profiles and offline hosts still
       // need an authoritative roster match.
-      const targetHosts = c.targetHostId ? hosts.filter(host => host.id === c.targetHostId) : [];
+      // Chats created without a profile route to the one paired bridge. Do
+      // not invent a host/profile identity when retaining that live chat.
+      const unscoped = c.targetHostId === undefined && c.profileId === undefined;
+      const genericProfileId = `harness:${c.harness}`;
+      const scopedHarness = c.targetHostId !== undefined && c.profileId === genericProfileId;
+      const targetHosts = c.targetHostId
+        ? hosts.filter(host => host.id === c.targetHostId)
+        : hosts.filter(host => host.self);
       const targetHost = targetHosts.length === 1 ? targetHosts[0] : undefined;
-      const profiles = targetHost?.agents.filter(agent => agent.id === c.profileId);
+      const profiles = targetHost?.agents.filter(agent => agent.id === genericProfileId);
       const bridgeOwnedStreaming =
         c.stale !== true &&
         isCatalogHarness(c.harness) &&
-        c.profileId === `harness:${c.harness}` &&
+        (unscoped || scopedHarness) &&
         c.messages.some(message => message.role === "assistant" && message.state === "streaming") &&
         targetHost !== undefined && targetHost.self && targetHost.online &&
         profiles?.length === 1 &&
