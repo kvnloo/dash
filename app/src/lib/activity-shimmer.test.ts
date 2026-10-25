@@ -76,7 +76,9 @@ describe("live activity shimmer", () => {
     expect(source).toContain("useSyncExternalStore(subscribeAppActive, appIsActive, appIsActive)");
     expect(source).toContain('AppState.addEventListener("change"');
     expect(source).toContain("appListener?.remove()");
-    expect(source).toContain("reduced || !running");
+    expect(source).toContain("reduced || !paintActive");
+    expect(source).toContain("const running = paintActive && !scrolling;");
+    expect(source).toContain("transcriptScrollActivity.getSnapshot");
     expect(source).toContain("color: bright");
     expect(source).toContain("accessibilityLabel={text}");
     expect(source).toContain("Array.from(text)");
