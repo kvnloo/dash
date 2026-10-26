@@ -12,7 +12,12 @@ Python twin, checked case by case against it.
   without a reason (`BNoReason`) is treated as no blocker.
 - Anything else is **Open**.
 - **may_stop**: the run stops only when the owner stops it or every in-scope feature is
-  Done or Blocked. Budget exhaustion alone gives `RPauseReport`, never a stop.
+  Done or owner-blocked. Budget exhaustion alone gives `RPauseReport`, never a stop, and so
+  does a scope settled only because some feature is externally blocked (the owner reviews
+  those blockers; an agent cannot end a run by declaring the rest external).
+- The CLI (observation, fail closed): an empty scope is never settled; a journey pass counts
+  only when a device-observed check judged the feature (`device_observed`); an owner blocker
+  needs `owner_ref`, the owner message that set it.
 
 Boundary: nothing here proves that a receipt is authentic or that a device or sha is real.
 The CLI fails closed: it ignores any receipt it cannot classify. A proof is not permission
@@ -21,7 +26,7 @@ The CLI fails closed: it ignores any receipt it cannot classify. A proof is not 
 ```bash
 export BEND=$HOME/.bend/bin/bend LEAN_BIN=$HOME/.elan/toolchains/leanprover--lean4---v4.34.0/bin
 (cd bend/feature_completion && $BEND PROOF.bend --verdict)   # ALL PROOFS CHECK
-python3 -I tests/feature_completion_parity.py                # 136 cases match
+python3 -I tests/feature_completion_parity.py                # 144 cases match
 python3 -I tests/feature_completion_mutation.py              # every mutant rejected
 python3 scripts/feature_status.py --evidence DIR --scope P0  # exit 1 unless the run may stop
 ```

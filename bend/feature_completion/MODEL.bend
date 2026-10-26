@@ -74,7 +74,9 @@ def decide(blocked: Blocker, spec_linked: Bool, code_present: Bool, journey: Jou
     case BExternal{}:
       SBlockedExternal{}
 
-# Run stop rule. No early stop: budget exhaustion alone is a pause with a report.
+# Run stop rule. No early stop: budget exhaustion alone is a pause with a report, and a
+# scope that is settled only because some feature is externally blocked is also a pause
+# with a report (the owner reviews the external blockers); only Done/owner-blocked completes.
 type Run is Data:
   RContinue{}
   RPauseReport{}
@@ -88,19 +90,26 @@ def check_budget(budget_exhausted: Bool) -> Run:
     case False{}:
       RContinue{}
 
-def check_scope(all_done_or_blocked: Bool, budget_exhausted: Bool) -> Run:
+def check_external(any_external_blocked: Bool) -> Run:
+  match any_external_blocked:
+    case True{}:
+      RPauseReport{}
+    case False{}:
+      RStopComplete{}
+
+def check_scope(all_done_or_blocked: Bool, any_external_blocked: Bool, budget_exhausted: Bool) -> Run:
   match all_done_or_blocked:
     case True{}:
-      RStopComplete{}
+      check_external(any_external_blocked)
     case False{}:
       check_budget(budget_exhausted)
 
-def may_stop(all_done_or_blocked: Bool, budget_exhausted: Bool, owner_stop: Bool) -> Run:
+def may_stop(all_done_or_blocked: Bool, any_external_blocked: Bool, budget_exhausted: Bool, owner_stop: Bool) -> Run:
   match owner_stop:
     case True{}:
       RStopOwner{}
     case False{}:
-      check_scope(all_done_or_blocked, budget_exhausted)
+      check_scope(all_done_or_blocked, any_external_blocked, budget_exhausted)
 
 # Exhaustive Python/Bend parity uses these lossless codes.
 def status_code(s: Status) -> Nat:

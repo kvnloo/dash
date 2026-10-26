@@ -34,15 +34,18 @@ MUTATIONS = [
     ("unlinked spec counts as done",
      "    case False{}:\n      SOpen{}\n\ndef check_code",
      "    case False{}:\n      SDone{}\n\ndef check_code"),
+    ("all-external-blocked scope stops",
+     "    case True{}:\n      RPauseReport{}\n    case False{}:\n      RStopComplete{}",
+     "    case True{}:\n      RStopComplete{}\n    case False{}:\n      RStopComplete{}"),
     ("budget exhaustion stops",
-     "    case True{}:\n      RPauseReport{}",
-     "    case True{}:\n      RStopComplete{}"),
+     "    case True{}:\n      RPauseReport{}\n    case False{}:\n      RContinue{}",
+     "    case True{}:\n      RStopComplete{}\n    case False{}:\n      RContinue{}"),
     ("blocked without reason",
      "    case BNoReason{}:\n      evidence(spec_linked, code_present, journey, preview)",
      "    case BNoReason{}:\n      SBlockedOwner{}"),
     ("owner stop ignored",
      "    case True{}:\n      RStopOwner{}",
-     "    case True{}:\n      check_scope(all_done_or_blocked, budget_exhausted)"),
+     "    case True{}:\n      check_scope(all_done_or_blocked, any_external_blocked, budget_exhausted)"),
 ]
 
 

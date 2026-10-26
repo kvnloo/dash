@@ -11,7 +11,7 @@ Status is read from the code at the baseline. A requirement is proved only by it
 - Priority: P0 51, P1 33, P2 37
 - Device journeys: 51
 
-Ledger laws (enforced by `spec/check.py`): every feature has a defined journey; `missing` means no surface_refs (gap locations go in gap_refs); every non-missing feature cites code that exists at the baseline; an ask the owner repeated (`recurring`) is P0.
+Ledger laws (enforced by `spec/check.py`): every feature has a defined journey; `missing` means no surface_refs (gap locations go in gap_refs); every non-missing feature cites code that exists at the baseline; an ask the owner repeated (`recurring`) is P0; every owner turn in the replay manifest (`spec/replay.yaml`) is cited by a feature, and every cited turn is in the manifest.
 
 ## P0 features
 

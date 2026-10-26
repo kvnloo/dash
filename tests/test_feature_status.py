@@ -22,7 +22,7 @@ LEDGER = {
 
 def journey(sha=SHA, result="pass", real=True, j="J-x", f="DF-001"):
     return {"kind": "journey", "feature": f, "journey": j, "sha": sha, "real_device": real,
-            "device": "S22", "result": result}
+            "device": "S22", "device_observed": True, "result": result}
 
 
 def preview(sha=SHA, f="DF-001"):
@@ -70,11 +70,35 @@ class FeatureStatus(unittest.TestCase):
             self.assertEqual(fs.main(base + ["--owner-stop"]), 0)
             (ev / "r.json").write_text(json.dumps([
                 {"kind": "journey", "feature": "DF-005", "journey": "J-send-receive-hermes", "sha": SHA,
-                 "real_device": True, "device": "S22", "result": "pass"}, preview(f="DF-005")]))
+                 "real_device": True, "device": "S22", "device_observed": True, "result": "pass"}, preview(f="DF-005")]))
             self.assertEqual(fs.main(base), 0)
 
+    def test_empty_scope_never_stops(self):
+        with tempfile.TemporaryDirectory() as folder:
+            ledger = Path(folder) / "f.yaml"
+            ledger.write_text("journeys: []\nfeatures:\n  - id: \"DF-001\"\n    priority: \"P2\"\n")
+            ev = Path(folder) / "ev"
+            ev.mkdir()
+            self.assertEqual(fs.main(["--ledger", str(ledger), "--evidence", str(ev), "--candidate", SHA,
+                                      "--scope", "P0"]), 1)
+
+    def test_host_only_pass_is_not_device_evidence(self):
+        host_only = dict(journey(), device_observed=False)
+        self.assertEqual(status([host_only, preview()]), "open")
+        self.assertEqual(status([dict(journey(), device_observed=None), preview()]), "open")
+
+    def test_owner_blocker_needs_owner_ref(self):
+        claim = {"kind": "blocker", "feature": "DF-001", "by": "owner", "reason": "owner wants it later"}
+        self.assertEqual(status([claim]), "open")
+        self.assertEqual(status([dict(claim, owner_ref="hermes-telegram 2026-10-25T17:22")]), "blocked_owner")
+
+    def test_scope_settled_by_external_blockers_pauses(self):
+        self.assertIs(fs.may_stop(True, True, False, False), fs.Run.PAUSE_REPORT)
+        self.assertIs(fs.may_stop(True, False, False, False), fs.Run.STOP_COMPLETE)
+        self.assertIs(fs.may_stop(True, True, False, True), fs.Run.STOP_OWNER)
+
     def test_may_stop_never_on_budget_alone(self):
-        self.assertIs(fs.may_stop(False, True, False), fs.Run.PAUSE_REPORT)
+        self.assertIs(fs.may_stop(False, False, True, False), fs.Run.PAUSE_REPORT)
 
 
 if __name__ == "__main__":

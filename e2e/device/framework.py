@@ -8,6 +8,10 @@ Receipts (one per feature of the journey, JSON) carry both the device-run fields
 and the fields scripts/feature_status.py reads:
   feature_id, journey_id, candidate_sha, device_serial, display, started_at, result, evidence, failure_reason
   kind="journey", feature, journey, sha, real_device, device
+A check is device-observed unless it is marked host=True (it reads a host log, a file, git or a CLI).
+A feature passes only when at least one passing check that judged it observed the device; a pass made
+of host-side checks alone is a fail, so "the file exists" or "spec/check.py passes" never makes a
+feature Done. A journey with more than one feature needs a check tagged with each feature.
 A journey that lacks an environment capability (second host, real agent, S Pen ...) still runs what it
 can, but writes kind="journey-partial": the CLI ignores that kind, so it can never make a feature Done.
 A journey skipped by the owner guard writes kind="journey-skip" with the guard verdict.
@@ -75,17 +79,18 @@ class Ctx:
     checks: list[dict] = field(default_factory=list)
     metrics: dict = field(default_factory=dict)
 
-    def check(self, name: str, ok: bool, detail: object = "", feature: str | None = None) -> bool:
+    def check(self, name: str, ok: bool, detail: object = "", feature: str | None = None, host: bool = False) -> bool:
         if feature is not None and feature not in self.journey.features:
             raise ValueError(f"{self.journey.id}: check {name!r} tagged {feature}, not one of its features")
         rec = {"check": name, "ok": bool(ok), "detail": detail if isinstance(detail, (int, float, dict, list)) else str(detail)[:600],
-               "feature": feature, "shot": self.dev.shot(name)}
+               "feature": feature, "observed": "host" if host else "device",
+               "shot": None if host else self.dev.shot(name)}
         self.checks.append(rec)
         print(json.dumps({"journey": self.journey.id, **rec}), flush=True)
         return bool(ok)
 
-    def require(self, name: str, ok: bool, detail: object = "") -> None:
-        if not self.check(name, ok, detail):
+    def require(self, name: str, ok: bool, detail: object = "", host: bool = False) -> None:
+        if not self.check(name, ok, detail, host=host):
             raise StepFailed(name)
 
     def guard(self) -> None:
@@ -113,21 +118,30 @@ class Stack:
         return self.mbp(f"tail -n {lines} {self.base}/device-state/bridge.log")
 
 
-def feature_results(checks: list[dict], features: list[str]) -> dict[str, tuple[str, str | None]]:
-    """Per feature: pass iff no check failed among untagged checks and that feature's tagged checks.
-    Nothing proven is a fail: a journey with no checks, or (when the journey tags checks at all) a
-    feature none of whose tagged checks ran, e.g. because an earlier step stopped the journey."""
+def _device_observed(c: dict) -> bool:
+    return c.get("observed", "device") != "host"
+
+
+def feature_results(checks: list[dict], features: list[str],
+                    journey_features: tuple[str, ...] | list[str] | None = None) -> dict[str, tuple[str, str | None]]:
+    """Per feature: pass iff no check failed among untagged checks and that feature's tagged checks,
+    and at least one of those passing checks observed the device. Nothing proven is a fail: a journey
+    with no checks, a feature judged only by host-side checks, or (when the journey tags checks at all,
+    or has more than one feature even if only one was selected) a feature none of whose tagged checks
+    ran, e.g. because an earlier step stopped the journey."""
     out = {}
-    tagged = any(c["feature"] for c in checks)
+    multi = any(c["feature"] for c in checks) or len(journey_features or features) > 1
     for f in features:
         mine = [c for c in checks if c["feature"] in (None, f)]
         bad = [c for c in mine if not c["ok"]]
         if not mine:
             out[f] = ("fail", "no checks ran")
-        elif tagged and not any(c["feature"] == f for c in checks) and not bad:
+        elif multi and not any(c["feature"] == f for c in checks) and not bad:
             out[f] = ("fail", "no check for this feature ran")
         elif bad:
             out[f] = ("fail", "; ".join(f"{c['check']}: {c['detail']}" for c in bad)[:1200])
+        elif not any(_device_observed(c) for c in mine):
+            out[f] = ("fail", "only host-side checks ran; no check observed the device")
         else:
             out[f] = ("pass", None)
     return out
@@ -138,7 +152,7 @@ def write_receipts(out_dir: Path, *, journey: Journey, features: list[str], sha:
                    evidence: list[str], missing: list[str], error: str | None, skip: str | None) -> list[Path]:
     """One receipt per feature. kind tells feature_status.py whether it counts."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    results = feature_results(checks, features)
+    results = feature_results(checks, features, journey.features)
     paths = []
     for f in features:
         result, reason = results[f]
@@ -148,6 +162,7 @@ def write_receipts(out_dir: Path, *, journey: Journey, features: list[str], sha:
         rec = {
             "kind": kind, "feature": f, "journey": journey.id, "sha": sha, "real_device": real_device,
             "device": dev_serial, "result": None if skip else result,
+            "device_observed": result == "pass" and any(_device_observed(c) for c in checks if c["feature"] in (None, f)),
             "feature_id": f, "journey_id": journey.id, "candidate_sha": sha, "device_serial": dev_serial,
             "display": display, "started_at": started_at,
             "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -186,4 +201,4 @@ def run_one(j: Journey, dev: Device, stack: Stack, features: list[str], out_root
                            real_device=dev.real_device, display=dev.display, started_at=started, checks=ctx.checks,
                            metrics=ctx.metrics, evidence=list(dev.shots), missing=missing, error=error, skip=skip)
     return {"journey": j.id, "skip": skip, "missing": missing, "error": error,
-            "results": feature_results(ctx.checks, features), "receipts": [str(p) for p in paths]}
+            "results": feature_results(ctx.checks, features, j.features), "receipts": [str(p) for p in paths]}

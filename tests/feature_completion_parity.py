@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Exhaustive Bend/Python parity for feature completion:
-4 * 2 * 2 * 4 * 2 = 128 decide cases + 2 * 2 * 2 = 8 may_stop cases.
+4 * 2 * 2 * 4 * 2 = 128 decide cases + 2 * 2 * 2 * 2 = 16 may_stop cases.
 
 Executes the real MODEL.decide / MODEL.may_stop through Bend. No device, git or receipt effects.
 """
@@ -33,9 +33,9 @@ def main():
         exprs.append(f"Nat.show(M.status_code(M.decide(M.{blocked.value}{{}}, {b(spec)}, {b(code)}, "
                      f"M.{journey.value}{{}}, M.{preview.value}{{}})))")
         expected.append(str(status_code(decide_status(blocked, spec, code, journey, preview))))
-    for settled, budget, owner in itertools.product((False, True), repeat=3):
-        exprs.append(f"Nat.show(M.run_code(M.may_stop({b(settled)}, {b(budget)}, {b(owner)})))")
-        expected.append(str(run_code(may_stop(settled, budget, owner))))
+    for settled, external, budget, owner in itertools.product((False, True), repeat=4):
+        exprs.append(f"Nat.show(M.run_code(M.may_stop({b(settled)}, {b(external)}, {b(budget)}, {b(owner)})))")
+        expected.append(str(run_code(may_stop(settled, external, budget, owner))))
     with verifier_environment(DOMAIN) as (bend, env), tempfile.TemporaryDirectory() as folder:
         working = Path(folder)
         shutil.copy2(DOMAIN / "MODEL.bend", working / "MODEL.bend")

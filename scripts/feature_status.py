@@ -12,11 +12,16 @@ is Done or Blocked, or the owner stopped it); exit 1 otherwise (continue, or pau
 
 Receipt files are untrusted data. Only these shapes count; anything else is ignored:
   {"kind": "journey", "feature": "DF-001", "journey": "J-...", "sha": "<sha>",
-   "real_device": true, "device": "<serial or name>", "result": "pass" | "fail"}
+   "real_device": true, "device": "<serial or name>", "device_observed": true, "result": "pass" | "fail"}
   {"kind": "preview", "feature": "DF-001", "sha": "<sha>", "delivered": true}
-  {"kind": "blocker", "feature": "DF-001", "by": "owner" | "external", "reason": "<text>"}
+  {"kind": "blocker", "feature": "DF-001", "by": "owner", "reason": "<text>", "owner_ref": "<owner message id>"}
+  {"kind": "blocker", "feature": "DF-001", "by": "external", "reason": "<text>"}
 A journey receipt counts only for the feature's own ledger journey, from a real device
-(real_device true and a device name). Unit tests, emulators and other journeys never count.
+(real_device true and a device name), and a pass counts only when the feature was judged by at least
+one check that observed the device UI (device_observed true; host-only checks such as "the file
+exists" or "spec/check.py passes" never make a feature Done). Unit tests, emulators and other
+journeys never count. An owner blocker needs owner_ref (the owner message that set it); without it,
+it is a blocker without a reason.
 Evidence for another sha is stale: a pass there is JPassOtherSha, never Done.
 A preview counts only for the candidate sha. A blocker without a non-empty reason is no blocker.
 spec_linked: the feature is in the ledger with a requirement and a defined journey.
@@ -84,12 +89,13 @@ def decide_status(blocked, spec_linked, code_present, journey, preview):
     return Status.DONE
 
 
-def may_stop(all_done_or_blocked, budget_exhausted, owner_stop):
-    """MODEL.may_stop: budget exhaustion alone is a pause with report, never a stop."""
+def may_stop(all_done_or_blocked, any_external_blocked, budget_exhausted, owner_stop):
+    """MODEL.may_stop: budget exhaustion alone, or a scope settled only by external blockers,
+    is a pause with report, never a stop."""
     if owner_stop:
         return Run.STOP_OWNER
     if all_done_or_blocked:
-        return Run.STOP_COMPLETE
+        return Run.PAUSE_REPORT if any_external_blocked else Run.STOP_COMPLETE
     if budget_exhausted:
         return Run.PAUSE_REPORT
     return Run.CONTINUE
@@ -127,6 +133,9 @@ def classify_journey(receipts, journey_id, candidate):
     real = [r for r in receipts if r.get('kind') == 'journey' and r.get('journey') == journey_id
             and r.get('real_device') is True and isinstance(r.get('device'), str) and r['device'].strip()
             and r.get('result') in ('pass', 'fail')]
+    # A pass judged only by host-side checks is not device evidence: it counts as a failure.
+    real = [dict(r, result='fail') if r['result'] == 'pass' and r.get('device_observed') is not True else r
+            for r in real]
     here = [r for r in real if _same_sha(r.get('sha'), candidate)]
     if any(r['result'] == 'fail' for r in here):
         return Journey.FAIL
@@ -147,7 +156,8 @@ def classify_preview(receipts, candidate):
 
 def classify_blocker(receipts):
     claims = [r for r in receipts if r.get('kind') == 'blocker']
-    explained = [r for r in claims if isinstance(r.get('reason'), str) and r['reason'].strip()]
+    explained = [r for r in claims if isinstance(r.get('reason'), str) and r['reason'].strip()
+                 and (r.get('by') != 'owner' or (isinstance(r.get('owner_ref'), str) and r['owner_ref'].strip()))]
     if any(r.get('by') == 'owner' for r in explained):
         return Blocker.OWNER, next(r['reason'] for r in explained if r.get('by') == 'owner')
     if any(r.get('by') == 'external' for r in explained):
@@ -203,8 +213,10 @@ def main(argv=None):
     if ids is not None and len(rows) != len(ids):
         print('unknown feature id in --ids', file=sys.stderr)
         return 2
-    settled = all(r['status'] != 'open' for r in rows)
-    run = may_stop(settled, args.budget_exhausted, args.owner_stop)
+    # An empty scope is never settled: selecting nothing must not let a run stop.
+    settled = bool(rows) and all(r['status'] != 'open' for r in rows)
+    external = any(r['status'] == 'blocked_external' for r in rows)
+    run = may_stop(settled, external, args.budget_exhausted, args.owner_stop)
     counts = {s: sum(r['status'] == s for r in rows) for s in ('done', 'blocked_owner', 'blocked_external', 'open')}
     if args.json:
         print(json.dumps({'candidate': candidate, 'scope': sorted(ids) if ids else args.scope,

@@ -35,6 +35,19 @@ bun run spec:status -- --candidate <sha> --scope P0         # read the receipts
 | `probe.py` | Taps and types, then dumps the tree and a screenshot (guarded, locked) |
 | `SURFACES.md` | Mapping from the earlier surface to a journey (copied) |
 
+## Device evidence and the preview hand-off
+
+- A check is device-observed unless the journey marks it `host=True` (a host log, git, a file, a CLI).
+  A feature passes only when a passing check that judged it observed the device, and a journey with
+  several features needs a check tagged with each one, even when `--features` selects only one.
+  Receipts carry `device_observed`; `scripts/feature_status.py` counts a pass only when it is true.
+- `scripts/preview_handoff.py` is the Turbo hook for a preview merge: it prints the AODL test card
+  (feature, owner ask, expected behaviour, screen and steps, proof journey), opens the screen with
+  `am start -d dash://<chats|bots|orchestra|settings|trace|lab>` (`--display-id` for a virtual display)
+  and writes the preview receipt. The receipt is `delivered` only when the screen opened or
+  `--delivered-via` names the message that carried the card. `J-turbo-preview-brief` calls it and
+  checks that the phone landed on the screen.
+
 ## Receipts
 
 `<out>/<journey>/<feature>.json` (default `.acceptance-receipts/<sha12>-<UTC>/`) contains:

@@ -90,9 +90,15 @@ class RepoCase(unittest.TestCase):
 
     def test_main_exit_codes(self):
         good = self.repo / "good.yaml"
-        good.write_text(check.dump_yaml(doc()) + "\n")
+        good.write_text(check.dump_yaml(doc(feature(sources=["H-001"]))) + "\n")
+        rp = self.repo / "replay.yaml"
+        rp.write_text(check.dump_yaml(replay("H-001")) + "\n")
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(check.main(["--features", str(good), "--repo", str(self.repo)]), 0)
+            self.assertEqual(check.main(["--features", str(good), "--replay", str(rp), "--repo", str(self.repo)]), 0)
+        rp.write_text(check.dump_yaml(replay("H-001", "H-002")) + "\n")
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(check.main(["--features", str(good), "--replay", str(rp), "--repo", str(self.repo)]), 1)
+        self.assertIn("H-002", err.getvalue())
         bad = self.repo / "bad.yaml"
         bad.write_text(check.dump_yaml(doc(feature(), feature())) + "\n")
         with contextlib.redirect_stderr(io.StringIO()) as err:
@@ -117,6 +123,41 @@ class YamlCase(unittest.TestCase):
         real = check.load_yaml((HERE / "features.yaml").read_text(encoding="utf-8"))
         self.assertEqual(check.validate(real, SCHEMA, SCHEMA), [])
         self.assertEqual(copy.deepcopy(real), check.load_yaml(check.dump_yaml(real)))
+
+
+
+def replay(*ids, excused=()):
+    return {"corpora": [{"id": "owner", "prefix": "H",
+                         "turns": [{"id": i, "date": "2026-10-25", "refs": ["hermes:1"]} for i in ids]}],
+            "not_requirements": [{"id": i, "reason": "not about Dash"} for i in excused]}
+
+
+class ReplayLaw(unittest.TestCase):
+    def test_every_turn_cited_and_every_citation_replayed(self):
+        d = doc(feature(sources=["H-001, H-002", "dash#50"]))
+        self.assertEqual(check.check_replay(d, replay("H-001", "H-002")), [])
+
+    def test_uncited_owner_turn_is_an_error(self):
+        errs = check.check_replay(doc(feature(sources=["H-001"])), replay("H-001", "H-003"))
+        self.assertTrue(any("H-003" in e and "cited by no feature" in e for e in errs), errs)
+        self.assertEqual(check.check_replay(doc(feature(sources=["H-001"])), replay("H-001", "H-003", excused=["H-003"])), [])
+
+    def test_invented_citation_is_an_error(self):
+        errs = check.check_replay(doc(feature(sources=["H-001 H-009"])), replay("H-001"))
+        self.assertTrue(any("H-009" in e and "not a replayed turn" in e for e in errs), errs)
+
+    def test_excuse_needs_reason_and_turn_needs_provenance(self):
+        r = replay("H-001")
+        r["not_requirements"] = [{"id": "H-001", "reason": " "}]
+        self.assertTrue(check.check_replay(doc(feature(sources=["H-001"])), r))
+        r = replay("H-001")
+        r["corpora"][0]["turns"][0]["refs"] = []
+        self.assertTrue(check.check_replay(doc(feature(sources=["H-001"])), r))
+
+    def test_real_ledger_and_replay_cover_each_other(self):
+        real = check.load_yaml((HERE / "features.yaml").read_text(encoding="utf-8"))
+        rep = check.load_yaml((HERE / "replay.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(check.check_replay(real, rep), [])
 
 
 if __name__ == "__main__":

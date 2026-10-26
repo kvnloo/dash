@@ -10,6 +10,7 @@
     "verify": "bun scripts/verify-dash/control-dash.ts test",
     "spec": "python3 spec/check.py && python3 -I -m unittest discover -s spec -p 'test_*.py'",
     "spec:status": "python3 scripts/feature_status.py --evidence .acceptance-receipts",
+    "spec:handoff": "python3 scripts/preview_handoff.py",
     "spec:e2e": "python3 -I -m unittest discover -s e2e/device -p 'test_*.py' && python3 -I e2e/device/run_journeys.py --dry-run --all",
     "spec:law": "python3 -I -m unittest discover -s tests -p 'test_*.py' && python3 -I tests/feature_completion_parity.py && python3 -I tests/feature_completion_mutation.py"
   },

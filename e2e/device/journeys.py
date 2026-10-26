@@ -368,7 +368,8 @@ def j_send_receive_hermes(ctx: Ctx) -> None:
     """Three sends into a running Hermes session; each arrives once and the reply streams back."""
     _send_three(ctx, "Hermes", None)
     log = ctx.stack.bridge_log(400)
-    ctx.check("bridge log shows no duplicate fallback send", "fallback" not in log.lower() or "duplicate" not in log.lower(), "", "DF-020")
+    ctx.check("bridge log shows no duplicate fallback send", "fallback" not in log.lower() or "duplicate" not in log.lower(), "", "DF-020",
+              host=True)
 
 
 @journey("J-send-receive-omp", ("DF-004", "DF-013"))
@@ -1143,16 +1144,45 @@ def j_notifications_share(ctx: Ctx) -> None:
 
 @journey("J-turbo-preview-brief", ("DF-071", "DF-072"), needs=("turbo",))
 def j_turbo_preview_brief(ctx: Ctx) -> None:
-    """A preview merge hot-reloads the phone; Dash shows a compact brief and jumps to the feature screen."""
+    """A preview merge hot-reloads the phone; the hand-off hook (scripts/preview_handoff.py, called by the
+    Turbo orchestrator after the merge) briefs the owner and opens the exact screen to test; the phone then
+    shows that screen, and Dash shows the brief itself."""
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
     d = ctx.dev
     home(ctx)
-    ctx.check("Metro serves this candidate", ctx.stack.mbp(f"curl -sm 3 http://127.0.0.1:{os.environ.get('DASH_E2E_METRO_PORT', '18520')}/status").strip()
-              == "packager-status:running", "", "DF-072")
+    port = os.environ.get("DASH_E2E_METRO_PORT", "18520")
+    ctx.check("Metro serves this candidate", ctx.stack.mbp(f"curl -sm 3 http://127.0.0.1:{port}/status").strip()
+              == "packager-status:running", "", "DF-072", host=True)
+    # The running bundle must prove it is the candidate on the device; Dash exposes no bundle sha yet.
+    ctx.check("the phone shows the candidate bundle sha", d.find(any_text=re.escape(ctx.sha[:7])) is not None,
+              "Dash does not render its bundle sha", "DF-072")
+    tab(ctx, "Orchestra")
+    root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(root / "scripts"))
+    from preview_handoff import load_ledger
+    # Hand off a feature that lives on another screen (the Bots tree), so landing there proves the jump.
+    target = next(f["id"] for f in load_ledger(root / "spec/features.yaml")["features"] if f["journey"] == "J-bots-tree")
+    cmd = [sys.executable, "-I", str(root / "scripts/preview_handoff.py"), "--sha", ctx.sha, "--features", target,
+           "--open", "--serial", d.serial, "--json"]
+    if d.display == "virtual":
+        cmd += ["--display-id", str(d.display_id)]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    try:
+        card = json.loads(r.stdout)["cards"][0]
+    except (ValueError, KeyError, IndexError):
+        card = {}
+    ctx.check("hand-off brief names the feature, ask, expectation, screen and proof",
+              card.get("screen") == "dash://bots" and all(k in card.get("text", "") for k in (f"TEST {target}", "expect:", "proof:")),
+              r.stderr[-300:], "DF-071", host=True)
+    ctx.check("hand-off opened the screen on the phone", r.returncode == 0, r.stdout[-300:] + r.stderr[-300:], "DF-071", host=True)
+    time.sleep(1.5)
+    ctx.check("the phone now shows the screen to test (Bots host tree)", len(d.find_all(rid=r"tree-row-.*")) > 0
+              and d.find(rid="chats-pane") is None, "", "DF-071")
     brief = d.wait(timeout=30, any_text=r"(?i)test this|what to test")
-    ctx.check("compact 'test this feature' brief", brief is not None, "", "DF-071")
-    if brief:
-        d.tap(brief)
-        ctx.check("brief navigates to the feature screen", d.find(desc="Chats") is None, "", "DF-071")
+    ctx.check("Dash shows the compact 'test this feature' brief in the app", brief is not None, "", "DF-071")
 
 
 @journey("J-turbo-chatgpt-fanout", ("DF-070", "DF-074", "DF-081"), needs=("turbo", "physical_display"))
@@ -1207,25 +1237,27 @@ def j_process_audit(ctx: Ctx) -> None:
     from pathlib import Path
     root = Path(__file__).resolve().parents[2]
     head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-    ctx.require("runner repo at candidate sha", head.startswith(ctx.sha[:12]) or ctx.sha.startswith(head[:12]), head)
+    ctx.require("runner repo at candidate sha", head.startswith(ctx.sha[:12]) or ctx.sha.startswith(head[:12]), head, host=True)
     chk = subprocess.run(["python3", str(root / "spec/check.py")], capture_output=True, text=True)
-    ctx.check("spec/check.py passes", chk.returncode == 0, chk.stdout[-300:] + chk.stderr[-300:], "DF-078")
-    ctx.check("E2E runs on a virtual display", ctx.dev.display == "virtual", ctx.dev.display, "DF-077")
+    ctx.check("spec/check.py passes", chk.returncode == 0, chk.stdout[-300:] + chk.stderr[-300:], "DF-078", host=True)
+    ctx.check("E2E runs on a virtual display", ctx.dev.display == "virtual", ctx.dev.display, "DF-077", host=True)
     st = subprocess.run(["python3", str(root / "scripts/feature_status.py"), "--evidence", str(root / ".acceptance-receipts"),
                          "--candidate", ctx.sha, "--scope", "P0", "--json"], capture_output=True, text=True)
-    ctx.check("feature status CLI runs", st.returncode in (0, 1), st.stderr[-300:], "DF-077")
+    ctx.check("feature status CLI runs", st.returncode in (0, 1), st.stderr[-300:], "DF-077", host=True)
     sys_path = str(root / "spec")
     import sys
     sys.path.insert(0, sys_path)
     from check import load_yaml
     ledger = load_yaml((root / "spec/features.yaml").read_text())
-    ctx.check("ledger marks bugs that block live use (priority one)", any(f.get("blocks_live_use") for f in ledger["features"]), "", "DF-075")
+    ctx.check("ledger marks bugs that block live use (priority one)", any(f.get("blocks_live_use") for f in ledger["features"]), "", "DF-075",
+              host=True)
     by_id = {f["id"]: f for f in ledger["features"]}
     for fid in ("DF-079", "DF-082", "DF-083", "DF-084", "DF-085"):
         f = by_id[fid]
         refs = [r.rsplit(":", 1)[0] for r in f.get("surface_refs") or []]
         present = f.get("status_from_code") == "implemented" and bool(refs) and all((root / r).exists() for r in refs)
-        ctx.check(f"{fid} process surface present at the candidate", present, f"{f.get('status_from_code')} refs={refs[:4]}", fid)
+        ctx.check(f"{fid} process surface present at the candidate", present, f"{f.get('status_from_code')} refs={refs[:4]}", fid,
+                  host=True)
 
 
 @journey("J-design-conformance", ("DF-029", "DF-033", "DF-103", "DF-111", "DF-113", "DF-114", "DF-115", "DF-116", "DF-119"))

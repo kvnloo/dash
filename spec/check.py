@@ -8,6 +8,9 @@ Checks, all of which must pass (exit 1 otherwise):
   4. Every surface_ref / gap_ref file exists at the git revision (default HEAD) and its line,
      when given, is within the file.
   5. Ledger laws: status missing <=> surface_refs empty; recurring => priority P0.
+  6. Replay law (spec/replay.yaml): every replayed owner turn is cited by at least one feature's
+     sources (or is in not_requirements with a reason), and every H-/C- turn id a feature cites is
+     a replayed turn. An owner ask cannot be dropped silently, and a citation cannot be invented.
 
 Dependency-free: features.yaml is written in a YAML subset (block mappings and lists whose
 scalars are JSON literals), so any YAML 1.2 parser reads it the same way as `load_yaml`.
@@ -231,6 +234,57 @@ def check(doc, schema: dict, repo: Path, rev: str = "HEAD") -> list[str]:
     return errors
 
 
+_TURN = re.compile(r"\b([A-Z])-(\d{3})\b")
+
+
+def check_replay(doc, replay) -> list[str]:
+    """Law 6: the replay manifest and the ledger's sources cover each other exactly."""
+    errors: list[str] = []
+    if not isinstance(replay, dict) or not isinstance(replay.get("corpora"), list) or not replay["corpora"]:
+        return ["replay: corpora missing"]
+    turns: dict[str, str] = {}
+    prefixes = set()
+    for corpus in replay["corpora"]:
+        prefix = corpus.get("prefix")
+        if not isinstance(prefix, str) or not re.fullmatch(r"[A-Z]", prefix) or prefix == "D":
+            errors.append(f"replay: corpus {corpus.get('id')!r} needs a one-letter prefix")
+            continue
+        prefixes.add(prefix)
+        for turn in corpus.get("turns") or []:
+            tid = turn.get("id") if isinstance(turn, dict) else None
+            if not isinstance(tid, str) or not re.fullmatch(prefix + r"-\d{3}", tid):
+                errors.append(f"replay: bad turn id {tid!r} in {corpus.get('id')}")
+            elif tid in turns:
+                errors.append(f"replay: duplicate turn id {tid}")
+            elif not turn.get("date") or not turn.get("refs"):
+                errors.append(f"replay: {tid} needs a date and provenance refs")
+            else:
+                turns[tid] = corpus["id"]
+    excused = {}
+    for item in replay.get("not_requirements") or []:
+        if not isinstance(item, dict) or not str(item.get("reason") or "").strip():
+            errors.append(f"replay: not_requirements entry {item!r} needs a reason")
+        else:
+            excused[item.get("id")] = item["reason"]
+    cited: dict[str, list[str]] = {}
+    for feature in doc["features"]:
+        for source in feature.get("sources") or []:
+            for m in _TURN.finditer(source):
+                if m[1] in prefixes:
+                    cited.setdefault(f"{m[1]}-{m[2]}", []).append(feature["id"])
+    for tid in sorted(turns):
+        if tid not in cited and tid not in excused:
+            errors.append(f"replay: owner turn {tid} ({turns[tid]}) is cited by no feature; add or extend a feature, "
+                          "or list it in not_requirements with a reason")
+    for tid in sorted(cited):
+        if tid not in turns:
+            errors.append(f"replay: {', '.join(sorted(set(cited[tid])))} cite {tid}, which is not a replayed turn")
+    for tid in sorted(excused):
+        if tid not in turns:
+            errors.append(f"replay: not_requirements names {tid}, which is not a replayed turn")
+    return errors
+
+
 def _check_ref(repo: Path, rev: str, ref: str, owner: str, cache: dict) -> list[str]:
     path, _, line = ref.partition(":")
     count = _line_count(repo, rev, path, cache)
@@ -246,20 +300,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--features", type=Path, default=HERE / "features.yaml")
     parser.add_argument("--schema", type=Path, default=HERE / "schema.json")
     parser.add_argument("--repo", type=Path, default=HERE.parent)
+    parser.add_argument("--replay", type=Path, default=HERE / "replay.yaml")
     parser.add_argument("--rev", default="HEAD")
     args = parser.parse_args(argv)
     try:
         doc = load_yaml(args.features.read_text(encoding="utf-8"))
+        replay = load_yaml(args.replay.read_text(encoding="utf-8"))
     except (OSError, YamlError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     schema = json.loads(args.schema.read_text(encoding="utf-8"))
     errors = check(doc, schema, args.repo, args.rev)
+    if not errors:
+        errors = check_replay(doc, replay)
     for error in errors:
         print(f"error: {error}", file=sys.stderr)
     if errors:
         return 1
-    print(f"ok: {len(doc['features'])} features, {len(doc['journeys'])} journeys at {args.rev}")
+    turns = sum(len(c.get("turns") or []) for c in replay["corpora"])
+    print(f"ok: {len(doc['features'])} features, {len(doc['journeys'])} journeys, {turns} replayed owner turns at {args.rev}")
     return 0
 
 

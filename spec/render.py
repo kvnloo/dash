@@ -50,7 +50,8 @@ def render(doc: dict) -> str:
         "",
         "Ledger laws (enforced by `spec/check.py`): every feature has a defined journey; `missing` means no "
         "surface_refs (gap locations go in gap_refs); every non-missing feature cites code that exists at the "
-        "baseline; an ask the owner repeated (`recurring`) is P0.",
+        "baseline; an ask the owner repeated (`recurring`) is P0; every owner turn in the replay manifest "
+        "(`spec/replay.yaml`) is cited by a feature, and every cited turn is in the manifest.",
         "",
         "## P0 features",
         "",

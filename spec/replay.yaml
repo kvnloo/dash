@@ -1,0 +1,756 @@
+# Replay manifest: the closed list of owner turns the 2026-10-25 replay classified.
+# Ids, dates and provenance pointers only (no message text). spec/check.py requires every turn
+# here to be cited by a feature in features.yaml (or listed in not_requirements with a reason),
+# and every H-/C- id a feature cites to be a turn here. Add new owner turns before new features.
+version: 1
+generated: "2026-10-25"
+corpora:
+  - id: "hermes-owner-turns"
+    prefix: "H"
+    description: "Owner asks and complaints about Dash in Hermes (CLI/Telegram) and OMP chats, replayed 2026-10-19..2026-10-25 and deduplicated into one turn per ask."
+    turns:
+      - id: "H-001"
+        area: "voice"
+        date: "2026-10-19"
+        refs: ["hermes/clean:msg160529"]
+      - id: "H-002"
+        area: "voice"
+        date: "2026-10-19"
+        refs: ["hermes/clean:msg162852"]
+      - id: "H-003"
+        area: "voice"
+        date: "2026-10-19"
+        refs: ["hermes/clean:msg163801"]
+      - id: "H-004"
+        area: "voice"
+        date: "2026-10-19"
+        refs: ["hermes/clean:msg163915"]
+      - id: "H-005"
+        area: "voice"
+        date: "2026-10-19"
+        refs: ["hermes/clean:msg163915"]
+      - id: "H-006"
+        area: "voice"
+        date: "2026-10-19"
+        refs: ["hermes/clean:msg164148"]
+      - id: "H-007"
+        area: "other"
+        date: "2026-10-19"
+        refs: ["hermes/clean:msg164320"]
+      - id: "H-008"
+        area: "design-rules"
+        date: "2026-10-19"
+        refs: ["hermes/clean:msg165540"]
+      - id: "H-009"
+        area: "turbo-preview"
+        date: "2026-10-19"
+        refs: ["hermes/clean:msg165742"]
+      - id: "H-010"
+        area: "voice"
+        date: "2026-10-19"
+        refs: ["hermes/clean:msg166388"]
+      - id: "H-011"
+        area: "approvals"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg170063", "superseded_by H-136"]
+      - id: "H-012"
+        area: "other"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg173353"]
+      - id: "H-013"
+        area: "pairing"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg173388"]
+      - id: "H-014"
+        area: "chat-window"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg173447"]
+      - id: "H-015"
+        area: "voice"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg173996"]
+      - id: "H-016"
+        area: "voice"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg173996"]
+      - id: "H-017"
+        area: "pairing"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg175596"]
+      - id: "H-018"
+        area: "voice"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg176035"]
+      - id: "H-019"
+        area: "annotation"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg184560"]
+      - id: "H-020"
+        area: "navigation"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg184791", "superseded_by H-131"]
+      - id: "H-021"
+        area: "composer"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg184791"]
+      - id: "H-022"
+        area: "reliability"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg184791"]
+      - id: "H-023"
+        area: "orchestra"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg184791"]
+      - id: "H-024"
+        area: "navigation"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg184990"]
+      - id: "H-025"
+        area: "design-rules"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg184990"]
+      - id: "H-026"
+        area: "chat-window"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg185075"]
+      - id: "H-027"
+        area: "voice"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg185075"]
+      - id: "H-028"
+        area: "orchestra"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg185865"]
+      - id: "H-029"
+        area: "orchestra"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg186701"]
+      - id: "H-030"
+        area: "other"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg186740"]
+      - id: "H-031"
+        area: "annotation"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg187113"]
+      - id: "H-032"
+        area: "annotation"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg187376"]
+      - id: "H-033"
+        area: "annotation"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg187376"]
+      - id: "H-034"
+        area: "other"
+        date: "2026-10-20"
+        refs: ["hermes/clean:msg188724"]
+      - id: "H-035"
+        area: "navigation"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg194917"]
+      - id: "H-036"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg194917"]
+      - id: "H-037"
+        area: "design-rules"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg196705"]
+      - id: "H-038"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg197107"]
+      - id: "H-039"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg197107"]
+      - id: "H-040"
+        area: "design-rules"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg197107"]
+      - id: "H-041"
+        area: "orchestra"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg200638"]
+      - id: "H-042"
+        area: "pairing"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg202208"]
+      - id: "H-043"
+        area: "reliability"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg202661"]
+      - id: "H-044"
+        area: "voice"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg203358"]
+      - id: "H-045"
+        area: "voice"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg203836"]
+      - id: "H-046"
+        area: "other"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg205818"]
+      - id: "H-047"
+        area: "orchestra"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg206068"]
+      - id: "H-048"
+        area: "orchestra"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg206068"]
+      - id: "H-049"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg206720"]
+      - id: "H-050"
+        area: "composer"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg207037"]
+      - id: "H-051"
+        area: "composer"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg207037"]
+      - id: "H-052"
+        area: "design-rules"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg208002"]
+      - id: "H-053"
+        area: "orchestra"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg208431"]
+      - id: "H-054"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg208618"]
+      - id: "H-055"
+        area: "composer"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg209007"]
+      - id: "H-056"
+        area: "orchestra"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg209007"]
+      - id: "H-057"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg209111"]
+      - id: "H-058"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg209250"]
+      - id: "H-059"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg209313"]
+      - id: "H-060"
+        area: "settings"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg209313"]
+      - id: "H-061"
+        area: "performance"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg209528"]
+      - id: "H-062"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg209528"]
+      - id: "H-063"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg209528"]
+      - id: "H-064"
+        area: "design-rules"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg209528"]
+      - id: "H-065"
+        area: "settings"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg210468"]
+      - id: "H-066"
+        area: "reliability"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg211140"]
+      - id: "H-067"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg211265"]
+      - id: "H-068"
+        area: "performance"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg211313"]
+      - id: "H-069"
+        area: "composer"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg211313", "superseded_by H-093"]
+      - id: "H-070"
+        area: "composer"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg211336"]
+      - id: "H-071"
+        area: "performance"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg211402"]
+      - id: "H-072"
+        area: "orchestra"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg211521"]
+      - id: "H-073"
+        area: "composer"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg211647"]
+      - id: "H-074"
+        area: "approvals"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg211747"]
+      - id: "H-075"
+        area: "settings"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg212794", "superseded_by H-078"]
+      - id: "H-076"
+        area: "other"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg214541"]
+      - id: "H-077"
+        area: "settings"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg215699"]
+      - id: "H-078"
+        area: "settings"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg215699", "supersedes H-075"]
+      - id: "H-079"
+        area: "settings"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg215754"]
+      - id: "H-080"
+        area: "orchestra"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg215754", "superseded_by H-081"]
+      - id: "H-081"
+        area: "orchestra"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg215770", "supersedes H-080"]
+      - id: "H-082"
+        area: "turbo-preview"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg215880"]
+      - id: "H-083"
+        area: "annotation"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg215923"]
+      - id: "H-084"
+        area: "voice"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg207037"]
+      - id: "H-085"
+        area: "turbo-preview"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg216101"]
+      - id: "H-086"
+        area: "turbo-preview"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg216433"]
+      - id: "H-087"
+        area: "turbo-preview"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg216719", "superseded_by H-155"]
+      - id: "H-088"
+        area: "turbo-preview"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg216719"]
+      - id: "H-089"
+        area: "performance"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg216788"]
+      - id: "H-090"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg216877"]
+      - id: "H-091"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg216877"]
+      - id: "H-092"
+        area: "voice"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg216920"]
+      - id: "H-093"
+        area: "orchestra"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg217042", "supersedes H-069"]
+      - id: "H-094"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg217215"]
+      - id: "H-095"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg217234"]
+      - id: "H-096"
+        area: "composer"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg217379"]
+      - id: "H-097"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg217379"]
+      - id: "H-098"
+        area: "composer"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg217784"]
+      - id: "H-099"
+        area: "voice"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg218002"]
+      - id: "H-100"
+        area: "voice"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg218056"]
+      - id: "H-101"
+        area: "other"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg218163"]
+      - id: "H-102"
+        area: "reliability"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg218204"]
+      - id: "H-103"
+        area: "performance"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg218250"]
+      - id: "H-104"
+        area: "orchestra"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg218250"]
+      - id: "H-105"
+        area: "orchestra"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg218261"]
+      - id: "H-106"
+        area: "turbo-preview"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg218315"]
+      - id: "H-107"
+        area: "voice"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg218325"]
+      - id: "H-108"
+        area: "composer"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg218363"]
+      - id: "H-109"
+        area: "chat-window"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg218363"]
+      - id: "H-110"
+        area: "other"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg218374"]
+      - id: "H-111"
+        area: "voice"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg218624"]
+      - id: "H-112"
+        area: "chat-window"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg218626"]
+      - id: "H-113"
+        area: "chat-window"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg219839"]
+      - id: "H-114"
+        area: "pairing"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg220239"]
+      - id: "H-115"
+        area: "chat-window"
+        date: "2026-10-21"
+        refs: ["hermes/clean:msg212794"]
+      - id: "H-116"
+        area: "chat-window"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg220384"]
+      - id: "H-117"
+        area: "design-rules"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg220384"]
+      - id: "H-118"
+        area: "performance"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg220465"]
+      - id: "H-119"
+        area: "chat-window"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg220836"]
+      - id: "H-120"
+        area: "composer"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg220920"]
+      - id: "H-121"
+        area: "reliability"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg221571"]
+      - id: "H-122"
+        area: "orchestra"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg221932"]
+      - id: "H-123"
+        area: "chat-window"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg222490"]
+      - id: "H-124"
+        area: "reliability"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg224218"]
+      - id: "H-125"
+        area: "annotation"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg225054"]
+      - id: "H-126"
+        area: "annotation"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg225773"]
+      - id: "H-127"
+        area: "composer"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg225773"]
+      - id: "H-128"
+        area: "navigation"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg225773"]
+      - id: "H-129"
+        area: "chat-window"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg225773"]
+      - id: "H-130"
+        area: "annotation"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg225773"]
+      - id: "H-131"
+        area: "chat-window"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg225927", "supersedes H-020"]
+      - id: "H-132"
+        area: "chat-window"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg225927"]
+      - id: "H-133"
+        area: "chat-window"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg225927"]
+      - id: "H-134"
+        area: "composer"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg225927"]
+      - id: "H-135"
+        area: "annotation"
+        date: "2026-10-22"
+        refs: ["hermes/clean:msg227103"]
+      - id: "H-136"
+        area: "approvals"
+        date: "2026-10-23"
+        refs: ["hermes/clean:msg228201", "supersedes H-011"]
+      - id: "H-137"
+        area: "design-rules"
+        date: "2026-10-23"
+        refs: ["hermes/clean:msg230848"]
+      - id: "H-138"
+        area: "reliability"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg235593"]
+      - id: "H-139"
+        area: "navigation"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236010"]
+      - id: "H-140"
+        area: "performance"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236042"]
+      - id: "H-141"
+        area: "composer"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236103"]
+      - id: "H-142"
+        area: "annotation"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236103"]
+      - id: "H-143"
+        area: "composer"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236130"]
+      - id: "H-144"
+        area: "voice"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236141"]
+      - id: "H-145"
+        area: "composer"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236168"]
+      - id: "H-146"
+        area: "reliability"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236188"]
+      - id: "H-147"
+        area: "composer"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236188"]
+      - id: "H-148"
+        area: "reliability"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236371"]
+      - id: "H-149"
+        area: "chat-window"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236433"]
+      - id: "H-150"
+        area: "annotation"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236433"]
+      - id: "H-151"
+        area: "reliability"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236629"]
+      - id: "H-152"
+        area: "reliability"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg236776"]
+      - id: "H-153"
+        area: "reliability"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg237183"]
+      - id: "H-154"
+        area: "reliability"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg237275"]
+      - id: "H-155"
+        area: "turbo-preview"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg238039", "supersedes H-087"]
+      - id: "H-156"
+        area: "chat-window"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg238207"]
+      - id: "H-157"
+        area: "other"
+        date: "2026-10-25"
+        refs: ["hermes/clean:msg238381"]
+  - id: "harness-complaints"
+    prefix: "C"
+    description: "Owner complaints about Dash raised inside OMP/Claude harness sessions (first-seen event pointers)."
+    turns:
+      - id: "C-001"
+        area: "reliability"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#f383c5d3"]
+      - id: "C-002"
+        area: "reliability"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-003"
+        area: "reliability"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#bfed1c22"]
+      - id: "C-004"
+        area: "reliability"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#bfed1c22"]
+      - id: "C-005"
+        area: "reliability"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#bfed1c22"]
+      - id: "C-006"
+        area: "reliability"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-007"
+        area: "other"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#c46122a6"]
+      - id: "C-008"
+        area: "other"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-009"
+        area: "other"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#c46122a6"]
+      - id: "C-010"
+        area: "navigation"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-011"
+        area: "turbo-preview"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-012"
+        area: "turbo-preview"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-013"
+        area: "turbo-preview"
+        date: "2026-10-22"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-014"
+        area: "voice"
+        date: "2026-10-23"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#8575fecb"]
+      - id: "C-015"
+        area: "voice"
+        date: "2026-10-23"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#8575fecb"]
+      - id: "C-016"
+        area: "voice"
+        date: "2026-10-23"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-017"
+        area: "performance"
+        date: "2026-10-23"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-018"
+        area: "performance"
+        date: "2026-10-23"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-019"
+        area: "design-rules"
+        date: "2026-10-23"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-020"
+        area: "other"
+        date: "2026-10-24"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#df7f5a76"]
+      - id: "C-021"
+        area: "turbo-preview"
+        date: "2026-10-24"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#df7f5a76"]
+      - id: "C-022"
+        area: "turbo-preview"
+        date: "2026-10-24"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-023"
+        area: "design-rules"
+        date: "2026-10-24"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#"]
+      - id: "C-024"
+        area: "other"
+        date: "2026-10-24"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#df7f5a76"]
+      - id: "C-025"
+        area: "design-rules"
+        date: "2026-10-24"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#370f870e"]
+      - id: "C-026"
+        area: "turbo-preview"
+        date: "2026-10-24"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#370f870e"]
+      - id: "C-027"
+        area: "turbo-preview"
+        date: "2026-10-24"
+        refs: ["omp:01a16527-824c-7714-8205-9a2d0d5eff38#370f870e"]
+      - id: "C-028"
+        area: "reliability"
+        date: "2026-10-25"
+        refs: ["omp:01a16f47-f4a8-7753-9976-a51a85b8b697#"]
+not_requirements: []

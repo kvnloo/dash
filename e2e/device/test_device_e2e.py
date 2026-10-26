@@ -208,6 +208,24 @@ class Receipts(unittest.TestCase):
         self.assertEqual(res["DF-009"], ("fail", "no check for this feature ran"))
         self.assertEqual(feature_results([], ["DF-001"])["DF-001"], ("fail", "no checks ran"))
 
+    def test_host_only_checks_never_pass_a_feature(self):
+        host = [{"check": "file exists", "ok": True, "detail": "", "feature": "DF-001", "observed": "host", "shot": None}]
+        self.assertEqual(feature_results(host, ["DF-001"])["DF-001"][0], "fail")
+        dev = host + [{"check": "row visible", "ok": True, "detail": "", "feature": None, "observed": "device", "shot": "x"}]
+        self.assertEqual(feature_results(dev, ["DF-001"])["DF-001"], ("pass", None))
+        with tempfile.TemporaryDirectory() as tmp:
+            rs = self.write(tmp, [dict(host[0], feature=None)])
+            self.assertIs(rs[0]["device_observed"], False)
+            self.assertIn("no check observed the device", rs[0]["failure_reason"])
+            self.assertEqual(feature_status.classify_journey(rs, "J-composer-draft-restore", "abcdef1234567"),
+                             feature_status.Journey.FAIL)
+
+    def test_selecting_one_feature_of_a_multi_feature_journey_still_needs_its_tag(self):
+        untagged = [{"check": "open", "ok": True, "detail": "", "feature": None, "shot": ""}]
+        self.assertEqual(feature_results(untagged, ["DF-001"], ("DF-001", "DF-003"))["DF-001"],
+                         ("fail", "no check for this feature ran"))
+        self.assertEqual(feature_results(untagged, ["DF-001"], ("DF-001",))["DF-001"], ("pass", None))
+
     def test_check_rejects_a_foreign_feature_tag(self):
         class Dev:
             def shot(self, name):

@@ -37,14 +37,17 @@ def Laws.blocker_without_reason_is_no_blocker(s, c, j, p):
 def Laws.blocker_without_reason_stays_open(s, c, p):
   {==}
 
-def Laws.owner_stop_stops(a, b):
+def Laws.owner_stop_stops(a, e, b):
   {==}
 
 def Laws.complete_scope_stops(b):
   {==}
 
-def Laws.budget_alone_pauses_with_report():
+def Laws.external_blocked_scope_pauses_with_report(b):
   {==}
 
-def Laws.open_work_continues():
+def Laws.budget_alone_pauses_with_report(e):
+  {==}
+
+def Laws.open_work_continues(e):
   {==}
