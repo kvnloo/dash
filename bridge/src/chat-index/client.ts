@@ -45,6 +45,20 @@ export interface WorkerLike {
 /** A started job that has run this many lane timeouts is treated as a hung worker. */
 export const STUCK_FACTOR = 3;
 
+/**
+ * Respawn policy. The first restart after a served job is immediate; each further one waits twice
+ * as long (from `baseMs` up to `maxMs`). After `budget` restarts within `windowMs` the lane is down:
+ * calls fail busy at once (retryAfterMs = the time left) and nothing spawns until the wait ends.
+ * A served job resets the wait.
+ */
+export interface RestartPolicy { baseMs: number; maxMs: number; budget: number; windowMs: number }
+export const RESTART_POLICY: RestartPolicy = { baseMs: 250, maxMs: 30_000, budget: 5, windowMs: 60_000 };
+export interface LaneOptions {
+  restart?: Partial<RestartPolicy>;
+  now?: () => number;
+  log?: (message: string) => void;
+}
+
 type Listener = { resolve(value: unknown): void; reject(error: Error): void };
 interface Job { id: number; key: string; request: WorkerRequest; listeners: Set<Listener>; started: boolean; done: boolean; timer: ReturnType<typeof setTimeout> | undefined }
 
@@ -63,8 +77,18 @@ export class Lane {
   private active: Job | undefined;
   private readonly inflight = new Map<string, Job>();
   private seq = 0;
-  private worker: WorkerLike;
+  /** Undefined while a replacement waits out its backoff. */
+  private worker: WorkerLike | undefined;
   private readonly spawn: (() => WorkerLike) | undefined;
+  private readonly policy: RestartPolicy;
+  private readonly now: () => number;
+  private readonly log: (message: string) => void;
+  /** Wait before the next respawn (0: immediate); doubles per restart, reset by a served job. */
+  private backoffMs = 0;
+  private readonly restartTimes: number[] = [];
+  private respawnTimer: ReturnType<typeof setTimeout> | undefined;
+  /** While set and in the future, the lane spent its restart budget: calls fail busy at once. */
+  private downUntil = 0;
   private initOp: Extract<WorkerOp, { op: "init" }> | undefined;
   private generation = 0;
   private stuck: ReturnType<typeof setTimeout> | undefined;
@@ -73,22 +97,31 @@ export class Lane {
   restarts = 0;
   onSnapshot: ((snapshot: Snapshot) => void) | undefined;
 
-  constructor(source: WorkerLike | (() => WorkerLike), private readonly timeoutMs = RPC_TIMEOUT_MS, private readonly cap = QUEUE_CAP) {
+  constructor(source: WorkerLike | (() => WorkerLike), private readonly timeoutMs = RPC_TIMEOUT_MS, private readonly cap = QUEUE_CAP, options: LaneOptions = {}) {
     this.spawn = typeof source === "function" ? source : undefined;
+    this.policy = { ...RESTART_POLICY, ...options.restart };
+    this.now = options.now ?? Date.now;
+    this.log = options.log ?? (message => console.warn(message));
     this.worker = this.attach(typeof source === "function" ? source() : source);
   }
 
   private attach(worker: WorkerLike): WorkerLike {
     const generation = ++this.generation;
     worker.onmessage = event => { if (generation === this.generation) this.receive(event.data); };
-    const died = () => { if (generation === this.generation && !this.closed) this.recover(); };
-    worker.addEventListener?.("error", died);
-    worker.addEventListener?.("close", died);
+    worker.addEventListener?.("error", () => this.died(generation, "errored"));
+    worker.addEventListener?.("close", () => this.died(generation, "exited"));
     return worker;
   }
 
-  /** Fail everything pending, replace the worker, re-init it. Without a spawn function, only fails the pending jobs. */
-  private recover(): void {
+  private died(generation: number, reason: string): void {
+    if (generation === this.generation && !this.closed) this.recover(reason);
+  }
+
+  /**
+   * Fail everything pending, drop the worker, and schedule a replacement under the restart policy
+   * (re-sent the last init op). Without a spawn function, only fails the pending jobs.
+   */
+  private recover(reason: string): void {
     if (this.stuck) clearTimeout(this.stuck);
     this.stuck = undefined;
     const victims = [...(this.active ? [this.active] : []), ...this.queue];
@@ -97,15 +130,44 @@ export class Lane {
     for (const job of victims) {
       const listeners = job.done ? [] : [...job.listeners];
       this.finish(job);
-      for (const l of listeners) l.reject(new BusyError());
+      for (const l of listeners) l.reject(new BusyError(this.retryAfter()));
     }
     if (!this.spawn) return;
     const old = this.worker;
+    this.worker = undefined;
     this.generation++; // the old worker's late replies and close event are ignored
-    try { old.terminate(); } catch { /* already gone */ }
-    try { this.worker = this.attach(this.spawn()); } catch { return; }
+    try { old?.terminate(); } catch { /* already gone */ }
+    if (this.respawnTimer) return; // a replacement is already scheduled
+    const now = this.now();
+    while (this.restartTimes.length && now - (this.restartTimes[0] ?? 0) > this.policy.windowMs) this.restartTimes.shift();
+    const wait = this.backoffMs;
+    this.backoffMs = Math.min(this.policy.maxMs, Math.max(this.policy.baseMs, wait * 2));
+    // Out of budget: down for at least one full backoff step, so a crash loop spawns at most once per wait.
+    const delay = this.restartTimes.length >= this.policy.budget ? Math.max(wait, this.policy.baseMs) : wait;
+    if (this.restartTimes.length >= this.policy.budget) this.downUntil = now + delay;
+    this.log(`[chat-index] worker ${reason}; restart ${this.restarts + 1} in ${delay} ms${this.downUntil > now ? " (restart budget spent: lane down)" : ""}`);
+    if (delay === 0) this.respawn();
+    else this.respawnTimer = setTimeout(() => { this.respawnTimer = undefined; this.respawn(); }, delay);
+  }
+
+  private respawn(): void {
+    if (this.closed || !this.spawn) return;
+    this.downUntil = 0;
+    this.restartTimes.push(this.now());
     this.restarts++;
+    let worker: WorkerLike;
+    try { worker = this.spawn(); } catch (error) {
+      this.recover(`failed to spawn (${error instanceof Error ? error.message : String(error)})`);
+      return;
+    }
+    this.worker = this.attach(worker);
     if (this.initOp) void this.call(this.initOp).catch(() => undefined);
+    this.pump();
+  }
+
+  /** Time until a down lane spawns again (0 when it is up). */
+  private retryAfter(): number {
+    return Math.max(0, this.downUntil - this.now());
   }
 
   /** Queued, not started. */
@@ -114,6 +176,8 @@ export class Lane {
   call(op: WorkerOp, signal?: AbortSignal): Promise<unknown> {
     if (signal?.aborted) return Promise.reject(new AbortedError());
     if (op.op === "init") this.initOp = op;
+    const down = this.retryAfter();
+    if (down > 0) return Promise.reject(new BusyError(down));
     const key = JSON.stringify(op);
     let job = op.op === "init" || op.op === "stall" ? undefined : this.inflight.get(key);
     if (!job) {
@@ -160,12 +224,12 @@ export class Lane {
   }
 
   private pump(): void {
-    if (this.active) return;
+    if (this.active || !this.worker) return;
     const job = this.queue.shift();
     if (!job) return;
     job.started = true;
     this.active = job;
-    if (this.spawn) this.stuck = setTimeout(() => { if (this.active === job) this.recover(); }, this.timeoutMs * STUCK_FACTOR);
+    if (this.spawn) this.stuck = setTimeout(() => { if (this.active === job) this.recover("stuck"); }, this.timeoutMs * STUCK_FACTOR);
     try { this.worker.postMessage(job.request); } catch { this.settle(job, false, new BusyError()); }
   }
 
@@ -182,6 +246,9 @@ export class Lane {
     if (this.stuck) clearTimeout(this.stuck);
     this.stuck = undefined;
     this.active = undefined;
+    // A served job (even an error reply) proves the worker works: the next restart is immediate.
+    // Init does not count: a worker that inits and then dies on its first real job keeps backing off.
+    if ((ok || value instanceof RpcError) && job.request.op !== "init") this.backoffMs = 0;
     const listeners = job.done ? [] : [...job.listeners];
     this.finish(job);
     for (const l of listeners) {
@@ -202,7 +269,9 @@ export class Lane {
     }
     this.queue.length = 0;
     this.active = undefined;
-    this.worker.terminate();
+    if (this.respawnTimer) clearTimeout(this.respawnTimer);
+    this.respawnTimer = undefined;
+    this.worker?.terminate();
   }
 }
 

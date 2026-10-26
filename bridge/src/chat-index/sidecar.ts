@@ -29,11 +29,17 @@ export function internalKey(row: { host_id: string; kind: string; session_id: st
   return chatKey({ hostId: row.host_id, kind: row.kind, sessionId: row.session_id, ...(row.profile_id ? { profileId: row.profile_id } : {}) });
 }
 
+/** The key the app sees for a row (`toSummary(row, self).key`). */
+export function summaryKey(row: ChatRow, self: SelfInfo): string {
+  const hostId = row.host_id === SELF_HOST ? self.id : row.host_id;
+  return chatKey({ hostId, kind: row.kind, sessionId: row.session_id, ...(row.profile_id ? { profileId: row.profile_id } : {}) });
+}
+
 export function toSummary(row: ChatRow, self: SelfInfo): ChatSummary {
   const mine = row.host_id === SELF_HOST;
   const hostId = mine ? self.id : row.host_id;
   return {
-    key: chatKey({ hostId, kind: row.kind, sessionId: row.session_id, ...(row.profile_id ? { profileId: row.profile_id } : {}) }),
+    key: summaryKey(row, self),
     kind: row.kind, sessionId: row.session_id, hostId, hostName: mine ? self.name : row.host_name,
     ...(row.profile_id ? { profileId: row.profile_id } : {}), ...(row.agent_id ? { agentId: row.agent_id } : {}),
     title: row.title, ...(row.cwd ? { cwd: row.cwd } : {}), startedAt: row.started_at, lastActivityAt: row.last_activity_at,

@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { AppState as RNAppState } from "react-native";
-import type { ChatSummary } from "../../../shared/protocol";
-import { listRows } from "../lib/chat-index";
+import type { PagedList } from "../lib/chat-index";
 import { chatIndexStore, HEAD_TTL_MS, listState, loadMore as loadMorePage, queryKey, refreshHead, seedFromSnapshot, type ChatQuery, type ListStatus } from "../store/chat-index-store";
 
-const NO_ROWS: ChatSummary[] = [];
-
 export interface PagedChats {
-  rows: ChatSummary[];
+  /**
+   * The loaded pages (undefined while hidden). Label it with `labelList` and the previous labeling:
+   * a new page or a head refresh then costs O(change), not O(loaded).
+   */
+  list: PagedList | undefined;
+  /** Loaded chat count. */
+  loaded: number;
   status: ListStatus;
   loadingMore: boolean;
   exhausted: boolean;
@@ -53,10 +56,10 @@ export function usePagedChats(query: ChatQuery = {}, opts: { focused?: boolean; 
 
   const loadMore = useCallback(() => { void loadMorePage(stableQuery); }, [stableQuery]);
   const refresh = useCallback(() => { void refreshHead(stableQuery, { force: true }); }, [stableQuery]);
-  const list = state?.list;
-  const rows = useMemo(() => (list && shown ? listRows(list) : NO_ROWS), [list, shown]);
+  const list = shown ? state?.list : undefined;
   return {
-    rows,
+    list,
+    loaded: list?.index.size ?? 0,
     status: state?.status ?? "idle",
     loadingMore: state?.loadingMore ?? false,
     exhausted: !shown || (state?.list.exhausted ?? false),

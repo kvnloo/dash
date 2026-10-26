@@ -5,6 +5,7 @@
 import type { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import type { AgentInfo, ChatSearchHit, ChatSummary, HistoryMessage } from "../../../shared/protocol";
+import { CURSOR_MAX_BYTES } from "../../../shared/protocol";
 import { AGENTSVIEW_KINDS } from "../agentsview-sessions";
 import { HermesSessions } from "../hermes-sessions";
 import { redact } from "../reply-parts";
@@ -14,10 +15,10 @@ import {
 } from "./agentsview-src";
 import { HermesFts, hermesIngest, hermesReconcile } from "./hermes-src";
 import {
-  capSnippet, CursorError, cursorNumber, cursorString, decodeCursor, encodeCursor, markersToHighlights, markSnippet, readCursor, RESPONSE_CAP_BYTES,
+  capSnippet, CursorError, cursorNumber, cursorString, decodeCursor, encodeCursor, hash, markersToHighlights, markSnippet, readCursor, RESPONSE_CAP_BYTES,
   sanitizeQuery, SEARCH_BATCH, SEARCH_BUDGET_MS, SEARCH_MAX_SCANNED, SELF_HOST, substringHighlights, type SanitizedQuery,
 } from "./query";
-import { Sidecar, toAgentInfo, toSummary, type ChatRow, type SelfInfo } from "./sidecar";
+import { Sidecar, summaryKey, toAgentInfo, toSummary, type ChatRow, type SelfInfo } from "./sidecar";
 
 export interface EngineConfig {
   role: "primary" | "search";
@@ -47,7 +48,7 @@ export interface ListValue { items: ChatSummary[]; next: string | null; rev: num
 export interface TitleArgs { q: string; qh: string; limit: number; after?: { t: number; k: string }; kinds: string[]; hosts: string[]; self: SelfInfo }
 export interface TitleValue { hits: ChatSearchHit[]; keys: string[]; next: { t: number; k: string } | null; rev: number }
 export type MsgPositions = { av?: number; hz?: Record<string, number> };
-export interface MsgArgs { q: string; limit: number; positions: MsgPositions | "start"; exclude: string[]; kinds: string[]; hosts: string[]; self: SelfInfo; budgetMs?: number; maxScanned?: number }
+export interface MsgArgs { q: string; limit: number; positions: MsgPositions | "start"; exclude: string[]; /** `hash()` of the app-facing chat keys (summaryKey) earlier pages returned. */ excludeHashes?: string[]; kinds: string[]; hosts: string[]; self: SelfInfo; budgetMs?: number; maxScanned?: number }
 export interface MsgValue { hits: ChatSearchHit[]; next: MsgPositions | null; partial: boolean; scanned: number }
 export interface HistoryArgs { key?: string; kind?: string; sessionId?: string; host?: string; profile?: string; before?: string; limit: number; self: SelfInfo }
 export interface WsHistoryArgs { kind: string; sessionId: string; limit?: number }
@@ -308,6 +309,7 @@ export class ChatIndexEngine {
     const kinds = new Set(args.kinds);
     const hosts = new Set(args.hosts);
     const seen = new Set(args.exclude);
+    const emitted = new Set(args.excludeHashes ?? []);
     const picked: { source: Source; row: FtsRow; chat: ChatRow }[] = [];
     let scanned = 0;
     let partial = false;
@@ -329,7 +331,7 @@ export class ChatIndexEngine {
       best.pos = row.rid;
       scanned++;
       const chat = best.chat(row);
-      if (!chat || seen.has(chat.key)) continue;
+      if (!chat || seen.has(chat.key) || (emitted.size > 0 && emitted.has(hash(summaryKey(chat, args.self))))) continue;
       if ((kinds.size && !kinds.has(chat.kind)) || (hosts.size && !hosts.has(chat.host_id))) continue;
       seen.add(chat.key);
       picked.push({ source: best, row, chat });
@@ -494,30 +496,75 @@ function titleHit(row: ChatRow, q: SanitizedQuery, self: SelfInfo): ChatSearchHi
   return { chat: toSummary(row, self), field, snippet, highlights };
 }
 
-export function msgCursor(qh: string, positions: MsgPositions | "start"): string {
-  return encodeCursor(positions === "start" ? { v: 1, q: qh, ph: "msg", s: 1 } : { v: 1, q: qh, ph: "msg", ...(positions.av !== undefined ? { av: positions.av } : {}), ...(positions.hz && Object.keys(positions.hz).length ? { hz: positions.hz } : {}) });
+/**
+ * Chats a search already returned, carried in its cursor as `hash()` values (newest last), so
+ * message hits on later pages skip them. Capped: past the cap the oldest drop out.
+ */
+export const EMITTED_MAX = 256;
+
+/** `prev` plus the hashes of `keys` not in it yet, keeping the newest EMITTED_MAX. */
+export function withEmitted(prev: readonly string[], keys: readonly string[]): string[] {
+  const out = prev.slice();
+  const have = new Set(prev);
+  for (const key of keys) {
+    const h = hash(key);
+    if (!have.has(h)) { have.add(h); out.push(h); }
+  }
+  return out.length > EMITTED_MAX ? out.slice(out.length - EMITTED_MAX) : out;
+}
+
+/**
+ * Encode a search cursor carrying `emitted`. If it would pass CURSOR_MAX_BYTES (many Hermes
+ * profiles), the oldest hashes drop until it fits: a dropped chat can repeat, never go missing.
+ */
+function searchCursor(fields: Record<string, unknown>, emitted: readonly string[]): string {
+  let x = emitted;
+  for (;;) {
+    const text = encodeCursor(x.length ? { ...fields, x: x.join("") } : fields);
+    if (text.length <= CURSOR_MAX_BYTES || x.length === 0) return text;
+    x = x.slice(Math.ceil(x.length / 2));
+  }
+}
+
+export function titleCursor(qh: string, after: { t: number; k: string }, emitted: readonly string[] = []): string {
+  return searchCursor({ v: 1, q: qh, ph: "title", t: after.t, tk: after.k }, emitted);
+}
+
+export function msgCursor(qh: string, positions: MsgPositions | "start", emitted: readonly string[] = []): string {
+  return searchCursor(positions === "start" ? { v: 1, q: qh, ph: "msg", s: 1 } : { v: 1, q: qh, ph: "msg", ...(positions.av !== undefined ? { av: positions.av } : {}), ...(positions.hz && Object.keys(positions.hz).length ? { hz: positions.hz } : {}) }, emitted);
+}
+
+export type SearchCursor = ({ ph: "title"; after: { t: number; k: string } } | { ph: "msg"; positions: MsgPositions | "start" }) & { emitted: string[] };
+
+function readEmitted(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (typeof value !== "string" || value.length % 8 !== 0 || value.length > EMITTED_MAX * 8 || !/^[0-9a-f]*$/.test(value)) throw new EngineError("bad_cursor", "cursor");
+  const out: string[] = [];
+  for (let i = 0; i < value.length; i += 8) out.push(value.slice(i, i + 8));
+  return out;
 }
 
 /** Decode a search cursor bound to `qh`. */
-export function readSearchCursor(cursor: string | undefined, qh: string): { ph: "title"; after: { t: number; k: string } } | { ph: "msg"; positions: MsgPositions | "start" } | undefined {
+export function readSearchCursor(cursor: string | undefined, qh: string): SearchCursor | undefined {
   let value: Record<string, unknown> | undefined;
   try { value = readCursor(cursor, "q", qh); } catch (error) { if (error instanceof CursorError) throw new EngineError("bad_cursor", "cursor"); throw error; }
   if (!value) return undefined;
+  const emitted = readEmitted(value.x);
   if (value.ph === "title") {
     const t = cursorNumber(value.t);
     const k = cursorString(value.tk);
     if (t === undefined || k === undefined) throw new EngineError("bad_cursor", "cursor");
-    return { ph: "title", after: { t, k } };
+    return { ph: "title", after: { t, k }, emitted };
   }
   if (value.ph !== "msg") throw new EngineError("bad_cursor", "cursor");
-  if (value.s === 1) return { ph: "msg", positions: "start" };
+  if (value.s === 1) return { ph: "msg", positions: "start", emitted };
   const av = cursorNumber(value.av);
   const hz: Record<string, number> = {};
   if (value.hz !== undefined) {
     if (typeof value.hz !== "object" || value.hz === null || Array.isArray(value.hz)) throw new EngineError("bad_cursor", "cursor");
     for (const [profile, id] of Object.entries(value.hz)) { const n = cursorNumber(id); if (n === undefined || !/^[A-Za-z0-9_-]{1,64}$/.test(profile)) throw new EngineError("bad_cursor", "cursor"); hz[profile] = n; }
   }
-  return { ph: "msg", positions: { ...(av !== undefined ? { av } : {}), hz } };
+  return { ph: "msg", positions: { ...(av !== undefined ? { av } : {}), hz }, emitted };
 }
 
 // -- Bun Worker entry -----------------------------------------------------------

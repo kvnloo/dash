@@ -1,4 +1,4 @@
-import type { ChatSearchHit, ChatSummary, SearchHighlight } from "../../../shared/protocol";
+import type { ChatSearchHit, ChatSearchPage, ChatSummary, SearchHighlight } from "../../../shared/protocol";
 import { effortIdForTurn, lastAssistantState, runtimeStateFromOrchestra, runtimeStateFromTurn } from "../catalog/runtime-state";
 import type { Conversation } from "../model";
 import { timeAgo } from "./time-labels";
@@ -212,4 +212,25 @@ export function mergeSearch(local: readonly SearchRowModel[], remote: readonly C
     out.push(hitRowModel(hit, harnessName(hit.chat.kind)));
   }
   return out;
+}
+
+/** A partial page with fewer distinct chats than this keeps scanning on its own. */
+export const SEARCH_MIN_FILL = 8;
+/** Pages fetched on their own after one request (fill or no-progress), at most. */
+export const SEARCH_MAX_CHAINED = 3;
+
+/**
+ * Whether to fetch `next` on its own after the last of `pages` arrived. Counts distinct chats, not
+ * raw hits: a page that adds no new row would otherwise stall the list (FlashList does not fire
+ * onEndReached again while the list does not grow).
+ */
+export function shouldChainSearch(pages: readonly ChatSearchPage[], chained: number): boolean {
+  const page = pages.at(-1);
+  if (!page?.next || chained >= SEARCH_MAX_CHAINED) return false;
+  const before = new Set<string>();
+  for (const p of pages.slice(0, -1)) for (const h of p.hits) before.add(h.chat.key);
+  let added = 0;
+  for (const h of page.hits) if (!before.has(h.chat.key)) { before.add(h.chat.key); added += 1; }
+  if (added === 0) return true;
+  return page.partial && before.size < SEARCH_MIN_FILL;
 }

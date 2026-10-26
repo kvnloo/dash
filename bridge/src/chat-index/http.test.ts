@@ -4,8 +4,8 @@ import { BridgeAuth } from "../z0bridge-identity";
 import { AgentsviewFixture, engineConfig, inProcessWorker, TEST_RPC_TIMEOUT_MS, stalledWorker, tempDir } from "../fixtures/chat-index/make-fixtures";
 import { AbortedError, BusyError, ChatIndexClient, Lane, Lru, STUCK_FACTOR, type WorkerLike } from "./client";
 import { createChatsHttpHandler } from "./http";
-import { parseChatSearchPage } from "../../../shared/protocol";
-import type { WorkerRequest } from "./worker";
+import { CURSOR_MAX_BYTES, encodeCursor, parseChatSearchPage } from "../../../shared/protocol";
+import { EMITTED_MAX, msgCursor, readSearchCursor, withEmitted, type WorkerRequest } from "./worker";
 
 const TOKEN = "chat-index-test-token-never-log";
 const cleanup: (() => void)[] = [];
@@ -153,6 +153,54 @@ describe("lane recovery", () => {
   });
 });
 
+describe("lane restart backoff", () => {
+  /** A worker that dies as soon as it is attached (bad deploy, failed import, OOM on init). */
+  function dying(spawned: { n: number }) {
+    return (): WorkerLike => {
+      spawned.n += 1;
+      const listeners: (() => void)[] = [];
+      setTimeout(() => { for (const l of listeners) l(); }, 0);
+      return { onmessage: null, postMessage() {}, terminate() {}, addEventListener(type, listener) { if (type === "error") listeners.push(listener); } };
+    };
+  }
+
+  test("a worker that dies at once is respawned with backoff, then the lane goes down and fails busy", async () => {
+    const spawned = { n: 0 };
+    const logs: string[] = [];
+    const lane = new Lane(dying(spawned), 5_000, 64, { restart: { baseMs: 10, maxMs: 80, budget: 5, windowMs: 60_000 }, log: message => logs.push(message) });
+    cleanup.push(() => lane.terminate());
+    void lane.call({ op: "init", args: engineConfig(tempDir()) }).catch(() => undefined);
+    await Bun.sleep(600);
+    // Unbounded, this would be thousands of spawns. Restarts: 0, 10, 20, 40, 80 ms, then 80 ms apart while down.
+    expect(spawned.n).toBeGreaterThanOrEqual(5);
+    expect(spawned.n).toBeLessThanOrEqual(14);
+    expect(logs.length).toBe(spawned.n);
+    expect(logs.at(-1)).toContain("errored");
+    const error = await lane.call({ op: "snapshot", args: null }).then(() => undefined, (e: unknown) => e);
+    // Down: refused at once with the time left, or (between waits) queued and failed busy when the worker died.
+    expect(error).toBeInstanceOf(BusyError);
+    const settledAt = spawned.n;
+    lane.terminate();
+    await Bun.sleep(150);
+    expect(spawned.n).toBe(settledAt);
+  });
+
+  test("while down, calls fail busy at once with retryAfterMs = the wait left", async () => {
+    const spawned = { n: 0 };
+    let now = 0;
+    const lane = new Lane(dying(spawned), 5_000, 64, { restart: { baseMs: 1_000, maxMs: 30_000, budget: 1, windowMs: 60_000 }, now: () => now, log: () => {} });
+    cleanup.push(() => lane.terminate());
+    await Bun.sleep(20); // first death: immediate respawn (budget 1 used)
+    await Bun.sleep(20); // second death: over budget, down for 1 s
+    expect(spawned.n).toBe(2);
+    now = 400;
+    const error = await lane.call({ op: "snapshot", args: null }).then(() => undefined, (e: unknown) => e);
+    expect(error).toBeInstanceOf(BusyError);
+    expect(error instanceof BusyError ? error.retryAfterMs : 0).toBe(600);
+    expect(spawned.n).toBe(2);
+  });
+});
+
 describe("search degrades instead of failing", () => {
   test("a busy content scan still returns the title hits, partial, with a cursor that resumes the scan", async () => {
     const dir = tempDir();
@@ -183,5 +231,55 @@ describe("Lru", () => {
     expect(lru.get("b")).toBeUndefined();
     now = 150;
     expect(lru.get("a")).toBeUndefined();
+  });
+});
+
+describe("search paging returns each chat once", () => {
+  test("a chat with many matching messages, or a title hit, never repeats on later pages", async () => {
+    const dir = tempDir();
+    const av = new AgentsviewFixture(join(dir, "av.db"));
+    const at = (m: number) => new Date(Date.UTC(2026, 0, 1, 0, m)).toISOString();
+    av.db.transaction(() => {
+      // "a": six matching messages, newest overall. "b": one older match. "t": matches by title too.
+      av.session({ id: "codex:a", agent: "codex", ended_at: at(50) });
+      for (let i = 0; i < 6; i++) av.message({ session_id: "codex:a", ordinal: i, role: "user", content: `needle ${i}`, timestamp: at(40 + i) });
+      av.session({ id: "codex:b", agent: "codex", ended_at: at(10) });
+      av.message({ session_id: "codex:b", ordinal: 0, role: "user", content: "needle b", timestamp: at(5) });
+      av.session({ id: "codex:t", agent: "codex", first_message: "needle in the title", ended_at: at(30) });
+      av.message({ session_id: "codex:t", ordinal: 0, role: "user", content: "needle again", timestamp: at(48) });
+    })();
+    const config = engineConfig(dir, { agentsviewPath: av.path });
+    const client = new ChatIndexClient({ config, spawn: inProcessWorker(config), timeoutMs: TEST_RPC_TIMEOUT_MS });
+    cleanup.push(() => client.stop());
+    await client.primary.call({ op: "ingest", args: null });
+    const handle = handlerWith(client);
+    const keys: string[] = [];
+    let cursor: string | null = "";
+    let pages = 0;
+    while (cursor !== null && pages < 20) {
+      const res = await handle(new Request(`http://b/chats/search?q=needle&limit=1${cursor ? `&cursor=${cursor}` : ""}`, { headers: { Authorization: `Bearer ${TOKEN}` } }));
+      expect(res?.status).toBe(200);
+      const page = parseChatSearchPage(await res?.json());
+      if (!page) throw new Error("bad page");
+      keys.push(...page.hits.map(h => h.chat.sessionId));
+      cursor = page.next;
+      pages += 1;
+    }
+    expect(cursor).toBeNull();
+    expect(keys.slice().sort()).toEqual(["a", "b", "t"]);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe("emitted-chat cursor field", () => {
+  test("keeps the newest EMITTED_MAX hashes, round-trips, and rejects a malformed field", () => {
+    const keys = Array.from({ length: EMITTED_MAX + 40 }, (_, i) => `0:codex:s${i}`);
+    const emitted = withEmitted(withEmitted([], keys.slice(0, 100)), keys);
+    expect(emitted).toHaveLength(EMITTED_MAX);
+    expect(emitted.at(-1)).toBe(withEmitted([], [keys.at(-1) ?? ""])[0]);
+    const cursor = msgCursor("abcd1234", { av: 9, hz: {} }, emitted);
+    expect(cursor.length).toBeLessThanOrEqual(CURSOR_MAX_BYTES);
+    expect(readSearchCursor(cursor, "abcd1234")?.emitted).toEqual(emitted);
+    expect(() => readSearchCursor(encodeCursor({ v: 1, q: "abcd1234", ph: "msg", s: 1, x: "xyz" }), "abcd1234")).toThrow();
   });
 });

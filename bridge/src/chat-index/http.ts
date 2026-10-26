@@ -6,8 +6,7 @@ import {
 } from "../../../shared/protocol";
 import { AbortedError, BusyError, RpcError, type ChatIndexClient } from "./client";
 import { filterHash, hash, normalizeQuery, queryHash, SELF_HOST } from "./query";
-import { msgCursor, readSearchCursor, type MsgPositions } from "./worker";
-import { encodeCursor } from "./query";
+import { msgCursor, readSearchCursor, titleCursor, withEmitted, type MsgPositions } from "./worker";
 import { EngineError } from "./worker";
 
 export interface SelfIdentity { id: string; name: string; matches(hostId: string): boolean }
@@ -103,28 +102,32 @@ export function createChatsHttpHandler(options: ChatsHttpOptions) {
     let msgStart: MsgPositions | "start" | undefined;
     let exclude: string[] = [];
     let degraded = false;
+    // Chats earlier pages returned: message hits skip them, so a chat with many matching messages
+    // (or one that matched by title) comes back once per search, not once per page.
+    const carried = cursor?.emitted ?? [];
+    const emitted = () => withEmitted(carried, hits.map(hit => hit.chat.key));
     if (!cursor || cursor.ph === "title") {
       const titles = await client.titleSearch({ ...base, qh, limit: query.limit, ...(cursor?.ph === "title" ? { after: cursor.after } : {}) }, request.signal);
       hits = titles.hits;
       exclude = titles.keys;
-      if (titles.next) next = encodeCursor({ v: 1, q: qh, ph: "title", t: titles.next.t, tk: titles.next.k });
+      if (titles.next) next = titleCursor(qh, titles.next, emitted());
       else if (query.in === "all") msgStart = "start";
     } else msgStart = cursor.positions;
     if (msgStart !== undefined) {
       const room = query.limit - hits.length;
-      if (room <= 0) next = msgCursor(qh, msgStart);
+      if (room <= 0) next = msgCursor(qh, msgStart, emitted());
       else {
         try {
-          const messages = await client.msgSearch({ ...base, limit: room, positions: msgStart, exclude }, request.signal);
+          const messages = await client.msgSearch({ ...base, limit: room, positions: msgStart, exclude, excludeHashes: carried }, request.signal);
           hits = [...hits, ...messages.hits];
           partial = messages.partial;
-          next = messages.next ? msgCursor(qh, messages.next) : null;
+          next = messages.next ? msgCursor(qh, messages.next, emitted()) : null;
         } catch (error) {
           // A slow content scan must not cost the title hits: return them, partial, resuming the scan.
           if (!(error instanceof BusyError) || hits.length === 0) throw error;
           partial = true;
           degraded = true;
-          next = msgCursor(qh, msgStart);
+          next = msgCursor(qh, msgStart, emitted());
         }
       }
     }

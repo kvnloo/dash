@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { chatKey, type ChatSummary } from "../../../shared/protocol";
 import type { Conversation } from "../model";
-import { conversationEntries, groupLabeler, labelRemote, labelStats, mergeLocal, mergeLocalAndRemote, type ChatListRow, type ConversationEntry, type MergeInput } from "./chat-index";
+import { applyHead, conversationEntries, emptyList, groupLabeler, labelList, labelRemote, labelStats, listRows, mergeLocal, mergeLocalAndRemote, mergePage, type ChatListRow, type ConversationEntry, type MergeInput, type PagedList } from "./chat-index";
 
 const DAY = 86_400_000;
 const NOW = new Date(2026, 9, 26, 12).getTime();
@@ -54,7 +54,8 @@ function referenceMerge(input: MergeInput): ChatListRow[] {
 
 /** Deterministic PRNG so a failure reproduces. */
 function rng(seed: number) {
-  let x = seed >>> 0 || 1;
+  // Mix the seed: xorshift's first outputs for small seeds are near 0 (every list came out empty).
+  let x = Math.imul(seed, 0x9e3779b1) >>> 0 || 1;
   return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return (x >>> 0) / 0x1_0000_0000; };
 }
 
@@ -117,15 +118,59 @@ describe("incremental merge", () => {
     for (let seed = 1; seed <= 100; seed++) {
       const { remote, local, exhausted, endedLast } = scenario(seed);
       const cut = Math.floor(remote.length / 2);
-      const first = labelRemote(remote.slice(0, cut), groupOf);
-      const before = labelStats.appended;
-      const extended = labelRemote(remote.slice(), groupOf, first);
-      if (cut > 0) expect(labelStats.appended).toBe(before + 1);
+      const firstList = mergePage(emptyList(), { items: remote.slice(0, cut), next: "c", rev: 1 });
+      const first = labelList(firstList, groupOf);
+      expect(JSON.stringify(mergeLocal(first, { local, exhausted, endedLast, groupOf }))).toBe(JSON.stringify(referenceMerge({ local, remote: remote.slice(0, cut), exhausted, endedLast, groupOf })));
+      const before = { ...labelStats };
+      const extended = labelList(mergePage(firstList, { items: remote.slice(cut), next: null, rev: 1 }), groupOf, first);
+      if (cut > 0 && cut < remote.length) expect(labelStats.appended).toBe(before.appended + 1);
+      expect(labelStats.full).toBe(before.full);
       const expected = referenceMerge({ local, remote, exhausted, endedLast, groupOf });
       expect(JSON.stringify(mergeLocal(extended, { local, exhausted, endedLast, groupOf }))).toBe(JSON.stringify(expected));
-      // The labeling it extended still answers for its own prefix.
-      expect(JSON.stringify(mergeLocal(first, { local, exhausted, endedLast, groupOf }))).toBe(JSON.stringify(referenceMerge({ local, remote: remote.slice(0, cut), exhausted, endedLast, groupOf })));
     }
+  });
+
+  test("random page and head sequences: the incremental labeling matches a fresh one and the single-pass merge", () => {
+    const groupOf = groupLabeler(NOW);
+    let checked = 0;
+    for (let seed = 1; seed <= 150; seed++) {
+      const rand = rng(seed * 7919);
+      const { local, exhausted, endedLast } = scenario(seed);
+      const pool = Array.from({ length: 80 }, (_, n) => summary(n, NOW - Math.floor(rand() * 60) * DAY / 3 - n));
+      pool.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+      let list: PagedList = emptyList();
+      let labeled = labelList(list, groupOf);
+      let offset = 0;
+      for (let step = 0; step < 12; step++) {
+        if (rand() < 0.5 && offset < pool.length) {
+          const size = 1 + Math.floor(rand() * 10);
+          list = mergePage(list, { items: pool.slice(offset, offset + size), next: "c", rev: step });
+          offset += size;
+        } else {
+          // A fresh page 1: some rows change in place, some get bumped, sometimes a new chat.
+          const top = listRows(list).slice(0, 8).map(row => {
+            const roll = rand();
+            if (roll < 0.3) return { ...row, messageCount: row.messageCount + 1 };
+            if (roll < 0.45) return { ...row, lastActivityAt: NOW + step * 1000 + Math.floor(rand() * 500) };
+            return row;
+          });
+          if (rand() < 0.3) top.unshift(summary(1000 + seed * 100 + step, NOW + step * 1000 + 999));
+          top.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+          list = applyHead(list, { items: top, next: "c", rev: step });
+        }
+        labeled = labelList(list, groupOf, labeled);
+        const remote = listRows(list);
+        const fresh = labelRemote(remote, groupOf);
+        const got = JSON.stringify(mergeLocal(labeled, { local, exhausted, endedLast, groupOf }));
+        expect(got).toBe(JSON.stringify(mergeLocal(fresh, { local, exhausted, endedLast, groupOf })));
+        // The single-pass reference assumes a sorted remote list; bumped rows keep it sorted.
+        if (remote.every((row, i) => i === 0 || (remote[i - 1]?.lastActivityAt ?? 0) >= row.lastActivityAt)) {
+          expect(got).toBe(JSON.stringify(referenceMerge({ local, remote, exhausted, endedLast, groupOf })));
+          checked += 1;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(300);
   });
 
   test("remote rows and untouched section headers keep their identity across local changes", () => {

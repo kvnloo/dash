@@ -2,7 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import type { ChatSearchHit, ChatSearchPage, HarnessInfo } from "../../../shared/protocol";
 import type { Conversation } from "../model";
 import { conversationEntries } from "../lib/chat-index";
-import { localRowModel, mergeSearch, reuseRows, searchLocal, searchTerms, type SearchRowModel } from "../lib/chat-search";
+import { localRowModel, mergeSearch, reuseRows, searchLocal, searchTerms, shouldChainSearch, type SearchRowModel } from "../lib/chat-search";
 import { LRU } from "../lib/lru";
 import { createRequestGuard } from "../lib/request-guard";
 import { chatsApi } from "../net/chats-api";
@@ -10,9 +10,6 @@ import { store } from "../store/app";
 import { chatIndexStore, queryKey, type ChatQuery } from "../store/chat-index-store";
 
 export const SEARCH_DEBOUNCE_MS = 200;
-/** A partial page with fewer hits than this keeps scanning on its own. */
-const MIN_FILL = 8;
-const MAX_CHAINED = 3;
 
 /** Remote pages per query. A cache hit renders at once, without the debounce. */
 const searchCache = new LRU<ChatSearchPage[]>({ maxEntries: 16, ttlMs: 60_000 });
@@ -85,8 +82,7 @@ export function useChatSearch(query: string, opts: { enabled: boolean; filters?:
       loaded.current = { key, pages };
       setRemote({ key, pages, status: "ready" });
       searchCache.set(key, pages);
-      const hits = pages.reduce((n, p) => n + p.hits.length, 0);
-      if (page.partial && page.next && hits < MIN_FILL && chained < MAX_CHAINED) run(key, page.next, chained + 1);
+      if (page.next && shouldChainSearch(pages, chained)) run(key, page.next, chained + 1);
     });
   }, [text, filters?.kinds, filters?.hosts, opts.remoteLimit]);
 
@@ -114,7 +110,8 @@ export function useChatSearch(query: string, opts: { enabled: boolean; filters?:
   const loadMore = useCallback(() => {
     if (!wantsRemote || remote.status === "loading" || remote.key !== cacheKey) return;
     const next = remote.pages.at(-1)?.next;
-    if (next) run(cacheKey, next, MAX_CHAINED);
+    // A page that adds no new chat chains on (bounded), so scrolling never stalls on repeats.
+    if (next) run(cacheKey, next, 0);
   }, [wantsRemote, remote, cacheKey, run]);
 
   const previous = useRef(new Map<string, SearchRowModel>());

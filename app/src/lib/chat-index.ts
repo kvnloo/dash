@@ -19,6 +19,12 @@ export interface PagedList {
   readonly rows: (ChatSummary | null)[];
   /** key -> rows index, or "head". */
   readonly index: Map<string, number | "head">;
+  /**
+   * Slots of `rows` that were replaced in place or emptied (moved to `head`), in order. Append-only
+   * and shared like `rows`: a labeling replays only the entries after the ones it has seen, so a
+   * head refresh costs O(changes). A new array (after JOURNAL_CAP entries) means "relabel".
+   */
+  readonly changes: number[];
   readonly next: string | null;
   /** True once the server returned `next: null`. */
   readonly exhausted: boolean;
@@ -26,7 +32,7 @@ export interface PagedList {
 }
 
 export function emptyList(): PagedList {
-  return { version: 0, head: [], rows: [], index: new Map(), next: null, exhausted: false, rev: 0 };
+  return { version: 0, head: [], rows: [], index: new Map(), changes: [], next: null, exhausted: false, rev: 0 };
 }
 
 export function sameSummary(a: ChatSummary, b: ChatSummary): boolean {
@@ -38,6 +44,12 @@ export function sameSummary(a: ChatSummary, b: ChatSummary): boolean {
 
 function byActivity(a: ChatSummary, b: ChatSummary): number {
   return b.lastActivityAt - a.lastActivityAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+}
+
+/** Past this many journal entries the next version starts a fresh journal (one full relabel). */
+const JOURNAL_CAP = 4096;
+function journal(list: PagedList): number[] {
+  return list.changes.length > JOURNAL_CAP ? [] : list.changes;
 }
 
 /** Append the next page. Known keys are replaced in place only when a field changed. */
@@ -59,10 +71,13 @@ export function mergePage(list: PagedList, page: ChatPage, counter?: OpCounter):
       }
     } else {
       const current = list.rows[slot];
-      if (current && !sameSummary(current, item)) list.rows[slot] = item;
+      if (current && !sameSummary(current, item)) {
+        list.rows[slot] = item;
+        list.changes.push(slot);
+      }
     }
   }
-  return { ...list, head, version: list.version + 1, next: page.next, exhausted: page.next === null, rev: page.rev };
+  return { ...list, head, changes: journal(list), version: list.version + 1, next: page.next, exhausted: page.next === null, rev: page.rev };
 }
 
 /**
@@ -99,6 +114,7 @@ export function applyHead(list: PagedList, page: ChatPage, counter?: OpCounter):
         list.index.set(item.key, "head");
         lifted.push(item);
       } else list.rows[slot] = item;
+      list.changes.push(slot);
     }
   }
   if (!changed) return list.rev === page.rev ? list : { ...list, rev: page.rev };
@@ -108,16 +124,30 @@ export function applyHead(list: PagedList, page: ChatPage, counter?: OpCounter):
     merged.sort(byActivity);
     head = merged;
   }
-  return { ...list, head, version: list.version + 1, rev: page.rev };
+  return { ...list, head, changes: journal(list), version: list.version + 1, rev: page.rev };
 }
 
 const flatCache = new WeakMap<PagedList, ChatSummary[]>();
-/** The loaded rows in display order. O(loaded), cached per version. */
+/** The last flat array built for a `rows` lineage, and what it was built from. */
+const flatLineage = new WeakMap<readonly (ChatSummary | null)[], { head: readonly ChatSummary[]; changes: readonly number[]; seen: number; slots: number; out: ChatSummary[] }>();
+/**
+ * The loaded rows in display order, cached per version. An appended page costs O(page) plus one
+ * native array copy; only a head change or an in-place change rebuilds it.
+ */
 export function listRows(list: PagedList): ChatSummary[] {
   const cached = flatCache.get(list);
   if (cached) return cached;
-  const out: ChatSummary[] = list.head.slice();
-  for (const row of list.rows) if (row) out.push(row);
+  const prev = flatLineage.get(list.rows);
+  let out: ChatSummary[];
+  if (prev && prev.head === list.head && prev.changes === list.changes && prev.seen === list.changes.length) {
+    const added: ChatSummary[] = [];
+    for (let j = prev.slots; j < list.rows.length; j++) { const row = list.rows[j]; if (row) added.push(row); }
+    out = added.length ? prev.out.concat(added) : prev.out;
+  } else {
+    out = list.head.slice();
+    for (const row of list.rows) if (row) out.push(row);
+  }
+  flatLineage.set(list.rows, { head: list.head, changes: list.changes, seen: list.changes.length, slots: list.rows.length, out });
   flatCache.set(list, out);
   return out;
 }
@@ -179,9 +209,13 @@ export function conversationEntries(conversations: readonly Conversation[]): Con
 /**
  * Same list placement and row header: what the merged list reads from an entry. The preview and
  * the thinking state are not compared: list rows read those live from the conversation by id.
+ * `updatedAt` moves on every status, tool and summary event of a running turn; an attention row is
+ * pinned to its attention section, so while the attention state holds its order may lag until the
+ * turn settles instead of re-merging the whole list per event.
  */
 function sameListEntry(a: ConversationEntry, b: ConversationEntry): boolean {
-  return a.id === b.id && a.key === b.key && a.title === b.title && a.updatedAt === b.updatedAt && a.attention === b.attention &&
+  const placed = a.updatedAt === b.updatedAt || (a.attention !== null && a.attention === b.attention);
+  return a.id === b.id && a.key === b.key && a.title === b.title && placed && a.attention === b.attention &&
     a.stale === b.stale && a.hostId === b.hostId && a.harness === b.harness && a.sessionId === b.sessionId && a.cwd === b.cwd;
 }
 
@@ -253,41 +287,61 @@ export function mergeLocalAndRemote(input: MergeInput): ChatListRow[] {
   return mergeLocal(labelRemote(input.remote, groupOf), { local: input.local, exhausted: input.exhausted, endedLast: input.endedLast, groupOf });
 }
 
-// ---- labeled remote half (rebuilt per remote change, appended per page) ------
+// ---- labeled remote half (updated in O(changes) per version) ----------------
 
 type ChatRowOf = Extract<ChatListRow, { type: "chat" }>;
 type SectionRow = Extract<ChatListRow, { type: "section" }>;
 
-interface RemoteSection {
+/**
+ * Consecutive loaded remote rows with one label. Mutable and owned by one labeling lineage; the
+ * merge copies it out (natively), so a published list never changes under FlashList.
+ */
+interface Run {
   readonly title: string;
-  readonly header: SectionRow;
-  /** Row index of the header in `rows`; chats are `start + 1 .. end - 1`. */
-  readonly start: number;
-  readonly end: number;
+  readonly rows: ChatRowOf[];
+  /** The header last published for this run alone, reused while its key and count hold. */
+  header?: SectionRow;
+}
+
+/** What a labeling reads: a PagedList, or a plain array for a one-off merge. */
+export interface LabelSource {
+  readonly head: readonly ChatSummary[];
+  readonly rows: readonly (ChatSummary | null)[];
+  readonly changes: readonly number[];
+}
+
+/** The labeled `rows` of one PagedList lineage. Append-only arrays, patched in place. */
+interface Body {
+  readonly source: readonly (ChatSummary | null)[];
+  readonly changes: readonly number[];
+  readonly groupOf: (at: number) => string;
+  /** `source` slots labeled so far, and journal entries replayed so far. */
+  slots: number;
+  seen: number;
+  readonly runs: Run[];
+  readonly slotRow: (ChatRowOf | undefined)[];
+  readonly slotRun: (Run | undefined)[];
+  readonly byKey: Map<string, number>;
+  /** Bumped by every mutation: a labeling with an older stamp is out of date. */
+  stamp: number;
 }
 
 /**
- * The loaded remote rows with their section headers, plus what an O(L log N) local merge needs.
- * `byKey` is append-only and shared with the labelings this one extends: use `chatIndex`.
+ * The loaded remote rows grouped into labeled runs: the small `head` relabeled when it changes,
+ * the body appended per page and patched per journal entry. A labeling stays valid until the next
+ * `labelList` call on its lineage (one owner: the Chats pane).
  */
 export interface RemoteLabeled {
-  readonly source: readonly ChatSummary[];
+  readonly from: LabelSource;
   readonly groupOf: (at: number) => string;
-  readonly rows: readonly ChatListRow[];
-  readonly sections: readonly RemoteSection[];
+  readonly head: readonly ChatSummary[];
+  readonly headRuns: readonly Run[];
+  readonly headRows: ReadonlyMap<string, { run: Run; row: ChatRowOf }>;
+  readonly body: Body;
+  readonly stamp: number;
+  /** Non-empty runs in display order. */
+  readonly runs: readonly Run[];
   readonly chats: number;
-  readonly chatAt: readonly number[];
-  readonly chatSection: readonly number[];
-  readonly chatRow: readonly number[];
-  readonly byKey: Map<string, number>;
-}
-
-/** Index of the loaded remote chat with this key, if any. */
-export function chatIndex(labeled: RemoteLabeled, key: string): number | undefined {
-  const at = labeled.byKey.get(key);
-  if (at === undefined || at >= labeled.chats) return undefined;
-  const row = labeled.rows[labeled.chatRow[at] ?? -1];
-  return row?.type === "chat" && row.key === key ? at : undefined;
 }
 
 /** Row objects keep their identity across rebuilds, so FlashList sees unchanged rows as unchanged. */
@@ -306,78 +360,129 @@ function labelOf(summary: ChatSummary, groupOf: (at: number) => string): string 
   return label;
 }
 
-export const labelStats = { full: 0, appended: 0 };
+/** Work done by labelings: full passes, appended pages, replayed in-place changes. */
+export const labelStats = { full: 0, appended: 0, patched: 0 };
 
-/**
- * Label the loaded remote rows. When `prev` labeled a prefix of `remote` (a page was appended),
- * only the new rows are labeled and the last section continues; otherwise a full pass that reuses
- * row objects and labels.
- */
-export function labelRemote(remote: readonly ChatSummary[], groupOf: (at: number) => string, prev?: RemoteLabeled): RemoteLabeled {
-  if (prev && prev.source === remote && prev.groupOf === groupOf) return prev;
-  let from = 0;
-  let rows: ChatListRow[];
-  let sections: RemoteSection[];
-  let chatAt: number[], chatSection: number[], chatRow: number[], byKey: Map<string, number>;
-  if (prev && prev.groupOf === groupOf && remote.length >= prev.source.length && prev.chats === prev.source.length && isPrefix(prev.source, remote)) {
-    labelStats.appended += 1;
-    from = prev.source.length;
-    rows = prev.rows.slice();
-    sections = prev.sections.slice();
-    chatAt = prev.chatAt.slice(0, from);
-    chatSection = prev.chatSection.slice(0, from);
-    chatRow = prev.chatRow.slice(0, from);
-    // Append-only and shared: lookups confirm the key at the index they get back.
-    byKey = prev.byKey;
-  } else {
-    labelStats.full += 1;
-    rows = [];
-    sections = [];
-    chatAt = []; chatSection = []; chatRow = []; byKey = new Map();
-  }
-  let open: { title: string; start: number; count: number } | undefined;
-  const last = sections.at(-1);
-  if (from > 0 && last) {
-    open = { title: last.title, start: last.start, count: last.header.count };
-    sections.pop();
-  }
-  const used = new Map<string, number>();
-  for (const section of sections) used.set(section.title, (used.get(section.title) ?? 0) + 1);
-  if (open) used.set(open.title, (used.get(open.title) ?? 0) + 1);
-  const close = () => {
-    if (!open) return;
-    const seen = (used.get(open.title) ?? 1) - 1;
-    const prior = rows[open.start];
-    const header: SectionRow = prior?.type === "section" && prior.count === open.count && prior.title === open.title
-      ? prior : { type: "section", key: seen ? `sec-${open.title}-${seen}` : `sec-${open.title}`, title: open.title, count: open.count };
-    rows[open.start] = header;
-    sections.push({ title: open.title, header, start: open.start, end: rows.length });
-    open = undefined;
-  };
-  for (let j = from; j < remote.length; j++) {
-    const summary = remote[j];
-    if (!summary) continue;
-    const title = labelOf(summary, groupOf);
-    if (open?.title !== title) {
-      close();
-      used.set(title, (used.get(title) ?? 0) + 1);
-      open = { title, start: rows.length, count: 0 };
-      rows.push({ type: "section", key: "", title, count: 0 });
-    }
-    open.count += 1;
-    chatAt[j] = summary.lastActivityAt;
-    chatSection[j] = sections.length;
-    chatRow[j] = rows.length;
-    byKey.set(summary.key, j);
-    rows.push(remoteRow(summary));
-  }
-  close();
-  return { source: remote, groupOf, rows, sections, chats: remote.length, chatAt, chatSection, chatRow, byKey };
+function newBody(source: LabelSource, groupOf: (at: number) => string): Body {
+  labelStats.full += 1;
+  const body: Body = { source: source.rows, changes: source.changes, groupOf, slots: 0, seen: source.changes.length, runs: [], slotRow: [], slotRun: [], byKey: new Map(), stamp: 0 };
+  appendSlots(body);
+  return body;
 }
 
-function isPrefix(prefix: readonly ChatSummary[], of: readonly ChatSummary[]): boolean {
-  for (let i = 0; i < prefix.length; i++) if (prefix[i] !== of[i]) return false;
-  return true;
+function appendSlots(body: Body): void {
+  const { source, runs, groupOf } = body;
+  for (let j = body.slots; j < source.length; j++) {
+    const summary = source[j];
+    if (!summary) continue;
+    const title = labelOf(summary, groupOf);
+    let run = runs.at(-1);
+    if (run?.title !== title) { run = { title, rows: [] }; runs.push(run); }
+    const row = remoteRow(summary);
+    run.rows.push(row);
+    body.slotRow[j] = row;
+    body.slotRun[j] = run;
+    body.byKey.set(summary.key, j);
+  }
+  if (source.length > body.slots) body.stamp += 1;
+  body.slots = source.length;
+}
+
+/** Replay the journal, then label appended slots. Returns a new body when it had to relabel. */
+function syncBody(body: Body, source: LabelSource): Body {
+  const { changes } = source;
+  const rows = source.rows;
+  for (; body.seen < changes.length; body.seen++) {
+    const slot = changes[body.seen] ?? -1;
+    if (slot < 0 || slot >= body.slots) continue; // not labeled yet: the append below reads it
+    const old = body.slotRow[slot];
+    const run = body.slotRun[slot];
+    const now = rows[slot] ?? null;
+    if (old?.remote === now || (!old && !now)) continue;
+    const at = old && run ? run.rows.indexOf(old) : -1;
+    if (at < 0 || !old || !run) return newBody(source, body.groupOf);
+    if (!now) {
+      // Moved to the head: the body forgets it.
+      run.rows.splice(at, 1);
+      body.slotRow[slot] = undefined;
+      body.slotRun[slot] = undefined;
+      if (body.byKey.get(old.key) === slot) body.byKey.delete(old.key);
+    } else {
+      // Replaced in place: same run unless its label moved (then relabel; rare).
+      if (labelOf(now, body.groupOf) !== run.title) return newBody(source, body.groupOf);
+      const row = remoteRow(now);
+      run.rows[at] = row;
+      body.slotRow[slot] = row;
+      if (old.key !== now.key && body.byKey.get(old.key) === slot) body.byKey.delete(old.key);
+      body.byKey.set(now.key, slot);
+    }
+    labelStats.patched += 1;
+    body.stamp += 1;
+  }
+  if (rows.length > body.slots) {
+    labelStats.appended += 1;
+    appendSlots(body);
+  }
+  return body;
+}
+
+function labelHead(head: readonly ChatSummary[], groupOf: (at: number) => string): { runs: Run[]; rows: Map<string, { run: Run; row: ChatRowOf }> } {
+  const runs: Run[] = [];
+  const rows = new Map<string, { run: Run; row: ChatRowOf }>();
+  for (const summary of head) {
+    const title = labelOf(summary, groupOf);
+    let run = runs.at(-1);
+    if (run?.title !== title) { run = { title, rows: [] }; runs.push(run); }
+    const row = remoteRow(summary);
+    run.rows.push(row);
+    rows.set(summary.key, { run, row });
+  }
+  return { runs, rows };
+}
+
+/**
+ * Label a PagedList version. With the previous labeling of the same lineage it costs
+ * O(appended + journal entries + head + runs); otherwise one full pass.
+ */
+export function labelList(source: LabelSource, groupOf: (at: number) => string, prev?: RemoteLabeled): RemoteLabeled {
+  if (prev && prev.from === source && prev.groupOf === groupOf) return prev;
+  let body = prev?.body;
+  body = body && body.source === source.rows && body.changes === source.changes && body.groupOf === groupOf
+    ? syncBody(body, source)
+    : newBody(source, groupOf);
+  const sameHead = prev !== undefined && prev.head === source.head && prev.groupOf === groupOf;
+  if (sameHead && prev.body === body && prev.stamp === body.stamp) return prev;
+  const head = sameHead ? { runs: prev.headRuns, rows: prev.headRows } : labelHead(source.head, groupOf);
+  const runs: Run[] = [];
+  let chats = 0;
+  for (const run of head.runs) if (run.rows.length) { runs.push(run); chats += run.rows.length; }
+  for (const run of body.runs) if (run.rows.length) { runs.push(run); chats += run.rows.length; }
+  return { from: source, groupOf, head: source.head, headRuns: head.runs, headRows: head.rows, body, stamp: body.stamp, runs, chats };
+}
+
+const NO_HEAD: readonly ChatSummary[] = Object.freeze([]);
+const NO_CHANGES: readonly number[] = Object.freeze([]);
+
+/** Label a plain array of summaries (one-off merges and tests). `prev` helps only for the same array. */
+export function labelRemote(remote: readonly ChatSummary[], groupOf: (at: number) => string, prev?: RemoteLabeled): RemoteLabeled {
+  return labelList({ head: NO_HEAD, rows: remote, changes: NO_CHANGES }, groupOf, prev);
+}
+
+/** The loaded remote row with this key, and its run. */
+function remoteHit(labeled: RemoteLabeled, key: string): { run: Run; row: ChatRowOf } | undefined {
+  const head = labeled.headRows.get(key);
+  if (head) return head;
+  const { body } = labeled;
+  const slot = body.byKey.get(key);
+  if (slot === undefined) return undefined;
+  const row = body.slotRow[slot];
+  const run = body.slotRun[slot];
+  return row && run && row.key === key ? { run, row } : undefined;
+}
+
+/** True when a remote chat with this key is loaded. */
+export function hasRemote(labeled: RemoteLabeled, key: string): boolean {
+  return remoteHit(labeled, key) !== undefined;
 }
 
 const localRowCache = new WeakMap<ConversationEntry, ChatRowOf>();
@@ -394,27 +499,39 @@ export interface LocalMergeInput {
   groupOf: (at: number) => string;
 }
 
-/** A run of rows under one header: a slice of the labeled remote rows, or rows built here. */
-type Segment = { title: string; section: RemoteSection } | { title: string; rows: ChatRowOf[] };
+/** Rows under one title before adjacent titles are joined. `run` marks an untouched run. */
+interface Segment { title: string; count: number; parts: ChatListRow[][]; run?: Run }
+
+function atOf(row: ChatRowOf | undefined): number {
+  return row?.remote?.lastActivityAt ?? -Infinity;
+}
+
+/** First index in the descending `rows` whose activity is <= `value` (rows.length when none). */
+function firstAtOrBelow(rows: readonly ChatRowOf[], value: number): number {
+  let lo = 0, hi = rows.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (atOf(rows[mid]) <= value) hi = mid; else lo = mid + 1;
+  }
+  return lo;
+}
 
 /**
  * Merge the (small) local set into a labeled remote list. Cost: O(L log N) to place local rows,
- * plus rebuilding only the sections they touch, plus one copy of the output array.
+ * plus O(runs), plus one native copy of the untouched runs into the output array.
  */
 export function mergeLocal(labeled: RemoteLabeled, input: LocalMergeInput): ChatListRow[] {
   const { groupOf } = input;
   const attention: ConversationEntry[] = [];
   const timeline: ConversationEntry[] = [];
   const ended: ConversationEntry[] = [];
-  // Remote chats a local conversation replaces, per section.
-  const drops = new Map<number, Set<number>>();
+  // Remote rows a local conversation replaces, per run.
+  const drops = new Map<Run, ChatRowOf[]>();
   for (const entry of input.local) {
-    const at = chatIndex(labeled, entry.key);
-    if (at !== undefined) {
-      const s = labeled.chatSection[at] ?? 0;
-      let set = drops.get(s);
-      if (!set) { set = new Set(); drops.set(s, set); }
-      set.add(at);
+    const hit = remoteHit(labeled, entry.key);
+    if (hit) {
+      const list = drops.get(hit.run);
+      if (list) list.push(hit.row); else drops.set(hit.run, [hit.row]);
     }
     if (entry.attention) attention.push(entry);
     else if (entry.stale && input.endedLast) ended.push(entry);
@@ -424,92 +541,79 @@ export function mergeLocal(labeled: RemoteLabeled, input: LocalMergeInput): Chat
   timeline.sort((a, b) => b.updatedAt - a.updatedAt);
   ended.sort((a, b) => b.updatedAt - a.updatedAt);
 
-  const n = labeled.chats;
-  const cutoff = !input.exhausted && n > 0 ? labeled.chatAt[n - 1] ?? -Infinity : -Infinity;
-  // Local rows per section, by binary search on activity (local first on ties).
-  const placed = new Map<number, ConversationEntry[]>();
+  const runs = labeled.runs;
+  const lastRun = runs.at(-1);
+  const cutoff = !input.exhausted && lastRun ? atOf(lastRun.rows.at(-1)) : -Infinity;
+  // Local rows per run with their insertion index, by binary search on activity (local first on ties).
+  const placed = new Map<Run, { entry: ConversationEntry; pos: number }[]>();
   const tail: ConversationEntry[] = [];
   for (const entry of timeline) {
     if (entry.updatedAt < cutoff) break;
-    const c = firstAtOrBelow(labeled.chatAt, n, entry.updatedAt);
-    const s = c < n ? labeled.chatSection[c] : labeled.sections.length - 1;
-    if (s === undefined || s < 0) { tail.push(entry); continue; }
-    let list = placed.get(s);
-    if (!list) { list = []; placed.set(s, list); }
-    list.push(entry);
+    if (!lastRun) { tail.push(entry); continue; }
+    let lo = 0, hi = runs.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (atOf(runs[mid]?.rows.at(-1)) <= entry.updatedAt) hi = mid; else lo = mid + 1;
+    }
+    const run = runs[lo] ?? lastRun;
+    const pos = lo < runs.length ? firstAtOrBelow(run.rows, entry.updatedAt) : run.rows.length;
+    const list = placed.get(run);
+    if (list) list.push({ entry, pos }); else placed.set(run, [{ entry, pos }]);
   }
 
   const segments: Segment[] = [];
-  let run: { title: string; rows: ChatRowOf[] } | undefined;
-  const add = (row: ChatRowOf, title: string) => {
-    if (run && run.title === title) { run.rows.push(row); return; }
-    run = { title, rows: [row] };
-    segments.push(run);
+  const add = (title: string, part: ChatListRow[]) => {
+    const last = segments.at(-1);
+    if (last && !last.run && last.title === title) { last.parts.push(part); last.count += part.length; return; }
+    segments.push({ title, count: part.length, parts: [part] });
   };
-  for (const entry of attention) add(localRow(entry), entry.attention ?? "");
-  const sections = labeled.sections;
-  for (let s = 0; s < sections.length; s++) {
-    const section = sections[s];
-    if (!section) continue;
-    const locals = placed.get(s);
-    const dropped = drops.get(s);
-    if (!locals && !dropped) { segments.push({ title: section.title, section }); run = undefined; continue; }
-    let i = 0;
-    for (let r = section.start + 1; r < section.end; r++) {
-      const row = labeled.rows[r];
-      if (row?.type !== "chat" || !row.remote) continue;
-      const at = row.remote.lastActivityAt;
-      if (locals) for (let l = locals[i]; l && l.updatedAt >= at; l = locals[++i]) add(localRow(l), groupOf(l.updatedAt));
-      if (dropped && dropped.has(chatIndex(labeled, row.key) ?? -1)) continue;
-      add(row, section.title);
+  for (const entry of attention) add(entry.attention ?? "", [localRow(entry)]);
+  for (const run of runs) {
+    const locals = placed.get(run);
+    const dropped = drops.get(run);
+    if (!locals && !dropped) { segments.push({ title: run.title, count: run.rows.length, parts: [run.rows], run }); continue; }
+    const cuts = (dropped ?? []).map(row => run.rows.indexOf(row)).filter(i => i >= 0).sort((a, b) => a - b);
+    let cursor = 0, d = 0;
+    const remoteUntil = (to: number) => {
+      while (cursor < to) {
+        while (d < cuts.length && (cuts[d] ?? 0) < cursor) d++;
+        const cut = cuts[d];
+        const stop = cut !== undefined && cut < to ? cut : to;
+        if (stop > cursor) add(run.title, run.rows.slice(cursor, stop));
+        cursor = stop === cut ? stop + 1 : stop;
+      }
+    };
+    if (locals) {
+      locals.sort((a, b) => a.pos - b.pos);
+      for (const { entry, pos } of locals) { remoteUntil(pos); add(groupOf(entry.updatedAt), [localRow(entry)]); }
     }
-    if (locals) for (let l = locals[i]; l; l = locals[++i]) add(localRow(l), groupOf(l.updatedAt));
+    remoteUntil(run.rows.length);
   }
-  for (const entry of tail) add(localRow(entry), groupOf(entry.updatedAt));
-  for (const entry of ended) add(localRow(entry), "Ended");
+  for (const entry of tail) add(groupOf(entry.updatedAt), [localRow(entry)]);
+  for (const entry of ended) add("Ended", [localRow(entry)]);
 
   // Adjacent segments with one title become one section (as the single-pass merge produced).
-  const out: ChatListRow[] = [];
+  const pieces: ChatListRow[][] = [];
   const used = new Map<string, number>();
-  for (let k = 0; k < segments.length; k++) {
-    const segment = segments[k];
-    if (!segment) continue;
-    let rows: ChatRowOf[] | undefined;
-    while (segments[k + 1]?.title === segment.title) {
-      rows ??= segmentRows(labeled, segment);
-      const next = segments[++k];
-      if (next) rows.push(...segmentRows(labeled, next));
-    }
-    const seen = used.get(segment.title) ?? 0;
-    used.set(segment.title, seen + 1);
-    const key = seen ? `sec-${segment.title}-${seen}` : `sec-${segment.title}`;
-    if (!rows && "section" in segment) {
-      const { section } = segment;
-      out.push(section.header.key === key ? section.header : { ...section.header, key });
-      for (let r = section.start + 1; r < section.end; r++) { const row = labeled.rows[r]; if (row) out.push(row); }
-      continue;
-    }
-    rows ??= segmentRows(labeled, segment);
-    if (rows.length === 0) continue;
-    out.push({ type: "section", key, title: segment.title, count: rows.length });
-    for (const row of rows) out.push(row);
+  const live = segments.filter(segment => segment.count > 0);
+  for (let k = 0; k < live.length; k++) {
+    const first = live[k];
+    if (!first) continue;
+    let count = first.count;
+    let end = k + 1;
+    while (live[end]?.title === first.title) count += live[end++]?.count ?? 0;
+    const seen = used.get(first.title) ?? 0;
+    used.set(first.title, seen + 1);
+    const key = seen ? `sec-${first.title}-${seen}` : `sec-${first.title}`;
+    let header: SectionRow;
+    if (end === k + 1 && first.run) {
+      const prior = first.run.header;
+      header = prior && prior.key === key && prior.count === count ? prior : { type: "section", key, title: first.title, count };
+      first.run.header = header;
+    } else header = { type: "section", key, title: first.title, count };
+    pieces.push([header]);
+    for (let j = k; j < end; j++) for (const part of live[j]?.parts ?? []) pieces.push(part);
+    k = end - 1;
   }
-  return out;
-}
-
-function segmentRows(labeled: RemoteLabeled, segment: Segment): ChatRowOf[] {
-  if ("rows" in segment) return segment.rows.slice();
-  const out: ChatRowOf[] = [];
-  for (let r = segment.section.start + 1; r < segment.section.end; r++) { const row = labeled.rows[r]; if (row?.type === "chat") out.push(row); }
-  return out;
-}
-
-/** First index in the descending `at[0..n)` whose value is <= `value` (n when none). */
-function firstAtOrBelow(at: readonly number[], n: number, value: number): number {
-  let lo = 0, hi = n;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if ((at[mid] ?? -Infinity) <= value) hi = mid; else lo = mid + 1;
-  }
-  return lo;
+  return ([] as ChatListRow[]).concat(...pieces);
 }

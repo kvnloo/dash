@@ -585,7 +585,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
 
 /** kind/host filter values and route ids. */
 export const CHAT_NAME = /^[A-Za-z0-9:._-]{1,64}$/;
-export const CURSOR_MAX_BYTES = 1024;
+/** Longest cursor accepted (base64url chars). Search cursors carry up to 256 emitted-chat hashes. */
+export const CURSOR_MAX_BYTES = 4096;
 export type ChatQueryError = { error: "bad_request" | "bad_cursor"; field: string };
 export interface ChatListQuery { limit: number; cursor?: string; kinds: string[]; hosts: string[]; chatable: boolean }
 export interface ChatSearchQuery { q: string; limit: number; cursor?: string; kinds: string[]; hosts: string[]; in: "all" | "titles" }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chatKey, type ChatSearchHit, type ChatSummary } from "../../../shared/protocol";
 import type { Conversation } from "../model";
 import { conversationEntries } from "./chat-index";
-import { localIndexStats, localRowModel, mergeSearch, reuseRows, searchLocal, searchTerms, snippetSegments } from "./chat-search";
+import { localIndexStats, localRowModel, mergeSearch, reuseRows, SEARCH_MAX_CHAINED, SEARCH_MIN_FILL, searchLocal, searchTerms, shouldChainSearch, snippetSegments } from "./chat-search";
 
 const NOW = 1_800_000_000_000;
 const name = (id: string) => id.toUpperCase();
@@ -59,5 +59,23 @@ describe("mergeSearch", () => {
       { text: "a", hit: false }, { text: "bc", hit: true }, { text: "d", hit: true }, { text: "ef", hit: false },
     ]);
     expect(snippetSegments("", [])).toEqual([{ text: "", hit: false }]);
+  });
+});
+
+describe("search page chaining", () => {
+  const page = (ids: string[], next: string | null, partial = false) => ({ hits: ids.map(id => hit(id)), next, partial });
+  test("a page that adds no new chat chains on, bounded", () => {
+    const first = page(Array.from({ length: 10 }, (_, i) => `s${i}`), "c1");
+    const repeat = page(["s1", "s2"], "c2");
+    expect(shouldChainSearch([first, repeat], 0)).toBe(true);
+    expect(shouldChainSearch([first, repeat], SEARCH_MAX_CHAINED)).toBe(false);
+    expect(shouldChainSearch([first, page(["s1"], null)], 0)).toBe(false);
+  });
+  test("partial fill counts distinct chats, not raw hits", () => {
+    // Nine hits from two chats: still under the fill, so a partial page keeps scanning.
+    const repeats = page(["a", "a", "a", "a", "a", "b", "b", "b", "b"], "c", true);
+    expect(shouldChainSearch([repeats], 0)).toBe(true);
+    const full = page(Array.from({ length: SEARCH_MIN_FILL }, (_, i) => `f${i}`), "c", true);
+    expect(shouldChainSearch([full], 0)).toBe(false);
   });
 });

@@ -46,6 +46,36 @@ describe("history pages", () => {
     await loadOlder(chat);
     expect(requested).toEqual([]);
   });
+  test("messages without a timestamp do not end scrollback early: a page of at=0 then a normal page both appear", async () => {
+    setHistoryCursor("c", "cur1");
+    responses = [
+      { ok: true, value: { messages: [{ id: "av:5", role: "user", text: "no time a", at: 0 }, { id: "av:6", role: "assistant", text: "no time b", at: 0 }], before: "cur2" } },
+      { ok: true, value: { messages: [{ id: "av:3", role: "user", text: "older", at: 3 }, { id: "av:4", role: "assistant", text: "older b", at: 4 }], before: null } },
+    ];
+    await loadOlder(chat);
+    expect(historyState("c").older.map(m => m.id)).toEqual(["av:5", "av:6"]);
+    await loadOlder(chat);
+    expect(historyState("c").older.map(m => m.id)).toEqual(["av:3", "av:4", "av:5", "av:6"]);
+    expect(historyState("c").before).toBeNull();
+  });
+  test("messages that share a timestamp across a page boundary are all kept", async () => {
+    setHistoryCursor("c", "cur1");
+    responses = [
+      { ok: true, value: { messages: [{ id: "av:8", role: "assistant", text: "tie b", at: 8 }, { id: "av:9", role: "user", text: "x", at: 9 }], before: "cur2" } },
+      // The server keyset is exact: av:7 shares av:8's timestamp and must not be lost.
+      { ok: true, value: { messages: [{ id: "av:6", role: "user", text: "y", at: 6 }, { id: "av:7", role: "user", text: "tie a", at: 8 }], before: null } },
+    ];
+    await loadOlder(chat);
+    await loadOlder(chat);
+    expect(historyState("c").older.map(m => m.id)).toEqual(["av:6", "av:7", "av:8", "av:9"]);
+  });
+  test("the first page after the shown window keeps a sibling with the oldest shown time but drops a phone-id copy", async () => {
+    const phone: Conversation = { ...chat, messages: [{ id: "phone-1", role: "user", text: "hi", at: 10 }, { id: "phone-2", role: "assistant", text: "yo", at: 11, state: "done", turnId: "t", seq: 0 }] };
+    setHistoryCursor("c", "cur1");
+    responses = [{ ok: true, value: { messages: [{ id: "av:9", role: "user", text: "sibling", at: 10 }, { id: "av:10", role: "user", text: "hi", at: 10 }, { id: "av:11", role: "assistant", text: "yo", at: 11 }], before: null } }];
+    await loadOlder(phone);
+    expect(historyState("c").older.map(m => m.id)).toEqual(["av:9"]);
+  });
   test("prependOlder keeps the in-memory cap", () => {
     const many = Array.from({ length: 2100 }, (_, i) => ({ id: `m${i}`, role: "user" as const, text: "x", at: i }));
     expect(prependOlder({ older: [], before: "c", loading: false }, many, new Set(), "d").older).toHaveLength(2000);

@@ -12,7 +12,7 @@ import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { chatRow } from "../../lib/chat-row";
 import { chatRowActions, pressRow, rowLongPress } from "../../lib/chat-row-actions";
-import { conversationEntries, groupLabeler, labelRemote, mergeLocal, stableEntries, type ChatListRow, type ConversationEntry, type RemoteLabeled } from "../../lib/chat-index";
+import { conversationEntries, emptyList, groupLabeler, labelList, mergeLocal, stableEntries, type ChatListRow, type ConversationEntry, type RemoteLabeled } from "../../lib/chat-index";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { usePagedChats } from "../../hooks/usePagedChats";
@@ -208,6 +208,7 @@ function startOfToday(): number {
 }
 
 const NO_ENTRIES: readonly ConversationEntry[] = [];
+const NO_LIST = emptyList();
 
 export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Main">, "navigation"> & { focused?: boolean }) {
   const thumb = useHandedness();
@@ -228,13 +229,15 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
   }, [conversations]);
   const today = startOfToday();
   const groupOf = useMemo(() => groupLabeler(today), [today]);
-  // The remote half is labeled once per page (an appended page labels only its own rows); a local
-  // change merges the few local rows into it by binary search.
+  // The remote half is labeled incrementally: an appended page labels only its own rows and a head
+  // refresh replays only the rows it changed. A local change merges the few local rows into it by
+  // binary search.
   const previousLabeled = useRef<RemoteLabeled | undefined>(undefined);
+  const remoteList = remote.list ?? NO_LIST;
   const labeled = useMemo(() => {
-    previousLabeled.current = labelRemote(remote.rows, groupOf, previousLabeled.current);
+    previousLabeled.current = labelList(remoteList, groupOf, previousLabeled.current);
     return previousLabeled.current;
-  }, [remote.rows, groupOf]);
+  }, [remoteList, groupOf]);
   const items = useMemo((): ChatListRow[] => {
     const rows = mergeLocal(labeled, { local, exhausted: remote.exhausted, endedLast: !remote.enabled, groupOf });
     return rows.length === 0 && remote.enabled && remote.status === "loading" ? SKELETONS : rows;
@@ -321,7 +324,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
   const footer = remote.loadingMore || (remote.status === "loading" && items !== SKELETONS && items.length > 0)
     ? <View>{[0, 1, 2].map(i => <SkeletonRow key={i} />)}</View>
     : remote.error && remote.enabled
-      ? <PressScale onPress={remote.loadingMore ? undefined : remote.rows.length ? loadMore : remote.refresh} accessibilityRole="button" style={styles.retry}>
+      ? <PressScale onPress={remote.loadingMore ? undefined : remote.loaded ? loadMore : remote.refresh} accessibilityRole="button" style={styles.retry}>
         <Text style={styles.retryText}>{remote.error} · Retry</Text>
       </PressScale>
       : null;

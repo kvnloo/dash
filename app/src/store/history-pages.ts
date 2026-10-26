@@ -16,6 +16,11 @@ export interface HistoryPagesState {
   before: string | null | undefined;
   loading: boolean;
   error?: string;
+  /**
+   * `before` came with the page at the front of `older`, so the next page continues it exactly
+   * (server keyset: AV ordinal, Hermes (timestamp, id)) and joins by id alone.
+   */
+  chained?: boolean;
 }
 
 export const historyPages = createStore<Readonly<Record<string, HistoryPagesState>>>({});
@@ -39,7 +44,7 @@ function patch(conversationId: string, fn: (s: HistoryPagesState) => HistoryPage
 /** The newest page arrived (ws reply or first HTTP page): remember where older pages start. */
 export function setHistoryCursor(conversationId: string, before: string | null | undefined): void {
   // Once older pages are loaded their cursor is further back; a refreshed newest page keeps it.
-  patch(conversationId, s => s.older.length > 0 || s.before === before ? s : { ...s, before, error: undefined });
+  patch(conversationId, s => s.older.length > 0 || s.before === before ? s : { ...s, before, chained: false, error: undefined });
 }
 
 export function dropHistory(conversationId: string): void {
@@ -56,7 +61,7 @@ export function prependOlder(state: HistoryPagesState, page: readonly Message[],
   const known = new Set(state.older.map(m => m.id));
   const fresh = page.filter(m => !known.has(m.id) && !shown.has(m.id));
   const older = [...fresh, ...state.older];
-  return { ...state, older: older.length > OLDER_MAX ? older.slice(older.length - OLDER_MAX) : older, before, loading: false, error: undefined };
+  return { ...state, older: older.length > OLDER_MAX ? older.slice(older.length - OLDER_MAX) : older, before, chained: true, loading: false, error: undefined };
 }
 
 export interface HistoryDeps { api: ChatsApi; settings: () => ApiSettings | null }
@@ -76,17 +81,34 @@ export async function loadOlder(conversation: Conversation): Promise<void> {
     return;
   }
   const shown = new Set(conversation.messages.map(m => m.id));
-  // Ids alone do not dedupe chats whose shown messages carry phone ids (Dash-started chats): only
-  // messages older than everything already shown join the scrollback.
-  const oldest = oldestShown(conversation, historyState(conversation.id));
-  const page = historyToMessages(result.value.messages, conversation.id).filter(m => m.at < oldest);
+  const page = alignToShown(historyToMessages(result.value.messages, conversation.id), conversation, historyState(conversation.id));
   patch(conversation.id, s => s.before !== before ? { ...s, loading: false } : prependOlder(s, page, shown, result.value.before));
 }
 
+/**
+ * The messages of an older page that may join the scrollback. A page that continues `older`
+ * (chained) is exact: ids dedupe it, and messages with no timestamp (at 0) or with a timestamp
+ * shared across the page boundary are kept. The first page after a cursor that came with the shown
+ * window is aligned by time, because ids alone do not dedupe chats whose shown messages carry phone
+ * ids (Dash-started chats): it keeps messages at or before the oldest shown time that do not repeat
+ * a shown message.
+ */
+function alignToShown(page: Message[], conversation: Conversation, state: HistoryPagesState): Message[] {
+  if (state.chained) return page;
+  const oldest = oldestShown(conversation, state);
+  const shown = new Set(conversation.messages.map(signature));
+  return page.filter(m => m.at <= oldest && !shown.has(signature(m)));
+}
+
+function signature(m: Message): string {
+  return `${m.at}\u0000${m.text.slice(0, 200)}`;
+}
+
+/** Oldest timestamp on screen. A message without one (at 0) cannot pin it to the epoch. */
 function oldestShown(conversation: Conversation, state: HistoryPagesState): number {
   let oldest = Infinity;
-  for (const m of conversation.messages) if (m.at < oldest) oldest = m.at;
-  for (const m of state.older) if (m.at < oldest) oldest = m.at;
+  for (const m of conversation.messages) if (m.at > 0 && m.at < oldest) oldest = m.at;
+  for (const m of state.older) if (m.at > 0 && m.at < oldest) oldest = m.at;
   return oldest;
 }
 
@@ -122,7 +144,7 @@ export async function fetchFullText(conversation: Conversation, messageId: strin
 
 /**
  * Find the older-page cursor for a chat opened from its cached window (no ws reply this visit).
- * Only messages older than everything shown join `older`, so a stale cache never misorders.
+ * Only messages at or before everything shown join `older`, so a stale cache never misorders.
  */
 export async function primeCursor(conversation: Conversation): Promise<void> {
   const state = historyState(conversation.id);
@@ -130,14 +152,13 @@ export async function primeCursor(conversation: Conversation): Promise<void> {
   if (!settings || state.loading || state.before !== undefined || !conversation.sessionId || !conversation.targetHostId) return;
   patch(conversation.id, s => ({ ...s, loading: true }));
   const shown = new Set(conversation.messages.map(m => m.id));
-  const oldest = oldestShown(conversation, state);
   // The cached window (up to 80) can be longer than one page: walk back until a page reaches past
   // it, so the stored cursor never points inside what is already on screen.
   let before: string | undefined;
   for (let n = 0; n < PRIME_MAX_PAGES; n++) {
     const result = await deps.api.history(settings, { key: conversationKey(conversation), limit: HISTORY_PAGE, ...(before ? { before } : {}) });
     if (!result.ok) { patch(conversation.id, s => ({ ...s, loading: false })); return; }
-    const page = historyToMessages(result.value.messages, conversation.id).filter(m => m.at < oldest);
+    const page = alignToShown(historyToMessages(result.value.messages, conversation.id), conversation, state);
     const next = result.value.before;
     if (page.length > 0 || next === null || n === PRIME_MAX_PAGES - 1) {
       patch(conversation.id, s => s.before !== undefined ? { ...s, loading: false } : prependOlder(s, page, shown, next));

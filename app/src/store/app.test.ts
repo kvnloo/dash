@@ -686,3 +686,25 @@ describe("archive prune against the live store", () => {
     expect(app.store.get().conversations.find(x => x.id === c.id)?.openedAt).toBe(first);
   });
 });
+
+test("status events on a running chat keep the Chats list input, so the pane does not re-merge", async () => {
+  const { conversationEntries, stableEntries } = await import("../lib/chat-index");
+  const chat = app.createConversation("omp");
+  const turn = app.beginTurn(chat.id, "Go");
+  const entries = () => stableEntries(list, conversationEntries(app.store.get().conversations));
+  let list = stableEntries([], conversationEntries(app.store.get().conversations));
+  const first = list;
+  for (let seq = 1; seq <= 3; seq++) {
+    const before = app.store.get().conversations.find(c => c.id === chat.id)?.updatedAt;
+    Bun.sleepSync(2);
+    app.applyTurnEvent({ type: "status", id: turn.turnId, seq, text: `step ${seq}` });
+    // Each status event does bump the conversation (the precondition the list must tolerate).
+    expect(app.store.get().conversations.find(c => c.id === chat.id)?.updatedAt).toBeGreaterThan(before ?? Infinity);
+    list = entries();
+    expect(list).toBe(first);
+  }
+  replyText.set(turn.turnId, "Done");
+  app.applyTurnEvent({ type: "done", id: turn.turnId, seq: 9, exitCode: 0 });
+  // Settling the turn changes its section, so the list re-merges once.
+  expect(entries()).not.toBe(first);
+});
