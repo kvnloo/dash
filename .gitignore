@@ -25,3 +25,7 @@ orchestrate/dash/status.md
 .acceptance-receipts/
 .voice-deps/
 .repair-receipts/
+
+# native device journey probe output
+e2e/device/results/
+__pycache__/
