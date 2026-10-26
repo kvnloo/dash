@@ -126,7 +126,7 @@ test("native history previews and on-demand details leave the exact database byt
   expect(sessions.toolDetail("clean", "hidden", "2", "a")).toBeUndefined();
   expect(sessions.toolDetail("clean", "same", "missing", "a")).toBeUndefined();
   expect(readFileSync(path).equals(before)).toBe(true);
-});
+}, 20_000); // copies+hashes a real SQLite file; siblings take ~4 s and full-suite load pushed it past the 5 s default
 
 test("a stray profiles/default directory does not make default sessions ambiguous", async () => {
   const root = fixture();
