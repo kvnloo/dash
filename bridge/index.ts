@@ -34,6 +34,7 @@ import { createPairingHttpHandler } from "./src/pairing-http";
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
+import { AGENTSVIEW_PREFIX, agentsviewHistory } from "./src/agentsview-sessions";
 import { runHermesSession } from "./src/hermes-session";
 import { streamHermesSession } from "./src/hermes-stream";
 import { liveArgv } from "./src/hermes-live";
@@ -946,17 +947,18 @@ const server = Bun.serve<SocketData>({
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: SELF.id(), profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages });
             break;
           }
-          if (!(await isSelfHost(message.hostId)) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && !message.profileId.startsWith("omp:"))) {
+          if (!(await isSelfHost(message.hostId)) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && !message.profileId.startsWith("omp:") && !message.profileId.startsWith(AGENTSVIEW_PREFIX))) {
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, messages: [] });
             break;
           }
           const home = homedir();
           const sessionRoot = join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions");
+          const live = readLiveTranscript(message.harness, message.sessionId, sessionRoot, message.cwd, home);
           sendTo(ws, {
             type: "history",
             harness: message.harness,
             sessionId: message.sessionId,
-            messages: readLiveTranscript(message.harness, message.sessionId, sessionRoot, message.cwd, home),
+            messages: live.length ? live : agentsviewHistory(message.harness, message.sessionId),
           });
           break;
         }
