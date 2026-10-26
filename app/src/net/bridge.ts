@@ -169,6 +169,8 @@ class Bridge {
       if (this.ws !== ws) return;
       clearTimeout(this.connectTimer);
       this.attempt = 0;
+      // Connected once: from now on a lost connection may move to another paired bridge.
+      this.failover = true;
       this.stopKeepalive?.();
       this.stopKeepalive = startSocketKeepalive(ws);
     };

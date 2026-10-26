@@ -38,6 +38,15 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const attemptRef = useRef<AbortController | null>(null);
 
+  // Failover (or return to the primary) swaps the bridge in use under this screen:
+  // show that bridge, so Save cannot write the old address over the new entry.
+  const activeAddress = settings?.address;
+  const activeToken = settings?.token;
+  useEffect(() => {
+    setAddress(activeAddress ?? "");
+    setToken(activeToken ?? "");
+  }, [activeAddress, activeToken]);
+
   const dirty =
     normalizeAddress(address) !== (settings?.address ?? "") ||
     token.trim() !== (settings?.token ?? "") ||
