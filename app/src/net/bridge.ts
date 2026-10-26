@@ -9,6 +9,7 @@ import { fetchRosterIfChanged } from "../lib/roster";
 import { executionToken, socketUrl } from "../lib/bridge-auth";
 import { shouldRequestHistory } from "../lib/live-sessions";
 import { headerSocket } from "../lib/native-socket";
+import { reattachStreamingTurns, startSocketKeepalive } from "./socket-keepalive";
 import type { Settings } from "../model";
 import { configureChatIndex, setChatsFeatures } from "../store/chat-index-store";
 import { configureHistoryPages } from "../store/history-pages";
@@ -48,6 +49,7 @@ class Bridge {
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private connectTimer: ReturnType<typeof setTimeout> | undefined;
   private rosterTimer: ReturnType<typeof setInterval> | undefined;
+  private stopKeepalive: (() => void) | undefined;
   private pending = new Map<string, { text: string; seq: number }>();
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private appState: AppStateStatus = RNAppState.currentState;
@@ -156,6 +158,8 @@ class Bridge {
       if (this.ws !== ws) return;
       clearTimeout(this.connectTimer);
       this.attempt = 0;
+      this.stopKeepalive?.();
+      this.stopKeepalive = startSocketKeepalive(ws);
     };
     ws.onmessage = (event) => {
       if (this.ws !== ws) return;
@@ -212,8 +216,7 @@ class Bridge {
         void this.refreshRoster();
         clearInterval(this.rosterTimer);
         this.rosterTimer = setInterval(() => { if (this.appState === "active") void this.refreshRoster(); }, 10000);
-        const turns = streamingTurns();
-        if (turns.length) this.send({ type: "attach", turns });
+        if (this.ws) reattachStreamingTurns(this.ws, streamingTurns());
         this.send({ type: "gate_list" });
         flushPendingSends(sendChat);
         this.scheduleMigration();
@@ -326,6 +329,8 @@ class Bridge {
     clearTimeout(this.retryTimer);
     clearTimeout(this.connectTimer);
     clearInterval(this.rosterTimer);
+    this.stopKeepalive?.();
+    this.stopKeepalive = undefined;
     this.rosterTimer = undefined;
     this.retryTimer = undefined;
     this.connectTimer = undefined;
