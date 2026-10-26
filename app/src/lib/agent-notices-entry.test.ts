@@ -2,14 +2,14 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { parseServerMessage, type NoticeMessage } from "../../shared/protocol";
-import { createAgentNoticeInbox } from "../../app/src/lib/agent-notices";
-import type { DashNotice } from "../../app/src/lib/notification-policy";
+import { parseServerMessage, type NoticeMessage } from "../../../shared/protocol";
+import { createAgentNoticeInbox } from "./agent-notices";
+import type { DashNotice } from "./notification-policy";
 
 test("composed bridge: authenticated ingress broadcasts, offline reports replay with app dedupe", async () => {
   const root = mkdtempSync(join(tmpdir(), "dash-notice-entry-"));
   const sockets: WebSocket[] = [];
-  const proc = Bun.spawn([process.execPath, resolve(import.meta.dir, "../index.ts")], {
+  const proc = Bun.spawn([process.execPath, resolve(import.meta.dir, "../../../bridge/index.ts")], {
     env: { ...process.env, DASH_HOST: "127.0.0.1", DASH_ALLOW_LOOPBACK: "1", DASH_PORT: "0", DASH_NOTICE_PORT: "0", DASH_CREDENTIAL_DIR: join(root, "credentials"), DASH_HERMES_ROOT: join(root, "hermes"), DASH_Z0LIVE_SESSIONS: join(root, "z0live"), DASH_STT_MODEL: join(root, "no-model"), DASH_CHAT_INDEX: join(root, "index.db"), DASH_AGENTSVIEW_DB: join(root, "missing.db"), DASH_GATE_ENABLED: "0" },
     stdout: "ignore", stderr: "pipe",
   });
@@ -43,6 +43,7 @@ test("composed bridge: authenticated ingress broadcasts, offline reports replay 
     const a = await connect(); const b = await connect();
     const first = await post("online"); expect(first.status).toBe(201);
     const one = parseServerMessage(await first.json()); expect(one?.type).toBe("notice");
+    if (one?.type !== "notice") throw new Error("Expected an accepted notice");
     await until(() => a.received.length === 1 && b.received.length === 1 && emitted.length === 1);
     expect(a.received[0]).toEqual(one); expect(b.received[0]).toEqual(one);
     a.ws.close(); b.ws.close();

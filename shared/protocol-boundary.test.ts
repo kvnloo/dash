@@ -1,5 +1,36 @@
 import { expect, test } from "bun:test";
-import { type AgentInfo, type ServerMessage, parseClientMessage, parseServerMessage, parseHosts } from "./protocol";
+import { type AgentInfo, type ServerMessage, type ClientMessage, type ChatSummary, type ChatSearchHit, parseClientMessage, parseServerMessage, parseHosts } from "./protocol";
+import { CHAT_NAME, CURSOR_MAX_BYTES, MESSAGE_TEXT_MAX, decodeCursor, encodeCursor, parseChatListQuery, parseChatSummary, parseChatSearchPage } from "./protocol";
+
+test("published chat bounds, names and cursor validation are stable", () => {
+  expect(MESSAGE_TEXT_MAX).toBe(16000);
+  expect(CURSOR_MAX_BYTES).toBe(4096);
+  for (const name of ["0123456789", "a".repeat(64), "host:profile._-Z"]) expect(CHAT_NAME.test(name)).toBe(true);
+  for (const name of ["", "a".repeat(65), "a/b", "a b"]) expect(CHAT_NAME.test(name)).toBe(false);
+  expect(decodeCursor("")).toBeNull();
+  expect(decodeCursor("A".repeat(4100))).toBeNull();
+  expect(decodeCursor(encodeCursor({ n: 1 }))).toEqual({ n: 1 });
+  expect(parseChatListQuery(new URLSearchParams("limit="))).toMatchObject({ limit: 50 });
+  expect(parseChatListQuery(new URLSearchParams("limit=7"))).toMatchObject({ limit: 7 });
+});
+
+test("tool detail independent optional fields and empty approval snapshots fail closed", () => {
+  const detail = { type: "tool_detail", id: "t", callId: "call", messageId: "m", sessionId: "s", profileId: "p", hostId: "h" } satisfies ClientMessage;
+  expect(parseClientMessage(detail)).toEqual(detail);
+  for (const key of ["id", "callId", "messageId", "sessionId", "profileId", "hostId"]) expect(parseClientMessage({ ...detail, [key]: 42 })).toBeNull();
+  expect(parseServerMessage({ type: "gate_snapshot", items: [], dry_run: true })).toMatchObject({ type: "gate_snapshot", items: [] });
+  expect(parseServerMessage({ type: "gate_snapshot", items: [{}], dry_run: true })).toBeNull();
+});
+
+test("chat summaries validate optional agent identity; search retains only declared roles", () => {
+  const chat = { key: "h:hermes:s", kind: "hermes", sessionId: "s", hostId: "h", hostName: "Host", title: "Title", startedAt: 1, lastActivityAt: 2, messageCount: 3, origin: "hermes", chatable: true } satisfies ChatSummary;
+  expect(parseChatSummary(chat)).toEqual(chat);
+  for (const key of ["profileId", "agentId", "cwd", "openIn"]) expect(parseChatSummary({ ...chat, [key]: 42 })).toBeNull();
+  for (const role of [undefined, "user", "assistant"] satisfies ChatSearchHit["role"][]) {
+    const hit = { chat, field: "message", snippet: "text", highlights: [], ...(role ? { role } : {}) } satisfies ChatSearchHit;
+    expect(parseChatSearchPage({ hits: [hit], next: null, partial: false })?.hits).toEqual([hit]);
+  }
+});
 
 test("Hermes session metadata and scoped history survive the wire boundary", () => {
   const agent: AgentInfo = { id: "hermes:session:clean:owner", name: "Native title", kind: "hermes", status: "available", sessionId: "owner", profileId: "clean", lastActivityAt: 1700000000000, messageCount: 12, source: "local" };
