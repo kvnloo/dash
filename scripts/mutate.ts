@@ -19,6 +19,8 @@ export const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 export type Target = { file: string; tests: readonly string[] };
 
 export const TARGETS: readonly Target[] = [
+  { file: "app/src/lib/generative-stream.ts", tests: ["app/src/lib/generative-stream.test.ts", "app/src/lib/generative-generation.test.ts"] },
+  { file: "app/src/components/genui/GenerativeBlock.tsx", tests: ["app/src/components/genui/flow-114.native.test.ts"] },
   { file: "app/src/lib/flow-trace.ts", tests: ["app/src/lib/flow-trace.test.ts"] },
   { file: "app/src/lib/pending-queue.ts", tests: ["app/src/lib/pending-queue.test.ts"] },
   { file: "app/src/trace/chip-state.ts", tests: ["app/src/trace/chip-state.test.ts"] },

@@ -14,6 +14,12 @@ const json = JSON.stringify({
 });
 const lang = 'root = Roadmap("dash-roadmap")';
 
+test("flow HTML fragments are buffered before the native Markdown parser sees them", () => {
+  expect(prepareGenerativeMarkdown("```html\n<div>SENTINEL_RAW_SOURCE", true)).toBe(fencedPending("html"));
+  expect(prepareGenerativeMarkdown("```ht", true)).toBe(fencedPending("html"));
+  expect(prepareGenerativeMarkdown("```html\n<p>done</p>\n```", true)).toBe("```html\n<p>done</p>\n```");
+});
+
 describe("streaming native UI fence protection", () => {
   const examples: [string, string][] = [
     ["genui", json],

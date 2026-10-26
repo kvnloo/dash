@@ -35,6 +35,7 @@ import { loadSkia } from "./skia-ready";
 import { useContinuousVoice } from "../ContinuousVoiceRoot";
 import { flowMode, flowTrace } from "../../lib/flow-trace";
 import { executionToken } from "../../lib/bridge-auth";
+import { liveOf, nextGeneration } from "../../store/live";
 
 export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
 /** Strokes whose extent is under this many points are taps (e.g. a pen double-tap). */
@@ -196,6 +197,8 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     if (flowMode) {
       inkTraceId.current = flowTrace.begin();
       flowTrace.mark("input.pen", inkTraceId.current);
+      const conversationId = store.get().activeId;
+      if (conversationId && liveOf(conversationId).open) nextGeneration(conversationId);
     }
     if (__DEV__) console.log("[dash-ink] raw-down", { pointer: pointerKind(pointerType), touches });
   }, []);
