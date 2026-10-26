@@ -7,7 +7,8 @@
     "test:mutate": "bun scripts/mutate.ts",
     "typecheck": "bun app/node_modules/typescript/bin/tsc -p app --noEmit && bun bridge/node_modules/typescript/bin/tsc -p bridge --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "lint": "eslint . --max-warnings 0",
-    "verify": "bun scripts/verify-dash/control-dash.ts test"
+    "verify": "bun scripts/verify-dash/control-dash.ts test",
+    "spec": "python3 spec/check.py && python3 -I -m unittest discover -s spec -p 'test_*.py'"
   },
   "dependencies": {},
   "devDependencies": {
