@@ -7,6 +7,8 @@ import { isDebugMode } from "../debug/mode";
 import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf } from "../store/live";
 import { fetchRosterIfChanged } from "../lib/roster";
 import { executionToken, socketUrl } from "../lib/bridge-auth";
+import { visibleHarnesses } from "../lib/hidden-harnesses";
+import { activate, endpointsOf, pickEndpoint, probeBridge } from "../lib/bridge-failover";
 import { shouldRequestHistory } from "../lib/live-sessions";
 import { headerSocket } from "../lib/native-socket";
 import { reattachStreamingTurns, startSocketKeepalive } from "./socket-keepalive";
@@ -25,6 +27,7 @@ import {
   markTurnLost,
   locateTurn,
   rejectUnavailableTurn,
+  saveSettings,
   setConnection,
   setLiveHistoryRequester,
   store,
@@ -61,6 +64,9 @@ class Bridge {
   /** Hermes roster messageCount last requested per conversation: re-request only when it moves. */
   private hermesCounts = new Map<string, number | undefined>();
   private migration: "idle" | "scheduled" = "idle";
+  /** May a failed connect move to another paired bridge? Off while pairing/editing until it connects once. */
+  private failover = true;
+  private probing = false;
 
   constructor() {
     RNAppState.addEventListener("change", (next) => {
@@ -68,12 +74,17 @@ class Bridge {
       this.appState = next;
       // Coming back to the foreground: don't wait out the backoff.
       if (next === "active" && wasBackground && this.settings && !this.isOpen()) this.connectNow();
+      else if (next === "active" && wasBackground) void this.returnToPrimary();
     });
   }
 
-  /** Start (or restart) with new settings. */
-  start(settings: Settings): void {
+  /**
+   * Start (or restart) with new settings. `failover: false` pins the attempt to this
+   * bridge (pairing or editing must report that bridge's own failure) until it connects once.
+   */
+  start(settings: Settings, options?: { failover?: boolean }): void {
     this.settings = settings;
+    this.failover = options?.failover ?? true;
     if (isDebugMode()) {
       this.clearTimers();
       this.teardownSocket();
@@ -180,6 +191,54 @@ class Bridge {
     this.flushDeltas();
     if (!this.settings) return;
     setConnection({ status: "offline", error: reason });
+    if (this.failover && !this.probing && this.appState === "active" && endpointsOf(this.settings).length > 1) {
+      void this.failOver(this.settings, this.connectEpoch);
+      return;
+    }
+    this.scheduleRetry();
+  }
+
+  /** Health-probe the paired bridges in order and move to the first one that answers. */
+  private async failOver(settings: Settings, epoch: number): Promise<void> {
+    this.probing = true;
+    let pick: Awaited<ReturnType<typeof pickEndpoint>>;
+    try {
+      pick = await pickEndpoint(settings, address => probeBridge(address));
+    } finally {
+      this.probing = false;
+    }
+    if (this.settings !== settings || this.connectEpoch !== epoch) return;
+    if (pick && pick.address !== settings.address) {
+      console.warn(`[dash.failover] ${settings.address} -> ${pick.address}`);
+      const next = activate(settings, pick);
+      this.settings = next;
+      saveSettings(next);
+      this.attempt = 0;
+      void this.connectNow();
+      return;
+    }
+    this.scheduleRetry();
+  }
+
+  /** On a fallback bridge and back in the foreground: return to the primary when it answers and nothing streams. */
+  private async returnToPrimary(): Promise<void> {
+    const settings = this.settings;
+    if (!settings || this.probing || !this.isOpen()) return;
+    const primary = endpointsOf(settings)[0];
+    if (!primary || primary.address === settings.address || streamingTurns().length > 0) return;
+    const epoch = this.connectEpoch;
+    if (!(await probeBridge(primary.address))) return;
+    if (this.settings !== settings || this.connectEpoch !== epoch || streamingTurns().length > 0) return;
+    console.warn(`[dash.failover] back to primary ${primary.address}`);
+    const next = activate(settings, primary);
+    this.settings = next;
+    saveSettings(next);
+    this.attempt = 0;
+    void this.connectNow();
+  }
+
+  private scheduleRetry(): void {
+    if (!this.settings) return;
     const delay = BACKOFF_MS[Math.min(this.attempt, BACKOFF_MS.length - 1)] ?? 8000;
     this.attempt += 1;
     // In the background the OS will likely kill the socket anyway; reconnect on foreground.
@@ -209,7 +268,7 @@ class Bridge {
           status: "online",
           host: message.host,
           cwd: message.cwd,
-          harnesses: message.harnesses,
+          harnesses: visibleHarnesses(message.harnesses),
           hosts: message.hosts ?? [],
           error: undefined,
         });

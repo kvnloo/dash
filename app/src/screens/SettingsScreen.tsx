@@ -21,6 +21,7 @@ import { forgetEverything, saveSettings, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
 import { screenBack } from "../lib/screen-back";
+import { endpointsOf, withEditedEndpoint } from "../lib/bridge-failover";
 
 export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const thumb = useHandedness();
@@ -67,22 +68,23 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
     attemptRef.current = attempt;
     setSaving(true);
     setSaveError(null);
-    const next = {
-      ...store.get().settings,
+    const previous = store.get().settings;
+    const next = withEditedEndpoint(previous, {
+      ...previous,
       identity,
       address: normalizeAddress(address),
       token: token.trim(),
       harness: settings?.harness ?? "omp",
       cwd: cwd.trim() || undefined,
       inAppFeedback: settings?.inAppFeedback ?? true,
-    };
+    });
     haptic.tap();
     try {
       await connectSettings({
         settings: next,
         connection: store,
         save: saveSettings,
-        start: (saved) => bridge.start(saved),
+        start: (saved) => bridge.start(saved, { failover: false }),
         signal: attempt.signal,
         onConnected: () => {
           haptic.success();
@@ -224,6 +226,15 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             accessibilityState={connectA11y.accessibilityState}
           />
           {saveError ? <Text style={[styles.help, styles.dangerText]} accessibilityRole="alert">{saveError}</Text> : null}
+
+          {settings && endpointsOf(settings).length > 1 ? (
+            <>
+              <Text style={styles.label}>Paired bridges (failover order)</Text>
+              <Text style={styles.help} testID="settings-bridge-endpoints">
+                {endpointsOf(settings).map((e, i) => `${i + 1}. ${e.address}${e.address === settings.address ? " (in use)" : ""}`).join("\n")}
+              </Text>
+            </>
+          ) : null}
 
           {connection.harnesses.length > 0 ? (
             <>
