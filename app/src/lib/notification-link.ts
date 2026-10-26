@@ -24,7 +24,7 @@ export function parseChatLink(url: string | null): string | null {
       id === "." ||
       id === ".." ||
       id.includes("/") ||
-      id.includes("\\\\") ||
+      id.includes("\\") ||
       CONTROL_BYTES.test(id)
     ) return null;
     return id;
