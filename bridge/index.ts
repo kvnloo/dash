@@ -34,6 +34,7 @@ import { createPairingHttpHandler } from "./src/pairing-http";
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
+import { AGENTSVIEW_PREFIX, agentsviewHistory } from "./src/agentsview-sessions";
 import { runHermesSession } from "./src/hermes-session";
 import { streamHermesSession } from "./src/hermes-stream";
 import { liveArgv } from "./src/hermes-live";
@@ -65,7 +66,7 @@ import {
 import { speechAvailable, transcribe, warmup } from "./speech";
 import { AttachmentError, AttachmentStore, promptWithAttachments, type StoredAttachment } from "./src/attachments";
 import { createFilesHttpHandler } from "./src/files-http";
-import { contextHttp } from "./src/context-http";
+import { compactionEnabled, contextHttp } from "./src/context-http";
 import { createSuggestionsHttpHandler } from "./src/suggestions-http";
 import { LiveSurface } from "./src/live-surface";
 import { createModelsHttpHandler } from "./src/models-http";
@@ -694,7 +695,8 @@ const handleFiles = createFilesHttpHandler({
   ...(speechAvailable().ok ? { transcribe } : {}),
 });
 
-const handleContext = contextHttp({ sessions: hermesSessions });
+const contextCompaction = compactionEnabled();
+const handleContext = contextHttp({ sessions: hermesSessions, compaction: contextCompaction });
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleModels = createModelsHttpHandler({ authorize });
 const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
@@ -737,7 +739,7 @@ const server = Bun.serve<SocketData>({
         const voice = await voiceBootstrap(request, principal?.kind === "identity", (profile, session) => !!hermesSessions.target(profile, session));
         if (voice) return cors(voice);
       }
-      if (url.pathname === "/chat/context/compact" && request.method === "POST") server.timeout(request, 255);
+      if (url.pathname === "/chat/context/compact" && request.method === "POST" && contextCompaction) server.timeout(request, 255);
       const context = await handleContext(request, await authorize(request));
       if (context) return cors(context);
       const orchestra = await handleOrchestra(request);
@@ -947,17 +949,18 @@ const server = Bun.serve<SocketData>({
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: SELF.id(), profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages });
             break;
           }
-          if (!(await isSelfHost(message.hostId)) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && !message.profileId.startsWith("omp:"))) {
+          if (!(await isSelfHost(message.hostId)) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && !message.profileId.startsWith("omp:") && !message.profileId.startsWith(AGENTSVIEW_PREFIX))) {
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, messages: [] });
             break;
           }
           const home = homedir();
           const sessionRoot = join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions");
+          const live = readLiveTranscript(message.harness, message.sessionId, sessionRoot, message.cwd, home);
           sendTo(ws, {
             type: "history",
             harness: message.harness,
             sessionId: message.sessionId,
-            messages: readLiveTranscript(message.harness, message.sessionId, sessionRoot, message.cwd, home),
+            messages: live.length ? live : agentsviewHistory(message.harness, message.sessionId),
           });
           break;
         }
