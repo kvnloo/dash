@@ -90,3 +90,12 @@ test("a taken notice port does not throw; the bridge runs without notices", () =
     expect(ok?.port).toBeGreaterThan(0); ok?.stop(true);
   } finally { holder.stop(true); }
 });
+test("publish reports how many live sockets received it, so the bridge log can confirm delivery", () => {
+  const root = mkdtempSync(join(tmpdir(), "dash-notices-")); roots.push(root);
+  const published: Array<[string, number]> = [];
+  const notices = new NoticeService(root, (n, delivered) => { published.push([n.id, delivered]); });
+  const a = notices.subscribe(() => {}); notices.subscribe(() => { throw new Error("dead socket"); });
+  const first = notices.publish(payload);
+  a(); const second = notices.publish(payload);
+  expect(published).toEqual([[first.id, 1], [second.id, 0]]);
+});
