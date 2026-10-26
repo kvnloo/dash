@@ -218,6 +218,10 @@ export function setConnection(patch: Partial<Connection>): void {
 }
 
 export async function forgetEverything(): Promise<void> {
+  // Before the socket and settings go: ask the bridge to drop its notice ring too.
+  const { agentNoticeInbox } = await import("./notices");
+  const { bridge } = await import("../net/bridge");
+  await agentNoticeInbox.forget(message => bridge.send(message));
   const enrollment = store.get().settings?.identity;
   if (enrollment) {
     const { setSecret } = await import("../lib/secure");
@@ -231,8 +235,6 @@ export async function forgetEverything(): Promise<void> {
   await AsyncStorage.multiRemove([KEYS.settings, KEYS.conversations, KEYS.activeId, "dash.conversations.migrated.v2", "dash.chats.migrated.v3", "dash.chats.head.v1"]);
   const { resetChatIndex } = await import("./chat-index-store");
   resetChatIndex();
-  const { agentNoticeInbox } = await import("./notices");
-  await agentNoticeInbox.clear();
   lastActiveId = undefined;
   store.set((s) => ({
     ...s,

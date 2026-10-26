@@ -2,9 +2,11 @@ import type { Conversation } from "../model";
 import { messageThinking } from "./thinking";
 
 export type NotificationTarget = { kind: "chat"; chatId: string } | { kind: "approvals" } | { kind: "notices" };
-export interface DashNotice { key: string; title: string; body: string; target: NotificationTarget }
-export function shouldNotify(input: { foreground: boolean; enabled: boolean; permission: string }): boolean {
-  return !input.foreground && input.enabled && input.permission === "granted";
+export interface DashNotice { key: string; title: string; body: string; target: NotificationTarget; /** Agent report: posts even in the foreground. */ report?: boolean }
+/** Agent reports post even in the foreground: the app reconnects (and replays) only while open,
+ * so suppressing foreground delivery meant replayed reports never reached the shade. */
+export function shouldNotify(input: { foreground: boolean; enabled: boolean; permission: string; report?: boolean }): boolean {
+  return (!input.foreground || input.report === true) && input.enabled && input.permission === "granted";
 }
 export function chatLink(chatId: string): string { return `dash://chat/${encodeURIComponent(chatId)}`; }
 export function notificationLink(target: NotificationTarget): string {

@@ -43,8 +43,9 @@ export async function startNativeNotifications(open: (target: NotificationTarget
     const enabled = await AsyncStorage.getItem(KEY) === "true";
     notificationState.set(s => ({ ...s, available: true, enabled }));
     await refreshNotificationPermission();
-    notifications.setNotificationHandler({ handleNotification: async () => {
-      const show = AppState.currentState !== "active" && notificationState.get().enabled;
+    notifications.setNotificationHandler({ handleNotification: async (notification: import("expo-notifications").Notification) => {
+      const report = Reflect.get(notification.request.content.data ?? {}, "report") === true;
+      const show = shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get(), report });
       return { shouldShowBanner: show, shouldShowList: show, shouldPlaySound: false, shouldSetBadge: false };
     } });
     let lastId: string | undefined;
@@ -79,13 +80,13 @@ export async function disableNativeNotifications(): Promise<void> {
   } catch (error) { failure(error); }
 }
 export async function postNativeNotice(notice: DashNotice): Promise<void> {
-  if (!shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get() })) return;
+  if (!shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get(), report: notice.report })) return;
   try {
     const notifications = await api();
-    if (!notifications || AppState.currentState === "active" || !notificationState.get().enabled) return;
+    if (!notifications || !shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get(), report: notice.report })) return;
     await notifications.scheduleNotificationAsync({ identifier: notice.key,
       content: { title: notice.title, body: notice.body, sound: false, autoDismiss: true,
-        data: { url: notificationLink(notice.target) } },
+        data: { url: notificationLink(notice.target), ...(notice.report ? { report: true } : {}) } },
       trigger: { channelId: CHANNEL },
     });
   } catch (error) { failure(error); }
