@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { isCatalogHarness } from "../../shared/catalog";
 import { hermesSessions } from "./hermes-sessions";
+import { HermesProfileCache } from "./hermes-profiles";
 import { grokDesktopBot, hermesBots, hostBotSources, serviceBots } from "./bots";
 import { z0bridgeHermes } from "./z0bridge-hermes";
 import { agentsviewSessions } from "./agentsview-sessions";
@@ -565,24 +566,7 @@ function spawnText(argv: string[], seconds = 1): string {
   }
 }
 
-let hermesListCache = "";
-function refreshHermesList(): void {
-  if (Bun.which("hermes") === null) return;
-  try {
-    const proc = Bun.spawn(["hermes", "gateway", "list"], { stdout: "pipe", stderr: "ignore" });
-    const timer = setTimeout(() => proc.kill(), 2500);
-    void proc.exited.then(async () => {
-      clearTimeout(timer);
-      if (proc.exitCode !== 0) return;
-      const text = await new Response(proc.stdout).text();
-      if (text.trim()) hermesListCache = text;
-    }).catch(() => {
-      clearTimeout(timer);
-    });
-  } catch {
-    return;
-  }
-}
+const hermesProfileCache = new HermesProfileCache();
 
 let rosterCache: { at: number; key: string; hosts: HostInfo[] } | null = null;
 
@@ -663,19 +647,18 @@ function listedHermesProfiles(profiles: HermesProfileInfo[]): HermesProfileInfo[
   return profiles.filter((p) => p.gateway === "running" || p.id === "default" || p.id === "connect-all");
 }
 
-refreshHermesList();
+hermesProfileCache.read();
 
 export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }): Promise<HostInfo[]> {
   const key = `${self.hostname}:${self.address ?? ""}:${harnesses.map((h) => `${h.id}:${h.available}`).join(",")}`;
   const now = Date.now();
   if (rosterCache && rosterCache.key === key && now - rosterCache.at < ROSTER_TTL_MS) return rosterCache.hosts;
-  refreshHermesList();
+  const hermesProfiles = listedHermesProfiles(hermesProfileCache.read());
   const nodes = parseTailscaleStatus(readTailscaleStatus());
   const home = homedir();
   const ompTabs = collectOmpSessions(home, join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions"));
   const selfNode = nodes.find((n) => n.self);
   const selfAddress = self.address ?? firstV4(selfNode?.ips ?? []);
-  const hermesProfiles = listedHermesProfiles(parseHermesGatewayList(hermesListCache));
   const a2aUrl = hermesA2AUrl(process.env, selfAddress);
   const hosts = assembleRoster({
     nodes,

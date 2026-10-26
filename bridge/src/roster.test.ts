@@ -273,21 +273,16 @@ describe("roster", () => {
 });
 
 describe("timed probes", () => {
-  test("timedArgv wraps probes so /roster cannot hang on hermes gateway list", () => {
-    expect(timedArgv(["hermes", "gateway", "list"])).toEqual([
-      "timeout",
-      "--signal=KILL",
-      "1",
-      "hermes",
-      "gateway",
-      "list",
+  test("timedArgv bounds remaining process probes; Hermes discovery uses native state", () => {
+    expect(timedArgv(["pgrep", "-x", "grok-bot"])).toEqual([
+      "timeout", "--signal=KILL", "1", "pgrep", "-x", "grok-bot",
     ]);
     const src = readFileSync(join(import.meta.dir, "roster.ts"), "utf8");
-    expect(src).toContain("refreshHermesList");
+    expect(src).toContain("hermesProfileCache.read()");
     expect(src).toContain("ROSTER_TTL_MS");
-    expect(src).toContain('Bun.which("hermes")');
+    expect(src).not.toContain('Bun.which("hermes")');
     expect(src).toContain("attachOmpSessions");
-    expect(src).not.toContain('spawnText(["hermes", "gateway", "list"])');
+    expect(src).not.toContain('["hermes", "gateway", "list"]');
   });
 
   test("bridge resolves its tailnet binding through the fail-closed host policy", () => {
