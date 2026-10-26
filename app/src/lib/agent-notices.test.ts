@@ -48,5 +48,5 @@ test("forget clears the phone inbox and asks the bridge to clear its ring", asyn
   await inbox.receive(notice);
   await inbox.forget(m => { sent.push(m); return true; });
   expect(sent).toEqual([{ type: "notices_clear" }]);
-  expect(inbox.list()).toEqual([]); expect(saved).toBe("[]");
+  expect(inbox.list()).toEqual([]); expect(String(saved)).toBe("[]");
 });
