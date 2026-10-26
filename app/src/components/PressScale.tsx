@@ -4,11 +4,12 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   ReduceMotion,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
 import { PagerGestureContext } from "./pager-gesture";
-import { PRESS_SCALE, press } from "../motion";
+import { PRESS_SCALE, press, pressScaleFor } from "../motion";
 
 const spring = { ...press, reduceMotion: ReduceMotion.System };
 
@@ -45,8 +46,10 @@ export const PressScale = memo(function PressScale({
 }: PressScaleProps) {
   const swiping = useContext(PagerGestureContext);
   const scale = useSharedValue(1);
+  // Reduce motion: no squash at all (an instant 0.985 jump is still motion).
+  const target = pressScaleFor(scaleTo, useReducedMotion());
   const gesture = Gesture.Manual().enabled(!disabled)
-    .onTouchesDown(() => { scale.value = withTiming(scaleTo, spring); })
+    .onTouchesDown(() => { scale.value = withTiming(target, spring); })
     .onTouchesUp((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); })
     .onTouchesCancelled((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); });
   const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));

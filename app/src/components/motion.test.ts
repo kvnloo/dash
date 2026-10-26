@@ -133,3 +133,97 @@ describe("post-Lab motion contracts", () => {
     expect(app).not.toContain("animationDuration:");
   });
 });
+
+describe("MOTION.md tokens", () => {
+  test("spring constants are critically damped and match criticalProgress timing", async () => {
+    const { criticalSpring, dampingRatio, SPRING } = await import("../motion");
+    for (const ms of [100, 150, 180]) {
+      const spring = criticalSpring(ms);
+      expect(dampingRatio(spring)).toBeCloseTo(1, 10);
+      expect(spring.overshootClamping).toBe(true);
+      // omega * t = 9 at the deadline, the same point criticalProgress normalizes to 1.
+      expect(Math.sqrt(spring.stiffness / spring.mass) * ms / 1000).toBeCloseTo(9, 10);
+    }
+    expect(SPRING.snappy).toEqual(criticalSpring(snappy.duration));
+    expect(SPRING.settle.stiffness).toBeLessThan(SPRING.snappy.stiffness);
+  });
+
+  test("distance-based duration is monotone, sub-linear and bounded", async () => {
+    const { distanceDuration } = await import("../motion");
+    expect(distanceDuration(0, 120, 180, 400)).toBe(120);
+    expect(distanceDuration(400, 120, 180, 400)).toBe(180);
+    expect(distanceDuration(4000, 120, 180, 400)).toBe(180);
+    expect(distanceDuration(-400, 120, 180, 400)).toBe(180);
+    expect(distanceDuration(100, 120, 180, 400)).toBe(150);
+    expect(distanceDuration(Number.NaN, 120, 180, 400)).toBe(120);
+    expect(distanceDuration(50, 120, 180, 0)).toBe(120);
+    let previous = 0;
+    for (let d = 0; d <= 500; d += 5) {
+      const ms = distanceDuration(d, 120, 180, 400);
+      expect(ms).toBeGreaterThanOrEqual(previous);
+      expect(ms).toBeLessThanOrEqual(180);
+      previous = ms;
+    }
+  });
+
+  test("tab jumps scale with page distance; one page and swipes keep nav timing", async () => {
+    const { pageDuration } = await import("../motion");
+    expect(pageDuration(0)).toBe(nav.duration);
+    expect(pageDuration(0.4)).toBe(nav.duration);
+    expect(pageDuration(1)).toBe(nav.duration);
+    expect(pageDuration(-1)).toBe(nav.duration);
+    expect(pageDuration(2)).toBe(163);
+    expect(pageDuration(4)).toBe(settle.duration);
+    expect(pageDuration(9)).toBe(settle.duration);
+    expect(navDuration(3, 0)).toBe(pageDuration(3));
+    expect(navDuration(-3, 0)).toBe(pageDuration(3));
+    expect(navDuration(3, 0, true)).toBe(0);
+    // A fast fling toward a far page still finishes early, never later than the page budget.
+    expect(navDuration(3, 100)).toBe(80);
+  });
+
+  test("window morph time follows travel and never exceeds the release budget", async () => {
+    const { morphDuration } = await import("../motion");
+    expect(morphDuration(0, 800)).toBe(fade.duration);
+    expect(morphDuration(400, 800)).toBe(settle.duration);
+    expect(morphDuration(-400, 800)).toBe(settle.duration);
+    expect(morphDuration(100, 800)).toBeGreaterThan(fade.duration);
+    expect(morphDuration(100, 800)).toBeLessThan(settle.duration);
+  });
+
+  test("reduce motion removes spatial motion and keeps the crossfade", async () => {
+    const { REDUCED_MOTION, crossfade, pressScaleFor } = await import("../motion");
+    expect(REDUCED_MOTION).toEqual({ spatial: "jump", opacity: "crossfade" });
+    expect(crossfade.duration).toBe(fade.duration);
+    expect(MOTION_MS.crossfade).toBe(fade.duration);
+    expect(pressScaleFor(PRESS_SCALE.row, true)).toBe(1);
+    expect(pressScaleFor(PRESS_SCALE.row, false)).toBe(PRESS_SCALE.row);
+  });
+
+  test("the five most visible transitions use the shared tokens", () => {
+    const read = (file: string) => readFileSync(join(import.meta.dir, file), "utf8");
+    // 1. Tab pager: page-distance timing comes through navDuration.
+    expect(read("GesturePager.tsx")).toContain("navDuration(distance, velocity, reduced)");
+    // 2. Chat window open morph: distance-based duration, crossfade-only under reduce motion.
+    const chat = read("ChatWindow.tsx");
+    expect(chat).toContain("morphDuration(from.translateY, height)");
+    expect(chat).toContain("useReducedMotion()");
+    expect(chat).toContain("morphFrame(progress.value, from, reduced)");
+    // 3. Press feedback: no squash under reduce motion.
+    expect(read("PressScale.tsx")).toContain("pressScaleFor(scaleTo, useReducedMotion())");
+    // 4. Connection pill and queued stack: shared status crossfade, no literal durations.
+    for (const file of ["ConnectionPill.tsx", "QueuedStack.tsx"]) {
+      const source = read(file);
+      expect(source).toContain("statusIn");
+      expect(source).not.toMatch(/duration\(\d/);
+      expect(source).not.toContain("MOTION_MS.exit)");
+    }
+    // 5. Mic hold pill: every finite animation honors reduce motion.
+    const mic = read("MicButton.tsx");
+    expect(mic).not.toMatch(/withTiming\([^)]*,\s*snappy\)/);
+    expect(mic.match(/spatial\(snappy\)/g)?.length).toBe(4);
+    const enter = read("motion-enter.ts");
+    expect(enter).toContain("FadeIn.duration(MOTION_MS.crossfade)");
+    expect(enter).toContain("ReduceMotion.Never");
+  });
+});

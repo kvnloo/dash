@@ -7,6 +7,7 @@ import Animated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withT
 import { haptic } from "../haptics";
 import { MIC_DEFAULT_KEY, type MicChoice, parseMicChoice } from "../lib/mic-gesture";
 import { snappy } from "../motion";
+import { spatial } from "./motion-enter";
 import { colors, glass } from "../theme";
 
 interface Props {
@@ -43,7 +44,7 @@ export const MicButton = memo(function MicButton({ onDictate, onLive, children, 
   const live = useSharedValue(0);
 
   useEffect(() => { void AsyncStorage.getItem(MIC_DEFAULT_KEY).then(v => setMode(parseMicChoice(v)), () => {}); }, []);
-  useEffect(() => { const v = mode === "live" ? 1 : 0; knob.value = v; live.value = withTiming(v, snappy); }, [knob, live, mode]);
+  useEffect(() => { const v = mode === "live" ? 1 : 0; knob.value = v; live.value = withTiming(v, spatial(snappy)); }, [knob, live, mode]);
 
   const tapNow = useCallback(() => {
     haptic.tap();
@@ -67,7 +68,7 @@ export const MicButton = memo(function MicButton({ onDictate, onLive, children, 
     .onStart(() => {
       startKnob.value = knob.value;
       lastSlot.value = Math.round(knob.value);
-      open.value = withTiming(1, snappy);
+      open.value = withTiming(1, spatial(snappy));
       runOnJS(opened)();
     })
     .onUpdate(e => {
@@ -78,10 +79,10 @@ export const MicButton = memo(function MicButton({ onDictate, onLive, children, 
     })
     .onEnd(() => {
       const slot = Math.round(knob.value);
-      knob.value = withTiming(slot, snappy);
+      knob.value = withTiming(slot, spatial(snappy));
       runOnJS(commit)(slot);
     })
-    .onFinalize(() => { open.value = withTiming(0, snappy); });
+    .onFinalize(() => { open.value = withTiming(0, spatial(snappy)); });
   const tap = Gesture.Tap().maxDuration(HOLD_MS).onEnd((_e, ok) => { if (ok) runOnJS(tapNow)(); });
   const gesture = Gesture.Exclusive(hold, tap);
 

@@ -249,3 +249,15 @@ describe("hostIdentity", () => {
     expect(identityLabel({ ...base, model: "m", provider: "p" })).toContain("model p m, reported by host");
   });
 });
+
+describe("morphFrame", () => {
+  test("travels and scales from the row, and only crossfades under reduce motion", async () => {
+    const { morphFrame } = await import("./chat-window");
+    const from = { translateY: 200, scale: 0.94 };
+    expect(morphFrame(0, from, false)).toEqual({ opacity: 0, transform: [{ translateY: 200 }, { scale: 0.94 }] });
+    expect(morphFrame(1, from, false)).toEqual({ opacity: 1, transform: [{ translateY: 0 }, { scale: 1 }] });
+    expect(morphFrame(0.5, from, false).transform[0]).toEqual({ translateY: 100 });
+    expect(morphFrame(0, from, true)).toEqual({ opacity: 0, transform: [{ translateY: 0 }, { scale: 1 }] });
+    expect(morphFrame(0.5, from, true)).toEqual({ opacity: 0.5, transform: [{ translateY: 0 }, { scale: 1 }] });
+  });
+});

@@ -115,11 +115,12 @@ describe("native connection banner source contracts", () => {
     expect(theme).toMatch(/export const controlMin = 44\b/);
   });
 
-  test("banner has 110ms ease-out and reduced-motion behavior without spring", () => {
-    expect(source).toContain("FadeIn.duration(110)");
-    expect(source).toContain("FadeOut.duration(110)");
-    expect(source).toContain("Easing.out(Easing.cubic)");
-    expect(source).toContain("reduceMotion(ReduceMotion.System)");
+  test("banner crossfades with the shared status tokens (MOTION.md), kept under reduce motion, no spring", () => {
+    const enter = readFileSync(new URL("./motion-enter.ts", import.meta.url), "utf8");
+    expect(source).toContain("statusIn as enter, statusOut as exit");
+    expect(source).not.toMatch(/duration\(\d/);
+    expect(enter).toContain("FadeIn.duration(MOTION_MS.crossfade).easing(Easing.out(Easing.cubic)).reduceMotion(ReduceMotion.Never)");
+    expect(enter).toContain("FadeOut.duration(MOTION_MS.crossfade).easing(Easing.out(Easing.cubic)).reduceMotion(ReduceMotion.Never)");
     expect(source).not.toContain("withSpring");
     expect(source).toContain("numberOfLines={2}");
   });

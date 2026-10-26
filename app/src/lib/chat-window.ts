@@ -103,6 +103,19 @@ export function morphFrom(origin: WindowOrigin | undefined, windowHeight: number
   return { translateY: clamp(delta, -windowHeight / 2, windowHeight / 2), scale: MORPH_SCALE_FROM };
 }
 
+/** One frame of the open/close morph. Reduce motion drops travel and scale and keeps the crossfade. */
+export function morphFrame(progress: number, from: { translateY: number; scale: number }, reduced: boolean) {
+  "worklet";
+  if (reduced) return { opacity: progress, transform: [{ translateY: 0 }, { scale: 1 }] };
+  return {
+    opacity: progress,
+    transform: [
+      { translateY: from.translateY * (1 - progress) },
+      { scale: from.scale + (1 - from.scale) * progress },
+    ],
+  };
+}
+
 export type WindowLayer = "menu" | "tree" | "nav" | "window";
 /** Android Back closes the most transient layer first; the window last. */
 export function backTarget(state: { menuOpen: boolean; treeOpen: boolean; navOpen: boolean }): WindowLayer {
