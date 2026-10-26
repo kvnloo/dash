@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { ConversationPersistence, CACHE_ENTRIES, CACHE_ENTRY_BYTES, uniqueConversationIds, durableConversation, cacheConversation, type ConversationFiles } from "./conversation-persistence";
 import type { Conversation } from "../model";
 
@@ -117,4 +117,78 @@ test("concurrent saves converge to newest snapshot", async () => {
   await store.save([]);
   await store.save([chat("after-empty")]);
   expect(files.durable.has("after-empty.json")).toBe(true);
+});
+
+class Index {
+  value: string | null = null;
+  writes = 0;
+  reads = 0;
+  async read() { this.reads += 1; return this.value; }
+  async write(value: string) { this.writes += 1; this.value = value; }
+  async remove() { this.value = null; }
+}
+
+describe("v3 conversation index", () => {
+  test("startup reads only the index; pending chats are flagged for loading", async () => {
+    const files = new Files(); const index = new Index();
+    const queued = { ...chat("queued"), messages: [...chat("queued").messages, { id: "q", role: "user" as const, text: "later", at: 3, delivery: "queued" as const }] };
+    await new ConversationPersistence(files, index).save([chat("a"), chat("b"), queued]);
+    files.reads = [];
+    const store = new ConversationPersistence(files, index);
+    const loaded = await store.loadIndex();
+    expect(files.reads).toEqual([]);
+    expect(loaded?.chats.map(c => c.id).sort()).toEqual(["a", "b", "queued"]);
+    expect(loaded?.chats.every(c => c.messages.length === 0)).toBe(true);
+    expect(loaded?.pending).toEqual(["queued"]);
+    const stub = loaded?.chats.find(c => c.id === "queued");
+    if (!stub) throw Error("missing stub");
+    const full = await store.loadOne(stub);
+    expect(files.reads).toEqual(["durable/queued.json"]);
+    expect(full.messages.map(m => m.id)).toEqual(["q"]);
+  });
+
+  test("a save writes the index plus only the changed conversation files", async () => {
+    const files = new Files(); const index = new Index();
+    const store = new ConversationPersistence(files, index);
+    const a = chat("a"), b = chat("b");
+    await store.save([a, b]);
+    expect(index.writes).toBe(1);
+    files.writes = [];
+    await store.save([a, b]);
+    expect(files.writes).toEqual([]);
+    expect(index.writes).toBe(1);
+    await store.save([{ ...a, title: "renamed" }, b]);
+    expect(files.writes).toEqual(["durable/a.json"]);
+    expect(index.writes).toBe(2);
+    expect(index.value).toContain("renamed");
+    await store.save([b]);
+    expect(index.value).not.toContain("renamed");
+    expect(files.durable.has("a.json")).toBe(false);
+  });
+
+  test("a changed stub of a local chat never overwrites its transcript", async () => {
+    const files = new Files(); const index = new Index();
+    const local = { ...chat("local"), sessionId: undefined };
+    await new ConversationPersistence(files, index).save([local]);
+    const store = new ConversationPersistence(files, index);
+    const stub = (await store.loadIndex())?.chats[0];
+    if (!stub) throw Error("missing stub");
+    expect(stub.preview).toBe("host answer");
+    await store.save([{ ...stub, title: "renamed" }]);
+    const disk = JSON.parse(files.durable.get("local.json") ?? "null");
+    expect(disk.title).toBe("renamed");
+    expect(disk.messages.map((m: { id: string }) => m.id)).toEqual(["u", "a"]);
+  });
+
+  test("without an index the v2 layout loads and the next save writes the index", async () => {
+    const files = new Files();
+    await new ConversationPersistence(files).save([chat("a")]);
+    const index = new Index();
+    const store = new ConversationPersistence(files, index);
+    expect(await store.loadIndex()).toBeNull();
+    const chats = await store.load();
+    expect(chats).toHaveLength(1);
+    await store.save(chats);
+    expect(index.value).toContain("\"id\":\"a\"");
+  });
 });

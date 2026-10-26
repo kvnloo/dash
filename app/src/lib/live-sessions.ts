@@ -1,4 +1,4 @@
-import type { AgentInfo, HistoryMessage, HostInfo } from "../../../shared/protocol";
+import type { AgentInfo, ChatSummary, HistoryMessage, HostInfo } from "../../../shared/protocol";
 import { isCatalogHarness } from "../../../shared/catalog";
 import type { Conversation, Message } from "../model";
 
@@ -13,10 +13,13 @@ export function liveSessionTitle(agent: Pick<AgentInfo, "name" | "cwd"> & { kind
 }
 export function conversationPreview(c: Conversation): string {
   const last = c.messages.at(-1);
-  if (!last) return c.cwd || (c.sessionId ? c.title : "Empty chat");
+  if (!last) return c.preview || c.cwd || (c.sessionId ? c.title : "Empty chat");
   if (last.role === "assistant") return last.status || last.text.replace(/\s+/g, " ").trim() || "Thinking…";
   return last.text.replace(/\s+/g, " ").trim();
 }
+/** Bucket key for harness+session lookups. Profile and host are compared inside a bucket. */
+function sessionBucket(harness: string, sessionId: string): string { return `${harness}\u0000${sessionId}`; }
+
 export function findLiveConversation(conversations: Conversation[], agent: { harness: string; sessionId?: string; targetHostId?: string; profileId?: string }): Conversation | undefined {
   const sessionId = agent.sessionId?.trim();
   if (!sessionId) return undefined;
@@ -24,22 +27,59 @@ export function findLiveConversation(conversations: Conversation[], agent: { har
   if (agent.targetHostId) return candidates.find(c => c.targetHostId === agent.targetHostId) ?? candidates.find(c => !c.targetHostId);
   return candidates.find(c => !c.targetHostId) ?? (candidates.length === 1 ? candidates[0] : undefined);
 }
+
+/** One keyed index over conversations for many lookups: O(C) to build, O(bucket) per lookup. */
+export function liveConversationIndex(conversations: Conversation[]): (agent: { harness: string; sessionId?: string; targetHostId?: string; profileId?: string }) => Conversation | undefined {
+  const buckets = new Map<string, Conversation[]>();
+  for (const c of conversations) {
+    if (!c.sessionId) continue;
+    const key = sessionBucket(c.harness, c.sessionId);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(c); else buckets.set(key, [c]);
+  }
+  return agent => {
+    const sessionId = agent.sessionId?.trim();
+    if (!sessionId) return undefined;
+    return findLiveConversation(buckets.get(sessionBucket(agent.harness, sessionId)) ?? [], { ...agent, sessionId });
+  };
+}
+
 function sessionAgents(hosts: HostInfo[]) {
   return hosts.flatMap(host => !host.self || !host.online ? [] : host.agents.filter(agent => agent.status !== "offline" && isCatalogHarness(agent.kind) && agent.sessionId).map(agent => ({ host, agent })));
 }
-/** Successful roster snapshots reconcile, never delete. Missing snapshots do not enter here. */
-export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo[], now: number): Conversation[] {
+
+export interface MergeLiveOptions {
+  /**
+   * `all` (legacy bridges): every reported session becomes a conversation.
+   * `live` (chats.v1): only running or host-held sessions do; the paged list shows the rest.
+   */
+  adopt?: "all" | "live";
+}
+
+/** Successful roster snapshots reconcile, never delete. Missing snapshots do not enter here. O(C + R). */
+export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo[], now: number, options: MergeLiveOptions = {}): Conversation[] {
   const reported = sessionAgents(hosts);
+  const bySession = new Map<string, { host: HostInfo; agent: AgentInfo }[]>();
+  for (const entry of reported) {
+    if (!entry.agent.sessionId) continue;
+    const key = sessionBucket(entry.agent.kind, entry.agent.sessionId);
+    const bucket = bySession.get(key);
+    if (bucket) bucket.push(entry); else bySession.set(key, [entry]);
+  }
   let changed = false;
+  const owned = new Set<string>();
   const rows = existing.map(c => {
     if (!c.sessionId) return c;
-    const matches = reported.filter(({ host, agent }) => agent.kind === c.harness && agent.sessionId === c.sessionId && (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
+    const bucket = bySession.get(sessionBucket(c.harness, c.sessionId)) ?? [];
+    const matches = bucket.filter(({ host, agent }) => (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
     const match = matches.length === 1 ? matches[0] : undefined;
     if (!match) {
+      owned.add(`${c.harness}\u0000${c.sessionId}\u0000${c.targetHostId ?? ""}\u0000${c.profileId ?? ""}`);
       if (c.stale && c.openIn === undefined) return c;
       changed = true; return { ...c, stale: true, openIn: undefined };
     }
     const { host, agent } = match;
+    owned.add(`${c.harness}\u0000${c.sessionId}\u0000${host.id}\u0000${agent.id}`);
     const title = c.harness === "hermes" ? agent.name : c.title;
     const updatedAt = agent.lastActivityAt ?? c.updatedAt;
     if (c.stale === false && title === c.title && updatedAt === c.updatedAt && c.messageCount === agent.messageCount && c.targetHostId === host.id && c.profileId === agent.id && c.openIn === agent.openIn) return c;
@@ -49,13 +89,28 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
   const adopted: Conversation[] = [];
   for (const { host, agent } of reported) {
     const sessionId = agent.sessionId;
-    if (!sessionId || rows.some(c => c.harness === agent.kind && c.sessionId === sessionId && c.targetHostId === host.id && c.profileId === agent.id)) continue;
+    if (!sessionId || owned.has(`${agent.kind}\u0000${sessionId}\u0000${host.id}\u0000${agent.id}`)) continue;
+    if (options.adopt === "live" && agent.status !== "running" && !agent.openIn) continue;
     const baseId = liveConversationId(agent.kind, sessionId);
     adopted.push({ id: agent.kind === "hermes" ? `${baseId}:${host.id}:${agent.profileId ?? agent.id}` : baseId,
       harness: agent.kind, title: liveSessionTitle(agent), createdAt: agent.lastActivityAt ?? now, updatedAt: agent.lastActivityAt ?? now,
       sessionId, cwd: agent.cwd, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, messageCount: agent.messageCount, stale: false, ...(agent.openIn ? { openIn: agent.openIn } : {}), messages: [] });
   }
   return adopted.length ? [...adopted, ...rows] : changed ? rows : existing;
+}
+
+/** The conversation a tapped chat summary becomes. Ids match roster adoption so both paths meet. */
+export function adoptSummary(summary: ChatSummary, now: number): Conversation {
+  const baseId = liveConversationId(summary.kind, summary.sessionId);
+  return {
+    id: summary.kind === "hermes" ? `${baseId}:${summary.hostId}:${summary.profileId ?? summary.agentId ?? "default"}` : baseId,
+    harness: summary.kind, title: summary.title || liveSessionTitle({ name: summary.kind, cwd: summary.cwd, kind: summary.kind }),
+    createdAt: summary.startedAt, updatedAt: summary.lastActivityAt, sessionId: summary.sessionId,
+    ...(summary.cwd ? { cwd: summary.cwd } : {}), targetHostId: summary.hostId,
+    ...(summary.agentId ? { profileId: summary.agentId } : {}), ...(summary.profileId ? { profileName: summary.profileId } : {}),
+    messageCount: summary.messageCount, stale: false, ...(summary.openIn ? { openIn: summary.openIn } : {}),
+    openedAt: now, ...(summary.chatable ? {} : { viewOnly: true }), messages: [],
+  };
 }
 export function shouldRequestHistory(c: Conversation | undefined): boolean {
   if (!c?.sessionId?.trim() || !isCatalogHarness(c.harness) || c.stale) return false;
@@ -69,6 +124,8 @@ export function hydrateLiveConversation(conversation: Conversation, history: His
   if (!messages.length) return conversation;
   return { ...conversation, messages, updatedAt: Math.max(messages.at(-1)?.at ?? 0, conversation.updatedAt) };
 }
-function historyToMessages(history: HistoryMessage[], conversationId: string): Message[] {
-  return history.map(h => h.role === "user" ? { id: h.id, role: "user", text: h.text, at: h.at } : { id: h.id, role: "assistant", text: h.text, at: h.at, state: "done", parts: h.parts, turnId: `history:${conversationId}:${h.id}`, seq: 0 });
+export function historyToMessages(history: HistoryMessage[], conversationId: string): Message[] {
+  return history.map(h => h.role === "user"
+    ? { id: h.id, role: "user", text: h.text, at: h.at, ...(h.truncated ? { truncated: true } : {}) }
+    : { id: h.id, role: "assistant", text: h.text, at: h.at, state: "done", parts: h.parts, ...(h.truncated ? { truncated: true } : {}), turnId: `history:${conversationId}:${h.id}`, seq: 0 });
 }

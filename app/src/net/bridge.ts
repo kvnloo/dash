@@ -1,17 +1,22 @@
 import { applyGateMessage } from "../store/approvals";
 import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
-import { parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
+import { CHATS_FEATURE, parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
 import type { LiveIntent } from "../../../shared/live";
 import { isDebugMode } from "../debug/mode";
 import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf } from "../store/live";
-import { fetchRoster } from "../lib/roster";
+import { fetchRosterIfChanged } from "../lib/roster";
 import { executionToken, socketUrl } from "../lib/bridge-auth";
 import { shouldRequestHistory } from "../lib/live-sessions";
 import { headerSocket } from "../lib/native-socket";
 import type { Settings } from "../model";
+import { configureChatIndex, setChatsFeatures } from "../store/chat-index-store";
+import { configureHistoryPages, setHistoryCursor } from "../store/history-pages";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   applyDeltas,
   applyLiveHistory,
+  applyLiveHistoryTo,
+  migrateArchive,
   applyTranscript,
   applyTurnEvent,
   flushPendingSends,
@@ -25,6 +30,8 @@ import {
 } from "../store/app";
 
 const BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
+/** Newest history page size when the bridge pages history (chats.v1). */
+const HISTORY_HEAD = 50;
 const DELTA_FLUSH_MS = 32;
 const CONNECT_TIMEOUT_MS = 8000;
 
@@ -43,6 +50,14 @@ class Bridge {
   private pending = new Map<string, { text: string; seq: number }>();
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private appState: AppStateStatus = RNAppState.currentState;
+  private rosterEtag: string | undefined;
+  /** chats.v1 bridge: history requests carry limit + requestId, replies carry `before`. */
+  private chats = false;
+  private historyRequests = new Map<string, string>();
+  private historySeq = 0;
+  /** Hermes roster messageCount last requested per conversation: re-request only when it moves. */
+  private hermesCounts = new Map<string, number | undefined>();
+  private migration: "idle" | "scheduled" = "idle";
 
   constructor() {
     RNAppState.addEventListener("change", (next) => {
@@ -180,7 +195,11 @@ class Bridge {
       case "gate_status":
       case "gate_error": applyGateMessage(message); return;
       case "hello": {
+        this.chats = message.features?.includes(CHATS_FEATURE) === true;
+        this.rosterEtag = undefined;
+        setChatsFeatures(message.features);
         setConnection({
+          features: message.features ?? [],
           status: "online",
           host: message.host,
           cwd: message.cwd,
@@ -195,6 +214,7 @@ class Bridge {
         if (turns.length) this.send({ type: "attach", turns });
         this.send({ type: "gate_list" });
         flushPendingSends(sendChat);
+        this.scheduleMigration();
         return;
       }
       case "lost":
@@ -222,9 +242,18 @@ class Bridge {
         applyTurnEvent(message);
         if (message.type === "done" || message.type === "error") flushPendingSends(sendChat);
         return;
-      case "history":
+      case "history": {
+        const conversationId = message.requestId ? this.historyRequests.get(message.requestId) : undefined;
+        if (message.requestId) this.historyRequests.delete(message.requestId);
+        if (conversationId) {
+          applyLiveHistoryTo(conversationId, message.messages);
+          // An old bridge never sends `before`: older pages stay unavailable.
+          setHistoryCursor(conversationId, message.before);
+          return;
+        }
         applyLiveHistory(message.harness, message.sessionId, message.messages, message.hostId, message.profileId);
         return;
+      }
       case "live_opened":
       case "live_event":
       case "live_receipts":
@@ -241,13 +270,44 @@ class Bridge {
   private async refreshRoster(): Promise<void> {
     const settings = this.settings;
     if (!settings || !this.isOpen()) return;
-    const hosts = await fetchRoster(settings);
-    if (!hosts || this.settings !== settings || !this.isOpen()) return;
-    setConnection({ hosts });
-    const current = store.get().conversations.find(c => c.id === store.get().activeId);
-    if (current?.sessionId && shouldRequestHistory(current)) {
-      this.send({ type: "history", harness: current.harness, sessionId: current.sessionId, hostId: current.targetHostId, profileId: current.profileId });
+    const fetched = await fetchRosterIfChanged(settings, this.rosterEtag);
+    if (!fetched || this.settings !== settings || !this.isOpen()) return;
+    // 304: nothing re-renders and nothing reconciles.
+    if (fetched !== "unchanged") {
+      this.rosterEtag = fetched.etag;
+      setConnection({ hosts: fetched.hosts });
     }
+    const current = store.get().conversations.find(c => c.id === store.get().activeId);
+    if (!current?.sessionId || !shouldRequestHistory(current)) return;
+    // Hermes: re-fetch only when the host's message count for this session moved.
+    if (current.harness === "hermes" && current.messages.length > 0 && this.hermesCounts.has(current.id) && this.hermesCounts.get(current.id) === current.messageCount) return;
+    this.requestHistory({ conversationId: current.id, harness: current.harness, sessionId: current.sessionId, hostId: current.targetHostId, profileId: current.profileId });
+  }
+
+  /** One ws history request. chats.v1 pages it and matches the reply by requestId. */
+  requestHistory(input: { conversationId: string; harness: string; sessionId: string; cwd?: string; hostId?: string; profileId?: string }): void {
+    const conversation = store.get().conversations.find(c => c.id === input.conversationId);
+    if (input.harness === "hermes") this.hermesCounts.set(input.conversationId, conversation?.messageCount);
+    if (!this.chats) {
+      this.send({ type: "history", harness: input.harness, sessionId: input.sessionId, cwd: input.cwd, hostId: input.hostId, profileId: input.profileId });
+      return;
+    }
+    const requestId = `h${(++this.historySeq).toString(36)}`;
+    this.historyRequests.set(requestId, input.conversationId);
+    if (this.historyRequests.size > 64) {
+      const oldest = this.historyRequests.keys().next();
+      if (!oldest.done) this.historyRequests.delete(oldest.value);
+    }
+    this.send({ type: "history", harness: input.harness, sessionId: input.sessionId, cwd: input.cwd, hostId: input.hostId, profileId: input.profileId, limit: HISTORY_HEAD, requestId });
+  }
+
+  /** chats.v1 only, once, after first paint: prune adopted archive rows the paged list replaces. */
+  private scheduleMigration(): void {
+    if (!this.chats || this.migration !== "idle") return;
+    this.migration = "scheduled";
+    void import("react-native").then(({ InteractionManager }) => InteractionManager.runAfterInteractions(() => {
+      void migrateArchive({ legacy: false, pause: () => new Promise(resolve => setTimeout(resolve, 0)) }).catch(() => undefined);
+    }));
   }
 
   private flushDeltas(): void {
@@ -300,15 +360,11 @@ function closeReason(code: number): string {
 export const bridge = new Bridge();
 
 setLiveHistoryRequester((input) => {
-  bridge.send({
-    type: "history",
-    harness: input.harness,
-    sessionId: input.sessionId,
-    cwd: input.cwd,
-    hostId: input.hostId,
-    profileId: input.profileId,
-  });
+  bridge.requestHistory(input);
 });
+
+configureChatIndex({ settings: () => store.get().settings, storage: AsyncStorage });
+configureHistoryPages({ settings: () => store.get().settings });
 
 function targetForTurn(turnId: string): { hostId?: string; profileId?: string } {
   const where = locateTurn(turnId);

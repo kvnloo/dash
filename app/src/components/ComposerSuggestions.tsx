@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { parseSuggestionInventory, type SuggestionInventory } from "../../../shared/suggestions";
+import { conversationEntries } from "../lib/chat-index";
 import { composerSuggestions, composerTrigger, insertSuggestion } from "../lib/composer-suggestions";
 import { store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
@@ -13,13 +14,15 @@ export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, 
 }) {
   const settings = store.use(s => s.settings);
   const connection = store.use(s => s.connection);
-  const conversations = store.use(s => s.conversations);
   const trigger = composerTrigger(text, cursor);
+  const active = trigger !== null;
+  // Only while the panel is open, and through the light index (never transcripts).
+  const conversations = store.use(s => (active ? s.conversations : undefined));
+  const entries = useMemo(() => (conversations ? conversationEntries(conversations) : []), [conversations]);
   const harnessId = harness ?? settings?.harness ?? connection.harnesses[0]?.id ?? "hermes";
   const directory = cwd ?? settings?.cwd ?? connection.cwd;
   const address = settings?.address;
   const token = settings?.token;
-  const active = trigger !== null;
   const [state, setState] = useState<{ inventory: SuggestionInventory; loading: boolean; error?: string }>({ inventory: EMPTY, loading: false });
   useEffect(() => {
     if (!active) return;
@@ -37,8 +40,14 @@ export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, 
     const timeout = setTimeout(() => setState(previous => previous.loading ? { inventory: EMPTY, loading: false, error: "Suggestions timed out. Check the paired bridge and try again." } : previous), 20000);
     return () => { controller.abort(); clearTimeout(timer); clearTimeout(timeout); };
   }, [active, harnessId, directory, address, token]);
+  const triggerKey = trigger ? `${trigger.prefix}|${trigger.start}|${trigger.end}|${trigger.query}` : "";
+  const stableTrigger = useMemo(() => trigger, [triggerKey]);
+  const deferredTrigger = useDeferredValue(stableTrigger);
+  const rows = useMemo(
+    () => (deferredTrigger ? composerSuggestions(deferredTrigger, state.inventory, entries, connection.hosts) : []),
+    [deferredTrigger, state.inventory, entries, connection.hosts],
+  );
   if (!trigger) return null;
-  const rows = composerSuggestions(trigger, state.inventory, conversations, connection.hosts);
   const warning = state.error ?? (trigger.prefix === "/" ? state.inventory.commandError : state.inventory.fileError);
   return <View style={styles.panel} accessibilityLabel="Composer suggestions">
     <Text style={styles.heading}>{trigger.prefix === "/" ? `${harnessId} commands` : "Mention a file, session, bot or agent"}</Text>

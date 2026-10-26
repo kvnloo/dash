@@ -3,7 +3,7 @@ import type { OrchestraProject } from "../catalog/orchestra";
 import type { AgentTarget } from "../mock/agents";
 import type { FileResource, NamedResource } from "../mock/resources";
 import type { Conversation } from "../model";
-import { conversationPreview, findLiveConversation, mergeLiveConversations } from "./live-sessions";
+import { conversationPreview, liveConversationIndex, mergeLiveConversations } from "./live-sessions";
 import { projectsFromHosts } from "./project-data";
 import { botSummary, botTarget } from "./bots";
 
@@ -151,6 +151,8 @@ function matches(text: string, haystack: string): boolean {
 export { conversationPreview } from "./live-sessions";
 
 const DISCOVER_LIMITS = { conversation: 8, bot: 6, product: 4 } as const;
+/** Text queries never build more rows than a screen of results can use. */
+export const TEXT_RESULT_LIMIT = 50;
 
 export function runGlobalSearch(params: {
   query: string;
@@ -212,8 +214,9 @@ export function runGlobalSearch(params: {
 
   if (parsed.mode === "slash" && parsed.scope === "live") {
     const listed = mergeLiveConversations([], (params.hosts ?? []).filter((host) => host.online), Date.now());
+    const findLive = liveConversationIndex(params.conversations);
     for (const live of listed) {
-      const conversation = findLiveConversation(params.conversations, live) ?? live;
+      const conversation = findLive(live) ?? live;
       const harnessName = params.harnesses.find((h) => h.id === conversation.harness)?.name ?? conversation.harness;
       const preview = conversationPreview(conversation);
       const hay = [conversation.title, harnessName, preview, conversation.harness, conversation.sessionId ?? "", conversation.cwd ?? ""].join(" ");
@@ -249,5 +252,5 @@ export function runGlobalSearch(params: {
     results.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
   }
 
-  return results;
+  return parsed.text && results.length > TEXT_RESULT_LIMIT ? results.slice(0, TEXT_RESULT_LIMIT) : results;
 }

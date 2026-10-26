@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ConversationPersistence, hasHostHistory, uniqueConversationIds } from "./conversation-persistence";
-import { conversationFiles } from "./conversation-files";
+import { conversationFiles, conversationIndex } from "./conversation-files";
 import { hostDisplayName } from "../../../shared/host-display";
 import { appendReplyPart, partsFor, replyParts } from "./text";
 import type { DetailMode } from "../lib/reply-details";
-import type { ChatAttachment, HistoryMessage, TurnEvent } from "../../../shared/protocol";
+import { CHATS_FEATURE, type ChatAttachment, type ChatSummary, type HistoryMessage, type TurnEvent } from "../../../shared/protocol";
 import {
   newId,
   parseConversation,
@@ -16,7 +16,9 @@ import {
   type Message,
   type Settings,
 } from "../model";
-import { hydrateLiveConversation, mergeLiveConversations, shouldRequestHistory } from "../lib/live-sessions";
+import { adoptSummary, hydrateLiveConversation, mergeLiveConversations, shouldRequestHistory } from "../lib/live-sessions";
+import { conversationKey } from "../lib/chat-index";
+import { pruneArchive } from "./prune-archive";
 import { createStore } from "./createStore";
 import { dequeue, enqueue, notifyTurnSettled } from "./queue";
 import { nextPendingSend, parkMessage } from "./offline-send";
@@ -54,7 +56,7 @@ export const store = createStore<AppState>({
 // ---- persistence -----------------------------------------------------------
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
-const persistence = new ConversationPersistence(conversationFiles);
+const persistence = new ConversationPersistence(conversationFiles, conversationIndex);
 let lastActiveId: string | null | undefined;
 
 function persistenceFailure(): void {
@@ -65,7 +67,8 @@ function scheduleSave(): void {
   saveTimer ??= setTimeout(() => {
     saveTimer = undefined;
     const { conversations, activeId } = store.get();
-    const snapshots = conversations.map(chat => !hasHostHistory(chat) && chat.messages.some(message => message.role === "assistant" && message.state === "streaming")
+    // View-only chats are transient: they are read from the bridge and never written to the phone.
+    const snapshots = conversations.filter(chat => !chat.viewOnly).map(chat => !hasHostHistory(chat) && chat.messages.some(message => message.role === "assistant" && message.state === "streaming")
       ? { ...chat, messages: chat.messages.map(message => message.role === "assistant" && message.state === "streaming"
         ? { ...message, parts: partsFor(message.turnId).length ? partsFor(message.turnId) : message.parts, text: replyText.get(message.turnId) || message.text, seq: Math.max(message.seq, liveSequences.get(message.turnId) ?? 0) } : message) }
       : chat);
@@ -83,43 +86,64 @@ export async function hydrate(): Promise<void> {
     AsyncStorage.getItem(KEYS.activeId).catch(() => null),
   ]);
   const settings = parseSettings(safeJson(settingsText));
+  const activeId = activeIdText || null;
   let conversations: Conversation[] = [];
+  let indexed = false;
   try {
-    conversations = await persistence.load();
-    const migrated = await AsyncStorage.getItem("dash.conversations.migrated.v2");
-    const recovered = migrated || await conversationFiles.read("durable", ".migration-complete.json");
-    if (!recovered) {
-      // Leave an unreadable legacy row untouched. The host can repopulate its cache.
-      const rawLegacy = await AsyncStorage.getItem(KEYS.conversations);
-      const legacy = safeJson(rawLegacy);
-      if (rawLegacy && !Array.isArray(legacy)) throw new Error("Invalid legacy conversations");
-      if (Array.isArray(legacy)) {
-        const existing = new Set(conversations.map(chat => chat.id));
-        const parsed = legacy.flatMap(raw => { const chat = parseConversation(raw); return chat ? [chat] : []; });
-        for (const chat of uniqueConversationIds(parsed)) {
-          if (!existing.has(chat.id)) { conversations.push(chat); existing.add(chat.id); }
-        }
-        await persistence.save(conversations);
+    // Fast path: one index key with light entries. Transcripts load on demand, except the
+    // active chat and chats with unsent work.
+    const index = await persistence.loadIndex();
+    if (index) {
+      indexed = true;
+      conversations = index.chats;
+      const needed = new Set(index.pending);
+      if (activeId) needed.add(activeId);
+      for (const id of needed) {
+        const stub = conversations.find(chat => chat.id === id);
+        if (!stub) continue;
+        const loaded = await persistence.loadOne(stub);
+        conversations = conversations.map(chat => chat.id === id ? loaded : chat);
+        persistence.markLoaded(id);
       }
-      await conversationFiles.write("durable", ".migration-complete.json", "true");
-    }
-    if (!migrated) {
-      await AsyncStorage.removeItem(KEYS.conversations);
-      await AsyncStorage.setItem("dash.conversations.migrated.v2", "true");
+    } else {
+      conversations = await persistence.load();
+      const migrated = await AsyncStorage.getItem("dash.conversations.migrated.v2");
+      const recovered = migrated || await conversationFiles.read("durable", ".migration-complete.json");
+      if (!recovered) {
+        // Leave an unreadable legacy row untouched. The host can repopulate its cache.
+        const rawLegacy = await AsyncStorage.getItem(KEYS.conversations);
+        const legacy = safeJson(rawLegacy);
+        if (rawLegacy && !Array.isArray(legacy)) throw new Error("Invalid legacy conversations");
+        if (Array.isArray(legacy)) {
+          const existing = new Set(conversations.map(chat => chat.id));
+          const parsed = legacy.flatMap(raw => { const chat = parseConversation(raw); return chat ? [chat] : []; });
+          for (const chat of uniqueConversationIds(parsed)) {
+            if (!existing.has(chat.id)) { conversations.push(chat); existing.add(chat.id); }
+          }
+          await persistence.save(conversations);
+        }
+        await conversationFiles.write("durable", ".migration-complete.json", "true");
+      }
+      if (!migrated) {
+        await AsyncStorage.removeItem(KEYS.conversations);
+        await AsyncStorage.setItem("dash.conversations.migrated.v2", "true");
+      }
     }
   } catch { persistenceFailure(); }
-  const activeId = activeIdText || null;
   const active = conversations.find(chat => chat.id === activeId);
   if (active) {
     const cached = await persistence.cached(active);
     conversations = conversations.map(chat => chat.id === cached.id ? cached : chat);
   }
+  // Only loaded transcripts (active, pending) can hold a reply that was streaming at exit.
   for (const chat of conversations) for (const message of chat.messages) {
     if (message.role === "assistant" && message.state === "streaming") replyText.set(message.turnId, message.text);
   }
   lastActiveId = activeId;
   store.set(s => ({ ...s, hydrated: true, settings, conversations,
     activeId: conversations.some(chat => chat.id === activeId) ? activeId : null }));
+  // First run on the v2 layout: the next save writes the v3 index.
+  if (!indexed) scheduleSave();
 }
 
 function safeJson(text: string | null | undefined): unknown {
@@ -138,14 +162,37 @@ export function saveSettings(settings: Settings): void {
   void AsyncStorage.setItem(KEYS.settings, JSON.stringify(settings));
 }
 
+/** Body hash of the hosts the store holds, so an unchanged roster keeps its reference. */
+let hostsBody: { hosts: Connection["hosts"]; body: string } | undefined;
+
+export function chatsEnabled(connection: Pick<Connection, "features">): boolean {
+  return connection.features?.includes(CHATS_FEATURE) === true;
+}
+
 export function setConnection(patch: Partial<Connection>): void {
+  let conversationsChanged = false;
   store.set((s) => {
-    const connection = { ...s.connection, ...patch, hosts: patch.hosts?.map(host => ({ ...host, name: hostDisplayName(host) })) ?? s.connection.hosts };
-    if (patch.hosts === undefined) return { ...s, connection };
-    const conversations = mergeLiveConversations(s.conversations, connection.hosts, Date.now());
-    return conversations === s.conversations ? { ...s, connection } : { ...s, connection, conversations };
+    let hosts = s.connection.hosts;
+    if (patch.hosts !== undefined) {
+      const named = patch.hosts.map(host => ({ ...host, name: hostDisplayName(host) }));
+      const body = JSON.stringify(named);
+      const known = hostsBody?.hosts === s.connection.hosts ? hostsBody.body : JSON.stringify(s.connection.hosts);
+      hosts = body === known ? s.connection.hosts : named;
+      hostsBody = { hosts, body };
+    }
+    const sameFeatures = patch.features === undefined || (patch.features.length === s.connection.features?.length && patch.features.every((f, i) => s.connection.features?.[i] === f));
+    const connection = { ...s.connection, ...patch, hosts, features: sameFeatures ? s.connection.features : patch.features };
+    const was = s.connection;
+    const unchanged = hosts === was.hosts && sameFeatures && connection.status === was.status && connection.host === was.host &&
+      connection.cwd === was.cwd && connection.harnesses === was.harnesses && connection.error === was.error;
+    if (patch.hosts === undefined) return unchanged ? s : { ...s, connection };
+    // chats.v1: only running or host-held sessions become conversations; the paged list has the rest.
+    const conversations = mergeLiveConversations(s.conversations, connection.hosts, Date.now(), { adopt: chatsEnabled(connection) ? "live" : "all" });
+    conversationsChanged = conversations !== s.conversations;
+    if (!conversationsChanged) return unchanged ? s : { ...s, connection };
+    return { ...s, connection, conversations };
   });
-  if (patch.hosts !== undefined) scheduleSave();
+  if (conversationsChanged) scheduleSave();
 }
 
 export async function forgetEverything(): Promise<void> {
@@ -159,7 +206,9 @@ export async function forgetEverything(): Promise<void> {
   }
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = undefined; }
   await persistence.clear();
-  await AsyncStorage.multiRemove([KEYS.settings, KEYS.conversations, KEYS.activeId, "dash.conversations.migrated.v2"]);
+  await AsyncStorage.multiRemove([KEYS.settings, KEYS.conversations, KEYS.activeId, "dash.conversations.migrated.v2", "dash.chats.migrated.v3", "dash.chats.head.v1"]);
+  const { resetChatIndex } = await import("./chat-index-store");
+  resetChatIndex();
   lastActiveId = undefined;
   store.set((s) => ({
     ...s,
@@ -172,7 +221,7 @@ export async function forgetEverything(): Promise<void> {
 
 // ---- conversations ---------------------------------------------------------
 
-type LiveHistoryRequest = (input: { harness: string; sessionId: string; cwd?: string; hostId?: string; profileId?: string }) => void;
+type LiveHistoryRequest = (input: { conversationId: string; harness: string; sessionId: string; cwd?: string; hostId?: string; profileId?: string }) => void;
 let requestLiveHistory: LiveHistoryRequest | undefined;
 
 export function setLiveHistoryRequester(fn: LiveHistoryRequest | undefined): void {
@@ -198,22 +247,111 @@ export function applyLiveHistory(harness: string, sessionId: string, messages: H
   updateConversation(conv.id, (c) => hydrateLiveConversation(c, messages));
 }
 
+/** A ws history reply matched to its request: no harness/session guessing. */
+export function applyLiveHistoryTo(conversationId: string, messages: HistoryMessage[]): void {
+  updateConversation(conversationId, c => hydrateLiveConversation(c, messages));
+}
+/** The first /chats/history page of a chat the websocket cannot serve. */
+export const applyHistoryPage = applyLiveHistoryTo;
+
+/** Full text for a message the host history cut. */
+export function replaceMessageText(conversationId: string, messageId: string, text: string): void {
+  updateConversation(conversationId, c => c.messages.some(m => m.id === messageId)
+    ? { ...c, messages: c.messages.map(m => m.id === messageId ? { ...m, text, truncated: undefined } : m) } : c);
+}
+
 export function setDetailMode(id: string, detailMode: DetailMode): void { updateConversation(id, c => ({ ...c, detailMode })); }
 
 export function setActive(id: string | null): void {
-  store.set((s) => ({ ...s, activeId: id }));
+  store.set((s) => {
+    const previous = s.activeId && s.activeId !== id ? s.conversations.find(c => c.id === s.activeId) : undefined;
+    // Leaving a view-only chat drops it: it was never the phone's to keep.
+    const conversations = previous?.viewOnly ? s.conversations.filter(c => c !== previous) : s.conversations;
+    return s.activeId === id && conversations === s.conversations ? s : { ...s, activeId: id, conversations };
+  });
   scheduleSave();
   if (!id) return;
   const current = store.get().conversations.find((c) => c.id === id);
-  if (current && current.messages.length === 0 && current.sessionId) {
-    void persistence.cached(current).then(cached => {
-      if (cached === current || store.get().activeId !== id) return;
-      store.set(state => ({ ...state, conversations: state.conversations.map(chat => chat === current ? cached : chat) }));
-    }).catch(persistenceFailure);
+  if (current && (!persistence.isLoaded(current.id) || (current.messages.length === 0 && current.sessionId))) {
+    void loadTranscript(current).catch(persistenceFailure);
   }
   if (!current || !shouldRequestHistory(current) || !current.sessionId) return;
   if (conversationTargetError(current)) return;
-  requestLiveHistory?.({ harness: current.harness, sessionId: current.sessionId, cwd: current.cwd, hostId: current.targetHostId, profileId: current.profileId });
+  requestLiveHistory?.({ conversationId: current.id, harness: current.harness, sessionId: current.sessionId, cwd: current.cwd, hostId: current.targetHostId, profileId: current.profileId });
+}
+
+/** Read a conversation's durable transcript (if the index hydrated it as a stub) and its cache. */
+async function loadTranscript(current: Conversation): Promise<void> {
+  const loaded = await persistence.loadOne(current);
+  const full = loaded.messages.length === 0 && loaded.sessionId ? await persistence.cached(loaded) : loaded;
+  store.set(state => ({ ...state, conversations: state.conversations.map(chat => {
+    if (chat.id !== current.id) return chat;
+    if (chat === current) return full;
+    const ids = new Set(chat.messages.map(message => message.id));
+    const older = full.messages.filter(message => !ids.has(message.id));
+    return older.length ? { ...chat, messages: [...older, ...chat.messages] } : chat;
+  }) }));
+  persistence.markLoaded(current.id);
+  for (const message of full.messages) {
+    if (message.role === "assistant" && message.state === "streaming" && !replyText.get(message.turnId)) replyText.set(message.turnId, message.text);
+  }
+}
+
+/**
+ * Open a chat from the paged list or search. Only opened chats become conversations: a chatable
+ * summary is adopted and persisted, a view-only one opens transiently.
+ */
+export function openChat(summary: ChatSummary): Conversation {
+  const { conversations } = store.get();
+  const existing = conversations.find(c => conversationKey(c) === summary.key);
+  if (existing) {
+    setActive(existing.id);
+    return existing;
+  }
+  let conversation = adoptSummary(summary, Date.now());
+  if (conversations.some(c => c.id === conversation.id)) conversation = { ...conversation, id: `${conversation.id}:${summary.hostId}` };
+  store.set(s => ({ ...s, conversations: [conversation, ...s.conversations] }));
+  persistence.markLoaded(conversation.id);
+  setActive(conversation.id);
+  return conversation;
+}
+
+/** Open a conversation a search listed (e.g. a /live row) that the store may not hold yet. */
+export function openListedConversation(conversation: Conversation): Conversation {
+  const existing = store.get().conversations.find(c => c.id === conversation.id);
+  if (existing) { setActive(existing.id); return existing; }
+  const adopted: Conversation = { ...conversation, openedAt: conversation.openedAt ?? Date.now() };
+  store.set(s => ({ ...s, conversations: [adopted, ...s.conversations] }));
+  persistence.markLoaded(adopted.id);
+  setActive(adopted.id);
+  return adopted;
+}
+
+/** Drop a transient view-only chat (the chat screen closed). */
+export function releaseViewOnly(id: string): void {
+  store.set(s => {
+    const chat = s.conversations.find(c => c.id === id);
+    if (!chat?.viewOnly) return s;
+    return { ...s, conversations: s.conversations.filter(c => c !== chat), activeId: s.activeId === id ? null : s.activeId };
+  });
+}
+
+/**
+ * One-time chats.v1 migration: drop never-opened adopted archive rows from the phone (the paged
+ * list brings them back) and stamp the rest `openedAt`. Runs after first paint, in batches.
+ */
+export async function migrateArchive(options: { legacy: boolean; pause?: () => Promise<void> }): Promise<void> {
+  if (!store.get().hydrated) return;
+  const result = await pruneArchive({ storage: AsyncStorage, activeId: store.get().activeId, legacy: options.legacy, pause: options.pause });
+  if (result.status !== "done") return;
+  const pruned = new Set(result.pruned);
+  const opened = new Map(result.kept.map(chat => [chat.id, chat.openedAt]));
+  persistence.forget(result.pruned);
+  store.set(s => ({ ...s, conversations: s.conversations.filter(c => !pruned.has(c.id)).map(c => {
+    const at = opened.get(c.id);
+    return c.openedAt === undefined && at !== undefined ? { ...c, openedAt: at } : c;
+  }) }));
+  scheduleSave();
 }
 
 export function createConversation(harness: string, opts?: { id?: string; title?: string; targetHostId?: string; profileId?: string; sessionId?: string; cwd?: string }): Conversation {
@@ -242,7 +380,8 @@ export function createConversation(harness: string, opts?: { id?: string; title?
   return conversation;
 }
 
-export function conversationTargetError(target: Pick<Conversation, "targetHostId" | "profileId" | "harness" | "sessionId" | "stale">): string | undefined {
+export function conversationTargetError(target: Pick<Conversation, "targetHostId" | "profileId" | "harness" | "sessionId" | "stale"> & { viewOnly?: boolean }): string | undefined {
+  if (target.viewOnly) return "View only: Dash can read this chat but cannot send to it.";
   if (target.stale) return "This chat has ended on the host. Its saved history is still on this phone.";
   if (!target.targetHostId) return undefined;
   const { connection } = store.get();
