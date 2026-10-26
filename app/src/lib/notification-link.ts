@@ -3,7 +3,7 @@ import type { NotificationTarget } from "./notification-policy";
 // Inspect the original deep link before URL parsing can normalize dot segments,
 // userinfo, ports, or trailing empty query and fragment delimiters.
 const CHAT_LINK = /^dash:\/\/chat\/([^?#]*)$/i;
-const INVALID_CHAT_ID = /[\\/\x00-\x1f\x7f]/;
+const CONTROL_BYTES = /[\x00-\x1f\x7f]/;
 
 export function parseChatLink(url: string | null): string | null {
   if (typeof url !== "string") return null;
@@ -23,7 +23,9 @@ export function parseChatLink(url: string | null): string | null {
       id.trim().length === 0 ||
       id === "." ||
       id === ".." ||
-      INVALID_CHAT_ID.test(id)
+      id.includes("/") ||
+      id.includes("\\\\") ||
+      CONTROL_BYTES.test(id)
     ) return null;
     return id;
   } catch {
