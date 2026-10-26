@@ -80,7 +80,7 @@ export interface CircleDraftRequest {
   stroke: Stroke;
   screen: ScreenInfo;
   /** A composited, marked, full-screen PNG. Do not pass an unmarked screenshot. */
-  markedPng: Uint8Array;
+  markedPng: Uint8Array | (() => Promise<Uint8Array>);
   /** Only text visible inside the circled rectangle is added to the draft. */
   visibleText?: readonly VisibleTextBox[];
   createdAt: number;
@@ -112,7 +112,8 @@ export async function attachClosedPenLoop(request: CircleDraftRequest): Promise<
   if (!inserted) return full ? "full" : "ignored";
 
   try {
-    const cropped = await (request.crop ?? cropMarkedPng)(request.markedPng, request.screen, region);
+    const markedPng = typeof request.markedPng === "function" ? await request.markedPng() : request.markedPng;
+    const cropped = await (request.crop ?? cropMarkedPng)(markedPng, request.screen, region);
     if (!cropped.bytes.byteLength || !cropped.dataUri.startsWith("data:image/png;base64,")) {
       throw new Error("Could not create the cropped PNG.");
     }

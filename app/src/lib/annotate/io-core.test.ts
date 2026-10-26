@@ -14,6 +14,9 @@ test("annotation transcription preserves a safe identity failure instead of clai
 test("annotation transcription distinguishes transport, HTTP refusal and actual transcript", async () => {
   await expect(transcribeRecording(settings, new ArrayBuffer(2), async () => { throw new Error("offline"); })).rejects.toThrow("Could not reach the bridge");
   await expect(transcribeRecording(settings, new ArrayBuffer(2), async () => Response.json({ error: "Speech-to-text is not available on this host." }, { status: 503 }))).rejects.toThrow("Speech-to-text is not available");
+  for (const body of ["unexpected", 42, false, null]) {
+    await expect(transcribeRecording(settings, new ArrayBuffer(2), async () => Response.json(body))).rejects.toThrow("Transcription failed (200)");
+  }
   expect(await transcribeRecording(settings, new ArrayBuffer(2), async () => Response.json({ text: "the marked button" }))).toBe("the marked button");
 });
 
@@ -30,7 +33,32 @@ describe("S Pen cropped attachment draft lifecycle", () => {
   const crop = async (_bytes: Uint8Array, _screen: ScreenInfo, _region: CircleRegion) => ({ bytes: png, dataUri });
   const text = [{ text: "error on submit", x: 100, y: 250, width: 100, height: 20 }];
 
+  test("pending chip precedes slow screenshot capture; capture failure is visible without losing ink", async () => {
+    let draft: ComposerDraft = { text: "Existing", attachments: [] };
+    let captured: (value: Uint8Array) => void = () => {};
+    const image = new Promise<Uint8Array>(resolve => { captured = resolve; });
+    let cropped = false;
+    const task = attachClosedPenLoop({
+      stroke: loop, screen: phone, markedPng: () => image, createdAt: 12,
+      updateDraft: change => { draft = change(draft); }, uploadPng: async () => ref,
+      crop: async bytes => { cropped = true; expect(bytes).toEqual(png); return { bytes: png, dataUri }; },
+    });
+    expect(draft.attachments[0]?.state).toBe("uploading");
+    expect(cropped).toBe(false);
+    captured(png); expect(await task).toBe("ready");
+    draft = { text: "Existing", attachments: [] };
+    expect(await attachClosedPenLoop({
+      stroke: loop, screen: phone, markedPng: async () => { throw new Error("capture unavailable"); }, createdAt: 12,
+      updateDraft: change => { draft = change(draft); }, uploadPng: async () => ref, crop,
+    })).toBe("error");
+    expect(draft.text).toBe("Existing");
+    expect(draft.attachments[0]).toMatchObject({ state: "error", error: "capture unavailable" });
+  });
+
   test("screen DIPs round outwards to exact screenshot pixel bounds", () => {
+    for (const [width, height] of [[1200.5, 2400], [1200, 2400.5]]) {
+      expect(() => pixelCrop({ x: 0, y: 0, width: 10, height: 10 }, phone, width!, height!)).toThrow("Invalid annotation image");
+    }
     expect(pixelCrop({ x: 88, y: 188, width: 224, height: 424 }, phone, 1200, 2400))
       .toEqual({ x: 264, y: 564, width: 672, height: 1272 });
     expect(pixelCrop({ x: 390, y: 790, width: 100, height: 100 }, phone, 1200, 2400))
