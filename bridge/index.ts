@@ -10,6 +10,7 @@
 // the rest. Finished turns are kept for RETAIN_MS so late reattaches still work.
 
 import { ToolDetails } from "./src/tool-details";
+import { NoticeService, startNoticeServer } from "./src/notices";
 import { redact, statusUpdate } from "./src/reply-parts";
 import type { ReplyPart } from "../shared/protocol";
 import { GateService } from "./src/gate/service";
@@ -95,6 +96,7 @@ type Socket = Bun.ServerWebSocket<SocketData>;
 interface SocketData {
   principal: BridgePrincipal;
   stopIdentityWatch?: () => void;
+  stopNotices?: () => void;
   /** Turn ids this socket is subscribed to. */
   turns: Set<string>;
   gateSend?: (message: GateServerMessage) => void;
@@ -695,6 +697,10 @@ const handleHttp = createPairingHttpHandler({
 });
 
 const CREDENTIAL_DIR = process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash");
+const notices = new NoticeService(CREDENTIAL_DIR);
+const noticePort = Number(process.env.DASH_NOTICE_PORT ?? (PORT === 0 ? 0 : PORT + 1));
+if (!Number.isInteger(noticePort) || noticePort < 0 || noticePort > 65535) throw new Error("Invalid DASH_NOTICE_PORT");
+const noticeServer = startNoticeServer({ token: TOKEN, notices, port: noticePort });
 const attachments = new AttachmentStore(process.env.DASH_ATTACHMENT_DIR?.trim() || join(CREDENTIAL_DIR, "attachments"));
 const handleFiles = createFilesHttpHandler({
   token: TOKEN,
@@ -767,6 +773,8 @@ const server = Bun.serve<SocketData>({
   port: PORT,
   async fetch(request, server) {
     const url = new URL(request.url);
+    // Reports use their own loopback-only listener, never the tailnet surface.
+    if (url.pathname === "/notice") return new Response("use the local notice listener", { status: 403 });
     // Native clients omit Origin; browser clients must use the exact bridge
     // origin or an explicitly configured origin. Never trust forwarded headers.
     const authority = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${server.port}`;
@@ -842,6 +850,10 @@ const server = Bun.serve<SocketData>({
         harnesses,
         hosts: await selfRoster(harnesses, tailscaleIp ?? undefined),
         features: [CHATS_FEATURE],
+      });
+      if (ws.readyState === WebSocket.OPEN) ws.data.stopNotices = notices.subscribe(notice => {
+        if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) { ws.close(1008, "Identity authorization expired"); return; }
+        sendTo(ws, notice);
       });
     },
     async message(ws, raw) {
@@ -1036,6 +1048,7 @@ const server = Bun.serve<SocketData>({
     },
     close(ws) {
       ws.data.stopIdentityWatch?.();
+      ws.data.stopNotices?.();
       if (ws.data.gateSend) gate?.unsubscribe(ws.data.gateSend);
       detachSocket(ws.data.turns, (id) => turns.get(id), ws);
       for (const id of pruneStaleUtterances(utterances, Date.now())) {
@@ -1056,6 +1069,7 @@ function shutdown(): void {
   if (gatePoll) clearInterval(gatePoll);
   // Stop admission before awaiting cleanup; sockets must not launch new work.
   server.stop(true);
+  noticeServer.stop(true);
   chatIndex.stop();
   for (const turn of turns.values()) turn.cancel();
   void acpSupervisor.close().then(() => {
@@ -1083,6 +1097,7 @@ process.stderr.write(
   [
     "",
     `  dash bridge   ws://${bridgeAddress}/ws`,
+    `  notices       http://127.0.0.1:${noticeServer.port}/notice (authenticated local reports)`,
     `  computer      ${HOST_NAME}`,
     `  cwd           ${DEFAULT_CWD}`,
     `  agents        ${agents}`,
