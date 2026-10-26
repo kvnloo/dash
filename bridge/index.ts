@@ -73,6 +73,7 @@ import { loadRoles } from "./src/model-roles";
 import { ThinkingSummarizer } from "./src/thinking-summary";
 import { TurnSummaries } from "./src/turn-summaries";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
+import { createPostureHttpHandler } from "./src/posture-http";
 import { createOrchestraHttpHandler } from "./src/orchestra-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 
@@ -702,6 +703,7 @@ const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFA
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
 const liveSurface = new LiveSurface({ log });
 const handleSupervision = createSupervisionHttpHandler({ token: TOKEN, directory: process.env.DASH_SUPERVISION_DIR });
+const handlePosture = createPostureHttpHandler({ token: TOKEN, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG });
 const gatePoll = gate ? setInterval(() => { try { gate.refresh(); } catch { /* Explicit next request returns corruption error. */ } }, 2000) : null;
 
 const server = Bun.serve<SocketData>({
@@ -746,6 +748,8 @@ const server = Bun.serve<SocketData>({
       if (models) return cors(models);
       const supervision = await handleSupervision(request);
       if (supervision) return cors(supervision);
+      const posture = await handlePosture(request);
+      if (posture) return cors(posture);
       const activity = nativeActivityHttp(request, await authorize(request));
       if (activity) return cors(activity);
       const phase = sessionPhaseHttp(request, await authorize(request), (profile, session) => hermesSessions.phase(profile, session));
