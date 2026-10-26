@@ -35,6 +35,8 @@ import { loadSkia } from "./skia-ready";
 import { useContinuousVoice } from "../ContinuousVoiceRoot";
 import TldrawAnnotateDOM, { type TldrawAnnotateHandle } from "./TldrawAnnotateDOM";
 import { syncTldrawStrokes } from "../../store/annotate";
+import { flowMode, flowTrace } from "../../lib/flow-trace";
+import { executionToken } from "../../lib/bridge-auth";
 
 export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
 /** Strokes whose extent is under this many points are taps (e.g. a pen double-tap). */
@@ -84,6 +86,14 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const inkRetryUsed = useRef(false);
   const inkRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const captureTarget = useRef<View>(null);
+  const inkTraceId = useRef("");
+
+  useEffect(() => {
+    if (!flowMode || Platform.OS !== "android") return;
+    // WP4 supplies this optional uptime reader; do not substitute wall-clock time.
+    const clock = requireOptionalNativeModule<{ getUptimeMillis(): Promise<number> }>("DashStylus");
+    if (clock?.getUptimeMillis) void flowTrace.calibrate(() => clock.getUptimeMillis());
+  }, []);
 
   useEffect(() => {
     // DashStylus is unavailable in Expo Go and older APKs; manual mode still works.
@@ -163,6 +173,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   }, []);
 
   const finish = useCallback((flat: number[], pointerType: number) => {
+    if (flowMode) flowTrace.mark("ink.up", inkTraceId.current);
     const { width, height } = size;
     const s = annotate.get();
     if (!width || !height || flat.length < 8) return;
@@ -182,11 +193,16 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     const shaped = shape && first && last ? [{ ...first, ...shape.from }, { ...last, ...shape.to }] : points;
     commitStroke({ tool: shape?.tool ?? s.tool, color: s.color, pointer, points: shaped, targets: targetsAt(screenPoints) });
     if (__DEV__) console.log("[dash-ink] committed", { pointer, points: shaped.length, width, height });
+    if (flowMode) flowTrace.mark("ink.submit", inkTraceId.current);
     haptic.select();
   }, [size]);
 
   const send = useCallback((keep: boolean) => { void sendAnnotation(keep, captureTarget, size); }, [size]);
   const tracePointer = useCallback((pointerType: number, touches: number) => {
+    if (flowMode) {
+      inkTraceId.current = flowTrace.begin();
+      flowTrace.mark("input.pen", inkTraceId.current);
+    }
     if (__DEV__) console.log("[dash-ink] raw-down", { pointer: pointerKind(pointerType), touches });
   }, []);
 
@@ -278,6 +294,20 @@ const overlayProps = { testID: "annotation-overlay" };
 
 // Dev-only web hook so a browser harness can feed transcript segments when host STT is unavailable.
 if (__DEV__ && typeof window !== "undefined") Reflect.set(window, "__dashAnnotate", { addSegment, annotate, enterAnnotation });
+if (__DEV__ && flowMode) Reflect.set(globalThis, "__dashFlowTrace", {
+  dump: () => flowTrace.dump(),
+  // Explicit collector request only; never called by a pointer handler.
+  async upload() {
+    const settings = store.get().settings;
+    if (!settings) throw new Error("Pair before collecting traces");
+    const token = await executionToken(settings);
+    const response = await fetch(`http://${settings.address}/debug/trace`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(flowTrace.dump()),
+    });
+    if (!response.ok) throw new Error(`Trace collection failed (${response.status})`);
+  },
+});
 
 async function sendAnnotation(keep: boolean, target: React.RefObject<View | null>, size: { width: number; height: number }): Promise<void> {
   const s = annotate.get();
@@ -293,6 +323,7 @@ async function sendAnnotation(keep: boolean, target: React.RefObject<View | null
     const route = debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute() : undefined;
     const screen = { id: route?.key ?? "unknown", route: route?.name ?? "unknown", width: Math.round(size.width), height: Math.round(size.height) };
     const createdAt = Date.now();
+    if (flowMode) flowTrace.mark("turn.commit", flowTrace.begin());
     const { composite } = await loadInk();
     const { bytes, dataUri } = await composite(target, strokes, screen, INK, colors.bg);
     const text = composeMessage({ strokes, segments: s.segments, screen });
