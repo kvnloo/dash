@@ -19,6 +19,9 @@ export const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 export type Target = { file: string; tests: readonly string[] };
 
 export const TARGETS: readonly Target[] = [
+  { file: "app/src/lib/annotate/ink-persistence.ts", tests: ["app/src/lib/annotate/ink-persistence.test.ts"] },
+  { file: "app/src/lib/annotate/io-core.ts", tests: ["app/src/lib/annotate/io-core.test.ts"] },
+  { file: "app/src/lib/stylus-mode.ts", tests: ["app/src/lib/stylus-mode.test.ts"] },
   { file: "app/src/lib/generative-stream.ts", tests: ["app/src/lib/generative-stream.test.ts", "app/src/lib/generative-generation.test.ts"] },
   { file: "app/src/components/genui/GenerativeBlock.tsx", tests: ["app/src/components/genui/flow-114.native.test.ts"] },
   { file: "app/src/lib/flow-trace.ts", tests: ["app/src/lib/flow-trace.test.ts"] },
@@ -269,6 +272,7 @@ export async function runMutation(opts: {
   max?: number;
   timeoutMs?: number;
   dryRun?: boolean;
+  all?: boolean;
 }): Promise<MutationReport> {
   const root = opts.root ?? ROOT;
   const threshold = opts.threshold ?? 80;
@@ -282,6 +286,7 @@ export async function runMutation(opts: {
     const source = readFileSync(join(root, target.file), "utf8");
     const rank = (op: string) => (op === "num" ? 0 : op === "bool" ? 1 : op === "eq" ? 2 : 3);
     const found = collectMutants(source, target.file).sort((a, b) => rank(a.operator) - rank(b.operator));
+    if (opts.all) { mutants.push(...found); continue; }
     const cap = Math.max(8, Math.floor(max / targets.length));
     const core = found.filter((m) => m.operator === "num" || m.operator === "bool");
     const branches = found.filter((m) => m.operator === "eq" || m.operator === "logic");
@@ -386,7 +391,7 @@ if (isMain) {
     console.error(`unknown --file ${file}`);
     process.exit(1);
   }
-  const report = await runMutation({ threshold, max, dryRun, targets });
+  const report = await runMutation({ threshold, max, dryRun, targets, all: hasFlag("--all") });
   printReport(report, threshold, dryRun);
   process.exit(!dryRun && report.score < threshold ? 1 : 0);
 }

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createStore } from "../../store/createStore";
-import { EMPTY_DRAWING, addStroke, type Drawing } from "./strokes";
-import { attachInkPersistence } from "./ink-persistence";
+import { EMPTY_DRAWING, addStroke, type Stroke } from "./strokes";
+import { attachInkPersistence, parseInkDraft } from "./ink-persistence";
 
 const stroke = { tool: "pen", color: "accent", pointer: "stylus", points: [{ x: 0.1, y: 0.2, p: 0.4, t: 1760000000000 }, { x: 0.7, y: 0.8, p: 0.8, t: 1760000000020 }] } satisfies Parameters<typeof addStroke>[1];
 function state() { return createStore({ active: false, drawing: EMPTY_DRAWING }); }
@@ -69,6 +69,31 @@ test("L3: background during cold restore cannot overwrite saved ink with an empt
   finishRead(); await runtime.restored; await runtime.flush();
   expect(store.get().drawing.strokes).toEqual(drawing.strokes);
   await runtime.dispose();
+});
+
+test("L3: stored ink validates every stroke field and restores all supported tools and pointers", () => {
+  const committed = addStroke(EMPTY_DRAWING, stroke).strokes[0]!;
+  const parse = (value: unknown) => parseInkDraft(JSON.stringify({ strokes: [value], nextId: 2 }));
+  const tools: Stroke["tool"][] = ["pen", "highlighter", "arrow", "box", "circle"];
+  const pointers: Stroke["pointer"][] = ["stylus", "touch", "mouse", "other"];
+  const colors: Stroke["color"][] = ["accent", "red"];
+  for (const tool of tools) {
+    for (const pointer of pointers) {
+      for (const color of colors) {
+        expect(parse({ ...committed, tool, pointer, color, targets: ["title"] })?.strokes[0]).toEqual({ ...committed, tool, pointer, color, targets: ["title"] });
+      }
+    }
+  }
+  for (const invalid of [null, [], 1, "pen", {},
+    { ...committed, id: 0 }, { ...committed, id: 1.2 }, { ...committed, id: "1" },
+    { ...committed, tool: "invalid" }, { ...committed, color: "blue" }, { ...committed, pointer: "invalid" },
+    { ...committed, startedAt: null }, { ...committed, endedAt: "yesterday" },
+    { ...committed, points: [] }, { ...committed, points: [stroke.points[0]] },
+    { ...committed, points: [null, null] },
+    ...["x", "y", "p", "t"].map(key => ({ ...committed, points: [{ ...stroke.points[0], [key]: "invalid" }, stroke.points[1]] })),
+    { ...committed, targets: "title" }, { ...committed, targets: [42] },
+  ]) expect(parse(invalid)).toBeNull();
+  expect(parse(committed)?.strokes).toEqual([committed]);
 });
 
 test("L3: malformed persisted strokes are not admitted", async () => {

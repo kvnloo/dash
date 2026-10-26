@@ -15,6 +15,9 @@ const json = JSON.stringify({
 const lang = 'root = Roadmap("dash-roadmap")';
 
 test("flow HTML fragments are buffered before the native Markdown parser sees them", () => {
+  for (const language of ["genui", "openui", "openui-lang"]) {
+    expect(prepareGenerativeMarkdown("```" + language + "\nunfinished", true)).toBe(fencedPending(language));
+  }
   expect(prepareGenerativeMarkdown("```html\n<div>SENTINEL_RAW_SOURCE", true)).toBe(fencedPending("html"));
   expect(prepareGenerativeMarkdown("```ht", true)).toBe(fencedPending("html"));
   expect(prepareGenerativeMarkdown("```html\n<p>done</p>\n```", true)).toBe("```html\n<p>done</p>\n```");

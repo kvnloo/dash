@@ -27,6 +27,14 @@ test("L7 native #114 fixture: approved OpenUI roadmap, loaders and invalid state
     expect(rendered.ready).toContain("Dash");
     expect(rendered.partial).toContain('aria-label="Building interface"');
     expect(rendered.partial).toContain("Building interface…");
+    expect(rendered.partial).toContain('role="progressbar"');
+    expect(rendered.invalid).toContain('role="alert"');
+    expect(rendered.partial).not.toContain("<svg");
+    expect(rendered.invalid).not.toContain("<svg");
+    for (const width of [90, 65, 80]) {
+      expect(rendered.partial).toContain(`width:${width}%`);
+      expect(rendered.invalid).not.toContain(`width:${width}%`);
+    }
     expect(rendered.invalid).toContain('aria-label="Interface could not be rendered"');
     expect(rendered.widgets).toContain("WIDGET_MARKER");
     expect(rendered.openui).toContain("OPENUI_MARKER");

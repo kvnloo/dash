@@ -10,6 +10,32 @@ const box: Stroke = { id: 2, tool: "box", color: "red", pointer: "touch", starte
   points: [{ x: 0.5, y: 0.5, p: 0.5, t: 9000 }, { x: 0.7, y: 0.9, p: 0.5, t: 9400 }] };
 const segments: Segment[] = [{ id: "s1", text: "make this taller", start: 900, end: 1500, source: "mic" }];
 
+test("loop capture rejects each invalid dimension and ignores boxes outside each edge", () => {
+  const loop: Stroke = { ...box, pointer: "stylus" };
+  for (const dimension of ["width", "height"]) {
+    for (const value of [NaN, Infinity, 0, -1]) {
+      expect(closedPenLoopRegion(loop, { ...screen, [dimension]: value })).toBeNull();
+    }
+  }
+  for (const padding of [NaN, Infinity, -1]) expect(closedPenLoopRegion(loop, screen, padding)).toBeNull();
+  for (const points of [
+    [{ x: 0.5, y: 0.1 }, { x: 0.51, y: 0.9 }],
+    [{ x: 0.1, y: 0.5 }, { x: 0.9, y: 0.51 }],
+    [{ x: -2, y: 0.1 }, { x: -1, y: 0.9 }],
+    [{ x: 0.1, y: 2 }, { x: 0.9, y: 3 }],
+  ]) expect(closedPenLoopRegion({ ...loop, points: points.map(point => ({ ...point, p: 0.5, t: 1000 })) }, screen)).toBeNull();
+  const region = { x: 100, y: 100, width: 100, height: 100 };
+  expect(visibleTextInRegion(region, [
+    { x: 110, y: 110, width: 0, height: 10, text: "zero width" },
+    { x: 110, y: 110, width: 10, height: 0, text: "zero height" },
+    { x: 110, y: 80, width: 10, height: 10, text: "above" },
+    { x: 110, y: 210, width: 10, height: 10, text: "below" },
+    { x: 80, y: 110, width: 10, height: 10, text: "left" },
+    { x: 210, y: 110, width: 10, height: 10, text: "right" },
+    { x: 110, y: 110, width: 10, height: 10, text: "inside" },
+  ])).toBe("inside");
+});
+
 describe("annotationDoc", () => {
   test("normalized, rounded points with relative times and segment ids", () => {
     const doc = annotationDoc({ strokes: [arrow, box], segments, screen, createdAt: 42 });

@@ -14,6 +14,13 @@ import { applyMutant, collectMutants, ROOT, TARGETS, runMutation } from "./mutat
   }
 });
 
+test("all mode includes every collected mutation instead of sampling twelve branches", async () => {
+  const target = TARGETS.find(target => target.file === "app/src/lib/annotate/compose.ts")!;
+  const source = await Bun.file(join(ROOT, target.file)).text();
+  const report = await runMutation({ dryRun: true, all: true, targets: [target], max: 10000 });
+  expect(report.results).toHaveLength(collectMutants(source, target.file).length);
+});
+
 describe("collectMutants", () => {
   test("mutates numeric constants that lock UI geometry", () => {
     const source = "export const NAV_CHROME_HEIGHT = 60;\nexport const ON = true;\n";
@@ -49,6 +56,12 @@ describe("collectMutants", () => {
 describe("targets", () => {
   test("covers the modules that accidentally mutated UI or protocol", () => {
     expect(TARGETS.map((t) => t.file)).toEqual([
+      "app/src/lib/annotate/ink-persistence.ts",
+      "app/src/lib/annotate/io-core.ts",
+      "app/src/lib/stylus-mode.ts",
+      "app/src/lib/generative-stream.ts",
+      "app/src/components/genui/GenerativeBlock.tsx",
+      "app/src/lib/flow-trace.ts",
       "app/src/lib/pending-queue.ts",
       "app/src/trace/chip-state.ts",
       "bridge/src/model-health.ts",
