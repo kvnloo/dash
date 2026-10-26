@@ -8,7 +8,9 @@
     "typecheck": "bun app/node_modules/typescript/bin/tsc -p app --noEmit && bun bridge/node_modules/typescript/bin/tsc -p bridge --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "lint": "eslint . --max-warnings 0",
     "verify": "bun scripts/verify-dash/control-dash.ts test",
-    "spec": "python3 spec/check.py && python3 -I -m unittest discover -s spec -p 'test_*.py'"
+    "spec": "python3 spec/check.py && python3 -I -m unittest discover -s spec -p 'test_*.py'",
+    "spec:status": "python3 scripts/feature_status.py --evidence .acceptance-receipts",
+    "spec:law": "python3 -I -m unittest discover -s tests -p 'test_*.py' && python3 -I tests/feature_completion_parity.py && python3 -I tests/feature_completion_mutation.py"
   },
   "dependencies": {},
   "devDependencies": {
