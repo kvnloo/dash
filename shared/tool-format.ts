@@ -2,6 +2,8 @@
 export function redactTool(text: string): string {
   return text.replace(/\bBearer\s+[^\s"',}]+/gi, 'Bearer [REDACTED]')
     .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g, '[REDACTED]')
+    // A key cut off before its END line (a truncated read or snippet source) is redacted to the end.
+    .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*$/g, '[REDACTED]')
     .replace(/\b(?:sk-[\w-]{12,}|gh[pousr]_[\w]{12,}|github_pat_[\w]{12,}|xox[baprs]-[\w-]{10,}|eyJ[\w-]+\.[\w-]+\.[\w-]+)\b/g, '[REDACTED]')
     .replace(/((?:["']?(?:[\w-]{0,64}(?:token|secret|password)|api[_-]?key|authorization)["']?)\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,}\n]+)/gi, '$1"[REDACTED]"')
     .replace(/\bBearer\s+[^\s"',}]+/gi, 'Bearer [REDACTED]');

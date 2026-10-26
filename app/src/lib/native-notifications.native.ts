@@ -3,7 +3,7 @@ import Constants, { ExecutionEnvironment } from "expo-constants";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { AppState, Platform } from "react-native";
 import { notificationState } from "../store/notifications";
-import { chatLink, parseNotificationTarget, shouldNotify, type DashNotice, type NotificationTarget } from "./notification-policy";
+import { notificationLink, parseNotificationTarget, shouldNotify, type DashNotice, type NotificationTarget } from "./notification-policy";
 
 const KEY = "dash.notifications.enabled.v1";
 const CHANNEL = "dash-updates";
@@ -22,7 +22,7 @@ async function channel() {
   const notifications = await api();
   if (!notifications) return null;
   await notifications.setNotificationChannelAsync(CHANNEL, {
-    name: "Replies and action needed", importance: notifications.AndroidImportance.DEFAULT,
+    name: "Replies, reports and action needed", importance: notifications.AndroidImportance.DEFAULT,
     sound: null, enableVibrate: false, showBadge: false,
     lockscreenVisibility: notifications.AndroidNotificationVisibility.PRIVATE,
   });
@@ -85,7 +85,7 @@ export async function postNativeNotice(notice: DashNotice): Promise<void> {
     if (!notifications || AppState.currentState === "active" || !notificationState.get().enabled) return;
     await notifications.scheduleNotificationAsync({ identifier: notice.key,
       content: { title: notice.title, body: notice.body, sound: false, autoDismiss: true,
-        data: { url: notice.target.kind === "chat" ? chatLink(notice.target.chatId) : "dash://approvals" } },
+        data: { url: notificationLink(notice.target) } },
       trigger: { channelId: CHANNEL },
     });
   } catch (error) { failure(error); }

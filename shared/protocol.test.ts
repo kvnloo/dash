@@ -269,3 +269,38 @@ describe("Hermes handoff wire fields", () => {
     expect(parseHosts(host(3))).toBeUndefined();
   });
 });
+
+describe("chats.v1 additive ws fields", () => {
+  const base = { type: "history", harness: "codex", sessionId: "c1" };
+  test("history limit must be an integer 1..400", () => {
+    for (const limit of [0, 401, 1.5, "50", -1]) expect(parseClientMessage({ ...base, limit })).toBeNull();
+    expect(parseClientMessage({ ...base, limit: 50 })).toEqual({ type: "history", harness: "codex", sessionId: "c1", cwd: undefined, hostId: undefined, profileId: undefined, limit: 50 });
+    expect(parseClientMessage({ ...base, limit: 400 })).toMatchObject({ limit: 400 });
+  });
+  test("history requestId is 1-64 safe chars", () => {
+    expect(parseClientMessage({ ...base, limit: 50, requestId: "r-1_A" })).toMatchObject({ limit: 50, requestId: "r-1_A" });
+    for (const requestId of ["", "has space", "x".repeat(65), "a/b", 7]) expect(parseClientMessage({ ...base, requestId })).toBeNull();
+  });
+  test("old-shape history parses unchanged (no new keys)", () => {
+    const parsed = parseClientMessage(base);
+    expect(parsed).toEqual({ type: "history", harness: "codex", sessionId: "c1", cwd: undefined, hostId: undefined, profileId: undefined });
+    expect(parsed && "limit" in parsed).toBe(false);
+    expect(parsed && "requestId" in parsed).toBe(false);
+  });
+  test("hello.features kept when string[] <= 32, dropped otherwise", () => {
+    const hello = { type: "hello", version: 1, host: "h", cwd: "/", harnesses: [] };
+    const read = (features: unknown) => { const m = parseServerMessage({ ...hello, features }); return m?.type === "hello" ? m.features : "not-hello"; };
+    expect(read(["chats.v1"])).toEqual(["chats.v1"]);
+    expect(read("chats.v1")).toBeUndefined();
+    expect(read([1])).toBeUndefined();
+    expect(read(Array.from({ length: 33 }, (_, i) => `f${i}`))).toBeUndefined();
+    expect(read(undefined)).toBeUndefined();
+  });
+  test("history reply keeps requestId, before and truncated", () => {
+    const reply = parseServerMessage({ type: "history", harness: "codex", sessionId: "c1", requestId: "r1", before: "abc", messages: [{ id: "av:1", role: "user", text: "x", at: 1, truncated: true }] });
+    expect(reply).toMatchObject({ requestId: "r1", before: "abc", messages: [{ truncated: true }] });
+    expect(parseServerMessage({ type: "history", harness: "codex", sessionId: "c1", before: null, messages: [] })).toMatchObject({ before: null });
+    expect(parseServerMessage({ type: "history", harness: "codex", sessionId: "c1", before: 5, messages: [] })).toBeNull();
+    expect(parseServerMessage({ type: "history", harness: "codex", sessionId: "c1", messages: [{ id: "a", role: "user", text: "x", at: 1, truncated: "yes" }] })).toBeNull();
+  });
+});

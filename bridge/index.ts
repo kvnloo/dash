@@ -10,6 +10,7 @@
 // the rest. Finished turns are kept for RETAIN_MS so late reattaches still work.
 
 import { ToolDetails } from "./src/tool-details";
+import { NoticeService, startNoticeServer } from "./src/notices";
 import { redact, statusUpdate } from "./src/reply-parts";
 import type { ReplyPart } from "../shared/protocol";
 import { GateService } from "./src/gate/service";
@@ -19,8 +20,12 @@ import { statSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import {
+  CHATS_FEATURE,
   PROTOCOL_VERSION,
+  chatKey,
   parseClientMessage,
+  type ChatSummary,
+  type HistoryMessage,
   type HarnessInfo,
   type HostInfo,
   type AcpStatus,
@@ -34,6 +39,12 @@ import { createPairingHttpHandler } from "./src/pairing-http";
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
+import { AGENTSVIEW_PREFIX, agentsviewPath, rosterArchiveHead } from "./src/agentsview-sessions";
+import { ChatIndexClient } from "./src/chat-index/client";
+import { createChatsHttpHandler } from "./src/chat-index/http";
+import { hermesWsPage } from "./src/chat-index/hermes-src";
+import { sidecarPath } from "./src/chat-index/sidecar";
+import { isCatalogHarness } from "../shared/catalog";
 import { runHermesSession } from "./src/hermes-session";
 import { streamHermesSession } from "./src/hermes-stream";
 import { liveArgv } from "./src/hermes-live";
@@ -65,7 +76,7 @@ import {
 import { speechAvailable, transcribe, warmup } from "./speech";
 import { AttachmentError, AttachmentStore, promptWithAttachments, type StoredAttachment } from "./src/attachments";
 import { createFilesHttpHandler } from "./src/files-http";
-import { contextHttp } from "./src/context-http";
+import { compactionEnabled, contextHttp } from "./src/context-http";
 import { createSuggestionsHttpHandler } from "./src/suggestions-http";
 import { LiveSurface } from "./src/live-surface";
 import { createModelsHttpHandler } from "./src/models-http";
@@ -85,6 +96,7 @@ type Socket = Bun.ServerWebSocket<SocketData>;
 interface SocketData {
   principal: BridgePrincipal;
   stopIdentityWatch?: () => void;
+  stopNotices?: () => void;
   /** Turn ids this socket is subscribed to. */
   turns: Set<string>;
   gateSend?: (message: GateServerMessage) => void;
@@ -530,10 +542,13 @@ const PORT = Number(process.env.DASH_PORT ?? "4747");
 const DEFAULT_CWD = process.env.DASH_CWD ?? process.cwd();
 const HOST_NAME = hostname();
 const SELF = new SelfHost(HOST_NAME);
+/** Last assembled roster: the live overlay for GET /chats reads it without waiting. */
+let lastHosts: HostInfo[] = [];
 /** Roster for this bridge, remembering the id the phone uses for this computer. */
 async function selfRoster(harnesses: HarnessInfo[], address?: string): Promise<HostInfo[]> {
   const hosts = await collectRoster(harnesses, { hostname: HOST_NAME, address });
   SELF.remember(hosts);
+  lastHosts = hosts;
   return hosts;
 }
 /** True when a phone-supplied host id names this computer (refreshing the roster once if unknown). */
@@ -682,6 +697,10 @@ const handleHttp = createPairingHttpHandler({
 });
 
 const CREDENTIAL_DIR = process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash");
+const notices = new NoticeService(CREDENTIAL_DIR);
+const noticePort = Number(process.env.DASH_NOTICE_PORT ?? (PORT === 0 ? 0 : PORT + 1));
+if (!Number.isInteger(noticePort) || noticePort < 0 || noticePort > 65535) throw new Error("Invalid DASH_NOTICE_PORT");
+const noticeServer = startNoticeServer({ token: TOKEN, notices, port: noticePort });
 const attachments = new AttachmentStore(process.env.DASH_ATTACHMENT_DIR?.trim() || join(CREDENTIAL_DIR, "attachments"));
 const handleFiles = createFilesHttpHandler({
   token: TOKEN,
@@ -694,7 +713,52 @@ const handleFiles = createFilesHttpHandler({
   ...(speechAvailable().ok ? { transcribe } : {}),
 });
 
-const handleContext = contextHttp({ sessions: hermesSessions });
+// Chat index: every archived/native chat, paged and searchable. All SQLite reads run in
+// Bun Workers (src/chat-index/); this thread only routes requests and caches snapshots.
+const chatIndex = new ChatIndexClient({
+  workers: Math.max(1, Math.min(2, Number(process.env.DASH_CHAT_WORKERS ?? "2") || 2)),
+  config: {
+    sidecarPath: sidecarPath(),
+    agentsviewPath: agentsviewPath(),
+    ...(process.env.DASH_HERMES_ROOT ? { hermesRoot: process.env.DASH_HERMES_ROOT } : {}),
+    archiveHead: rosterArchiveHead(),
+    selfMachines: [HOST_NAME, ...(process.env.DASH_CHAT_SELF_MACHINES ?? "").split(",").filter(Boolean)],
+  },
+});
+const liveSince = new Map<string, number>();
+/** Running and host-held chats on this computer, keyed like the index. */
+function liveChats(): ChatSummary[] {
+  const self = lastHosts.find(h => h.self);
+  if (!self) { void selfRoster(harnessList(), HOST).catch(() => undefined); return []; }
+  const now = Date.now();
+  const out: ChatSummary[] = [];
+  for (const agent of self.agents) {
+    if (!agent.sessionId || (agent.status !== "running" && !agent.openIn)) continue;
+    const profileId = agent.kind === "hermes" ? agent.profileId : undefined;
+    const key = chatKey({ hostId: SELF.id(), kind: agent.kind, sessionId: agent.sessionId, ...(profileId ? { profileId } : {}) });
+    if (!liveSince.has(key)) liveSince.set(key, now);
+    const since = liveSince.get(key) ?? now;
+    out.push({
+      key, kind: agent.kind, sessionId: agent.sessionId, hostId: SELF.id(), hostName: self.name, ...(profileId ? { profileId } : {}), agentId: agent.id,
+      title: agent.name, ...(agent.cwd ? { cwd: agent.cwd } : {}), startedAt: since, lastActivityAt: agent.lastActivityAt ?? since,
+      messageCount: agent.messageCount ?? 0, origin: "live", chatable: isCatalogHarness(agent.kind),
+      ...(agent.status === "running" ? { running: true } : {}), ...(agent.openIn ? { openIn: agent.openIn } : {}),
+    });
+  }
+  if (liveSince.size > 512) for (const key of liveSince.keys()) if (!out.some(row => row.key === key)) liveSince.delete(key);
+  return out;
+}
+const handleChats = createChatsHttpHandler({
+  authorize: request => authorize(request, false),
+  client: chatIndex,
+  self: () => ({ id: SELF.id(), name: HOST_NAME, matches: (hostId: string) => SELF.matches(hostId) }),
+  live: liveChats,
+});
+
+/** Paged ws history for Hermes: the newest `limit`, and an older-page cursor when more may exist. */
+
+const contextCompaction = compactionEnabled();
+const handleContext = contextHttp({ sessions: hermesSessions, compaction: contextCompaction });
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleModels = createModelsHttpHandler({ authorize });
 const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
@@ -709,6 +773,8 @@ const server = Bun.serve<SocketData>({
   port: PORT,
   async fetch(request, server) {
     const url = new URL(request.url);
+    // Reports use their own loopback-only listener, never the tailnet surface.
+    if (url.pathname === "/notice") return new Response("use the local notice listener", { status: 403 });
     // Native clients omit Origin; browser clients must use the exact bridge
     // origin or an explicitly configured origin. Never trust forwarded headers.
     const authority = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${server.port}`;
@@ -737,7 +803,7 @@ const server = Bun.serve<SocketData>({
         const voice = await voiceBootstrap(request, principal?.kind === "identity", (profile, session) => !!hermesSessions.target(profile, session));
         if (voice) return cors(voice);
       }
-      if (url.pathname === "/chat/context/compact" && request.method === "POST") server.timeout(request, 255);
+      if (url.pathname === "/chat/context/compact" && request.method === "POST" && contextCompaction) server.timeout(request, 255);
       const context = await handleContext(request, await authorize(request));
       if (context) return cors(context);
       const orchestra = await handleOrchestra(request);
@@ -758,6 +824,8 @@ const server = Bun.serve<SocketData>({
       if (suggestions) return cors(suggestions);
       const files = await handleFiles(request);
       if (files) return cors(files);
+      const chats = await handleChats(request);
+      if (chats) return cors(chats);
       const http = await handleHttp(request, server.requestIP(request)?.address ?? null);
       return cors(http ?? new Response("not found", { status: 404 }));
     }
@@ -781,6 +849,11 @@ const server = Bun.serve<SocketData>({
         cwd: DEFAULT_CWD,
         harnesses,
         hosts: await selfRoster(harnesses, tailscaleIp ?? undefined),
+        features: [CHATS_FEATURE],
+      });
+      if (ws.readyState === WebSocket.OPEN) ws.data.stopNotices = notices.subscribe(notice => {
+        if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) { ws.close(1008, "Identity authorization expired"); return; }
+        sendTo(ws, notice);
       });
     },
     async message(ws, raw) {
@@ -940,24 +1013,34 @@ const server = Bun.serve<SocketData>({
           log("ws.attach", { remote: ws.remoteAddress, count: message.turns.length });
           break;
         case "history": {
+          // Without `limit` the reply is exactly today's (old apps). With it: newest `limit`,
+          // the echoed requestId, and `before` for GET /chats/history.
+          const limit = message.limit;
+          const paging = (before: string | null) => (limit === undefined ? {} : { ...(message.requestId ? { requestId: message.requestId } : {}), before });
           if (message.harness === "hermes") {
             const target = hermesSessions.target(message.profileId, message.sessionId);
-            const messages = (await isSelfHost(message.hostId)) && target
+            const all = (await isSelfHost(message.hostId)) && target
               ? await hermesSessions.history(target.profile, message.sessionId) : [];
-            sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: SELF.id(), profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages });
+            const page = limit === undefined ? { messages: all, before: null } : hermesWsPage(all, limit);
+            sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: SELF.id(), profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages: page.messages, ...paging(page.before) });
             break;
           }
-          if (!(await isSelfHost(message.hostId)) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && !message.profileId.startsWith("omp:"))) {
-            sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, messages: [] });
+          if (!(await isSelfHost(message.hostId)) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && !message.profileId.startsWith("omp:") && !message.profileId.startsWith(AGENTSVIEW_PREFIX))) {
+            sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, messages: [], ...paging(null) });
             break;
           }
           const home = homedir();
           const sessionRoot = join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions");
+          const live = readLiveTranscript(message.harness, message.sessionId, sessionRoot, message.cwd, home);
+          // A live OMP transcript is already in memory: it is sent whole and has no older page.
+          const archived = live.length ? { messages: live, before: null }
+            : await chatIndex.wsHistory({ kind: message.harness, sessionId: message.sessionId, ...(limit !== undefined ? { limit } : {}) }).catch(() => ({ messages: [], before: null }));
           sendTo(ws, {
             type: "history",
             harness: message.harness,
             sessionId: message.sessionId,
-            messages: readLiveTranscript(message.harness, message.sessionId, sessionRoot, message.cwd, home),
+            messages: archived.messages,
+            ...paging(archived.before),
           });
           break;
         }
@@ -965,6 +1048,7 @@ const server = Bun.serve<SocketData>({
     },
     close(ws) {
       ws.data.stopIdentityWatch?.();
+      ws.data.stopNotices?.();
       if (ws.data.gateSend) gate?.unsubscribe(ws.data.gateSend);
       detachSocket(ws.data.turns, (id) => turns.get(id), ws);
       for (const id of pruneStaleUtterances(utterances, Date.now())) {
@@ -985,6 +1069,8 @@ function shutdown(): void {
   if (gatePoll) clearInterval(gatePoll);
   // Stop admission before awaiting cleanup; sockets must not launch new work.
   server.stop(true);
+  noticeServer.stop(true);
+  chatIndex.stop();
   for (const turn of turns.values()) turn.cancel();
   void acpSupervisor.close().then(() => {
     log("bridge.stopped");
@@ -1011,6 +1097,7 @@ process.stderr.write(
   [
     "",
     `  dash bridge   ws://${bridgeAddress}/ws`,
+    `  notices       http://127.0.0.1:${noticeServer.port}/notice (authenticated local reports)`,
     `  computer      ${HOST_NAME}`,
     `  cwd           ${DEFAULT_CWD}`,
     `  agents        ${agents}`,

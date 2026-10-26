@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { conversationEntries } from "../lib/chat-index";
 import { composerSuggestions, composerTrigger, insertSuggestion } from "../lib/composer-suggestions";
 import {
   EMPTY_SUGGESTIONS, currentSuggestionLoad, loadSuggestionInventory,
@@ -15,7 +16,6 @@ export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, 
 }) {
   const settings = store.use(s => s.settings);
   const connection = store.use(s => s.connection);
-  const conversations = store.use(s => s.conversations);
   const trigger = composerTrigger(text, cursor);
   const target = selectSuggestionTarget({
     chatHarness: harness,
@@ -25,11 +25,14 @@ export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, 
     selectedCwd: settings?.cwd,
     connectedCwd: connection.cwd,
   });
+  const active = trigger !== null;
+  // Only while the panel is open, and through the light index (never transcripts).
+  const conversations = store.use(s => (active ? s.conversations : undefined));
+  const entries = useMemo(() => (conversations ? conversationEntries(conversations) : []), [conversations]);
   const address = settings?.address;
   const token = settings?.token;
   const source = address && token ? { ...target, address, token } : null;
   const key = suggestionRequestKey(source);
-  const active = trigger !== null;
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<SuggestionLoadState>({ key: null, inventory: EMPTY_SUGGESTIONS, loading: false });
 
@@ -66,10 +69,16 @@ export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, 
     return () => { controller.abort(); clearTimeout(timeout); };
   }, [active, key, address, token, target.harness, target.cwd, attempt]);
 
-  if (!trigger) return null;
   // The render immediately after a chat/harness/cwd/pairing switch must never show old rows.
   const current = currentSuggestionLoad(key, state);
-  const rows = composerSuggestions(trigger, current.inventory, conversations, connection.hosts);
+  const triggerKey = trigger ? `${trigger.prefix}|${trigger.start}|${trigger.end}|${trigger.query}` : "";
+  const stableTrigger = useMemo(() => trigger, [triggerKey]);
+  const deferredTrigger = useDeferredValue(stableTrigger);
+  const rows = useMemo(
+    () => (deferredTrigger ? composerSuggestions(deferredTrigger, current.inventory, entries, connection.hosts) : []),
+    [deferredTrigger, current.inventory, entries, connection.hosts],
+  );
+  if (!trigger) return null;
   const warning = current.error ?? (trigger.prefix === "/" ? current.inventory.commandError : current.inventory.fileError);
 
   return <View style={styles.panel} accessibilityLabel="Composer suggestions">

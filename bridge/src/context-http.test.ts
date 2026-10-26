@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { contextHttp, parseProviderUsage, planCache } from "./context-http";
+import { compactionEnabled, contextHttp, parseProviderUsage, planCache } from "./context-http";
 import { HermesSessions } from "./hermes-sessions";
 import { contextFixture } from "../../shared/context.test";
 
@@ -27,14 +27,14 @@ describe("provider plan projection", () => {
   });
 });
 
-test("context endpoint authenticates, resolves native identity, verifies compaction readback", async () => {
+test("context endpoint with compaction opted in authenticates, resolves native identity, verifies compaction readback", async () => {
   const root = mkdtempSync(join(tmpdir(), "dash-context-"));
   try {
     const db = new Database(join(root, "state.db"));
     db.exec("CREATE TABLE sessions(id TEXT,source TEXT,title TEXT,started_at REAL,last_activity_at REAL,message_count INTEGER,cwd TEXT,archived INTEGER,hidden INTEGER,parent_session_id TEXT,end_reason TEXT,model_config TEXT); INSERT INTO sessions VALUES('scratch','cli','Scratch',1,1,2,'/workspace',0,0,NULL,NULL,'{}');"); db.close();
     const sessions = new HermesSessions({ root, env: {} });
     let reads = 0; let writes = 0;
-    const handler = contextHttp({ sessions, plans: async () => [], read: async () => { reads++; return contextFixture(writes ? { used: 80_000, revision: "summary" } : {}); }, compact: async () => { writes++; return { ok: true, code: "committed" }; } });
+    const handler = contextHttp({ sessions, plans: async () => [], read: async () => { reads++; return contextFixture(writes ? { used: 80_000, revision: "summary" } : {}); }, compact: async () => { writes++; return { ok: true, code: "committed" }; }, compaction: true });
     const url = "http://localhost/chat/context?profile=default&session=scratch";
     expect((await handler(new Request(url), false))?.status).toBe(401); expect(reads).toBe(0);
     expect((await handler(new Request(url.replace("scratch", "unknown")), true))?.status).toBe(404);
@@ -70,4 +70,42 @@ test("burn uses only valid observed weekly windows and never invents a reset or 
   expect(parseProviderUsage({ provider: "codex", usage: { secondary: weekly } }, "codex", now).burn).toEqual({ observed: 50 / 12, sustainable: 50 / 12, ratio: 1 });
   expect(parseProviderUsage({ provider: "codex", usage: { secondary: { ...weekly, windowMinutes: undefined } } }, "codex", now).burn).toBeUndefined();
   expect(parseProviderUsage({ provider: "codex", usage: { secondary: { ...weekly, resetsAt: "invalid" } } }, "codex", now).burn).toBeUndefined();
+});
+
+test("context endpoint authenticates before any read, resolves native identity, never compacts unless opted in", async () => {
+  const root = mkdtempSync(join(tmpdir(), "dash-context-"));
+  try {
+    const db = new Database(join(root, "state.db"));
+    db.exec("CREATE TABLE sessions(id TEXT,source TEXT,title TEXT,started_at REAL,last_activity_at REAL,message_count INTEGER,cwd TEXT,archived INTEGER,hidden INTEGER,parent_session_id TEXT,end_reason TEXT,model_config TEXT); INSERT INTO sessions VALUES('scratch','cli','Scratch',1,1,2,'/workspace',0,0,NULL,NULL,'{}');"); db.close();
+    const sessions = new HermesSessions({ root, env: {} });
+    let reads = 0; let planReads = 0;
+    const handler = contextHttp({ sessions, plans: async () => { planReads++; return []; }, read: async () => { reads++; return contextFixture({}); } });
+    const url = "http://localhost/chat/context?profile=default&session=scratch";
+    const compactUrl = url.replace("context?", "context/compact?");
+    // Fail closed: unauthenticated GET and POST compact read nothing.
+    expect((await handler(new Request(url), false))?.status).toBe(401);
+    expect((await handler(new Request(compactUrl, { method: "POST" }), false))?.status).toBe(401);
+    expect(reads + planReads).toBe(0);
+    expect((await handler(new Request(url.replace("scratch", "unknown")), true))?.status).toBe(404);
+    expect((await handler(new Request(url.replace("default", "../../etc")), true))?.status).toBe(404);
+    expect((await handler(new Request("http://localhost/chat/context?profile=default"), true))?.status).toBe(400);
+    expect((await handler(new Request(url, { method: "POST" }), true))?.status).toBe(405);
+    expect(reads).toBe(0);
+    // Read-only rollout: compaction is explicitly unavailable, and neither reads nor executes anything.
+    const compact = await handler(new Request(compactUrl, { method: "POST" }), true);
+    expect(compact?.status).toBe(501);
+    expect(await compact?.json()).toEqual({ ok: false, code: "unavailable", error: "Compaction is not available on this host" });
+    expect(reads).toBe(0);
+    const response = await handler(new Request(url), true);
+    expect(response?.status).toBe(200); expect(reads).toBe(1);
+    expect(await response?.json()).toMatchObject({ context: { sessionId: "scratch" }, plans: [] });
+    // Unrelated paths fall through to other handlers.
+    expect(await handler(new Request("http://localhost/chat/contextual"), true)).toBeUndefined();
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("compaction is opt-in only through DASH_CONTEXT_COMPACTION=1", () => {
+  expect(compactionEnabled({})).toBe(false);
+  for (const value of ["0", "true", "yes", ""]) expect(compactionEnabled({ DASH_CONTEXT_COMPACTION: value })).toBe(false);
+  expect(compactionEnabled({ DASH_CONTEXT_COMPACTION: "1" })).toBe(true);
 });

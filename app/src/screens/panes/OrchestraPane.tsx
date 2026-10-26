@@ -1,4 +1,6 @@
-import { useMemo } from "react";
+import { sessionChats } from "../../lib/session-chats";
+import { shallowArrayEqual } from "../../store/createStore";
+import { memo, useMemo } from "react";
 import { useWindowDimensions } from "react-native";
 import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
 import { OrchestraGraph } from "../../components/OrchestraGraph";
@@ -14,8 +16,9 @@ import { submitInAppFeedback } from "../../lib/feedback-submit";
 import type { ScreenProps } from "../../navigation";
 import { setActive, openAgentConversation, store } from "../../store/app";
 
-export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
-  const conversations = store.use(s => s.conversations);
+export const OrchestraPane = memo(function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
+  // Only host sessions matter here; a phone-only chat changing must not re-render this pane.
+  const conversations = store.useSelector(sessionChats, shallowArrayEqual);
   const settings = store.use(s => s.settings);
   const hosts = store.use(s => s.connection.hosts);
   const fixture = debugUi.use(s => s.orchestraFixture);
@@ -42,4 +45,4 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
     <AodlCatalogNetwork />
     <TraceEntryCard onOpen={() => navigation.navigate("Trace")} />
   </OrchestraGraph>;
-}
+});

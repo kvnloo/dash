@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const persisted = new Map<string, string>();
+const reads: string[] = [];
 let rejectLegacy = false;
 mock.module("@react-native-async-storage/async-storage", () => ({
   default: {
     async getAllKeys() { return [...persisted.keys()]; },
-    async getItem(key: string) { if (rejectLegacy && key === "dash.conversations.v1") throw Error("Row too big to fit into CursorWindow requiredPos=1, totalRows=2"); return persisted.get(key) ?? null; },
+    async getItem(key: string) { reads.push(key); if (rejectLegacy && key === "dash.conversations.v1") throw Error("Row too big to fit into CursorWindow requiredPos=1, totalRows=2"); return persisted.get(key) ?? null; },
     async multiGet(keys: string[]) { return keys.map((key) => [key, persisted.get(key) ?? null]); },
     async removeItem(key: string) { persisted.delete(key); },
     async multiSet(entries: [string, string][]) { for (const [key, value] of entries) persisted.set(key, value); },
@@ -517,4 +518,218 @@ test("oversized legacy CursorWindow row cannot block pairing hydration or delete
     expect(app.store.get().settings?.address).toBe("fixture:4747");
     expect(persisted.get("dash.conversations.v1")).toBe("unreadable-original");
   } finally { rejectLegacy = false; persisted.delete("dash.conversations.v1"); }
+});
+
+describe("chats.v1 startup and adoption", () => {
+  const hostWith = (agents: import("../../../shared/protocol").AgentInfo[]) => ({ id: "mbp", name: "mbp", hostname: "mbp", online: true, self: true, agents });
+  test("hydrate reads settings, the index and only active/pending transcripts", async () => {
+    const quiet = app.createConversation("omp", { id: "quiet" });
+    const active = app.createConversation("omp", { id: "active" });
+    app.beginTurn(active.id, "done turn");
+    const queued = app.createConversation("hermes", { id: "queued" });
+    app.beginTurn(queued.id, "waiting", { pending: true });
+    app.setActive(active.id);
+    await new Promise(resolve => setTimeout(resolve, 450));
+    expect(persisted.has("dash.conversations.index.v3")).toBe(true);
+    reads.length = 0;
+    app.store.set(s => ({ ...s, conversations: [] }));
+    await app.hydrate();
+    const durableReads = reads.filter(key => key.startsWith("dash.durable.files.v2/"));
+    expect(durableReads.sort()).toEqual(["dash.durable.files.v2/active.json", "dash.durable.files.v2/queued.json"]);
+    expect(reads).toContain("dash.conversations.index.v3");
+    expect(reads).not.toContain(`dash.durable.files.v2/${quiet.id}.json`);
+    const byId = new Map(app.store.get().conversations.map(c => [c.id, c]));
+    expect(byId.get("quiet")?.messages).toEqual([]);
+    expect(byId.get("queued")?.messages.length).toBe(2);
+    expect(byId.get("active")?.messages.length).toBe(2);
+  });
+
+  test("a lazily loaded local transcript arrives on setActive and survives a metadata save", async () => {
+    const local = app.createConversation("omp", { id: "lazy-local" });
+    const turn = app.beginTurn(local.id, "first words");
+    replyText.set(turn.turnId, "an answer");
+    app.applyTurnEvent({ type: "done", id: turn.turnId, seq: 1, exitCode: 0 });
+    app.setActive(null);
+    await new Promise(resolve => setTimeout(resolve, 450));
+    app.store.set(s => ({ ...s, conversations: [] }));
+    await app.hydrate();
+    expect(app.store.get().conversations.find(c => c.id === local.id)?.messages).toEqual([]);
+    app.setDetailMode(local.id, "Full");
+    await new Promise(resolve => setTimeout(resolve, 450));
+    expect(JSON.parse(persisted.get(`dash.durable.files.v2/${local.id}.json`) ?? "null").messages).toHaveLength(2);
+    app.setActive(local.id);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(app.store.get().conversations.find(c => c.id === local.id)?.messages.map(m => m.text)[0]).toBe("first words");
+  });
+
+  test("chats.v1 roster adopts only live rows; openChat adopts a summary; view-only chats are never saved", async () => {
+    app.setConnection({ features: ["chats.v1"], harnesses: [{ id: "codex", name: "Codex", available: true }], hosts: [hostWith([
+      { id: "codex:live", name: "live", kind: "codex", status: "running", sessionId: "live" },
+      { id: "av:codex:old", name: "old", kind: "codex", status: "available", sessionId: "old" },
+    ])] });
+    expect(app.store.get().conversations.map(c => c.sessionId)).toEqual(["live"]);
+    const summary = { key: "mbp:codex:old", kind: "codex", sessionId: "old", hostId: "mbp", hostName: "mbp", agentId: "av:codex:old", title: "old chat",
+      startedAt: 1, lastActivityAt: 2, messageCount: 3, origin: "agentsview" as const, chatable: true };
+    const opened = app.openChat(summary);
+    expect(app.store.get().activeId).toBe(opened.id);
+    expect(opened.openedAt).toBeGreaterThan(0);
+    expect(app.openChat(summary).id).toBe(opened.id);
+    const viewOnly = app.openChat({ ...summary, key: "machine:x:chatgpt:v", kind: "chatgpt", sessionId: "v", hostId: "machine:x", chatable: false });
+    expect(viewOnly.viewOnly).toBe(true);
+    expect(app.conversationTargetError(viewOnly)).toContain("View only");
+    await new Promise(resolve => setTimeout(resolve, 450));
+    expect([...persisted.keys()].some(key => key.includes(encodeURIComponent(viewOnly.id)))).toBe(false);
+    expect(persisted.has(`dash.durable.files.v2/${encodeURIComponent(opened.id)}.json`)).toBe(true);
+    app.setActive(opened.id);
+    expect(app.store.get().conversations.some(c => c.id === viewOnly.id)).toBe(false);
+  });
+
+  test("a chat opened from the paged list stays sendable when the next roster does not list it", () => {
+    const harnesses = [{ id: "codex", name: "Codex", available: true }, { id: "hermes", name: "Hermes", available: true }];
+    app.setConnection({ features: ["chats.v1"], harnesses, hosts: [hostWith([{ id: "codex:live", name: "live", kind: "codex", status: "running", sessionId: "live" }])] });
+    const summary = { key: "mbp:codex:deep", kind: "codex", sessionId: "deep", hostId: "mbp", hostName: "mbp", agentId: "av:codex:deep", title: "page 40 chat",
+      startedAt: 1, lastActivityAt: 2, messageCount: 3, origin: "agentsview" as const, chatable: true, openIn: "CLI" };
+    const opened = app.openChat(summary);
+    const hermes = app.openChat({ ...summary, key: "mbp:hermes:h9:default", kind: "hermes", sessionId: "h9", agentId: "hermes:h9", profileId: "default" });
+    // The next roster refresh lists neither (head too short, not running).
+    app.setConnection({ hosts: [hostWith([{ id: "codex:live", name: "live", kind: "codex", status: "running", sessionId: "live" }, { id: "x", name: "x", kind: "codex", status: "available", sessionId: "x" }])] });
+    for (const id of [opened.id, hermes.id]) {
+      const now = app.store.get().conversations.find(c => c.id === id);
+      expect(now?.stale).toBe(false);
+      expect(now?.openIn).toBeUndefined();
+      if (now) expect(app.conversationTargetError(now)).toBeUndefined();
+    }
+    // A live-only OMP session still ends with its roster row.
+    expect(app.conversationTargetError({ harness: "omp", sessionId: "o", targetHostId: "mbp", profileId: "omp:gone" })).toContain("unavailable");
+  });
+
+  test("an unchanged roster keeps the hosts reference", () => {
+    const host = hostWith([{ id: "codex:live", name: "live", kind: "codex", status: "running", sessionId: "live" }]);
+    app.setConnection({ hosts: [host] });
+    const before = app.store.get().connection.hosts;
+    app.setConnection({ hosts: [JSON.parse(JSON.stringify(host))] });
+    expect(app.store.get().connection.hosts).toBe(before);
+  });
+});
+
+
+describe("paged ws history refresh", () => {
+  test("a refreshed newest window after older pages were loaded leaves no hole in the scrollback", async () => {
+    const pages = await import("./history-pages");
+    const msg = (n: number) => ({ id: String(n), role: n % 2 ? "assistant" as const : "user" as const, text: `h${n}`, at: n * 1000 });
+    const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => msg(from + i));
+    const id = "hz-gap";
+    app.store.set(s => ({ ...s, conversations: [{ id, harness: "hermes", title: "h", createdAt: 1, updatedAt: 1, sessionId: "s", targetHostId: "0", messages: [] }] }));
+    pages.historyPages.set({});
+    // Newest window 51..100, then the user pages in 1..50.
+    app.applyHistoryReply(id, range(51, 100), "cur-51");
+    pages.historyPages.set({ [id]: pages.prependOlder(pages.historyState(id), range(1, 50).map(m => ({ ...m, role: "user" as const })), new Set(), null) });
+    // Three new messages arrive; the refresh is again the newest 50 (54..103).
+    app.applyHistoryReply(id, range(54, 103), "cur-54");
+    const conversation = app.store.get().conversations.find(c => c.id === id);
+    const chain = [...pages.historyState(id).older, ...(conversation?.messages ?? [])].map(m => Number(m.id));
+    expect(chain).toEqual(Array.from({ length: 103 }, (_, i) => i + 1));
+    expect(pages.historyState(id).before).toBeNull();
+  });
+
+  test("without older pages the refresh replaces the window and takes the new cursor", async () => {
+    const pages = await import("./history-pages");
+    const msg = (n: number) => ({ id: String(n), role: "user" as const, text: `h${n}`, at: n * 1000 });
+    const id = "hz-fresh";
+    app.store.set(s => ({ ...s, conversations: [{ id, harness: "hermes", title: "h", createdAt: 1, updatedAt: 1, sessionId: "s", targetHostId: "0", messages: [] }] }));
+    pages.historyPages.set({});
+    app.applyHistoryReply(id, [msg(1), msg(2)], "a");
+    app.applyHistoryReply(id, [msg(2), msg(3)], "b");
+    expect(app.store.get().conversations.find(c => c.id === id)?.messages.map(m => m.id)).toEqual(["2", "3"]);
+    expect(pages.historyState(id).before).toBe("b");
+  });
+});
+
+describe("startup index reconcile", () => {
+  test("a chat whose durable file was written but whose index entry was not comes back after startup", async () => {
+    const local = app.createConversation("omp");
+    app.beginTurn(local.id, "only copy of this transcript");
+    await new Promise(resolve => setTimeout(resolve, 450));
+    const indexKey = "dash.conversations.index.v3";
+    const index = persisted.get(indexKey) ?? "[]";
+    expect(index).toContain(local.id);
+    // Simulate the kill: the index lost the new entry, the durable file survived.
+    const entries: { id: string }[] = JSON.parse(index);
+    persisted.set(indexKey, JSON.stringify(entries.filter(entry => entry.id !== local.id)));
+    app.store.set(s => ({ ...s, conversations: [] }));
+    await app.hydrate();
+    expect(app.store.get().conversations.some(c => c.id === local.id)).toBe(false);
+    await app.reconcileIndex();
+    const back = app.store.get().conversations.find(c => c.id === local.id);
+    expect(back?.messages.find(m => m.role === "user")?.text).toBe("only copy of this transcript");
+    await new Promise(resolve => setTimeout(resolve, 450));
+    expect(persisted.get(indexKey)).toContain(local.id);
+    expect(await app.reconcileIndex()).toBe(0);
+  });
+});
+
+describe("archive prune against the live store", () => {
+  test("a row opened during the prune survives with its new message; chats created meanwhile stay in the index", async () => {
+    const indexKey = "dash.conversations.index.v3";
+    for (const key of [...persisted.keys()]) if (key.startsWith("dash.durable.files.v2/") || key.startsWith("dash.cache.files.v2/") || key === indexKey || key === "dash.chats.migrated.v3") persisted.delete(key);
+    const rows = Array.from({ length: 40 }, (_, i) => ({ id: `live:codex:p${i}`, harness: "codex", title: `p${i}`, createdAt: 1, updatedAt: 10 + i, sessionId: `p${i}`, targetHostId: "mbp", messages: [] }));
+    for (const row of rows) persisted.set(`dash.durable.files.v2/${encodeURIComponent(row.id)}.json`, JSON.stringify(row));
+    persisted.set(indexKey, JSON.stringify(rows.map(({ messages: _m, ...meta }) => ({ ...meta, hasPending: false }))));
+    app.store.set(s => ({ ...s, conversations: [], activeId: null }));
+    await app.hydrate();
+    expect(app.store.get().conversations).toHaveLength(40);
+    const target = "live:codex:p35";
+    let created = "";
+    let paused = 0;
+    await app.migrateArchive({ legacy: false, pause: async () => {
+      paused += 1;
+      if (paused !== 1) return;
+      // Mid-run: the user opens a pending row and sends; another chat is created.
+      app.setActive(target);
+      app.beginTurn(target, "sent while pruning");
+      created = app.createConversation("omp").id;
+    } });
+    const ids = app.store.get().conversations.map(c => c.id);
+    expect(ids).toContain(target);
+    expect(ids).toContain(created);
+    expect(app.store.get().conversations.find(c => c.id === target)?.messages.some(m => m.role === "user" && m.text === "sent while pruning")).toBe(true);
+    expect(ids.filter(id => id.startsWith("live:codex:p"))).toEqual([target]);
+    await new Promise(resolve => setTimeout(resolve, 600));
+    const index: { id: string }[] = JSON.parse(persisted.get(indexKey) ?? "[]");
+    expect(index.map(entry => entry.id).sort()).toEqual([created, target].sort());
+    expect(persisted.has(`dash.durable.files.v2/${encodeURIComponent(target)}.json`)).toBe(true);
+  });
+
+  test("setActive stamps openedAt once", () => {
+    const c = app.createConversation("codex", { id: "live:codex:stamp", sessionId: "stamp" });
+    app.store.set(s => ({ ...s, activeId: null, conversations: s.conversations.map(x => x.id === c.id ? { ...x, openedAt: undefined } : x) }));
+    app.setActive(c.id);
+    const first = app.store.get().conversations.find(x => x.id === c.id)?.openedAt;
+    expect(first).toBeGreaterThan(0);
+    app.setActive(null);
+    app.setActive(c.id);
+    expect(app.store.get().conversations.find(x => x.id === c.id)?.openedAt).toBe(first);
+  });
+});
+
+test("status events on a running chat keep the Chats list input, so the pane does not re-merge", async () => {
+  const { conversationEntries, stableEntries } = await import("../lib/chat-index");
+  const chat = app.createConversation("omp");
+  const turn = app.beginTurn(chat.id, "Go");
+  const entries = () => stableEntries(list, conversationEntries(app.store.get().conversations));
+  let list = stableEntries([], conversationEntries(app.store.get().conversations));
+  const first = list;
+  for (let seq = 1; seq <= 3; seq++) {
+    const before = app.store.get().conversations.find(c => c.id === chat.id)?.updatedAt;
+    Bun.sleepSync(2);
+    app.applyTurnEvent({ type: "status", id: turn.turnId, seq, text: `step ${seq}` });
+    // Each status event does bump the conversation (the precondition the list must tolerate).
+    expect(app.store.get().conversations.find(c => c.id === chat.id)?.updatedAt).toBeGreaterThan(before ?? Infinity);
+    list = entries();
+    expect(list).toBe(first);
+  }
+  replyText.set(turn.turnId, "Done");
+  app.applyTurnEvent({ type: "done", id: turn.turnId, seq: 9, exitCode: 0 });
+  // Settling the turn changes its section, so the list re-merges once.
+  expect(entries()).not.toBe(first);
 });

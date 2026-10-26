@@ -435,3 +435,30 @@ describe("live OMP sessions", () => {
     expect(src).not.toContain("api.cursor.com");
   });
 });
+
+describe("chat index keeps the hello roster small and off the archive", () => {
+  test("collectRoster takes the AgentsView head from the worker snapshot, never a sync archive query", () => {
+    const roster = readFileSync(join(import.meta.dir, "roster.ts"), "utf8");
+    const adapter = readFileSync(join(import.meta.dir, "agentsview-sessions.ts"), "utf8");
+    const index = readFileSync(join(import.meta.dir, "../index.ts"), "utf8");
+    for (const src of [roster, adapter, index]) {
+      expect(src).not.toContain("bun:sqlite");
+      expect(src).not.toContain("agentsviewHistory");
+    }
+    expect(roster).toContain("agentsviewSessions(listed)");
+    expect(adapter).toContain("rows: AgentInfo[] = head");
+  });
+
+  test("hello head is bounded: 10 per catalog kind + Hermes head + live rows", async () => {
+    const { agentsviewSessions, setArchiveHead, AGENTSVIEW_KINDS } = await import("./agentsview-sessions");
+    const { rosterHermesHead } = await import("./hermes-sessions");
+    const rows = AGENTSVIEW_KINDS.flatMap(kind => Array.from({ length: 10 }, (_, i) => ({ id: `av:${kind}:${i}`, name: "x", kind, status: "available" as const, sessionId: String(i) })));
+    setArchiveHead(rows);
+    try {
+      expect(agentsviewSessions(new Set(), undefined, {}).length).toBe(10 * AGENTSVIEW_KINDS.length);
+      expect(agentsviewSessions(new Set(["codex:3"]), undefined, {}).length).toBe(10 * AGENTSVIEW_KINDS.length - 1);
+    } finally { setArchiveHead([]); }
+    expect(rosterHermesHead({})).toBe(50);
+    expect(rosterHermesHead({ DASH_ROSTER_HERMES_HEAD: "5" })).toBe(5);
+  });
+});

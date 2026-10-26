@@ -36,6 +36,8 @@ export interface UserMessage {
   at: number;
   /** Files uploaded to the bridge with this message. */
   attachments?: ChatAttachment[];
+  /** Host history cut this text; the full text loads on demand. */
+  truncated?: boolean;
 }
 
 export interface AssistantMessage {
@@ -60,6 +62,8 @@ export interface AssistantMessage {
   handoff?: "queued" | "sending";
   /** Error text when `state` is "error". */
   error?: string;
+  /** Host history cut this text; the full text loads on demand. */
+  truncated?: boolean;
   /** Bridge turn id; used to re-attach after a reconnect. */
   turnId: string;
   /** Last event sequence number applied. */
@@ -93,6 +97,12 @@ export interface Conversation {
   openIn?: string;
   /** True when the latest successful host roster no longer reports this chat. */
   stale?: boolean;
+  /** When the owner first opened this chat on the phone. Chats never opened are not kept. */
+  openedAt?: number;
+  /** A transient chat the phone can read but not send to. Never persisted. */
+  viewOnly?: boolean;
+  /** Short last-message text kept in the conversation index while the transcript is not loaded. */
+  preview?: string;
   messages: Message[];
 }
 
@@ -104,6 +114,8 @@ export interface Connection {
   cwd?: string;
   harnesses: HarnessInfo[];
   hosts: HostInfo[];
+  /** Bridge capability flags from hello (e.g. "chats.v1"). Old bridges send none. */
+  features?: string[];
   /** Human-readable reason for the last failure. */
   error?: string;
 }
@@ -158,7 +170,7 @@ function parseMessage(raw: unknown): Message | null {
     // A present-but-malformed upload list drops the row rather than replaying it as text-only.
     const attachments = parseChatAttachments(raw.attachments);
     if (attachments === null) return null;
-    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(attachments?.length ? { attachments } : {}), delivery: raw.delivery === "steering" || raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" || raw.delivery === "failed" ? raw.delivery : undefined, deliveryAt: finite(raw.deliveryAt) ? raw.deliveryAt : undefined, deliveryNote: typeof raw.deliveryNote === "string" ? raw.deliveryNote : undefined };
+    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(attachments?.length ? { attachments } : {}), ...(raw.truncated === true ? { truncated: true } : {}), delivery: raw.delivery === "steering" || raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" || raw.delivery === "failed" ? raw.delivery : undefined, deliveryAt: finite(raw.deliveryAt) ? raw.deliveryAt : undefined, deliveryNote: typeof raw.deliveryNote === "string" ? raw.deliveryNote : undefined };
   }
   if (raw.role === "assistant" && isAssistantState(raw.state) && nonBlank(raw.turnId)) {
     // A corrupt sequence would make re-attach resume from a nonsensical offset.
@@ -178,6 +190,7 @@ function parseMessage(raw: unknown): Message | null {
       activity: Array.isArray(raw.activity) ? raw.activity.filter((item): item is string => typeof item === "string").slice(-32) : undefined,
       handoff: raw.handoff === "queued" || raw.handoff === "sending" ? raw.handoff : undefined,
       error: typeof raw.error === "string" ? raw.error : undefined,
+      ...(raw.truncated === true ? { truncated: true } : {}),
       turnId: raw.turnId,
       seq: typeof raw.seq === "number" ? raw.seq : 0,
     };
@@ -235,6 +248,8 @@ export function parseConversation(raw: unknown): Conversation | null {
     profileName: typeof raw.profileName === "string" ? raw.profileName : undefined,
     messageCount: finite(raw.messageCount) ? raw.messageCount : undefined,
     stale: raw.stale === true,
+    ...(typeof raw.openedAt === "number" ? { openedAt: raw.openedAt } : {}),
+    ...(typeof raw.preview === "string" && raw.preview ? { preview: raw.preview.slice(0, 200) } : {}),
     messages: displayedMessages,
   };
 }

@@ -92,7 +92,10 @@ export async function nativeCompact(home: string, session: string): Promise<{ ok
   } catch { return { ok: false, code: "outcome_unknown" }; } finally { clearTimeout(timer); }
 }
 
-export function contextHttp(options: { sessions?: HermesSessions; read?: typeof nativeContext; plans?: () => Promise<PlanUsage[]>; compact?: typeof nativeCompact } = {}) {
+/** Session compaction mutates the transcript, so it is opt-in per host (DASH_CONTEXT_COMPACTION=1). */
+export function compactionEnabled(env: Record<string, string | undefined> = process.env): boolean { return env.DASH_CONTEXT_COMPACTION === "1"; }
+
+export function contextHttp(options: { sessions?: HermesSessions; read?: typeof nativeContext; plans?: () => Promise<PlanUsage[]>; compact?: typeof nativeCompact; compaction?: boolean } = {}) {
   const sessions = options.sessions ?? new HermesSessions();
   const plans = options.plans ?? planCache();
   const pending = new Set<string>();
@@ -103,6 +106,9 @@ export function contextHttp(options: { sessions?: HermesSessions; read?: typeof 
     if (url.pathname !== "/chat/context" && !compress && !usageSheet) return;
     const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
     if (!authorized) return json({ error: "unauthorized" }, 401);
+    // Read-only by default: a host that does not opt into compaction answers explicitly so clients
+    // show "unavailable" instead of a 404/guess; nothing is read or executed.
+    if (compress && options.compaction !== true) return json({ ok: false, code: "unavailable", error: "Compaction is not available on this host" }, 501);
     if (request.method !== (compress ? "POST" : "GET")) return json({ error: "method not allowed" }, 405);
     const session = url.searchParams.get("session");
     const profile = url.searchParams.get("profile");

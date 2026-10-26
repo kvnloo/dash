@@ -82,6 +82,46 @@ export function cacheConversation(chat: Conversation): string | null {
   return snapshot.messages.length ? JSON.stringify(snapshot) : null;
 }
 
+/** The light index of persisted conversations: everything but the transcript. */
+export const CONVERSATION_INDEX_KEY = "dash.conversations.index.v3";
+export interface IndexStore {
+  read(): Promise<string | null>;
+  write(value: string): Promise<void>;
+  remove(): Promise<void>;
+}
+export interface IndexedConversations {
+  /** Stubs (`messages: []`) for every persisted conversation, newest first. */
+  chats: Conversation[];
+  /** Ids whose transcripts hold pending or queued sends: load these at startup. */
+  pending: string[];
+}
+
+function hasPending(chat: Conversation): boolean { return chat.messages.some(pending); }
+function previewText(chat: Conversation): string | undefined {
+  const last = chat.messages.at(-1);
+  const text = last ? last.text.replace(/\s+/g, " ").trim() : chat.preview;
+  return text ? text.slice(0, 160) : undefined;
+}
+/** One index entry: the conversation without messages, plus startup hints. */
+export function indexEntry(chat: Conversation): string {
+  const { messages: _messages, viewOnly: _viewOnly, ...meta } = chat;
+  const preview = previewText(chat);
+  return JSON.stringify({ ...meta, ...(preview ? { preview } : {}), hasPending: hasPending(chat) });
+}
+export function parseIndex(raw: string | null): { chat: Conversation; part: string; hasPending: boolean }[] | null {
+  if (!raw) return null;
+  let value: unknown;
+  try { value = JSON.parse(raw); } catch { return null; }
+  if (!Array.isArray(value)) return null;
+  const out: { chat: Conversation; part: string; hasPending: boolean }[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null) continue;
+    const chat = parseConversation({ ...item, messages: [] });
+    if (chat) out.push({ chat, part: JSON.stringify(item), hasPending: "hasPending" in item && item.hasPending === true });
+  }
+  return out;
+}
+
 /** Serializes disk commits while coalescing waiting snapshots to the newest state. */
 export class ConversationPersistence {
   private saved = new Map<string, Conversation>();
@@ -89,7 +129,63 @@ export class ConversationPersistence {
   private cacheOrder: string[] = [];
   private waiting: readonly Conversation[] | undefined;
   private running: Promise<void> | undefined;
-  constructor(private readonly files: ConversationFiles) {}
+  /** Conversations hydrated from the index whose durable transcript was not read yet. */
+  private unloaded = new Set<string>();
+  /** Serialized index entries by id; the index key is written once per drain. */
+  private indexParts = new Map<string, string>();
+  private indexDirty = false;
+  /** Drain generation each saved id was last seen in (deletion without rebuilding a Set). */
+  private seen = new Map<string, number>();
+  private generation = 0;
+  private cacheListed = true;
+  /** Save calls so far; each drained snapshot knows which call took it. */
+  private saveSeq = 0;
+  private waitingSeq = 0;
+  /** Ids adopted outside a save: a snapshot taken at or before this save call cannot delete them. */
+  private adoptedAt = new Map<string, number>();
+  constructor(private readonly files: ConversationFiles, private readonly index?: IndexStore) {}
+
+  /** Startup without reading transcripts: stubs from the index, or null when there is no index yet. */
+  async loadIndex(): Promise<IndexedConversations | null> {
+    if (!this.index) return null;
+    const parsed = parseIndex(await this.index.read());
+    if (!parsed) return null;
+    this.saved.clear(); this.durableValues.clear(); this.unloaded.clear(); this.indexParts.clear(); this.seen.clear();
+    const chats: Conversation[] = [];
+    const pendingIds: string[] = [];
+    for (const { chat, part, hasPending: waiting } of parsed) {
+      if (this.indexParts.has(chat.id)) continue;
+      chats.push(chat);
+      this.saved.set(chat.id, chat);
+      this.unloaded.add(chat.id);
+      this.indexParts.set(chat.id, part);
+      if (waiting) pendingIds.push(chat.id);
+    }
+    // The cache listing is only needed for eviction; the first save reads it, not startup.
+    this.cacheOrder = [];
+    this.cacheListed = false;
+    this.indexDirty = false;
+    return { chats: chats.sort((a, b) => b.updatedAt - a.updatedAt), pending: pendingIds };
+  }
+
+  isLoaded(id: string): boolean { return !this.unloaded.has(id); }
+  /** The store now holds the transcript `loadOne` read: saves may write this chat directly. */
+  markLoaded(id: string): void { this.unloaded.delete(id); }
+
+  /** Read one conversation's durable transcript on demand (active chat, pending sends). */
+  async loadOne(chat: Conversation): Promise<Conversation> {
+    if (!this.unloaded.has(chat.id)) return chat;
+    let disk: Conversation | null = null;
+    try {
+      const raw = await this.files.read("durable", filename(chat.id));
+      disk = parse(raw);
+      if (raw && disk && hasHostHistory(disk)) this.durableValues.set(chat.id, raw);
+    } catch { disk = null; }
+    if (!disk) return chat;
+    const ids = new Set(chat.messages.map(message => message.id));
+    const messages = [...disk.messages.filter(message => !ids.has(message.id)), ...chat.messages];
+    return { ...disk, ...chat, messages };
+  }
 
   async load(): Promise<Conversation[]> {
     const chats: Conversation[] = [];
@@ -101,11 +197,60 @@ export class ConversationPersistence {
       for (const chat of batch) if (chat) {
         chats.push(chat);
         this.saved.set(chat.id, chat);
+        this.unloaded.delete(chat.id);
+        this.indexParts.set(chat.id, indexEntry(chat));
         if (hasHostHistory(chat)) this.durableValues.set(chat.id, JSON.stringify(chat));
       }
     }
+    // The v2 file layout is readable without an index; the next save writes one.
+    this.indexDirty = true;
     this.cacheOrder = (await this.files.list("cache")).filter(name => name.endsWith(".json"));
+    this.cacheListed = true;
     return chats.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  /**
+   * Durable files the index does not list: a crash between a new chat's file write and the index
+   * write, or files an older app wrote. Read-only: returns the parsed chats (full transcripts);
+   * the caller puts them in the store and then calls `adopt`.
+   */
+  async orphans(): Promise<Conversation[]> {
+    if (!this.index) return [];
+    const out: Conversation[] = [];
+    for (const name of await this.files.list("durable")) {
+      if (!name.endsWith(".json")) continue;
+      let id: string;
+      try { id = decodeURIComponent(name.slice(0, -".json".length)); } catch { continue; }
+      if (this.indexParts.has(id) || this.saved.has(id)) continue;
+      let chat: Conversation | null = null;
+      try { chat = parse(await this.files.read("durable", name)); } catch { chat = null; }
+      if (chat && chat.id === id) out.push(chat);
+    }
+    return out;
+  }
+
+  /** Register chats found by `orphans` (now in the store) and rewrite the index with them. */
+  adopt(chats: readonly Conversation[]): void {
+    for (const chat of chats) {
+      if (this.indexParts.has(chat.id)) continue;
+      this.saved.set(chat.id, chat);
+      this.unloaded.delete(chat.id);
+      this.indexParts.set(chat.id, indexEntry(chat));
+      if (hasHostHistory(chat)) this.durableValues.set(chat.id, JSON.stringify(durableConversation(chat)));
+      this.adoptedAt.set(chat.id, this.saveSeq);
+      this.indexDirty = true;
+    }
+  }
+
+  /** The next drain rewrites the whole index key from the in-memory entries. */
+  markIndexDirty(): void { this.indexDirty = true; }
+
+  /** Forget conversations removed outside a save (the archive prune) without touching disk. */
+  forget(ids: readonly string[]): void {
+    for (const id of ids) {
+      this.saved.delete(id); this.durableValues.delete(id); this.unloaded.delete(id); this.seen.delete(id); this.adoptedAt.delete(id);
+      if (this.indexParts.delete(id)) this.indexDirty = true;
+    }
   }
 
   async cached(chat: Conversation): Promise<Conversation> {
@@ -123,6 +268,7 @@ export class ConversationPersistence {
 
   save(chats: readonly Conversation[]): Promise<void> {
     this.waiting = chats;
+    this.waitingSeq = ++this.saveSeq;
     if (!this.running) {
       this.running = Promise.resolve().then(() => this.drain());
     }
@@ -132,26 +278,48 @@ export class ConversationPersistence {
     try {
       while (this.waiting) {
         const chats = this.waiting;
+        const seq = this.waitingSeq;
         this.waiting = undefined;
-        const keep = new Set(chats.map(chat => chat.id));
-        for (const [id] of this.saved) if (!keep.has(id)) {
+        const generation = ++this.generation;
+        for (const chat of chats) {
+          this.seen.set(chat.id, generation);
+          const adopted = this.adoptedAt.get(chat.id);
+          if (adopted !== undefined && seq > adopted) this.adoptedAt.delete(chat.id);
+        }
+        for (const [id] of this.saved) if (this.seen.get(id) !== generation) {
+          const adopted = this.adoptedAt.get(id);
+          // Taken before the chat was adopted into the store: absence here is not a delete.
+          if (adopted !== undefined && seq <= adopted) continue;
+          this.adoptedAt.delete(id);
           const name = filename(id);
           await this.files.remove("durable", name);
           await this.files.remove("cache", name).catch(() => undefined);
           this.saved.delete(id);
           this.durableValues.delete(id);
+          this.unloaded.delete(id);
+          this.seen.delete(id);
+          if (this.indexParts.delete(id)) this.indexDirty = true;
           this.cacheOrder = this.cacheOrder.filter(entry => entry !== name);
         }
         for (const chat of chats) {
           if (this.saved.get(chat.id) === chat) continue;
           const name = filename(chat.id);
-          const durable = JSON.stringify(durableConversation(chat));
+          let record = chat;
+          if (this.unloaded.has(chat.id) && !hasHostHistory(chat)) {
+            // The transcript of a local chat lives only in its durable file: never overwrite it with a stub.
+            const disk = parse(await this.files.read("durable", name).catch(() => null));
+            if (disk) {
+              const ids = new Set(chat.messages.map(message => message.id));
+              record = { ...chat, messages: [...disk.messages.filter(message => !ids.has(message.id)), ...chat.messages] };
+            }
+          }
+          const durable = JSON.stringify(durableConversation(record));
           if (this.durableValues.get(chat.id) !== durable) {
             await this.files.write("durable", name, durable);
             if (hasHostHistory(chat)) this.durableValues.set(chat.id, durable);
             else this.durableValues.delete(chat.id);
           }
-          if (hasHostHistory(chat) && !sameHistory(this.saved.get(chat.id), chat)) {
+          if (hasHostHistory(chat) && !this.unloaded.has(chat.id) && !sameHistory(this.saved.get(chat.id), chat)) {
             const cache = cacheConversation(chat);
             try {
               if (cache) {
@@ -163,13 +331,24 @@ export class ConversationPersistence {
               }
             } catch { /* A disposable cache cannot block durable drafts or startup. */ }
           }
+          const part = indexEntry(record);
+          if (this.indexParts.get(chat.id) !== part) { this.indexParts.set(chat.id, part); this.indexDirty = true; }
           this.saved.set(chat.id, chat);
+        }
+        if (!this.cacheListed) {
+          this.cacheListed = true;
+          const listed = (await this.files.list("cache").catch(() => [])).filter(name => name.endsWith(".json"));
+          this.cacheOrder = [...listed.filter(name => !this.cacheOrder.includes(name)), ...this.cacheOrder];
         }
         while (this.cacheOrder.length > CACHE_ENTRIES) {
           const oldest = this.cacheOrder[0];
           if (!oldest) break;
           await this.files.remove("cache", oldest).catch(() => undefined);
           this.cacheOrder.shift();
+        }
+        if (this.index && this.indexDirty) {
+          this.indexDirty = false;
+          await this.index.write(`[${[...this.indexParts.values()].join(",")}]`);
         }
       }
     } finally { this.running = undefined; }
@@ -180,5 +359,7 @@ export class ConversationPersistence {
       for (const name of await this.files.list(area)) await this.files.remove(area, name);
     }
     this.saved.clear(); this.durableValues.clear(); this.cacheOrder = [];
+    this.unloaded.clear(); this.indexParts.clear(); this.seen.clear(); this.adoptedAt.clear(); this.indexDirty = false;
+    await this.index?.remove();
   }
 }

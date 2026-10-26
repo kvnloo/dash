@@ -23,6 +23,9 @@ import { ConnectionPill } from "../components/ConnectionPill";
 import { HarnessPicker } from "../components/HarnessPicker";
 import { AppNav } from "../components/AppNav";
 import { MessageRow } from "../components/MessageRow";
+import { SkeletonRow } from "../components/SkeletonRow";
+import { useHistoryPages } from "../hooks/useHistoryPages";
+import { fetchFullText } from "../store/history-pages";
 import { LiveSurface } from "../components/LiveSurface";
 import { PressScale } from "../components/PressScale";
 import { isDebugActive } from "../debug/expose";
@@ -42,6 +45,8 @@ import {
   createConversation,
   parkUnsentTurn,
   flushPendingSends,
+  releaseViewOnly,
+  replaceMessageText,
   takeQueuedForSteer,
   changeQueuePreview,
   saveQueuePreview,
@@ -113,10 +118,24 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const conversation = store.use((s) => s.conversations.find((c) => c.id === s.activeId));
   const sharedDraft = sharedDrafts.use(s => conversation ? s[conversation.id] : undefined);
   const messages = conversation?.messages ?? EMPTY;
+  // Older pages (scrolled up) live in memory beside the conversation's own newest window.
+  const history = useHistoryPages(conversation);
+  const older = history.older;
   const visibleMessages = useMemo(() => {
     const queued = new Set(conversation ? queuedParts(conversation).flatMap(part => [part.user.id, part.assistant.id]) : []);
-    return messages.filter(message => !queued.has(message.id));
-  }, [messages, conversation]);
+    const current = messages.filter(message => !queued.has(message.id));
+    if (!older.length) return current;
+    const shown = new Set(current.map(message => message.id));
+    return [...older.filter(message => !shown.has(message.id)), ...current];
+  }, [messages, conversation, older]);
+  // A view-only chat is transient: closing it drops it from the phone.
+  const viewOnlyId = conversation?.viewOnly ? conversation.id : undefined;
+  useEffect(() => () => { if (viewOnlyId) releaseViewOnly(viewOnlyId); }, [viewOnlyId]);
+  const showFull = useCallback((messageId: string) => {
+    if (!conversation) return;
+    const target = conversation;
+    void fetchFullText(target, messageId).then(text => { if (text !== undefined) replaceMessageText(target.id, messageId, text); });
+  }, [conversation]);
   const anchors = useMemo(() => railTurns(visibleMessages), [visibleMessages]);
   useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
   const jumpPrompt = useCallback((prompt: number) => {
@@ -448,10 +467,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           ref={listRef}
           data={visibleMessages}
           extraData={external}
-          renderItem={({ item }) => <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
+          renderItem={({ item }) => item.truncated ? <View>
+            <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />
+            <PressScale accessibilityRole="button" accessibilityLabel="Show full message" onPress={() => showFull(item.id)} style={styles.showFull}><Text style={styles.showFullText}>Show full message</Text></PressScale>
+          </View> : <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
           maintainVisibleContentPosition={{ startRenderingFromBottom: true }}
+          onStartReached={history.canLoadOlder ? history.loadOlder : undefined}
+          onStartReachedThreshold={0.5}
+          ListHeaderComponent={history.loading ? <SkeletonRow /> : null}
           onScrollBeginDrag={() => { dragging.current = true; }}
           onScroll={event => {
             const { contentSize, layoutMeasurement, contentOffset } = event.nativeEvent;
@@ -533,4 +558,6 @@ const styles = StyleSheet.create({
   liveChipText: { ...type.label, color: colors.textMuted },
   liveChipTextOn: { color: colors.gold },
   liveNote: { ...type.mono, color: colors.textTertiary, flex: 1 },
+  showFull: { alignSelf: "flex-start", minHeight: 44, justifyContent: "center", paddingHorizontal: space.lg },
+  showFullText: { ...type.label, color: colors.gold },
 });

@@ -1,12 +1,15 @@
 import type { Conversation } from "../model";
 import { messageThinking } from "./thinking";
 
-export type NotificationTarget = { kind: "chat"; chatId: string } | { kind: "approvals" };
+export type NotificationTarget = { kind: "chat"; chatId: string } | { kind: "approvals" } | { kind: "notices" };
 export interface DashNotice { key: string; title: string; body: string; target: NotificationTarget }
 export function shouldNotify(input: { foreground: boolean; enabled: boolean; permission: string }): boolean {
   return !input.foreground && input.enabled && input.permission === "granted";
 }
 export function chatLink(chatId: string): string { return `dash://chat/${encodeURIComponent(chatId)}`; }
+export function notificationLink(target: NotificationTarget): string {
+  return target.kind === "chat" ? chatLink(target.chatId) : target.kind === "approvals" ? "dash://approvals" : "dash://notices";
+}
 export function parseChatLink(url: string | null): string | null {
   if (!url) return null;
   try {
@@ -19,6 +22,7 @@ export function parseChatLink(url: string | null): string | null {
 export function parseNotificationTarget(data: unknown): NotificationTarget | null {
   if (typeof data !== "object" || data === null) return null;
   const url: unknown = Reflect.get(data, "url");
+  if (url === "dash://notices") return { kind: "notices" };
   if (url === "dash://approvals") return { kind: "approvals" };
   const chatId = typeof url === "string" ? parseChatLink(url) : null;
   return chatId ? { kind: "chat", chatId } : null;

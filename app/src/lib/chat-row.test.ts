@@ -82,7 +82,8 @@ test("Chats rows render the row model and route actions through the tested helpe
   expect(source).toContain("onLongPress={() => onLongPress(item.id)}");
   expect(source).toContain("delayLongPress={350}");
   expect(source).toContain("onPress={open}");
-  expect(source).toContain("onLongPress={rowLongPress(feedbackOn, onFeedback, remove)}");
+  expect(source).toContain("rowLongPress(feedbackOn, onFeedback, remove)");
+  expect(source).toContain("onLongPress={longPress}");
   expect(source).toContain('selection: { kind: "chat", id, label: conversation?.title || id }');
   expect(source).toContain('chatRow(item, harnessName, connectionStatus)');
   expect(source).toContain('{content.folder}');

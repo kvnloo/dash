@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { ToolDetails } from "./tool-details";
 import type { ReplyPart } from "../../shared/protocol";
 import { PartEmitter, hermesParts, redact, record as partRecord } from "./reply-parts";
-import type { AgentInfo, HistoryMessage } from "../../shared/protocol";
+import { MESSAGE_TEXT_MAX, type AgentInfo, type HistoryMessage } from "../../shared/protocol";
 import { parseHermesEnvFile, type EnvMap, type HermesFetch } from "./hermes-session";
 import { hostProcesses, ownerOf, readLiveOwners, surfaceLabel, type LiveOwner } from "./hermes-owner";
 import { hostGatewayProbe, ownerHosting, type GatewayHostProbe, type OwnerHosting } from "./hermes-gateway-host";
@@ -16,11 +16,23 @@ import { hostGatewayProbe, ownerHosting, type GatewayHostProbe, type OwnerHostin
 // cron, oneshot, kanban, tool or delegated workers. `local` is native session authority CLI.
 export const HERMES_CHAT_SOURCES = ["local", "cli", "tui", "desktop", "acp", "api_server", "telegram", "discord", "slack", "whatsapp", "signal", "matrix", "email", "sms", "imessage", "mattermost", "dingtalk", "feishu", "wecom", "qq", "teams", "irc", "web", "gateway"];
 const SOURCES = new Set(HERMES_CHAT_SOURCES);
-const RECENT_LIMIT = 50;
+/**
+ * Roster (hello) head per profile (DASH_ROSTER_HERMES_HEAD, default 50). The full list is served
+ * paged from the chat index. Stays at 50: older apps mark any adopted chat the roster stops listing
+ * as stale, so a smaller head must wait for a client capability that opts into it.
+ */
+export function rosterHermesHead(env: Record<string, string | undefined> = process.env): number {
+  const n = Number(env.DASH_ROSTER_HERMES_HEAD);
+  return Number.isInteger(n) && n > 0 ? Math.min(n, 500) : 50;
+}
 const SESSION_FIELDS = "id,source,title,started_at,last_activity_at,message_count,cwd,archived,hidden,parent_session_id,end_reason,model_config";
 const PROFILE_OK = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 export type HermesApi = { url: string; key: string };
-type Profile = { id: string; home: string; api?: HermesApi };
+export type Profile = { id: string; home: string; api?: HermesApi };
+/** One native session row for the chat index. `agent` is absent when the row is not visible. */
+export type HermesListRow = { id: string; activity: number; startedAt: number; agent?: AgentInfo };
+/** Keyset position in a Hermes transcript: native (timestamp seconds, message id). */
+export type HermesHistoryCursor = { t: number; i: number };
 type Row = Record<string, unknown>;
 function record(value: unknown): value is Row { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function readEnv(path: string): EnvMap { try { return parseHermesEnvFile(readFileSync(path, "utf8")); } catch { return {}; } }
@@ -29,7 +41,7 @@ function stamp(value: unknown): number {
   if (typeof value === "string") return Date.parse(value) || 0;
   return 0;
 }
-function visible(row: Row): boolean {
+export function visible(row: Row): boolean {
   if (typeof row.source !== "string" || !SOURCES.has(row.source) || row.archived || row.hidden || row.is_internal_child) return false;
   try {
     const config: unknown = typeof row.model_config === "string" ? JSON.parse(row.model_config) : undefined;
@@ -43,7 +55,7 @@ function text(content: unknown): string {
   return content.flatMap(block => record(block) && block.type === "text" && typeof block.text === "string" ? [block.text] : []).join("\n");
 }
 export function hermesSessionAgentId(profile: string, session: string): string { return `hermes:session:${encodeURIComponent(profile)}:${encodeURIComponent(session)}`; }
-function toAgent(row: Row, profile: Profile, owner?: LiveOwner): AgentInfo | undefined {
+export function toAgent(row: Row, profile: Profile, owner?: LiveOwner): AgentInfo | undefined {
   if (!visible(row) || typeof row.id !== "string") return undefined;
   const title = typeof row.title === "string" && row.title.trim() ? row.title : `Hermes · ${profile.id}`;
   return { id: hermesSessionAgentId(profile.id, row.id), name: title, kind: "hermes", status: "available", sessionId: row.id, profileId: profile.id,
@@ -82,7 +94,8 @@ export function parseHermesHistory(rows: unknown): HistoryMessage[] {
   }
   return out.filter(message => message.text.trim() || message.parts?.length).map(message => ({ ...message, text: redact(message.text) }));
 }
-function withDb<T>(profile: Profile, fn: (db: Database) => T): T | undefined {
+/** Read-only native DB access (query_only, busy_timeout). Never initializes or migrates. */
+export function withDb<T>(profile: Profile, fn: (db: Database) => T): T | undefined {
   if (!existsSync(join(profile.home, "state.db"))) return undefined;
   let db: Database | undefined;
   try {
@@ -92,16 +105,16 @@ function withDb<T>(profile: Profile, fn: (db: Database) => T): T | undefined {
     return fn(db);
   } catch { return undefined; } finally { db?.close(); }
 }
-function localRows(profile: Profile): Row[] {
-  return withDb(profile, db => db.query<Row, []>(`SELECT ${SESSION_FIELDS} FROM sessions WHERE coalesce(archived,0)=0 AND coalesce(hidden,0)=0
+function localRows(profile: Profile, limit = rosterHermesHead()): Row[] {
+  return withDb(profile, db => db.query<Row, [number]>(`SELECT ${SESSION_FIELDS} FROM sessions WHERE coalesce(archived,0)=0 AND coalesce(hidden,0)=0
     AND source IN (${HERMES_CHAT_SOURCES.map(s => `'${s}'`).join(",")})
-    ORDER BY coalesce(last_activity_at,started_at) DESC LIMIT ${RECENT_LIMIT}`).all()) ?? [];
+    ORDER BY coalesce(last_activity_at,started_at) DESC LIMIT ?`).all(limit)) ?? [];
 }
 function localSession(profile: Profile, id: string): Row | undefined {
   return withDb(profile, db => db.query<Row, [string]>(`SELECT ${SESSION_FIELDS} FROM sessions WHERE id=?`).get(id) ?? undefined);
 }
 // Compression continuations only, never delegate children. Bounded lineage walk.
-function lineageIds(db: Database, id: string): Set<string> {
+export function lineageIds(db: Database, id: string): Set<string> {
   let tip = id;
   const ids = new Set<string>([id]);
   for (let n = 0; n < 64; n++) {
@@ -171,7 +184,7 @@ export class HermesSessions {
     this.processes = options.processes ?? hostProcesses;
     this.gateways = options.gateways ?? hostGatewayProbe(this.root, pid => this.processes.alive(pid));
   }
-  private profiles(credentials = true): Profile[] {
+  profiles(credentials = true): Profile[] {
     // "default" names the root home. A stray profiles/default directory would be a second
     // "default" and make every default session ambiguous once the roster has listed it.
     const profiles: Profile[] = [{ id: "default", home: this.root }];
@@ -202,7 +215,7 @@ export class HermesSessions {
   }
   async list(): Promise<AgentInfo[]> {
     const lists = await Promise.all(this.profiles().map(async profile => {
-      const local = localRows(profile);
+      const local = localRows(profile, rosterHermesHead(this.env));
       let rows = local;
       if (profile.api) try {
         // Named profiles often copy default's API port/key. Verify a native id
@@ -222,7 +235,7 @@ export class HermesSessions {
           apiRows.push(...body.data.filter(record));
           if (!body.has_more) break;
         }
-        rows = apiRows.filter(visible).slice(0, RECENT_LIMIT).map(row => ({ ...local.find(l => l.id === row.id) ?? (typeof row.id === "string" ? localSession(profile, row.id) : undefined), ...row }));
+        rows = apiRows.filter(visible).slice(0, rosterHermesHead(this.env)).map(row => ({ ...local.find(l => l.id === row.id) ?? (typeof row.id === "string" ? localSession(profile, row.id) : undefined), ...row }));
       } catch { /* API is optional for reads; native DB remains authoritative offline. */ }
       const seen = new Set<string>();
       // Few leases, many rows: expand each live lease over its compression lineage once.
@@ -231,12 +244,88 @@ export class HermesSessions {
       if (owners.length > 0) withDb(profile, db => { for (const owner of owners) for (const id of ownerSessionIds(db, owner)) heldBy.set(id, owner); });
       for (const owner of owners) if (!heldBy.has(owner.sessionId)) heldBy.set(owner.sessionId, owner);
       return rows.flatMap(row => { const agent = toAgent(row, profile, typeof row.id === "string" ? heldBy.get(row.id) : undefined); if (!agent || seen.has(agent.id)) return []; seen.add(agent.id); return [agent]; })
-        .sort((a, b) => (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0)).slice(0, RECENT_LIMIT);
+        .sort((a, b) => (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0)).slice(0, rosterHermesHead(this.env));
     }));
     const agents = lists.flat();
     this.known.clear();
     for (const agent of agents) this.known.add(agent.id);
     return agents;
+  }
+  /**
+   * Sessions with native activity after (since, afterId), ascending, for chat-index ingest.
+   * `since` is the native activity stamp (seconds). API-only profiles page the API (no 50 cap).
+   */
+  async listSince(profileId: string, since: number, afterId: string, limit: number): Promise<HermesListRow[]> {
+    const profile = this.profiles().find(p => p.id === profileId);
+    if (!profile) return [];
+    const toRow = (row: Row): HermesListRow[] => {
+      if (typeof row.id !== "string") return [];
+      const activity = typeof row.act === "number" ? row.act : typeof row.last_activity_at === "number" ? row.last_activity_at : typeof row.started_at === "number" ? row.started_at : 0;
+      return [{ id: row.id, activity, startedAt: stamp(row.started_at), agent: toAgent(row, profile) }];
+    };
+    const local = withDb(profile, db => db.query<Row, [number, string, number]>(`SELECT ${SESSION_FIELDS}, coalesce(last_activity_at, started_at) AS act FROM sessions
+      WHERE coalesce(archived,0)=0 AND coalesce(hidden,0)=0 AND source IN (${HERMES_CHAT_SOURCES.map(s => `'${s}'`).join(",")})
+        AND (coalesce(last_activity_at, started_at) > ?1 OR (coalesce(last_activity_at, started_at) = ?1 AND id > ?2))
+      ORDER BY act ASC, id ASC LIMIT ?3`).all(since, afterId, limit));
+    if (local) return local.flatMap(toRow);
+    if (!profile.api || profile.id !== "default") return [];
+    const rows: Row[] = [];
+    try {
+      for (let offset = 0; offset < 20000; offset += 200) {
+        const body = await this.get(profile, `/api/sessions?limit=200&offset=${offset}&include_children=false`);
+        if (!record(body) || !Array.isArray(body.data)) break;
+        rows.push(...body.data.filter(record));
+        if (!body.has_more) break;
+      }
+    } catch { /* API is optional; keep what was read. */ }
+    const act = (row: Row) => (typeof row.last_activity_at === "number" ? row.last_activity_at : typeof row.started_at === "number" ? row.started_at : 0);
+    return rows.filter(row => typeof row.id === "string" && (act(row) > since || (act(row) === since && String(row.id) > afterId)))
+      .sort((a, b) => act(a) - act(b) || String(a.id).localeCompare(String(b.id))).slice(0, limit)
+      .flatMap(row => toRow({ ...row, act: act(row) }));
+  }
+  /**
+   * One page of a native transcript, newest first by (timestamp, id) keyset over the compression lineage.
+   * User/assistant rows only; text cut to MESSAGE_TEXT_MAX. Undefined when the session is unknown or hidden.
+   * API-only profiles return the API window once, with no older cursor.
+   */
+  async historyPage(profileId: string, sessionId: string, before: HermesHistoryCursor | undefined, limit: number): Promise<{ messages: HistoryMessage[]; before: HermesHistoryCursor | null } | undefined> {
+    const profile = this.profiles(false).find(p => p.id === profileId);
+    if (!profile) return undefined;
+    if (!existsSync(join(profile.home, "state.db"))) {
+      if (before) return { messages: [], before: null };
+      const messages = await this.history(profileId, sessionId);
+      return messages.length ? { messages: messages.slice(-limit), before: null } : undefined;
+    }
+    const row = localSession(profile, sessionId);
+    if (!row || !visible(row)) return undefined;
+    return withDb(profile, db => {
+      const ids = [...lineageIds(db, sessionId)];
+      const marks = ids.map(() => "?").join(",");
+      const keyset = before ? "AND (timestamp < ? OR (timestamp <= ? AND id < ?))" : "";
+      const args: (string | number)[] = [...ids, ...(before ? [before.t, before.t + 1e-6, before.i] : []), limit + 1];
+      const rows = db.query<Row, (string | number)[]>(`SELECT id, role, content, timestamp, reasoning, reasoning_content, tool_calls, active FROM messages
+        WHERE session_id IN (${marks}) AND active=1 AND role IN ('user','assistant') ${keyset}
+        ORDER BY timestamp DESC, id DESC LIMIT ?`).all(...args);
+      const more = rows.length > limit;
+      const page = rows.slice(0, limit);
+      const oldest = page[page.length - 1];
+      const messages = previewHistory(parseHermesHistory(page.reverse())).map(message => message.text.length > MESSAGE_TEXT_MAX
+        ? { ...message, text: message.text.slice(0, MESSAGE_TEXT_MAX), truncated: true } : message);
+      return { messages, before: more && oldest && typeof oldest.timestamp === "number" && typeof oldest.id === "number" ? { t: oldest.timestamp, i: oldest.id } : null };
+    });
+  }
+  /** Full text of one native message in this session's lineage (≤ 1 MB). */
+  message(profileId: string, sessionId: string, messageId: number): HistoryMessage | undefined {
+    const profile = this.profiles(false).find(p => p.id === profileId);
+    if (!profile) return undefined;
+    const row = localSession(profile, sessionId);
+    if (!row || !visible(row)) return undefined;
+    return withDb(profile, db => {
+      const ids = lineageIds(db, sessionId);
+      const message = db.query<Row, [number]>("SELECT id, session_id, role, substr(content, 1, 1000000) AS content, timestamp FROM messages WHERE id = ? AND active=1 AND role IN ('user','assistant')").get(messageId);
+      if (!message || typeof message.session_id !== "string" || !ids.has(message.session_id)) return undefined;
+      return { id: String(message.id), role: message.role === "user" ? "user" : "assistant", text: redact(text(message.content)), at: stamp(message.timestamp) };
+    });
   }
   toolDetail(profileId: string, sessionId: string, messageId: string, callId: string): ReplyPart | undefined {
     const profile = this.profiles(false).find(p => p.id === profileId);
