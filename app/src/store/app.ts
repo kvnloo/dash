@@ -231,6 +231,8 @@ export async function forgetEverything(): Promise<void> {
   await AsyncStorage.multiRemove([KEYS.settings, KEYS.conversations, KEYS.activeId, "dash.conversations.migrated.v2", "dash.chats.migrated.v3", "dash.chats.head.v1"]);
   const { resetChatIndex } = await import("./chat-index-store");
   resetChatIndex();
+  const { agentNoticeInbox } = await import("./notices");
+  await agentNoticeInbox.clear();
   lastActiveId = undefined;
   store.set((s) => ({
     ...s,

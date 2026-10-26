@@ -1,6 +1,7 @@
 import { applyGateMessage } from "../store/approvals";
 import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
 import { CHATS_FEATURE, parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
+import { agentNoticeInbox, noticeFailure } from "../store/notices";
 import type { LiveIntent } from "../../../shared/live";
 import { isDebugMode } from "../debug/mode";
 import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf } from "../store/live";
@@ -191,6 +192,7 @@ class Bridge {
     const message = parseServerMessage(parsed);
     if (!message) return;
     switch (message.type) {
+      case "notice": void agentNoticeInbox.receive(message).catch(noticeFailure); return;
       case "gate_snapshot":
       case "gate_status":
       case "gate_error": applyGateMessage(message); return;

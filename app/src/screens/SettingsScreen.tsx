@@ -142,6 +142,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: modelsOpen }} onPress={() => setModelsOpen(!modelsOpen)} style={styles.secondary}><Text style={styles.secondaryText}>Models {modelsOpen ? "−" : "+"}</Text></Pressable>
           {modelsOpen ? <ModelsPanel /> : null}
           <NotificationSettings />
+          <Pressable accessibilityRole="button" onPress={() => navigation.navigate("Notices")} style={styles.secondary}><Text style={styles.secondaryText}>Notices · Agent reports</Text></Pressable>
           <Text style={styles.label}>Display</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <View style={styles.harnessRow}><Text style={styles.harnessName}>Thumb side</Text></View>
