@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { parseServerMessage, type ServerMessage } from "../../../shared/protocol";
@@ -11,6 +11,9 @@ async function bridgeFixture(mode = "ok") {
   const bin = join(root, "bin");
   await mkdir(bin);
   await writeFile(join(bin, "tailscale"), "#!/bin/sh\nexit 1\n", { mode: 0o700 });
+  // The bridge probes `hermes gateway list` at startup. The real CLI bootstraps an ~840 MB
+  // runtime into HOME (the fixture root) and outlives the bridge, so shim it out.
+  await writeFile(join(bin, "hermes"), "#!/bin/sh\nexit 1\n", { mode: 0o700 });
   await writeFile(join(bin, "omp"), `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(join(import.meta.dir, "fixtures/agent.ts"))} ${shellQuote(mode)}\n`, { mode: 0o700 });
   const proc = Bun.spawn([process.execPath, resolve(import.meta.dir, "../../index.ts")], {
     env: { ...process.env, HOME: root, PATH: `${bin}:${process.env.PATH}`, DASH_ALLOW_LOOPBACK: "1", DASH_HOST: "127.0.0.1", DASH_PORT: "0", DASH_STT_MODEL: join(root, "no-model"), DASH_ALLOWED_ORIGINS: "http://localhost:8100", DASH_ENABLE_LEGACY_CLI: "0", DASH_ACP_FIXTURE_PID: join(root, "agent.pid") },
@@ -26,12 +29,15 @@ async function bridgeFixture(mode = "ok") {
       if (match?.[1]) port = Number(match[1]);
     }
   })();
-  for (let i = 0; i < 100 && !port && proc.exitCode === null; i++) await Bun.sleep(20);
-  if (!port) { proc.kill("SIGKILL"); await reading; throw new Error(`Bridge fixture failed to start: ${stderr}`); }
+  for (let i = 0; i < 750 && !port && proc.exitCode === null; i++) await Bun.sleep(20);
+  if (!port) {
+    proc.kill("SIGKILL"); await proc.exited; await reading; await rm(root, { recursive: true, force: true });
+    throw new Error(`Bridge fixture failed to start: ${stderr}`);
+  }
   const token = (await readFile(join(root, ".dash/token"), "utf8")).trim();
   const bootstrap = (await readFile(join(root, ".dash/bootstrap-token"), "utf8")).trim();
   return {
-    port, token, bootstrap, pidFile: join(root, "agent.pid"),
+    root, port, token, bootstrap, pidFile: join(root, "agent.pid"),
     stderr: () => stderr,
     async close() { if (proc.exitCode === null) proc.kill("SIGTERM"); await proc.exited; await reading; await rm(root, { recursive: true, force: true }); },
   };
@@ -149,3 +155,13 @@ test("bridge shutdown cancels its owned ACP process before exiting", async () =>
     await f.close();
   }
 });
+
+test("fixture leaves no HOME and no process behind after close", async () => {
+  const f = await bridgeFixture();
+  await Bun.sleep(3000);
+  await f.close();
+  await Bun.sleep(2000);
+  const survivors = Bun.spawnSync(["pgrep", "-f", f.root]).stdout.toString().trim();
+  const exists = await stat(f.root).then(() => true, () => false);
+  expect({ exists, survivors }).toEqual({ exists: false, survivors: "" });
+}, 15000);
