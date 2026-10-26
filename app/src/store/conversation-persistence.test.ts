@@ -191,4 +191,31 @@ describe("v3 conversation index", () => {
     await store.save(chats);
     expect(index.value).toContain("\"id\":\"a\"");
   });
+
+  test("a durable file the index missed (kill between writes, downgrade) is found and rejoins the index", async () => {
+    const files = new Files(); const index = new Index();
+    const kept = chat("kept");
+    await new ConversationPersistence(files, index).save([kept]);
+    // Killed after the new chat's file write, before the index write.
+    const local = { ...chat("new local"), sessionId: undefined };
+    files.durable.set(`${encodeURIComponent(local.id)}.json`, JSON.stringify(local));
+    files.durable.set(".migration-complete.json", "true");
+    const store = new ConversationPersistence(files, index);
+    const loaded = await store.loadIndex();
+    expect(loaded?.chats.map(c => c.id)).toEqual(["kept"]);
+    const orphans = await store.orphans();
+    expect(orphans.map(c => c.id)).toEqual(["new local"]);
+    expect(orphans[0]?.messages.map(m => m.id)).toEqual(["u", "a"]);
+    // A save whose snapshot predates the adoption must not delete the adopted file.
+    const early = store.save(loaded?.chats ?? []);
+    store.adopt(orphans);
+    await early;
+    expect(files.durable.has("new%20local.json")).toBe(true);
+    await store.save([...(loaded?.chats ?? []), ...orphans]);
+    expect(index.value).toContain("\"id\":\"new local\"");
+    expect((await new ConversationPersistence(files, index).loadIndex())?.chats.map(c => c.id).sort()).toEqual(["kept", "new local"]);
+    // Once a later snapshot drops it, it is a real delete.
+    await store.save(loaded?.chats ?? []);
+    expect(files.durable.has("new%20local.json")).toBe(false);
+  });
 });

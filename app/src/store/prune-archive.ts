@@ -1,11 +1,12 @@
 import { parseConversation, type Conversation, type Message } from "../model";
-import { CONVERSATION_INDEX_KEY, indexEntry } from "./conversation-persistence";
 
 /**
  * One-time migration for chats.v1 bridges. Older apps adopted every archived host chat into a
  * persisted conversation. Those never-opened rows now come from the paged list, so their durable
- * files are pruned; every other conversation is kept and stamped `openedAt`. Idempotent and safe
- * to interrupt: until the flag is written a crash re-runs it, and v2 files stay readable.
+ * files are pruned. The live store is the authority: each candidate is re-checked against it
+ * (`stillPrunable`) right before its file goes, and the index is left to the persistence layer
+ * (the caller marks it dirty), so a chat opened or created during the run is never lost.
+ * Idempotent and safe to interrupt: until the flag is written a crash re-runs it.
  */
 export const MIGRATED_KEY = "dash.chats.migrated.v3";
 export const DURABLE_PREFIX = "dash.durable.files.v2/";
@@ -28,12 +29,16 @@ export interface PruneOptions {
   batchSize?: number;
   /** Yield between batches (setTimeout(0) in the app). */
   pause?: () => Promise<void>;
+  /** Asked right before each removal: false keeps the file (opened, active or written to since the scan). */
+  stillPrunable?: (id: string) => boolean;
 }
 
 export interface PruneResult {
   status: "done" | "skipped";
+  /** Ids whose durable files were removed. */
   pruned: string[];
-  kept: Conversation[];
+  /** Kept conversations that had no `openedAt`, with the stamp the caller should apply. */
+  kept: { id: string; openedAt: number }[];
 }
 
 function pendingMessage(message: Message): boolean {
@@ -58,7 +63,7 @@ export async function pruneArchive(options: PruneOptions): Promise<PruneResult> 
   }
   const size = Math.max(1, options.batchSize ?? PRUNE_BATCH);
   const pruned: string[] = [];
-  const kept: Conversation[] = [];
+  const kept: { id: string; openedAt: number }[] = [];
   for (let offset = 0; offset < durable.length; offset += size) {
     if (offset > 0) await options.pause?.();
     for (const name of durable.slice(offset, offset + size)) {
@@ -69,16 +74,12 @@ export async function pruneArchive(options: PruneOptions): Promise<PruneResult> 
       } catch { chat = null; }
       // Unreadable files (and the migration marker) are left exactly as they are.
       if (!chat) continue;
-      if (shouldPrune(chat, { cached: cached.has(name), activeId: options.activeId })) {
+      if (shouldPrune(chat, { cached: cached.has(name), activeId: options.activeId }) && (options.stillPrunable?.(chat.id) ?? true)) {
         await storage.removeItem(DURABLE_PREFIX + name);
         pruned.push(chat.id);
         continue;
       }
-      if (chat.openedAt === undefined) {
-        chat = { ...chat, openedAt: chat.updatedAt };
-        await storage.setItem(DURABLE_PREFIX + name, JSON.stringify(chat));
-      }
-      kept.push(chat);
+      if (chat.openedAt === undefined) kept.push({ id: chat.id, openedAt: chat.updatedAt });
     }
   }
   if (pruned.length) {
@@ -96,8 +97,6 @@ export async function pruneArchive(options: PruneOptions): Promise<PruneResult> 
       }
     } catch { /* Drafts are a convenience; a bad record cannot block the migration. */ }
   }
-  kept.sort((a, b) => b.updatedAt - a.updatedAt);
-  await storage.setItem(CONVERSATION_INDEX_KEY, `[${kept.map(indexEntry).join(",")}]`);
   await storage.setItem(MIGRATED_KEY, "true");
   return { status: "done", pruned, kept };
 }

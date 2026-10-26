@@ -175,7 +175,7 @@ export class ChatIndexEngine {
 
   snapshot(): Snapshot {
     const sidecar = this.sidecar();
-    const head = this.avEnabled ? sidecar.head(AGENTSVIEW_KINDS, this.config.archiveHead ?? 10).map(toAgentInfo) : [];
+    const head = this.avEnabled ? sidecar.head(AGENTSVIEW_KINDS, this.config.archiveHead ?? 50).map(toAgentInfo) : [];
     return { rev: sidecar.rev(), head, building: this.building() };
   }
 
@@ -342,8 +342,9 @@ export class ChatIndexEngine {
     const hits: ChatSearchHit[] = picked.map(({ source, row, chat }) => {
       let text: string | undefined;
       try { text = source.content(row.rid); } catch { text = undefined; }
-      // Redact after marking: a marker inside a redacted secret disappears with it, and so does its highlight.
-      const { snippet, highlights } = markersToHighlights(redact(markSnippet(text ?? "", sanitized.needles)));
+      // Redact the whole source before marking and windowing: a marker inside a secret, or a window
+      // that cuts off a secret's prefix, would otherwise defeat the redaction patterns.
+      const { snippet, highlights } = markersToHighlights(markSnippet(redact(text ?? ""), sanitized.needles));
       return { chat: toSummary(chat, args.self), field: "message", messageId: source.messageId(row.rid), role: row.role === "user" ? "user" : "assistant", at: row.at, snippet, highlights };
     });
     return { hits, next, partial: partial && next !== null, scanned };
@@ -354,15 +355,27 @@ export class ChatIndexEngine {
   /** Resolve an HTTP history target. Unknown, gone or foreign-host chats are not found. */
   private resolve(args: { key?: string; kind?: string; sessionId?: string; host?: string; profile?: string }): ChatRow | undefined {
     const sidecar = this.sidecar();
-    if (args.key) return sidecar.get(args.key) ?? undefined;
-    if (!args.kind || !args.sessionId) return undefined;
-    const host = args.host ?? SELF_HOST;
-    const key = args.kind === "hermes" && args.profile ? `${host}:hermes:${args.sessionId}:${args.profile}` : `${host}:${args.kind}:${args.sessionId}`;
-    const known = sidecar.get(key);
-    if (known) return known;
+    let kind = args.kind;
+    let sessionId = args.sessionId;
+    let host = args.host ?? SELF_HOST;
+    if (args.key) {
+      const known = sidecar.get(args.key);
+      if (known) return known;
+      // Not listed (for example a chat Dash ran with claude -p or codex exec): an archived self chat is
+      // still history-readable, so a ws history cursor always has a working HTTP continuation.
+      const parsed = selfArchiveKey(args.key);
+      if (!parsed) return undefined;
+      ({ kind, sessionId } = parsed);
+      host = SELF_HOST;
+    } else {
+      if (!kind || !sessionId) return undefined;
+      const key = kind === "hermes" && args.profile ? `${host}:hermes:${sessionId}:${args.profile}` : `${host}:${kind}:${sessionId}`;
+      const known = sidecar.get(key);
+      if (known) return known;
+    }
     const db = this.avEnabled ? this.av() : undefined;
-    if (args.kind !== "hermes" && db) {
-      const raw = lookupSession(db, args.kind, args.sessionId);
+    if (kind && sessionId && kind !== "hermes" && db) {
+      const raw = lookupSession(db, kind, sessionId);
       if (raw) { const row = avChatRow(raw, this.self); if (row.host_id === host) return { ...row, gone: 0 }; }
     }
     return undefined;
@@ -432,6 +445,13 @@ export class ChatIndexEngine {
   }
 }
 
+
+/** `@self:<kind>:<sessionId>` (never Hermes, which is listed natively) -> its parts. */
+function selfArchiveKey(key: string): { kind: string; sessionId: string } | undefined {
+  const match = /^@self:([A-Za-z0-9_-]+):(.+)$/.exec(key);
+  if (!match || match[1] === "hermes" || !match[1] || !match[2]) return undefined;
+  return { kind: match[1], sessionId: match[2] };
+}
 
 function stripOrdinal<T extends HistoryMessage & { ordinal: number }>(message: T): HistoryMessage {
   const { ordinal: _ordinal, ...rest } = message;

@@ -48,6 +48,15 @@ function sessionAgents(hosts: HostInfo[]) {
   return hosts.flatMap(host => !host.self || !host.online ? [] : host.agents.filter(agent => agent.status !== "offline" && isCatalogHarness(agent.kind) && agent.sessionId).map(agent => ({ host, agent })));
 }
 
+/**
+ * A self-host catalog chat that resumes by session id, so it needs no roster row to be sent to.
+ * OMP live sessions (`omp:` profiles) are the exception: they end when the host stops listing them.
+ */
+export function resumableWithoutRoster(c: Pick<Conversation, "harness" | "sessionId" | "targetHostId" | "profileId" | "stale" | "viewOnly">, hosts: readonly HostInfo[]): boolean {
+  if (!c.sessionId?.trim() || !isCatalogHarness(c.harness) || c.viewOnly || c.profileId?.startsWith("omp:")) return false;
+  return hosts.some(host => host.self && host.id === c.targetHostId);
+}
+
 export interface MergeLiveOptions {
   /**
    * `all` (legacy bridges): every reported session becomes a conversation.
@@ -75,6 +84,12 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     const match = matches.length === 1 ? matches[0] : undefined;
     if (!match) {
       owned.add(`${c.harness}\u0000${c.sessionId}\u0000${c.targetHostId ?? ""}\u0000${c.profileId ?? ""}`);
+      // chats.v1 rosters list only running/host-held chats and a short head: a chat opened from the
+      // paged list is simply not running, not ended. Only live-only sessions end with the roster row.
+      if (options.adopt === "live" && resumableWithoutRoster(c, hosts)) {
+        if (c.openIn === undefined) return c;
+        changed = true; return { ...c, openIn: undefined };
+      }
       if (c.stale && c.openIn === undefined) return c;
       changed = true; return { ...c, stale: true, openIn: undefined };
     }
@@ -123,6 +138,19 @@ export function hydrateLiveConversation(conversation: Conversation, history: His
   const messages = historyToMessages(history, conversation.id);
   if (!messages.length) return conversation;
   return { ...conversation, messages, updatedAt: Math.max(messages.at(-1)?.at ?? 0, conversation.updatedAt) };
+}
+/**
+ * A refreshed newest window on top of a conversation whose older pages were already paged in:
+ * like hydrateLiveConversation, but messages that slid out of the window (not in the page and
+ * older than its first message) stay in front of it, so the scrollback has no hole.
+ */
+export function mergeHistoryWindow(conversation: Conversation, history: HistoryMessage[]): Conversation {
+  const hydrated = hydrateLiveConversation(conversation, history);
+  const first = hydrated.messages[0];
+  if (hydrated === conversation || !first) return hydrated;
+  const ids = new Set(hydrated.messages.map(m => m.id));
+  const kept = conversation.messages.filter(m => !ids.has(m.id) && m.at < first.at);
+  return kept.length ? { ...hydrated, messages: [...kept, ...hydrated.messages] } : hydrated;
 }
 export function historyToMessages(history: HistoryMessage[], conversationId: string): Message[] {
   return history.map(h => h.role === "user"

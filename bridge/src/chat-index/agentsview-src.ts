@@ -4,7 +4,7 @@ import { isCatalogHarness } from "../../../shared/catalog";
 import { MESSAGE_TEXT_MAX, type HistoryMessage } from "../../../shared/protocol";
 import { redact } from "../reply-parts";
 import { AGENTSVIEW_PREFIX, nativeSessionId } from "../agentsview-sessions";
-import { firstLine, SELF_HOST, SNIPPET_SOURCE_MAX } from "./query";
+import { firstLine, REDACT_SLACK, SELF_HOST, SNIPPET_SOURCE_MAX } from "./query";
 import { internalKey, type NewChatRow, type Sidecar } from "./sidecar";
 
 // Read-only AgentsView access. Runs only inside a chat-index worker, never on the
@@ -112,9 +112,16 @@ export function coldList(db: Database, self: Set<string>, after: { e: string; i:
   return { rows: raw.map(row => avChatRow(row, self)), raw };
 }
 
-/** Find one owner-visible session by native id when the sidecar does not know it yet. */
+/**
+ * History eligibility is wider than list eligibility: chats Dash itself ran (claude -p = sdk-cli,
+ * codex exec = non-interactive) are kept out of the list but their history must stay readable,
+ * because ws history serves them and hands out a cursor the HTTP path must honor.
+ */
+export const HISTORY_FILTER = "deleted_at is null and agent <> 'hermes'";
+
+/** Find one history-readable session by native id when the sidecar does not list it. */
 export function lookupSession(db: Database, kind: string, sessionId: string): AvSessionRow | undefined {
-  return db.query<AvSessionRow, [string, string, string]>(`select ${FIELDS} from sessions where id in (?1, ?2) and agent = ?3 and ${OWNER_FILTER} limit 1`)
+  return db.query<AvSessionRow, [string, string, string]>(`select ${FIELDS} from sessions where id in (?1, ?2) and agent = ?3 and ${HISTORY_FILTER} limit 1`)
     .get(`${kind}:${sessionId}`, sessionId, kind) ?? undefined;
 }
 
@@ -126,7 +133,8 @@ export interface AvHistory { messages: (HistoryMessage & { ordinal: number })[];
  */
 export function avHistory(db: Database, ids: string[], before: number | undefined, limit: number, cut = true): AvHistory {
   const [a = "", b = a] = ids;
-  const text = cut ? `substr(content, 1, ${MESSAGE_TEXT_MAX}) as content, length(content) > ${MESSAGE_TEXT_MAX} as cut` : "content, 0 as cut";
+  // Read past the cut, redact, then cut in JS: a secret straddling MESSAGE_TEXT_MAX is still whole when redacted.
+  const text = cut ? `substr(content, 1, ${MESSAGE_TEXT_MAX + REDACT_SLACK}) as content, length(content) > ${MESSAGE_TEXT_MAX} as cut` : "content, 0 as cut";
   const rows = db.query<{ id: number; role: string; content: string; cut: number; timestamp: string | null; ordinal: number }, [string, string, number, number]>(
     `select id, role, ${text}, timestamp, ordinal from messages
       where session_id in (?1, ?2) and ordinal < ?3 and ifnull(is_system,0) = 0 and role in ('user','assistant') and content_length > 0
@@ -135,7 +143,7 @@ export function avHistory(db: Database, ids: string[], before: number | undefine
   return {
     hasMore,
     messages: rows.slice(0, limit).reverse().map(row => ({
-      id: `av:${row.id}`, role: row.role === "user" ? "user" : "assistant", text: redact(row.content), at: stamp(row.timestamp), ordinal: row.ordinal,
+      id: `av:${row.id}`, role: row.role === "user" ? "user" : "assistant", text: cut ? redact(row.content).slice(0, MESSAGE_TEXT_MAX) : redact(row.content), at: stamp(row.timestamp), ordinal: row.ordinal,
       ...(row.cut ? { truncated: true } : {}),
     })),
   };
@@ -164,9 +172,10 @@ export function avFtsBatch(db: Database, fts: string, below: number, limit: numb
 }
 
 /**
- * Text of one hit for its snippet: a primary-key read of at most SNIPPET_SOURCE_MAX chars.
+ * Raw text of one hit for its snippet: a primary-key read of SNIPPET_SOURCE_MAX (+ redaction slack) chars.
+ * Callers redact the whole string before windowing it.
  * FTS5 snippet() cannot use `rowid = ?` together with MATCH, so it re-ran the whole match per hit.
  */
 export function avContent(db: Database, rowid: number): string | undefined {
-  return db.query<{ c: string }, [number, number]>("select substr(content, 1, ?2) as c from messages where id = ?1").get(rowid, SNIPPET_SOURCE_MAX)?.c ?? undefined;
+  return db.query<{ c: string }, [number, number]>("select substr(content, 1, ?2) as c from messages where id = ?1").get(rowid, SNIPPET_SOURCE_MAX + REDACT_SLACK)?.c ?? undefined;
 }

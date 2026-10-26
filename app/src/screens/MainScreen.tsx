@@ -383,6 +383,20 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             : "No live sessions or installed harnesses match."
           : "No matches. Use @ for bots and chats, / for harness files and tools.";
 
+  // Stable pager children: a MainScreen render (typing, search state) must not cascade into the
+  // three panes; each pane subscribes to the store slices it needs on its own.
+  const pages = useMemo(() => [
+    <View key="bots" style={{ width, flex: 1 }}>
+      <LazyPane focused={index === 0}><BotsPane navigation={navigation} /></LazyPane>
+    </View>,
+    <View key="chats" style={{ width, flex: 1 }}>
+      <ChatsPane navigation={navigation} focused={index === 1 && !searchActive} />
+    </View>,
+    <View key="orchestra" style={{ width, flex: 1 }}>
+      <LazyPane focused={index === 2}><OrchestraPane navigation={navigation} /></LazyPane>
+    </View>,
+  ], [navigation, index, searchActive, width]);
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav
@@ -433,15 +447,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               progress={pagerProgress}
               pageWidth={width}
             >
-              <View key="bots" style={{ width, flex: 1 }}>
-                <LazyPane focused={index === 0}><BotsPane navigation={navigation} /></LazyPane>
-              </View>
-              <View key="chats" style={{ width, flex: 1 }}>
-                <ChatsPane navigation={navigation} focused={index === 1 && !searchActive} />
-              </View>
-              <View key="orchestra" style={{ width, flex: 1 }}>
-                <LazyPane focused={index === 2}><OrchestraPane navigation={navigation} /></LazyPane>
-              </View>
+              {pages}
             </MainPager>
           </Animated.View>
         )}

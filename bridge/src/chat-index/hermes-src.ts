@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { redact } from "../reply-parts";
 import type { HermesListRow, HermesSessions, Profile } from "../hermes-sessions";
-import { firstLine, SELF_HOST, SNIPPET_SOURCE_MAX } from "./query";
+import type { HistoryMessage } from "../../../shared/protocol";
+import { encodeCursor, firstLine, REDACT_SLACK, SELF_HOST, SNIPPET_SOURCE_MAX } from "./query";
 import { internalKey, type NewChatRow, type Sidecar } from "./sidecar";
 import { hasTable, type FtsRow } from "./agentsview-src";
 
@@ -102,7 +103,7 @@ export class HermesFts {
 
   /** Text of one hit for its snippet (primary-key read; see avContent). */
   content(db: Database, rowid: number): string | undefined {
-    const raw = db.query<{ c: string | null }, [number, number]>("select substr(content, 1, ?2) as c from messages where id = ?1").get(rowid, SNIPPET_SOURCE_MAX)?.c;
+    const raw = db.query<{ c: string | null }, [number, number]>("select substr(content, 1, ?2) as c from messages where id = ?1").get(rowid, SNIPPET_SOURCE_MAX + REDACT_SLACK)?.c;
     return typeof raw === "string" ? plainText(raw) : undefined;
   }
 
@@ -117,4 +118,16 @@ function plainText(raw: string): string {
     if (!Array.isArray(value)) return raw;
     return value.flatMap(block => (typeof block === "object" && block !== null && "text" in block && typeof block.text === "string" ? [block.text] : [])).join("\n");
   } catch { return raw; }
+}
+
+/**
+ * The ws window cannot tell whether older history exists: hermesSessions.history reads a raw row
+ * window (tool rows included) and merges rows, so a tool-heavy session can fill it with few messages.
+ * A non-empty page with a native id therefore always carries a cursor; GET /chats/history answers
+ * `{ messages: [], before: null }` at the start of the chat.
+ */
+export function hermesWsPage(messages: HistoryMessage[], limit: number): { messages: HistoryMessage[]; before: string | null } {
+  const page = messages.slice(-limit);
+  const oldest = page[0];
+  return { messages: page, before: oldest && /^\d+$/.test(oldest.id) ? encodeCursor({ v: 1, t: oldest.at / 1000, i: Number(oldest.id) }) : null };
 }

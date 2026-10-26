@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { BridgeAuth } from "../z0bridge-identity";
-import { AgentsviewFixture, engineConfig, inProcessWorker, stalledWorker, tempDir } from "../fixtures/chat-index/make-fixtures";
-import { AbortedError, BusyError, ChatIndexClient, Lane, Lru, type WorkerLike } from "./client";
+import { AgentsviewFixture, engineConfig, inProcessWorker, TEST_RPC_TIMEOUT_MS, stalledWorker, tempDir } from "../fixtures/chat-index/make-fixtures";
+import { AbortedError, BusyError, ChatIndexClient, Lane, Lru, STUCK_FACTOR, type WorkerLike } from "./client";
 import { createChatsHttpHandler } from "./http";
 import { parseChatSearchPage } from "../../../shared/protocol";
 import type { WorkerRequest } from "./worker";
@@ -27,7 +27,7 @@ describe("chats HTTP auth", () => {
     const av = new AgentsviewFixture(join(dir, "av.db"));
     av.session({ id: "codex:c1", agent: "codex" });
     const config = engineConfig(dir, { agentsviewPath: av.path });
-    const client = new ChatIndexClient({ config, spawn: inProcessWorker(config) });
+    const client = new ChatIndexClient({ config, spawn: inProcessWorker(config), timeoutMs: TEST_RPC_TIMEOUT_MS });
     cleanup.push(() => client.stop());
     const handle = handlerWith(client);
     for (const path of ["/chats", "/chats/search?q=x", "/chats/history?key=0:codex:c1", "/chats/message?key=0:codex:c1&id=av:1"]) {
@@ -94,6 +94,62 @@ describe("worker RPC", () => {
     expect(sent.map(r => r.op)).toEqual(["snapshot", "ingest"]);
     reply({ id: sent[1]?.id, ok: true, value: 7 });
     expect(await second).toBe(7);
+  });
+});
+
+describe("lane recovery", () => {
+  /** Answers init and every other op with `value`, and can be killed from the test. */
+  function answering(log: string[], value: unknown) {
+    const listeners: Record<string, (() => void)[]> = {};
+    const worker: WorkerLike & { emit(type: "error" | "close"): void; terminated: boolean } = {
+      onmessage: null,
+      terminated: false,
+      postMessage(r: WorkerRequest) {
+        log.push(r.op);
+        void Promise.resolve().then(() => worker.onmessage?.(new MessageEvent("message", { data: { id: r.id, ok: true, value: r.op === "init" ? true : value } })));
+      },
+      terminate() { worker.terminated = true; },
+      addEventListener(type, listener) { (listeners[type] ??= []).push(listener); },
+      emit(type) { for (const l of listeners[type] ?? []) l(); },
+    };
+    return worker;
+  }
+
+  test("a worker that never replies is replaced after STUCK_FACTOR x timeout; the next call is served", async () => {
+    const sent: WorkerRequest[] = [];
+    const log: string[] = [];
+    const workers: WorkerLike[] = [];
+    const lane = new Lane(() => { const w = workers.length === 0 ? stalledWorker(sent) : answering(log, "fresh"); workers.push(w); return w; }, 200);
+    cleanup.push(() => lane.terminate());
+    await lane.call({ op: "init", args: engineConfig(tempDir()) });
+    const settled = (p: Promise<unknown>) => p.then(() => undefined, (error: unknown) => error);
+    const hung = settled(lane.call({ op: "snapshot", args: null }));
+    const queued = settled(lane.call({ op: "message", args: { key: "k", id: "1" } }));
+    expect(await hung).toBeInstanceOf(BusyError);
+    expect(await queued).toBeInstanceOf(BusyError);
+    await Bun.sleep(200 * STUCK_FACTOR + 100);
+    expect(lane.restarts).toBe(1);
+    expect(await lane.call({ op: "snapshot", args: null })).toBe("fresh");
+    expect(log).toEqual(["init", "snapshot"]);
+  });
+
+  test("a worker that errors or exits is replaced at once and re-initialised", async () => {
+    const log: string[] = [];
+    const workers: ReturnType<typeof answering>[] = [];
+    const lane = new Lane(() => { const w = answering(log, workers.length); workers.push(w); return w; }, 5_000);
+    cleanup.push(() => lane.terminate());
+    await lane.call({ op: "init", args: engineConfig(tempDir()) });
+    expect(await lane.call({ op: "snapshot", args: null })).toBe(0);
+    workers[0]?.emit("error");
+    expect(workers[0]?.terminated).toBe(true);
+    expect(await lane.call({ op: "snapshot", args: null })).toBe(1);
+    workers[1]?.emit("close");
+    expect(await lane.call({ op: "snapshot", args: null })).toBe(2);
+    expect(lane.restarts).toBe(2);
+    expect(log).toEqual(["init", "snapshot", "init", "snapshot", "init", "snapshot"]);
+    // A stale worker's events after replacement change nothing.
+    workers[0]?.emit("close");
+    expect(lane.restarts).toBe(2);
   });
 });
 

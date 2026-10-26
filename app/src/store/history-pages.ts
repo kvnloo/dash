@@ -76,9 +76,22 @@ export async function loadOlder(conversation: Conversation): Promise<void> {
     return;
   }
   const shown = new Set(conversation.messages.map(m => m.id));
-  const page = historyToMessages(result.value.messages, conversation.id);
+  // Ids alone do not dedupe chats whose shown messages carry phone ids (Dash-started chats): only
+  // messages older than everything already shown join the scrollback.
+  const oldest = oldestShown(conversation, historyState(conversation.id));
+  const page = historyToMessages(result.value.messages, conversation.id).filter(m => m.at < oldest);
   patch(conversation.id, s => s.before !== before ? { ...s, loading: false } : prependOlder(s, page, shown, result.value.before));
 }
+
+function oldestShown(conversation: Conversation, state: HistoryPagesState): number {
+  let oldest = Infinity;
+  for (const m of conversation.messages) if (m.at < oldest) oldest = m.at;
+  for (const m of state.older) if (m.at < oldest) oldest = m.at;
+  return oldest;
+}
+
+/** Pages primeCursor walks back, at most, to get past the cached window. */
+export const PRIME_MAX_PAGES = 4;
 
 /** The first page for a chat the websocket cannot serve (view-only kinds). */
 export async function loadNewest(conversation: Conversation, apply: (messages: HistoryMessage[]) => void): Promise<void> {
@@ -116,10 +129,20 @@ export async function primeCursor(conversation: Conversation): Promise<void> {
   const settings = deps.settings();
   if (!settings || state.loading || state.before !== undefined || !conversation.sessionId || !conversation.targetHostId) return;
   patch(conversation.id, s => ({ ...s, loading: true }));
-  const result = await deps.api.history(settings, { key: conversationKey(conversation), limit: HISTORY_PAGE });
-  if (!result.ok) { patch(conversation.id, s => ({ ...s, loading: false })); return; }
   const shown = new Set(conversation.messages.map(m => m.id));
-  const oldest = conversation.messages.reduce((min, m) => Math.min(min, m.at), Infinity);
-  const page = historyToMessages(result.value.messages, conversation.id).filter(m => m.at < oldest);
-  patch(conversation.id, s => s.before !== undefined ? { ...s, loading: false } : prependOlder(s, page, shown, result.value.before));
+  const oldest = oldestShown(conversation, state);
+  // The cached window (up to 80) can be longer than one page: walk back until a page reaches past
+  // it, so the stored cursor never points inside what is already on screen.
+  let before: string | undefined;
+  for (let n = 0; n < PRIME_MAX_PAGES; n++) {
+    const result = await deps.api.history(settings, { key: conversationKey(conversation), limit: HISTORY_PAGE, ...(before ? { before } : {}) });
+    if (!result.ok) { patch(conversation.id, s => ({ ...s, loading: false })); return; }
+    const page = historyToMessages(result.value.messages, conversation.id).filter(m => m.at < oldest);
+    const next = result.value.before;
+    if (page.length > 0 || next === null || n === PRIME_MAX_PAGES - 1) {
+      patch(conversation.id, s => s.before !== undefined ? { ...s, loading: false } : prependOlder(s, page, shown, next));
+      return;
+    }
+    before = next;
+  }
 }

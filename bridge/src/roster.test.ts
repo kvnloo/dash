@@ -458,7 +458,7 @@ describe("chat index keeps the hello roster small and off the archive", () => {
       expect(agentsviewSessions(new Set(), undefined, {}).length).toBe(10 * AGENTSVIEW_KINDS.length);
       expect(agentsviewSessions(new Set(["codex:3"]), undefined, {}).length).toBe(10 * AGENTSVIEW_KINDS.length - 1);
     } finally { setArchiveHead([]); }
-    expect(rosterHermesHead({})).toBe(20);
+    expect(rosterHermesHead({})).toBe(50);
     expect(rosterHermesHead({ DASH_ROSTER_HERMES_HEAD: "5" })).toBe(5);
   });
 });

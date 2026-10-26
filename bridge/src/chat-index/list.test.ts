@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parseChatPage, type ChatSummary } from "../../../shared/protocol";
-import { AgentsviewFixture, engineConfig, HermesFixture, inProcessWorker, tempDir } from "../fixtures/chat-index/make-fixtures";
+import { AgentsviewFixture, engineConfig, HermesFixture, inProcessWorker, TEST_RPC_TIMEOUT_MS, tempDir } from "../fixtures/chat-index/make-fixtures";
 import { ChatIndexClient } from "./client";
 import { createChatsHttpHandler, overlayLive } from "./http";
 import { EngineError, ChatIndexEngine } from "./worker";
@@ -26,7 +26,7 @@ function bigArchive(n: number) {
 
 function harness(dir: string, avPath: string | undefined, live: () => ChatSummary[] = () => []) {
   const config = engineConfig(dir, { agentsviewPath: avPath });
-  const client = new ChatIndexClient({ config, spawn: inProcessWorker(config), workers: 2 });
+  const client = new ChatIndexClient({ config, spawn: inProcessWorker(config), workers: 2, timeoutMs: TEST_RPC_TIMEOUT_MS });
   cleanup.push(() => client.stop());
   const handle = createChatsHttpHandler({
     authorize: async r => r.headers.get("authorization") === "Bearer ok",

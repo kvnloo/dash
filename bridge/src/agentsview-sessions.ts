@@ -19,10 +19,13 @@ export function agentsviewPath(env: Record<string, string | undefined> = process
   return existsSync(path) ? path : undefined;
 }
 
-/** Hello roster head per catalog kind (DASH_ROSTER_ARCHIVE_HEAD, default 10). */
+/**
+ * Hello roster head per catalog kind (DASH_ROSTER_ARCHIVE_HEAD, default 50, as before chats.v1).
+ * Older apps mark adopted chats the roster stops listing as stale, so it must not shrink by default.
+ */
 export function rosterArchiveHead(env: Record<string, string | undefined> = process.env): number {
   const n = Number(env.DASH_ROSTER_ARCHIVE_HEAD);
-  return Number.isInteger(n) && n >= 0 ? Math.min(n, 200) : 10;
+  return Number.isInteger(n) && n >= 0 ? Math.min(n, 200) : 50;
 }
 
 /** Strip AgentsView's "<agent>:" prefix to recover the harness-native session id. */

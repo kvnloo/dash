@@ -3,7 +3,8 @@ import type { ApiResult } from "../net/chats-api";
 import type { ChatsApi } from "../net/chats-api";
 import type { HistoryPage } from "../../../shared/protocol";
 import type { Conversation } from "../model";
-import { configureHistoryPages, historyPages, historyState, loadOlder, prependOlder, setHistoryCursor } from "./history-pages";
+import { configureHistoryPages, historyPages, historyState, loadOlder, prependOlder, primeCursor, setHistoryCursor } from "./history-pages";
+import type { HistoryMessage } from "../../../shared/protocol";
 
 const chat: Conversation = { id: "c", harness: "codex", title: "t", createdAt: 1, updatedAt: 1, sessionId: "s", targetHostId: "groot",
   messages: [{ id: "av:10", role: "user", text: "newest", at: 10 }] };
@@ -50,3 +51,47 @@ describe("history pages", () => {
     expect(prependOlder({ older: [], before: "c", loading: false }, many, new Set(), "d").older).toHaveLength(2000);
   });
 });
+
+/** Host messages n..m (ids av:n), one per second; n is oldest. */
+function hostRange(from: number, to: number): HistoryMessage[] {
+  const out: HistoryMessage[] = [];
+  for (let n = from; n <= to; n++) out.push({ id: `av:${n}`, role: n % 2 ? "assistant" : "user", text: `m${n}`, at: n * 1000 });
+  return out;
+}
+
+describe("chats with phone message ids (Dash-started)", () => {
+  // The cached window: the newest 80 host messages (101..180) under local ids.
+  const cached: Conversation = { ...chat, id: "d", messages: hostRange(101, 180).map(m => ({ id: `local-${m.id}`, role: "user", text: m.text, at: m.at })) };
+
+  test("primeCursor walks past the cached window, so no cached message shows twice", async () => {
+    responses = [
+      { ok: true, value: { messages: hostRange(131, 180), before: "p1" } },
+      { ok: true, value: { messages: hostRange(81, 130), before: "p2" } },
+    ];
+    await primeCursor(cached);
+    expect(requested.map(r => r.before)).toEqual([undefined, "p1"]);
+    expect(historyState("d").older.map(m => m.id)).toEqual(hostRange(81, 100).map(m => m.id));
+    expect(historyState("d").before).toBe("p2");
+    responses = [{ ok: true, value: { messages: hostRange(31, 80), before: "p3" } }];
+    await loadOlder(cached);
+    const texts = [...historyState("d").older, ...cached.messages].map(m => m.text);
+    expect(new Set(texts).size).toBe(texts.length);
+    expect(texts).toEqual(hostRange(31, 180).map(m => m.text));
+  });
+
+  test("loadOlder drops page messages not older than everything shown", async () => {
+    setHistoryCursor("d", "inside");
+    // A cursor that points inside the cached window returns messages already on screen.
+    responses = [{ ok: true, value: { messages: hostRange(91, 140), before: "p" } }];
+    await loadOlder(cached);
+    expect(historyState("d").older.map(m => m.id)).toEqual(hostRange(91, 100).map(m => m.id));
+  });
+
+  test("primeCursor stops at the start of the chat", async () => {
+    responses = [{ ok: true, value: { messages: hostRange(131, 180), before: null } }];
+    await primeCursor(cached);
+    expect(historyState("d").before).toBeNull();
+    expect(historyState("d").older).toEqual([]);
+  });
+});
+

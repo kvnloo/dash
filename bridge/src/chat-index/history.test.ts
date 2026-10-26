@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { MESSAGE_TEXT_MAX, parseHistoryPage, type HistoryMessage } from "../../../shared/protocol";
-import { AgentsviewFixture, engineConfig, HermesFixture, inProcessWorker, tempDir } from "../fixtures/chat-index/make-fixtures";
+import { AgentsviewFixture, engineConfig, HermesFixture, inProcessWorker, TEST_RPC_TIMEOUT_MS, tempDir } from "../fixtures/chat-index/make-fixtures";
 import { ChatIndexClient } from "./client";
 import { createChatsHttpHandler } from "./http";
+import { hermesWsPage } from "./hermes-src";
 import { ChatIndexEngine } from "./worker";
 
 const cleanup: (() => void)[] = [];
@@ -24,7 +25,7 @@ function setup() {
   av.session({ id: "oc1", agent: "opencode", ended_at: "2026-10-01T03:00:00Z" });
   av.message({ session_id: "oc1", ordinal: 0, role: "user", content: "opencode question" });
   const config = engineConfig(dir, { agentsviewPath: av.path });
-  const client = new ChatIndexClient({ config, spawn: inProcessWorker(config) });
+  const client = new ChatIndexClient({ config, spawn: inProcessWorker(config), timeoutMs: TEST_RPC_TIMEOUT_MS });
   cleanup.push(() => client.stop());
   const handle = createChatsHttpHandler({ authorize: async () => true, client, self: () => ({ id: "0", name: "groot", matches: h => h === "0" || h === "groot" }), live: () => [] });
   const get = async (p: string) => { const r = await handle(new Request(`http://b${p}`)); if (!r) throw new Error("unrouted"); return r; };
@@ -80,6 +81,34 @@ describe("GET /chats/history", () => {
     expect((await get("/chats/message?key=0:codex:big&id=drop%20table")).status).toBe(400);
   });
 
+  test("chats Dash ran (sdk-cli, non-interactive) are unlisted but their ws cursor continues over HTTP", async () => {
+    const { av, client, get, ingest } = setup();
+    av.session({ id: "claude:sdk1", agent: "claude", entrypoint: "sdk-cli", ended_at: "2026-10-01T06:00:00Z" });
+    av.session({ id: "codex:exec1", agent: "codex", session_kind: "non-interactive", ended_at: "2026-10-01T06:00:00Z" });
+    av.session({ id: "claude:del1", agent: "claude", entrypoint: "sdk-cli", deleted_at: "2026-10-02T00:00:00Z", ended_at: "2026-10-01T06:00:00Z" });
+    av.db.transaction(() => {
+      for (const id of ["claude:sdk1", "codex:exec1", "claude:del1"]) {
+        for (let i = 0; i < 60; i++) av.message({ session_id: id, ordinal: i, role: i % 2 ? "assistant" : "user", content: `${id}-${i}${i === 1 ? "x".repeat(20_000) : ""}`, timestamp: new Date(Date.UTC(2026, 9, 1) + i * 1000).toISOString() });
+      }
+    })();
+    await ingest();
+    for (const [kind, sessionId] of [["claude", "sdk1"], ["codex", "exec1"]] as const) {
+      const ws = await client.wsHistory({ kind, sessionId, limit: 50 });
+      expect(ws.messages.length).toBe(50);
+      expect(ws.before).not.toBeNull();
+      const res = await get(`/chats/history?key=0:${kind}:${sessionId}&limit=50&before=${ws.before}`);
+      expect(res.status).toBe(200);
+      const older = parseHistoryPage(await res.json());
+      expect(older?.messages.map(m => m.text.slice(0, 40))).toEqual(Array.from({ length: 10 }, (_, i) => `${kind}:${sessionId}-${i}${i === 1 ? "x".repeat(40 - `${kind}:${sessionId}-1`.length) : ""}`));
+      expect(older?.before).toBeNull();
+      const cut = older?.messages[1];
+      expect(cut?.truncated).toBe(true);
+      expect((await get(`/chats/message?key=0:${kind}:${sessionId}&id=${cut?.id}`)).status).toBe(200);
+      expect((await get(`/chats/history?kind=${kind}&sessionId=${sessionId}&host=groot&limit=5`)).status).toBe(200);
+    }
+    expect((await get("/chats/history?key=0:claude:del1")).status).toBe(404);
+  });
+
   test("non-catalog kinds are readable over HTTP but not over ws", async () => {
     const { get, ingest, client } = setup();
     await ingest();
@@ -127,5 +156,54 @@ describe("GET /chats/history", () => {
       before = page.before;
     }
     expect(texts).toEqual(Array.from({ length: 30 }, (_, i) => `h${i}`));
+  });
+});
+
+describe("Hermes ws window", () => {
+  test("a tool-heavy session that fills the raw window with few messages still gets a cursor that reaches the start", async () => {
+    const dir = tempDir();
+    const hz = new HermesFixture(join(dir, "hermes"));
+    hz.session({ id: "tools", title: "tool heavy", started_at: 1_790_000_000 });
+    let t = 1_790_000_000;
+    hz.db.transaction(() => {
+      for (let turn = 0; turn < 20; turn++) {
+        hz.message("tools", "user", `ask ${turn}`, t++);
+        hz.message("tools", "assistant", `working on ${turn}`, t++);
+        for (let k = 0; k < 40; k++) hz.message("tools", "tool", `out ${turn}.${k}`, t++);
+      }
+    })();
+    const engine = new ChatIndexEngine(engineConfig(dir));
+    cleanup.push(() => engine.stop());
+    await engine.ingest();
+    const window = await engine.hermes.history("default", "tools");
+    expect(window.length).toBeLessThan(50);
+    const page = hermesWsPage(window, 50);
+    expect(page.before).not.toBeNull();
+    const self = { id: "0", name: "groot" };
+    const asks = new Set(window.filter(m => m.role === "user").map(m => m.text));
+    let before: string | null = page.before;
+    for (let n = 0; before && n < 50; n++) {
+      const older = await engine.history({ key: "@self:hermes:tools:default", limit: 50, before, self });
+      for (const m of older.messages) if (m.role === "user") asks.add(m.text);
+      before = older.before;
+    }
+    expect([...asks].sort()).toEqual(Array.from({ length: 20 }, (_, i) => `ask ${i}`).sort());
+  });
+
+  test("a short chat gets a cursor too; at the start of the chat the HTTP page is empty with no cursor", async () => {
+    const dir = tempDir();
+    const hz = new HermesFixture(join(dir, "hermes"));
+    hz.session({ id: "short", title: "short", started_at: 1_790_000_000 });
+    hz.message("short", "user", "hi", 1_790_000_001);
+    hz.message("short", "assistant", "hello", 1_790_000_002);
+    const engine = new ChatIndexEngine(engineConfig(dir));
+    cleanup.push(() => engine.stop());
+    await engine.ingest();
+    const page = hermesWsPage(await engine.hermes.history("default", "short"), 50);
+    expect(page.messages.map(m => m.text)).toEqual(["hi", "hello"]);
+    expect(page.before).not.toBeNull();
+    const older = await engine.history({ key: "@self:hermes:short:default", limit: 50, before: page.before ?? undefined, self: { id: "0", name: "groot" } });
+    expect(older).toEqual({ messages: [], before: null });
+    expect(hermesWsPage([], 50).before).toBeNull();
   });
 });

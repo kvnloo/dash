@@ -16,10 +16,14 @@ import { hostGatewayProbe, ownerHosting, type GatewayHostProbe, type OwnerHostin
 // cron, oneshot, kanban, tool or delegated workers. `local` is native session authority CLI.
 export const HERMES_CHAT_SOURCES = ["local", "cli", "tui", "desktop", "acp", "api_server", "telegram", "discord", "slack", "whatsapp", "signal", "matrix", "email", "sms", "imessage", "mattermost", "dingtalk", "feishu", "wecom", "qq", "teams", "irc", "web", "gateway"];
 const SOURCES = new Set(HERMES_CHAT_SOURCES);
-/** Roster (hello) head per profile. The full list is served paged from the chat index. */
+/**
+ * Roster (hello) head per profile (DASH_ROSTER_HERMES_HEAD, default 50). The full list is served
+ * paged from the chat index. Stays at 50: older apps mark any adopted chat the roster stops listing
+ * as stale, so a smaller head must wait for a client capability that opts into it.
+ */
 export function rosterHermesHead(env: Record<string, string | undefined> = process.env): number {
   const n = Number(env.DASH_ROSTER_HERMES_HEAD);
-  return Number.isInteger(n) && n > 0 ? Math.min(n, 500) : 20;
+  return Number.isInteger(n) && n > 0 ? Math.min(n, 500) : 50;
 }
 const SESSION_FIELDS = "id,source,title,started_at,last_activity_at,message_count,cwd,archived,hidden,parent_session_id,end_reason,model_config";
 const PROFILE_OK = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;

@@ -38,7 +38,12 @@ export interface WorkerLike {
   postMessage(message: WorkerRequest): void;
   onmessage: ((event: MessageEvent) => void) | null;
   terminate(): void;
+  /** A worker that dies ("error": uncaught error, failed import; "close": exited) is replaced. */
+  addEventListener?(type: "error" | "close", listener: () => void): void;
 }
+
+/** A started job that has run this many lane timeouts is treated as a hung worker. */
+export const STUCK_FACTOR = 3;
 
 type Listener = { resolve(value: unknown): void; reject(error: Error): void };
 interface Job { id: number; key: string; request: WorkerRequest; listeners: Set<Listener>; started: boolean; done: boolean; timer: ReturnType<typeof setTimeout> | undefined }
@@ -47,16 +52,60 @@ function isReply(value: unknown): value is WorkerReply {
   return typeof value === "object" && value !== null && ("id" in value || ("type" in value && value.type === "snapshot"));
 }
 
-/** One worker, one request at a time. Bounded queue, per-request deadline from enqueue. */
+/**
+ * One worker, one request at a time. Bounded queue, per-request deadline from enqueue.
+ * Given a spawn function, the lane is self-healing: when its worker errors, exits, or holds one job
+ * for STUCK_FACTOR x timeoutMs (a stalled read on the archive mount), every pending call fails busy,
+ * the worker is terminated, and a fresh one is spawned and re-sent the last init op.
+ */
 export class Lane {
   private readonly queue: Job[] = [];
   private active: Job | undefined;
   private readonly inflight = new Map<string, Job>();
   private seq = 0;
+  private worker: WorkerLike;
+  private readonly spawn: (() => WorkerLike) | undefined;
+  private initOp: Extract<WorkerOp, { op: "init" }> | undefined;
+  private generation = 0;
+  private stuck: ReturnType<typeof setTimeout> | undefined;
+  private closed = false;
+  /** Times the lane replaced its worker. */
+  restarts = 0;
   onSnapshot: ((snapshot: Snapshot) => void) | undefined;
 
-  constructor(private readonly worker: WorkerLike, private readonly timeoutMs = RPC_TIMEOUT_MS, private readonly cap = QUEUE_CAP) {
-    worker.onmessage = event => this.receive(event.data);
+  constructor(source: WorkerLike | (() => WorkerLike), private readonly timeoutMs = RPC_TIMEOUT_MS, private readonly cap = QUEUE_CAP) {
+    this.spawn = typeof source === "function" ? source : undefined;
+    this.worker = this.attach(typeof source === "function" ? source() : source);
+  }
+
+  private attach(worker: WorkerLike): WorkerLike {
+    const generation = ++this.generation;
+    worker.onmessage = event => { if (generation === this.generation) this.receive(event.data); };
+    const died = () => { if (generation === this.generation && !this.closed) this.recover(); };
+    worker.addEventListener?.("error", died);
+    worker.addEventListener?.("close", died);
+    return worker;
+  }
+
+  /** Fail everything pending, replace the worker, re-init it. Without a spawn function, only fails the pending jobs. */
+  private recover(): void {
+    if (this.stuck) clearTimeout(this.stuck);
+    this.stuck = undefined;
+    const victims = [...(this.active ? [this.active] : []), ...this.queue];
+    this.queue.length = 0;
+    this.active = undefined;
+    for (const job of victims) {
+      const listeners = job.done ? [] : [...job.listeners];
+      this.finish(job);
+      for (const l of listeners) l.reject(new BusyError());
+    }
+    if (!this.spawn) return;
+    const old = this.worker;
+    this.generation++; // the old worker's late replies and close event are ignored
+    try { old.terminate(); } catch { /* already gone */ }
+    try { this.worker = this.attach(this.spawn()); } catch { return; }
+    this.restarts++;
+    if (this.initOp) void this.call(this.initOp).catch(() => undefined);
   }
 
   /** Queued, not started. */
@@ -64,6 +113,7 @@ export class Lane {
 
   call(op: WorkerOp, signal?: AbortSignal): Promise<unknown> {
     if (signal?.aborted) return Promise.reject(new AbortedError());
+    if (op.op === "init") this.initOp = op;
     const key = JSON.stringify(op);
     let job = op.op === "init" || op.op === "stall" ? undefined : this.inflight.get(key);
     if (!job) {
@@ -115,6 +165,7 @@ export class Lane {
     if (!job) return;
     job.started = true;
     this.active = job;
+    if (this.spawn) this.stuck = setTimeout(() => { if (this.active === job) this.recover(); }, this.timeoutMs * STUCK_FACTOR);
     try { this.worker.postMessage(job.request); } catch { this.settle(job, false, new BusyError()); }
   }
 
@@ -128,6 +179,8 @@ export class Lane {
   }
 
   private settle(job: Job, ok: boolean, value: unknown): void {
+    if (this.stuck) clearTimeout(this.stuck);
+    this.stuck = undefined;
     this.active = undefined;
     const listeners = job.done ? [] : [...job.listeners];
     this.finish(job);
@@ -139,6 +192,9 @@ export class Lane {
   }
 
   terminate(): void {
+    this.closed = true;
+    if (this.stuck) clearTimeout(this.stuck);
+    this.stuck = undefined;
     for (const job of [...this.queue, ...(this.active ? [this.active] : [])]) {
       const listeners = [...job.listeners];
       this.finish(job);
@@ -193,7 +249,7 @@ export class ChatIndexClient {
   constructor(options: ClientOptions) {
     const spawn = options.spawn ?? spawnWorker;
     const make = (role: EngineConfig["role"]) => {
-      const lane = new Lane(spawn(role), options.timeoutMs ?? RPC_TIMEOUT_MS);
+      const lane = new Lane(() => spawn(role), options.timeoutMs ?? RPC_TIMEOUT_MS);
       void lane.call({ op: "init", args: { ...options.config, role } }).catch(() => undefined);
       return lane;
     };

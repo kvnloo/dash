@@ -30,7 +30,7 @@ describe("archive write boundary", () => {
       await engine.ingest();
       expect(engine.list({ limit: 50, fh: "f", kinds: [], hosts: [], chatable: false, self }).items.length).toBe(2);
       expect(engine.titleSearch({ q: "flamingo", qh: "q", limit: 10, kinds: [], hosts: [], self }).hits.length).toBe(2);
-      expect(search.msgSearch({ q: "flamingo", limit: 10, positions: "start", exclude: [], kinds: [], hosts: [], self }).hits.length).toBe(2);
+      expect(search.msgSearch({ q: "flamingo", limit: 10, positions: "start", exclude: [], kinds: [], hosts: [], self, budgetMs: 1e9 }).hits.length).toBe(2);
       expect((await engine.history({ key: "@self:codex:c1", limit: 10, self })).messages.length).toBe(1);
       expect((await engine.history({ key: "@self:hermes:s1:default", limit: 10, self })).messages.length).toBe(1);
       expect(engine.message({ key: "@self:codex:c1", id: `av:${avMsg}` }).text).toBe("flamingo body");

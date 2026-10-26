@@ -138,6 +138,11 @@ export class ConversationPersistence {
   private seen = new Map<string, number>();
   private generation = 0;
   private cacheListed = true;
+  /** Save calls so far; each drained snapshot knows which call took it. */
+  private saveSeq = 0;
+  private waitingSeq = 0;
+  /** Ids adopted outside a save: a snapshot taken at or before this save call cannot delete them. */
+  private adoptedAt = new Map<string, number>();
   constructor(private readonly files: ConversationFiles, private readonly index?: IndexStore) {}
 
   /** Startup without reading transcripts: stubs from the index, or null when there is no index yet. */
@@ -204,10 +209,46 @@ export class ConversationPersistence {
     return chats.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
+  /**
+   * Durable files the index does not list: a crash between a new chat's file write and the index
+   * write, or files an older app wrote. Read-only: returns the parsed chats (full transcripts);
+   * the caller puts them in the store and then calls `adopt`.
+   */
+  async orphans(): Promise<Conversation[]> {
+    if (!this.index) return [];
+    const out: Conversation[] = [];
+    for (const name of await this.files.list("durable")) {
+      if (!name.endsWith(".json")) continue;
+      let id: string;
+      try { id = decodeURIComponent(name.slice(0, -".json".length)); } catch { continue; }
+      if (this.indexParts.has(id) || this.saved.has(id)) continue;
+      let chat: Conversation | null = null;
+      try { chat = parse(await this.files.read("durable", name)); } catch { chat = null; }
+      if (chat && chat.id === id) out.push(chat);
+    }
+    return out;
+  }
+
+  /** Register chats found by `orphans` (now in the store) and rewrite the index with them. */
+  adopt(chats: readonly Conversation[]): void {
+    for (const chat of chats) {
+      if (this.indexParts.has(chat.id)) continue;
+      this.saved.set(chat.id, chat);
+      this.unloaded.delete(chat.id);
+      this.indexParts.set(chat.id, indexEntry(chat));
+      if (hasHostHistory(chat)) this.durableValues.set(chat.id, JSON.stringify(durableConversation(chat)));
+      this.adoptedAt.set(chat.id, this.saveSeq);
+      this.indexDirty = true;
+    }
+  }
+
+  /** The next drain rewrites the whole index key from the in-memory entries. */
+  markIndexDirty(): void { this.indexDirty = true; }
+
   /** Forget conversations removed outside a save (the archive prune) without touching disk. */
   forget(ids: readonly string[]): void {
     for (const id of ids) {
-      this.saved.delete(id); this.durableValues.delete(id); this.unloaded.delete(id); this.seen.delete(id);
+      this.saved.delete(id); this.durableValues.delete(id); this.unloaded.delete(id); this.seen.delete(id); this.adoptedAt.delete(id);
       if (this.indexParts.delete(id)) this.indexDirty = true;
     }
   }
@@ -227,6 +268,7 @@ export class ConversationPersistence {
 
   save(chats: readonly Conversation[]): Promise<void> {
     this.waiting = chats;
+    this.waitingSeq = ++this.saveSeq;
     if (!this.running) {
       this.running = Promise.resolve().then(() => this.drain());
     }
@@ -236,10 +278,19 @@ export class ConversationPersistence {
     try {
       while (this.waiting) {
         const chats = this.waiting;
+        const seq = this.waitingSeq;
         this.waiting = undefined;
         const generation = ++this.generation;
-        for (const chat of chats) this.seen.set(chat.id, generation);
+        for (const chat of chats) {
+          this.seen.set(chat.id, generation);
+          const adopted = this.adoptedAt.get(chat.id);
+          if (adopted !== undefined && seq > adopted) this.adoptedAt.delete(chat.id);
+        }
         for (const [id] of this.saved) if (this.seen.get(id) !== generation) {
+          const adopted = this.adoptedAt.get(id);
+          // Taken before the chat was adopted into the store: absence here is not a delete.
+          if (adopted !== undefined && seq <= adopted) continue;
+          this.adoptedAt.delete(id);
           const name = filename(id);
           await this.files.remove("durable", name);
           await this.files.remove("cache", name).catch(() => undefined);
@@ -308,7 +359,7 @@ export class ConversationPersistence {
       for (const name of await this.files.list(area)) await this.files.remove(area, name);
     }
     this.saved.clear(); this.durableValues.clear(); this.cacheOrder = [];
-    this.unloaded.clear(); this.indexParts.clear(); this.seen.clear(); this.indexDirty = false;
+    this.unloaded.clear(); this.indexParts.clear(); this.seen.clear(); this.adoptedAt.clear(); this.indexDirty = false;
     await this.index?.remove();
   }
 }

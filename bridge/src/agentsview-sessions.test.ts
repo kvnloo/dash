@@ -76,13 +76,13 @@ describe("agentsview sessions", () => {
     const path = fixture();
     const db = new Database(path);
     const add = db.prepare(`insert into sessions (id, project, machine, agent, first_message, started_at, ended_at, message_count, user_message_count, is_automated) values (?,?,?,?,?,?,?,?,?,0)`);
-    for (let i = 0; i < 30; i++) add.run(`codex:bulk${i}`, "p", "m", "codex", `bulk ${i}`, "2026-10-20T00:00:00Z", `2026-10-20T00:${String(i).padStart(2, "0")}:00Z`, 12, 3);
+    for (let i = 0; i < 60; i++) add.run(`codex:bulk${i}`, "p", "m", "codex", `bulk ${i}`, "2026-10-20T00:00:00Z", `2026-10-20T00:${String(i).padStart(2, "0")}:00Z`, 12, 3);
     db.close();
     const rows = await head(path);
-    expect(rows.filter(r => r.kind === "codex").length).toBe(10);
-    expect(rows.length).toBeLessThanOrEqual(10 * 4);
+    expect(rows.filter(r => r.kind === "codex").length).toBe(50);
+    expect(rows.length).toBeLessThanOrEqual(50 * 4);
     expect(agentsviewSessions(new Set(), rows, { DASH_AGENTSVIEW: "0" })).toEqual([]);
-    expect(rosterArchiveHead({})).toBe(10);
+    expect(rosterArchiveHead({})).toBe(50);
     expect(rosterArchiveHead({ DASH_ROSTER_ARCHIVE_HEAD: "3" })).toBe(3);
   });
   test("history opens archived chats, skips system rows, redacts", () => {

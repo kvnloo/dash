@@ -9,6 +9,8 @@ export const SELF_HOST = "@self";
 export const SNIPPET_MAX = 240;
 /** Leading chars of a message read to build its snippet. */
 export const SNIPPET_SOURCE_MAX = 65_536;
+/** Extra chars read past a cut so a secret straddling it is still whole when redacted. */
+export const REDACT_SLACK = 4096;
 export const TITLE_MAX = 200;
 export const SEARCH_BUDGET_MS = 120;
 export const SEARCH_MAX_SCANNED = 2000;
@@ -100,7 +102,8 @@ export function substringHighlights(text: string, needles: string[]): SearchHigh
 /**
  * Snippet source with \x01…\x02 around each needle, windowed on the first match (`…` marks a cut).
  * No match (a stemmed hit, or past SNIPPET_SOURCE_MAX): the start of the text, unmarked.
- * Callers redact the result, then convert markers with markersToHighlights.
+ * Callers pass already-redacted text (never raw: the window and markers can split a secret),
+ * then convert markers with markersToHighlights.
  */
 export function markSnippet(text: string, needles: string[], max = SNIPPET_MAX): string {
   const flat = text.replace(/\s+/g, " ").trim();

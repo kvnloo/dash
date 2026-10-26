@@ -22,7 +22,6 @@ import {
   CHATS_FEATURE,
   PROTOCOL_VERSION,
   chatKey,
-  encodeCursor,
   parseClientMessage,
   type ChatSummary,
   type HistoryMessage,
@@ -42,6 +41,7 @@ import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
 import { AGENTSVIEW_PREFIX, agentsviewPath, rosterArchiveHead } from "./src/agentsview-sessions";
 import { ChatIndexClient } from "./src/chat-index/client";
 import { createChatsHttpHandler } from "./src/chat-index/http";
+import { hermesWsPage } from "./src/chat-index/hermes-src";
 import { sidecarPath } from "./src/chat-index/sidecar";
 import { isCatalogHarness } from "../shared/catalog";
 import { runHermesSession } from "./src/hermes-session";
@@ -750,12 +750,6 @@ const handleChats = createChatsHttpHandler({
 });
 
 /** Paged ws history for Hermes: the newest `limit`, and an older-page cursor when more may exist. */
-function hermesWsPage(messages: HistoryMessage[], limit: number): { messages: HistoryMessage[]; before: string | null } {
-  const page = messages.slice(-limit);
-  const oldest = page[0];
-  const more = messages.length > limit || messages.length >= 200;
-  return { messages: page, before: more && oldest && /^\d+$/.test(oldest.id) ? encodeCursor({ v: 1, t: oldest.at / 1000, i: Number(oldest.id) }) : null };
-}
 
 const contextCompaction = compactionEnabled();
 const handleContext = contextHttp({ sessions: hermesSessions, compaction: contextCompaction });

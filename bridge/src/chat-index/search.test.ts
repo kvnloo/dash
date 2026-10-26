@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parseChatSearchPage, type ChatSearchHit } from "../../../shared/protocol";
-import { AgentsviewFixture, engineConfig, HermesFixture, inProcessWorker, tempDir } from "../fixtures/chat-index/make-fixtures";
+import { AgentsviewFixture, engineConfig, HermesFixture, inProcessWorker, TEST_RPC_TIMEOUT_MS, tempDir } from "../fixtures/chat-index/make-fixtures";
 import { ChatIndexClient } from "./client";
 import { createChatsHttpHandler } from "./http";
 import { markersToHighlights, markSnippet, sanitizeQuery, SNIPPET_MAX } from "./query";
@@ -40,7 +40,7 @@ describe("FTS sanitizer", () => {
 describe("snippet highlights", () => {
   test("markSnippet windows on the first match, marks every needle, cuts with an ellipsis", () => {
     const text = `${"lead ".repeat(100)}then\nDeploy the deploy step ${"tail ".repeat(100)}`;
-    const out = markersToHighlights(redact(markSnippet(text, ["deploy"])));
+    const out = markersToHighlights(markSnippet(redact(text), ["deploy"]));
     expect(out.snippet.length).toBeLessThanOrEqual(SNIPPET_MAX);
     expect(out.snippet.startsWith("…")).toBe(true);
     expect(out.snippet.endsWith("…")).toBe(true);
@@ -55,6 +55,56 @@ describe("snippet highlights", () => {
     const out = markersToHighlights(marked);
     expect(out.snippet).not.toContain("secretvalue");
     expect(out.highlights.map(h => out.snippet.slice(h.start, h.end))).toEqual(["deploy"]);
+  });
+});
+
+describe("snippet redaction", () => {
+  const secrets = "password=hunter2xyz and api_key=SUPERSECRET123 and token sk-proj-AAAAAAAAAAAAAAAAAAAA";
+  const leaks = ["hunter2xyz", "SUPERSECRET123", "sk-proj-"];
+
+  test("a query term inside a secret's key name or prefix never unredacts it", async () => {
+    const dir = tempDir();
+    const av = new AgentsviewFixture(join(dir, "av.db"));
+    av.session({ id: "codex:s1", agent: "codex", first_message: "secrets chat", ended_at: "2026-10-01T05:00:00Z" });
+    av.message({ session_id: "codex:s1", ordinal: 0, role: "user", content: secrets, timestamp: "2026-10-01T04:00:00Z" });
+    av.message({ session_id: "codex:s1", ordinal: 1, role: "assistant", content: "ok", timestamp: "2026-10-01T04:01:00Z" });
+    const engine = await ready(dir, av.path);
+    for (const q of ["password", "api", "proj", "token", "key"]) {
+      const page = engine.msgSearch({ q, limit: 10, positions: "start", exclude: [], kinds: [], hosts: [], self: SELF, budgetMs: 1e9 });
+      for (const hit of page.hits) for (const leak of leaks) expect(hit.snippet).not.toContain(leak);
+    }
+    const hits = engine.msgSearch({ q: "password", limit: 10, positions: "start", exclude: [], kinds: [], hosts: [], self: SELF, budgetMs: 1e9 }).hits;
+    expect(hits.length).toBe(1);
+  });
+
+  test("a window that starts inside a long secret cannot cut off its prefix", () => {
+    const text = `intro ghp_${"Z".repeat(100)},deploy failed`;
+    const out = markersToHighlights(markSnippet(redact(text), ["deploy"]));
+    expect(out.snippet).not.toContain("ZZZZ");
+    expect(out.highlights.map(h => out.snippet.slice(h.start, h.end))).toEqual(["deploy"]);
+  });
+
+  test("a private key cut off before its END line is redacted", () => {
+    expect(redact(`see -----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAA${"Q".repeat(50)}`)).toBe("see [REDACTED]");
+  });
+
+  test("a private key straddling the snippet source cut is redacted in the snippet", async () => {
+    const dir = tempDir();
+    const av = new AgentsviewFixture(join(dir, "av.db"));
+    av.session({ id: "codex:k1", agent: "codex", first_message: "key chat", ended_at: "2026-10-01T05:00:00Z" });
+    const body = `${"x".repeat(65_536 - 40)} -----BEGIN OPENSSH PRIVATE KEY-----\n${"K".repeat(200)}\n-----END OPENSSH PRIVATE KEY----- kiwifruit`;
+    av.message({ session_id: "codex:k1", ordinal: 0, role: "user", content: `kiwifruit ${body}`, timestamp: "2026-10-01T04:00:00Z" });
+    av.message({ session_id: "codex:k1", ordinal: 1, role: "assistant", content: "ok", timestamp: "2026-10-01T04:01:00Z" });
+    const engine = await ready(dir, av.path);
+    const db = engine.av();
+    if (!db) throw new Error("no archive");
+    const { avContent } = await import("./agentsview-src");
+    const raw = avContent(db, 1) ?? "";
+    expect(raw).toContain("-----END OPENSSH PRIVATE KEY-----");
+    expect(redact(raw)).not.toContain("KKKK");
+    const hits = engine.msgSearch({ q: "kiwifruit", limit: 10, positions: "start", exclude: [], kinds: [], hosts: [], self: SELF, budgetMs: 1e9 }).hits;
+    expect(hits.length).toBe(1);
+    for (const hit of hits) expect(hit.snippet).not.toContain("KKKK");
   });
 });
 
@@ -106,7 +156,7 @@ describe("message phase", () => {
   test("only eligible sessions, one hit per chat, never tool or system rows; redacted snippet", async () => {
     const { dir, av } = fixture();
     const engine = await ready(dir, av.path);
-    const page = engine.msgSearch({ q: "flamingo", limit: 10, positions: "start", exclude: [], kinds: [], hosts: [], self: SELF });
+    const page = engine.msgSearch({ q: "flamingo", limit: 10, positions: "start", exclude: [], kinds: [], hosts: [], self: SELF, budgetMs: 1e9 });
     expect(page.hits.map(h => h.chat.sessionId)).toEqual(["c2", "c1"]);
     const c1 = page.hits.find(h => h.chat.sessionId === "c1");
     expect(c1?.role).toBe("assistant");
@@ -183,7 +233,7 @@ describe("GET /chats/search", () => {
     const { dir, av } = fixture();
     av.session({ id: "claude:f3", agent: "claude", first_message: "flamingo naming ideas", ended_at: "2026-09-01T00:00:00Z" });
     const config = engineConfig(dir, { agentsviewPath: av.path });
-    const client = new ChatIndexClient({ config, spawn: inProcessWorker(config) });
+    const client = new ChatIndexClient({ config, spawn: inProcessWorker(config), timeoutMs: TEST_RPC_TIMEOUT_MS });
     cleanup.push(() => client.stop());
     await client.primary.call({ op: "ingest", args: null });
     const handle = createChatsHttpHandler({ authorize: async () => true, client, self: () => ({ id: "0", name: "groot", matches: h => h === "0" }), live: () => [] });

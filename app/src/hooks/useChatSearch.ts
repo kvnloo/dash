@@ -1,5 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import type { ChatSearchHit, ChatSearchPage } from "../../../shared/protocol";
+import type { ChatSearchHit, ChatSearchPage, HarnessInfo } from "../../../shared/protocol";
+import type { Conversation } from "../model";
 import { conversationEntries } from "../lib/chat-index";
 import { localRowModel, mergeSearch, reuseRows, searchLocal, searchTerms, type SearchRowModel } from "../lib/chat-search";
 import { LRU } from "../lib/lru";
@@ -29,6 +30,8 @@ export interface ChatSearchState {
 }
 
 const NO_PAGES: ChatSearchPage[] = [];
+const NO_CONVERSATIONS: readonly Conversation[] = [];
+const NO_HARNESSES: readonly HarnessInfo[] = [];
 
 interface RemoteState { key: string; pages: ChatSearchPage[]; status: ChatSearchState["status"] }
 
@@ -40,8 +43,10 @@ interface RemoteState { key: string; pages: ChatSearchPage[]; status: ChatSearch
 export function useChatSearch(query: string, opts: { enabled: boolean; filters?: ChatQuery; localLimit?: number; remoteLimit?: number; minRemoteChars?: number }): ChatSearchState {
   const { enabled } = opts;
   const deferred = useDeferredValue(query);
-  const conversations = store.use(s => s.conversations);
-  const harnesses = store.use(s => s.connection.harnesses);
+  // Idle search subscribes to nothing that changes per turn event: MainScreen calls this hook on
+  // every render, and a live subscription would re-render the whole pager on each tool event.
+  const conversations = store.use(s => (enabled ? s.conversations : NO_CONVERSATIONS));
+  const harnesses = store.use(s => (enabled ? s.connection.harnesses : NO_HARNESSES));
   const settings = store.use(s => s.settings);
   const mode = chatIndexStore.use(s => s.mode);
   const remoteEnabled = mode === "chats" && Boolean(settings);

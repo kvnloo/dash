@@ -10,12 +10,12 @@ import { shouldRequestHistory } from "../lib/live-sessions";
 import { headerSocket } from "../lib/native-socket";
 import type { Settings } from "../model";
 import { configureChatIndex, setChatsFeatures } from "../store/chat-index-store";
-import { configureHistoryPages, setHistoryCursor } from "../store/history-pages";
+import { configureHistoryPages } from "../store/history-pages";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   applyDeltas,
   applyLiveHistory,
-  applyLiveHistoryTo,
+  applyHistoryReply,
   migrateArchive,
   applyTranscript,
   applyTurnEvent,
@@ -246,9 +246,7 @@ class Bridge {
         const conversationId = message.requestId ? this.historyRequests.get(message.requestId) : undefined;
         if (message.requestId) this.historyRequests.delete(message.requestId);
         if (conversationId) {
-          applyLiveHistoryTo(conversationId, message.messages);
-          // An old bridge never sends `before`: older pages stay unavailable.
-          setHistoryCursor(conversationId, message.before);
+          applyHistoryReply(conversationId, message.messages, message.before);
           return;
         }
         applyLiveHistory(message.harness, message.sessionId, message.messages, message.hostId, message.profileId);

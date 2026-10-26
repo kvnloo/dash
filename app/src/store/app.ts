@@ -16,7 +16,8 @@ import {
   type Message,
   type Settings,
 } from "../model";
-import { adoptSummary, hydrateLiveConversation, mergeLiveConversations, shouldRequestHistory } from "../lib/live-sessions";
+import { adoptSummary, hydrateLiveConversation, mergeHistoryWindow, mergeLiveConversations, resumableWithoutRoster, shouldRequestHistory } from "../lib/live-sessions";
+import { historyState, setHistoryCursor } from "./history-pages";
 import { conversationKey } from "../lib/chat-index";
 import { pruneArchive } from "./prune-archive";
 import { createStore } from "./createStore";
@@ -144,6 +145,27 @@ export async function hydrate(): Promise<void> {
     activeId: conversations.some(chat => chat.id === activeId) ? activeId : null }));
   // First run on the v2 layout: the next save writes the v3 index.
   if (!indexed) scheduleSave();
+  // After first paint: durable files the index missed (crash between writes, downgrade) rejoin it.
+  else setTimeout(() => { void reconcileIndex().catch(persistenceFailure); }, 0);
+}
+
+/**
+ * Add durable conversations the v3 index does not list to the store and the index. A new chat's
+ * file is written before the index key, so a kill in between would otherwise hide it for good;
+ * for a local chat that file is the only copy of the transcript. Returns how many were added.
+ */
+export async function reconcileIndex(): Promise<number> {
+  const found = await persistence.orphans();
+  if (!found.length) return 0;
+  let added: Conversation[] = [];
+  store.set(s => {
+    const ids = new Set(s.conversations.map(c => c.id));
+    added = found.filter(c => !ids.has(c.id));
+    return added.length ? { ...s, conversations: [...s.conversations, ...added] } : s;
+  });
+  persistence.adopt(added);
+  scheduleSave();
+  return added.length;
 }
 
 function safeJson(text: string | null | undefined): unknown {
@@ -251,6 +273,17 @@ export function applyLiveHistory(harness: string, sessionId: string, messages: H
 export function applyLiveHistoryTo(conversationId: string, messages: HistoryMessage[]): void {
   updateConversation(conversationId, c => hydrateLiveConversation(c, messages));
 }
+
+/**
+ * A paged (chats.v1) ws history reply. Once older pages are loaded, their cursor is kept, so the
+ * refreshed window merges instead of replacing: messages that slid out of the newest window stay.
+ */
+export function applyHistoryReply(conversationId: string, messages: HistoryMessage[], before: string | null | undefined): void {
+  if (historyState(conversationId).older.length > 0) updateConversation(conversationId, c => mergeHistoryWindow(c, messages));
+  else applyLiveHistoryTo(conversationId, messages);
+  // An old bridge never sends `before`: older pages stay unavailable.
+  setHistoryCursor(conversationId, before);
+}
 /** The first /chats/history page of a chat the websocket cannot serve. */
 export const applyHistoryPage = applyLiveHistoryTo;
 
@@ -266,7 +299,14 @@ export function setActive(id: string | null): void {
   store.set((s) => {
     const previous = s.activeId && s.activeId !== id ? s.conversations.find(c => c.id === s.activeId) : undefined;
     // Leaving a view-only chat drops it: it was never the phone's to keep.
-    const conversations = previous?.viewOnly ? s.conversations.filter(c => c !== previous) : s.conversations;
+    let conversations = previous?.viewOnly ? s.conversations.filter(c => c !== previous) : s.conversations;
+    // Opening an adopted host chat marks it opened: the archive prune (live: rows only) never removes it.
+    const target = id?.startsWith("live:") ? conversations.findIndex(c => c.id === id) : -1;
+    const opening = conversations[target];
+    if (opening && opening.openedAt === undefined) {
+      conversations = conversations.slice();
+      conversations[target] = { ...opening, openedAt: Date.now() };
+    }
     return s.activeId === id && conversations === s.conversations ? s : { ...s, activeId: id, conversations };
   });
   scheduleSave();
@@ -342,15 +382,23 @@ export function releaseViewOnly(id: string): void {
  */
 export async function migrateArchive(options: { legacy: boolean; pause?: () => Promise<void> }): Promise<void> {
   if (!store.get().hydrated) return;
-  const result = await pruneArchive({ storage: AsyncStorage, activeId: store.get().activeId, legacy: options.legacy, pause: options.pause });
+  // The live store decides, at the moment of each removal: an opened, active or written-to chat stays.
+  const prunable = (s: AppState, id: string) => {
+    const c = s.conversations.find(chat => chat.id === id);
+    return !c || (c.id !== s.activeId && c.openedAt === undefined && c.messages.length === 0);
+  };
+  const result = await pruneArchive({ storage: AsyncStorage, activeId: store.get().activeId, legacy: options.legacy, pause: options.pause, stillPrunable: id => prunable(store.get(), id) });
   if (result.status !== "done") return;
-  const pruned = new Set(result.pruned);
+  const removed = new Set(result.pruned);
   const opened = new Map(result.kept.map(chat => [chat.id, chat.openedAt]));
-  persistence.forget(result.pruned);
-  store.set(s => ({ ...s, conversations: s.conversations.filter(c => !pruned.has(c.id)).map(c => {
+  store.set(s => ({ ...s, conversations: s.conversations.filter(c => !removed.has(c.id) || !prunable(s, c.id)).map(c => {
     const at = opened.get(c.id);
     return c.openedAt === undefined && at !== undefined ? { ...c, openedAt: at } : c;
   }) }));
+  // Every removed file is forgotten; one the user opened after its removal is still in the store,
+  // so the next save writes it again. The index is rebuilt in full from the store.
+  persistence.forget(result.pruned);
+  persistence.markIndexDirty();
   scheduleSave();
 }
 
@@ -389,6 +437,10 @@ export function conversationTargetError(target: Pick<Conversation, "targetHostId
   if (!host || !host.online) return "This target host is unavailable. Reconnect to that computer.";
   if (!host.self) return `The paired bridge cannot route to remote host ${host.name}. Pair with that computer to chat.`;
   const agent = host.agents.find((a) => a.id === target.profileId);
+  if (!agent && !target.stale && resumableWithoutRoster(target, connection.hosts)) {
+    // Opened from the paged list: resumes by session id; the hello head lists only the newest chats.
+    return connection.harnesses.some((h) => h.id === target.harness && h.available) ? undefined : "This harness is unavailable on the paired computer.";
+  }
   if (!agent || agent.status === "offline") return "This agent is unavailable. Refresh the roster before trying again.";
   if (chatKind(agent) !== target.harness || (agent.sessionId && target.sessionId && agent.sessionId !== target.sessionId)) return "This agent session has changed. Select it again from the roster.";
   if (!connection.harnesses.some((h) => h.id === target.harness && h.available)) return "This harness is unavailable on the paired computer.";
@@ -405,11 +457,12 @@ export function openAgentConversation(profile: AgentTarget): { conversation: Con
   const existing = store.get().conversations.find((c) => c.harness === profile.harness && c.targetHostId === profile.targetHostId && c.profileId === profile.profileId && c.sessionId === profile.sessionId && c.cwd === profile.cwd);
   if (existing) {
     setActive(existing.id);
-    return { conversation: existing };
+    return { conversation: store.get().conversations.find(c => c.id === existing.id) ?? existing };
   }
   const conversation = createConversation(profile.harness, { title: profile.name, targetHostId: profile.targetHostId, profileId: profile.profileId, sessionId: profile.sessionId, cwd: profile.cwd });
   if (conversation.sessionId) setActive(conversation.id);
-  return { conversation };
+  // setActive may have stamped `openedAt`: hand back the stored conversation.
+  return { conversation: store.get().conversations.find(c => c.id === conversation.id) ?? conversation };
 }
 
 export function clearEndedConversations(): void {

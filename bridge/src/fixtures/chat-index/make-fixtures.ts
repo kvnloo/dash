@@ -92,6 +92,9 @@ export function engineConfig(dir: string, over: Partial<EngineConfig> = {}): Eng
   return { role: "primary", sidecarPath: join(dir, "sidecar.db"), hermesRoot: join(dir, "hermes"), archiveHead: 10, selfMachines: ["groot"], manual: true, ...over };
 }
 
+/** Fixture-driven tests push bulk ingest through a lane; deadlines are tested with explicit small timeouts. */
+export const TEST_RPC_TIMEOUT_MS = 30_000;
+
 /** A WorkerLike that runs an engine in-process (async hop, like a real worker). */
 export function inProcessWorker(base: Omit<EngineConfig, "role">): (role: EngineConfig["role"]) => WorkerLike {
   return () => {

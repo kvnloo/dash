@@ -12,7 +12,7 @@ import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { chatRow } from "../../lib/chat-row";
 import { chatRowActions, pressRow, rowLongPress } from "../../lib/chat-row-actions";
-import { conversationEntries, mergeLocalAndRemote, type ChatListRow } from "../../lib/chat-index";
+import { conversationEntries, groupLabeler, labelRemote, mergeLocal, stableEntries, type ChatListRow, type ConversationEntry, type RemoteLabeled } from "../../lib/chat-index";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { usePagedChats } from "../../hooks/usePagedChats";
@@ -75,6 +75,18 @@ function remoteModel(summary: ChatSummary, harnessName: string, selfId: string |
   };
   remoteModels.set(summary, { harnessName, selfId, model });
   return model;
+}
+
+/** id -> conversation, built once per conversations array and shared by every mounted row. */
+const byIdCache = new WeakMap<readonly Conversation[], Map<string, Conversation>>();
+function conversationById(conversations: readonly Conversation[], id: string): Conversation | undefined {
+  let map = byIdCache.get(conversations);
+  if (!map) {
+    map = new Map();
+    for (const c of conversations) map.set(c.id, c);
+    byIdCache.set(conversations, map);
+  }
+  return map.get(id);
 }
 
 /** Running and host-held sessions, keyed like the index. Built once per roster revision. */
@@ -151,6 +163,33 @@ const Row = memo(function Row({
   );
 }, (a, b) => a.item === b.item && a.live === b.live && a.active === b.active && a.connectionStatus === b.connectionStatus && a.onPress === b.onPress && a.onLongPress === b.onLongPress);
 
+/**
+ * A phone conversation's row. It reads its conversation live by id, so its title, activity and
+ * thinking orb follow every turn event while the merged list (and FlashList's data) stays put.
+ */
+const LocalChatRow = memo(function LocalChatRow({ id, harnessName, connectionStatus, active, live, onPress, onLongPress }: {
+  id: string;
+  harnessName: string;
+  connectionStatus: ConnectionStatus;
+  active: boolean;
+  live: boolean;
+  onPress(id: string, origin?: WindowOrigin): void;
+  onLongPress(id: string): void;
+}) {
+  const conversation = store.use((s) => conversationById(s.conversations, id));
+  if (!conversation) return null;
+  return (
+    <Row
+      item={localModel(conversation, harnessName, connectionStatus)}
+      active={active}
+      connectionStatus={connectionStatus}
+      live={live}
+      onPress={onPress}
+      onLongPress={onLongPress}
+    />
+  );
+});
+
 const SectionHeader = memo(function SectionHeader({ title, count }: { title: string; count: number }) {
   return (
     <View style={styles.section}>
@@ -161,7 +200,16 @@ const SectionHeader = memo(function SectionHeader({ title, count }: { title: str
 
 const SKELETONS: ChatListRow[] = Array.from({ length: 6 }, (_, i) => ({ type: "skeleton", key: `skeleton-${i}` }));
 
-export function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Main">, "navigation"> & { focused?: boolean }) {
+/** Start of the local day: the section labeler is rebuilt once a day, not per merge. */
+function startOfToday(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+const NO_ENTRIES: readonly ConversationEntry[] = [];
+
+export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Main">, "navigation"> & { focused?: boolean }) {
   const thumb = useHandedness();
   const conversations = store.use((s) => s.conversations);
   const activeId = store.use((s) => s.activeId);
@@ -171,12 +219,26 @@ export function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Mai
   const hasEnded = store.useSelector((s) => s.conversations.some(c => c.stale));
   const remote = usePagedChats({}, { focused, online: connectionStatus === "online" });
 
-  // Light entries reuse their object while a conversation is unchanged; rows never read messages.
-  const local = useMemo(() => conversationEntries(conversations), [conversations]);
+  // Entries keep their identity while a conversation's list placement and header are unchanged,
+  // so most store changes (status, adoption, setActive) skip the merge entirely.
+  const previousLocal = useRef<readonly ConversationEntry[]>(NO_ENTRIES);
+  const local = useMemo(() => {
+    previousLocal.current = stableEntries(previousLocal.current, conversationEntries(conversations));
+    return previousLocal.current;
+  }, [conversations]);
+  const today = startOfToday();
+  const groupOf = useMemo(() => groupLabeler(today), [today]);
+  // The remote half is labeled once per page (an appended page labels only its own rows); a local
+  // change merges the few local rows into it by binary search.
+  const previousLabeled = useRef<RemoteLabeled | undefined>(undefined);
+  const labeled = useMemo(() => {
+    previousLabeled.current = labelRemote(remote.rows, groupOf, previousLabeled.current);
+    return previousLabeled.current;
+  }, [remote.rows, groupOf]);
   const items = useMemo((): ChatListRow[] => {
-    const rows = mergeLocalAndRemote({ local, remote: remote.rows, exhausted: remote.exhausted, endedLast: !remote.enabled });
+    const rows = mergeLocal(labeled, { local, exhausted: remote.exhausted, endedLast: !remote.enabled, groupOf });
     return rows.length === 0 && remote.enabled && remote.status === "loading" ? SKELETONS : rows;
-  }, [local, remote.rows, remote.exhausted, remote.enabled, remote.status]);
+  }, [labeled, local, groupOf, remote.exhausted, remote.enabled, remote.status]);
 
   const liveKeys = useMemo(() => liveKeySet(hosts), [hosts]);
   const selfId = useMemo(() => hosts.find(host => host.self)?.id, [hosts]);
@@ -212,6 +274,7 @@ export function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Mai
   );
 
   const feedbackOn = inAppFeedbackEnabled(store.use((s) => s.settings));
+  const longPress = useMemo(() => rowLongPress(feedbackOn, onFeedback, remove), [feedbackOn, onFeedback, remove]);
 
   const renderItem = useCallback(
     ({ item: row }: ListRenderItemInfo<ChatListRow>) => {
@@ -221,24 +284,35 @@ export function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Mai
       const summary = row.remote;
       const harness = local?.harness ?? summary?.kind ?? "";
       const harnessName = harnessNames.get(harness) ?? harness;
-      const model = local ? localModel(local.conversation, harnessName, connectionStatus) : summary ? remoteModel(summary, harnessName, selfId) : undefined;
-      if (!model) return null;
-      const sessionId = local?.conversation.sessionId;
-      const live = local
-        ? liveKeys.has(local.key) || Boolean(sessionId && !local.hostId && liveKeys.has(`any:${local.harness}:${sessionId}`))
-        : summary?.running === true || liveKeys.has(row.key);
+      if (local) {
+        const sessionId = local.sessionId;
+        const live = liveKeys.has(local.key) || Boolean(sessionId && !local.hostId && liveKeys.has(`any:${local.harness}:${sessionId}`));
+        return (
+          <LocalChatRow
+            id={local.id}
+            harnessName={harnessName}
+            connectionStatus={connectionStatus}
+            active={local.id === activeId}
+            live={live}
+            onPress={open}
+            onLongPress={longPress}
+          />
+        );
+      }
+      if (!summary) return null;
+      const model = remoteModel(summary, harnessName, selfId);
       return (
         <Row
           item={model}
           active={model.id === activeId}
           connectionStatus={connectionStatus}
-          live={live}
+          live={summary.running === true || liveKeys.has(row.key)}
           onPress={open}
-          onLongPress={rowLongPress(feedbackOn, onFeedback, remove)}
+          onLongPress={longPress}
         />
       );
     },
-    [activeId, connectionStatus, feedbackOn, harnessNames, liveKeys, onFeedback, open, remove, selfId],
+    [activeId, connectionStatus, harnessNames, liveKeys, longPress, open, selfId],
   );
 
   const getItemType = useCallback((item: ChatListRow) => item.type, []);
@@ -278,7 +352,7 @@ export function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Mai
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
