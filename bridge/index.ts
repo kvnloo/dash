@@ -10,7 +10,7 @@
 // the rest. Finished turns are kept for RETAIN_MS so late reattaches still work.
 
 import { ToolDetails } from "./src/tool-details";
-import { NoticeService, startNoticeServer } from "./src/notices";
+import { NoticeService, tryStartNoticeServer } from "./src/notices";
 import { redact, statusUpdate } from "./src/reply-parts";
 import type { ReplyPart } from "../shared/protocol";
 import { GateService } from "./src/gate/service";
@@ -18,7 +18,7 @@ import { GateStore } from "./src/gate/store";
 import type { GateServerMessage } from "../shared/protocol";
 import { statSync } from "node:fs";
 import { homedir, hostname } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   CHATS_FEATURE,
   PROTOCOL_VERSION,
@@ -698,10 +698,11 @@ const handleHttp = createPairingHttpHandler({
 });
 
 const CREDENTIAL_DIR = process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash");
-const notices = new NoticeService(CREDENTIAL_DIR);
+const notices = new NoticeService(CREDENTIAL_DIR, (notice, delivered) => log("notice.published", { id: notice.id, delivered }));
 const noticePort = Number(process.env.DASH_NOTICE_PORT ?? (PORT === 0 ? 0 : PORT + 1));
 if (!Number.isInteger(noticePort) || noticePort < 0 || noticePort > 65535) throw new Error("Invalid DASH_NOTICE_PORT");
-const noticeServer = startNoticeServer({ token: TOKEN, notices, port: noticePort });
+if (notices.quarantined) log("notices.quarantined", { file: basename(notices.quarantined) });
+const noticeServer = tryStartNoticeServer({ token: TOKEN, notices, port: noticePort }, reason => log("notices.disabled", { reason }));
 const attachments = new AttachmentStore(process.env.DASH_ATTACHMENT_DIR?.trim() || join(CREDENTIAL_DIR, "attachments"));
 const handleFiles = createFilesHttpHandler({
   token: TOKEN,
@@ -872,6 +873,11 @@ const server = Bun.serve<SocketData>({
         return;
       }
       switch (message.type) {
+        case "notices_clear": {
+          try { notices.clear(); log("notices.cleared", {}); }
+          catch { log("notices.clear_failed", {}); }
+          break;
+        }
         case "gate_list":
         case "gate_decide":
         case "gate_post": {
@@ -1074,7 +1080,7 @@ function shutdown(): void {
   if (gatePoll) clearInterval(gatePoll);
   // Stop admission before awaiting cleanup; sockets must not launch new work.
   server.stop(true);
-  noticeServer.stop(true);
+  noticeServer?.stop(true);
   chatIndex.stop();
   for (const turn of turns.values()) turn.cancel();
   void acpSupervisor.close().then(() => {
@@ -1102,7 +1108,7 @@ process.stderr.write(
   [
     "",
     `  dash bridge   ws://${bridgeAddress}/ws`,
-    `  notices       http://127.0.0.1:${noticeServer.port}/notice (authenticated local reports)`,
+    noticeServer ? `  notices       http://127.0.0.1:${noticeServer.port}/notice (authenticated local reports)` : "  notices       disabled (local listener could not bind; chat unaffected)",
     `  computer      ${HOST_NAME}`,
     `  cwd           ${DEFAULT_CWD}`,
     `  agents        ${agents}`,

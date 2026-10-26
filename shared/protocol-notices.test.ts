@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { NOTICE_BODY_MAX, NOTICE_TITLE_MAX, parseNoticeInput, parseServerMessage, PROTOCOL_VERSION } from "./protocol";
+import { NOTICE_BODY_MAX, NOTICE_TITLE_MAX, parseClientMessage, parseNoticeInput, parseServerMessage, PROTOCOL_VERSION } from "./protocol";
 const input = { title: "Build ready", body: "Tests passed", url: "dash://chat/c1" };
 describe("agent notice protocol", () => {
   test("additive v1 message with optional URL", () => {
@@ -19,4 +19,7 @@ describe("agent notice protocol", () => {
     for (const id of [undefined, null, 1, "", "x".repeat(129)]) expect(parseServerMessage({ type: "notice", id, ...input })).toBeNull();
     expect(parseNoticeInput({ ...input, extra: "ignored" })).toEqual(input);
   });
+});
+test("notices_clear is a parsed client message", () => {
+  expect(parseClientMessage({ type: "notices_clear" })).toEqual({ type: "notices_clear" });
 });

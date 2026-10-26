@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { NoticeService, createNoticeHttpHandler, startNoticeServer } from "./notices";
+import { NoticeService, createNoticeHttpHandler, startNoticeServer, tryStartNoticeServer } from "./notices";
 import type { NoticeMessage } from "../../shared/protocol";
 const roots: string[] = [];
 function service() { const root = mkdtempSync(join(tmpdir(), "dash-notices-")); roots.push(root); return { root, notices: new NoticeService(root) }; }
@@ -55,4 +55,47 @@ test("real loopback listener accepts CLI and never binds tailnet", async () => {
     const unauthorized = run(["T", "B"], { DASH_CREDENTIAL_DIR: join(root, "missing") }); expect(await unauthorized.exited).toBe(1);
     expect(await new Response(unauthorized.stderr).text()).not.toContain(token);
   } finally { server.stop(true); }
+});
+test("corrupt history is quarantined, not fatal; the bridge keeps a fresh ring", async () => {
+  const root = mkdtempSync(join(tmpdir(), "dash-notices-")); roots.push(root);
+  const { writeFileSync, readdirSync, statSync } = await import("node:fs");
+  for (const corrupt of ["{not json", JSON.stringify({ not: "array" }), JSON.stringify([{ type: "notice" }])]) {
+    writeFileSync(join(root, "notices.json"), corrupt);
+    const notices = new NoticeService(root);
+    expect(notices.list()).toEqual([]);
+    expect(notices.quarantined).toMatch(/notices\.json\.corrupt-/);
+    expect(readFileSync(notices.quarantined ?? "", "utf8")).toBe(corrupt);
+    expect(statSync(notices.quarantined ?? "").mode & 0o777).toBe(0o600);
+    notices.publish(payload); expect(new NoticeService(root).list()).toHaveLength(1);
+    for (const f of readdirSync(root)) rmSync(join(root, f));
+  }
+});
+test("clear empties the ring on disk so reconnect replays nothing", () => {
+  const { notices, root } = service();
+  notices.publish(payload); notices.publish(payload);
+  notices.clear();
+  expect(notices.list()).toEqual([]);
+  expect(new NoticeService(root).list()).toEqual([]);
+  const replayed: NoticeMessage[] = []; notices.subscribe(n => { replayed.push(n); }); expect(replayed).toEqual([]);
+});
+test("a taken notice port does not throw; the bridge runs without notices", () => {
+  const { notices } = service();
+  const holder = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("busy") });
+  const errors: string[] = [];
+  try {
+    const server = tryStartNoticeServer({ token, notices, port: holder.port ?? 0 }, message => { errors.push(message); });
+    expect(server).toBeNull();
+    expect(errors).toHaveLength(1); expect(errors[0]).not.toContain(token);
+    const ok = tryStartNoticeServer({ token, notices, port: 0 }, message => { errors.push(message); });
+    expect(ok?.port).toBeGreaterThan(0); ok?.stop(true);
+  } finally { holder.stop(true); }
+});
+test("publish reports how many live sockets received it, so the bridge log can confirm delivery", () => {
+  const root = mkdtempSync(join(tmpdir(), "dash-notices-")); roots.push(root);
+  const published: Array<[string, number]> = [];
+  const notices = new NoticeService(root, (n, delivered) => { published.push([n.id, delivered]); });
+  const a = notices.subscribe(() => {}); notices.subscribe(() => { throw new Error("dead socket"); });
+  const first = notices.publish(payload);
+  a(); const second = notices.publish(payload);
+  expect(published).toEqual([[first.id, 1], [second.id, 0]]);
 });
