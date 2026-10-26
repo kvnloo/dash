@@ -5,6 +5,7 @@ import type { Segment } from "../lib/annotate/align";
 import { EMPTY_DRAWING, addStroke, clear, eraseAlong, undo, type Drawing, type InkColor, type Stroke, type Tool } from "../lib/annotate/strokes";
 import { penButton, toggleMode } from "../lib/stylus-mode";
 import { createStore } from "./createStore";
+import { flowMode } from "../lib/flow-trace";
 
 export interface AnnotationPreview {
   /** data: URI of the composited PNG, shown before upload finishes. */
@@ -75,9 +76,9 @@ export function enterAnnotation(): void {
   annotate.set(s => (s.active ? s : { ...s, active: true, status: "idle", error: undefined, preview: undefined }));
 }
 
-/** Discard: leave the mode and throw the drawing away. */
+/** Flow exits close the mode, not the draft. Clear remains the explicit discard. */
 export function exitAnnotation(): void {
-  annotate.set(s => ({ ...s, active: false, drawing: EMPTY_DRAWING, segments: [], recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined }));
+  annotate.set(s => ({ ...s, active: false, drawing: flowMode ? s.drawing : EMPTY_DRAWING, segments: flowMode ? s.segments : [], recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined }));
 }
 
 /** Switch modes without discarding ink, voice or queued drafts. */
