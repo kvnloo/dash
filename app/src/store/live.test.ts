@@ -13,11 +13,11 @@ test("a live turn streams text, versions fx0 html, records receipts and times fi
   expect(liveOf(conv).busy).toBe(true);
   applyLiveMessage({ type: "live_event", id: turn, seq: 1, workerId: "w1", event: { type: "delta", text: "Building" } });
   applyLiveMessage({ type: "live_event", id: turn, seq: 2, workerId: "w1", event: { type: "artifact", artifact: artifact(1) } });
-  applyLiveMessage({ type: "live_event", id: turn, seq: 2, workerId: "w1", event: { type: "tool", id: "t1", name: "publish_design", status: "completed" } });
-  applyLiveMessage({ type: "live_event", id: turn, seq: 2, workerId: "w1", event: { type: "delta", text: "Ready." } });
-  applyLiveMessage({ type: "live_event", id: turn, seq: 3, workerId: "w1", event: { type: "artifact", artifact: artifact(2) } });
-  applyLiveMessage({ type: "live_event", id: turn, seq: 4, workerId: "w1", event: { type: "receipt", receipt: { kind: "turn", summary: "built", decisions: [], artifacts: [{ version: 2, sha256: "s2", bytes: 10 }], at: 1 } } });
-  applyLiveMessage({ type: "live_event", id: turn, seq: 5, workerId: "w1", event: { type: "done", stopReason: "end_turn" } });
+  applyLiveMessage({ type: "live_event", id: turn, seq: 3, workerId: "w1", event: { type: "tool", id: "t1", name: "publish_design", status: "completed" } });
+  applyLiveMessage({ type: "live_event", id: turn, seq: 4, workerId: "w1", event: { type: "delta", text: "Ready." } });
+  applyLiveMessage({ type: "live_event", id: turn, seq: 5, workerId: "w1", event: { type: "artifact", artifact: artifact(2) } });
+  applyLiveMessage({ type: "live_event", id: turn, seq: 6, workerId: "w1", event: { type: "receipt", receipt: { kind: "turn", summary: "built", decisions: [], artifacts: [{ version: 2, sha256: "s2", bytes: 10 }], at: 1 } } });
+  applyLiveMessage({ type: "live_event", id: turn, seq: 7, workerId: "w1", event: { type: "done", stopReason: "end_turn" } });
   const state = liveOf(conv);
   expect(state.lines.map(l => [l.role, l.text])).toEqual([["owner", "a compact control"], ["worker", "Building\n\nReady."]]);
   expect(state.artifacts.map(a => a.version)).toEqual([1, 2]);
