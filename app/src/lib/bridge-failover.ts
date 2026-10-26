@@ -17,7 +17,9 @@ export function endpointsOf(settings: Settings): BridgeEndpoint[] {
 
 /** Make `endpoint` the bridge in use. The list and its order are kept. */
 export function activate(settings: Settings, endpoint: BridgeEndpoint): Settings {
-  const next: Settings = { ...settings, address: endpoint.address, token: endpoint.token, endpoints: endpointsOf(settings) };
+  const list = settings.endpoints?.length ? settings.endpoints : [current(settings)];
+  const endpoints = list.some(e => e.address === endpoint.address) ? list : [...list, endpoint];
+  const next: Settings = { ...settings, address: endpoint.address, token: endpoint.token, endpoints };
   if (endpoint.identity) next.identity = endpoint.identity;
   else delete next.identity;
   return next;

@@ -3,7 +3,7 @@ import { activate, endpointsOf, pickEndpoint, probeBridge, withEditedEndpoint, w
 import { parseSettings, type Settings } from "../model";
 
 const groot: Settings = { address: "groot.test:8787", token: "tg", harness: "hermes", inAppFeedback: true };
-const mbpIdentity = { url: "http://mbp.test:9797", issuer: "z0bridge:mbp", kid: "k".repeat(43), credentialId: "cred_0123456789abcdef" };
+const mbpIdentity = { url: "http://100.64.0.2:4788", issuer: "z0bridge:mbp", kid: "k".repeat(43), credentialId: "cred_0123456789abcdef" };
 const mbp: Settings = { address: "mbp.test:8787", token: "", harness: "hermes", inAppFeedback: true, identity: mbpIdentity };
 
 test("a single-host settings object is a list of one", () => {
