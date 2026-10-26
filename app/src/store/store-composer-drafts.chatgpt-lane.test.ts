@@ -72,6 +72,11 @@ if (selectedCase === undefined) {
 
   mock.module("@react-native-async-storage/async-storage", () => ({
     default: {
+      // app.ts persists conversations via multiSet on a debounce timer that can fire
+      // while this process-wide mock is installed; it is not part of the drafts contract.
+      multiSet(): Promise<void> {
+        return Promise.resolve();
+      },
       getItem(key: string): Promise<string | null> {
         expect(key).toBe(KEY);
         return new Promise(resolve => { finishRead = resolve; });

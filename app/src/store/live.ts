@@ -44,8 +44,29 @@ export interface LiveState {
 export const EMPTY_LIVE: LiveState = { open: false, status: "idle", lines: [], artifacts: [], controls: [], receipts: [], busy: false, askHermes: false };
 
 export const liveStore = createStore<Record<string, LiveState>>({});
-/** Request id → conversation id, so server events find their surface. */
-const requests = new Map<string, { conversationId: string; lineId?: string }>();
+/**
+ * Request id → the surface operation it belongs to, so server events find their surface.
+ * `workerId` is the worker the request was sent to (unknown for an open); `seq` is the last
+ * accepted live_event sequence for the request, so replays cannot duplicate or reorder text.
+ */
+interface LiveRequest {
+  conversationId: string;
+  kind: "open" | "turn" | "receipts";
+  lineId?: string;
+  workerId?: string;
+  seq: number;
+}
+const requests = new Map<string, LiveRequest>();
+/** Conversation id → its newest open request; an older open's reply must not swap identity. */
+const latestOpen = new Map<string, string>();
+
+/** Whether another turn/intent request for this conversation is still in flight. */
+function otherTurnPending(conversationId: string, exceptId: string): boolean {
+  for (const [id, request] of requests) {
+    if (id !== exceptId && request.kind === "turn" && request.conversationId === conversationId) return true;
+  }
+  return false;
+}
 
 const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
@@ -71,7 +92,8 @@ export function showVersion(conversationId: string, version: number): void {
 
 export function beginOpen(conversationId: string): string {
   const id = newId();
-  requests.set(id, { conversationId });
+  requests.set(id, { conversationId, kind: "open", seq: 0 });
+  latestOpen.set(conversationId, id);
   update(conversationId, state => ({ ...state, open: true, status: "opening", error: undefined }));
   return id;
 }
@@ -79,7 +101,7 @@ export function beginOpen(conversationId: string): string {
 export function beginLiveTurn(conversationId: string, text: string, askHermes: boolean): string {
   const id = newId();
   const lineId = `w_${id}`;
-  requests.set(id, { conversationId, lineId });
+  requests.set(id, { conversationId, kind: "turn", lineId, workerId: liveOf(conversationId).workerId, seq: 0 });
   update(conversationId, state => ({
     ...state, busy: true, askHermes: false,
     timing: { sentAt: now() },
@@ -91,7 +113,7 @@ export function beginLiveTurn(conversationId: string, text: string, askHermes: b
 export function beginIntent(conversationId: string, intent: LiveIntent): string {
   const id = newId();
   const lineId = `w_${id}`;
-  requests.set(id, { conversationId, lineId });
+  requests.set(id, { conversationId, kind: "turn", lineId, workerId: liveOf(conversationId).workerId, seq: 0 });
   update(conversationId, state => ({
     ...state, busy: true,
     timing: { sentAt: now() },
@@ -102,11 +124,11 @@ export function beginIntent(conversationId: string, intent: LiveIntent): string 
 
 export function beginReceipts(conversationId: string): string {
   const id = newId();
-  requests.set(id, { conversationId });
+  requests.set(id, { conversationId, kind: "receipts", workerId: liveOf(conversationId).workerId, seq: 0 });
   return id;
 }
 
-function applyEvent(state: LiveState, lineId: string | undefined, event: LiveEvent): LiveState {
+function applyEvent(state: LiveState, lineId: string | undefined, event: LiveEvent, othersBusy: boolean): LiveState {
   const line = (fn: (l: LiveLine) => LiveLine) => ({ ...state, lines: state.lines.map(l => (l.id === lineId ? fn(l) : l)) });
   switch (event.type) {
     case "delta": {
@@ -128,10 +150,13 @@ function applyEvent(state: LiveState, lineId: string | undefined, event: LiveEve
       return { ...state, receipts: [...state.receipts, event.receipt] };
     case "done": {
       const done = line(l => ({ ...l, state: "done" }));
-      return { ...done, lines: done.lines.filter(l => !(l.id === lineId && !l.text.trim())), busy: false, timing: state.timing ? { ...state.timing, doneAt: now() } : undefined };
+      const lines = done.lines.filter(l => !(l.id === lineId && !l.text.trim()));
+      // A newer turn still running owns busy and timing; an old completion must not settle it.
+      if (othersBusy) return { ...done, lines };
+      return { ...done, lines, busy: false, timing: state.timing ? { ...state.timing, doneAt: now() } : undefined };
     }
     case "error":
-      return { ...line(l => ({ ...l, text: l.text || event.message, state: "error" })), busy: false };
+      return { ...line(l => ({ ...l, text: l.text || event.message, state: "error" })), busy: othersBusy };
     case "tool":
       return line(l => ({ ...l, broken: true }));
     case "status":
@@ -146,25 +171,47 @@ export function applyLiveMessage(message: LiveServerMessage): void {
   switch (message.type) {
     case "live_opened":
       requests.delete(message.id);
+      if (latestOpen.get(conversationId) !== message.id) return;
+      latestOpen.delete(conversationId);
       update(conversationId, state => ({
         ...state, status: "ready", workerId: message.workerId, profileId: message.profileId, parentSessionId: message.parentSessionId,
         parentTitle: message.parentTitle, model: message.model, artifacts: message.artifacts, shownVersion: message.artifacts.at(-1)?.version,
       }));
       return;
-    case "live_event":
-      update(conversationId, state => applyEvent(state, lineId, message.event));
-      if (message.event.type === "done" || message.event.type === "error") requests.delete(message.id);
+    case "live_event": {
+      if (request.workerId !== undefined && message.workerId !== request.workerId) return;
+      if (message.seq <= request.seq) return;
+      request.seq = message.seq;
+      const terminal = message.event.type === "done" || message.event.type === "error";
+      if (terminal) requests.delete(message.id);
+      const othersBusy = terminal && otherTurnPending(conversationId, message.id);
+      update(conversationId, state => applyEvent(state, lineId, message.event, othersBusy));
       return;
+    }
     case "live_receipts":
+      if (request.workerId !== undefined && message.workerId !== request.workerId) return;
       requests.delete(message.id);
       update(conversationId, state => ({ ...state, receipts: message.receipts }));
       return;
-    case "live_error":
+    case "live_error": {
       requests.delete(message.id);
+      if (request.kind === "open") {
+        if (latestOpen.get(conversationId) !== message.id) return;
+        latestOpen.delete(conversationId);
+        update(conversationId, state => ({ ...state, status: state.status === "opening" ? "error" : state.status, error: message.message }));
+        return;
+      }
+      if (request.kind === "receipts") {
+        // A failed history refresh reports the error but never cancels a live turn.
+        update(conversationId, state => ({ ...state, error: message.message }));
+        return;
+      }
+      const othersBusy = otherTurnPending(conversationId, message.id);
       update(conversationId, state => ({
-        ...state, busy: false, status: state.status === "opening" ? "error" : state.status, error: message.message,
+        ...state, busy: othersBusy, error: message.message,
         lines: state.lines.map(l => (l.id === lineId ? { ...l, text: l.text || message.message, state: "error" } : l)),
       }));
       return;
+    }
   }
 }
