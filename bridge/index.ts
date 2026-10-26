@@ -42,6 +42,8 @@ import { sessionPhaseHttp } from "./src/hermes-phase";
 import { sessionWorkersHttp } from "./src/hermes-workers";
 import { z0liveStateHttp } from "./src/z0live-state";
 import { voiceBootstrap } from "./src/voice-bootstrap";
+import { flowTraceHttp } from "./src/flow-trace-http";
+const handleFlowTrace = flowTraceHttp(process.env.DASH_DEBUG_FLOW_TRACE === "1");
 import { activityHttp } from "./src/hermes-activity";
 const nativeActivityHttp = activityHttp((profile, session) => hermesSessions.nativeActivity(profile, session));
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
@@ -732,6 +734,10 @@ const server = Bun.serve<SocketData>({
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      if (url.pathname === "/debug/trace") {
+        const trace = await handleFlowTrace(request, await authorize(request));
+        if (trace) return cors(trace);
+      }
       if (url.pathname === "/voice/bootstrap") {
         const principal = await bridgeAuth.authenticate(request, false, true);
         const voice = await voiceBootstrap(request, principal?.kind === "identity", (profile, session) => !!hermesSessions.target(profile, session));
