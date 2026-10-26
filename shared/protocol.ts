@@ -9,6 +9,23 @@ export type { ReplyPart } from "./reply-parts";
 import { parseSummary, type SummaryInfo } from "./thinking-summary";
 export const PROTOCOL_VERSION = 1;
 
+export const NOTICE_TITLE_MAX = 80;
+export const NOTICE_BODY_MAX = 600;
+export interface NoticeInput { title: string; body: string; url?: string }
+export type NoticeMessage = NoticeInput & { type: "notice"; id: string };
+
+/** Reports are additive v1 events, never approvals or turn events. */
+export function parseNoticeInput(raw: unknown): NoticeInput | null {
+  if (!isRecord(raw) || !str(raw.title) || !str(raw.body)) return null;
+  if (!raw.title.trim() || raw.title.length > NOTICE_TITLE_MAX || !raw.body.trim() || raw.body.length > NOTICE_BODY_MAX) return null;
+  if (raw.url !== undefined) {
+    if (!str(raw.url) || raw.url.length > 512) return null;
+    try { const url = new URL(raw.url); if (url.protocol !== "dash:" || !url.hostname || url.username || url.password) return null; }
+    catch { return null; }
+  }
+  return { title: raw.title, body: raw.body, ...(str(raw.url) ? { url: raw.url } : {}) };
+}
+
 export interface HarnessInfo {
   id: string;
   name: string;
@@ -263,6 +280,7 @@ export type TurnEvent =
   | { type: "error"; id: string; seq: number; message: string };
 
 export type ServerMessage =
+  | NoticeMessage
   | GateServerMessage
   | LiveServerMessage
   | {
@@ -490,6 +508,10 @@ function isHostInfo(value: unknown): value is HostInfo {
 export function parseServerMessage(raw: unknown): ServerMessage | null {
   if (!isRecord(raw)) return null;
   switch (raw.type) {
+    case "notice": {
+      const notice = parseNoticeInput(raw);
+      return notice && str(raw.id) && raw.id.length > 0 && raw.id.length <= 128 ? { type: "notice", id: raw.id, ...notice } : null;
+    }
     case "live_opened":
     case "live_event":
     case "live_receipts":
