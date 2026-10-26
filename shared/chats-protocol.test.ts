@@ -10,6 +10,7 @@ import {
   parseChatSearchQuery,
   parseHistoryPage,
   parseHistoryQuery,
+  type ChatSearchHit,
   type ChatSummary,
 } from "./protocol";
 
@@ -93,7 +94,7 @@ describe("response parsers drop malformed items one at a time", () => {
     expect(parseChatPage({ items: [], next: 4, rev: 1 })).toBeNull();
   });
   test("search page", () => {
-    const hit = { chat: summary(), field: "message", messageId: "av:1", role: "user", at: 5, snippet: "hello world", highlights: [{ start: 0, end: 5 }] };
+    const hit: ChatSearchHit = { chat: summary(), field: "message", messageId: "av:1", role: "user", at: 5, snippet: "hello world", highlights: [{ start: 0, end: 5 }] };
     const page = parseChatSearchPage({ hits: [hit, { ...hit, field: "zzz" }, { ...hit, highlights: [{ start: 3, end: 1 }] }], next: "abc", partial: true });
     expect(page).toEqual({ hits: [hit], next: "abc", partial: true });
     expect(parseChatSearchPage({ hits: [], next: null })).toBeNull();

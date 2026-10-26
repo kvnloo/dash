@@ -234,3 +234,25 @@ describe("pairing HTTP trust boundary", () => {
     } finally { f.stop(); }
   });
 });
+
+describe("/roster ETag", () => {
+  test("ETag over the body; If-None-Match answers 304; no header keeps today's 200", async () => {
+    const pairing = createPairingSessions();
+    let hosts: unknown[] = [{ id: "h" }];
+    const handler = createPairingHttpHandler({
+      bootstrapToken: "test-bootstrap-secret-never-log", token: "test-execution-secret-never-log", hostname: "fixture", address: "100.90.10.4:4747",
+      cwd: "/w", harnesses: () => [], roster: () => hosts, pairing, playCode: () => {}, decodeAudio: async () => null,
+    });
+    const auth = { authorization: "Bearer test-execution-secret-never-log" };
+    const first = await handler(new Request("http://b/roster", { headers: auth }), "100.64.0.9");
+    expect(first?.status).toBe(200);
+    expect(await first?.json()).toEqual({ host: "fixture", hosts: [{ id: "h" }] });
+    const etag = first?.headers.get("etag") ?? "";
+    expect(etag).toMatch(/^W\/"/);
+    const again = await handler(new Request("http://b/roster", { headers: { ...auth, "if-none-match": etag } }), "100.64.0.9");
+    expect(again?.status).toBe(304);
+    hosts = [{ id: "h2" }];
+    expect((await handler(new Request("http://b/roster", { headers: { ...auth, "if-none-match": etag } }), "100.64.0.9"))?.status).toBe(200);
+    expect((await handler(new Request("http://b/roster", { headers: { "if-none-match": etag } }), "100.64.0.9"))?.status).toBe(401);
+  });
+});
