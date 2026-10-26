@@ -697,7 +697,7 @@ const handleHttp = createPairingHttpHandler({
 });
 
 const CREDENTIAL_DIR = process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash");
-const notices = new NoticeService(CREDENTIAL_DIR);
+const notices = new NoticeService(CREDENTIAL_DIR, (notice, delivered) => log("notice.published", { id: notice.id, delivered }));
 const noticePort = Number(process.env.DASH_NOTICE_PORT ?? (PORT === 0 ? 0 : PORT + 1));
 if (!Number.isInteger(noticePort) || noticePort < 0 || noticePort > 65535) throw new Error("Invalid DASH_NOTICE_PORT");
 if (notices.quarantined) log("notices.quarantined", { file: basename(notices.quarantined) });

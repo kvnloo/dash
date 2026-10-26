@@ -10,7 +10,8 @@ export class NoticeService {
   private readonly path: string;
   /** Set when a corrupt history file was moved aside at startup. */
   readonly quarantined: string | undefined;
-  constructor(directory: string) {
+  /** onPublish: called after each new notice is stored and broadcast, with the count of live sockets that took it. */
+  constructor(directory: string, private readonly onPublish?: (notice: NoticeMessage, delivered: number) => void) {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     this.path = join(directory, "notices.json");
     try {
@@ -53,9 +54,11 @@ export class NoticeService {
   publish(input: NoticeInput): NoticeMessage {
     const notice: NoticeMessage = { ...input, type: "notice", id: crypto.randomUUID() };
     this.write([...this.items, notice].slice(-50));
+    let delivered = 0;
     for (const send of this.listeners) {
-      try { send(notice); } catch { this.listeners.delete(send); }
+      try { send(notice); delivered++; } catch { this.listeners.delete(send); }
     }
+    try { this.onPublish?.(notice, delivered); } catch { /* logging must never fail a publish */ }
     return notice;
   }
 }

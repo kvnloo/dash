@@ -43,6 +43,12 @@ in the list and notifications fall back to the Notices screen. No remote URL is
 executed automatically. Forgetting the bridge clears the local inbox and sends
 `notices_clear`, which empties the bridge ring on disk (old bridges ignore it).
 
+## Confirming delivery
+
+Each accepted report logs `notice.published id=<uuid> delivered=<n>`, where `n`
+is the number of authenticated sockets that took it live. `delivered=0` means
+the report waits in the ring and replays when the phone next connects.
+
 ## Failure behavior
 
 Notices are optional; chat never depends on them. If the loopback notice port
