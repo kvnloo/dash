@@ -9,7 +9,7 @@ import type { AgentInfo, HistoryMessage } from "../../shared/protocol";
 // unified archive. Hermes keeps its own native listing (hermes-sessions.ts);
 // running OMP tabs keep their live rows and are de-duplicated by session id.
 export const AGENTSVIEW_KINDS = ["omp", "codex", "claude", "grok"] as const;
-const PER_KIND = 100;
+const PER_KIND = 50; // parity with Hermes RECENT_LIMIT; the phone keeps adopted rows
 const HISTORY_LIMIT = 400;
 export const AGENTSVIEW_PREFIX = "av:";
 
