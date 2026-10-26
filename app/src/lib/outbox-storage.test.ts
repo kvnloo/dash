@@ -196,12 +196,17 @@ describe("versioned outbox storage", () => {
     const first = store.save({ revision: 0, records: [entry()] });
     await entered;
     const obsolete = store.save({ revision: 0, records: [entry({ clientId: "obsolete", turnId: "old" })] });
-    const obsoleteRejected = expect(obsolete).rejects.toMatchObject({ kind: "stale-revision" });
+    // Bun's expect(promise).rejects blocks until the promise settles, and this one
+    // cannot settle before releaseFirst(); capture the outcome without blocking.
+    const obsoleteRejected = obsolete.then(
+      () => { throw new Error("obsolete save resolved; expected stale-revision"); },
+      (error: unknown) => error,
+    );
     const newestRecord = entry({ clientId: "client-B", turnId: "turn-B", conversationId: "conversation-B", stage: "queued", attempts: 0 });
     const newest = store.save({ revision: 1, records: [entry(), newestRecord] });
     releaseFirst?.();
     expect((await first).revision).toBe(1);
-    await obsoleteRejected;
+    expect(await obsoleteRejected).toMatchObject({ kind: "stale-revision" });
     expect((await newest).revision).toBe(2);
     expect((await createOutboxStorage(io).load()).records).toEqual([entry(), newestRecord]);
     expect(writes).toBe(2);
