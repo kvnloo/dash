@@ -70,8 +70,10 @@ if [ "$variant" = debug ]; then
   cp -r app/modules/dash-cutout/android/build/test-results .native-receipts/cutout-test-results
 else
   # The RC must boot without Metro: the Hermes bundle has to be inside the APK.
-  unzip -l .native-receipts/dash-native-arm64.apk 'assets/index.android.bundle' | tee .native-receipts/embedded-bundle.txt
-  unzip -l .native-receipts/dash-native-arm64.apk 'assets/index.android.bundle' | grep -q index.android.bundle
+  # No `grep -q` on a pipe here: with pipefail its early exit SIGPIPEs unzip (exit 141).
+  unzip -l .native-receipts/dash-native-arm64.apk 'assets/index.android.bundle' > .native-receipts/embedded-bundle.txt
+  cat .native-receipts/embedded-bundle.txt
+  grep -F assets/index.android.bundle .native-receipts/embedded-bundle.txt > /dev/null
 fi
 # Module inclusion: the class and its autolinked registration must be in the APK's dex.
 for module in 'Lapp/dash/cutout/DashCutoutModule;' 'Lapp/dash/share/DashShareModule;' 'Lcom/oney/WebRTCModule/WebRTCModule;' 'Lorg/webrtc/PeerConnectionFactory;' 'app.dash.cutout.DashCutoutModule' 'app.dash.share.DashShareModule'; do
