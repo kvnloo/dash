@@ -7,7 +7,10 @@ import {
   fullscreenCloseLabel,
   fullscreenPillLabel,
   fullscreenPillState,
+  type FullscreenCloseSide,
 } from "./a11y-fullscreen-chat-chrome";
+
+const CLOSE_SIDES: FullscreenCloseSide[] = ["left", "right"];
 
 const source = readFileSync(new URL("../components/FullscreenChatChrome.tsx", import.meta.url), "utf8");
 
@@ -61,7 +64,7 @@ describe("full-screen close target and cutout safety", () => {
       cutout: { x: 146, y: 0, width: 28, height: 24 },
     });
     expect(geometry.hole).not.toBeNull();
-    for (const side of ["left", "right"] as const) {
+    for (const side of CLOSE_SIDES) {
       const close = fullscreenCloseBounds(geometry, 320, side);
       expect(close.width).toBe(CLOSE_HIT);
       expect(close.height).toBe(CLOSE_HIT);
@@ -74,7 +77,7 @@ describe("full-screen close target and cutout safety", () => {
   test("reserve accounts for the pill, close button and status inset", () => {
     for (const width of [320, 390, 430]) {
       const geometry = pillGeometry({ width, insetTop: 30, cutout: null });
-      for (const side of ["left", "right"] as const) {
+      for (const side of CLOSE_SIDES) {
         const reserve = fullscreenChromeReserve(geometry, width, side, 30);
         expect(reserve).toBeGreaterThanOrEqual(pillReserve(geometry, 30));
         expect(reserve).toBeGreaterThanOrEqual(fullscreenCloseBounds(geometry, width, side).top + CLOSE_HIT + PILL_GAP);
