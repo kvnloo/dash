@@ -110,10 +110,16 @@ export function commitStroke(input: Omit<Stroke, "id" | "startedAt" | "endedAt">
 export function syncTldrawStrokes(strokes: Stroke[]): void {
   if (!annotate.get().active) return;
   const previous = annotate.get().drawing.strokes;
-  for (const stroke of strokes) {
+  // finishSend excludes its immutable snapshot by reference. A DOM document
+  // notification must not replace unchanged marks while another is uploaded.
+  const stable = strokes.map(stroke => {
+    const saved = previous.find(saved => saved.id === stroke.id);
+    return saved && JSON.stringify(saved) === JSON.stringify(stroke) ? saved : stroke;
+  });
+  for (const stroke of stable) {
     if (!previous.some(saved => saved.id === stroke.id)) commitStroke(stroke);
   }
-  annotate.set(s => ({ ...s, drawing: { ...s.drawing, strokes, nextId: Math.max(s.drawing.nextId, ...strokes.map(stroke => stroke.id + 1)) } }));
+  annotate.set(s => ({ ...s, drawing: { ...s.drawing, strokes: stable, nextId: Math.max(s.drawing.nextId, ...stable.map(stroke => stroke.id + 1)) } }));
 }
 
 export function eraseStrokes(path: { x: number; y: number }[]): void { annotate.set(s => ({ ...s, drawing: eraseAlong(s.drawing, path) })); }
