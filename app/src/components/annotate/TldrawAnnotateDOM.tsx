@@ -2,7 +2,7 @@
 // Based on the measured Expo DOM spike; kept mounted while idle to avoid cold opens.
 import { useCallback, useEffect, useRef, useState, type Ref } from "react";
 import { useDOMImperativeHandle, type DOMProps, type DOMImperativeFactory } from "expo/dom";
-import { AssetRecordType, Box, DefaultColorStyle, DefaultGeoStyle, Tldraw, createShapeId, type Editor, type TLShapeId } from "tldraw";
+import { AssetRecordType, Box, DefaultColorStyle, GeoShapeGeoStyle, Tldraw, createShapeId, type Editor, type TLShapeId } from "tldraw";
 import "tldraw/tldraw.css";
 import { annotationShapeToStroke, isAnnotationShape, type TimedInk } from "../../lib/annotate/tldraw-adapter";
 import { appendInkSample, pressureOf } from "../../lib/annotate/pointer";
@@ -83,7 +83,7 @@ export default function TldrawAnnotateDOM(props: Props) {
     if (!editor) return;
     editor.setCurrentTool(props.tool === "pen" ? "draw" : props.tool === "highlighter" ? "highlight" : props.tool === "box" || props.tool === "circle" ? "geo" : props.tool);
     editor.setStyleForNextShapes(DefaultColorStyle, props.color === "red" ? "red" : "yellow");
-    if (props.tool === "box" || props.tool === "circle") editor.setStyleForNextShapes(DefaultGeoStyle, props.tool === "box" ? "rectangle" : "ellipse");
+    if (props.tool === "box" || props.tool === "circle") editor.setStyleForNextShapes(GeoShapeGeoStyle, props.tool === "box" ? "rectangle" : "ellipse");
     editor.updateInstanceState({ isPenMode: props.penMode });
   }, [editor, props.tool, props.color, props.penMode]);
   useEffect(() => {
