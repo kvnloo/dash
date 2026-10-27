@@ -163,6 +163,8 @@ function primitive(kind: string) {
 }
 mock.module("react-native", () => ({
   AccessibilityInfo: { setAccessibilityFocus() {} },
+  // bun mock.module is process-wide: keep AppState so later store/bridge imports still link (see #448).
+  AppState: { currentState: "active", addEventListener() { return { remove() {} }; } },
   Modal: primitive("Modal"), Platform: platform, Pressable: primitive("Pressable"),
   ScrollView: primitive("ScrollView"), Text: primitive("Text"), View: primitive("View"),
   StyleSheet: { create: <T,>(styles: T) => styles, hairlineWidth: 1 },
