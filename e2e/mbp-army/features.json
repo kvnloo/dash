@@ -9,6 +9,8 @@
      "tests": ["annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Skia"]},
     {"id": "annotate-tldraw-zoom", "title": "Capture-normalized strokes after camera zoom",
      "tests": ["annotate-tldraw: zoomed ink is normalized in capture page coordinates"]},
+    {"id": "dex-simulation", "title": "Explicit web DeX TV and Pad simulation",
+     "tests": ["DeX simulation shows TV and Pad and Touchpad returns to TV"]},
     {"id": "pairing", "title": "Pair with a bridge, Chats tab, open and close a chat window",
      "tests": ["pairing, Chats tab, open and close real chat window"]},
     {"id": "send-stream", "title": "Composer send and streamed agent reply",

@@ -75,8 +75,10 @@ if [ "$variant" = release ]; then
   grep -F assets/index.android.bundle .native-receipts/embedded-bundle.txt > /dev/null
 fi
 # Module inclusion: the class and its autolinked registration must be in the APK's dex.
-for module in 'Lapp/dash/cutout/DashCutoutModule;' 'Lapp/dash/share/DashShareModule;' 'Lcom/oney/WebRTCModule/WebRTCModule;' 'Lorg/webrtc/PeerConnectionFactory;' 'app.dash.cutout.DashCutoutModule' 'app.dash.share.DashShareModule'; do
-  printf '%s %s\n' "$(unzip -p .native-receipts/dash-native-arm64.apk 'classes*.dex' | grep -a -c -F "$module" || true)" "$module"
+for module in 'Lapp/dash/dex/DashDexModule;' 'Lapp/dash/dex/DashPadActivity;' 'app.dash.dex.DashDexModule' 'Lapp/dash/cutout/DashCutoutModule;' 'Lapp/dash/share/DashShareModule;' 'Lcom/oney/WebRTCModule/WebRTCModule;' 'Lorg/webrtc/PeerConnectionFactory;' 'app.dash.cutout.DashCutoutModule' 'app.dash.share.DashShareModule'; do
+  count=$(unzip -p .native-receipts/dash-native-arm64.apk 'classes*.dex' | grep -a -c -F "$module" || true)
+  printf '%s %s\n' "$count" "$module"
+  [ "$count" -gt 0 ] || { printf 'Required native class absent: %s\n' "$module" >&2; exit 1; }
 done | tee .native-receipts/module-inclusion.txt
 unzip -l .native-receipts/dash-native-arm64.apk 'lib/*' | tee .native-receipts/native-libs.txt | { grep -c 'libjingle_peerconnection_so.so' || true; } | sed 's/^/libjingle_peerconnection_so.so entries: /' | tee -a .native-receipts/module-inclusion.txt
 cp "app/android/app/build/intermediates/merged_manifests/$variant/process${Variant}Manifest/AndroidManifest.xml" .native-receipts/AndroidManifest.xml
