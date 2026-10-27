@@ -55,6 +55,8 @@ AI-native work is untrusted until it is proven. Pyramid:
 4. **Runtime** — `.cursor/skills/verify-dash` against live `dash-pair`.
 5. **Device** — Maestro in `.maestro/` for pixels the unit suite cannot see. Nav-dot centering: `.maestro/nav-dots.yaml` (never relaunch Expo Go) and `bun scripts/assert-nav-dots.ts` on the cropped chrome PNG; CI runs `bun test scripts/assert-nav-dots.test.ts`.
 
+6. **Formal laws**: read `.claude/skills/formal-verify-dash/SKILL.md`. Bend laws in `laws/` (send path S1-S12, release O15) are proven and mutation-tested on every PR (`.github/workflows/laws.yml`). A failing proof blocks the merge. Never weaken a law to get a pass.
+
 Do not skip mutation because the unit tests are green. Surviving mutants are missing assertions.
 
 ## Layout
