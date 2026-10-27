@@ -1,8 +1,10 @@
 /**
- * Pure focus-block scheduler. Callers persist block history and atomically update
- * nudgesThisBlock and lastNudgeAt after actual delivery (not scheduled time).
+ * Pure focus-block scheduler. The specified inputs provide nominal deadlines;
+ * nudgesThisBlock counts deliveries in the effective block after the latest break.
+ * Optional lastNudgeAt adds actual-delivery spacing and distinguishes stale counts
+ * across retained break markers. Persist it atomically with the count on delivery.
  * On a break, persist the new blockStartAt and clear the count/delivery time.
- * Retained explicit break markers also work until that rollover is persisted.
+ * Without delivery history a pure function cannot infer late deliveries.
  */
 export type FocusBlockKind = "standard" | "rested";
 export type BreakNudgePhase =
@@ -18,8 +20,11 @@ export interface BreakNudgeInput {
   blockKind: FocusBlockKind;
   phase: BreakNudgePhase;
   nudgesThisBlock: number;
-  /** Actual delivery time; needed to prevent late-delivery catch-up bursts. */
-  lastNudgeAt: number | null;
+  /** Optional actual delivery history for late-delivery spacing. Omit for the
+   * nominal schedule; null explicitly means no delivery in the original block.
+   * Without history, nudgesThisBlock belongs to the block after the latest break.
+   */
+  lastNudgeAt?: number | null;
 }
 
 export interface BreakNudgeResult {
@@ -33,8 +38,10 @@ export interface NextBlockInput {
   now: number;
   wakeAt: number;
   restedMorning: boolean;
-  /** Actual completed focus blocks since this wake, not elapsed wake windows. */
-  completedBlocksSinceWake: number;
+  /** Optional completed-block history; omitted means selecting the first block.
+   * Later selections must clear restedMorning or provide completed history.
+   */
+  completedBlocksSinceWake?: number;
 }
 
 const MINUTE = 60_000;
@@ -49,7 +56,7 @@ const SUPPRESSED_PHASES: ReadonlySet<BreakNudgePhase> = new Set([
 ]);
 
 /** Called at a block start; a delayed first block still gets rested duration. */
-export function nextBlock({ now, wakeAt, restedMorning, completedBlocksSinceWake }: NextBlockInput): FocusBlockKind {
+export function nextBlock({ now, wakeAt, restedMorning, completedBlocksSinceWake = 0 }: NextBlockInput): FocusBlockKind {
   return restedMorning && Number.isFinite(now) && Number.isFinite(wakeAt) &&
     now >= wakeAt && completedBlocksSinceWake === 0 ? "rested" : "standard";
 }
@@ -60,7 +67,7 @@ export function breakNudge(input: BreakNudgeInput): BreakNudgeResult {
     !Number.isFinite(now) || !Number.isFinite(blockStartAt) ||
     (lastBreakEndAt !== null && !Number.isFinite(lastBreakEndAt)) ||
     (lastActivityAt !== null && !Number.isFinite(lastActivityAt)) ||
-    (lastNudgeAt !== null && (!Number.isFinite(lastNudgeAt) || lastNudgeAt > now)) ||
+    (lastNudgeAt !== undefined && lastNudgeAt !== null && (!Number.isFinite(lastNudgeAt) || lastNudgeAt > now)) ||
     !Number.isSafeInteger(nudgesThisBlock) || nudgesThisBlock < 0
   ) {
     return { level: "none", dueAt: null, reason: "0 minutes elapsed; invalid focus-block timing or nudge count." };
@@ -74,7 +81,7 @@ export function breakNudge(input: BreakNudgeInput): BreakNudgeResult {
   // Discard only deliveries belonging to the previous block, not deliveries
   // made after a retained explicit break marker.
   const reset = idleBreak || (endedBreakAt !== null &&
-    (lastNudgeAt === null || lastNudgeAt < effectiveStartAt));
+    (lastNudgeAt === null || (lastNudgeAt !== undefined && lastNudgeAt < effectiveStartAt)));
   const count = reset ? 0 : nudgesThisBlock;
   const elapsedMinutes = Math.max(0, Math.floor((now - effectiveStartAt) / MINUTE));
   const blockMinutes = blockKind === "rested" ? RESTED_BLOCK_MINUTES : STANDARD_BLOCK_MINUTES;
@@ -86,7 +93,7 @@ export function breakNudge(input: BreakNudgeInput): BreakNudgeResult {
   if (count >= MAX_NUDGES) {
     return { level: "none", dueAt: null, reason: `${context}; maximum of 3 nudges already delivered this block.` };
   }
-  if (count > 0 && (lastNudgeAt === null || lastNudgeAt < effectiveStartAt)) {
+  if (count > 0 && (lastNudgeAt === null || (lastNudgeAt !== undefined && lastNudgeAt < effectiveStartAt))) {
     return { level: "none", dueAt: null, reason: `${context}; actual last nudge delivery time is required.` };
   }
   const softAt = effectiveStartAt + blockMinutes * MINUTE;
@@ -94,7 +101,7 @@ export function breakNudge(input: BreakNudgeInput): BreakNudgeResult {
     : softAt + (FIRM_DELAY_MINUTES + (count - 1) * FIRM_REPEAT_MINUTES) * MINUTE;
   // Preserve nominal deadlines, but space actual soft -> firm by 15 minutes
   // and actual firm -> firm by at least 30 minutes even after late delivery.
-  const nextAt = count > 0 && lastNudgeAt !== null
+  const nextAt = count > 0 && lastNudgeAt !== undefined && lastNudgeAt !== null
     ? Math.max(scheduledAt, lastNudgeAt + (count === 1 ? FIRM_DELAY_MINUTES : FIRM_REPEAT_MINUTES) * MINUTE)
     : scheduledAt;
   if (!Number.isFinite(nextAt)) {

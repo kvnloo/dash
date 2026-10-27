@@ -246,6 +246,61 @@ describe("actual delivery history regressions", () => {
   });
 });
 
+describe("specified API without optional history", () => {
+  // This exact shape is also a compile-time regression: do not fill in the
+  // optional fields via snapshot(), or required-field API changes go unnoticed.
+  function contractInput(at: number, nudgesThisBlock: number, blockKind: FocusBlockKind): BreakNudgeInput {
+    const now = START + at * MINUTE;
+    return {
+      now, blockStartAt: START, lastBreakEndAt: null, lastActivityAt: now,
+      blockKind, phase: "PEAK", nudgesThisBlock,
+    };
+  }
+
+  test("contract-shaped calls follow both nominal timelines, not invalid-input fallback", () => {
+    for (const blockKind of ["standard", "rested"] satisfies FocusBlockKind[]) {
+      const duration = blockKind === "rested" ? 180 : 90;
+      for (const [offset, count, level, due] of [
+        [0, 0, "none", duration],
+        [duration - 1, 0, "none", duration],
+        [duration, 0, "soft", duration],
+        [duration + 14, 1, "none", duration + 15],
+        [duration + 15, 1, "firm", duration + 15],
+        [duration + 45, 2, "firm", duration + 45],
+        [duration + 75, 3, "none", null],
+        [duration + 105, 3, "none", null],
+      ] satisfies [number, number, BreakNudgeLevel, number | null][]) {
+        const result = breakNudge(contractInput(offset, count, blockKind));
+        expect(result).toMatchObject({ level, dueAt: due === null ? null : START + due * MINUTE });
+        expect(result.reason).toContain(`${offset} minutes elapsed`);
+      }
+    }
+  });
+
+  test("contract-shaped idle reset and explicit-marker polls preserve current-block counts", () => {
+    expect(breakNudge({ ...contractInput(90, 3, "standard"), lastActivityAt: START + 80 * MINUTE }))
+      .toMatchObject({ level: "none", dueAt: START + 180 * MINUTE });
+    for (const [at, count, level, due] of [
+      [110, 0, "none", 200], [200, 0, "soft", 200],
+      [201, 1, "none", 215], [215, 1, "firm", 215],
+      [245, 2, "firm", 245], [275, 3, "none", null],
+    ] satisfies [number, number, BreakNudgeLevel, number | null][]) {
+      expect(breakNudge({ ...contractInput(at, count, "standard"), lastBreakEndAt: START + 110 * MINUTE }))
+        .toMatchObject({ level, dueAt: due === null ? null : START + due * MINUTE });
+    }
+  });
+
+  test("nextBlock accepts the three-field contract, including delayed first selection", () => {
+    for (const now of [START, START + 360 * MINUTE]) {
+      expect(nextBlock({ now, wakeAt: START, restedMorning: true })).toBe("rested");
+      // Without completed history, the caller consumes first-block eligibility.
+      expect(nextBlock({ now, wakeAt: START, restedMorning: false })).toBe("standard");
+    }
+    expect(nextBlock({ now: START - 1, wakeAt: START, restedMorning: true })).toBe("standard");
+    expect(nextBlock({ now: START, wakeAt: Infinity, restedMorning: true })).toBe("standard");
+  });
+});
+
 describe("nextBlock first actual rested morning block", () => {
   test("delayed first blocks are rested and early second blocks are standard", () => {
     const wakeAt = START;
