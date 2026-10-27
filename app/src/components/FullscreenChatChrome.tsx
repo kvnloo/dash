@@ -58,7 +58,7 @@ export function FullscreenChatChrome({
     <Text style={styles.statusText} numberOfLines={1} maxFontSizeMultiplier={1.1}>{primary.text}</Text>
   </View> : null;
 
-  return <View testID="chat-fullscreen-chrome" pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+  return <View testID="chat-fullscreen-chrome" pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.root]}>
     <Pressable
       testID="chat-fullscreen-pill"
       accessible
@@ -102,6 +102,7 @@ export function FullscreenChatChrome({
 }
 
 const styles = StyleSheet.create({
+  root: { zIndex: 30 },
   pill: {
     position: "absolute",
     zIndex: 30,
