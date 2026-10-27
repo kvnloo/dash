@@ -14,6 +14,10 @@ mock.module("@react-native-async-storage/async-storage", () => ({
     async multiRemove(keys: string[]) { for (const key of keys) persisted.delete(key); },
   },
 }));
+// bun mock.module is process-wide and last-writer-wins. Other files mock react-native with only
+// AppState; when they run first, ../net/bridge (imports Platform) fails to link. Install a complete
+// mock before any store/bridge import so this file passes regardless of test-file order.
+mock.module("react-native", () => ({ Platform: { OS: "android" }, AppState: { currentState: "active", addEventListener() { return { remove() {} }; } } }));
 Object.defineProperty(globalThis, "requestAnimationFrame", { configurable: true, value: (fn: FrameRequestCallback) => setTimeout(() => fn(0), 0) });
 const app = await import("./app");
 const { replyText } = await import("./text");
