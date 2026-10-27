@@ -5,6 +5,7 @@ import {
   UI_CONTROL_SCHEMA,
   parseUiControl,
   type UiControlCommand,
+  type UiControlRoute,
 } from "./ui-control";
 import type { AppRoute } from "../app/src/lib/app-route-link";
 
@@ -18,10 +19,10 @@ function rejects(command: unknown): void {
   if (!result.ok) expect(result.error.length).toBeGreaterThan(0);
 }
 
-const point = { type: "point", id: "p1", target: { x: 0.25, y: 0.75 }, ttlMs: 250 };
-const draw = { type: "draw", id: "d1", strokes: [{ points: [[0, 0], [0.5, 0.5], [1, 1]] }], ttlMs: 30_000 };
-const highlight = { type: "highlight", id: "h1", testID: "trace_row-1", ttlMs: 400 };
-const navigate = { type: "navigate", id: "n1", route: "Chat", conversationId: "chat:42" };
+const point: UiControlCommand = { type: "point", id: "p1", target: { x: 0.25, y: 0.75 }, ttlMs: 250 };
+const draw: UiControlCommand = { type: "draw", id: "d1", strokes: [{ points: [[0, 0], [0.5, 0.5], [1, 1]] }], ttlMs: 30_000 };
+const highlight: UiControlCommand = { type: "highlight", id: "h1", testID: "trace_row-1", ttlMs: 400 };
+const navigate: UiControlCommand = { type: "navigate", id: "n1", route: "Chat", conversationId: "chat:42" };
 
 const cases: UiControlCommand[] = [
   point,
@@ -158,7 +159,7 @@ test("labels and palette colors are bounded and validated; optional fields may b
 
 test("navigate accepts only AppRoute names and Chat, with bounded optional conversationId", () => {
   // Compile-time drift check: every in-app AppRoute must remain assignable to UI control routes.
-  const fromAppRoute = (route: AppRoute) => route;
+  const fromAppRoute = (route: AppRoute): UiControlRoute => route;
   expect(UI_CONTROL_ROUTES).toEqual(["Lab", "Trace", "Orchestra", "Settings", "Bots", "Chat"]);
   expect(UI_CONTROL_ROUTES).toContain(fromAppRoute("Lab"));
   for (const route of UI_CONTROL_ROUTES) expect(parseUiControl(frame({ ...navigate, route })).ok).toBe(true);
