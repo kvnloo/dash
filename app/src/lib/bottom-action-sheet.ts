@@ -11,9 +11,7 @@ export interface SheetLayout {
   scrollable: boolean;
 }
 
-export interface SheetAccessibility {
-  id: string;
-  accessibilityLabel: string;
+export interface SheetAccessibility extends BottomActionOption {
   accessibilityHint?: string;
   position: number;
   total: number;
@@ -45,7 +43,7 @@ export function sheetLayout(optionCount: number, windowHeight: number, bottomIns
 /** Supply explicit reading order and a separately spoken destructive warning. */
 export function sheetA11y(options: readonly BottomActionOption[]): SheetAccessibility[] {
   return options.map((option, index) => ({
-    id: option.id,
+    ...option,
     accessibilityLabel: `${option.accessibilityLabel.trim() || option.label}, ${index + 1} of ${options.length}`,
     accessibilityHint: option.destructive ? "Destructive action" : undefined,
     position: index + 1,
