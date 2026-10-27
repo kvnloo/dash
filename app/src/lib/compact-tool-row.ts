@@ -87,7 +87,8 @@ export function compactToolRow(tool: FormatTool, harness = "hermes", targetBudge
   const safeTool: FormatTool = {
     name: redactTool(tool.name),
     args: redactTool(tool.args),
-    output: redactTool(tool.output),
+    // Titles come from arguments; retained output may be megabytes and stays lazy.
+    output: "",
     status: tool.status,
     durationMs: tool.durationMs,
   };
