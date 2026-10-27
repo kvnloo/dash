@@ -88,8 +88,8 @@ export const test=base.extend<{bridge:Bridge; persistSession:boolean; bridgeOpti
 });
 export {expect};
 export async function act(metrics:{name:string;ms:number}[],name:string,fn:()=>Promise<unknown>) {const t=performance.now();await fn();metrics.push({name,ms:performance.now()-t});}
-export async function pair(page:Page,b:Bridge) {
- await page.goto(web,{waitUntil:'domcontentloaded'});
+export async function pair(page:Page,b:Bridge,url=web) {
+ await page.goto(url,{waitUntil:'domcontentloaded'});
  await page.getByPlaceholder('100.64.0.1',{exact:true}).waitFor({timeout:120000});
  await page.getByPlaceholder('100.64.0.1',{exact:true}).fill('127.0.0.1:'+b.port);
  await page.getByLabel('Bootstrap token',{exact:true}).fill(b.bootstrap);
@@ -101,7 +101,7 @@ export async function pair(page:Page,b:Bridge) {
 }
 const rows = new WeakMap<Page,string>();
 export function chatRow(page:Page){const id=rows.get(page);if(!id)throw Error('No owned chat row recorded');return page.getByTestId(id);}
-export async function openChat(page:Page,b:Bridge) {await pair(page,b);await page.getByRole('button',{name:/^(Create new chat|New chat)$/}).first().click({noWaitAfter:true});await expect(composer(page)).toBeVisible();await page.getByRole('button',{name:'Back',exact:true}).click({noWaitAfter:true});const row=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({has:page.getByText('New chat',{exact:true})});await expect(row).toHaveCount(1);const id=await row.getAttribute('data-testid');if(!id)throw Error('New chat row id missing');rows.set(page,id);await row.click({noWaitAfter:true});await expect(page.getByTestId('chat-window')).toBeVisible();}
+export async function openChat(page:Page,b:Bridge,url=web) {await pair(page,b,url);await page.getByRole('button',{name:/^(Create new chat|New chat)$/}).first().click({noWaitAfter:true});await expect(composer(page)).toBeVisible();await page.getByRole('button',{name:'Back',exact:true}).click({noWaitAfter:true});const row=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({has:page.getByText('New chat',{exact:true})});await expect(row).toHaveCount(1);const id=await row.getAttribute('data-testid');if(!id)throw Error('New chat row id missing');rows.set(page,id);await row.click({noWaitAfter:true});await expect(page.getByTestId('chat-window')).toBeVisible();}
 export const composer=(page:Page)=>page.getByRole('textbox',{name:'Message',exact:true});
 export async function chooseHarness(page:Page,name='OMP') {
  await page.getByRole('button',{name:'Options. Current surface: Chat',exact:true}).click({noWaitAfter:true});
