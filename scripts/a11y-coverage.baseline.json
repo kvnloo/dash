@@ -8,6 +8,7 @@
     "app/src/components/ReplyBlocks.tsx": 1,
     "app/src/components/ToolInspector.tsx": 5,
     "app/src/components/trace/TraceTimeline.tsx": 1,
+    "app/src/screens/ApprovalsScreen.tsx": 1,
     "app/src/screens/LegacyVoiceScreen.tsx": 2,
     "app/src/screens/OrchestraDetailScreen.tsx": 1,
     "app/src/screens/VoiceScreen.tsx": 2

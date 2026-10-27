@@ -172,6 +172,42 @@ describe("JSX text and nested touchable regression coverage", () => {
   });
 });
 
+describe("JavaScript lexical context regressions", () => {
+  test("comments preserve the preceding expression context", () => {
+    const source = [
+      'const first = /* note */ <Pressable />;',
+      'function render() { return /* note */ <View>Don\'t hide <Switch /></View>; }',
+      'const second = // note with an apostrophe\n<TouchableOpacity />;',
+      'const nested = <View child={/* note */ <TouchableHighlight />} />;',
+      'const comparison = value /* note */ < bound && other > limit;',
+    ].join("\n");
+    expect(scanSource(FILE, source).map(f => [f.line, f.component])).toEqual([
+      [1, "Pressable"], [2, "Switch"], [4, "TouchableOpacity"], [5, "TouchableHighlight"],
+    ]);
+    expect(checkRatchet(scanSource(FILE, source), { unlabeled: {} }).increases).toEqual([
+      { file: FILE, line: 1, previous: 0, current: 4 },
+    ]);
+  });
+
+  test("regex quotes, braces, escapes and character classes cannot hide or invent controls", () => {
+    const source = [
+      "const quote = /'/; const first = <Pressable />;",
+      'const doubleQuote = /"/; const second = <Switch />;',
+      'const pattern = /<Pressable \\/>|[}/]/g; const third = <TouchableOpacity />;',
+      'const nested = <Pressable onPress={() => /[}]/.test(value)} accessibilityLabel="Outer" child={<Switch />} />;',
+      'function render() { if (ready) /[\x60]/.test(value); return /* note */ <TouchableHighlight />; }',
+      'const divided = total / count / scale; const fourth = <TouchableWithoutFeedback />;',
+      'const more = <View>{/}/.test(value) ? <Pressable /> : null}</View>;',
+    ].join("\n");
+    expect(scanSource(FILE, source).map(f => [f.line, f.component, f.hasLabel])).toEqual([
+      [1, "Pressable", false], [2, "Switch", false], [3, "TouchableOpacity", false],
+      [4, "Pressable", true], [4, "Switch", false], [5, "TouchableHighlight", false],
+      [6, "TouchableWithoutFeedback", false], [7, "Pressable", false],
+    ]);
+    expect(checkRatchet(scanSource(FILE, source), { unlabeled: {} }).unlabeled).toEqual({ [FILE]: 7 });
+  });
+});
+
 describe("per-file accessibility ratchet", () => {
   test("increasing the count fails with a file and new finding line", () => {
     const report = checkRatchet([finding(3), finding(22)], { unlabeled: { [FILE]: 1 } });

@@ -130,21 +130,75 @@ export function scanSource(file: string, text: string): Finding[] {
     return text.length;
   }
 
+  /** Regex bodies are opaque JS tokens, including escapes and character classes. */
+  function skipRegex(start: number): number {
+    let inClass = false;
+    let i = start + 1;
+    while (i < text.length) {
+      const c = text[i];
+      if (c === "\\") { i += 2; continue; }
+      if (c === "\n" || c === "\r") return i;
+      if (c === "[") inClass = true;
+      if (c === "]") inClass = false;
+      if (c === "/" && !inClass) {
+        i++;
+        while (/[a-z]/i.test(text[i] ?? "")) i++;
+        return i;
+      }
+      i++;
+    }
+    return i;
+  }
+
   /** JS region, optionally terminated by its matching closing brace. */
   function visitCode(start: number, untilBrace = false): number {
     let i = start;
     let depth = untilBrace ? 1 : 0;
+    // Track significant tokens, not raw source prefixes: comments are trivia.
+    let expressionStart = true;
+    let controlKeyword = false;
+    const controlParens: boolean[] = [];
     while (i < text.length) {
+      const c = text[i] ?? "";
+      if (/\s/.test(c)) { i++; continue; }
       if (text.startsWith("//", i)) { i = skipLine(text, i); continue; }
       if (text.startsWith("/*", i)) { i = skipBlock(text, i); continue; }
-      if (text[i] === "'" || text[i] === '"') { i = skipString(i); continue; }
-      if (text[i] === "\x60") { i = skipTemplate(i); continue; }
-      if (text[i] === "<") {
-        const end = visitElement(i);
-        if (end !== null) { i = end; continue; }
+      if (c === "'" || c === '"' || c === "\x60") {
+        i = c === "\x60" ? skipTemplate(i) : skipString(i);
+        expressionStart = false;
+        continue;
       }
-      if (text[i] === "{") depth++;
-      if (text[i] === "}" && untilBrace && --depth === 0) return i + 1;
+      if (c === "/" && expressionStart) {
+        i = skipRegex(i);
+        expressionStart = false;
+        continue;
+      }
+      if (c === "<" && expressionStart) {
+        const end = visitElement(i);
+        if (end !== null) { i = end; expressionStart = true; continue; }
+      }
+      if (/[A-Za-z_$]/.test(c)) {
+        const token = /^[\w$]+/.exec(text.slice(i))?.[0] ?? c;
+        controlKeyword = /^(?:if|while|for|with|switch|catch)$/.test(token);
+        expressionStart = controlKeyword || /^(?:return|yield|default|throw|case|delete|void|typeof|new|in|of|instanceof|await|else|do)$/.test(token);
+        i += token.length;
+        continue;
+      }
+      if (c === "(") {
+        controlParens.push(controlKeyword);
+        expressionStart = true;
+      } else if (c === ")") {
+        expressionStart = controlParens.pop() === true;
+      } else if (c === "{") {
+        depth++;
+        expressionStart = true;
+      } else if (c === "}") {
+        if (untilBrace && --depth === 0) return i + 1;
+        expressionStart = true;
+      } else {
+        expressionStart = "=([,?:!&|>;+-*%~^/".includes(c);
+      }
+      controlKeyword = false;
       i++;
     }
     return i;
@@ -196,7 +250,7 @@ export function scanSource(file: string, text: string): Finding[] {
         return close < 0 ? text.length : close + 1;
       }
       if (text[i] === "<") {
-        const end = visitElement(i, true);
+        const end = visitElement(i);
         if (end !== null) { i = end; continue; }
       }
       if (text[i] === "{") { i = visitCode(i + 1, true); continue; }
@@ -205,7 +259,7 @@ export function scanSource(file: string, text: string): Finding[] {
     return i;
   }
 
-  function visitElement(start: number, inChildren = false): number | null {
+  function visitElement(start: number): number | null {
     let name = "";
     let afterName = start + 1;
     if (!text.startsWith("<>", start)) {
@@ -217,15 +271,8 @@ export function scanSource(file: string, text: string): Finding[] {
       if (boundary !== ">" && boundary !== "/" && (boundary === undefined || !/\s/.test(boundary))) {
         return null;
       }
-      // Accept lower-case JSX hosts inside JSX text or in expression positions,
-      // while rejecting comparisons such as a < bound and generic <T> arrows.
-      const prefix = text.slice(0, start);
-      const before = prefix.trimEnd();
-      const previous = before[before.length - 1];
-      const lineStart = prefix.slice(prefix.lastIndexOf("\n") + 1).trim().length === 0;
-      const expressionStart = previous === undefined || "=([{,?:!&|>;".includes(previous)
-        || lineStart || /\b(?:return|yield|default)$/.test(before);
-      if (!inChildren && !expressionStart) return null;
+      // The JS walker already validated expression position using significant
+      // tokens; the children walker is in JSX text where no such check is needed.
       if (!names.has(name) && /^\s+extends\b/.test(text.slice(afterName))) return null;
       if (!names.has(name) && /^[A-Z]$/.test(name)) return null;
     }
