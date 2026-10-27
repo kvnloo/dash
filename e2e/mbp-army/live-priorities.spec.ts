@@ -22,6 +22,7 @@ test('Triage lists live blockers and roadmap priorities, opens an item and label
   await page.setViewportSize({ width: 390, height: 844 });
   await pair(page, bridge);
   await page.getByRole('tab').nth(2).click();
+  await expect(page.getByTestId('orchestra-graph')).toBeInViewport({ ratio: 1 });
   await page.getByRole('button', { name: 'Triage', exact: true }).click();
   const list = page.getByTestId('live-triage-list');
   await expect(list.getByText('Fixture current board blocker', { exact: true })).toBeVisible();
@@ -33,6 +34,7 @@ test('Triage lists live blockers and roadmap priorities, opens an item and label
   await expect(stale).toContainText('Stale');
   await expect(list.getByRole('button').last()).toHaveAccessibleName('Open Outdated fixture decision');
   await expect(list.getByTestId('triage-item-roadmap:decision')).toContainText('ago');
+  await expect(list.getByRole('button').first()).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: info.outputPath('triage-list.png') });
   await list.getByRole('button', { name: 'Open Choose fixture release', exact: true }).click();
   await expect(page.getByTestId('triage-detail')).toContainText('Approve fixture release');
@@ -52,6 +54,7 @@ test('Agent Trace loads the bridge live session and clears it on unavailable', a
   await page.setViewportSize({ width: 390, height: 844 });
   await pair(page, bridge);
   await page.getByRole('tab').nth(2).click();
+  await expect(page.getByTestId('orchestra-graph')).toBeInViewport({ ratio: 1 });
   await page.getByTestId('trace-entry').click();
   await expect(page.getByTestId('trace-feed-live')).toBeVisible();
   const session = page.getByTestId('row-hermes:.hermes:army-fixture-session');
@@ -74,6 +77,7 @@ test.describe('Trace without native sessions', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await pair(page, bridge);
     await page.getByRole('tab').nth(2).click();
+    await expect(page.getByTestId('orchestra-graph')).toBeInViewport({ ratio: 1 });
     await page.getByTestId('trace-entry').click();
     await expect(page.getByTestId('trace-feed-unavailable')).toContainText('No live sessions or source observations');
     await expect(page.getByTestId('trace-timeline')).toHaveCount(0);
