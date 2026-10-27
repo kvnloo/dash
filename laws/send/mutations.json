@@ -1,0 +1,222 @@
+{
+  "verdict_mode": false,
+  "rows": [
+    {
+      "law": "-",
+      "mutation": "reference (unmodified)",
+      "rejected": null,
+      "proofs_check": true,
+      "witnesses_hold": true,
+      "where": ""
+    },
+    {
+      "law": "S1 longpress_only_opens_menu",
+      "mutation": "pre-#457 Chats long-press: feedback on sends, off deletes",
+      "counterexample": "Chats list, feedback on: long-press a row -> onFeedback sends a message",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.longpress_only_opens_menu",
+      "law_false_here": true
+    },
+    {
+      "law": "S1 longpress_only_opens_menu",
+      "mutation": "pre-#457 search long-press calls onFeedbackRow (sends)",
+      "counterexample": "search results, feedback on: long-press a result -> onFeedbackRow sends",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.longpress_only_opens_menu",
+      "law_false_here": true
+    },
+    {
+      "law": "S1 longpress_only_opens_menu",
+      "mutation": "long-press opens the menu and also opens the chat",
+      "counterexample": "Chats list: long-press a row -> it navigates as well as opening the menu",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.longpress_only_opens_menu",
+      "law_false_here": true
+    },
+    {
+      "law": "S2 send_needs_feedback_pick",
+      "mutation": "menu 'open' runs the feedback handler",
+      "counterexample": "long-press, pick Open -> a message is sent",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "run_send",
+      "law_false_here": true
+    },
+    {
+      "law": "S2 send_needs_feedback_pick",
+      "mutation": "dismissing the menu runs the feedback handler",
+      "counterexample": "long-press, dismiss the sheet -> a message is sent",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.send_needs_feedback_pick",
+      "law_false_here": true
+    },
+    {
+      "law": "S3 feedback_off_never_sends",
+      "mutation": "Chats menu offers feedback while feedback is off",
+      "counterexample": "feedback off: long-press a chat row, pick feedback -> sends",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "chats_step",
+      "law_false_here": true
+    },
+    {
+      "law": "S3 feedback_off_never_sends",
+      "mutation": "a pick with no menu shown still runs the choice",
+      "counterexample": "feedback off, search: a stale 'feedback' select with no sheet open -> sends",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "pick_send",
+      "law_false_here": true
+    },
+    {
+      "law": "S4 feedback_pick_sends",
+      "mutation": "feedback pick does nothing (vacuous)",
+      "counterexample": "feedback on: long-press, pick feedback -> nothing (the feature is dead)",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.feedback_pick_sends",
+      "law_false_here": true
+    },
+    {
+      "law": "S5 own_install_is_self",
+      "mutation": "pre-#457 selfMachines without AgentsView's install id",
+      "counterexample": "AgentsView stamps local sessions with its install id -> listed as 'Other machine', view only",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "own_self",
+      "law_false_here": true
+    },
+    {
+      "law": "S6 chatable_is_self",
+      "mutation": "chatable ignores the host (other machines' chats sendable)",
+      "counterexample": "a Claude Code chat from another machine is marked chatable on this host",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.chatable_is_self",
+      "law_false_here": true
+    },
+    {
+      "law": "S7 archived_chat_routes",
+      "mutation": "pre-#457 bridge refuses av: profiles",
+      "counterexample": "open a chatable Claude Code chat, send -> bridge: 'Profile routing unavailable on this bridge.'",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "routes",
+      "law_false_here": true
+    },
+    {
+      "law": "S8 av_profile_own_session",
+      "mutation": "av: profile admitted for any session",
+      "counterexample": "profileId av:claude:9 with sessionId 8 -> admitted, the turn resumes the wrong session",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "routes",
+      "law_false_here": true
+    },
+    {
+      "law": "S8 av_profile_own_harness",
+      "mutation": "av: profile admitted for any harness",
+      "counterexample": "profileId av:claude:9 sent with harness codex -> admitted",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "routes",
+      "law_false_here": true
+    },
+    {
+      "law": "S8 av_profile_needs_session",
+      "mutation": "av: profile admitted without a session id",
+      "counterexample": "profileId av:claude:9 with no sessionId -> admitted as a new chat",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.av_profile_needs_session",
+      "law_false_here": true
+    },
+    {
+      "law": "S9 no_silent_refusal",
+      "mutation": "pre-#457 rejectTurn without the turn.rejected log line",
+      "counterexample": "phone sends to a host id that is not this bridge -> refused, nothing in the bridge log",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "tail_accounted",
+      "law_false_here": true
+    },
+    {
+      "law": "S9 no_silent_refusal",
+      "mutation": "rejectTurn sends error but no done",
+      "counterexample": "refused turn -> the phone gets an error but no done: the turn spins forever",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "tail_accounted",
+      "law_false_here": true
+    },
+    {
+      "law": "S9 no_silent_refusal",
+      "mutation": "unknown harness: bare return",
+      "counterexample": "chat for a harness this bridge does not know -> no log, no answer",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "tail_accounted",
+      "law_false_here": true
+    },
+    {
+      "law": "S9 no_silent_refusal",
+      "mutation": "remote host: bare return",
+      "counterexample": "chat for another host -> no log, no answer",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.no_silent_refusal",
+      "law_false_here": true
+    },
+    {
+      "law": "S10 dup_only_for_live_turn",
+      "mutation": "routing refusal dressed up as a duplicate",
+      "counterexample": "a profile the bridge refuses is dropped as if it were a resend",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.dup_only_for_live_turn",
+      "law_false_here": true
+    },
+    {
+      "law": "S11 start_only_through_every_gate",
+      "mutation": "duplicate id starts a second turn",
+      "counterexample": "the phone resends a live turn id -> a second agent process starts",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.start_only_through_every_gate",
+      "law_false_here": true
+    },
+    {
+      "law": "S11 start_only_through_every_gate",
+      "mutation": "chat skips the cwd check",
+      "counterexample": "chat with a cwd that is not a directory -> the agent starts anyway",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.start_only_through_every_gate",
+      "law_false_here": true
+    },
+    {
+      "law": "S11 start_only_through_every_gate",
+      "mutation": "voice skips the speech check",
+      "counterexample": "voice turn with no speech-to-text set up -> starts anyway",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.start_only_through_every_gate",
+      "law_false_here": true
+    },
+    {
+      "law": "S12 all_gates_start",
+      "mutation": "chat never starts (vacuous)",
+      "counterexample": "a valid new chat turn -> refused",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.all_gates_start",
+      "law_false_here": true
+    }
+  ],
+  "rejected": 23,
+  "total": 23
+}
