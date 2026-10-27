@@ -95,6 +95,7 @@ describe("compact tool call row (DASH-15)", () => {
     expect(target).toBe("alpha…delta");
     expect(target.length).toBe(11);
     expect(truncateToolTarget("abcdef", 1)).toBe("…");
+    expect(truncateToolTarget("/very/long/path/filename.ts:7", 2).length).toBe(2);
     const row = compactToolRow(tool("web_search", { query: "first line\nsecond line" }));
     expect(row.target.includes("\n")).toBe(false);
     expect(row.accessibilityLabel.includes("\n")).toBe(false);
@@ -128,6 +129,7 @@ describe("compactGroup adjacency, identity and order", () => {
     expect(group).toHaveLength(1);
     expect(group[0]?.verb).toBe("Read");
     expect(group[0]?.count).toBe(4);
+    expect(group[0]?.toolIndexes).toEqual([0, 1, 2, 3]);
     expect(group[0]?.target).toBe("src/d.ts:1");
     expect(group[0]?.durationLabel).toBe("1.6s");
     expect(group[0]?.accessibilityLabel).toContain("4 successful calls");
@@ -142,6 +144,7 @@ describe("compactGroup adjacency, identity and order", () => {
       tool("terminal", { command: "git status" }),
       read("e.ts"),
     ]);
+    expect(rows.map(row => row.toolIndexes)).toEqual([[0, 1], [2], [3, 4], [5], [6]]);
     expect(rows.map(row => [row.verb, row.status, row.count ?? 1, row.target])).toEqual([
       ["Read", "ok", 2, "b.ts:1"],
       ["Read", "error", 1, "failed.ts:1"],
