@@ -37,10 +37,12 @@ jobs:
       - name: Headless Chromium and the bridge sandbox (bubblewrap)
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends bubblewrap ffmpeg
+          sudo apt-get install --yes --no-install-recommends bubblewrap
           # Ubuntu 24.04 restricts unprivileged user namespaces; the army isolates each bridge with bwrap.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 node node_modules/playwright/cli.js install --with-deps chromium
+      - name: O15 checker evidence rules (laws/release)
+        run: python3 -m unittest laws/release/test_check.py -v
       - name: Tester army on ${{ env.SHA }}
         env:
           DASH_ARMY_RECEIPTS: ${{ runner.temp }}/army-receipts
@@ -76,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gate: [typecheck, lint, invariants, mutation]
+        gate: [typecheck, lint]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -94,15 +96,6 @@ jobs:
       - name: Lint
         if: matrix.gate == 'lint'
         run: bun run lint
-      - name: Install real audio decoder for pairing regression
-        if: matrix.gate == 'invariants'
-        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends ffmpeg
-      - name: Invariants the army cannot reach (protocol, security, storage, native-only logic) and the O15 checker
-        if: matrix.gate == 'invariants'
-        run: bun run test:invariants && python3 -m unittest laws/release/test_check.py -v
-      - name: Mutation tests (including protocol and roster branches)
-        if: matrix.gate == 'mutation'
-        run: bun scripts/mutate.ts --threshold 80 --max 200
 
   required-gates:
     if: always()

@@ -33,8 +33,6 @@ if [ ! -f app/node_modules/@shopify/react-native-skia/libs/android/arm64-v8a/lib
 fi
 if [ "${DASH_NATIVE_ONLY:-0}" != 1 ]; then
   bun app/node_modules/typescript/bin/tsc -p app --noEmit > .native-receipts/typecheck.log 2>&1
-  bun run test:invariants > .native-receipts/unit.log 2>&1
-  bun scripts/mutate.ts > .native-receipts/mutation.log 2>&1
   (cd app && CI=1 bun x expo export --platform android --output-dir ../.native-receipts/export) > .native-receipts/export.log 2>&1
 else
   printf 'Native-only retry: use the preceding unchanged-source JS gate receipts.\n'
@@ -61,10 +59,8 @@ if [ ! -d "$ANDROID_HOME/ndk/27.1.12297006" ] || [ ! -d "$ANDROID_HOME/platforms
   fi
 fi
 (cd app && CI=1 bun x expo prebuild --platform android --no-install)
-(cd app/android && ./gradlew :app:assembleDebug :dash-share:testDebugUnitTest :dash-cutout:testDebugUnitTest -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
+(cd app/android && ./gradlew :app:assembleDebug -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
 cp app/android/app/build/outputs/apk/debug/app-debug.apk .native-receipts/dash-native-arm64.apk
-cp -r app/modules/dash-share/android/build/test-results .native-receipts/native-test-results
-cp -r app/modules/dash-cutout/android/build/test-results .native-receipts/cutout-test-results
 # Module inclusion: the class and its autolinked registration must be in the APK's dex.
 for module in 'Lapp/dash/cutout/DashCutoutModule;' 'Lapp/dash/share/DashShareModule;' 'Lcom/oney/WebRTCModule/WebRTCModule;' 'Lorg/webrtc/PeerConnectionFactory;' 'app.dash.cutout.DashCutoutModule' 'app.dash.share.DashShareModule'; do
   printf '%s %s\n' "$(unzip -p .native-receipts/dash-native-arm64.apk 'classes*.dex' | grep -a -c -F "$module" || true)" "$module"

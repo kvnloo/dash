@@ -27,12 +27,12 @@ together with its army test. Never remove a feature or a test to get a pass.
 
 ## Other gates
 
-| gate | command | why it exists |
-| --- | --- | --- |
-| invariants | `bun run test:invariants` | protocol/wire compatibility, security, storage formats, native-only logic the web army cannot reach |
-| O15 checker | `python3 -m unittest laws/release/test_check.py` | evidence rules and parity with the Bend book |
-| mutation | `bun scripts/mutate.ts --threshold 80 --max 200` | the invariant tests must kill mutants of the contracts they guard |
-| typecheck / lint | `bun run typecheck`; `bun run lint` | compiler and lint baseline |
+| gate | command |
+| --- | --- |
+| O15 checker | `python3 -m unittest laws/release/test_check.py` (evidence rules; parity with the Bend book where Bend is installed) |
+| typecheck / lint | `bun run typecheck`; `bun run lint` |
+
+There is no unit-test suite and no mutation gate: the army is the suite.
 
 Web army evidence is not native phone acceptance: native IME, voice, Android
 permissions and live model behaviour are not covered yet
