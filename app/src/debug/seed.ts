@@ -12,9 +12,9 @@ const DEBUG_SETTINGS: Settings = {
 
 const DEBUG_HOSTS = [
   {
-    id: "mbp",
-    name: "mbp",
-    hostname: "mbp",
+    id: "host-a",
+    name: "host-a",
+    hostname: "host-a",
     online: true,
     self: true,
     address: "100.64.0.1",
@@ -32,7 +32,7 @@ const DEBUG_HOSTS = [
   {
     id: "0",
     name: "0",
-    hostname: "groot",
+    hostname: "host-b",
     online: true,
     self: false,
     address: "100.64.0.2",
@@ -42,7 +42,7 @@ const DEBUG_HOSTS = [
 
 const ONLINE_CONNECTION: Partial<Connection> = {
   status: "online",
-  host: "mbp",
+  host: "host-a",
   cwd: "~/workspace/dash",
   error: undefined,
   harnesses: [
@@ -83,7 +83,7 @@ export function applyDebugSeed(variant: DebugSeedVariant = "paired"): void {
   if (variant === "offline") {
     setConnection({
       status: "offline",
-      host: "mbp",
+      host: "host-a",
       cwd: "~/workspace/dash",
       error: "Debug: bridge unreachable",
       harnesses: ONLINE_CONNECTION.harnesses ?? [],

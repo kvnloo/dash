@@ -74,14 +74,14 @@ describe("parseServerMessage", () => {
     const hello = parseServerMessage({
       type: "hello",
       version: 1,
-      host: "mbp",
+      host: "host-a",
       cwd: "/home/you/workspace/dash",
       harnesses: [{ id: "omp", name: "OMP", available: true }],
     });
     expect(hello).toEqual({
       type: "hello",
       version: 1,
-      host: "mbp",
+      host: "host-a",
       cwd: "/home/you/workspace/dash",
       harnesses: [{ id: "omp", name: "OMP", available: true }],
       hosts: undefined,
@@ -91,9 +91,9 @@ describe("parseServerMessage", () => {
   test("accepts hello hosts and turn events", () => {
     const hosts = [
       {
-        id: "mbp",
-        name: "mbp",
-        hostname: "mbp",
+        id: "host-a",
+        name: "host-a",
+        hostname: "host-a",
         online: true,
         self: true,
         agents: [{ id: "a2a:hermes", name: "Hermes", kind: "hermes", status: "running" }],
@@ -102,7 +102,7 @@ describe("parseServerMessage", () => {
     const hello = parseServerMessage({
       type: "hello",
       version: 1,
-      host: "mbp",
+      host: "host-a",
       cwd: "/tmp",
       harnesses: [{ id: "omp", name: "OMP", available: false }],
       hosts,
@@ -127,9 +127,9 @@ describe("parseServerMessage", () => {
     expect(
       parseHosts([
         {
-          id: "mbp",
-          name: "mbp",
-          hostname: "mbp",
+          id: "host-a",
+          name: "host-a",
+          hostname: "host-a",
           online: true,
           self: true,
           agents: [{ id: "x", name: "X", kind: "omp", status: "maybe" }],

@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { canChatWithAgent, chatKind, emptyHostProfile, profileFromAgent, profilesFromHosts } from "./roster";
 import type { HostInfo } from "../../../shared/protocol";
 
-const mbp: HostInfo = {
-  id: "mbp",
-  name: "mbp",
-  hostname: "mbp",
+const hostA: HostInfo = {
+  id: "host-a",
+  name: "host-a",
+  hostname: "host-a",
   online: true,
   self: true,
   address: "100.64.0.1",
@@ -29,10 +29,10 @@ const mbp: HostInfo = {
   ],
 };
 
-const groot: HostInfo = {
+const hostB: HostInfo = {
   id: "0",
   name: "0",
-  hostname: "groot",
+  hostname: "host-b",
   online: true,
   self: false,
   address: "100.64.0.2",
@@ -51,21 +51,21 @@ const cursor: HostInfo = {
 
 describe("profilesFromHosts", () => {
   test("keeps both live OMP tabs and the MagicDNS 0 host", () => {
-    const profiles = profilesFromHosts([mbp, groot]);
-    expect(profiles.map((p) => p.id)).toEqual(["mbp:omp:dash", "mbp:omp:keyconf", "0:hermes"]);
+    const profiles = profilesFromHosts([hostA, hostB]);
+    expect(profiles.map((p) => p.id)).toEqual(["host-a:omp:dash", "host-a:omp:keyconf", "0:hermes"]);
     expect(profiles[0]?.cwd).toBe("/home/you/workspace/dash");
     expect(profiles[1]?.cwd).toBe("/home/you/workspace/keyconf.gen");
     expect(profiles[2]?.name).toBe("Hermes");
-    expect(profiles[2]?.role).toBe("0 · groot");
+    expect(profiles[2]?.role).toBe("0 · host-b");
   });
 
   test("profileFromAgent labels the host and copies cwd", () => {
-    const profile = profileFromAgent(mbp, mbp.agents[0]!);
+    const profile = profileFromAgent(hostA, hostA.agents[0]!);
     expect(profile).toMatchObject({
-      id: "mbp:omp:dash",
+      id: "host-a:omp:dash",
       harness: "omp",
       name: "OMP 1",
-      role: "mbp",
+      role: "host-a",
       online: true,
       cwd: "/home/you/workspace/dash",
     });
@@ -101,7 +101,7 @@ describe("profilesFromHosts", () => {
   });
 
   test("profileFromAgent uses the chat harness, not a2a", () => {
-    const profile = profileFromAgent(mbp, {
+    const profile = profileFromAgent(hostA, {
       id: "a2a:hermes",
       name: "Hermes",
       kind: "a2a",

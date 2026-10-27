@@ -67,7 +67,7 @@ Typography: system sans. Display 22/700. Heading 17/600. Body 16/24. Small 13/18
 8. `settings` — grouped rows
 9. `voice` — orb + “Say something…”
 
-Sample content: OMP / Grok / Codex / Hermes, “fix the auth bug in login.ts”, host `mbp`, address `100.64.0.1:4747`.
+Sample content: OMP / Grok / Codex / Hermes, “fix the auth bug in login.ts”, host `host-a`, address `100.64.0.1:4747`.
 
 ## Non-goals
 

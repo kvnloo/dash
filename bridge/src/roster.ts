@@ -164,12 +164,18 @@ function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster
   };
 }
 
-function isGroot(id: string, hostname: string): boolean {
-  return id === "0" || hostname.toLowerCase() === "groot";
+/**
+ * The Hermes mesh node is MagicDNS label "0". A deployment whose node has a
+ * different label can name its hostname via DASH_HERMES_HOSTNAME.
+ */
+function isHermesNode(id: string, hostname: string): boolean {
+  if (id === "0") return true;
+  const named = process.env.DASH_HERMES_HOSTNAME?.trim().toLowerCase();
+  return !!named && hostname.toLowerCase() === named;
 }
 
 function peerAgents(id: string, hostname: string): AgentInfo[] {
-  if (isGroot(id, hostname)) {
+  if (isHermesNode(id, hostname)) {
     return [{ id: "hermes", name: "Hermes", kind: "hermes", status: "running", detail: "Mesh node" }];
   }
   return [];

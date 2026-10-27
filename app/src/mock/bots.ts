@@ -52,9 +52,9 @@ export const DEMO_BOT_PROFILES: BotProfile[] = [
     online: true,
   },
   {
-    id: "hermes-groot",
+    id: "hermes-host-b",
     harness: "hermes",
-    name: "groot",
+    name: "host-b",
     role: "Mesh peer · node 0",
     description: "Chiefstaff mesh — Zero context and Hermes desktop",
     online: true,

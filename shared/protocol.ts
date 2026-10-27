@@ -21,7 +21,7 @@ export interface AgentInfo {
   cwd?: string;
 }
 
-/** A machine on the tailnet (this laptop, groot/0, …). */
+/** A machine on the tailnet (this laptop, host-b/0, …). */
 export interface HostInfo {
   id: string;
   name: string;

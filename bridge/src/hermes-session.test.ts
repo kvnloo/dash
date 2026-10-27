@@ -94,7 +94,7 @@ describe("hermes gateway request builder", () => {
     expect(gatewayOrigin({ A2A_HOST: "100.64.0.1", A2A_PORT: "9900" })).toBe("http://100.64.0.1:9900");
     expect(agentCardUrl("http://100.64.0.1:9900")).toBe("http://100.64.0.1:9900/.well-known/agent.json");
     expect(a2aBearerToken({ A2A_MBP_TOKEN: "from-env" })).toBe("from-env");
-    expect(a2aBearerToken({ A2A_PEER_TOKENS: "dash:peer-one,groot:peer-two" })).toBe("peer-one");
+    expect(a2aBearerToken({ A2A_PEER_TOKENS: "dash:peer-one,host-b:peer-two" })).toBe("peer-one");
     expect(a2aBearerToken({})).toBeUndefined();
   });
 

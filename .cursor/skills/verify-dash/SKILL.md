@@ -52,7 +52,7 @@ bun scripts/verify-dash/control-dash.ts test       # bun test app/src bridge/src
 bun scripts/verify-dash/control-dash.ts mutate    # bun scripts/mutate.ts (score ≥ 80)
 ```
 
-Phone reload after app changes: Expo Go shake → **Reload**. Pair computer field is the laptop Tailscale IPv4, not MagicDNS `mbp`.
+Phone reload after app changes: Expo Go shake → **Reload**. Pair computer field is the laptop Tailscale IPv4, not MagicDNS `host-a`.
 
 The Main and Chat input docks are `KeyboardDock` (`KeyboardStickyView`). On the S25, focusing the bar must lift it with the IME. A screenshot with the keyboard covering "Message Dash" is a fail.
 

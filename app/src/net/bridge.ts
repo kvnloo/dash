@@ -50,7 +50,7 @@ class Bridge {
       const hosts = store.get().connection.hosts;
       setConnection({
         status: "online",
-        host: "debug-mbp",
+        host: "debug-host-a",
         cwd: settings.cwd ?? "~/workspace/dash",
         error: undefined,
         harnesses:

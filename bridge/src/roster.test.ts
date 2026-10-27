@@ -13,15 +13,15 @@ import {
 
 const status = {
   Self: {
-    HostName: "mbp",
-    DNSName: "mbp.example.ts.net.",
+    HostName: "host-a",
+    DNSName: "host-a.example.ts.net.",
     Online: true,
     OS: "linux",
     TailscaleIPs: ["100.64.0.1"],
   },
   Peer: {
     a: {
-      HostName: "groot",
+      HostName: "host-b",
       DNSName: "0.example.ts.net.",
       Online: true,
       OS: "linux",
@@ -45,13 +45,13 @@ const status = {
 };
 
 describe("roster", () => {
-  test("dns label prefers MagicDNS 0 over hostname groot", () => {
-    expect(dnsLabel("0.example.ts.net.", "groot")).toBe("0");
+  test("dns label prefers MagicDNS 0 over hostname host-b", () => {
+    expect(dnsLabel("0.example.ts.net.", "host-b")).toBe("0");
     expect(isPhoneOs("android")).toBe(true);
     expect(isPhoneOs("linux")).toBe(false);
   });
 
-  test("lists mbp, 0, cursor and skips the phone", () => {
+  test("lists host-a, 0, cursor and skips the phone", () => {
     const nodes = parseTailscaleStatus(status);
     const hosts = assembleRoster({
       nodes,
@@ -64,23 +64,23 @@ describe("roster", () => {
         { id: "codex", name: "Codex", available: true },
         { id: "claude", name: "Claude Code", available: false },
       ],
-      selfFallback: { hostname: "mbp", address: "100.64.0.1" },
+      selfFallback: { hostname: "host-a", address: "100.64.0.1" },
     });
-    expect(hosts.map((h) => h.id)).toEqual(["mbp", "0", "cursor"]);
-    expect(hosts.find((h) => h.id === "0")?.hostname).toBe("groot");
+    expect(hosts.map((h) => h.id)).toEqual(["host-a", "0", "cursor"]);
+    expect(hosts.find((h) => h.id === "0")?.hostname).toBe("host-b");
     expect(hosts.find((h) => h.id === "0")?.online).toBe(true);
     expect(hosts.find((h) => h.id === "0")?.agents.map((a) => a.name)).toEqual(["Hermes"]);
     expect(hosts.find((h) => h.id === "cursor")?.agents).toEqual([]);
-    const mbp = hosts[0]!;
-    expect(mbp.self).toBe(true);
-    expect(mbp.agents.filter((a) => a.kind === "omp").map((a) => a.detail)).toEqual([
+    const hostA = hosts[0]!;
+    expect(hostA.self).toBe(true);
+    expect(hostA.agents.filter((a) => a.kind === "omp").map((a) => a.detail)).toEqual([
       "/home/you/workspace/dash",
       "/home/you/workspace/keyconf.gen",
     ]);
-    expect(mbp.agents.some((a) => a.id === "harness:omp")).toBe(false);
-    expect(mbp.agents.find((a) => a.kind === "codex")?.status).toBe("available");
-    expect(mbp.agents.find((a) => a.kind === "claude")?.status).toBe("offline");
-    expect(mbp.agents.filter((a) => a.id.startsWith("a2a:") || a.id === "grok-bot")).toEqual([]);
+    expect(hostA.agents.some((a) => a.id === "harness:omp")).toBe(false);
+    expect(hostA.agents.find((a) => a.kind === "codex")?.status).toBe("available");
+    expect(hostA.agents.find((a) => a.kind === "claude")?.status).toBe("offline");
+    expect(hostA.agents.filter((a) => a.id.startsWith("a2a:") || a.id === "grok-bot")).toEqual([]);
   });
 
   test("falls back to installed OMP when no tabs are live", () => {
@@ -88,7 +88,7 @@ describe("roster", () => {
       nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
       ompTabs: [],
       harnesses: [{ id: "omp", name: "OMP", available: true }],
-      selfFallback: { hostname: "mbp" },
+      selfFallback: { hostname: "host-a" },
     });
     expect(hosts[0]!.agents).toEqual([
       { id: "harness:omp", name: "OMP", kind: "omp", status: "available", detail: "Installed" },
@@ -100,7 +100,7 @@ describe("roster", () => {
       nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
       ompTabs: [],
       harnesses: [{ id: "hermes", name: "Hermes", available: true }],
-      selfFallback: { hostname: "mbp", address: "100.64.0.1" },
+      selfFallback: { hostname: "host-a", address: "100.64.0.1" },
       signals: {
         hermesProfiles: [
           { id: "default", gateway: "running" },
@@ -131,7 +131,7 @@ describe("roster", () => {
       nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
       ompTabs: [] as const,
       harnesses: [] as { id: string; name: string; available: boolean }[],
-      selfFallback: { hostname: "mbp", address: "100.64.0.1" },
+      selfFallback: { hostname: "host-a", address: "100.64.0.1" },
       signals: {
         hermesProfiles: [{ id: "default", gateway: "running" as const }],
       },
@@ -154,7 +154,7 @@ describe("roster", () => {
       nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
       ompTabs: [],
       harnesses: [{ id: "grok", name: "Grok", available: true }],
-      selfFallback: { hostname: "mbp" },
+      selfFallback: { hostname: "host-a" },
       signals: {
         grokBot: true,
         hermesProfiles: [{ id: "connect-all", gateway: "stopped" }],
@@ -164,7 +164,7 @@ describe("roster", () => {
       nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
       ompTabs: [],
       harnesses: [{ id: "grok", name: "Grok", available: true }],
-      selfFallback: { hostname: "mbp" },
+      selfFallback: { hostname: "host-a" },
       signals: {
         grokBot: false,
         hermesProfiles: [{ id: "connect-all", gateway: "running" }],
@@ -189,7 +189,7 @@ describe("roster", () => {
       nodes,
       ompTabs: [],
       harnesses: [],
-      selfFallback: { hostname: "mbp" },
+      selfFallback: { hostname: "host-a" },
     });
     expect(hosts.find((h) => h.id === "cursor")?.agents).toEqual([]);
     expect(hosts.find((h) => h.id === "0")?.agents).toEqual([

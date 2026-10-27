@@ -658,10 +658,10 @@
           "cornerRadius": 22
         },
         {
-          "id": "p-mbp",
+          "id": "p-host-a",
           "type": "text",
-          "name": "p-mbp",
-          "content": "mbp",
+          "name": "p-host-a",
+          "content": "host-a",
           "fontSize": 15,
           "fontWeight": 400,
           "fill": "$color.text"
@@ -754,7 +754,7 @@
           "id": "s-conn",
           "type": "text",
           "name": "s-conn",
-          "content": "Connected to mbp",
+          "content": "Connected to host-a",
           "fontSize": 13,
           "fontWeight": 400,
           "fill": "$color.muted"

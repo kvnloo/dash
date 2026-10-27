@@ -24,7 +24,7 @@ export const DEMO_ORCHESTRAS: OrchestraProject[] = [
   {
     id: "orch-mesh",
     name: "Hermes mesh",
-    subtitle: "groot · chiefstaff node 0",
+    subtitle: "host-b · chiefstaff node 0",
     agents: ["hermes", "grok"],
     chatIds: [],
     status: "idle",
