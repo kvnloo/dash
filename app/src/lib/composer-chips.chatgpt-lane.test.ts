@@ -30,7 +30,7 @@ describe("modelChipLabel", () => {
     const result = modelChipLabel(full);
     expect(result).toEqual({ short: full.slice(0, 9) + "…" + full.slice(-8), full });
     expect(result?.short.length).toBe(18);
-    expect(result?.short.endsWith("sion-12.7")).toBe(false);
+    expect(result?.short.endsWith("ion-12.7")).toBe(true);
   });
 
   test("does not truncate an 18-character label", () => {
