@@ -1,5 +1,7 @@
 # Dash: notes for agents and contributors
 
+**Testing Dash (every agent and harness):** test only via `.claude/skills/verify-dash/SKILL.md`, the e2e tester army (`e2e/mbp-army`). Never native_journeys, ad-hoc scripts, unit tests or the owner's phone as proof, and never call a feature working unless an army spec drove it. This overrides the Verification pyramid and `.cursor/skills/verify-dash` below.
+
 Dash is a phone app (Expo, Android + iOS) that chats with free-tier models in
 parallel and with the coding agents on your own computer over Tailscale.
 
