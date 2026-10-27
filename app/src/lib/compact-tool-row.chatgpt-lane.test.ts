@@ -101,6 +101,17 @@ describe("compact tool call row (DASH-15)", () => {
     expect(row.accessibilityLabel.includes("\n")).toBe(false);
   });
 
+  test("compact projection never reads retained tool output to render a collapsed row or group", () => {
+    const sample = tool("read_file", { path: "src/secret.ts" });
+    Object.defineProperty(sample, "output", {
+      configurable: true,
+      get: () => { throw new Error("retained output unexpectedly read"); },
+    });
+    expect(() => compactToolRow(sample)).not.toThrow();
+    expect(() => compactGroup([sample, sample])).not.toThrow();
+    expect(compactToolRow(sample).target).toBe("src/secret.ts:1");
+  });
+
   test("redacts secrets before shortening; neither target nor accessible label leaks them", () => {
     const secret = "sk-abcdefghijklmnop";
     const bearer = "Bearer " + secret;
