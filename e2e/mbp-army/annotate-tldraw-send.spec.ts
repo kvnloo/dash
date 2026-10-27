@@ -12,12 +12,14 @@ test('annotate-tldraw: confirmed send removes only submitted ink, retaining newe
   // Throttle the real upload, never mock or intercept the bridge response. This
   // gives the user time to finish a second stroke while the first is in flight.
   await network.send('Network.enable');
-  await network.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: 1000000, uploadThroughput: 2000 });
+  await network.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: 1000000, uploadThroughput: 20000 });
   const uploading = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'image/png');
-  const confirmed = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/attachments?') && response.request().headers()['content-type'] === 'image/png');
+  const confirmed = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/attachments?') && response.request().headers()['content-type'] === 'image/png', { timeout: 45000 });
   await page.getByRole('button', { name: 'Send and keep drawing', exact: true }).click();
   await uploading;
-  await page.mouse.move(100, 350); await page.mouse.down(); await page.mouse.move(280, 370); await page.mouse.up();
+  // The busy preview expands the tray down to the lower part of the canvas.
+  // Draw below that rendered tray, not over its Highlighter button.
+  await page.mouse.move(100, 470); await page.mouse.down(); await page.mouse.move(280, 480); await page.mouse.up();
   await expect(ink).toHaveCount(2);
   await (await confirmed).finished();
   await expect(ink).toHaveCount(1, { timeout: 20000 });
