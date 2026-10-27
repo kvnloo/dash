@@ -30,7 +30,11 @@ REPO="$H/repo.git"
 TABLE="$H/channels.tsv"
 UNIT="${DASH_CHANNEL_METRO_UNIT:-dash-channel-metro.service}"
 SYSTEMCTL="${DASH_CHANNEL_SYSTEMCTL:-systemctl --user}"
-INSTALL_CMD="${DASH_CHANNEL_INSTALL_CMD:-$HOME/.bun/bin/bun install --frozen-lockfile}"
+# Pinned bun (same as turbo CI). main/dev/nightly bun.lock is lockfileVersion 2, which
+# the host bun 1.3.x cannot parse ("Unknown lockfile version"); 1.4.x reads v1 and v2.
+BUN_VERSION="${DASH_CHANNEL_BUN_VERSION:-1.4.3}"
+BUN="${DASH_CHANNEL_BUN:-$H/toolchain/bun-$BUN_VERSION/bun}"
+INSTALL_CMD="${DASH_CHANNEL_INSTALL_CMD:-$BUN install --frozen-lockfile}"
 HEALTH_TIMEOUT="${DASH_CHANNEL_HEALTH_TIMEOUT:-420}"
 ADB="${DASH_CHANNEL_ADB:-adb}"
 APP_SCHEME="${DASH_CHANNEL_APP_SCHEME:-dash}"
