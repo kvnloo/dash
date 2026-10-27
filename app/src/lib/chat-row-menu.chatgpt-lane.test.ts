@@ -105,18 +105,21 @@ describe("chat row long-press options", () => {
   });
 
   test("delete confirmation copy stays identical to existing chatRowActions.remove", () => {
-    let captured: { title: string; message: string; action: string } | null = null;
+    const captured: { title: string; message: string; action: string }[] = [];
     let deleted = false;
     chatRowActions({
       select: () => {},
       setActive: () => {},
       navigate: () => {},
-      confirm: (title, message, action) => { captured = { title, message, action }; },
+      confirm: (title, message, action) => { captured.push({ title, message, action }); },
       remove: () => { deleted = true; },
     }).remove(row.id);
 
     const options = chatRowMenu(row, { feedbackOn: true, canOpenWindow: true });
-    expect(options.find(option => option.id === "delete-local")?.confirm).toEqual(captured);
+    // Capture callback output in a collection: TypeScript cannot track an
+    // assignment to a nullable local performed inside the injected callback.
+    expect(captured).toHaveLength(1);
+    expect([options.find(option => option.id === "delete-local")?.confirm]).toEqual(captured);
     expect(deleted).toBe(false);
   });
 });
