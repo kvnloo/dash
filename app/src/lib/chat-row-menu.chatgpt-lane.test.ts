@@ -7,7 +7,6 @@ const row = {
   title: "Repair pairing",
   live: true,
   hasSession: true,
-  pinned: false,
 };
 
 describe("chat row long-press options", () => {
@@ -54,12 +53,12 @@ describe("chat row long-press options", () => {
   test("option order and visibility follow capabilities and session presence, not live or pinned", () => {
     let combinations = 0;
     for (const live of [false, true]) {
-      for (const pinned of [undefined, false, true]) {
+      for (const pin of [{}, { pinned: false }, { pinned: true }]) {
         for (const hasSession of [false, true]) {
           for (const feedbackOn of [false, true]) {
             for (const canOpenWindow of [false, true]) {
               const options = chatRowMenu(
-                { ...row, live, pinned, hasSession },
+                { ...row, ...pin, live, hasSession },
                 { feedbackOn, canOpenWindow },
               );
               const ids: RowMenuOptionId[] = ["open"];
@@ -85,7 +84,7 @@ describe("chat row long-press options", () => {
 
   test("omits unavailable capabilities but keeps open and delete even for ended unpinned chats", () => {
     expect(chatRowMenu(
-      { ...row, title: " ", live: false, pinned: undefined, hasSession: false },
+      { ...row, title: " ", live: false, hasSession: false },
       { feedbackOn: false, canOpenWindow: false },
     )).toEqual([
       {
@@ -125,16 +124,15 @@ describe("chat row long-press options", () => {
 describe("id-keyed chat row menu selection", () => {
   test("opens the exact conversation and survives reorder rather than following an index", () => {
     const selection = createRowSelection();
-    const chats = [
-      { id: "same-title-a", title: "Work" },
-      { id: "same-title-b", title: "Work" },
-      { id: "other", title: "Work" },
-    ];
+    const first = { id: "same-title-a", title: "Work" };
+    const second = { id: "same-title-b", title: "Work" };
+    const third = { id: "other", title: "Work" };
+    const chats = [first, second, third];
     expect(selection.current(chats)).toBeNull();
     selection.open("same-title-b");
     expect(selection.current(chats)).toBe("same-title-b");
-    expect(selection.current([chats[2]!, chats[0]!, chats[1]!])).toBe("same-title-b");
-    expect(selection.current([{ id: "new-at-same-index" }, chats[1]!])).toBe("same-title-b");
+    expect(selection.current([third, first, second])).toBe("same-title-b");
+    expect(selection.current([{ id: "new-at-same-index" }, second])).toBe("same-title-b");
     selection.close();
     expect(selection.current(chats)).toBeNull();
   });
