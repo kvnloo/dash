@@ -1,12 +1,14 @@
 import Constants, { ExecutionEnvironment } from "expo-constants";
-// Namespace import: names resolve at call time, so a test runner that links the real
-// react-native entry (no static PermissionsAndroid export) cannot fail at module link.
+// Namespace import: names resolve at call time, so linking never needs a static PermissionsAndroid export.
 import * as ReactNative from "react-native";
 import type { VoicePeer } from "./continuous-voice";
 
 /** Native media only. Import lazily after rejecting Expo Go, which has no WebRTC module. */
-export async function createVoicePeer(event: (raw: string) => void, ready: () => void, lost: () => void): Promise<VoicePeer> {
-  const { PermissionsAndroid, Platform } = ReactNative;
+/** The react-native surface this module needs; tests pass their own (bun module mocks are process-wide). */
+export type VoicePeerHost = Pick<typeof ReactNative, "PermissionsAndroid" | "Platform">;
+
+export async function createVoicePeer(event: (raw: string) => void, ready: () => void, lost: () => void, host: VoicePeerHost = ReactNative): Promise<VoicePeer> {
+  const { PermissionsAndroid, Platform } = host;
   if (Platform.OS !== "android" || Constants.executionEnvironment === ExecutionEnvironment.StoreClient) throw new Error("Native continuous voice is unavailable in Expo Go. Install the reviewed native Dash APK.");
   const permission = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
   if (permission !== PermissionsAndroid.RESULTS.GRANTED) throw new Error("Microphone permission denied.");
