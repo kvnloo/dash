@@ -10,7 +10,7 @@ import { screenBack } from "../lib/screen-back";
 
 import type { ScreenProps } from "../navigation";
 import type { OrbState } from "../lib/orb-phase";
-import { colors, radius, space, type } from "../theme";
+import { colors, radius, space, type, surfaces } from "../theme";
 
 
 /** Live conversation mode: the hero orb follows a live z0live call, else the chat's live phase. */
@@ -64,7 +64,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: surfaces.scene },
   content: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: space.xl, gap: space.md },
   title: { ...type.title, color: colors.text },
   caption: { ...type.body, color: colors.textMuted, textAlign: "center", minHeight: 22 },

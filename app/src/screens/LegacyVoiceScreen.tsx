@@ -17,7 +17,7 @@ import { addSegment, registerSink } from "../store/annotate";
 import { canSteer } from "../lib/composer-mode";
 import { beginTurn, createConversation, store } from "../store/app";
 import { replyText } from "../store/text";
-import { colors, radius, space, type } from "../theme";
+import { colors, radius, space, type, surfaces } from "../theme";
 import { screenBack } from "../lib/screen-back";
 
 const ORB = 190;
@@ -245,7 +245,7 @@ export function LegacyVoiceScreen({ navigation, onExit }: Props): React.JSX.Elem
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: surfaces.scene },
   stage: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: space.xl },
   halo: {
     position: "absolute",

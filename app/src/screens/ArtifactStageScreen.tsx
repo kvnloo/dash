@@ -6,7 +6,7 @@ import { sandboxHTML } from "../lib/genui";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { forDash, isStageUrl, stageLabel } from "../lib/stage-link";
 import type { ScreenProps } from "../navigation";
-import { colors, space, type } from "../theme";
+import { colors, space, type, surfaces } from "../theme";
 import { toMain } from "../lib/main-nav";
 
 /** One ephemeral artifact review, opened from a chat reply or an approval item. */
@@ -30,7 +30,7 @@ export function ArtifactStageScreen({ navigation, route }: ScreenProps<"Artifact
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+  root: { flex: 1, backgroundColor: surfaces.scene },
   stage: { flex: 1 },
   note: { ...type.body, color: colors.textMuted, padding: space.lg },
 });

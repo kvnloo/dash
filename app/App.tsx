@@ -38,7 +38,9 @@ import { debugNavigationRef, flushPendingDebugNavigation } from "./src/debug/nav
 import { clearDebugPersistence, applyDebugSeed } from "./src/debug/seed";
 import { applyDemoSeed } from "./src/mock/seed";
 import { hydrate, store } from "./src/store/app";
-import { colors } from "./src/theme";
+import { colors, glassBuild, surfaces } from "./src/theme";
+import { GlassWindow } from "./src/components/GlassWindow";
+import { useGlassScene } from "./src/store/glass";
 import { NativeEvents } from "./src/components/NativeEvents";
 import { ContinuousVoiceRoot } from "./src/components/ContinuousVoiceRoot";
 import { flushNotificationTarget, handleChatLink } from "./src/lib/notification-routing";
@@ -47,7 +49,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const theme: Theme = {
   ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bg, text: colors.text, border: colors.border },
+  colors: { ...DarkTheme.colors, background: surfaces.scene, card: colors.bg, text: colors.text, border: colors.border },
 };
 
 const linking = {
@@ -90,6 +92,9 @@ export default function App() {
   if (fontError) throw fontError;
   const hydrated = store.use((s) => s.hydrated);
   const hasSettings = store.use((s) => s.settings !== null);
+  // Glass build: the live tint over the wallpaper. Classic: colors.bg, as before.
+  const scene = useGlassScene();
+  const rootBg = glassBuild ? { backgroundColor: scene.root } : null;
 
   useEffect(() => {
     void hydrate().then(async () => {
@@ -117,10 +122,10 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  if (!hydrated || !fontsLoaded) return <View style={styles.splash} />;
+  if (!hydrated || !fontsLoaded) return <View style={[styles.splash, rootBg]} />;
 
   return (
-    <GestureHandlerRootView style={styles.root}><DensityProvider><OrbMotionProvider><TileGestureProvider><TileDetailProvider>
+    <GestureHandlerRootView style={[styles.root, rootBg]}><GlassWindow /><DensityProvider><OrbMotionProvider><TileGestureProvider><TileDetailProvider>
       {Platform.OS === "web" ? <style>{"input:focus,textarea:focus{outline:none!important}"}</style> : null}
       <SafeAreaProvider>
         <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
@@ -165,7 +170,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  splash: { flex: 1, backgroundColor: colors.bg },
+  splash: { flex: 1, backgroundColor: surfaces.scene },
   clear: { flex: 1, backgroundColor: "transparent" },
 });
 

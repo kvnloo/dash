@@ -60,3 +60,11 @@ export const type = {
   label: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, fontWeight: "600" as const, letterSpacing: .4 },
   mono: { fontFamily: fonts.mono, fontSize: 12, lineHeight: 16, fontWeight: "400" as const },
 } as const;
+/** DASH_GLASS build: app.config.js sets EXPO_PUBLIC_DASH_GLASS=1, inlined by Metro. False in the classic build. */
+export const glassBuild = process.env.EXPO_PUBLIC_DASH_GLASS === "1";
+/**
+ * Full-screen scene backgrounds. Classic build: the same opaque bg as before. Glass build: the
+ * scene is transparent and the root view paints the live tint (src/store/glass.ts), so Classic
+ * mode inside the glass build still looks opaque. See docs/design/GLASS-THEME.md.
+ */
+export const surfaces = { scene: glassBuild ? "transparent" : palette.bg } as const;

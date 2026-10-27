@@ -22,8 +22,28 @@ function withAppVariant(config) {
   return { ...config, name: "Dash E2E", scheme: "dash-e2e", android: { ...config.android, package: E2E_PACKAGE } };
 }
 
+// DASH_GLASS=1: Dash Glass, a side-by-side variant whose window shows the Android wallpaper
+// behind a native glass layer (docs/design/GLASS-THEME.md). Own applicationId and scheme.
+const GLASS_PACKAGE = "app.dash.mobile.glass";
+
+function withGlass(config) {
+  if (process.env.DASH_GLASS !== "1") return config;
+  // Metro inlines EXPO_PUBLIC_* at transform time; set it for any bundler started from this process.
+  process.env.EXPO_PUBLIC_DASH_GLASS = "1";
+  return {
+    ...config,
+    name: "Dash Glass",
+    scheme: "dash-glass",
+    backgroundColor: "#00000000",
+    ios: { ...config.ios, bundleIdentifier: GLASS_PACKAGE },
+    android: { ...config.android, package: GLASS_PACKAGE },
+    extra: { ...config.extra, dashGlass: true },
+    plugins: [...(config.plugins ?? []), ["./plugins/withGlassWindow", { translucent: false }]],
+  };
+}
+
 module.exports = ({ config: base }) => {
-  const config = withAppVariant(base);
+  const config = withGlass(withAppVariant(base));
   if (process.env.DASH_VARIANT !== "release") return config;
   const plugins = (config.plugins ?? []).filter((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) !== "expo-dev-client");
   return withCleartextTraffic({ ...config, plugins });

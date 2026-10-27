@@ -12,7 +12,7 @@ import { KeyboardDock } from "../components/KeyboardDock";
 import { bridge } from "../net/bridge";
 import { store } from "../store/app";
 import { actionable, approvals, bulkEligible, itemTitle } from "../store/approvals";
-import { colors, fonts, radius, space, type } from "../theme";
+import { colors, fonts, radius, space, type, surfaces } from "../theme";
 import { StageLinks } from "../components/artifact-stage/StageLinks";
 import { isStageUrl } from "../lib/stage-link";
 
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
   metric: { flex: 1, gap: 2, paddingHorizontal: space.md }, metricBorder: { borderLeftWidth: 1, borderColor: colors.hair },
   // Sans tabular numerals: Cormorant's old-style "1" reads as the letter I beside a label.
   metricLabel: { ...type.label, color: colors.textMuted }, metricNumber: { fontFamily: fonts.semibold, fontSize: 30, lineHeight: 36, fontWeight: "600", fontVariant: ["tabular-nums"], color: colors.text }, metricNote: { ...type.mono, color: colors.textTertiary, fontSize: 10 },
-  screen: { flex: 1, backgroundColor: colors.bg }, header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.md, gap: space.sm },
+  screen: { flex: 1, backgroundColor: surfaces.scene }, header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.md, gap: space.sm },
   title: { color: colors.text, ...type.title, flexShrink: 1 }, heading: { color: colors.ink, ...type.cardTitle, flexShrink: 1 }, itemTitle: { color: colors.text, ...type.cardTitle },
   mode: { color: colors.ink2, ...type.small, paddingHorizontal: space.lg, paddingTop: space.sm }, subtitle: { color: colors.textMuted, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.xs },
   content: { padding: space.lg, gap: space.lg }, group: { gap: space.md }, groupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },

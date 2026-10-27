@@ -9,8 +9,9 @@ import xml.etree.ElementTree as ET
 manifest = ET.parse(sys.argv[1]).getroot()
 android = "{http://schemas.android.com/apk/res/android}"
 e2e = os.environ.get("DASH_APP_VARIANT") == "e2e"
-package = "app.dash.mobile.e2e" if e2e else "app.dash.mobile"
-scheme = "dash-e2e" if e2e else "dash"
+glass = os.environ.get("DASH_GLASS") == "1"
+package = "app.dash.mobile.glass" if glass else "app.dash.mobile.e2e" if e2e else "app.dash.mobile"
+scheme = "dash-glass" if glass else "dash-e2e" if e2e else "dash"
 assert manifest.attrib["package"] == package, manifest.attrib["package"]
 permissions = {node.attrib.get(android + "name") for node in manifest.findall("uses-permission")}
 assert "android.permission.POST_NOTIFICATIONS" in permissions
