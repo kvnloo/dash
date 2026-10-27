@@ -56,6 +56,44 @@ describe("DASH-15: tappable Markdown link targets", () => {
     expect(classifyLink("dash://trace")).toEqual({ kind: "app-route", route: "Trace" });
   });
 
+  test("blocks prefixed Expo route markers rather than treating them as files", () => {
+    for (const href of ["/foo/--/trace", "/foo/--/nope", "/foo/--/trace/other", "/foo/--/trace.ts"]) {
+      expect(classifyLink(href)).toEqual({ kind: "blocked", reason: "Unknown app route" });
+    }
+    expect(classifyLink("/--/trace")).toEqual({ kind: "app-route", route: "Trace" });
+    expect(classifyLink("mailto:user@example.com?body=/--/trace")).toEqual({
+      kind: "mailto", url: "mailto:user@example.com?body=/--/trace",
+    });
+    expect(classifyLink("file:///foo/--/trace.ts")).toEqual({
+      kind: "file", path: "/foo/--/trace.ts",
+    });
+  });
+
+  test("allows every printable ASCII character in local file names", () => {
+    for (let code = 0x20; code <= 0x7e; code++) {
+      const path = "/src/A" + String.fromCharCode(code) + "Z.ts";
+      expect(classifyLink(path)).toEqual({ kind: "file", path });
+    }
+    expect(classifyLink("MAILTO:AZaz09+tag@example.com?subject=Hello_World")).toEqual({
+      kind: "mailto", url: "MAILTO:AZaz09+tag@example.com?subject=Hello_World",
+    });
+  });
+
+  test("rejects every embedded C0 control and DEL, including decoded file paths", () => {
+    const codes = Array.from({ length: 32 }, (_, code) => code).concat(0x7f);
+    for (const code of codes) {
+      const control = String.fromCharCode(code);
+      for (const href of [
+        "/src/A" + control + "Z.ts", "./A" + control + "Z.ts",
+        "https://example.com/A" + control + "Z", "mailto:A" + control + "Z@example.com",
+        "dash://tra" + control + "ce",
+        "file:///src/A%" + code.toString(16).padStart(2, "0") + "Z.ts",
+      ]) {
+        expect(classifyLink(href).kind).toBe("blocked");
+      }
+    }
+  });
+
   test("blocks unsafe schemes in any case", () => {
     for (const href of [
       "javascript:alert(1)", "JaVaScRiPt:alert(1)", "data:text/html,abc",

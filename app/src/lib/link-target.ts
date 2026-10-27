@@ -8,7 +8,8 @@ export type LinkTarget =
   | { kind: "file"; path: string; line?: number; column?: number }
   | { kind: "blocked"; reason: string };
 
-const CONTROL = /[\u0000-\u001f\u007f]/;
+// C0 controls and DEL only; printable ASCII must remain valid in paths and URLs.
+const CONTROL = /[\x00-\x1f\x7f]/;
 const APP_SCHEME = /^(?:dash|exp\+dash):/i;
 const APP_URL = /^(?:dash|exp\+dash):\/\/[a-z]+\/?(?:[?#].*)?$/i;
 const APP_PATH = /^\/--\/[a-z]+\/?(?:[?#].*)?$/i;
@@ -65,7 +66,9 @@ export function classifyLink(href: string): LinkTarget {
     }
   }
 
-  if (APP_SCHEME.test(value) || value.startsWith("/--/")) {
+  // Reserve Expo's route marker even in malformed/prefixed links: never open
+  // an attempted app route as a local file just because it starts with '/'.
+  if (APP_SCHEME.test(value) || (value.startsWith("/") && value.includes("/--/"))) {
     if (!APP_URL.test(value) && !APP_PATH.test(value)) return blocked("Unknown app route");
     const route = parseAppRouteLink(value);
     return route ? { kind: "app-route", route } : blocked("Unknown app route");
