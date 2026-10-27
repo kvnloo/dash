@@ -179,8 +179,9 @@ test.describe('ephemeral ACP regression',()=>{
   await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
   // A fixed 5.5 s sleep missed the real 10 s roster poll and could false-green.
   // Observe an actual authenticated response, then let its React update paint.
+  // 304 counts: builds with the If-None-Match roster poll get Not Modified once hosts are current.
   await page.bringToFront();
-  const roster=await page.waitForResponse(response=>response.url().startsWith(`http://127.0.0.1:${bridge.port}/roster`)&&response.status()===200,{timeout:45000});
+  const roster=await page.waitForResponse(response=>response.url().startsWith(`http://127.0.0.1:${bridge.port}/roster`)&&[200,304].includes(response.status()),{timeout:45000});
   await roster.finished();
   await page.waitForTimeout(500);
   await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
