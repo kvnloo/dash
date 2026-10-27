@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
-import Animated, { ReduceMotion, runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { ReduceMotion, cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { haptic } from "../haptics";
 import { useHandedness } from "../lib/useHandedness";
 import { isRadialActionCountValid, radialCenter, radialPosition, radialSector } from "../lib/tile-layout";
@@ -48,32 +48,47 @@ export function useTileGestures({ onOpen, onPrimary, onSecondary, actions }: Til
   const { x, y, selected, bloom, show, hide } = wheel;
   const actionCount = actions.length;
   const valid = isRadialActionCountValid(actionCount);
-  const showActions = () => show(actions);
-  const commit = (index: number) => { hide(); if (index >= 0 && actions[index]) { haptic.success(); actions[index].run(); } };
+  // Callbacks change every parent render; the gesture reads the latest ones through a ref,
+  // so the Gesture objects (and their native handlers/worklets) are built once per layout input.
+  const latest = useRef({ onOpen, onPrimary, onSecondary, actions });
+  latest.current = { onOpen, onPrimary, onSecondary, actions };
+  const runOpen = useCallback(() => latest.current.onOpen(), []);
+  const runPrimary = useCallback(() => latest.current.onPrimary(), []);
+  const runSecondary = useCallback(() => latest.current.onSecondary(), []);
+  const showActions = useCallback(() => show(latest.current.actions), [show]);
+  const commit = useCallback((index: number) => {
+    hide();
+    const action = latest.current.actions[index];
+    if (index >= 0 && action) { haptic.success(); action.run(); }
+  }, [hide]);
   const armed = useSharedValue(false);
   useEffect(() => () => { if (armed.value) { bloom.value = 0; hide(); } }, [armed, bloom, hide]);
-  const press = () => { "worklet"; scale.value = reduced ? 1 : withTiming(0.975, { ...pressMotion, reduceMotion: ReduceMotion.System }); };
-  const release = () => { "worklet"; scale.value = reduced ? 1 : withTiming(1, { ...pressMotion, reduceMotion: ReduceMotion.System }); tilt.value = withTiming(0, { ...fade, reduceMotion: ReduceMotion.System }); };
-  const tap = (count: number, action: () => void) => Gesture.Tap().numberOfTaps(count).maxDelay(180).maxDuration(220).maxDistance(10)
-    .onBegin(press).onEnd((_event, success) => { if (success) runOnJS(action)(); }).onFinalize(release);
-  const hold = Gesture.Pan().minPointers(1).maxPointers(1).activateAfterLongPress(350).enabled(valid)
-    .onBegin(press)
-    .onStart(event => {
-      const center = radialCenter(event.absoluteX, event.absoluteY, width, height);
-      armed.value = true;
-      start.value = { x: event.absoluteX, y: event.absoluteY };
-      x.value = center.x; y.value = center.y; selected.value = -1;
-      bloom.value = reduced ? 1 : withTiming(1, { ...SNAP, reduceMotion: ReduceMotion.System });
-      runOnJS(showActions)();
-    })
-    .onUpdate(event => {
-      const moved = Math.hypot(event.absoluteX - start.value.x, event.absoluteY - start.value.y) > 20;
-      selected.value = moved ? radialSector(event.absoluteX - x.value, event.absoluteY - y.value, actionCount, thumb.isLeft) : -1;
-      tilt.value = reduced ? 0 : Math.max(-3, Math.min(3, (event.absoluteX - x.value) / 28));
-    })
-    .onEnd((_event, success) => { if (success) runOnJS(commit)(selected.value); })
-    .onFinalize(() => { release(); if (armed.value) { armed.value = false; selected.value = -1; bloom.value = 0; runOnJS(hide)(); } });
-  const gesture = Gesture.Race(hold, Gesture.Exclusive(tap(3, onSecondary), tap(2, onPrimary), tap(1, onOpen)));
+  // Unmount mid-press (view switch, list recycle) must not leave a timing animation on a dead view.
+  useEffect(() => () => { cancelAnimation(scale); cancelAnimation(tilt); }, [scale, tilt]);
+  const gesture = useMemo(() => {
+    const press = () => { "worklet"; scale.value = reduced ? 1 : withTiming(0.975, { ...pressMotion, reduceMotion: ReduceMotion.System }); };
+    const release = () => { "worklet"; scale.value = reduced ? 1 : withTiming(1, { ...pressMotion, reduceMotion: ReduceMotion.System }); tilt.value = withTiming(0, { ...fade, reduceMotion: ReduceMotion.System }); };
+    const tap = (count: number, action: () => void) => Gesture.Tap().numberOfTaps(count).maxDelay(180).maxDuration(220).maxDistance(10)
+      .onBegin(press).onEnd((_event, success) => { if (success) runOnJS(action)(); }).onFinalize(release);
+    const hold = Gesture.Pan().minPointers(1).maxPointers(1).activateAfterLongPress(350).enabled(valid)
+      .onBegin(press)
+      .onStart(event => {
+        const center = radialCenter(event.absoluteX, event.absoluteY, width, height);
+        armed.value = true;
+        start.value = { x: event.absoluteX, y: event.absoluteY };
+        x.value = center.x; y.value = center.y; selected.value = -1;
+        bloom.value = reduced ? 1 : withTiming(1, { ...SNAP, reduceMotion: ReduceMotion.System });
+        runOnJS(showActions)();
+      })
+      .onUpdate(event => {
+        const moved = Math.hypot(event.absoluteX - start.value.x, event.absoluteY - start.value.y) > 20;
+        selected.value = moved ? radialSector(event.absoluteX - x.value, event.absoluteY - y.value, actionCount, thumb.isLeft) : -1;
+        tilt.value = reduced ? 0 : Math.max(-3, Math.min(3, (event.absoluteX - x.value) / 28));
+      })
+      .onEnd((_event, success) => { if (success) runOnJS(commit)(selected.value); })
+      .onFinalize(() => { release(); if (armed.value) { armed.value = false; selected.value = -1; bloom.value = 0; runOnJS(hide)(); } });
+    return Gesture.Race(hold, Gesture.Exclusive(tap(3, runSecondary), tap(2, runPrimary), tap(1, runOpen)));
+  }, [scale, tilt, start, armed, x, y, selected, bloom, reduced, valid, width, height, actionCount, thumb.isLeft, showActions, commit, hide, runOpen, runPrimary, runSecondary]);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }, { rotate: `${tilt.value}deg` }], shadowOpacity: (1 - scale.value) * 8, shadowRadius: 12 }));
   return { gesture, animatedStyle, holding: armed };
 }
