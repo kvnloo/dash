@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test, mock } from "bun:test";
+import { createElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
-  SHEET_HEADER_HEIGHT, SHEET_ROW_HEIGHT, selectAndClose, sheetA11y, sheetLayout,
+  SHEET_HEADER_HEIGHT, SHEET_ROW_HEIGHT, createSheetInteraction, selectAndClose, sheetA11y, sheetLayout,
   type BottomActionOption, type SheetSelection,
 } from "./bottom-action-sheet";
 
@@ -98,27 +98,110 @@ describe("bottom action sheet one-shot selection", () => {
   });
 });
 
-describe("bottom sheet native component wiring contract", () => {
-  const component = readFileSync(join(import.meta.dir, "../components/BottomActionSheet.tsx"), "utf8");
-
-  test("covers backdrop, Android Back, accessible close control and themed destructive rows", () => {
-    expect(component).toContain('onRequestClose={dismiss}');
-    expect(component).toContain('onPress={dismiss}');
-    expect(component).toContain('accessibilityLabel="Close actions"');
-    expect(component).toContain('accessibilityLabel={row.accessibilityLabel}');
-    expect(component).toContain('accessibilityHint={row.accessibilityHint}');
-    expect(component).toContain("row.destructive && styles.destructive");
-    expect(component).toContain("color: colors.danger");
-    expect(component).toContain("height: SHEET_ROW_HEIGHT");
+describe("bottom sheet interaction lifecycle", () => {
+  test("iOS retains the selecting chat callback after close clears the host context", () => {
+    const interaction = createSheetInteraction(true);
+    const events: string[] = [];
+    let selectedChat: string | null = "chat-a";
+    const chatAtSelection = selectedChat;
+    const onSelect = (id: string) => events.push(`${chatAtSelection}:${id}`);
+    const close = () => { selectedChat = null; events.push("closed"); };
+    interaction.choose("delete", actions, onSelect, close, true);
+    interaction.choose("open", actions, onSelect, close, true);
+    interaction.dismiss(close);
+    interaction.setOpen(false);
+    expect(selectedChat).toBeNull();
+    expect(events).toEqual(["closed"]);
+    interaction.didDismiss();
+    interaction.didDismiss();
+    expect(events).toEqual(["closed", "chat-a:delete"]);
   });
 
-  test("uses the tokenized slide and bypasses slide for reduced motion", () => {
-    expect(component).toContain('animationType="none"');
-    expect(component).toContain("Easing.bezier(...easing.sheet)");
-    expect(component).toContain("duration: timing.state");
-    expect(component).toContain("reducedMotion ? 0");
-    expect(component).toContain("selectAndClose(previous, id, options)");
-    expect(component).toContain("pendingIosSelection.current = id");
-    expect(component).toContain("onDismiss={flushPendingSelection}");
+  test("immediate selection closes even when its callback throws", () => {
+    const interaction = createSheetInteraction(true);
+    let closed = 0;
+    expect(() => interaction.choose("open", actions, () => { throw new Error("action failed"); },
+      () => { closed++; }, false)).toThrow("action failed");
+    interaction.dismiss(() => { closed++; });
+    expect(closed).toBe(1);
   });
+
+  test("dismissal never selects and reopening permits a fresh choice", () => {
+    const interaction = createSheetInteraction(true);
+    const events: string[] = [];
+    const close = () => events.push("closed");
+    const select = (id: string) => events.push(id);
+    interaction.choose("missing", actions, select, close, false);
+    interaction.dismiss(close);
+    interaction.dismiss(close);
+    interaction.didDismiss();
+    interaction.setOpen(true);
+    interaction.choose("open", actions, select, close, false);
+    expect(events).toEqual(["closed", "open", "closed"]);
+  });
+});
+
+// Render real React with native primitives replaced, not source-text assertions.
+// Native layout, animations and device accessibility still need integration gates.
+interface NativeProps {
+  children?: ReactNode;
+  testID?: string;
+  style?: unknown;
+  scrollEnabled?: boolean;
+  onPress?: () => void;
+  onRequestClose?: () => void;
+  onDismiss?: () => void;
+}
+const rendered: { kind: string; props: NativeProps; markup: string }[] = [];
+function primitive(kind: string) {
+  return (props: NativeProps) => {
+    const markup = renderToStaticMarkup(createElement("div", null, props.children));
+    rendered.push({ kind, props, markup });
+    return createElement("div", null, props.children);
+  };
+}
+mock.module("react-native", () => ({
+  AccessibilityInfo: { setAccessibilityFocus() {} },
+  Modal: primitive("Modal"), Platform: { OS: "ios" }, Pressable: primitive("Pressable"),
+  ScrollView: primitive("ScrollView"), Text: primitive("Text"), View: primitive("View"),
+  StyleSheet: { create: <T,>(styles: T) => styles, hairlineWidth: 1 },
+  findNodeHandle: () => null, useWindowDimensions: () => ({ height: 100, width: 400 }),
+}));
+mock.module("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ bottom: 20 }) }));
+mock.module("@expo/vector-icons", () => ({ Feather: () => null }));
+mock.module("../components/GlassSurface", () => ({ GlassSurface: primitive("GlassSurface") }));
+mock.module("react-native-reanimated", () => ({
+  default: { View: primitive("AnimatedView") }, Easing: { bezier: () => () => 0 },
+  ReduceMotion: { System: "system" }, useAnimatedStyle: (style: () => unknown) => style(),
+  useReducedMotion: () => true, useSharedValue: (value: number) => ({ value }),
+  withTiming: (value: number) => value,
+}));
+const { BottomActionSheet } = await import("../components/BottomActionSheet");
+
+test("rendered tiny sheet scrolls header, rows and inset together and dispatches real events once", () => {
+  rendered.length = 0;
+  const events: string[] = [];
+  renderToStaticMarkup(createElement(BottomActionSheet, {
+    open: true, title: "Chat actions", options: actions,
+    onSelect: id => { events.push(id); }, onClose: () => { events.push("closed"); },
+  }));
+  const scroll = rendered.find(node => node.kind === "ScrollView");
+  expect(scroll?.props.scrollEnabled).toBe(true);
+  expect(scroll?.markup).toContain("Chat actions");
+  expect(scroll?.markup).toContain("Delete");
+  const sheet = rendered.find(node => node.kind === "GlassSurface");
+  // No fixed header/footer siblings can consume the tiny 60-DIP viewport.
+  expect(sheet?.markup).toBe(`<div>${scroll?.markup}</div>`);
+  const backdrop = rendered.find(node => node.props.testID === "bottom-action-sheet-backdrop");
+  expect(backdrop?.props.style).toMatchObject({ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 });
+  const option = rendered.find(node => node.props.testID === "bottom-action-sheet-option-delete");
+  const modal = rendered.find(node => node.kind === "Modal");
+  option?.props.onPress?.();
+  option?.props.onPress?.();
+  backdrop?.props.onPress?.();
+  modal?.props.onRequestClose?.();
+  expect(events).toEqual(["closed"]);
+  modal?.props.onDismiss?.();
+  modal?.props.onDismiss?.();
+  expect(events).toEqual(["closed", "delete"]);
 });

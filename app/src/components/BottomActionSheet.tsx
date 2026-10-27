@@ -9,8 +9,8 @@ import Animated, {
   Easing, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming,
 } from "react-native-reanimated";
 import {
-  SHEET_HEADER_HEIGHT, SHEET_ROW_HEIGHT, selectAndClose, sheetA11y, sheetLayout,
-  type BottomActionOption, type SheetSelection,
+  SHEET_HEADER_HEIGHT, SHEET_ROW_HEIGHT, createSheetInteraction, sheetA11y, sheetLayout,
+  type BottomActionOption,
 } from "../lib/bottom-action-sheet";
 import { colors, easing, glass, radius, space, timing, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
@@ -31,15 +31,14 @@ export function BottomActionSheet({ open, title, options, onSelect, onClose }: B
   const layout = sheetLayout(options.length, window.height, bottomInset);
   const rows = sheetA11y(options);
   const headingRef = useRef<Text>(null);
-  const selection = useRef<SheetSelection>({ open, selectedId: null });
-  const pendingIosSelection = useRef<string | null>(null);
+  const interaction = useRef(createSheetInteraction(open)).current;
   const progress = useSharedValue(0);
   const reducedMotion = useReducedMotion();
 
   // A selection consumes this opening synchronously, even during two rapid taps.
   useEffect(() => {
-    selection.current = { open, selectedId: null };
-  }, [open]);
+    interaction.setOpen(open);
+  }, [open, interaction]);
 
   useEffect(() => {
     if (!open) {
@@ -63,34 +62,16 @@ export function BottomActionSheet({ open, title, options, onSelect, onClose }: B
   }));
 
   const dismiss = useCallback(() => {
-    if (!selection.current.open) return;
-    selection.current = { open: false, selectedId: null };
-    onClose();
-  }, [onClose]);
+    interaction.dismiss(onClose);
+  }, [interaction, onClose]);
 
   const choose = useCallback((id: string) => {
-    const previous = selection.current;
-    const next = selectAndClose(previous, id, options);
-    if (next === previous) return;
-    selection.current = next;
-    // iOS cannot present another native modal until this one has dismissed.
-    if (Platform.OS === "ios") {
-      pendingIosSelection.current = id;
-      onClose();
-      return;
-    }
-    try {
-      onSelect(id);
-    } finally {
-      onClose();
-    }
-  }, [onSelect, onClose, options]);
+    interaction.choose(id, options, onSelect, onClose, Platform.OS === "ios");
+  }, [interaction, onSelect, onClose, options]);
 
   const flushPendingSelection = useCallback(() => {
-    const id = pendingIosSelection.current;
-    pendingIosSelection.current = null;
-    if (id !== null) onSelect(id);
-  }, [onSelect]);
+    interaction.didDismiss();
+  }, [interaction]);
 
   const focusHeading = useCallback(() => {
     if (Platform.OS === "web") return;
@@ -128,26 +109,6 @@ export function BottomActionSheet({ open, title, options, onSelect, onClose }: B
           style={styles.surface}
           contentStyle={styles.content}
         >
-          <View style={styles.header}>
-            <View style={styles.handle} accessible={false} />
-            <View style={styles.headerRow}>
-              <Text
-                ref={headingRef}
-                accessibilityRole="header"
-                numberOfLines={1}
-                style={styles.title}
-              >{title || "Actions"}</Text>
-              <Pressable
-                testID="bottom-action-sheet-close"
-                accessibilityRole="button"
-                accessibilityLabel="Close actions"
-                onPress={dismiss}
-                style={({ pressed }) => [styles.close, pressed && styles.pressed]}
-              >
-                <Feather name="x" size={20} color={colors.textMuted} />
-              </Pressable>
-            </View>
-          </View>
           <ScrollView
             style={styles.list}
             scrollEnabled={layout.scrollable}
@@ -155,6 +116,26 @@ export function BottomActionSheet({ open, title, options, onSelect, onClose }: B
             nestedScrollEnabled
             showsVerticalScrollIndicator={layout.scrollable}
           >
+            <View style={styles.header}>
+              <View style={styles.handle} accessible={false} />
+              <View style={styles.headerRow}>
+                <Text
+                  ref={headingRef}
+                  accessibilityRole="header"
+                  numberOfLines={1}
+                  style={styles.title}
+                >{title || "Actions"}</Text>
+                <Pressable
+                  testID="bottom-action-sheet-close"
+                  accessibilityRole="button"
+                  accessibilityLabel="Close actions"
+                  onPress={dismiss}
+                  style={({ pressed }) => [styles.close, pressed && styles.pressed]}
+                >
+                  <Feather name="x" size={20} color={colors.textMuted} />
+                </Pressable>
+              </View>
+            </View>
             {rows.map(row => <Pressable
               key={row.id}
               testID={`bottom-action-sheet-option-${row.id}`}
@@ -168,8 +149,8 @@ export function BottomActionSheet({ open, title, options, onSelect, onClose }: B
                 {row.label}
               </Text>
             </Pressable>)}
+            <View style={{ height: bottomInset }} accessible={false} />
           </ScrollView>
-          <View style={{ height: bottomInset }} accessible={false} />
         </GlassSurface>
       </Animated.View>
     </View>
@@ -178,11 +159,11 @@ export function BottomActionSheet({ open, title, options, onSelect, onClose }: B
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end" },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.64)" },
+  scrim: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,0.64)" },
   animatedSheet: { width: "100%" },
   surface: { flex: 1, backgroundColor: colors.surfaceRaised },
   content: { flex: 1 },
-  header: { height: SHEET_HEADER_HEIGHT },
+  header: { height: SHEET_HEADER_HEIGHT, flexShrink: 0 },
   handle: {
     position: "absolute", alignSelf: "center", top: 6,
     width: 36, height: 4, borderRadius: radius.pill, backgroundColor: colors.textMuted,

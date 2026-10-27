@@ -26,7 +26,7 @@ export const SHEET_ROW_HEIGHT = 52;
 export const SHEET_HEADER_HEIGHT = 56;
 const MAX_WINDOW_FRACTION = 0.6;
 
-/** The header and bottom safe-area padding remain fixed while the option rows scroll. */
+/** The entire sheet (including header and safe area) scrolls when capped. */
 export function sheetLayout(optionCount: number, windowHeight: number, bottomInset: number): SheetLayout {
   const count = Number.isFinite(optionCount) ? Math.max(0, Math.floor(optionCount)) : 0;
   const available = Number.isFinite(windowHeight) ? Math.max(0, windowHeight) : 0;
@@ -59,4 +59,37 @@ export function selectAndClose(
 ): SheetSelection {
   if (!state.open || !options.some(option => option.id === id)) return state;
   return { open: false, selectedId: id };
+}
+
+/** Per-mount interaction state. Capture the selecting render's callback before closing. */
+export function createSheetInteraction(open: boolean) {
+  let state: SheetSelection = { open, selectedId: null };
+  let pendingSelection: (() => void) | null = null;
+  return {
+    setOpen(nextOpen: boolean) {
+      state = { open: nextOpen, selectedId: null };
+    },
+    dismiss(onClose: () => void) {
+      if (!state.open) return;
+      state = { open: false, selectedId: null };
+      onClose();
+    },
+    choose(id: string, options: readonly BottomActionOption[], onSelect: (id: string) => void,
+      onClose: () => void, deferUntilDismiss: boolean) {
+      const next = selectAndClose(state, id, options);
+      if (next === state) return;
+      state = next;
+      if (deferUntilDismiss) {
+        pendingSelection = () => onSelect(id);
+        onClose();
+      } else {
+        try { onSelect(id); } finally { onClose(); }
+      }
+    },
+    didDismiss() {
+      const callback = pendingSelection;
+      pendingSelection = null;
+      callback?.();
+    },
+  };
 }
