@@ -162,8 +162,8 @@ export function reducePane(state: PaneState, event: PaneEvent): PaneReduction {
     // Cached figures can fill the loader, but may never displace a stream
     // already begun or an artifact already published for this generation.
     // Preserving the streaming content also makes first_node one-shot.
-    if (current.content.generation === event.generation &&
-        (current.content.kind === "genui" || current.content.kind === "artifact")) {
+    if ((current.content.kind === "genui" || current.content.kind === "artifact") &&
+        current.content.generation === event.generation) {
       return unchanged(state);
     }
     if (current.content.kind === "figure" &&
