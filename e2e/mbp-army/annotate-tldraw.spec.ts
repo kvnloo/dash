@@ -47,7 +47,7 @@ test('annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Sk
     // Each engine gets a fresh browser profile and uses the real pairing flow.
     // Reloading the first paired profile would correctly skip the Pair screen.
     const context = await browser.newContext({ viewport: { width: 480, height: 780 } });
-    await context.tracing.start({ screenshots: true, snapshots: true });
+
     const page = await context.newPage();
     page.on('websocket', socket => socket.on('framesent', frame => {
       if (typeof frame.payload === 'string' && frame.payload.includes('⟦stroke 1⟧')) sent.push(frame.payload);
@@ -68,7 +68,7 @@ test('annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Sk
       await writeFile(info.outputPath(`${engine}-sent.json`), documents.at(-1)!);
       await page.screenshot({ path: info.outputPath(`${engine}-sent.png`) });
     } finally {
-      await context.tracing.stop({ path: info.outputPath(`${engine}-trace.zip`) });
+
       await context.close();
     }
   }
