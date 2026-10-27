@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { spawn } from "bun";
+import { fileURLToPath } from "node:url";
 import { composerChips, modelChipLabel } from "./composer-chips";
 
 describe("modelChipLabel", () => {
@@ -48,6 +50,92 @@ describe("modelChipLabel", () => {
         expect(result).toBeNull();
       }
     }
+  });
+});
+
+test("slash-containing unknown readings stay hidden before and after provider normalization", () => {
+  for (const provider of [undefined, "n", "openai"]) {
+    for (const model of ["n/a", " N/A ", "openai/n/a", "openai/model unknown"]) {
+      expect(modelChipLabel(model, provider)).toBeNull();
+      expect(composerChips({ model, provider, streaming: false })).toEqual([]);
+    }
+  }
+  expect(modelChipLabel("n/actual-model", "n")).toEqual({ short: "actual-model", full: "actual-model" });
+});
+
+// Render the real component through React DOM and the existing RN web adapter.
+// Isolate the native-module alias in a child so it cannot leak to other suites.
+async function checkChipRender(assertions: string) {
+  const code = `
+    import { expect, mock } from "bun:test";
+    import { createElement } from "react";
+    import { renderToStaticMarkup } from "react-dom/server";
+    const nativeWeb = await import("react-native-web");
+    mock.module("react-native", () => nativeWeb);
+    const { ComposerStatChips } = await import("../components/ComposerStatChips.tsx");
+    const render = props => renderToStaticMarkup(createElement(ComposerStatChips, props));
+    const cssFor = markup => {
+      const classes = [...markup.matchAll(/class="([^"]+)"/g)].flatMap(match => match[1].split(" "));
+      const css = nativeWeb.StyleSheet.getSheet().textContent;
+      return css.split("}").filter(rule => classes.some(name => rule.includes("." + name + "{"))).join("}");
+    };
+    ${assertions}
+  `;
+  const child = spawn([process.execPath, "-e", code], {
+    cwd: fileURLToPath(new URL(".", import.meta.url)), stdout: "pipe", stderr: "pipe",
+  });
+  const [stdout, stderr, exit] = await Promise.all([
+    new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+  ]);
+  expect({ exit, stdout, stderr }).toEqual({ exit: 0, stdout: "", stderr: "" });
+}
+
+describe("ComposerStatChips rendering", () => {
+  test("renders ordered passive accessible chips with estimated speed and full model identity", async () => {
+    await checkChipRender(`
+      const full = "unusually-extended-model-series-version-12.7";
+      const html = render({ model: full, streaming: true, rateLabel: "≈42 tok/s" });
+      expect(html).toContain('aria-label="Model: ' + full + '"');
+      expect(html).toContain('aria-label="Speed: 42 tokens per second, estimated"');
+      expect(html.indexOf('data-testid="composer-stat-model"')).toBeLessThan(html.indexOf('data-testid="composer-stat-rate"'));
+      expect(cssFor(html)).toContain('font-size:12px');
+      expect(html).not.toMatch(/<button|role="button"|tabindex="0"/);
+    `);
+  });
+
+  test("reserves the same fixed rate slot before, during, and after samples", async () => {
+    await checkChipRender(`
+      for (const state of [
+        { streaming: false },
+        { streaming: true },
+        { streaming: true, rateLabel: "≈42 tok/s" },
+        { streaming: false, recent: true, rateLabel: "42 tok/s" },
+        { streaming: false, recent: false, rateLabel: "42 tok/s" },
+      ]) {
+        const html = render({ model: "gpt-4.1", ...state });
+        const slot = html.match(/<div[^>]*data-testid="composer-stat-rate-slot"[^>]*>/)?.[0];
+        expect(slot).toBeDefined();
+        const css = cssFor(slot ?? "");
+        expect(css).toContain('min-width:112px');
+        expect(css).toContain('{width:112px');
+        expect(css).toContain('height:28px');
+        expect(css).toContain('flex-shrink:0');
+        expect(html.includes('data-testid="composer-stat-rate"')).toBe(Boolean(state.rateLabel && (state.streaming || state.recent)));
+      }
+    `);
+  });
+
+  test("hides unknown idle identity and renders speed without a model", async () => {
+    await checkChipRender(`
+      expect(render({ model: "n/a", streaming: false })).toBe("");
+      const waiting = render({ streaming: true });
+      expect(waiting).toContain('data-testid="composer-stat-rate-slot"');
+      expect(waiting).not.toContain('data-testid="composer-stat-rate"');
+      const speed = render({ streaming: true, rateLabel: "42 tok/s" });
+      expect(speed).toContain('aria-label="Speed: 42 tokens per second"');
+      expect(speed).not.toContain('data-testid="composer-stat-model"');
+      expect(speed).not.toContain('estimated');
+    `);
   });
 });
 

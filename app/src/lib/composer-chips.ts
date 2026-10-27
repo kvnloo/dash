@@ -38,7 +38,9 @@ function shortenMiddle(value: string): string {
 /** A provider prefix and release-date aliases are not the model's identity. */
 export function modelChipLabel(model?: string, provider?: string): ModelChipLabel | null {
   let full = model?.trim() ?? "";
-  if (!full) return null;
+  // Reject raw sentinels before treating a slash as a provider separator:
+  // "n/a" is unavailable identity, not provider "n" and model "a".
+  if (!full || full.toLowerCase() === MODEL_UNKNOWN.toLowerCase() || UNKNOWN_MODEL.test(full)) return null;
 
   const explicitProvider = provider?.trim();
   if (explicitProvider && full.toLowerCase().startsWith(explicitProvider.toLowerCase() + "/")) {
