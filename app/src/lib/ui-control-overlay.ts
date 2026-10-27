@@ -65,6 +65,11 @@ export interface OverlayState {
   readonly log: readonly OverlayReceipt[];
   /** Commands before this timestamp are blocked by an explicit user dismissal. */
   readonly dismissedUntil?: number;
+  /**
+   * Bare user-dismiss has no event time. Fail closed until a valid timestamp
+   * arrives, then begin the cooldown; never use the potentially stale lastAt.
+   */
+  readonly dismissalAwaitingTime?: true;
   /** Latest injected timestamp. Prevents stale commands from evading cooldown. */
   readonly lastAt?: number;
 }
@@ -91,6 +96,11 @@ function appendLog(log: readonly OverlayReceipt[], entries: readonly OverlayRece
 
 /** Expiry is inclusive: an item is gone exactly at createdAt + ttlMs. */
 function advance(state: OverlayState, at: number): OverlayState {
+  // A bare dismissal cannot know the wall clock in a pure reducer. Anchor its
+  // 10s cooldown to the first valid injected time, conservatively dropping
+  // that event's command even when the previous timestamp is long stale.
+  const dismissedUntil = state.dismissalAwaitingTime
+    ? at + DISMISS_COOLDOWN_MS : state.dismissedUntil;
   const live = state.items.filter((item) => at < item.createdAt + item.ttlMs);
   const expired = state.items
     .filter((item) => at >= item.createdAt + item.ttlMs)
@@ -99,8 +109,9 @@ function advance(state: OverlayState, at: number): OverlayState {
     ...state,
     items: expired.length === 0 ? state.items : live,
     log: expired.length === 0 ? state.log : appendLog(state.log, expired),
-    dismissedUntil: state.dismissedUntil !== undefined && at >= state.dismissedUntil
-      ? undefined : state.dismissedUntil,
+    dismissedUntil: dismissedUntil !== undefined && at >= dismissedUntil
+      ? undefined : dismissedUntil,
+    dismissalAwaitingTime: undefined,
     lastAt: at,
   };
 }
@@ -137,9 +148,10 @@ function dropped(state: OverlayState, id: string, at: number): OverlayState {
 
 /**
  * Pure state only: no timers, navigation, drawing side effects, or wall-clock
- * reads. The caller validates wire commands and injects timestamps. For the
- * shorthand { type: "user-dismiss" }, the most recent injected time is used;
- * real UI dismissals should provide at to start the cooldown immediately.
+ * reads. The caller validates wire commands and injects timestamps. An
+ * untimed { type: "user-dismiss" } clears immediately and blocks commands
+ * until the next valid timestamp plus 10s. UI dismissals should supply
+ * at: Date.now() to begin an exact 10s cooldown at the user's interaction.
  */
 export function reduceOverlay(state: OverlayState, event: OverlayEvent): OverlayState {
   switch (event.type) {
@@ -212,7 +224,18 @@ export function reduceOverlay(state: OverlayState, event: OverlayEvent): Overlay
     }
 
     case "user-dismiss": {
-      const at = event.at ?? state.lastAt ?? 0;
+      if (event.at === undefined) {
+        // There is no trustworthy elapsed time in this event. Never start
+        // cooldown from lastAt: after a long idle it may already be expired.
+        return {
+          ...state,
+          items: [],
+          pendingNavigate: undefined,
+          dismissalAwaitingTime: true,
+          log: appendLog(state.log, [{ id: "user", kind: "dismissed", at: state.lastAt ?? 0 }]),
+        };
+      }
+      const at = event.at;
       if (!orderedTime(state, at)) return state;
       const next = advance(state, at);
       return {

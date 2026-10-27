@@ -132,12 +132,81 @@ describe("agent overlay state reducer", () => {
     expect(state.items.map((item) => item.id)).toEqual(["allowed"]);
   });
 
-  test("bare dismiss uses the last injected timestamp without reading Date.now", () => {
+  test("bare dismiss after an idle gap cannot expire against the stale prior timestamp", () => {
     const state = put(createOverlayState(), point("old"), 500);
     const dismissed = reduceOverlay(state, { type: "user-dismiss" });
-    expect(dismissed.dismissedUntil).toBe(500 + DISMISS_COOLDOWN_MS);
-    expect(put(dismissed, point("blocked"), 501).items).toEqual([]);
-    expect(put(dismissed, point("later"), 10_500).items.map((item) => item.id)).toEqual(["later"]);
+    expect(dismissed.items).toEqual([]);
+    expect(dismissed.dismissalAwaitingTime).toBe(true);
+    expect(dismissed.dismissedUntil).toBeUndefined();
+
+    // Last injected time was 500, but the very next command arrives much later.
+    // It must be dropped and start a fresh, conservative ten-second window.
+    const first = put(dismissed, point("immediate"), 50_000);
+    expect(first.items).toEqual([]);
+    expect(first.dismissalAwaitingTime).toBeUndefined();
+    expect(first.dismissedUntil).toBe(50_000 + DISMISS_COOLDOWN_MS);
+    expect(first.log.at(-1)).toEqual({ id: "immediate", kind: "dropped", at: 50_000 });
+
+    const early = put(first, point("early"), 59_999);
+    expect(early.items).toEqual([]);
+    expect(early.log.at(-1)).toEqual({ id: "early", kind: "dropped", at: 59_999 });
+    const ready = put(early, point("ready"), 60_000);
+    expect(ready.dismissedUntil).toBeUndefined();
+    expect(ready.items.map((item) => item.id)).toEqual(["ready"]);
+  });
+
+  test("bare dismiss on an empty state anchors safely to the next tick", () => {
+    const dismissed = reduceOverlay(createOverlayState(), { type: "user-dismiss" });
+    expect(dismissed.dismissalAwaitingTime).toBe(true);
+    expect(dismissed.items).toEqual([]);
+
+    const ticked = reduceOverlay(dismissed, { type: "tick", at: 400_000 });
+    expect(ticked.dismissalAwaitingTime).toBeUndefined();
+    expect(ticked.dismissedUntil).toBe(410_000);
+    const blocked = put(ticked, { type: "navigate", id: "nav", route: "Chat" }, 409_999);
+    expect(blocked.pendingNavigate).toBeUndefined();
+    expect(blocked.log.at(-1)).toEqual({ id: "nav", kind: "dropped", at: 409_999 });
+    expect(put(blocked, point("after-tick"), 410_000).items.map((item) => item.id))
+      .toEqual(["after-tick"]);
+  });
+
+  test("bare dismissal cannot be bypassed by disable/enable or the earlier cooldown deadline", () => {
+    let state = put(createOverlayState(), point("old"), 100);
+    state = reduceOverlay(state, { type: "user-dismiss", at: 200 });
+    expect(state.dismissedUntil).toBe(10_200);
+    state = reduceOverlay(state, { type: "user-dismiss" });
+    expect(state.dismissalAwaitingTime).toBe(true);
+    state = reduceOverlay(state, { type: "disable" });
+    state = reduceOverlay(state, { type: "enable" });
+    state = put(state, point("at-old-deadline"), 10_200);
+    expect(state.items).toEqual([]);
+    expect(state.dismissedUntil).toBe(20_200);
+    expect(state.log.at(-1)).toEqual({ id: "at-old-deadline", kind: "dropped", at: 10_200 });
+    expect(put(state, point("at-new-deadline"), 20_200).items.map((item) => item.id))
+      .toEqual(["at-new-deadline"]);
+  });
+
+  test("bare dismiss preserves frozen prior state and rejects stale or invalid time anchors", () => {
+    const original = put(createOverlayState(), point("old"), 100);
+    for (const item of original.items) {
+      if (item.kind === "point") Object.freeze(item.target);
+      Object.freeze(item);
+    }
+    for (const receipt of original.log) Object.freeze(receipt);
+    Object.freeze(original.items);
+    Object.freeze(original.log);
+    Object.freeze(original);
+
+    const dismissed = reduceOverlay(original, { type: "user-dismiss" });
+    expect(original.items.map((item) => item.id)).toEqual(["old"]);
+    expect(dismissed.items).toEqual([]);
+    expect(dismissed.dismissalAwaitingTime).toBe(true);
+    expect(put(dismissed, point("stale"), 99)).toBe(dismissed);
+    for (const at of [NaN, Infinity, -1]) {
+      expect(reduceOverlay(dismissed, { type: "tick", at })).toBe(dismissed);
+      expect(put(dismissed, point("invalid"), at)).toBe(dismissed);
+    }
+    expect(put(dismissed, point("blocked"), 101).items).toEqual([]);
   });
 
   test("disable clears active and pending UI; commands drop until explicitly enabled", () => {
