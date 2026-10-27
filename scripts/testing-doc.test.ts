@@ -157,6 +157,13 @@ test("checks quoted paths only, but detects bare bun run script names", () => {
   ).toThrow("Missing package.json scripts: missing:even-without-backticks");
 });
 
+test("quick start provides the standalone validator command without requiring PR context", () => {
+  const quickStart = DOC.split("## Quick start\n")[1]?.split("\n## ")[0];
+  expect(quickStart).toBeDefined();
+  expect(quickStart).toContain("`bun test scripts/testing-doc.test.ts`");
+  expect(quickStart).toContain("is not registered in that root script or its CI test job");
+});
+
 test("the actual guide names only existing files, directories and registered scripts", () => {
   expect(() =>
     checkTestingDoc(DOC, (path) => existsSync(join(ROOT, path)), rootScriptNames()),
