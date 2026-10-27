@@ -42,8 +42,16 @@ describe("chat index scale (O(page))", () => {
       return performance.now() - start;
     };
     time(1_000); // warm up
-    const small = Math.min(time(1_000), time(1_000));
-    const large = Math.min(time(20_000), time(20_000));
+    // Best of four interleaved runs per size, so one run slowed by a loaded full suite
+    // cannot decide the ratio. The 3x bound still rejects O(loaded) (20x more rows).
+    const smalls: number[] = [];
+    const larges: number[] = [];
+    for (let run = 0; run < 4; run++) {
+      smalls.push(time(1_000));
+      larges.push(time(20_000));
+    }
+    const small = Math.min(...smalls);
+    const large = Math.min(...larges);
     expect(large).toBeLessThan(Math.max(small, 1) * 3);
   }, 30_000);
 
@@ -90,8 +98,16 @@ describe("chat index scale (O(page))", () => {
       return median(samples);
     };
     time(1_000); // warm up
-    const small = Math.min(time(1_000), time(1_000));
-    const large = Math.min(time(20_000), time(20_000));
+    // Best of four interleaved runs per size, so one run slowed by a loaded full suite
+    // cannot decide the ratio. The 3x bound still rejects O(loaded) (20x more rows).
+    const smalls: number[] = [];
+    const larges: number[] = [];
+    for (let run = 0; run < 4; run++) {
+      smalls.push(time(1_000));
+      larges.push(time(20_000));
+    }
+    const small = Math.min(...smalls);
+    const large = Math.min(...larges);
     expect(large).toBeLessThan(Math.max(small, 0.05) * 3);
   }, 30_000);
 
@@ -127,8 +143,16 @@ describe("chat index scale (O(page))", () => {
       return median(samples);
     };
     time(1_000); // warm up
-    const small = Math.min(time(1_000), time(1_000));
-    const large = Math.min(time(20_000), time(20_000));
+    // Best of four interleaved runs per size, so one run slowed by a loaded full suite
+    // cannot decide the ratio. The 3x bound still rejects O(loaded) (20x more rows).
+    const smalls: number[] = [];
+    const larges: number[] = [];
+    for (let run = 0; run < 4; run++) {
+      smalls.push(time(1_000));
+      larges.push(time(20_000));
+    }
+    const small = Math.min(...smalls);
+    const large = Math.min(...larges);
     expect(large).toBeLessThan(Math.max(small, 0.05) * 3);
   }, 30_000);
 });
