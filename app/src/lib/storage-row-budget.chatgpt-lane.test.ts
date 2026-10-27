@@ -14,7 +14,7 @@ interface Draft {
 }
 
 function encode(row: Record<string, Draft>): string {
-  return JSON.stringify(row);
+  return JSON.stringify(row) ?? "{}";
 }
 
 function wellFormedUtf16(text: string): boolean {
