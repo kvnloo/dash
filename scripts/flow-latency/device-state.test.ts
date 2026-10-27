@@ -243,7 +243,7 @@ describe("admitRun", () => {
   });
 
   test("honors caller limits instead of always applying defaults", () => {
-    const state = { batteryPct: 15, temperatureC: 41, thermalStatus: 2 };
+    const state: Pick<import("./device-state").DeviceState, "batteryPct" | "temperatureC" | "thermalStatus"> = { batteryPct: 15, temperatureC: 41, thermalStatus: 2 };
     expect(admitRun(state, {
       maxThermal: 2,
       minBatteryPct: 15,
