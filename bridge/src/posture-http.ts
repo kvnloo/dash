@@ -64,19 +64,19 @@ export function postureView(decision: Decision, source: PostureView["source"]): 
 }
 
 /** The current decision: from circadiand when fresh, else clock-only. Never throws. */
-export async function readPosture(file: string, nowMs: number, anchors: Partial<PostureConfig> = {}): Promise<{ decision: Decision; source: PostureView["source"] }> {
+export async function readPosture(file: string, nowMs: number, anchors: Partial<PostureConfig> = {}): Promise<{ decision: Decision; source: PostureView["source"]; enforcingNow: boolean }> {
   const nowIso = fmt(nowMs);
   try {
     const raw: unknown = JSON.parse(await readFile(file, "utf8"));
     if (record(raw) && typeof raw.generatedAt === "string" && isState(raw.state)) {
       const age = nowMs - parseTs(raw.generatedAt);
-      if (age >= 0 && age <= POSTURE_STALE_MS) return { decision: policy(raw.state, nowIso), source: "circadiand" };
+      if (age >= 0 && age <= POSTURE_STALE_MS) return { decision: policy(raw.state, nowIso), source: "circadiand", enforcingNow: record(raw.enforcement) && raw.enforcement.enforcingNow === true };
     }
   } catch { /* missing or malformed: fall through to the clock */ }
   try {
-    return { decision: policy(evaluateHumanPosture({}, nowIso, anchors), nowIso), source: "clock" };
+    return { decision: policy(evaluateHumanPosture({}, nowIso, anchors), nowIso), source: "clock", enforcingNow: false };
   } catch {
-    return { decision: policy(evaluateHumanPosture({}, nowIso), nowIso), source: "clock" }; // bad tz or anchors in the host config
+    return { decision: policy(evaluateHumanPosture({}, nowIso), nowIso), source: "clock", enforcingNow: false }; // bad tz or anchors in the host config
   }
 }
 

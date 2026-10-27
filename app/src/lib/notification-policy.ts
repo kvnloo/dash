@@ -1,8 +1,9 @@
 import type { Conversation } from "../model";
 import { messageThinking } from "./thinking";
+import type { NoticeClass } from "../../../shared/interaction-policy";
 
 export type NotificationTarget = { kind: "chat"; chatId: string } | { kind: "approvals" } | { kind: "notices" };
-export interface DashNotice { key: string; title: string; body: string; target: NotificationTarget }
+export interface DashNotice { key: string; title: string; body: string; target: NotificationTarget; class?: NoticeClass }
 export function shouldNotify(input: { foreground: boolean; enabled: boolean; permission: string }): boolean {
   return !input.foreground && input.enabled && input.permission === "granted";
 }

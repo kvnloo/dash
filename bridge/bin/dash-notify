@@ -1,3 +1,4 @@
 #!/usr/bin/env bun
 import { notifyCli } from "../src/notify-cli";
+// Flags, including --class, are validated by the shared CLI entry point.
 process.exitCode = await notifyCli(process.argv.slice(2));

@@ -11,8 +11,8 @@ const token = "test-only-execution-token";
 const payload = { title: "Ready", body: "Done", url: "dash://notices" };
 function request(auth = token, body = JSON.stringify(payload), headers = {}) { return new Request("http://127.0.0.1/notice", { method: "POST", headers: { authorization: `Bearer ${auth}`, "content-type": "application/json", ...headers }, body }); }
 test("refuses missing/wrong/absent configured token, non-loopback peers and browser origins", async () => {
-  const { notices } = service();
-  const handle = createNoticeHttpHandler({ token, notices });
+  const { notices, root } = service();
+  const handle = createNoticeHttpHandler({ token, notices, file: join(root, "posture.json"), configFile: join(root, "config.json") });
   for (const auth of ["", "wrong"]) expect((await handle(request(auth), "127.0.0.1")).status).toBe(401);
   expect((await createNoticeHttpHandler({ token: "", notices })(request(), "127.0.0.1")).status).toBe(401);
   for (const ip of [null, "100.64.0.1", "192.168.1.2"]) expect((await handle(request(), ip)).status).toBe(403);
@@ -21,13 +21,13 @@ test("refuses missing/wrong/absent configured token, non-loopback peers and brow
 });
 test("bounded input, methods, rate window and disk-before-broadcast", async () => {
   const { notices, root } = service(); let now = 1;
-  let handle = createNoticeHttpHandler({ token, notices, now: () => now });
+  let handle = createNoticeHttpHandler({ token, notices, file: join(root, "posture.json"), configFile: join(root, "config.json"), now: () => now });
   expect((await handle(new Request("http://localhost/notice", { headers: { authorization: `Bearer ${token}` } }), "127.0.0.1")).status).toBe(405);
   expect((await handle(request(token, "{"), "127.0.0.1")).status).toBe(400);
   expect((await handle(request(token, JSON.stringify({ title: "x".repeat(81), body: "b" })), "127.0.0.1")).status).toBe(400);
   expect((await handle(request(token, "x".repeat(8193)), "127.0.0.1")).status).toBe(413);
   const seen: NoticeMessage[] = [];
-  handle = createNoticeHttpHandler({ token, notices, now: () => now });
+  handle = createNoticeHttpHandler({ token, notices, file: join(root, "posture.json"), configFile: join(root, "config.json"), now: () => now });
   const stop = notices.subscribe(n => { expect(readFileSync(join(root, "notices.json"), "utf8")).toContain(n.id); seen.push(n); });
   for (let i = 0; i < 10; i++) expect((await handle(request(), "::1")).status).toBe(201);
   const limited = await handle(request(), "127.0.0.1"); expect(limited.status).toBe(429); expect(limited.headers.get("retry-after")).toBe("60");
@@ -44,13 +44,15 @@ test("last 50 survive restart; reconnect replay retains stable ids", () => {
   expect(ids.size).toBe(50); restored.publish(payload); expect(ids.size).toBe(51); stopAgain();
 });
 test("real loopback listener accepts CLI and never binds tailnet", async () => {
-  const { notices, root } = service(); const server = startNoticeServer({ token, notices, port: 0 });
+  const { notices, root } = service(); const server = startNoticeServer({ token, notices, port: 0, file: join(root, "posture.json"), configFile: join(root, "config.json") });
   try {
     expect(server.hostname).toBe("127.0.0.1");
     const { writeFileSync } = await import("node:fs"); writeFileSync(join(root, "token"), token);
     const run = (args: string[], env = {}) => Bun.spawn([process.execPath, "bridge/bin/dash-notify", ...args], { cwd: join(import.meta.dir, "../.."), env: { ...process.env, DASH_CREDENTIAL_DIR: root, DASH_NOTICE_PORT: String(server.port), ...env }, stdout: "pipe", stderr: "pipe" });
-    const ok = run(["CLI ready", "CLI report", "--url", "dash://notices"]); expect(await ok.exited).toBe(0);
+    const ok = run(["CLI ready", "CLI report", "--url", "dash://notices", "--class", "digest"]); expect(await ok.exited).toBe(0);
     expect(notices.list()[0]?.title).toBe("CLI ready");
+    expect(notices.list()[0]?.class).toBe("digest");
+    const invalidClass = run(["Synthetic", "Ready", "--class", "urgent"]); expect(await invalidClass.exited).toBe(2);
     const bad = run(["Only title"]); expect(await bad.exited).toBe(2);
     const unauthorized = run(["T", "B"], { DASH_CREDENTIAL_DIR: join(root, "missing") }); expect(await unauthorized.exited).toBe(1);
     expect(await new Response(unauthorized.stderr).text()).not.toContain(token);

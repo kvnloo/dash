@@ -37,7 +37,7 @@ export function createAgentNoticeInbox(options: {
       await options.storage?.write(JSON.stringify(next));
       items = next; options.changed?.(items);
       options.emit({ key: `notice:${notice.id}`, title: notice.title, body: notice.body,
-        target: parseNotificationTarget({ url: notice.url }) ?? { kind: "notices" } });
+        ...(notice.class ? { class: notice.class } : {}), target: parseNotificationTarget({ url: notice.url }) ?? { kind: "notices" } });
     }),
     clear: () => enqueue(async () => { await options.storage?.write("[]"); items = []; hydrated = true; options.changed?.(items); }),
   };

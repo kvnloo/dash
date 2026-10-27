@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { applyMutant, collectMutants, ROOT, TARGETS, runMutation } from "./mutate";
 
  test("default mutation plan exercises parser and roster branches, not only constants", async () => {
-  // Keep the per-target budget at 20 so adding a target does not starve parser/roster branches.
-  const report = await runMutation({ dryRun: true, max: 20 * TARGETS.length });
+  // Reserve enough room for protocol constants plus twelve parser branches.
+  const report = await runMutation({ dryRun: true, max: 32 * TARGETS.length });
   for (const file of ["shared/protocol.ts", "bridge/src/roster.ts"]) {
     const branches = report.results.filter((row) => row.file === file && (row.operator === "eq" || row.operator === "logic"));
     expect(branches.length).toBeGreaterThanOrEqual(12);
@@ -49,6 +49,7 @@ describe("collectMutants", () => {
 describe("targets", () => {
   test("covers the modules that accidentally mutated UI or protocol", () => {
     expect(TARGETS.map((t) => t.file)).toEqual([
+      "shared/interaction-policy.ts",
       "app/src/lib/pending-queue.ts",
       "app/src/trace/chip-state.ts",
       "bridge/src/model-health.ts",

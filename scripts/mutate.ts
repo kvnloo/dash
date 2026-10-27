@@ -19,6 +19,7 @@ export const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 export type Target = { file: string; tests: readonly string[] };
 
 export const TARGETS: readonly Target[] = [
+  { file: "shared/interaction-policy.ts", tests: ["shared/human-posture.test.ts", "bridge/src/notice-policy.test.ts", "app/src/lib/notice-posture.test.ts"] },
   { file: "app/src/lib/pending-queue.ts", tests: ["app/src/lib/pending-queue.test.ts"] },
   { file: "app/src/trace/chip-state.ts", tests: ["app/src/trace/chip-state.test.ts"] },
   { file: "bridge/src/model-health.ts", tests: ["bridge/src/model-health.test.ts"] },
@@ -32,7 +33,7 @@ export const TARGETS: readonly Target[] = [
   { file: "app/src/components/golden-nav.ts", tests: ["app/src/components/golden-nav.test.ts"] },
   { file: "app/src/components/bridge-pull.ts", tests: ["app/src/components/bridge-pull.test.ts"] },
   { file: "app/src/motion.ts", tests: ["app/src/components/motion.test.ts"] },
-  { file: "shared/protocol.ts", tests: ["shared/protocol.test.ts", "shared/protocol-boundary.test.ts", "shared/protocol-attachments.test.ts", "shared/protocol-notices.test.ts", "shared/reply-parts.test.ts", "bridge/src/thinking-summary.test.ts"] },
+  { file: "shared/protocol.ts", tests: ["shared/protocol.test.ts", "shared/protocol-boundary.test.ts", "shared/protocol-attachments.test.ts", "shared/protocol-notices.test.ts", "shared/protocol-notice-policy.test.ts", "shared/reply-parts.test.ts", "bridge/src/thinking-summary.test.ts"] },
   { file: "shared/z0live-state.ts", tests: ["bridge/src/z0live-state.test.ts"] },
   { file: "bridge/src/z0live-state.ts", tests: ["bridge/src/z0live-state.test.ts"] },
   { file: "app/src/lib/orb-phase.ts", tests: ["app/src/lib/orb-phase.test.ts"] },
