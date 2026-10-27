@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "observed_app_revision": "05e3bb506c84361eb53c4800484f431dc492d8e0",
+  "observed_bridge_revision": "6f050cb043e68e97e70d21150729ed4d96639ae5",
+  "source_only": true,
+  "agent_claims_used_as_proof": false,
+  "limits": [
+    "History extraction is a source-validated lower bound, not universal semantic completeness.",
+    "No phone or live service modified or exercised.",
+    "Related source tests are discovery candidates, never automatically promoted into executed evidence.",
+    "Absolute private history filenames replaced by opaque source keys; session/event/line/message citations retained.",
+    "Source inspection and formal trace metadata cannot prove native media, physical ink or performance."
+  ]
+}
