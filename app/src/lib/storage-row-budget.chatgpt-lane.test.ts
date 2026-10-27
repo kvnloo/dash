@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-
-// Large-payload test: correctness is load-independent; 5 s default timed out at load ~37 on MBP fleet.
-const HEAVY_TEST_TIMEOUT_MS = 30_000;
   ROW_BYTE_LIMIT,
   chunkRow,
   fitRecord,
@@ -10,6 +7,9 @@ const HEAVY_TEST_TIMEOUT_MS = 30_000;
   truncateUtf8,
   utf8Bytes,
 } from "./storage-row-budget";
+
+// Large-payload test: correctness is load-independent; 5 s default timed out at load ~37 on MBP fleet.
+const HEAVY_TEST_TIMEOUT_MS = 30_000;
 
 interface Draft {
   text: string;
