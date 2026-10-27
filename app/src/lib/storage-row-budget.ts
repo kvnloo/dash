@@ -63,7 +63,10 @@ export interface FittedRecord<T> {
  * addition (including JSON escaping and keys), not just the payload text.
  *
  * The optional shrink receives the original entry and a maximum payload byte
- * budget. It must return a smaller, valid entry with unchanged `at`, or null.
+ * budget. It must return a smaller, valid entry with unchanged `at`, or null
+ * when the budget is below its minimum viable payload (or it always refuses).
+ * For binary search, viable budgets must form a suffix and their full encoded
+ * row sizes must be nondecreasing as the budget grows.
  * We search for the largest budget whose *full encoded row* still fits; a
  * shrinker that refuses or cannot make a safe fit causes that entry to drop.
  * Callers should surface dropped keys rather than silently discarding drafts.
@@ -100,8 +103,10 @@ export function fitRecord<T>(
       while (lower <= upper) {
         const budget = Math.floor((lower + upper) / 2);
         const attempt = shrink(entry, budget);
-        if (attempt !== null
-          && attempt.at === entry.at
+        if (attempt === null) {
+          // No viable payload at this budget; a larger budget may still fit.
+          lower = budget + 1;
+        } else if (attempt.at === entry.at
           && utf8Bytes(encode({ ...selected, [key]: attempt })) <= limit) {
           best = attempt;
           lower = budget + 1;

@@ -122,6 +122,41 @@ describe("CursorWindow storage row budget", () => {
     expect(() => fitRecord<{ text: string }>(tied, encode, 1)).toThrow(RangeError);
   });
 
+  test("a shrinker with a minimum viable payload is searched above null budgets", () => {
+    const input = { draft: { text: "x".repeat(200), at: 1 } };
+    const result = fitRecord<{ text: string }>(input, encode, 100, (entry, budget) =>
+      budget < 60 ? null : { ...entry, text: entry.text.slice(0, budget) });
+    expect(result.dropped).toEqual([]);
+    expect(result.entries.draft).toEqual({ text: "x".repeat(72), at: 1 });
+    expect(utf8Bytes(encode(result.entries))).toBe(100);
+  });
+
+  test("null lower budgets and oversized upper budgets bracket a fitting shrink", () => {
+    const input = {
+      older: { text: "x".repeat(300), at: 1 },
+      newest: { text: "keep", at: 2 },
+    };
+    const result = fitRecord<{ text: string }>(input, encode, 150, (entry, budget) =>
+      budget < 80 ? null : { ...entry, text: entry.text.slice(0, budget) });
+    expect(Object.keys(result.entries)).toEqual(["newest", "older"]);
+    expect(result.entries.newest).toEqual(input.newest);
+    expect(result.entries.older?.text.length).toBe(90);
+    expect(result.dropped).toEqual([]);
+    expect(utf8Bytes(encode(result.entries))).toBe(150);
+  });
+
+  test("a shrinker that always returns null terminates and reports the dropped key", () => {
+    const input = { draft: { text: "x".repeat(200), at: 1 } };
+    const budgets: number[] = [];
+    const result = fitRecord<{ text: string }>(input, encode, 100, (_entry, budget) => {
+      budgets.push(budget);
+      return null;
+    });
+    expect(result.entries).toEqual({});
+    expect(result.dropped).toEqual(["draft"]);
+    expect(budgets).toEqual([50, 75, 88, 94, 97, 99, 100]);
+  });
+
   test("a noncooperative shrinker cannot bypass the row limit", () => {
     const input = { giant: { text: "x".repeat(ROW_BYTE_LIMIT * 2), at: 1 } };
     const result = fitRecord<{ text: string }>(input, encode, ROW_BYTE_LIMIT, item => item);
