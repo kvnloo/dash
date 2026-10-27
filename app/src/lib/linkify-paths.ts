@@ -115,7 +115,7 @@ function bracketEnd(line: string, start: number): number {
 }
 
 function recordHtmlTag(state: ScanState, tag: string): void {
-  if (/^<\s*(?:https?:\/\/|mailto:)/i.test(tag)) return;
+  if (/^<\s*(?:[A-Za-z][A-Za-z0-9+.-]*:\/\/|mailto:)/i.test(tag)) return;
   const match = /^<\s*(\/?)\s*([A-Za-z][A-Za-z0-9:-]*)(?=[\s/>])/.exec(tag);
   if (!match) return; // Includes URL autolinks and email autolinks.
   const name = (match[2] ?? "").toLowerCase();
@@ -138,14 +138,14 @@ function scanHtmlTag(line: string, offset: number, state: ScanState): number {
     } else if (char === "'" || char === '"') {
       state.tagQuote = char;
     } else if (char === ">") {
-      recordHtmlTag(state, state.tagBuffer);
+      recordHtmlTag(state, state.tagBuffer ?? "");
       state.tagBuffer = null;
       state.tagQuote = null;
       return index + 1;
     }
     index++;
   }
-  state.tagBuffer += "\n";
+  state.tagBuffer = (state.tagBuffer ?? "") + "\n";
   return index;
 }
 
