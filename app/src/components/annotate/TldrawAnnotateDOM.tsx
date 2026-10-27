@@ -97,7 +97,7 @@ export default function TldrawAnnotateDOM(props: Props) {
   }, [editor, props.bgUri, props.width, props.height]);
   useEffect(() => {
     if (!props.active) { opened.current = undefined; return; }
-    opened.current = performance.now();
+    opened.current ??= performance.now();
     if (!editor) return;
     const frame = requestAnimationFrame(() => {
       const ms = performance.now() - (opened.current ?? performance.now());
