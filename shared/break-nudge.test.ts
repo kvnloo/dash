@@ -25,6 +25,7 @@ function snapshot(
     blockKind: "standard",
     phase: "PEAK",
     nudgesThisBlock,
+    lastNudgeAt: nudgesThisBlock === 0 ? null : Math.min(now, START + (nudgesThisBlock === 1 ? 90 : 105) * MINUTE),
     ...change,
   };
 }
@@ -51,7 +52,8 @@ describe("breakNudge focus-block timeline", () => {
 
     test(`${blockKind} timeline at 0, pre-soft, soft, pre-firm, firm, repeat and cap`, () => {
       for (const { at, nudges, level, due } of timeline) {
-        const result = breakNudge(snapshot(at, nudges, { blockKind }));
+        const lastNudgeAt = nudges === 0 ? null : START + (nudges === 1 ? duration : duration + 15) * MINUTE;
+        const result = breakNudge(snapshot(at, nudges, { blockKind, lastNudgeAt }));
         expect(result.level).toBe(level);
         expect(result.dueAt).toBe(due === null ? null : START + due * MINUTE);
         expect(result.reason).toContain(`${at} minutes elapsed`);
@@ -197,20 +199,69 @@ describe("breakNudge suppression, limits and invalid inputs", () => {
   });
 });
 
-describe("nextBlock first rested morning window", () => {
-  test("only the first 180 minutes after a rested wake get a rested block", () => {
-    const wakeAt = START;
-    for (const now of [wakeAt, wakeAt + MINUTE, wakeAt + 179 * MINUTE]) {
-      expect(nextBlock({ now, wakeAt, restedMorning: true })).toBe("rested");
+describe("actual delivery history regressions", () => {
+  test("retained explicit break markers preserve new-block deliveries through the cap", () => {
+    const lastBreakEndAt = START + 110 * MINUTE;
+    for (const blockKind of ["standard", "rested"] satisfies FocusBlockKind[]) {
+      const duration = blockKind === "rested" ? 180 : 90;
+      const soft = 110 + duration;
+      const base = { blockKind, lastBreakEndAt };
+      expect(breakNudge(snapshot(soft, 3, base)).level).toBe("soft");
+      const deliveredSoft = { ...base, lastNudgeAt: START + soft * MINUTE };
+      expect(breakNudge(snapshot(soft + 1, 1, deliveredSoft))).toMatchObject({
+        level: "none", dueAt: START + (soft + 15) * MINUTE,
+      });
+      expect(breakNudge(snapshot(soft + 15, 1, deliveredSoft)).level).toBe("firm");
+      const deliveredFirm = { ...base, lastNudgeAt: START + (soft + 15) * MINUTE };
+      expect(breakNudge(snapshot(soft + 45, 2, deliveredFirm)).level).toBe("firm");
+      expect(breakNudge(snapshot(soft + 100, 3, {
+        ...base, lastNudgeAt: START + (soft + 45) * MINUTE,
+      }))).toMatchObject({ level: "none", dueAt: null });
     }
-    for (const now of [wakeAt - 1, wakeAt + 180 * MINUTE, wakeAt + 360 * MINUTE]) {
-      expect(nextBlock({ now, wakeAt, restedMorning: true })).toBe("standard");
+  });
+
+  test("late firm delivery waits thirty actual minutes, inclusive to the millisecond", () => {
+    const lastNudgeAt = START + 134 * MINUTE;
+    for (const at of [134, 135, 163]) {
+      expect(breakNudge(snapshot(at, 2, { lastNudgeAt }))).toMatchObject({
+        level: "none", dueAt: START + 164 * MINUTE,
+      });
+    }
+    expect(breakNudge(snapshot(164, 2, { lastNudgeAt, now: START + 164 * MINUTE - 1 })).level).toBe("none");
+    expect(breakNudge(snapshot(164, 2, { lastNudgeAt })).level).toBe("firm");
+  });
+
+  test("late soft delivery cannot immediately catch up to the firm deadline", () => {
+    const lastNudgeAt = START + 150 * MINUTE;
+    expect(breakNudge(snapshot(150, 1, { lastNudgeAt }))).toMatchObject({
+      level: "none", dueAt: START + 165 * MINUTE,
+    });
+    expect(breakNudge(snapshot(165, 1, { lastNudgeAt })).level).toBe("firm");
+  });
+
+  test("missing, stale, nonfinite and future delivery history fail closed", () => {
+    for (const lastNudgeAt of [null, START - 1, Infinity, Number.NaN, START + 200 * MINUTE]) {
+      expect(breakNudge(snapshot(135, 2, { lastNudgeAt }))).toMatchObject({ level: "none", dueAt: null });
+    }
+  });
+});
+
+describe("nextBlock first actual rested morning block", () => {
+  test("delayed first blocks are rested and early second blocks are standard", () => {
+    const wakeAt = START;
+    for (const now of [wakeAt, wakeAt + MINUTE, wakeAt + 179 * MINUTE, wakeAt + 360 * MINUTE]) {
+      expect(nextBlock({ now, wakeAt, restedMorning: true, completedBlocksSinceWake: 0 })).toBe("rested");
+      expect(nextBlock({ now, wakeAt, restedMorning: true, completedBlocksSinceWake: 1 })).toBe("standard");
+    }
+    for (const completedBlocksSinceWake of [-1, 0.5, Infinity, Number.NaN]) {
+      expect(nextBlock({ now: wakeAt, wakeAt, restedMorning: true, completedBlocksSinceWake })).toBe("standard");
     }
   });
 
   test("non-rested mornings and invalid wake times use standard blocks", () => {
-    expect(nextBlock({ now: START, wakeAt: START, restedMorning: false })).toBe("standard");
-    expect(nextBlock({ now: START, wakeAt: Infinity, restedMorning: true })).toBe("standard");
-    expect(nextBlock({ now: Number.NaN, wakeAt: START, restedMorning: true })).toBe("standard");
+    expect(nextBlock({ now: START, wakeAt: START, restedMorning: false, completedBlocksSinceWake: 0 })).toBe("standard");
+    expect(nextBlock({ now: START, wakeAt: Infinity, restedMorning: true, completedBlocksSinceWake: 0 })).toBe("standard");
+    expect(nextBlock({ now: Number.NaN, wakeAt: START, restedMorning: true, completedBlocksSinceWake: 0 })).toBe("standard");
+    expect(nextBlock({ now: START - 1, wakeAt: START, restedMorning: true, completedBlocksSinceWake: 0 })).toBe("standard");
   });
 });
