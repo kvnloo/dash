@@ -51,7 +51,7 @@ export type InkEnvelopeParseResult =
   | { ok: false; error: string };
 
 /** Ink is quiet session context, never a speakable transcript segment. */
-export const INK_CONTEXT_SPEAKABLE = false;
+export const INK_CONTEXT_SPEAKABLE: false = false;
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_STRING_LENGTH = 256;
@@ -187,7 +187,7 @@ export function parseInkEnvelope(raw: unknown): InkEnvelopeParseResult {
 
     case "annotation_undo":
       if (!isRecord(payload) || !hasExactFields(payload, ["count"])
-        || !isCounter(payload.count) || payload.count < 1) {
+        || !isCounter(payload.count)) {
         return reject("Invalid annotation_undo count");
       }
       return {
