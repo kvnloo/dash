@@ -101,6 +101,24 @@ describe("compact tool call row (DASH-15)", () => {
     expect(row.accessibilityLabel.includes("\n")).toBe(false);
   });
 
+  test("two-character non-path budgets omit the empty trailing slice", () => {
+    expect(truncateToolTarget("abcdef", 2)).toBe("a…");
+    const row = compactToolRow(tool("web_search", { query: "abcdef" }), "hermes", 2);
+    expect(row.target).toBe("a…");
+    expect(row.accessibilityLabel).toContain("a…");
+    expect(row.accessibilityLabel).not.toContain("abcdef");
+  });
+
+  test("non-path truncation respects every small caller budget", () => {
+    const text = "alpha-beta-gamma-delta";
+    for (let budget = 1; budget <= text.length + 1; budget++) {
+      const target = truncateToolTarget(text, budget);
+      expect(target.length).toBeLessThanOrEqual(budget);
+      if (budget >= text.length) expect(target).toBe(text);
+      else expect(target).toContain("…");
+    }
+  });
+
   test("compact projection never reads retained tool output to render a collapsed row or group", () => {
     const sample = tool("read_file", { path: "src/secret.ts" });
     Object.defineProperty(sample, "output", {

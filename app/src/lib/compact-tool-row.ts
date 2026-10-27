@@ -99,7 +99,8 @@ export function truncateToolTarget(value: string, maxLength = 48): string {
     return "…" + basename.slice(-(limit - 1));
   }
   const leading = Math.ceil((limit - 1) / 2);
-  return text.slice(0, leading) + "…" + text.slice(-(limit - 1 - leading));
+  const trailing = limit - 1 - leading;
+  return text.slice(0, leading) + "…" + (trailing > 0 ? text.slice(-trailing) : "");
 }
 
 /**
