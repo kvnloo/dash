@@ -82,7 +82,7 @@ function snapshotRequest(request: DialogRequest): DialogView {
 }
 
 function samePromptKey(view: DialogView): string {
-  return JSON.stringify([view.title, view.message ?? null]);
+  return JSON.stringify([view.title, view.message ?? null]) ?? "";
 }
 
 /**
