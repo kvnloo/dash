@@ -199,8 +199,9 @@ export function reduceOverlay(state: OverlayState, event: OverlayEvent): Overlay
     }
 
     case "navigated": {
-      if (state.pendingNavigate?.id !== event.id) return state;
-      const at = event.at ?? state.lastAt ?? state.pendingNavigate.requestedAt;
+      const pending = state.pendingNavigate;
+      if (pending === undefined || pending.id !== event.id) return state;
+      const at = event.at ?? state.lastAt ?? pending.requestedAt;
       if (!orderedTime(state, at)) return state;
       const next = advance(state, at);
       return {
