@@ -1,6 +1,6 @@
 import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
-import { memo, useCallback, useMemo, useRef } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { chatKey, type ChatSummary, type HostInfo } from "../../../../shared/protocol";
 import type { WindowOrigin } from "../../lib/chat-window";
@@ -13,7 +13,8 @@ import { conversationThinking, type Thinking } from "../../lib/thinking";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { chatRow } from "../../lib/chat-row";
-import { chatRowActions, pressRow, rowLongPress } from "../../lib/chat-row-actions";
+import { chatRowActions, chatRowMenu, pressRow, runChatRowMenu } from "../../lib/chat-row-actions";
+import { BottomActionSheet } from "../../components/BottomActionSheet";
 import { conversationEntries, emptyList, groupLabeler, labelList, mergeLocal, stableEntries, type ChatListRow, type ConversationEntry, type RemoteLabeled } from "../../lib/chat-index";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
@@ -282,7 +283,17 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
   );
 
   const feedbackOn = inAppFeedbackEnabled(store.use((s) => s.settings));
-  const longPress = useMemo(() => rowLongPress(feedbackOn, onFeedback, remove), [feedbackOn, onFeedback, remove]);
+  // Long-press only opens the row menu; every action (including feedback, which sends) is an explicit choice.
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const longPress = useCallback((id: string) => { haptic.select(); setMenuFor(id); }, []);
+  const closeMenu = useCallback(() => setMenuFor(null), []);
+  const menuTitle = menuFor ? store.get().conversations.find((c) => c.id === menuFor)?.title ?? summaryByKey(menuFor)?.title ?? "" : "";
+  const menu = useMemo(() => chatRowMenu(feedbackOn, menuTitle), [feedbackOn, menuTitle]);
+  const onMenu = useCallback((choice: string) => {
+    const id = menuFor;
+    setMenuFor(null);
+    if (id) runChatRowMenu(choice, id, { open: (rowId) => open(rowId), feedback: onFeedback, remove });
+  }, [menuFor, open, onFeedback, remove]);
 
   const renderItem = useCallback(
     ({ item: row }: ListRenderItemInfo<ChatListRow | undefined>) => {
@@ -343,6 +354,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
           <Text style={styles.clearEndedText}>Clear ended</Text>
         </PressScale>
       )}
+      <BottomActionSheet open={menuFor !== null} title={menu.title} options={menu.options} onSelect={onMenu} onClose={closeMenu} />
       <FlashList
         data={items}
         renderItem={renderItem}

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { AssistantMessage, Conversation } from "../model";
 import { chatRow } from "./chat-row";
-import { chatRowActions, pressRow, rowLongPress } from "./chat-row-actions";
+import { chatRowActions, chatRowMenu, pressRow, runChatRowMenu } from "./chat-row-actions";
 
 const base: Conversation = { id: "c", harness: "hermes", title: "Repair pairing", createdAt: 1, updatedAt: 2, messages: [] };
 const answer = (text: string, state: AssistantMessage["state"] = "done"): AssistantMessage => ({ id: "a", role: "assistant", text, state, at: 2, turnId: "t", seq: 0 });
@@ -70,9 +70,20 @@ test("row actions: tap measures the row and opens the SAME chat as a window; lon
   calls.length = 0;
   actions.remove("chat-7");
   expect(calls).toEqual([["confirm", "Delete chat?", "This removes it from this phone only.", "Delete"], ["remove", "chat-7"]]);
-  const feedback = () => "feedback", remove = () => "remove";
-  expect(rowLongPress(true, feedback, remove)).toBe(feedback);
-  expect(rowLongPress(false, feedback, remove)).toBe(remove);
+});
+
+test("long-press menu: only an explicit choice acts; feedback is never the long-press itself", () => {
+  expect(chatRowMenu(true, "Repair pairing").options.map(o => o.id)).toEqual(["open", "feedback", "delete"]);
+  expect(chatRowMenu(false, " ").options.map(o => o.id)).toEqual(["open", "delete"]);
+  expect(chatRowMenu(false, " ").title).toBe("Chat");
+  const calls: string[] = [];
+  const handlers = { open: (id: string) => calls.push("open " + id), feedback: (id: string) => calls.push("feedback " + id), remove: (id: string) => calls.push("remove " + id) };
+  expect(runChatRowMenu("dismiss", "c1", handlers)).toBe(false);
+  expect(calls).toEqual([]);
+  runChatRowMenu("feedback", "c1", handlers);
+  runChatRowMenu("delete", "c2", handlers);
+  runChatRowMenu("open", "c3", handlers);
+  expect(calls).toEqual(["feedback c1", "remove c2", "open c3"]);
 });
 
 test("Chats rows render the row model and route actions through the tested helpers", () => {
@@ -82,7 +93,9 @@ test("Chats rows render the row model and route actions through the tested helpe
   expect(source).toContain("onLongPress={() => onLongPress(item.id)}");
   expect(source).toContain("delayLongPress={350}");
   expect(source).toContain("onPress={open}");
-  expect(source).toContain("rowLongPress(feedbackOn, onFeedback, remove)");
+  expect(source).toContain("setMenuFor(id)");
+  expect(source).toContain("<BottomActionSheet open={menuFor !== null}");
+  expect(source).not.toContain("rowLongPress(");
   expect(source).toContain("onLongPress={longPress}");
   expect(source).toContain('selection: { kind: "chat", id, label: conversation?.title || id }');
   expect(source).toContain('chatRow(item, harnessName, connectionStatus)');

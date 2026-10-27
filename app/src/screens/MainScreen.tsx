@@ -12,6 +12,7 @@ import { ConnectionPill } from "../components/ConnectionPill";
 import { KeyboardDock } from "../components/KeyboardDock";
 import { AppNav, type AppNavHandle } from "../components/AppNav";
 import { SearchResultRow } from "../components/SearchResultRow";
+import { BottomActionSheet } from "../components/BottomActionSheet";
 import { SkeletonRow } from "../components/SkeletonRow";
 import { useChatSearch } from "../hooks/useChatSearch";
 import { resultRowModel, type SearchRowModel } from "../lib/chat-search";
@@ -352,6 +353,22 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
     [navigation, onFeedbackResult],
   );
 
+  // Long-press opens a menu; feedback (which sends a message) only on an explicit choice.
+  const [rowMenu, setRowMenu] = useState<SearchRowModel | null>(null);
+  const onRowMenu = useCallback((model: SearchRowModel) => { haptic.select(); setRowMenu(model); }, []);
+  const closeRowMenu = useCallback(() => setRowMenu(null), []);
+  const rowMenuOptions = useMemo(() => [
+    { id: "open", label: "Open", accessibilityLabel: `Open ${rowMenu?.title || "result"}`, destructive: false },
+    { id: "feedback", label: "Send feedback about this", accessibilityLabel: `Send feedback about ${rowMenu?.title || "result"}`, destructive: false },
+  ], [rowMenu]);
+  const onRowMenuSelect = useCallback((choice: string) => {
+    const model = rowMenu;
+    setRowMenu(null);
+    if (!model) return;
+    if (choice === "open") onRow(model);
+    else if (choice === "feedback") onFeedbackRow(model);
+  }, [rowMenu, onRow, onFeedbackRow]);
+
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<SearchListItem | undefined>) => {
       if (!item) return null;
@@ -363,9 +380,9 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           </Pressable>
         );
       }
-      return <SearchResultRow model={item.model} onPress={onRow} onLongPress={feedbackOn ? onFeedbackRow : undefined} />;
+      return <SearchResultRow model={item.model} onPress={onRow} onLongPress={feedbackOn ? onRowMenu : undefined} />;
     },
-    [feedbackOn, onFeedbackRow, onRow, setQuery],
+    [feedbackOn, onRowMenu, onRow, setQuery],
   );
   // FlashList asks for the type at indices of the list it last laid out. Typing (or Send, which
   // clears the query) shrinks the data first, so an index can be past the end: never throw there.
@@ -458,6 +475,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
         )}
       </BlurTargetView>
 
+      <BottomActionSheet open={rowMenu !== null} title={rowMenu?.title || "Result"} options={rowMenuOptions} onSelect={onRowMenuSelect} onClose={closeRowMenu} />
       <KeyboardDock style={styles.searchDock}>
         <GlobalSearchBar
           value={query}
