@@ -23,7 +23,7 @@ function withAppVariant(config) {
 }
 
 module.exports = ({ config: base }) => {
-  const config = withAppVariant(base);
+  const config = require("./plugins/with-dex")(withAppVariant(base));
   if (process.env.DASH_VARIANT !== "release") return config;
   const plugins = (config.plugins ?? []).filter((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) !== "expo-dev-client");
   return withCleartextTraffic({ ...config, plugins });

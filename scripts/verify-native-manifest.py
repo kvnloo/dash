@@ -18,6 +18,19 @@ activities = manifest.findall("application/activity")
 main = next(node for node in activities if node.attrib[android + "name"].endswith("MainActivity"))
 assert main.attrib[android + "exported"] == "true"
 assert main.attrib[android + "launchMode"] == "singleTask"
+# DeX changes must survive Expo prebuild and manifest merging.
+required_changes = {"smallestScreenSize", "screenLayout", "density", "uiMode", "orientation"}
+assert main.attrib.get(android + "resizeableActivity") == "true"
+assert required_changes <= set(main.attrib.get(android + "configChanges", "").split("|"))
+pad = next(node for node in activities if node.attrib[android + "name"] == "app.dash.dex.DashPadActivity")
+assert pad.attrib.get(android + "exported") == "false"
+assert pad.attrib.get(android + "resizeableActivity") == "true"
+assert pad.attrib.get(android + "launchMode") == "singleTask"
+assert required_changes <= set(pad.attrib.get(android + "configChanges", "").split("|"))
+metadata = {node.attrib.get(android + "name"): node.attrib.get(android + "value") for node in manifest.findall("application/meta-data")}
+assert metadata.get("com.samsung.android.multidisplay.keep_process_alive") == "true"
+assert all(node.attrib.get(android + "reqTouchScreen") != "finger" for node in manifest.iter())
+assert all(node.attrib.get(android + "required") == "false" for node in manifest.findall("uses-feature") if node.attrib.get(android + "name") == "android.hardware.touchscreen")
 filters = main.findall("intent-filter")
 for action in ["android.intent.action.SEND", "android.intent.action.SEND_MULTIPLE"]:
     matching = [node for node in filters if any(a.attrib.get(android + "name") == action for a in node.findall("action"))]

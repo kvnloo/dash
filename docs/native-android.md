@@ -1,5 +1,38 @@
 # Android development build
 
+## DeX WP2 (device spike pending)
+
+The local `dash-dex` Expo module registers `DashDex` and a non-exported
+`DashPadActivity`, using the application's existing ReactHost. `DashPad` is a
+placeholder, not a mirror or annotation implementation. The optional native
+adapter requires both `EXPO_PUBLIC_DASH_TURBO=1` and `EXPO_PUBLIC_DASH_DEX=1`.
+Expo Go and older APKs report unavailable. Commands reject activity-launch
+failures instead of claiming attachment. Private Samsung confirmations without
+a public desktop display ID cannot move MainActivity.
+
+Detection prefers MainActivity's display (not the Pad's currentActivity), public
+desk-mode displays, Samsung's category, guarded reflection, then Knox broadcasts.
+Display, configuration and activity callbacks refresh `dexState`. Runtime
+orientation unlock applies only to MainActivity on an external display and
+restores the original orientation on return. app.json stays portrait.
+`plugins/with-dex.js` applies the resize/config-change and keep-alive metadata;
+the merged-manifest checker and APK class inclusion check require the results.
+
+Explicit web developer simulation:
+`window.__dashDex.simulate({mode: "dual", tv: {w: 1920, h: 1080}})` shows the
+real Dash tree beside the placeholder Pad. Touchpad closes the Pad;
+`simulate({mode: "off"})` restores the ordinary layout without remounting Dash
+or starting another voice root. This is not native availability; web stays
+unchanged until simulation is explicitly called. The army journey includes a
+real chat send after exit.
+
+O15 still requires green CI army evidence for the exact SHA before the native
+build script runs. This WP2 task explicitly authorizes compilation on the build
+host only, not phone installation or testing. Shared-host, multi-resume,
+display-density and One UI behavior remain unverified on devices. L2 overlays
+are deferred until a failed, owner-authorized L1 spike; no overlay permission,
+MediaProjection, Presentation or native mirror pump is included.
+
 Dash's installed Android package is `app.dash.mobile`. Expo Go and web still run, but do not register Dash as a share destination or enable native notifications.
 
 ## Build on the MBP
