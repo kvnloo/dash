@@ -3,25 +3,26 @@ import { StyleSheet, Text, View } from "react-native";
 import { PressScale } from "../PressScale";
 import { haptic } from "../../haptics";
 import { traceStore } from "../../trace/source";
+import { store } from "../../store/app";
+import { entryLine } from "../../trace/feed-state";
 import { fonts, radius, space, type } from "../../theme";
 import { LivePulse, tc } from "./tokens";
 
-/** Orchestra's way into the trace: live / cut / asks at a glance, tap to open. */
+/** Orchestra's way into the trace. Shows live counts only after a real bridge snapshot. */
 export const TraceEntryCard = memo(function TraceEntryCard({ onOpen }: { onOpen(): void }) {
-  const st = traceStore.use((s) => s.snapshot.stats);
+  const feed = traceStore.use((s) => s.feed);
+  const paired = store.use((s) => Boolean(s.settings?.address && (s.settings.token || s.settings.identity)));
+  const line = entryLine(feed, paired);
   return (
-    <PressScale onPress={() => { haptic.select(); onOpen(); }} style={styles.card} accessibilityRole="button" accessibilityLabel={`Agent trace: ${st.live} live, ${st.cut} cut, ${st.asks} need OK`} testID="trace-entry">
+    <PressScale onPress={() => { haptic.select(); onOpen(); }} style={styles.card} accessibilityRole="button" accessibilityLabel={`Agent trace: ${line}`} testID="trace-entry">
       <View style={styles.inner}>
         <View style={styles.top}>
           <Text style={styles.title}>Agent trace</Text>
           <Text style={styles.chev}>›</Text>
         </View>
         <View style={styles.row}>
-          <LivePulse size={6} />
-          <Text style={[styles.k, { color: tc.live }]}>{st.live} live</Text>
-          <Text style={[styles.k, { color: tc.cut }]}>{st.cut} cut</Text>
-          <Text style={[styles.k, { color: tc.ask }]}>{st.asks} need{st.asks === 1 ? "s" : ""} OK</Text>
-          <Text style={styles.k}>{st.workers} workers · 12 h</Text>
+          {feed.phase === "live" ? <LivePulse size={6} /> : null}
+          <Text style={[styles.k, feed.phase === "live" ? { color: tc.live } : null]} numberOfLines={2}>{line}</Text>
         </View>
       </View>
     </PressScale>
@@ -35,5 +36,5 @@ const styles = StyleSheet.create({
   title: { ...type.heading, color: tc.text },
   chev: { color: tc.text3, fontSize: 22, lineHeight: 22 },
   row: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
-  k: { fontFamily: fonts.mono, fontSize: 11, color: tc.text3 },
+  k: { fontFamily: fonts.mono, fontSize: 11, color: tc.text3, flexShrink: 1 },
 });

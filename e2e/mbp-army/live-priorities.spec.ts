@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test, expect, pair } from './fixtures';
@@ -5,6 +6,8 @@ import { test, expect, pair } from './fixtures';
 // Real source files in this test's isolated bridge HOME, never route/store mocks.
 test('Triage lists live blockers and roadmap priorities, opens an item and labels stale evidence', async ({ page, bridge }, info) => {
   const now = Date.now();
+  const bun = execFileSync('sh', ['-c', 'command -v bun'], { encoding: 'utf8' }).trim();
+  execFileSync(bun, [join(__dirname, 'seed-priority-board.ts'), join(bridge.dir, 'work.db'), String(Math.floor(now / 1000))]);
   const directory = join(bridge.dir, '.local/state/dash');
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, 'roadmap.json'), JSON.stringify({ id: 'army', title: 'Fixture roadmap', updated: new Date(now).toISOString(), items: [
@@ -20,6 +23,8 @@ test('Triage lists live blockers and roadmap priorities, opens an item and label
   await page.getByRole('tab').nth(2).click();
   await page.getByRole('button', { name: 'Triage', exact: true }).click();
   const list = page.getByTestId('live-triage-list');
+  await expect(list.getByText('Fixture current board blocker', { exact: true })).toBeVisible();
+  await expect(list.getByTestId('triage-item-kanban:0:army-board-blocked')).toContainText('Running · blocked');
   await expect(list.getByText('Running fixture awaits credentials', { exact: true })).toBeVisible();
   await expect(list.getByText('Fixture owner decision', { exact: true })).toBeVisible();
   await expect(list.getByText('Choose fixture release', { exact: true })).toBeVisible();

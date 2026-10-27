@@ -32,6 +32,10 @@
     {"id": "chat-window-identity", "title": "Chat window identity badge at phone and tablet widths",
      "tests": ["safe exploratory controls and context hit target at 390",
                "safe exploratory controls and context hit target at 800"]},
+    {"id": "live-triage", "title": "Live prioritized blockers and roadmap asks, age and details",
+     "tests": ["Triage lists live blockers and roadmap priorities, opens an item and labels stale evidence"]},
+    {"id": "live-agent-trace", "title": "Authenticated live bridge sessions and explicit unavailable state",
+     "tests": ["Agent Trace loads the bridge live session and clears it on unavailable"]},
     {"id": "running-turn-survives-roster", "title": "A running turn survives a missing roster row",
      "tests": ["a missing roster row must not terminate a bridge-owned running turn"]}
   ],

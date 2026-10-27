@@ -17,7 +17,7 @@ function json(path: string): unknown { try { return JSON.parse(readFileSync(path
 function dirs(path: string): string[] { try { return readdirSync(path).map(name => join(path, name)).filter(p => statSync(p).isDirectory()); } catch { return []; } }
 function run(args: string[], cwd?: string): string { const result = spawnSync(args[0]!, args.slice(1), { cwd, encoding: "utf8", timeout: 1500, maxBuffer: 1024 * 1024, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } }); return result.status === 0 ? result.stdout.trim() : ""; }
 function profiles(): string[] {
-  const candidates = [join(homedir(), ".hermes"), ...dirs("/workspace/hermes-home/profiles"), ...dirs(join(homedir(), ".hermes/profiles"))];
+  const candidates = process.env.DASH_ORCHESTRA_PROFILES?.split(":") ?? [join(homedir(), ".hermes"), ...dirs("/workspace/hermes-home/profiles"), ...dirs(join(homedir(), ".hermes/profiles"))];
   return [...new Set(candidates.flatMap(p => { try { return [realpathSync(p)]; } catch { return []; } }))].filter(p => existsSync(join(p, "state.db")));
 }
 export async function collectOrchestra(hosts: HostInfo[], hours = 24, now = Date.now()): Promise<OrchestraSnapshot> {

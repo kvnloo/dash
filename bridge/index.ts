@@ -85,6 +85,9 @@ import { ThinkingSummarizer } from "./src/thinking-summary";
 import { TurnSummaries } from "./src/turn-summaries";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
 import { createOrchestraHttpHandler } from "./src/orchestra-http";
+import { createTraceRoute } from "./src/trace-route";
+import { createRoadmapHttpHandler } from "./src/roadmap-http";
+import { createTriageHttpHandler } from "./src/triage-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 import { acknowledgeSocketPing, BRIDGE_WS_IDLE_TIMEOUT_SECONDS } from "./src/ws-keepalive";
 
@@ -762,6 +765,9 @@ const handleChats = createChatsHttpHandler({
 const contextCompaction = compactionEnabled();
 const handleContext = contextHttp({ sessions: hermesSessions, compaction: contextCompaction });
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
+const handleTrace = createTraceRoute({ authorize, roster: () => selfRoster(harnessList(), HOST) });
+const handleRoadmap = createRoadmapHttpHandler({ authorize });
+const handleTriage = createTriageHttpHandler({ authorize });
 const handleModels = createModelsHttpHandler({ authorize });
 const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
 
@@ -808,6 +814,9 @@ const server = Bun.serve<SocketData>({
       if (url.pathname === "/chat/context/compact" && request.method === "POST" && contextCompaction) server.timeout(request, 255);
       const context = await handleContext(request, await authorize(request));
       if (context) return cors(context);
+      const trace = await handleTrace(request); if (trace) return cors(trace);
+      const roadmap = await handleRoadmap(request); if (roadmap) return cors(roadmap);
+      const triage = await handleTriage(request); if (triage) return cors(triage);
       const orchestra = await handleOrchestra(request);
       if (orchestra) return cors(orchestra);
       const models = await handleModels(request);
