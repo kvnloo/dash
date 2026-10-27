@@ -76,8 +76,8 @@ function evictionIndex(queue: readonly Capture[]): number {
   return chosen;
 }
 
-function withinLimit(items: Capture[]): Capture[] {
-  while (items.length > MAX_OVERNIGHT_CAPTURES) {
+function withinLimit(items: Capture[], maximum = MAX_OVERNIGHT_CAPTURES): Capture[] {
+  while (items.length > maximum) {
     items.splice(evictionIndex(items), 1);
   }
   return items;
@@ -115,7 +115,9 @@ export function addCapture(
     attachments,
     status: "queued",
   };
-  return withinLimit([...queue, capture]);
+  // Reserve the newest slot before pruning so even a full queue of planned
+  // notes cannot silently discard the thought the user just captured.
+  return [...withinLimit([...queue], MAX_OVERNIGHT_CAPTURES - 1), capture];
 }
 
 /**
@@ -144,10 +146,10 @@ export function markPlanned(queue: readonly Capture[], ids: readonly string[]): 
   if (ids.length === 0) return queue;
   const selected = new Set(ids);
   let changed = false;
-  const next = queue.map(item => {
+  const next = queue.map((item): Capture => {
     if (item.status !== "queued" || !selected.has(item.id)) return item;
     changed = true;
-    return { ...item, status: "planned" as const };
+    return { ...item, status: "planned" };
   });
   return changed ? next : queue;
 }
@@ -155,7 +157,7 @@ export function markPlanned(queue: readonly Capture[], ids: readonly string[]): 
 /** Dismiss a queued or planned capture without mutating the input. */
 export function dismiss(queue: readonly Capture[], id: string): readonly Capture[] {
   if (!queue.some(item => item.id === id && item.status !== "dismissed")) return queue;
-  return queue.map(item => item.id === id ? { ...item, status: "dismissed" as const } : item);
+  return queue.map((item): Capture => item.id === id ? { ...item, status: "dismissed" } : item);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
