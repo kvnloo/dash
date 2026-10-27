@@ -48,9 +48,9 @@ export const dialogStore = {
 };
 
 function snapshotRequest(request: DialogRequest): DialogView {
-  const source = request.buttons.length > 0
+  const source: readonly DialogButton[] = request.buttons.length > 0
     ? request.buttons
-    : [{ id: "ok", label: "OK", role: "default" }] satisfies DialogButton[];
+    : [{ id: "ok", label: "OK", role: "default" }];
 
   const seenIds = new Set<string>();
   let hasCancel = false;
