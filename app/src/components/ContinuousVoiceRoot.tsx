@@ -186,6 +186,20 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
     };
   }, []);
+  // Annotation is a spoken mode: entering it turns conversation voice on; leaving it ends only a call it started.
+  const annotating = annotate.use(s => s.active);
+  const latest = useRef({ start, stop, phase: state.phase });
+  latest.current = { start, stop, phase: state.phase };
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    const { start: begin, stop: end, phase } = latest.current;
+    if (annotating) {
+      if (["idle", "error"].includes(phase) && !starting.current) { autoStarted.current = true; void begin(); }
+    } else if (autoStarted.current) {
+      autoStarted.current = false;
+      void end();
+    }
+  }, [annotating]);
   const shown = fixture ?? state;
   const active = !["idle", "error"].includes(shown.phase);
   const visible = voiceBarVisible(shown.phase, attempted);
