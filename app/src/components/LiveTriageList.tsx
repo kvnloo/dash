@@ -56,7 +56,7 @@ export function LiveTriageList() {
         <Text style={s.meta}>{item.source}</Text>
       </PressScale>)}
     </ScrollView>
-    {open ? <Modal transparent visible animationType="fade" onRequestClose={() => setSelected(null)}><View style={s.backdrop}><View style={s.detail} testID="triage-detail" accessibilityViewIsModal>
+    {open ? <Modal transparent visible animationType="none" onRequestClose={() => setSelected(null)}><View style={s.backdrop}><View style={s.detail} testID="triage-detail" accessibilityViewIsModal>
       <ScrollView><Text style={s.title}>{open.title}</Text><Text style={s.meta}>{triageStale(open, now) ? 'Stale · not current · ' : ''}{triageAge(open, now)} · {open.source}</Text><Text selectable style={s.body}>{open.reason}</Text><Text selectable style={s.body}>{open.next}</Text>
       {open.url ? <PressScale accessibilityRole="button" accessibilityLabel="Open triage source" onPress={() => { if (open.url) void Linking.openURL(open.url); }} style={s.button}><Text style={s.body}>Open source PR</Text></PressScale> : null}</ScrollView>
       <PressScale accessibilityRole="button" accessibilityLabel="Close triage item" onPress={() => setSelected(null)} style={s.button}><Text style={s.body}>Close</Text></PressScale>

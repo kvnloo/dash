@@ -30,7 +30,7 @@ export async function createBridge(persistSession=true): Promise<Bridge> {
    child.stdout?.on('data',collect);child.stderr?.on('data',collect);
    await expect.poll(()=>port>0 && startup.includes('dash bridge'),{timeout:20000,message:'isolated real bridge startup'}).toBeTruthy();
    f.port=port; f.bootstrap=(await readFile(join(dir,'.dash/bootstrap-token'),'utf8')).trim();
-  }, async stop(){if(child && child.exitCode===null){child.kill('SIGTERM');await once(child,'exit');}}
+  }, async stop(){if(child && child.exitCode===null && child.signalCode===null){child.kill('SIGTERM');await once(child,'exit');}}
  };await f.start();
  if(persistSession){
   const token=(await readFile(join(dir,'.dash/token'),'utf8')).trim();
