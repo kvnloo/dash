@@ -33,6 +33,8 @@ import { WORKSPACE_HEADER_HEIGHT } from "../WorkspaceHeader";
 import { targetsAt } from "./hit-test";
 import { loadSkia } from "./skia-ready";
 import { useContinuousVoice } from "../ContinuousVoiceRoot";
+import TldrawAnnotateDOM, { type TldrawAnnotateHandle } from "./TldrawAnnotateDOM";
+import { syncTldrawStrokes } from "../../store/annotate";
 
 export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
 /** Strokes whose extent is under this many points are taps (e.g. a pen double-tap). */
@@ -65,7 +67,10 @@ class InkBoundary extends Component<{ children: ReactNode; onError(error: Error)
 }
 
 export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX.Element {
+  const engine = annotate.use(s => s.annotateEngine);
+  const tldraw = useRef<TldrawAnnotateHandle>(null);
   const active = annotate.use(s => s.active);
+  const annotationStatus = annotate.use(s => s.status);
   const penMode = annotate.use(s => s.penMode);
   const tool = annotate.use(s => s.tool);
   const color = annotate.use(s => s.color);
@@ -138,7 +143,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
   }, []);
   useEffect(() => {
-    if ((!active && !penMode) || ink || inkError || inkRetryPending) return;
+    if (engine !== "skia" || (!active && !penMode) || ink || inkError || inkRetryPending) return;
     let cancelled = false;
     void loadInk().then(module => {
       if (!cancelled) setInk(module);
@@ -146,7 +151,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       if (!cancelled) inkFailed(error);
     });
     return () => { cancelled = true; };
-  }, [active, penMode, ink, inkError, inkRetryPending, inkFailed]);
+  }, [engine, active, penMode, ink, inkError, inkRetryPending, inkFailed]);
   const retryInk = useCallback(() => {
     if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
     inkRetryTimer.current = null;
@@ -187,7 +192,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const gesture = useMemo(() => {
     const draw = Gesture.Pan()
       .manualActivation(true)
-      .enabled(active && !!ink && !inkError)
+      .enabled(engine === "skia" && active && !!ink && !inkError)
       .onTouchesDown((e, manager) => {
         const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
         // The dock rides the IME without resizing Expo Go: never swallow input touches.
@@ -217,10 +222,10 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         runOnJS(finish)(flat, kindSv.value);
       })
       .onFinalize(() => { live.value = []; pointerSv.value = -1; });
-    const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(active)
+    const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(engine === "skia" && active)
       .onEnd((e, success) => { if (success && e.y < size.height - composerAvoidance(-keyboardHeight.value) && pointerKind(e.pointerType) === "stylus") runOnJS(send)(false); });
     return Gesture.Simultaneous(draw, penDoubleTap);
-  }, [active, penMode, ink, inkError, finish, send, live, activeSv, penSv, kindSv, pointerSv, tracePointer, size.height, keyboardHeight]);
+  }, [engine, active, penMode, ink, inkError, finish, send, live, activeSv, penSv, kindSv, pointerSv, tracePointer, size.height, keyboardHeight]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -231,18 +236,28 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   // Use the same moving boundary for the frame and the finger-blocking overlay.
   const frameStyle = useAnimatedStyle(() => ({ bottom: composerAvoidance(-keyboardHeight.value) }));
   const Ink = ink?.InkCanvas;
+  useEffect(() => {
+    if (engine === "tldraw" && strokes.length === 0 && (!active || annotationStatus === "sent")) tldraw.current?.clear(true);
+  }, [engine, active, annotationStatus, strokes.length]);
   return (
     <View style={styles.root}>
       <GestureDetector gesture={gesture}>
         <View style={styles.root} collapsable={false} onLayout={onLayout}>
           <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
           {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
-          {active && !penMode && !inkError ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
-          {active && Ink ? <InkBoundary onError={inkFailed}><View style={StyleSheet.absoluteFill} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></View></InkBoundary> : null}
+          {engine === "skia" && active && !penMode && !inkError ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
+          {engine === "skia" && active && Ink ? <InkBoundary onError={inkFailed}><View style={StyleSheet.absoluteFill} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></View></InkBoundary> : null}
+          {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active ? "auto" : "none"} {...overlayProps}>
+            <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} tool={tool} color={color} penMode={penMode} mode="screen"
+              onReady={async ms => { console.info("[annotate-tldraw] host-ready", { ms }); }}
+              onDrawing={async drawing => { syncTldrawStrokes(drawing.map(stroke => ({ ...stroke, targets: targetsAt(stroke.points.map(point => ({ x: point.x * size.width, y: point.y * size.height }))) }))); }}
+              onExportDone={async () => { /* WP3 connects the ink export to compositing. */ }}
+              dom={{ style: { flex: 1 }, scrollEnabled: false }} />
+          </Animated.View> : null}
         </View>
       </GestureDetector>
       {active ? <Animated.View pointerEvents="none" style={[styles.frame, frameStyle]} accessibilityLabel="Annotation mode on" {...overlayProps} /> : null}
-      {active ? <Tray onSend={send} screenHeight={size.height} /> : <Toast screenHeight={size.height} />}
+      {active ? <Tray onSend={send} screenHeight={size.height} tldraw={engine === "tldraw" ? tldraw : undefined} /> : <Toast screenHeight={size.height} />}
       {active && inkError ? <View style={styles.inkError}>
         <Text accessibilityRole="alert" style={styles.error}>{inkError}</Text>
         <View style={styles.row}>
@@ -334,7 +349,7 @@ function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; 
   );
 }
 
-function Tray({ onSend, screenHeight }: { onSend(keep: boolean): void; screenHeight: number }): React.JSX.Element {
+function Tray({ onSend, screenHeight, tldraw }: { onSend(keep: boolean): void; screenHeight: number; tldraw?: React.RefObject<TldrawAnnotateHandle | null> }): React.JSX.Element {
   const thumb = useHandedness();
   const s = annotate.use(x => x);
   const busy = s.status === "capturing" || s.status === "sending";
@@ -352,8 +367,9 @@ function Tray({ onSend, screenHeight }: { onSend(keep: boolean): void; screenHei
       </View>
       <View style={[styles.row, thumb.row]}>
         <Chip label="Exit" a11y="Exit annotation" onPress={exitAnnotation} />
-        <Chip label="Undo" a11y="Undo" disabled={s.drawing.past.length === 0} onPress={undoStroke} />
-        <Chip label="Clear" a11y="Clear" disabled={count === 0} onPress={clearStrokes} />
+        <Chip label="Undo" a11y="Undo" disabled={tldraw ? count === 0 : s.drawing.past.length === 0} onPress={() => tldraw ? tldraw.current?.undo() : undoStroke()} />
+        {tldraw ? <Chip label="Redo" a11y="Redo" onPress={() => tldraw.current?.redo()} /> : null}
+        <Chip label="Clear" a11y="Clear" disabled={count === 0} onPress={() => tldraw ? tldraw.current?.clear() : clearStrokes()} />
         <Chip label={s.penMode ? "S Pen ✓" : "S Pen"} a11y="Pen mode: only the S Pen draws, fingers scroll" selected={s.penMode} onPress={() => setPenMode(!s.penMode)} />
         <HoldToTalk />
         <Chip label="⇅" a11y={top ? "Move tray to the bottom" : "Move tray to the top"} onPress={() => setTop(!top)} />
