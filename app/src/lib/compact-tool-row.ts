@@ -10,6 +10,8 @@ export interface CompactToolRowModel {
   accessibilityLabel: string;
   /** Only present when adjacent successful calls share the same verb. */
   count?: number;
+  /** Input positions remain stable for Hermes drill-down after coalescing. */
+  toolIndexes?: number[];
 }
 
 type KnownVerb = "Run" | "Read" | "Write" | "Edit" | "Search" | "Web" | "Task";
@@ -64,12 +66,15 @@ export function truncateToolTarget(value: string, maxLength = 48): string {
   if (limit === 1) return "…";
 
   const basename = /(?:^|[/\\])([^/\\\s]+)$/.exec(text)?.[1];
-  if (basename && text.length > basename.length && basename.length <= limit - 2) {
-    const prefix = text.slice(0, limit - basename.length - 2).replace(/[/\\]$/, "");
-    return prefix + "…/" + basename;
+  if (basename && text.length > basename.length) {
+    if (basename.length <= limit - 2) {
+      const prefix = text.slice(0, limit - basename.length - 2).replace(/[/\\]$/, "");
+      return prefix + "…/" + basename;
+    }
+    if (basename.length === limit - 1) return "…" + basename;
+    // A tiny caller budget cannot retain an entire basename: preserve its line suffix.
+    return "…" + basename.slice(-(limit - 1));
   }
-  // A tiny caller budget cannot retain an entire basename: preserve its line suffix.
-  if (basename && text.length > basename.length) return "…/" + basename.slice(-(limit - 2));
   const leading = Math.ceil((limit - 1) / 2);
   return text.slice(0, leading) + "…" + text.slice(-(limit - 1 - leading));
 }
@@ -107,13 +112,13 @@ export function compactToolRow(tool: FormatTool, harness = "hermes", targetBudge
 /** Only adjacent successful calls with the same verb are coalesced; failures keep their own row. */
 export function compactGroup(tools: readonly FormatTool[], harness = "hermes"): CompactToolRowModel[] {
   const rows: CompactToolRowModel[] = [];
-  let pending: { row: CompactToolRowModel; elapsed?: number }[] = [];
+  let pending: { row: CompactToolRowModel; elapsed?: number; index: number }[] = [];
 
   const flush = () => {
     const first = pending[0];
     if (!first) return;
     if (pending.length === 1) {
-      rows.push(first.row);
+      rows.push({ ...first.row, toolIndexes: [first.index] });
     } else {
       const latest = pending[pending.length - 1]?.row ?? first.row;
       const count = pending.length;
@@ -127,7 +132,7 @@ export function compactGroup(tools: readonly FormatTool[], harness = "hermes"): 
       );
       rows.push({
         glyph: first.row.glyph, verb: first.row.verb, target: latest.target,
-        status: "ok", count,
+        status: "ok", count, toolIndexes: pending.map(item => item.index),
         ...(duration !== undefined ? { durationLabel: duration } : {}),
         accessibilityLabel,
       });
@@ -135,15 +140,15 @@ export function compactGroup(tools: readonly FormatTool[], harness = "hermes"): 
     pending = [];
   };
 
-  for (const tool of tools) {
+  for (const [index, tool] of tools.entries()) {
     const row = compactToolRow(tool, harness);
     if (row.status !== "ok") {
       flush();
-      rows.push(row);
+      rows.push({ ...row, toolIndexes: [index] });
       continue;
     }
     if (pending.length && pending[0]?.row.verb !== row.verb) flush();
-    pending.push({ row, elapsed: finiteDuration(tool.durationMs) });
+    pending.push({ row, elapsed: finiteDuration(tool.durationMs), index });
   }
   flush();
   return rows;
