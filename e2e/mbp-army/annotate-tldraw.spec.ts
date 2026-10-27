@@ -4,7 +4,8 @@ import { writeFile } from 'node:fs/promises';
 
 async function openAnnotation(page: Page, bridge: Bridge, engine?: 'skia' | 'tldraw') {
   await openChat(page, bridge, engine ? `${web}?annotateEngine=${engine}` : web);
-  await page.getByRole('button', { name: 'Annotate this screen', exact: true }).click();
+  await page.getByRole('button', { name: 'Options. Current surface: Chat', exact: true }).click();
+  await page.getByRole('button', { name: 'Annotate, S Pen or finger', exact: true }).click();
   await expect(page.getByLabel('Annotation mode on', { exact: true })).toBeVisible();
 }
 async function stroke(page: Page) {
