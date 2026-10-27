@@ -15,10 +15,16 @@ watermark and license behavior are unchanged.
 
 `tldraw` is pinned to **5.5.2**. `tldraw-assets/bundled.json` contains that
 version's 16 font files, icon sprite, and English translation from the published
-`@tldraw/assets` package. They are embedded data URLs, not CDN fallbacks, so the
+`@tldraw/assets` package; `embed-icons.json` includes all 19 preloaded embed logos.
+They are embedded data URLs, not CDN fallbacks, so the
 same asset map works in the native DOM bundle without an HTTP asset server.
 The package license is retained alongside the bundle. Keep the vendored assets
 and SDK version in sync when upgrading. Non-English UI is not exposed.
+
+The app's eager ShimmerText bootstrap also requires CanvasKit. Metro copies its
+installed, lockfile-pinned WASM into `public/` before exporting the web app; the
+bootstrap loader fetches that same-origin file. This avoids a pre-annotation CDN
+request without changing the renderer or committing an extra binary.
 
 The adapter maps draw/highlight/arrow/rectangle/ellipse shapes to Dash strokes.
 Pointer samples supply epoch times and pressure (tldraw's compressed paths have
