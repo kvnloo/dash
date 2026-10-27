@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DEFAULT_POSTURE_CONFIG, evaluateHumanPosture, parseTs } from "../../shared/human-posture";
+import type { NoticeMessage } from "../../shared/protocol";
 import { policy } from "../../shared/interaction-policy";
 import { NoticeService, createNoticeHttpHandler, startNoticeServer } from "./notices";
 
@@ -94,6 +95,72 @@ test("CLI accepts held response and --class through the real wrapper", async () 
     expect(s.notices.list()).toHaveLength(0); expect(s.notices.deferred().items[0]?.input.class).toBe("decision");
   } finally { server.stop(true); }
 });
+for (const restart of [false, true]) {
+  for (const change of ["ingress", "eligibility", "history eviction"]) {
+    test(`real clear failure never repeats a title after ${change}; restart=${restart}`, () => {
+      const s = setup();
+      s.notices.hold({ title: "Synthetic A", body: "Ready" }, null);
+      if (change === "eligibility") s.notices.hold({ title: "Synthetic B", body: "Ready", not_before: "2026-10-28T14:00:00Z" }, null);
+      const now = "2026-10-28T13:00:00Z", later = "2026-10-28T14:00:00Z";
+      const seen: NoticeMessage[] = [];
+      s.notices.subscribe(n => seen.push(n));
+      const obstruction = join(s.root, "notices-deferred.json.tmp");
+      mkdirSync(obstruction);
+      expect(() => s.notices.release(parseTs(now), policy(evaluateHumanPosture({}, now), now), DEFAULT_POSTURE_CONFIG.tz)).toThrow();
+      expect(seen.map(n => n.body)).toEqual(["Synthetic A"]);
+      expect(s.notices.list().map(n => n.body)).toEqual(["Synthetic A"]);
+      expect(s.notices.deferred().items[0]?.input.title).toBe("Synthetic A");
+      rmSync(obstruction, { recursive: true });
+      const current = restart ? new NoticeService(s.root) : s.notices;
+      const retried: NoticeMessage[] = [];
+      // subscribe replays history, so observe only new broadcasts below.
+      current.subscribe(n => retried.push(n)); retried.length = 0;
+      if (change !== "eligibility") current.hold({ title: "Synthetic B", body: "Ready" }, null);
+      if (change === "history eviction") {
+        for (let i = 0; i < 51; i++) current.publish({ title: `Synthetic live ${i}`, body: "Live" });
+        retried.length = 0;
+      }
+      const recovered = restart ? new NoticeService(s.root) : current;
+      if (restart) { recovered.subscribe(n => retried.push(n)); retried.length = 0; }
+      const d = policy(evaluateHumanPosture({}, later), later);
+      expect(recovered.release(parseTs(later), d, DEFAULT_POSTURE_CONFIG.tz)?.body).toBe("Synthetic B");
+      expect(retried.map(n => n.body)).toEqual(["Synthetic B"]);
+      expect(recovered.list().filter(n => n.body.includes("Synthetic A"))).toHaveLength(change === "history eviction" ? 0 : 1);
+      expect(recovered.deferred().items).toHaveLength(0);
+      expect(new NoticeService(s.root).deferred().items).toHaveLength(0);
+      expect(recovered.release(parseTs(later), d, DEFAULT_POSTURE_CONFIG.tz)).toBeNull();
+    });
+  }
+}
+
+test("failed digest history write neither broadcasts nor acknowledges held items", () => {
+  const s = setup(); s.notices.hold({ title: "Synthetic A", body: "Ready" }, null);
+  const seen: NoticeMessage[] = []; s.notices.subscribe(n => seen.push(n));
+  const obstruction = join(s.root, "notices.json.tmp"); mkdirSync(obstruction);
+  const now = "2026-10-28T13:00:00Z", d = policy(evaluateHumanPosture({}, now), now);
+  expect(() => s.notices.release(parseTs(now), d, DEFAULT_POSTURE_CONFIG.tz)).toThrow();
+  expect(seen).toHaveLength(0); expect(s.notices.list()).toHaveLength(0);
+  rmSync(obstruction, { recursive: true });
+  const restored = new NoticeService(s.root);
+  expect(restored.release(parseTs(now), d, DEFAULT_POSTURE_CONFIG.tz)?.body).toBe("Synthetic A");
+  expect(restored.deferred().items).toHaveLength(0);
+  expect(statSync(join(s.root, "notices.json")).mode & 0o777).toBe(0o600);
+});
+
+test("legacy history migrates to bounded validated delivery receipts", () => {
+  const s = setup(), path = join(s.root, "notices.json");
+  const legacy: NoticeMessage = { type: "notice", id: "synthetic-id", title: "Synthetic legacy", body: "Ready" };
+  writeFileSync(path, JSON.stringify([legacy]));
+  const restored = new NoticeService(s.root);
+  expect(restored.list()).toEqual([legacy]);
+  restored.publish({ title: "Synthetic new", body: "Ready" });
+  expect(new NoticeService(s.root).list()).toHaveLength(2);
+  for (const releasedIds of [null, [1], Array(201).fill("synthetic-id")]) {
+    writeFileSync(path, JSON.stringify({ schema: "dash.notice_history/v1", items: [legacy], releasedIds }));
+    expect(() => new NoticeService(s.root)).toThrow("Invalid release receipts");
+  }
+});
+
 test("release retry after clearing fails does not publish a second digest", () => {
   const s = setup(); s.notices.hold({ title: "Synthetic", body: "Ready" }, null);
   const saved = readFileSync(join(s.root, "notices-deferred.json"), "utf8");
