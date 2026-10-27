@@ -10,6 +10,7 @@ import { PressScale } from "./PressScale";
 import { useAmbientRunning, useOrbMotion } from "./OrbMotion";
 import { InteractiveTile } from "./InteractiveTile";
 import { Tree } from "./Tree";
+import { LiveTriageList } from "./LiveTriageList";
 import type { TreeNode } from "../lib/tree";
 
 const kindColor = { chat: colors.gold, subagent: colors.orchestraSubagent, repo: colors.gold, host: colors.textMuted };
@@ -66,7 +67,7 @@ function useLatest<T>(value: T) {
   return ref;
 }
 
-export function OrchestraGraph({ graph, width: _width, children, actions, fixture = false, error, warnings = [], onOpen, onFeedback, canOpen }: { graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode; fixture?: boolean; error?: string; warnings?: string[]; onOpen?(node: MapNode): void; onFeedback?(node: MapNode): void; canOpen?(node: MapNode): boolean }) {
+export function OrchestraGraph({ graph, width: _width, children, actions, fixture = false, error, warnings = [], onOpen, onFeedback, canOpen, triageHeader }: { triageHeader?: ReactNode; graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode; fixture?: boolean; error?: string; warnings?: string[]; onOpen?(node: MapNode): void; onFeedback?(node: MapNode): void; canOpen?(node: MapNode): boolean }) {
   const [view, setView] = useState<OrchestraView>(() => defaultView(graph.nodes));
   const [chosen, setChosen] = useState(false);
   const [filter, setFilter] = useState<MapFilter | null>(null);
@@ -181,13 +182,13 @@ export function OrchestraGraph({ graph, width: _width, children, actions, fixtur
   return <View style={styles.root} testID="orchestra-graph">
     <Text style={styles.summary}>{summary}</Text>
     <View style={styles.tabs}>{ORCHESTRA_VIEWS.map(mode => <PressScale key={mode.id} accessibilityRole="button" accessibilityLabel={mode.title} accessibilityState={{ selected: view === mode.id }} onPress={() => switchView(mode.id)} style={[styles.tab, view === mode.id && styles.tabOn]}><Text style={[styles.tabTitle, view === mode.id && { color: colors.gold }]}>{mode.title}</Text><Text style={styles.subtitle}>{mode.subtitle}</Text></PressScale>)}</View>
-    <Text style={styles.hint}>{fixture ? "Fixture · not live" : "Read-only host evidence · last 24h"} · Tap a label to inspect</Text>
+    <Text style={styles.hint}>{fixture ? "Fixture · not live" : view === "triage" ? "Live priority sources · source ages shown" : "Read-only host evidence · last 24h"} · Tap a label to inspect</Text>
     {error ? <Text accessibilityRole="alert" style={styles.warning}>{error}</Text> : null}
     {warnings.length ? <Text style={styles.warning}>{warnings.join(" · ")}</Text> : null}
     {view === "work" ? <Text style={styles.hint}>{current.nodes.filter(n => n.collision).length} W1 collisions · {current.nodes.filter(n => n.kind !== "repo" && n.state === "live").length} live sessions changing worktrees</Text> : null}
     {view === "triage" ? <Text style={styles.hint}>{TRIAGE_LANES.map(l => `${l.title} ${current.nodes.filter(n => n.state === l.state).length}`).join(" → ")}</Text> : null}
     <Animated.View style={[styles.body, transition]}>
-      <FlatList
+      {view === "triage" ? <>{triageHeader}<LiveTriageList /></> : <FlatList
         testID="orchestra-list"
         data={rows}
         keyExtractor={row => row.key}
@@ -199,7 +200,7 @@ export function OrchestraGraph({ graph, width: _width, children, actions, fixtur
         maxToRenderPerBatch={8}
         windowSize={7}
         removeClippedSubviews={Platform.OS === "android"}
-      />
+      />}
     </Animated.View>
     <View style={styles.legend} accessibilityLabel="Graph legend. Tap to highlight, hold to show only.">{legendItems.map(({ kind, count, live }) => <PressScale key={kind} accessibilityRole="button" accessibilityLabel={`Legend ${kind}`} accessibilityHint="Tap to highlight; long press to show only" onPress={() => setFilter(filter?.kind === kind ? null : { kind, only: false })} onLongPress={() => { setFilter({ kind, only: true }); setFocusOnly(false); }} style={[styles.legendItem, filter?.kind === kind && styles.tabOn]}><Glyph kind={kind} /><Text style={styles.meta}>{kind} {count} · {live} live</Text></PressScale>)}</View>
     <View style={styles.footer}><PressScale onPress={() => { setFocusOnly(!focusOnly); }} style={styles.button}><Text style={styles.meta}>{focusOnly ? "All" : "Focus"}</Text></PressScale><PressScale onPress={() => { setFilter(null); setFocusOnly(false); setFocusId(null); }} style={styles.button}><Text style={styles.meta}>Reset</Text></PressScale>{actions}</View>
