@@ -122,6 +122,13 @@ describe("compact tool call row (DASH-15)", () => {
       tool("unknown_vendor", { target: bearer }),
       tool("read_file", { path: "/repo/.env" }, { output: "VERY_PRIVATE=do-not-expose" }),
     ];
+    const safeQuery = compactToolRow(tool("web_search", { query: "Find token=" + secret + " in docs" }));
+    expect(safeQuery.target).toContain("Find");
+    expect(safeQuery.target).toContain("docs");
+    expect(safeQuery.target).not.toContain(secret);
+    const numeric = compactToolRow(tool("unknown_vendor", { token: 123456789, path: "docs" }));
+    expect(numeric.target).not.toContain("123456789");
+    expect(numeric.accessibilityLabel).not.toContain("123456789");
     for (const call of cases) {
       const row = compactToolRow(call);
       expect(row.target).not.toContain(secret);
