@@ -67,10 +67,19 @@ mock.module("react-native-webrtc", () => ({
 }));
 
 const { createVoicePeer } = await import("./voice-peer.native");
+// Pass react-native explicitly: another test file may already own the process-wide module mock.
+const host = {
+  Platform: { OS: "android" },
+  PermissionsAndroid: {
+    PERMISSIONS: { RECORD_AUDIO: "android.permission.RECORD_AUDIO" },
+    RESULTS: { GRANTED: "granted" },
+    request: async () => permission,
+  },
+} as unknown as import("./voice-peer.native").VoicePeerHost;
 
 describe("Android realtime peer teardown", () => {
   test("End disables and stops every local track and closes channel, peer and stream once", async () => {
-    const peer = await createVoicePeer(() => {}, () => {}, () => {});
+    const peer = await createVoicePeer(() => {}, () => {}, () => {}, host);
     const stream = streams.at(-1);
     const connection = connections.at(-1);
     expect(stream).toBeDefined();
@@ -95,11 +104,11 @@ describe("Android realtime peer teardown", () => {
   });
 
   test("a new call after End acquires a distinct peer and microphone stream", async () => {
-    const first = await createVoicePeer(() => {}, () => {}, () => {});
+    const first = await createVoicePeer(() => {}, () => {}, () => {}, host);
     const oldStream = streams.at(-1);
     const oldConnection = connections.at(-1);
     first.close();
-    const next = await createVoicePeer(() => {}, () => {}, () => {});
+    const next = await createVoicePeer(() => {}, () => {}, () => {}, host);
     const newStream = streams.at(-1);
     const newConnection = connections.at(-1);
     expect(newStream).not.toBe(oldStream);
@@ -117,11 +126,11 @@ describe("Android realtime peer teardown", () => {
     mediaFails = true;
     const before = connections.length;
     try {
-      await expect(createVoicePeer(() => {}, () => {}, () => {})).rejects.toThrow("Mic unavailable");
+      await expect(createVoicePeer(() => {}, () => {}, () => {}, host)).rejects.toThrow("Mic unavailable");
       expect(connections.length).toBe(before + 1);
       expect(connections.at(-1)?.closes).toBe(1);
     } finally { mediaFails = false; }
-    const next = await createVoicePeer(() => {}, () => {}, () => {});
+    const next = await createVoicePeer(() => {}, () => {}, () => {}, host);
     next.close();
     expect(streams.at(-1)?.releases).toBe(1);
   });
@@ -130,7 +139,7 @@ describe("Android realtime peer teardown", () => {
     const before = connections.length;
     permission = "denied";
     try {
-      await expect(createVoicePeer(() => {}, () => {}, () => {})).rejects.toThrow("Microphone permission denied.");
+      await expect(createVoicePeer(() => {}, () => {}, () => {}, host)).rejects.toThrow("Microphone permission denied.");
       expect(connections.length).toBe(before);
     } finally { permission = "granted"; }
   });
