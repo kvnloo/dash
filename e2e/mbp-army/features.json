@@ -1,6 +1,10 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "annotate-tldraw", "title": "Offline warm tldraw annotation and history",
+     "tests": ["annotate-tldraw: warm open, visible stroke, local assets and history"]},
+    {"id": "annotate-tldraw-contract", "title": "Unchanged sent annotation JSON and markers",
+     "tests": ["annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Skia"]},
     {"id": "pairing", "title": "Pair with a bridge, Chats tab, open and close a chat window",
      "tests": ["pairing, Chats tab, open and close real chat window"]},
     {"id": "send-stream", "title": "Composer send and streamed agent reply",
