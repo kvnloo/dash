@@ -71,6 +71,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const tldraw = useRef<TldrawAnnotateHandle>(null);
   const active = annotate.use(s => s.active);
   const annotationStatus = annotate.use(s => s.status);
+  const previousAnnotationStatus = useRef(annotationStatus);
   const penMode = annotate.use(s => s.penMode);
   const tool = annotate.use(s => s.tool);
   const color = annotate.use(s => s.color);
@@ -237,8 +238,12 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const frameStyle = useAnimatedStyle(() => ({ bottom: composerAvoidance(-keyboardHeight.value) }));
   const Ink = ink?.InkCanvas;
   useEffect(() => {
-    if (engine === "tldraw" && strokes.length === 0 && (!active || annotationStatus === "sent")) tldraw.current?.clear(true);
-  }, [engine, active, annotationStatus, strokes.length]);
+    const confirmed = annotationStatus === "sent" && previousAnnotationStatus.current !== "sent";
+    previousAnnotationStatus.current = annotationStatus;
+    if (engine !== "tldraw") return;
+    if (confirmed) tldraw.current?.retain(strokes.map(stroke => stroke.id));
+    else if (!active && strokes.length === 0) tldraw.current?.clear(true);
+  }, [engine, active, annotationStatus, strokes]);
   return (
     <View style={styles.root}>
       <GestureDetector gesture={gesture}>

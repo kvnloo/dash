@@ -13,6 +13,7 @@ export interface TldrawAnnotateHandle extends DOMImperativeFactory {
   undo(): void;
   redo(): void;
   clear(...args: Parameters<DOMImperativeFactory[string]>): void;
+  retain(...args: Parameters<DOMImperativeFactory[string]>): void;
   export(...args: Parameters<DOMImperativeFactory[string]>): void;
 }
 interface Props {
@@ -56,6 +57,20 @@ export default function TldrawAnnotateDOM(props: Props) {
   useDOMImperativeHandle<TldrawAnnotateHandle>(props.ref ?? null, () => ({
     undo() { editor?.undo(); publish(); },
     redo() { editor?.redo(); publish(); },
+    retain(...args: Parameters<DOMImperativeFactory[string]>) {
+      if (!editor || !Array.isArray(args[0])) return;
+      const kept = new Set(args[0].filter(id => typeof id === "number"));
+      const removed = editor.getCurrentPageShapes().filter(shape => {
+        const ink = inks.current.get(shape.id);
+        // Uncommitted ink may still be under the pen while an upload finishes.
+        return ink && !kept.has(ink.id);
+      }).map(shape => shape.id);
+      editor.run(() => editor.deleteShapes(removed), { history: "ignore" });
+      editor.clearHistory();
+      for (const id of removed) inks.current.delete(id);
+      if (kept.size === 0) nextId.current = 1;
+      publish();
+    },
     clear(...args: Parameters<DOMImperativeFactory[string]>) {
       const reset = args[0] === true;
       if (!editor) return;
