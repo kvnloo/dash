@@ -1,7 +1,8 @@
 import type { Database } from "bun:sqlite";
 
 // Sidecar DDL. Bridge-owned, summaries only: no message content is ever stored here.
-export const SCHEMA_VERSION = 1;
+// 2: AgentsView's install id is a self machine; local rows move from machine:<id> to self.
+export const SCHEMA_VERSION = 2;
 
 const DDL = `
 create table if not exists meta(k text primary key, v text);

@@ -97,3 +97,27 @@ describe("agentsview sessions", () => {
     expect(nativeSessionId("codex", "codex:x")).toBe("x");
   });
 });
+
+test("AgentsView install id is this host: its sessions are self and chatable, routed as av:<harness>:<session>", async () => {
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { agentsviewMachineId, isSelfArchiveProfile } = await import("./agentsview-sessions");
+  const { avChatRow, selfMachines } = await import("./chat-index/agentsview-src");
+  const dir = mkdtempSync(join(tmpdir(), "dash-av-id-"));
+  const db = join(dir, "sessions.db");
+  writeFileSync(db, "");
+  expect(agentsviewMachineId(db)).toBeUndefined();
+  writeFileSync(join(dir, "telemetry-install-id"), "b163c2db159f66e6567dc1fe9acb4706\n");
+  const id = agentsviewMachineId(db);
+  expect(id).toBe("b163c2db159f66e6567dc1fe9acb4706");
+  const row = { id: "5ef72d78-e14b-4a87-b4b1-681bd7b3e4ac", agent: "claude", project: "p", cwd: "/w", machine: id ?? "", title: "t", started_at: null, ended_at: null, message_count: 12 };
+  expect(avChatRow(row, selfMachines([])).chatable).toBe(0);
+  const self = avChatRow(row, selfMachines([id ?? ""]));
+  expect(self.chatable).toBe(1);
+  expect(self.agent_id).toBe("av:claude:5ef72d78-e14b-4a87-b4b1-681bd7b3e4ac");
+  expect(isSelfArchiveProfile(self.agent_id ?? undefined, "claude", row.id)).toBe(true);
+  expect(isSelfArchiveProfile(self.agent_id ?? undefined, "codex", row.id)).toBe(false);
+  expect(isSelfArchiveProfile(self.agent_id ?? undefined, "claude", "other")).toBe(false);
+  expect(isSelfArchiveProfile(undefined, "claude", row.id)).toBe(false);
+});
