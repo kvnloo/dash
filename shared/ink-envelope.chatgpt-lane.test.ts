@@ -46,6 +46,7 @@ test("optional references, all ink shapes and normalized bounding-box endpoints 
   for (const event of [
     { ...common, event_type: "capture_open", payload: { width: 1, height: 1 } },
     { ...common, event_type: "annotation_commit", payload: { stroke_count: 0 } },
+    { ...common, event_type: "annotation_undo", payload: { count: 0 } },
   ]) {
     expect(parseInkEnvelope(event)).toEqual({ ok: true, value: event });
   }
@@ -119,7 +120,6 @@ test("invalid payloads, oversized strings and unknown keys are rejected per type
     { ...common, event_type: "annotation_delta", payload: { shape: "pen", bbox: [0, 0, 1, 1], target_id: "stroke.dot" } },
     { ...common, event_type: "annotation_delta", payload: { shape: "pen", bbox: [0, 0, 1, 1], color: "red" } },
     { ...common, event_type: "annotation_undo", payload: { count: -1 } },
-    { ...common, event_type: "annotation_undo", payload: { count: 0 } },
     { ...common, event_type: "annotation_undo", payload: { count: 1.25 } },
     { ...common, event_type: "annotation_commit", payload: { stroke_count: -1 } },
     { ...common, event_type: "annotation_commit", payload: { stroke_count: 0.5 } },
