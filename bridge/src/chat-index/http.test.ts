@@ -209,7 +209,9 @@ describe("search degrades instead of failing", () => {
     const config = engineConfig(dir, { agentsviewPath: av.path });
     const healthy = inProcessWorker(config);
     // Worker 0 answers; worker 1 (content search) is stalled past the RPC timeout.
-    const client = new ChatIndexClient({ config, spawn: role => (role === "search" ? stalledWorker() : healthy(role)), timeoutMs: 300 });
+    // The RPC timeout also bounds the healthy ingest and title query, so it must
+    // outlast a loaded full suite; the stalled search worker still never replies.
+    const client = new ChatIndexClient({ config, spawn: role => (role === "search" ? stalledWorker() : healthy(role)), timeoutMs: 5_000 });
     cleanup.push(() => client.stop());
     await client.primary.call({ op: "ingest", args: null });
     const res = await handlerWith(client)(new Request("http://b/chats/search?q=flamingo", { headers: { Authorization: `Bearer ${TOKEN}` } }));
@@ -218,7 +220,7 @@ describe("search degrades instead of failing", () => {
     expect(page?.hits.map(h => h.field)).toEqual(["title"]);
     expect(page?.partial).toBe(true);
     expect(page?.next).not.toBeNull();
-  });
+  }, 20_000);
 });
 
 describe("Lru", () => {
