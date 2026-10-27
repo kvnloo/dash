@@ -84,7 +84,7 @@ describe("risingEdges", () => {
       { uptimeMs: 120, code: "BTN_STYLUS", pressed: false },
       down(125),
     ];
-    expect(risingEdges(edges)).toEqual([edges[0], edges[3]]);
+    expect(risingEdges(edges)).toEqual([down(100), down(125)]);
     expect(edges).toHaveLength(4); // pure; no input mutation
   });
 
@@ -96,8 +96,16 @@ describe("risingEdges", () => {
       { uptimeMs: 103, code: "BTN_STYLUS2", pressed: false },
       down(104, "BTN_STYLUS2"),
     ];
-    expect(risingEdges(edges)).toEqual([edges[0], edges[1], edges[4]]);
+    expect(risingEdges(edges)).toEqual([down(100), down(101, "BTN_STYLUS2"), down(104, "BTN_STYLUS2")]);
     expect(risingEdges(parseButtonEdges(fixture).edges)).toHaveLength(3);
+  });
+
+  test("empty and release-only inputs have no rising edges", () => {
+    expect(risingEdges([])).toEqual([]);
+    expect(risingEdges([
+      { uptimeMs: 100, code: "BTN_STYLUS", pressed: false },
+      { uptimeMs: 101, code: "BTN_STYLUS2", pressed: false },
+    ])).toEqual([]);
   });
 
   test("a first pressed edge counts even when the log starts mid-press", () => {
