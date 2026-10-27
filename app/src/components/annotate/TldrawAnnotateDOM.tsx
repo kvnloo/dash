@@ -132,7 +132,12 @@ export default function TldrawAnnotateDOM(props: Props) {
       // tldraw finalizes its shape in the bubble handler before this frame.
       requestAnimationFrame(() => {
         const shape = editor.getCurrentPageShapes().find(shape => !current.before.has(shape.id) && isAnnotationShape(editor, shape));
-        if (!shape || !isAnnotationShape(editor, shape) || current.flat.length < 8) return;
+        if (!shape || !isAnnotationShape(editor, shape)) { publish(); return; }
+        const xs = current.flat.filter((_, index) => index % 4 === 0);
+        const ys = current.flat.filter((_, index) => index % 4 === 1);
+        if (current.flat.length < 8 || Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) < 6) {
+          editor.deleteShapes([shape.id]); publish(); return;
+        }
         const inverse = editor.getShapePageTransform(shape).clone().invert();
         const points = [];
         for (let i = 0; i < current.flat.length; i += 4) {
