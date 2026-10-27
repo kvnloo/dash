@@ -194,13 +194,17 @@ describe("CLI", () => {
       });
       if (
         typeof parsed !== "object" || parsed === null ||
-        !("samples" in parsed) || !Array.isArray(parsed.samples)
+        !("samples" in parsed) || !Array.isArray(parsed.samples) ||
+        !("p50Ms" in parsed) || typeof parsed.p50Ms !== "number" ||
+        !("p95Ms" in parsed) || typeof parsed.p95Ms !== "number"
       ) {
-        throw new Error("CLI did not emit samples");
+        throw new Error("CLI did not emit samples and percentiles");
       }
       expect(parsed.samples).toHaveLength(2);
       expect(parsed.samples[0]).toBeCloseTo(40, 4);
       expect(parsed.samples[1]).toBeCloseTo(42, 4);
+      expect(parsed.p50Ms).toBeCloseTo(40, 4);
+      expect(parsed.p95Ms).toBeCloseTo(42, 4);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
