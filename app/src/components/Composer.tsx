@@ -7,7 +7,7 @@ import { useHandedness } from "../lib/useHandedness";
 import { MicButton } from "./MicButton";
 import { useRecordedSpeech } from "../lib/useRecordedSpeech";
 import { insertAtCursor, type Selection } from "../lib/mic-gesture";
-import { type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
+import { type RefObject, memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, Keyboard, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AttachmentChooser, type AttachmentAnchor } from "./AttachmentChooser";
 import { dismissKeyboard } from "../lib/dismiss-keyboard";
@@ -79,6 +79,13 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
   const changeDraft = useCallback((update: (draft: ComposerDraft) => ComposerDraft) => {
     if (draftKey) updateComposerDraft(draftKey, seed, update); else setLocalDraft(update);
   }, [draftKey, seed]);
+  // A draft handed over on open (main bar Send, a search result) is the owner's latest words for
+  // this chat. A saved draft for the chat (often an empty one left by clearing it) used to win
+  // over it, so the new chat opened empty (e2e B5). Once per mount: the composer is keyed by it.
+  useLayoutEffect(() => {
+    if (draftKey && initialText) updateComposerDraft(draftKey, seed, draft => draft.text === initialText ? draft : { ...draft, text: initialText });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const setText = useCallback((value: string | ((previous: string) => string)) => changeDraft(draft => ({ ...draft, text: typeof value === "function" ? value(draft.text) : value })), [changeDraft]);
   const setDrafts = useCallback((value: DraftAttachment[] | ((previous: DraftAttachment[]) => DraftAttachment[])) => changeDraft(draft => ({ ...draft, attachments: typeof value === "function" ? value(draft.attachments) : value })), [changeDraft]);
   const lastShare = useRef<string | undefined>(undefined);
