@@ -115,6 +115,7 @@ function bracketEnd(line: string, start: number): number {
 }
 
 function recordHtmlTag(state: ScanState, tag: string): void {
+  if (/^<\s*(?:https?:\/\/|mailto:)/i.test(tag)) return;
   const match = /^<\s*(\/?)\s*([A-Za-z][A-Za-z0-9:-]*)(?=[\s/>])/.exec(tag);
   if (!match) return; // Includes URL autolinks and email autolinks.
   const name = (match[2] ?? "").toLowerCase();
