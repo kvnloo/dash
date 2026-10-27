@@ -189,6 +189,89 @@ describe("toGestures - frame and slot grouping", () => {
     expect(dropped).toHaveLength(0);
     expect(dropped.warnings.join(" ")).toContain("SYN_DROPPED");
   });
+  test("discards every event through the first SYN_REPORT after SYN_DROPPED", () => {
+    const gestures = toGestures([
+      event(1, "EV_ABS", "ABS_MT_TRACKING_ID", 1),
+      event(2, "EV_ABS", "ABS_MT_POSITION_X", 10),
+      event(3, "EV_ABS", "ABS_MT_POSITION_Y", 20),
+      event(4, "EV_SYN", "SYN_REPORT", 0),
+      event(5, "EV_ABS", "ABS_MT_POSITION_X", 30),
+      event(6, "EV_SYN", "SYN_DROPPED", 0),
+      // Even complete contacts in this interval are not synchronized.
+      event(7, "EV_ABS", "ABS_MT_TRACKING_ID", 2),
+      event(8, "EV_ABS", "ABS_MT_POSITION_X", 40),
+      event(9, "EV_ABS", "ABS_MT_POSITION_Y", 50),
+      event(10, "EV_ABS", "ABS_MT_TRACKING_ID", -1),
+      event(11, "EV_SYN", "SYN_DROPPED", 0),
+      event(12, "EV_KEY", "BTN_TOUCH", 1),
+      event(13, "EV_ABS", "ABS_MT_POSITION_X", 60),
+      event(14, "EV_ABS", "ABS_MT_POSITION_Y", 70),
+      event(15, "EV_KEY", "BTN_TOUCH", 0),
+      event(16, "EV_SYN", "SYN_REPORT", 0),
+    ]);
+    expect(gestures).toHaveLength(0);
+    expect(gestures.warnings).toEqual([
+      "/dev/input/event2 at 6: SYN_DROPPED; discarding unsynchronized gesture",
+      "/dev/input/event2 at 11: SYN_DROPPED; discarding unsynchronized gesture",
+    ]);
+  });
+
+  test("does not retain discarded coordinates or slot selection after recovery", () => {
+    const gestures = toGestures([
+      event(1, "EV_SYN", "SYN_DROPPED", 0),
+      event(2, "EV_ABS", "ABS_MT_POSITION_X", 90),
+      event(3, "EV_ABS", "ABS_MT_POSITION_Y", 100),
+      event(4, "EV_ABS", "ABS_MT_SLOT", 1),
+      event(5, "EV_SYN", "SYN_REPORT", 0),
+      event(6, "EV_ABS", "ABS_MT_TRACKING_ID", 2),
+      event(7, "EV_SYN", "SYN_REPORT", 0),
+      event(8, "EV_ABS", "ABS_MT_TRACKING_ID", -1),
+      event(9, "EV_SYN", "SYN_REPORT", 0),
+      event(10, "EV_ABS", "ABS_MT_TRACKING_ID", 3),
+      event(11, "EV_ABS", "ABS_MT_POSITION_X", 20),
+      event(12, "EV_ABS", "ABS_MT_POSITION_Y", 30),
+      event(13, "EV_SYN", "SYN_REPORT", 0),
+      event(14, "EV_ABS", "ABS_MT_TRACKING_ID", -1),
+      event(15, "EV_SYN", "SYN_REPORT", 0),
+    ]);
+    expect(gestures).toHaveLength(1);
+    expect(gestures[0]).toEqual({
+      startUs: 13, endUs: 15, durationMs: 0.002,
+      points: [{ tUs: 13, x: 20, y: 30 }],
+    });
+    expect(gestures.warnings).toEqual([
+      "/dev/input/event2 at 1: SYN_DROPPED; discarding unsynchronized gesture",
+      "/dev/input/event2 at 9: contact ended without slot-0 coordinates",
+    ]);
+  });
+
+  test("drop recovery is per-device and waits for that device's SYN_REPORT", () => {
+    const other = "/dev/input/event9";
+    const gestures = toGestures([
+      event(1, "EV_KEY", "BTN_TOUCH", 1, other),
+      event(2, "EV_ABS", "ABS_MT_POSITION_X", 30, other),
+      event(3, "EV_ABS", "ABS_MT_POSITION_Y", 40, other),
+      event(4, "EV_SYN", "SYN_REPORT", 0, other),
+      event(5, "EV_SYN", "SYN_DROPPED", 0),
+      event(6, "EV_KEY", "BTN_TOUCH", 0, other),
+      event(7, "EV_SYN", "SYN_REPORT", 0, other),
+      event(8, "EV_KEY", "BTN_TOUCH", 1),
+      event(9, "EV_ABS", "ABS_MT_POSITION_X", 50),
+      event(10, "EV_ABS", "ABS_MT_POSITION_Y", 60),
+      event(11, "EV_SYN", "SYN_REPORT", 0),
+      event(12, "EV_KEY", "BTN_TOUCH", 0),
+      event(13, "EV_SYN", "SYN_REPORT", 0),
+    ]);
+    expect(gestures).toHaveLength(1);
+    expect(gestures[0]).toEqual({
+      startUs: 4, endUs: 7, durationMs: 0.003,
+      points: [{ tUs: 4, x: 30, y: 40 }],
+    });
+    expect(gestures.warnings).toEqual([
+      "/dev/input/event2 at 5: SYN_DROPPED; discarding unsynchronized gesture",
+    ]);
+  });
+
   test("reuses persistent slot coordinates for consecutive BTN_TOUCH-only contacts", () => {
     const events: InputEvent[] = [
       event(100, "EV_ABS", "ABS_MT_POSITION_X", 55),

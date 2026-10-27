@@ -86,6 +86,7 @@ export function parseGetevent(text: string): ParsedInputEvents {
 
 type DeviceState = {
   frame: InputEvent[];
+  discarding: boolean;
   active: boolean;
   slot: number;
   // ABS_MT_POSITION_* are persistent slot values, not contact-local values.
@@ -100,6 +101,7 @@ type DeviceState = {
 function newDeviceState(): DeviceState {
   return {
     frame: [],
+    discarding: false,
     active: false,
     slot: 0,
     x: null,
@@ -241,7 +243,14 @@ export function toGestures(
     }
     if (event.type === "EV_SYN" && event.code === "SYN_DROPPED") {
       warnings.push(event.device + " at " + event.tUs + ": SYN_DROPPED; discarding unsynchronized gesture");
-      states.set(event.device, newDeviceState());
+      states.set(event.device, { ...newDeviceState(), discarding: true });
+    } else if (state.discarding) {
+      // evdev requires ignoring everything through the next SYN_REPORT.
+      // This pure trace parser cannot query EVIOCG* to restore lost state;
+      // resume with empty caches and require fresh contact/axis events.
+      if (event.type === "EV_SYN" && event.code === "SYN_REPORT") {
+        state.discarding = false;
+      }
     } else if (event.type === "EV_SYN" && event.code === "SYN_REPORT") {
       processFrame(state, event.device, event.tUs, gestures, warnings);
     } else {
