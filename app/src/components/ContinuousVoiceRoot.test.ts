@@ -55,4 +55,14 @@ describe("root-owned voice survives in-app navigation", () => {
     expect(lifetime).toContain("void controller?.stop()");
     expect(lifetime).toMatch(/\}, \[\]\);/);
   });
+
+  test("entering annotation starts conversation voice; leaving ends only the call annotation started", () => {
+    const root = source("ContinuousVoiceRoot.tsx");
+    expect(root).toContain("const annotating = annotate.use(s => s.active);");
+    const at = root.indexOf("if (annotating) {");
+    expect(at).toBeGreaterThan(-1);
+    const effect = root.slice(at, root.indexOf("}, [annotating]);", at));
+    expect(effect).toMatch(/\["idle", "error"\]\.includes\(phase\) && !starting\.current\) \{ autoStarted\.current = true; void begin\(\); \}/);
+    expect(effect).toMatch(/else if \(autoStarted\.current\) \{\s*autoStarted\.current = false;\s*void end\(\);/);
+  });
 });

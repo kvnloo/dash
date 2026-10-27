@@ -15,6 +15,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { microphone } from "../lib/recorded-speech";
 import { createStore } from "../store/createStore";
 import { debugUi } from "../debug/ui-store";
+import { voiceTarget } from "../lib/voice-target";
+
+/** One logcat line per failed voice stage (phone-watch turns these into incidents). Notes never carry secrets. */
+function voiceTrace(stage: string, note: string | undefined): void { console.warn(`[voice] ${stage} failed: ${note ?? "unknown"}`); }
 
 const initial: VoiceState = { phase: "idle", muted: false, lines: [] };
 /** True while a full-screen chat window is open: its dock row is then the single home of voice Mute/End. */
@@ -58,16 +62,21 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     desiredMute.current = false;
     const settings = store.get().settings;
     // Retry is pinned to the original conversation, even if the user navigated elsewhere.
+    // Conversation mode is usually opened from the main screen, where the open chat is rarely an
+    // attached Hermes chat: bind the most recent attached one instead of refusing before the mic.
     const conversation = (state.phase === "error" ? attached.current : null) ??
-      store.get().conversations.find(c => c.id === store.get().activeId);
-    if (!settings?.identity || conversation?.harness !== "hermes" || !conversation.sessionId || !conversation.profileId) {
-      setState({ ...initial, phase: "error", note: "Attach a Hermes chat and pair Dash" });
+      voiceTarget(store.get().conversations, store.get().activeId);
+    if (!settings?.identity || !conversation?.sessionId || !conversation.profileId) {
+      const note = !settings?.identity ? "Pair Dash with z0bridge identity to use voice" : "Open a Hermes chat once, then start voice";
+      voiceTrace("target", note);
+      setState({ ...initial, phase: "error", note });
       starting.current = false;
       return;
     }
     const target = { profile: conversation.profileId, session: conversation.sessionId };
     const release = microphone.acquire("live");
     if (!release) {
+      voiceTrace("mic-lease", `in use by ${microphone.owner}`);
       setState({ ...initial, phase: "error", note: `Microphone in use by ${microphone.owner}` });
       starting.current = false;
       return;
@@ -128,6 +137,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
         }
       }, changed: next => {
         if (generation !== epoch.current) return;
+        if (next.phase === "error") voiceTrace("call", next.note);
         setState(next.phase === "error" ? { ...next, note: voiceConnectionErrorLine(next.note) } : next);
       },
         captureReleased: () => { releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined; },
@@ -141,6 +151,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       await connecting;
     } catch (error) {
       releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined;
+      voiceTrace("bootstrap", error instanceof Error ? error.message : undefined);
       if (generation === epoch.current) setState({ ...initial, phase: "error", note: voiceConnectionErrorLine(error instanceof Error ? error.message : undefined) });
     }
     finally { if (generation === epoch.current) starting.current = false; }
@@ -175,6 +186,20 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
     };
   }, []);
+  // Annotation is a spoken mode: entering it turns conversation voice on; leaving it ends only a call it started.
+  const annotating = annotate.use(s => s.active);
+  const latest = useRef({ start, stop, phase: state.phase });
+  latest.current = { start, stop, phase: state.phase };
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    const { start: begin, stop: end, phase } = latest.current;
+    if (annotating) {
+      if (["idle", "error"].includes(phase) && !starting.current) { autoStarted.current = true; void begin(); }
+    } else if (autoStarted.current) {
+      autoStarted.current = false;
+      void end();
+    }
+  }, [annotating]);
   const shown = fixture ?? state;
   const active = !["idle", "error"].includes(shown.phase);
   const visible = voiceBarVisible(shown.phase, attempted);
