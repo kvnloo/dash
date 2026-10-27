@@ -6,7 +6,7 @@ Run commands from the repository root in an isolated checkout unless a step says
 
 ## Quick start
 
-The commands below are keys in root `package.json` (except the explicit `bun test` and `bun scripts/...` invocations).
+The commands below are keys in root `package.json` (except direct `bun test` and `bun scripts/mutate.ts` invocations).
 
 | Purpose | Exact command |
 | --- | --- |
