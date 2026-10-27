@@ -1,3 +1,4 @@
+import type { SearchRowModel } from "./chat-search";
 import type { SearchResult } from "./global-search";
 
 export const SEARCH_RESULT_KIND_LABEL: Record<SearchResult["kind"], string> = {
@@ -86,12 +87,30 @@ export function searchResultAccessibility(
   return { label: parts.join(", "), hint: actionHint(item), state: { disabled: false }, actions };
 }
 
+/**
+ * Spoken metadata for a precomputed search row. Rows from global search carry their result;
+ * rows from the chat index or host search are chats and are described from the row model.
+ */
+export function searchRowAccessibility(model: SearchRowModel, display: { hasLongPress: boolean }): SearchResultAccessibility {
+  if (model.result) return searchResultAccessibility(model.result, { title: model.title, meta: model.meta, hasLongPress: display.hasLongPress });
+  const title = model.title.trim() || "Unnamed " + model.kindLabel.toLowerCase();
+  const status = model.stale ? "Ended" : model.meta ? updatedLabel(model.meta) : undefined;
+  const parts: string[] = [];
+  for (const value of [title, model.kindLabel, status, model.subtitle]) {
+    const text = value?.trim();
+    if (text && !parts.some((part) => part.toLowerCase() === text.toLowerCase())) parts.push(text);
+  }
+  const actions: SearchResultAccessibility["actions"] = [{ name: "activate", label: "Open result" }];
+  if (display.hasLongPress) actions.push({ name: "longpress", label: "Send feedback" });
+  return { label: parts.join(", "), hint: "Opens the conversation", state: { disabled: false }, actions };
+}
+
 /** Both native touch and TalkBack actions must dispatch the identical result identity. */
-export function performSearchResultAction(
-  item: SearchResult,
+export function performSearchResultAction<T>(
+  item: T,
   actionName: string,
-  onPress: (item: SearchResult) => void,
-  onLongPress?: (item: SearchResult) => void,
+  onPress: (item: T) => void,
+  onLongPress?: (item: T) => void,
 ): boolean {
   if (actionName === "activate") {
     onPress(item);

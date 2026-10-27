@@ -21,6 +21,7 @@ import { forgetEverything, saveSettings, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
 import { screenBack } from "../lib/screen-back";
+import { endpointsOf, withEditedEndpoint } from "../lib/bridge-failover";
 
 export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const thumb = useHandedness();
@@ -36,6 +37,15 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const attemptRef = useRef<AbortController | null>(null);
+
+  // Failover (or return to the primary) swaps the bridge in use under this screen:
+  // show that bridge, so Save cannot write the old address over the new entry.
+  const activeAddress = settings?.address;
+  const activeToken = settings?.token;
+  useEffect(() => {
+    setAddress(activeAddress ?? "");
+    setToken(activeToken ?? "");
+  }, [activeAddress, activeToken]);
 
   const dirty =
     normalizeAddress(address) !== (settings?.address ?? "") ||
@@ -67,22 +77,23 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
     attemptRef.current = attempt;
     setSaving(true);
     setSaveError(null);
-    const next = {
-      ...store.get().settings,
+    const previous = store.get().settings;
+    const next = withEditedEndpoint(previous, {
+      ...previous,
       identity,
       address: normalizeAddress(address),
       token: token.trim(),
       harness: settings?.harness ?? "omp",
       cwd: cwd.trim() || undefined,
       inAppFeedback: settings?.inAppFeedback ?? true,
-    };
+    });
     haptic.tap();
     try {
       await connectSettings({
         settings: next,
         connection: store,
         save: saveSettings,
-        start: (saved) => bridge.start(saved),
+        start: (saved) => bridge.start(saved, { failover: false }),
         signal: attempt.signal,
         onConnected: () => {
           haptic.success();
@@ -158,6 +169,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           </Pressable>
           {modelsOpen ? <ModelsPanel /> : null}
           <NotificationSettings />
+          <Pressable accessibilityRole="button" onPress={() => navigation.navigate("Notices")} style={styles.secondary}><Text style={styles.secondaryText}>Notices · Agent reports</Text></Pressable>
           <Text style={styles.label}>Display</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <View style={styles.harnessRow}><Text style={styles.harnessName}>Thumb side</Text></View>
@@ -223,6 +235,15 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             accessibilityState={connectA11y.accessibilityState}
           />
           {saveError ? <Text style={[styles.help, styles.dangerText]} accessibilityRole="alert">{saveError}</Text> : null}
+
+          {settings && endpointsOf(settings).length > 1 ? (
+            <>
+              <Text style={styles.label}>Paired bridges (failover order)</Text>
+              <Text style={styles.help} testID="settings-bridge-endpoints">
+                {endpointsOf(settings).map((e, i) => `${i + 1}. ${e.address}${e.address === settings.address ? " (in use)" : ""}`).join("\n")}
+              </Text>
+            </>
+          ) : null}
 
           {connection.harnesses.length > 0 ? (
             <>

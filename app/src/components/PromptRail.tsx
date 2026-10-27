@@ -6,7 +6,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { haptic } from "../haptics";
-import { railTarget } from "../lib/prompt-navigation";
+import { railLayout, railTargetAt } from "../lib/prompt-navigation";
 import { railColors, railWidth, type RailTurn } from "../lib/rail-turns";
 import { colors, type } from "../theme";
 
@@ -20,8 +20,11 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
   const [confirmContinue, setConfirmContinue] = useState(false);
   const height = useSharedValue(240);
   const last = useSharedValue(-1);
-  const count = useSharedValue(anchors.length);
-  useEffect(() => { count.set(anchors.length); setSelected(null); }, [anchors, count]);
+  const [railHeight, setRailHeight] = useState(240);
+  const positions = useMemo(() => railLayout(anchors.map(anchor => anchor.durationMs), railHeight), [anchors, railHeight]);
+  const tickPositions = useSharedValue(positions);
+  useEffect(() => { tickPositions.set(positions); }, [positions, tickPositions]);
+  useEffect(() => { setSelected(null); }, [anchors]);
   const actions = useRef({ anchors, onJump, onLatest });
   actions.current = { anchors, onJump, onLatest };
   const choose = useCallback((index: number) => {
@@ -37,12 +40,12 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
   const clear = useCallback(() => setSelected(null), []);
   const cursor = useAnimatedStyle(() => ({
     opacity: last.get() < 0 ? 0 : 1,
-    transform: [{ translateY: Math.min(height.get() - 2, Math.max(0, (last.get() + 0.5) / Math.max(1, count.get()) * height.get())) }],
+    transform: [{ translateY: Math.min(height.get() - 2, Math.max(0, tickPositions.get()[last.get()] ?? height.get())) }],
   }));
   const pan = useMemo(() => {
     const update = (y: number) => {
       "worklet";
-      const index = railTarget(y, height.get(), count.get());
+      const index = railTargetAt(y, tickPositions.get(), height.get());
       if (index === last.get()) return;
       last.set(index);
       // Only preview on boundary changes. FlashList commits once, on release.
@@ -51,9 +54,9 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
     return Gesture.Pan().minDistance(0)
       .onBegin(event => { update(event.y); })
       .onUpdate(event => { update(event.y); })
-      .onEnd(event => { scheduleOnRN(commit, railTarget(event.y, height.get(), count.get())); })
+      .onEnd(event => { scheduleOnRN(commit, railTargetAt(event.y, tickPositions.get(), height.get())); })
       .onFinalize((_event, success) => { last.set(-1); if (!success) scheduleOnRN(clear); });
-  }, [choose, clear, commit, count, height, last]);
+  }, [choose, clear, commit, tickPositions, height, last]);
   const turn = selected === null ? undefined : anchors[selected];
   if (!anchors.length) return null;
   return <View style={[styles.rail, thumb.edge(0)]} pointerEvents="box-none">
@@ -66,7 +69,7 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
       {turn ? <>
         <Text style={styles.resultLabel}>RESULT · answer excerpt</Text>
         <Text style={styles.previewText} numberOfLines={3}>{turn.summary}</Text>
-        <Text style={styles.facts}>{turn.characters.toLocaleString()} chars · {turn.activityUpdates} activity updates{turn.code ? " · diff" : ""}{turn.files.length ? ` · ${turn.files.length} file refs` : ""}</Text>
+        <Text style={styles.facts}>ran {Math.max(1, Math.round(turn.durationMs / 60000))} min · {turn.characters.toLocaleString()} chars · {turn.activityUpdates} activity updates{turn.code ? " · diff" : ""}{turn.files.length ? ` · ${turn.files.length} file refs` : ""}</Text>
         <Text style={styles.facts}>Width = answer volume · colour = state · ◆ = diff/PR</Text>
         {confirmContinue ? <Text style={styles.facts}>Replace the composer draft with this reference? Nothing is sent; this does not rewind the session.</Text> : null}
         <View style={styles.buttons}>
@@ -79,10 +82,10 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
       </> : <Action label="Jump to latest" onPress={() => { onLatest(); clear(); }} />}
     </View> : null}
     <GestureDetector gesture={pan}>
-      <View onLayout={e => { height.set(e.nativeEvent.layout.height); }}
+      <View onLayout={e => { height.set(e.nativeEvent.layout.height); setRailHeight(e.nativeEvent.layout.height); }}
         onPointerMove={e => {
           if (e.nativeEvent.pointerType !== "mouse" || e.nativeEvent.buttons !== 0) return;
-          const target = railTarget(e.nativeEvent.offsetY, height.get(), anchors.length);
+          const target = railTargetAt(e.nativeEvent.offsetY, positions, railHeight);
           if (target !== selected) choose(target);
         }}
         accessibilityRole="adjustable" accessibilityLabel="Prompt navigator"
@@ -93,7 +96,7 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
           const next = Math.max(0, Math.min(anchors.length, (selected ?? 0) + (e.nativeEvent.actionName === "increment" ? 1 : -1)));
           choose(next); commit(next);
         }} style={styles.ticks}>
-        <RailTicks anchors={anchors} />
+        <RailTicks anchors={anchors} positions={positions} />
         <Animated.View pointerEvents="none" style={[styles.cursor, thumb.edge(6), cursor]} />
       </View>
     </GestureDetector>
@@ -107,8 +110,8 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
 function Action({ label, onPress }: { label: string; onPress(): void }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.action}><Text style={styles.actionText}>{label}</Text></Pressable>;
 }
-const RailTicks = memo(function RailTicks({ anchors }: { anchors: readonly RailTurn[] }) {
-  return <View pointerEvents="none" style={styles.tickLayer}>{anchors.map(anchor => <View key={anchor.id} style={styles.slot}>
+const RailTicks = memo(function RailTicks({ anchors, positions }: { anchors: readonly RailTurn[]; positions: readonly number[] }) {
+  return <View pointerEvents="none" style={styles.tickLayer}>{anchors.map((anchor, index) => <View key={anchor.id} style={[styles.slot, { top: positions[index] ?? 0 }]}>
     <View style={[styles.tick, { width: railWidth(anchor.characters), backgroundColor: railColors[anchor.state] }]} />
     {anchor.code || anchor.pr ? <View style={styles.change} /> : null}
     {anchor.question ? <View style={styles.question} /> : null}
@@ -119,7 +122,7 @@ const styles = StyleSheet.create({
   cursor: { position: "absolute", top: 0, width: 32, height: 2, backgroundColor: colors.gold },
   rail: { position: "absolute", top: "18%", bottom: "12%", width: 44, alignItems: "center" },
   ticks: { flex: 1, width: 44 },
-  slot: { flex: 1, justifyContent: "center", alignItems: "flex-end", paddingRight: 6 },
+  slot: { position: "absolute", left: 0, right: 0, height: 2, marginTop: -1, justifyContent: "center", alignItems: "flex-end", paddingRight: 6 },
   tick: { height: 1, borderRadius: 1 },
   change: { position: "absolute", right: 1, width: 2, height: 2, backgroundColor: colors.textMuted, transform: [{ rotate: "45deg" }] },
   question: { position: "absolute", left: 1, width: 2, height: 2, borderRadius: 1, backgroundColor: colors.textMuted },

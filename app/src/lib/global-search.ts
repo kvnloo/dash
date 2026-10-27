@@ -3,7 +3,7 @@ import type { OrchestraProject } from "../catalog/orchestra";
 import type { AgentTarget } from "../mock/agents";
 import type { FileResource, NamedResource } from "../mock/resources";
 import type { Conversation } from "../model";
-import { conversationPreview, findLiveConversation, mergeLiveConversations } from "./live-sessions";
+import { conversationPreview, liveConversationIndex, mergeLiveConversations } from "./live-sessions";
 import { projectsFromHosts } from "./project-data";
 import { botSummary, botTarget } from "./bots";
 
@@ -151,6 +151,16 @@ function matches(text: string, haystack: string): boolean {
 export { conversationPreview } from "./live-sessions";
 
 const DISCOVER_LIMITS = { conversation: 8, bot: 6, product: 4 } as const;
+/** Text queries never build more rows than a screen of results can use. */
+export const TEXT_RESULT_LIMIT = 50;
+
+/**
+ * The rows a search screen shows. Search itself stays complete (scoped and nonempty discovery
+ * queries never inherit a cap); only the rendered list of a text query is bounded.
+ */
+export function visibleSearchResults(results: SearchResult[], query: string): SearchResult[] {
+  return parseSearchQuery(query).text && results.length > TEXT_RESULT_LIMIT ? results.slice(0, TEXT_RESULT_LIMIT) : results;
+}
 
 export function runGlobalSearch(params: {
   query: string;
@@ -225,9 +235,10 @@ export function runGlobalSearch(params: {
     // report that same key, neither is safe to open from search.
     const idCounts = new Map<string, number>();
     for (const live of listed) idCounts.set(live.id, (idCounts.get(live.id) ?? 0) + 1);
+    const findLive = liveConversationIndex(params.conversations);
     for (const live of listed) {
       if (idCounts.get(live.id) !== 1) continue;
-      const conversation = findLiveConversation(params.conversations, live) ?? live;
+      const conversation = findLive(live) ?? live;
       const harnessName = params.harnesses.find((h) => h.id === conversation.harness)?.name ?? conversation.harness;
       const preview = conversationPreview(conversation);
       const hay = [conversation.title, harnessName, preview, conversation.harness, conversation.sessionId ?? "", conversation.cwd ?? ""].join(" ");

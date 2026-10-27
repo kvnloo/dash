@@ -3,6 +3,7 @@
 import type { ChatAttachment } from "../../../shared/protocol";
 import type { Segment } from "../lib/annotate/align";
 import { EMPTY_DRAWING, addStroke, clear, eraseAlong, undo, type Drawing, type InkColor, type Stroke, type Tool } from "../lib/annotate/strokes";
+import { penButton, toggleMode } from "../lib/stylus-mode";
 import { createStore } from "./createStore";
 
 export interface AnnotationPreview {
@@ -14,6 +15,8 @@ export interface AnnotationPreview {
 
 export interface AnnotateState {
   active: boolean;
+  /** Current S Pen side-button latch, to ignore repeats until release. */
+  buttonDown: boolean;
   /** Palm rejection: only the S Pen draws; fingers scroll. Persisted per app run. */
   penMode: boolean;
   tool: Tool;
@@ -31,9 +34,16 @@ export interface AnnotateState {
   pendingTurn?: { id: string; conversationId: string; fingerprint: string };
 }
 
-export const annotate = createStore<AnnotateState>({
-  active: false, penMode: false, tool: "pen", color: "accent", drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle",
-});
+/** Annotation is a volatile session: cold starts and module refreshes begin closed.
+ * Never seed active or penMode from stored settings or a prior module instance. */
+function initialAnnotationState(): AnnotateState {
+  return {
+    active: false, buttonDown: false, penMode: false, tool: "pen", color: "accent",
+    drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle",
+  };
+}
+
+export const annotate = createStore<AnnotateState>(initialAnnotationState());
 
 export interface AnnotationSink {
   label: string;
@@ -68,6 +78,19 @@ export function enterAnnotation(): void {
 /** Discard: leave the mode and throw the drawing away. */
 export function exitAnnotation(): void {
   annotate.set(s => ({ ...s, active: false, drawing: EMPTY_DRAWING, segments: [], recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined }));
+}
+
+/** Switch modes without discarding ink, voice or queued drafts. */
+export function toggleAnnotation(): void {
+  annotate.set(s => ({ ...s, ...toggleMode(s) }));
+}
+
+/** Hardware presses enter S Pen drawing; release and repeats never switch modes. */
+export function stylusButton(pressed: boolean): void {
+  annotate.set(s => {
+    const next = penButton(s, pressed);
+    return next === s ? s : { ...s, ...next, penMode: pressed ? true : s.penMode };
+  });
 }
 
 export function setPenMode(on: boolean): void { annotate.set(s => ({ ...s, penMode: on })); }

@@ -43,6 +43,7 @@ export function parseNotificationTarget(data: unknown): NotificationTarget | nul
     return null;
   }
 
+  if (url === "dash://notices") return { kind: "notices" };
   if (url === "dash://approvals") return { kind: "approvals" };
   const chatId = typeof url === "string" ? parseChatLink(url) : null;
   return chatId === null ? null : { kind: "chat", chatId };

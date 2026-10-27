@@ -1,3 +1,4 @@
+import { isUsageCommand } from "../lib/composer-command";
 import { ContextCard, ContextGauge, type ContextControl } from "./ContextCard";
 import { Feather } from "@expo/vector-icons";
 import { AgentOrb } from "./AgentOrb";
@@ -6,11 +7,14 @@ import { useHandedness } from "../lib/useHandedness";
 import { MicButton } from "./MicButton";
 import { useRecordedSpeech } from "../lib/useRecordedSpeech";
 import { insertAtCursor, type Selection } from "../lib/mic-gesture";
-import { type RefObject, memo, useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Image, Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { type RefObject, memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Image, Keyboard, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AttachmentChooser, type AttachmentAnchor } from "./AttachmentChooser";
 import { dismissKeyboard } from "../lib/dismiss-keyboard";
 import type { ChatAttachment } from "../../../shared/protocol";
+import * as Clipboard from "expo-clipboard";
+import { clipboardInsertion } from "../lib/clipboard-paste";
+import { clipboardImageFile } from "../lib/clipboard-image";
 import { pickFiles, pickPhotos } from "../lib/attachment-picker";
 import { uploadPickedFile } from "../lib/attachment-upload";
 import {
@@ -75,6 +79,12 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
   const changeDraft = useCallback((update: (draft: ComposerDraft) => ComposerDraft) => {
     if (draftKey) updateComposerDraft(draftKey, seed, update); else setLocalDraft(update);
   }, [draftKey, seed]);
+  // A draft handed over on open (main bar Send, a search result) is the owner's latest words for
+  // this chat. A saved draft for the chat (often an empty one left by clearing it) used to win
+  // over it, so the new chat opened empty (e2e B5). Once per mount: the composer is keyed by it.
+  useLayoutEffect(() => {
+    if (draftKey && initialText) updateComposerDraft(draftKey, seed, draft => draft.text === initialText ? draft : { ...draft, text: initialText });
+  }, []);
   const setText = useCallback((value: string | ((previous: string) => string)) => changeDraft(draft => ({ ...draft, text: typeof value === "function" ? value(draft.text) : value })), [changeDraft]);
   const setDrafts = useCallback((value: DraftAttachment[] | ((previous: DraftAttachment[]) => DraftAttachment[])) => changeDraft(draft => ({ ...draft, attachments: typeof value === "function" ? value(draft.attachments) : value })), [changeDraft]);
   const lastShare = useRef<string | undefined>(undefined);
@@ -124,7 +134,8 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
   const editingQueue = queuePreview !== undefined;
   const draftText = queuePreview ?? text;
   const changeText = editingQueue ? onQueuePreviewChange ?? setText : setText;
-  const canSend = editingQueue ? Boolean(draftText.trim()) : canSendDrafts(draftText, drafts) && !disabled;
+  const localUsage = !editingQueue && Boolean(context) && isUsageCommand(draftText);
+  const canSend = localUsage || (editingQueue ? Boolean(draftText.trim()) : canSendDrafts(draftText, drafts) && !disabled);
 
   const update = useCallback((key: string, patch: Partial<DraftAttachment>) => {
     // An upload completion belongs to its original draft even while offscreen.
@@ -148,6 +159,59 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
       );
     });
   }, [update]);
+
+  const [fieldFocused, setFieldFocused] = useState(false);
+  const [clipboardHasImage, setClipboardHasImage] = useState(false);
+  const [pastingImage, setPastingImage] = useState(false);
+  const pasteBusy = useRef(false);
+  useEffect(() => {
+    if (Platform.OS === "web" || !fieldFocused || editingQueue || disabled) { setClipboardHasImage(false); return; }
+    let disposed = false;
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      try {
+        const hasImage = await Clipboard.hasImageAsync();
+        if (!disposed && current === request) setClipboardHasImage(hasImage);
+      } catch { if (!disposed && current === request) setClipboardHasImage(false); }
+    };
+    void refresh();
+    const subscription = Clipboard.addClipboardListener(() => { void refresh(); });
+    return () => { disposed = true; subscription.remove(); };
+  }, [fieldFocused, editingQueue, disabled]);
+
+  const pasteImage = useCallback(async (): Promise<boolean> => {
+    if (Platform.OS === "web" || disabled || editingQueue || pasteBusy.current) return false;
+    if (remainingSlots(drafts) === 0) { Alert.alert("Attachments", `Up to ${MAX_ATTACHMENTS_PER_TURN} files per message.`); return false; }
+    if (!store.get().settings) { Alert.alert("Attachments", "Pair with a computer first."); return false; }
+    pasteBusy.current = true;
+    setPastingImage(true);
+    try {
+      const file = await clipboardImageFile();
+      if (!file || !mounted.current) return false;
+      addFiles([file]);
+      return true;
+    } catch (error) {
+      if (mounted.current) Alert.alert("Attachments", error instanceof Error ? error.message : "Could not paste the clipboard image.");
+      return false;
+    } finally {
+      pasteBusy.current = false;
+      if (mounted.current) setPastingImage(false);
+    }
+  }, [disabled, editingQueue, drafts, addFiles]);
+
+  const onTextChange = (next: string) => {
+    changeText(next);
+    if (Platform.OS === "web" || editingQueue || disabled) return;
+    const insertion = clipboardInsertion(draftText, next);
+    if (!insertion) return;
+    // Never clobber edits made while the clipboard/cache operation was awaiting I/O.
+    void Clipboard.hasImageAsync().then(async hasImage => {
+      if (!hasImage || !mounted.current) return;
+      const attached = await pasteImage();
+      if (attached && insertion.contentUri && mounted.current) setText(current => current === next ? insertion.withoutUri : current);
+    }).catch(() => { /* Clipboard unavailable: retain the text insertion. */ });
+  };
 
   const pick = useCallback(async (kind: "photos" | "files") => {
     const room = remainingSlots(drafts);
@@ -188,6 +252,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
   const remove = useCallback((key: string) => setDrafts(list => list.filter(d => d.key !== key)), []);
 
   const submit = useCallback(() => {
+    if (localUsage && context) { setText(""); Keyboard.dismiss(); context.showUsage(); return; }
     if (!canSend) return;
     if (queuePreview !== undefined) { onSaveQueuePreview?.(); return; }
     const refs = readyRefs(drafts);
@@ -195,15 +260,16 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
     setText("");
     setDrafts([]);
     onSend(value, refs, sendMode.mode);
-  }, [canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
+  }, [localUsage, context, canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
 
-  return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
+  return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} onUsage={context ? () => { if (isUsageCommand(draftText)) changeText(""); Keyboard.dismiss(); context.showUsage(); } : undefined} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
     {drafts.length > 0 ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips} accessibilityLabel="Attachments">
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}
       </ScrollView>
     ) : null}
     {drafts.some(d => d.state === "local") ? <PressScale accessibilityRole="button" accessibilityLabel="Upload shared files" disabled={disabled || editingQueue} onPress={uploadShared} style={styles.modeToggle}><Text style={styles.chipName}>Upload shared files to paired computer</Text></PressScale> : null}
+    {clipboardHasImage && !editingQueue ? <PressScale accessibilityRole="button" accessibilityLabel="Paste image" disabled={disabled || pastingImage} onPress={() => { void pasteImage(); }} style={styles.modeToggle}><Text style={styles.chipName}>{pastingImage ? "Pasting image…" : "Paste image"}</Text></PressScale> : null}
     {steerBusy && !editingQueue ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
     {speech.state.note ? <View style={styles.modeRow}>
       <Text accessibilityLiveRegion="polite" accessibilityRole={speech.state.phase === "error" ? "alert" : "text"} style={styles.chipMeta}>{speech.state.note}</Text>
@@ -211,7 +277,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
       {speech.state.phase === "error" ? <PressScale accessibilityRole="button" accessibilityLabel="Retry dictation" onPress={onDictate} style={styles.modeToggle}><Text style={styles.chipName}>Retry</Text></PressScale> : null}
     </View> : null}
     <View testID="composer-field" style={[styles.field, editingQueue && styles.previewField]}>
-      <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={changeText} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
+      <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={onTextChange} onFocus={() => setFieldFocused(true)} onBlur={() => setFieldFocused(false)} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
       <View testID="composer-controls" style={[styles.controls, { flexDirection: "row", justifyContent: "flex-start" }, editingQueue && thumb.align]}>
         {/* One primary button at the text's leading edge: Send/Steer/Queue when there is a draft, Stop while a turn runs with an empty draft. */}
         {editingQueue ? <PressScale accessibilityRole="button" accessibilityLabel="Save queued merge" accessibilityHint="Keep this merged message queued for the next turn" onPress={submit} disabled={!canSend} style={[styles.hit, styles.previewSave]}><Text style={styles.chipName}>Save queued</Text></PressScale>

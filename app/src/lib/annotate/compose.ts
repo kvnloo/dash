@@ -1,7 +1,7 @@
 // Turn a drawing into one chat message: text with stroke markers, a strokes JSON
 // document, and the names the two uploads get on the host.
 import { annotateTranscript, marker, segmentFor, type Segment } from "./align";
-import type { Stroke } from "./strokes";
+import { bounds, type Stroke } from "./strokes";
 
 export const ANNOTATION_SCHEMA = "dash.annotation.v1";
 
@@ -94,4 +94,56 @@ export function composeMessage(input: { strokes: readonly Stroke[]; segments: re
 /** Mid-turn Hermes sessions take the annotation as a steer; otherwise it is a normal send. */
 export function annotationSendMode(steerable: boolean): "steer" | "queue" {
   return steerable ? "steer" : "queue";
+}
+
+
+/** The cropped rectangle of the selected loop, expanded to keep ink legible. */
+export interface CircleRegion { x: number; y: number; width: number; height: number }
+export interface VisibleTextBox extends CircleRegion { text: string }
+
+/**
+ * A stylus loop encloses a substantial region. Circle/box are shapes
+ * recognized from a completed pen loop; a raw pen loop must close at its start.
+ * Finger strokes, taps, open lines and invalid coordinates never capture.
+ * The returned rectangle is in screen DIPs, not screenshot pixels.
+ */
+export function closedPenLoopRegion(stroke: Stroke, screen: ScreenInfo, padding = 12): CircleRegion | null {
+  if (stroke.pointer !== "stylus" || !["pen", "circle", "box"].includes(stroke.tool)) return null;
+  if (!Number.isFinite(screen.width) || !Number.isFinite(screen.height) || screen.width <= 0 || screen.height <= 0) return null;
+  if (!Number.isFinite(padding) || padding < 0) return null;
+  const points = stroke.points;
+  if (points.length < (stroke.tool === "pen" ? 8 : 2) || points.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) return null;
+  const [minX, minY, maxX, maxY] = bounds(points);
+  const extentX = (maxX - minX) * screen.width;
+  const extentY = (maxY - minY) * screen.height;
+  if (extentX < 32 || extentY < 32) return null;
+  if (stroke.tool === "pen") {
+    const first = points[0], last = points.at(-1);
+    if (!first || !last) return null;
+    const endGap = Math.hypot((first.x - last.x) * screen.width, (first.y - last.y) * screen.height);
+    if (endGap > Math.max(12, Math.hypot(extentX, extentY) * 0.2)) return null;
+  }
+  const x = Math.max(0, Math.floor(minX * screen.width - padding));
+  const y = Math.max(0, Math.floor(minY * screen.height - padding));
+  const right = Math.min(Math.ceil(screen.width), Math.ceil(maxX * screen.width + padding));
+  const bottom = Math.min(Math.ceil(screen.height), Math.ceil(maxY * screen.height + padding));
+  if (right <= x || bottom <= y) return null;
+  return { x, y, width: right - x, height: bottom - y };
+}
+
+/** Text boxes come from the visible screen, not from hidden/offscreen content. */
+export function visibleTextInRegion(region: CircleRegion, boxes: readonly VisibleTextBox[]): string {
+  return boxes.filter(box => {
+    if (!box.text.trim() || ![box.x, box.y, box.width, box.height].every(Number.isFinite)) return false;
+    if (box.width <= 0 || box.height <= 0) return false;
+    const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+    return cx >= region.x && cx <= region.x + region.width && cy >= region.y && cy <= region.y + region.height;
+  }).map(box => box.text.trim()).join("\n");
+}
+
+/** A circle updates a draft, never a turn or a steer command. */
+export function circleDraftText(existing: string, route: string, visibleText: string): string {
+  const caption = visibleText.trim() ? `Circled on ${route}:\n${visibleText.trim()}` : `Circled on ${route}.`;
+  const previous = existing.trimEnd();
+  return previous ? `${previous}\n\n${caption}` : caption;
 }

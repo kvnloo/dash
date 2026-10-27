@@ -7,6 +7,7 @@ export function flushNotificationTarget(): void {
   if (!pending || !store.get().hydrated || !debugNavigationRef.isReady()) return;
   const target = pending;
   pending = undefined;
+  if (target.kind === "notices") { debugNavigationRef.navigate("Notices"); return; }
   if (target.kind === "approvals") { debugNavigationRef.navigate("Approvals"); return; }
   if (!store.get().conversations.some(c => c.id === target.chatId)) { debugNavigationRef.navigate("Main", { tab: 1 }); return; }
   setActive(target.chatId);

@@ -76,3 +76,24 @@ export async function fetchRoster(settings: Settings): Promise<HostInfo[] | unde
     return undefined;
   }
 }
+
+export type RosterFetch = { hosts: HostInfo[]; etag?: string } | "unchanged" | undefined;
+
+/** `GET /roster` with `If-None-Match`: a 304 means the hosts the app holds are current. */
+export async function fetchRosterIfChanged(settings: Settings, etag: string | undefined): Promise<RosterFetch> {
+  try {
+    const headers: Record<string, string> = { Authorization: `Bearer ${await executionToken(settings)}` };
+    if (etag) headers["If-None-Match"] = etag;
+    const res = await fetch(`http://${settings.address}/roster`, { method: "GET", headers });
+    if (res.status === 304) return "unchanged";
+    if (!res.ok) return undefined;
+    const raw: unknown = await res.json();
+    if (typeof raw !== "object" || raw === null) return undefined;
+    const hosts = "hosts" in raw ? parseHosts(raw.hosts) : undefined;
+    if (!hosts) return undefined;
+    const next = res.headers.get("ETag") ?? undefined;
+    return next ? { hosts, etag: next } : { hosts };
+  } catch {
+    return undefined;
+  }
+}

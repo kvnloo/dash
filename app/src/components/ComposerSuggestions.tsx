@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { conversationEntries } from "../lib/chat-index";
 import { composerSuggestions, composerTrigger, insertSuggestion } from "../lib/composer-suggestions";
 import {
   EMPTY_SUGGESTIONS, currentSuggestionLoad, loadSuggestionInventory,
@@ -10,12 +11,11 @@ import { colors, radius, space, type } from "../theme";
 import { PressScale } from "./PressScale";
 
 /** Shared by the Main search/message dock and by the open Chat composer. */
-export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, onChange }: {
-  text: string; cursor?: number; harness?: string; cwd?: string; onChange(text: string): void;
+export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, onChange, onUsage }: {
+  text: string; cursor?: number; harness?: string; cwd?: string; onChange(text: string): void; onUsage?(): void;
 }) {
   const settings = store.use(s => s.settings);
   const connection = store.use(s => s.connection);
-  const conversations = store.use(s => s.conversations);
   const trigger = composerTrigger(text, cursor);
   const target = selectSuggestionTarget({
     chatHarness: harness,
@@ -25,11 +25,14 @@ export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, 
     selectedCwd: settings?.cwd,
     connectedCwd: connection.cwd,
   });
+  const active = trigger !== null;
+  // Only while the panel is open, and through the light index (never transcripts).
+  const conversations = store.use(s => (active ? s.conversations : undefined));
+  const entries = useMemo(() => (conversations ? conversationEntries(conversations) : []), [conversations]);
   const address = settings?.address;
   const token = settings?.token;
   const source = address && token ? { ...target, address, token } : null;
   const key = suggestionRequestKey(source);
-  const active = trigger !== null;
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<SuggestionLoadState>({ key: null, inventory: EMPTY_SUGGESTIONS, loading: false });
 
@@ -66,10 +69,16 @@ export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, 
     return () => { controller.abort(); clearTimeout(timeout); };
   }, [active, key, address, token, target.harness, target.cwd, attempt]);
 
-  if (!trigger) return null;
   // The render immediately after a chat/harness/cwd/pairing switch must never show old rows.
   const current = currentSuggestionLoad(key, state);
-  const rows = composerSuggestions(trigger, current.inventory, conversations, connection.hosts);
+  const triggerKey = trigger ? `${trigger.prefix}|${trigger.start}|${trigger.end}|${trigger.query}` : "";
+  const stableTrigger = useMemo(() => trigger, [triggerKey]);
+  const deferredTrigger = useDeferredValue(stableTrigger);
+  const rows = useMemo(
+    () => (deferredTrigger ? composerSuggestions(deferredTrigger, current.inventory, entries, connection.hosts) : []),
+    [deferredTrigger, current.inventory, entries, connection.hosts],
+  );
+  if (!trigger) return null;
   const warning = current.error ?? (trigger.prefix === "/" ? current.inventory.commandError : current.inventory.fileError);
 
   return <View style={styles.panel} accessibilityLabel="Composer suggestions">
@@ -78,7 +87,8 @@ export function ComposerSuggestions({ text, cursor = text.length, harness, cwd, 
     {warning ? <Text accessibilityRole="alert" style={styles.detail}>{warning}</Text> : null}
     {warning && source ? <PressScale accessibilityRole="button" accessibilityLabel="Retry loading suggestions" onPress={() => setAttempt(value => value + 1)} style={styles.retry}><Text style={styles.retryText}>Retry suggestions</Text></PressScale> : null}
     <ScrollView keyboardShouldPersistTaps="always" style={styles.list}>
-      {rows.map(row => <PressScale key={row.id} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => onChange(insertSuggestion(text, trigger, row.insert))} style={styles.row}>
+      {onUsage && trigger.prefix === "/" && "usage".startsWith(trigger.query) ? <PressScale accessibilityRole="button" accessibilityLabel="/usage" onPress={onUsage} style={styles.row}><Text style={styles.label}>/usage</Text><Text style={styles.detail}>This chat’s context and account quotas</Text></PressScale> : null}
+      {rows.filter(row => !onUsage || row.insert !== "/usage").map(row => <PressScale key={row.id} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => onChange(insertSuggestion(text, trigger, row.insert))} style={styles.row}>
         <Text numberOfLines={1} style={styles.label}>{row.label}</Text><Text numberOfLines={1} style={styles.detail}>{row.detail}</Text>
       </PressScale>)}
     </ScrollView>

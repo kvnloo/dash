@@ -5,6 +5,7 @@ import { isCatalogHarness } from "../../shared/catalog";
 import { hermesSessions } from "./hermes-sessions";
 import { grokDesktopBot, hermesBots, hostBotSources, serviceBots } from "./bots";
 import { z0bridgeHermes } from "./z0bridge-hermes";
+import { agentsviewSessions } from "./agentsview-sessions";
 import { GatewayListSnapshot, isLocalRoute, localRoutingIds } from "./roster-reliability";
 import type { AgentInfo, HarnessInfo, HistoryMessage, HostInfo } from "../../shared/protocol";
 
@@ -703,6 +704,9 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
   const local = hosts.find(h => h.self);
   if (local) {
     local.agents.push(...sessions);
+    // Every other harness's persisted chats; live rows for the same session win.
+    const listed = new Set(local.agents.filter(a => a.sessionId).map(a => `${a.kind}:${a.sessionId}`));
+    local.agents.push(...agentsviewSessions(listed));
     local.bots = localBots();
   }
   rosterCache = { at: now, key, hosts };

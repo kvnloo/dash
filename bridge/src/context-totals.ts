@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { openSync, closeSync, readSync, fstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -13,6 +14,7 @@ export function parseHarnessTotal(harness: string, text: string, sessionId: stri
   let used: number | undefined;
   let maximum = 0;
   let model = harness;
+  let provider: string | undefined;
   for (const line of text.split("\n")) {
     let event: unknown;
     try { event = JSON.parse(line); } catch { continue; }
@@ -24,13 +26,14 @@ export function parseHarnessTotal(harness: string, text: string, sessionId: stri
       if (count !== undefined) { used = count; maximum = positive(info.model_context_window) ?? 0; }
     }
     const message = record(event.message) ? event.message : undefined;
+    if (harness === "omp" && (message?.stopReason === "aborted" || message?.stopReason === "error")) continue;
     if (message?.role === "assistant" && record(message.usage)) {
       const count = harness === "claude" ? sum(message.usage, ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"]) : harness === "omp" ? sum(message.usage, ["input", "cacheRead", "cacheWrite", "output"]) : undefined;
-      if (count !== undefined) { used = count; if (typeof message.model === "string") model = message.model.slice(0, 120); }
+      if (count !== undefined) { used = count; if (typeof message.provider === "string") provider = message.provider.slice(0, 120); if (typeof message.model === "string") model = message.model.slice(0, 120); }
     }
   }
   if (used === undefined) return;
-  return { sessionId, model, used, maximum, threshold: 0, estimated: true, source: "last provider request (best-effort total)", categories: [], revision: `${harness}:${sessionId}`, notes: ["Total only. Categories, current turn delta and auto-compact threshold are unavailable for this harness."] };
+  return { sessionId, model, provider, used, maximum, threshold: 0, estimated: true, source: "last provider request (best-effort total)", categories: [], revision: `${harness}:${sessionId}`, notes: ["Total only. Categories, current turn delta and auto-compact threshold are unavailable for this harness."] };
 }
 function findSession(root: string, session: string): string | undefined {
   const queue = [{ dir: root, depth: 0 }];
@@ -43,6 +46,18 @@ function findSession(root: string, session: string): string | undefined {
         // Never follow symlinks or inspect credential/config files.
         if (child.isDirectory() && entry.depth < 6) queue.push({ dir: join(entry.dir, child.name), depth: entry.depth + 1 });
         else if (child.isFile() && child.name.endsWith(".jsonl") && (child.name === `${session}.jsonl` || child.name.endsWith(`-${session}.jsonl`) || child.name.endsWith(`_${session}.jsonl`))) return join(entry.dir, child.name);
+        else if (child.isFile() && child.name.endsWith(".jsonl")) {
+          // Renamed OMP sessions keep their UUID in the header. Read at most 16 KiB, not the transcript.
+          let fd: number | undefined;
+          try {
+            fd = openSync(join(entry.dir, child.name), "r");
+            const buf = Buffer.alloc(16_384); const n = readSync(fd, buf, 0, buf.length, 0);
+            for (const line of buf.toString("utf8", 0, n).split("\n").slice(0, 4)) {
+              let header: unknown; try { header = JSON.parse(line); } catch { continue; }
+              if (record(header) && header.type === "session" && header.id === session) return join(entry.dir, child.name);
+            }
+          } catch { /* not a session file */ } finally { if (fd !== undefined) closeSync(fd); }
+        }
       }
     } catch { /* provider not installed */ }
   }
@@ -60,6 +75,27 @@ export function harnessTotal(harness: string, session: string): ContextSnapshot 
     const length = Math.min(size, 4 * 1024 * 1024);
     const buffer = Buffer.alloc(length);
     readSync(fd, buffer, 0, length, size - length);
-    return parseHarnessTotal(harness, buffer.toString("utf8"), session);
+    const snapshot = parseHarnessTotal(harness, buffer.toString("utf8"), session);
+    if (snapshot && harness === "omp" && snapshot.provider) {
+      const cached = ompModelWindow(snapshot.provider, snapshot.model);
+      if (cached) return { ...snapshot, maximum: cached.maximum, notes: [...snapshot.notes, `Window from OMP provider catalog cached ${new Date(cached.updatedAt).toISOString()}; runtime overrides may differ.`] };
+    }
+    return snapshot;
   } catch { return; } finally { if (fd !== undefined) closeSync(fd); }
+}
+
+/** Read ONLY the observed provider/model's cached metadata, never auth or settings. */
+export function ompModelWindow(provider: string, model: string, root = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".omp", "agent")): { maximum: number; updatedAt: number } | undefined {
+  let db: Database | undefined;
+  try {
+    db = new Database(join(root, "models.db"), { readonly: true });
+    db.exec("PRAGMA query_only=ON; PRAGMA busy_timeout=100;");
+    const row = db.query<{ models: string; updated_at: number }, [string]>("SELECT models,updated_at FROM model_cache WHERE provider_id=? AND length(models)<16777216").get(provider);
+    if (!row || !Number.isFinite(row.updated_at) || row.updated_at < 0 || row.updated_at > 8.64e15) return;
+    const models: unknown = JSON.parse(row.models);
+    if (!Array.isArray(models)) return;
+    const entry: unknown = models.find(m => record(m) && m.id === model);
+    if (!record(entry) || typeof entry.contextWindow !== "number" || !Number.isFinite(entry.contextWindow) || entry.contextWindow <= 0) return;
+    return { maximum: entry.contextWindow, updatedAt: row.updated_at };
+  } catch { return; } finally { db?.close(); }
 }

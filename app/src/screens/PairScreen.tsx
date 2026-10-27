@@ -32,6 +32,7 @@ import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
 import { nextPrefill } from "../lib/deep-link";
 import { saveSettings, store } from "../store/app";
+import { withPairedEndpoint } from "../lib/bridge-failover";
 import type { Settings } from "../model";
 import { colors, radius, space, type } from "../theme";
 import { screenBack } from "../lib/screen-back";
@@ -98,10 +99,10 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
       attemptRef.current?.abort();
       attemptRef.current = attempt;
       await connectSettings({
-        settings: settingsFromClaim(claim),
+        settings: withPairedEndpoint(store.get().settings, settingsFromClaim(claim)),
         connection: store,
         save: saveSettings,
-        start: (settings) => bridge.start(settings),
+        start: (settings) => bridge.start(settings, { failover: false }),
         signal: attempt.signal,
         onConnected: () => {
           haptic.success();
@@ -219,7 +220,7 @@ export function PairScreen({ navigation, route }: ScreenProps<"Pair">) {
       }
       const attempt = new AbortController();
       attemptRef.current?.abort(); attemptRef.current = attempt;
-      await connectSettings({ settings, connection: store, save: saveSettings, start: s => bridge.start(s), signal: attempt.signal,
+      await connectSettings({ settings: withPairedEndpoint(saved, settings), connection: store, save: saveSettings, start: s => bridge.start(s, { failover: false }), signal: attempt.signal,
         onConnected: () => { setIdentityLink(""); haptic.success(); navigation.replace("Main"); },
       });
     } catch (error) { setError(error instanceof Error ? error.message : "Identity pairing failed"); }

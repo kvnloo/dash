@@ -38,17 +38,29 @@ export function insertSuggestion(text: string, trigger: ComposerTrigger, insert:
   return `${text.slice(0, trigger.start)}${insert} ${text.slice(trigger.end).trimStart()}`;
 }
 
-export function composerSuggestions(trigger: ComposerTrigger, inventory: SuggestionInventory, conversations: Conversation[], hosts: HostInfo[]): ComposerSuggestion[] {
+export const SUGGESTION_LIMIT = 30;
+
+/** Filter first, then build at most 30 rows: cost follows the matches shown, not every chat. */
+export function composerSuggestions(trigger: ComposerTrigger, inventory: SuggestionInventory, conversations: readonly Pick<Conversation, "id" | "title" | "harness" | "sessionId">[], hosts: HostInfo[]): ComposerSuggestion[] {
   assertTrigger(trigger);
-  const rows: ComposerSuggestion[] = trigger.prefix === "/"
-    ? inventory.commands.map(command => ({ id: `command:${command.name}`, label: `/${command.name}`, detail: command.description, insert: `/${command.name}` }))
-    : [
-      ...conversations.map(chat => ({ id: `chat:${chat.id}`, label: `@${chat.title}`, detail: `${chat.harness} · session`, insert: `@${chat.sessionId?.trim() ? chat.sessionId : chat.id}` })),
-      ...hosts.flatMap(host => [
-        ...(host.bots ?? []).map(bot => ({ id: `bot:${host.id}:${bot.id}`, label: `@${bot.name}`, detail: `${host.name} · bot`, insert: `@${bot.name}` })),
-        ...host.agents.map(agent => ({ id: `agent:${host.id}:${agent.id}`, label: `@${agent.name}`, detail: `${host.name} · ${agent.kind}`, insert: `@${agent.name}` })),
-      ]),
-      ...inventory.files.filter(path => path.trim() !== "").map(path => ({ id: `file:${path}`, label: `@${path}`, detail: "Workspace file", insert: `@${path}` })),
-    ];
-  return rows.filter(row => `${row.label} ${row.detail}`.toLowerCase().includes(trigger.query)).slice(0, 30);
+  const rows: ComposerSuggestion[] = [];
+  const add = (row: ComposerSuggestion) => {
+    if (rows.length < SUGGESTION_LIMIT && `${row.label} ${row.detail}`.toLowerCase().includes(trigger.query)) rows.push(row);
+    return rows.length >= SUGGESTION_LIMIT;
+  };
+  if (trigger.prefix === "/") {
+    for (const command of inventory.commands) if (add({ id: `command:${command.name}`, label: `/${command.name}`, detail: command.description, insert: `/${command.name}` })) break;
+    return rows;
+  }
+  for (const chat of conversations) {
+    const label = `@${chat.title}`, detail = `${chat.harness} · session`;
+    if (!`${label} ${detail}`.toLowerCase().includes(trigger.query)) continue;
+    if (add({ id: `chat:${chat.id}`, label, detail, insert: `@${chat.sessionId?.trim() ? chat.sessionId : chat.id}` })) return rows;
+  }
+  for (const host of hosts) {
+    for (const bot of host.bots ?? []) if (add({ id: `bot:${host.id}:${bot.id}`, label: `@${bot.name}`, detail: `${host.name} · bot`, insert: `@${bot.name}` })) return rows;
+    for (const agent of host.agents) if (add({ id: `agent:${host.id}:${agent.id}`, label: `@${agent.name}`, detail: `${host.name} · ${agent.kind}`, insert: `@${agent.name}` })) return rows;
+  }
+  for (const path of inventory.files) if (path.trim() !== "" && add({ id: `file:${path}`, label: `@${path}`, detail: "Workspace file", insert: `@${path}` })) return rows;
+  return rows;
 }

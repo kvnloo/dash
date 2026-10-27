@@ -2,6 +2,7 @@ import type { HarnessInfo } from "../../shared/protocol";
 import { dashConnectUrl, expoGoConnectUrl } from "../../shared/pair-link";
 import { CLAIM_KEY_BYTES, type PairingSessions } from "../pair";
 import { bearerToken, secretMatches } from "./bridge-security";
+import { hash } from "./chat-index/query";
 
 export const MAX_PAIR_AUDIO_BYTES = 1024 * 1024;
 const MAX_JSON_BYTES = 16 * 1024;
@@ -124,7 +125,11 @@ export function createPairingHttpHandler(options: PairingHttpOptions) {
     }
     if (url.pathname === "/roster") {
       if (!(options.authorize ? await options.authorize(request, true) : secretMatches(bearer ?? url.searchParams.get("token"), options.token))) return unauthorized();
-      return json({ host: options.hostname, hosts: await options.roster() });
+      // ETag over the body: a poll with nothing changed costs one 304 and no client re-render.
+      const body = JSON.stringify({ host: options.hostname, hosts: await options.roster() });
+      const etag = `W/"${hash(body)}-${body.length}"`;
+      if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: { ETag: etag, "cache-control": "no-cache" } });
+      return new Response(body, { status: 200, headers: { "content-type": "application/json;charset=utf-8", ETag: etag, "cache-control": "no-cache" } });
     }
     try {
       if (url.pathname === "/pair" && request.method === "GET") {

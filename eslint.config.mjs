@@ -16,5 +16,19 @@ export default [
       "no-unsafe-finally": "error",
       "valid-typeof": "error"
     }
+  },
+  // Metro relay previews cannot load dynamic JS chunks on the native path.
+  {
+    files: ["app/src/**/*.{ts,tsx}"],
+    ignores: ["app/src/**/*.web.ts", "app/src/**/*.web.tsx", "app/src/**/*.test.ts", "app/src/**/*.harness.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ImportExpression",
+          message: "Dynamic import() can 404 in native Metro previews. Use a lazy require() inside the function instead."
+        }
+      ]
+    }
   }
 ];

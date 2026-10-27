@@ -20,6 +20,7 @@ import { createDeepLinkRouter } from "./src/lib/deep-link";
 import { bridge } from "./src/net/bridge";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { ApprovalsScreen } from "./src/screens/ApprovalsScreen";
+import { NoticesScreen } from "./src/screens/NoticesScreen";
 import { ArtifactStageScreen } from "./src/screens/ArtifactStageScreen";
 import { createStageLinkRouter } from "./src/lib/stage-router";
 import { createAppRouteRouter } from "./src/lib/app-route-link";
@@ -139,6 +140,7 @@ export default function App() {
               >
                 <Stack.Screen name="Main" component={MainScreen} />
                 <Stack.Screen name="Approvals" component={ApprovalsScreen} />
+                <Stack.Screen name="Notices" component={NoticesScreen} />
                 <Stack.Screen name="ArtifactStage" component={ArtifactStageScreen} />
                 <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => route.params?.window ? CHAT_WINDOW : {}} />
                 <Stack.Screen name="OrchestraDetail" component={OrchestraDetailScreen} />

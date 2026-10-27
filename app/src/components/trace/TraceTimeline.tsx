@@ -409,7 +409,7 @@ const RowLabel = memo(function RowLabel({ row, h, selected, onPress, refCb, vari
           {variant === "compact" ? null : <Text style={styles.goal} numberOfLines={1}>{row.goal}</Text>}
           {sum.cut || sum.asks ? (
             <Text style={styles.meta} numberOfLines={1}>
-              {sum.cut ? <Text style={{ color: tc.cut }}>{sum.cut} cut</Text> : null}{sum.cut && sum.asks ? " · " : null}{sum.asks ? <Text style={{ color: tc.ask }}>{sum.asks} ask{sum.asks === 1 ? "" : "s"}</Text> : null}
+              {sum.cut ? <Text style={{ color: tc.cut }}>{sum.cut} cut</Text> : null}{sum.cut && sum.asks ? " · " : null}{sum.asks ? <Text style={{ color: tc.ask }}>{sum.asks} need{sum.asks === 1 ? "s" : ""} OK</Text> : null}
             </Text>
           ) : null}
         </View>

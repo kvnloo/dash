@@ -1,8 +1,9 @@
-import { memo, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { AppState, PixelRatio, Platform, Text, View, type TextStyle } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { AppState, PixelRatio, Platform, Text, View, type LayoutChangeEvent, type TextStyle } from "react-native";
 import { Canvas, LinearGradient, Text as SkText, matchFont, vec } from "@shopify/react-native-skia";
 import { cancelAnimation, Easing, useDerivedValue, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from "react-native-reanimated";
 import { SHIMMER_END, SHIMMER_REST_MS, SHIMMER_START, SHIMMER_SWEEP_MS, shimmerStops } from "../lib/activity-shimmer";
+import { transcriptScrollActivity } from "../lib/transcript-scroll-activity";
 import { colors } from "../theme";
 import { useAmbientRunning } from "./OrbMotion";
 
@@ -54,8 +55,20 @@ export const ShimmerText = memo(function ShimmerText({
   const reduced = useReducedMotion();
   const screenActive = useAmbientRunning();
   const foreground = useSyncExternalStore(subscribeAppActive, appIsActive, appIsActive);
-  const running = screenActive && foreground;
+  const scrolling = useSyncExternalStore(
+    transcriptScrollActivity.subscribe,
+    transcriptScrollActivity.getSnapshot,
+    transcriptScrollActivity.getServerSnapshot,
+  );
+  const paintActive = screenActive && foreground;
+  // Keep the last Skia frame painted while a transcript moves. Only the
+  // native animation stops; React sees start/end, never per-scroll positions.
+  const running = paintActive && !scrolling;
   const [max, setMax] = useState(0);
+  const onLayout = useCallback((event: LayoutChangeEvent) => {
+    const width = event.nativeEvent.layout.width;
+    setMax(previous => previous === width ? previous : width);
+  }, []);
   // Skia does not apply the font scale that React Native Text applies.
   const px = size * PixelRatio.getFontScale();
   const font = useMemo(() => Platform.OS === "web" ? null : matchFont({ fontFamily: family, fontSize: px }), [family, px]);
@@ -81,9 +94,14 @@ export const ShimmerText = memo(function ShimmerText({
   const progress = useSharedValue(SHIMMER_START);
 
   useEffect(() => {
-    cancelAnimation(progress);
+    // Pausing freezes the current gradient instead of remounting native text
+    // or snapping the shader to the beginning of the sweep.
+    if (!running || !font || !hasText) {
+      cancelAnimation(progress);
+      return;
+    }
+    // A newly active sweep always starts at its original off-glyph phase.
     progress.value = SHIMMER_START;
-    if (!running || !font || !hasText) return;
     progress.value = withRepeat(withDelay(SHIMMER_REST_MS, withTiming(SHIMMER_END, {
       duration: SHIMMER_SWEEP_MS, easing: Easing.linear,
     })), -1, false);
@@ -92,14 +110,14 @@ export const ShimmerText = memo(function ShimmerText({
 
   const positions = useDerivedValue(() => shimmerStops(progress.value));
 
-  if (!font || reduced || !running) {
+  if (!font || reduced || !paintActive) {
     return <View style={{ flexShrink: 1, minWidth: 0 }}>
       <Text numberOfLines={1} accessibilityRole="text" style={[{ fontSize: size, color: bright, fontFamily: family }, style]}>{text}</Text>
     </View>;
   }
 
   return (
-    <View style={{ flex: 1, minWidth: 0, height }} onLayout={event => setMax(event.nativeEvent.layout.width)}
+    <View style={{ flex: 1, minWidth: 0, height }} onLayout={onLayout}
       accessible accessibilityRole="text" accessibilityLabel={text}>
       {max > 0 && hasText ? <Canvas style={{ width, height }}>
         <SkText x={0} y={Math.round(px * 1.15)} text={shown} font={font}>
