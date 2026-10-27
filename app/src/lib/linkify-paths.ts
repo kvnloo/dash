@@ -13,7 +13,14 @@ interface Fence {
   width: number;
 }
 
+interface MarkdownBracket {
+  phase: "label" | "destination" | "reference";
+  depth: number;
+  angleDestination: boolean;
+}
+
 interface ScanState {
+  markdownBracket: MarkdownBracket | null;
   codeWidth: number;
   htmlComment: boolean;
   tagBuffer: string | null;
@@ -75,43 +82,55 @@ function closesFence(line: string, fence: Fence): boolean {
 }
 
 /** Keep all bracketed labels protected, including reference-style links. */
-function bracketEnd(line: string, start: number): number {
-  const opening = line[start] === "!" ? start + 1 : start;
-  let depth = 0;
-  let index = opening;
-  for (; index < line.length; index++) {
-    const char = line[index];
+/**
+ * Keep an existing Markdown link or image protected across line boundaries.
+ * The parser consumes nested labels, reference labels, and destinations without
+ * looking for bare URLs or paths inside any of those regions.
+ */
+function scanMarkdownBracket(line: string, start: number, state: ScanState): number {
+  let index = start;
+  while (index < line.length) {
+    const bracket = state.markdownBracket;
+    if (bracket === null) break;
+    const char = line[index] ?? "";
     if (char === "\\") {
-      index++;
-    } else if (char === "[") {
-      depth++;
-    } else if (char === "]" && --depth === 0) {
-      break;
+      index += 2; // Markdown escape: skip the escaped character.
+      continue;
     }
-  }
-  if (index >= line.length) return line.length;
-  const next = index + 1;
-  if (line[next] === "(") {
-    let parentheses = 0;
-    for (let i = next; i < line.length; i++) {
-      if (line[i] === "\\") {
-        i++;
-      } else if (line[i] === "(") {
-        parentheses++;
-      } else if (line[i] === ")" && --parentheses === 0) {
-        return i + 1;
+    if (bracket.phase === "label") {
+      if (char === "[") {
+        bracket.depth++;
+      } else if (char === "]" && --bracket.depth === 0) {
+        if (line[index + 1] === "(") {
+          bracket.phase = "destination";
+          bracket.depth = 1;
+          index += 2;
+          continue;
+        }
+        if (line[index + 1] === "[") {
+          bracket.phase = "reference";
+          bracket.depth = 1;
+          index += 2;
+          continue;
+        }
+        state.markdownBracket = null;
       }
+    } else if (bracket.phase === "reference") {
+      if (char === "[") bracket.depth++;
+      else if (char === "]" && --bracket.depth === 0) state.markdownBracket = null;
+    } else if (bracket.angleDestination) {
+      // Parentheses in a <destination> are literal, not Markdown delimiters.
+      if (char === ">") bracket.angleDestination = false;
+    } else if (char === "<" && bracket.depth === 1) {
+      bracket.angleDestination = true;
+    } else if (char === "(") {
+      bracket.depth++;
+    } else if (char === ")" && --bracket.depth === 0) {
+      state.markdownBracket = null;
     }
-    return line.length;
+    index++;
   }
-  if (line[next] === "[") {
-    for (let i = next + 1; i < line.length; i++) {
-      if (line[i] === "\\") i++;
-      else if (line[i] === "]") return i + 1;
-    }
-    return line.length;
-  }
-  return next;
+  return index;
 }
 
 function recordHtmlTag(state: ScanState, tag: string): void {
@@ -185,6 +204,25 @@ function urlEnd(line: string, start: number): number | null {
   return trimmed;
 }
 
+/**
+ * Unbalanced parentheses in a URL would terminate a Markdown destination
+ * early, or swallow its generated closing delimiter. Escape them in the href
+ * only; the visible link label and navigated URL keep the original characters.
+ */
+function markdownDestination(target: string): string {
+  if (!/^https?:\/\//i.test(target)) return target;
+  let depth = 0;
+  let unbalanced = false;
+  for (const char of target) {
+    if (char === "(") depth++;
+    else if (char === ")") {
+      if (depth > 0) depth--;
+      else unbalanced = true;
+    }
+  }
+  return unbalanced || depth > 0 ? target.replace(/[()]/g, "\\$&") : target;
+}
+
 function pathCharacter(char: string | undefined): boolean {
   return isWord(char) || char === "_" || char === "." || char === "-" ||
     char === "~" || char === "+" || char === "/";
@@ -228,7 +266,8 @@ function pathEnd(line: string, start: number): number | null {
 function linkifyLine(line: string, state: ScanState): string {
   // Indented code and reference definitions are also kept verbatim.
   if (state.codeWidth === 0 && state.tagBuffer === null &&
-      !state.htmlComment && state.htmlStack.length === 0 &&
+      state.markdownBracket === null && !state.htmlComment &&
+      state.htmlStack.length === 0 &&
       (line.startsWith("    ") || line.startsWith("\t") ||
         /^ {0,3}\[[^\]]+\]:/.test(line))) return line;
 
@@ -236,6 +275,10 @@ function linkifyLine(line: string, state: ScanState): string {
   let last = 0;
   let index = 0;
   while (index < line.length) {
+    if (state.markdownBracket !== null) {
+      index = scanMarkdownBracket(line, index, state);
+      continue;
+    }
     if (state.htmlComment) {
       const close = line.indexOf("-->", index);
       if (close === -1) break;
@@ -283,7 +326,9 @@ function linkifyLine(line: string, state: ScanState): string {
     }
     if ((char === "[" || (char === "!" && line[index + 1] === "[")) &&
         !isEscaped(line, index)) {
-      index = bracketEnd(line, index);
+      const opening = char === "!" ? index + 1 : index;
+      state.markdownBracket = { phase: "label", depth: 1, angleDestination: false };
+      index = scanMarkdownBracket(line, opening + 1, state);
       continue;
     }
 
@@ -292,7 +337,7 @@ function linkifyLine(line: string, state: ScanState): string {
       if (end !== null && end > index) {
         const target = line.slice(index, end);
         const label = target.replace(/([\\[\]])/g, "\\$1");
-        parts.push(line.slice(last, index), "[" + label + "](" + target + ")");
+        parts.push(line.slice(last, index), "[" + label + "](" + markdownDestination(target) + ")");
         index = end;
         last = end;
         continue;
@@ -313,7 +358,8 @@ export function linkifyMarkdown(markdown: string): string {
   if (markdown.length > MAX_MARKDOWN_LENGTH) return markdown;
   const lines = markdown.split("\n");
   const state: ScanState = {
-    codeWidth: 0, htmlComment: false, tagBuffer: null, tagQuote: null, htmlStack: [],
+    codeWidth: 0, htmlComment: false, tagBuffer: null, tagQuote: null,
+    htmlStack: [], markdownBracket: null,
   };
   let fence: Fence | null = null;
   const result: string[] = [];

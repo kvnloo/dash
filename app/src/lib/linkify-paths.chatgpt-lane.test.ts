@@ -105,6 +105,52 @@ describe("DASH-15: bare Markdown links", () => {
     ].join("\n"));
   });
 
+  test("multiline links, reference labels, and images remain protected", () => {
+    const input = [
+      "[multiline label",
+      "https://inside.test/doc](../docs/guide.md) followed by src/outside.ts",
+      "![image caption",
+      "src/inside.png](https://assets.test/asset.png) then https://public.test",
+      "[destination](",
+      "https://inside.test/wrapped",
+      ") and ./outside.ts",
+      "[reference text",
+      "https://reference.test][ref]",
+      "[plain] plus https://after.test",
+      "",
+    ].join("\n");
+    const expected = [
+      "[multiline label",
+      "https://inside.test/doc](../docs/guide.md) followed by [src/outside.ts](src/outside.ts)",
+      "![image caption",
+      "src/inside.png](https://assets.test/asset.png) then [https://public.test](https://public.test)",
+      "[destination](",
+      "https://inside.test/wrapped",
+      ") and [./outside.ts](./outside.ts)",
+      "[reference text",
+      "https://reference.test][ref]",
+      "[plain] plus [https://after.test](https://after.test)",
+      "",
+    ].join("\n");
+    expect(linkifyMarkdown(input)).toBe(expected);
+    expect(linkifyMarkdown(expected)).toBe(expected);
+  });
+
+  test("unbalanced opening and internal closing URL parentheses have safe hrefs", () => {
+    const open = "See https://example.test/a(b now \n";
+    const escapedOpen = "See [https://example.test/a(b](https://example.test/a\\(b) now \n";
+    expect(linkifyMarkdown(open)).toBe(escapedOpen);
+    expect(linkifyMarkdown(escapedOpen)).toBe(escapedOpen);
+
+    const close = "See https://example.test/a)b?q=1 now \n";
+    const escapedClose = "See [https://example.test/a)b?q=1](https://example.test/a\\)b?q=1) now \n";
+    expect(linkifyMarkdown(close)).toBe(escapedClose);
+    expect(linkifyMarkdown(escapedClose)).toBe(escapedClose);
+    expect(linkifyMarkdown("See https://example.test/a(b)c now \n")).toBe(
+      "See [https://example.test/a(b)c](https://example.test/a(b)c) now \n",
+    );
+  });
+
   test("HTML elements, attributes, bodies and comments are left unchanged", () => {
     const input = [
       '<a href="https://inside.test">src/app.ts</a> https://outside.test',
@@ -162,6 +208,8 @@ describe("DASH-15: bare Markdown links", () => {
       "Open https://example.test and src/app.ts:4 \n",
       "Go https://example.test/(foo). \n",
       "Go https://example.test/odd). \n",
+      "See https://example.test/a(b now \n",
+      "[label\nhttps://inside.test](target) and src/after.ts\n",
       tick + "https://example.test" + tick + " src/real.ts \n",
       codeFence + "ts\nsrc/no.ts\n" + codeFence + "\nsrc/yes.ts\n",
       "~~~\nhttps://no.test\n~~~\nhttps://yes.test\n",
@@ -177,7 +225,15 @@ describe("DASH-15: bare Markdown links", () => {
   });
 
   test("input size is bounded; long slash lines do not backtrack", () => {
-    const oversized = "src/app.ts " + "/".repeat(200_001);
+    // A complete, linkifiable first line is essential: a partial tail would
+    // stay unchanged for streaming reasons even if the size guard were removed.
+    const firstLine = "src/app.ts \n";
+    const padding = "x".repeat(200_000 - firstLine.length);
+    const atLimit = firstLine + padding;
+    expect(atLimit.length).toBe(200_000);
+    expect(linkifyMarkdown(atLimit)).toBe("[src/app.ts](src/app.ts) \n" + padding);
+    const oversized = atLimit + "x";
+    expect(oversized.length).toBe(200_001);
     expect(linkifyMarkdown(oversized)).toBe(oversized);
     const slashLine = "/".repeat(50_000) + " src/ok.ts \n";
     expect(linkifyMarkdown(slashLine)).toBe(
