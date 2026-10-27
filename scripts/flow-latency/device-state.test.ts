@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   DeviceStateParseError,
   type DeviceState,
+  type ThermalState,
   admitRun,
   parseBattery,
   parseThermal,
@@ -152,23 +153,29 @@ describe("parseThermal", () => {
     });
   });
 
-  test("maps all seven Android thermal service levels", () => {
-    const names = [
-      "NONE",
-      "LIGHT",
-      "MODERATE",
-      "SEVERE",
-      "CRITICAL",
-      "EMERGENCY",
-      "SHUTDOWN",
-    ];
-    for (const [index, name] of names.entries()) {
-      expect(parseThermal("Thermal Status: " + index)).toEqual({
-        thermalStatus: index,
-        name,
-      });
-    }
-  });
+  const thermalCases: ThermalState[] = [
+    { thermalStatus: 0, name: "NONE" },
+    { thermalStatus: 1, name: "LIGHT" },
+    { thermalStatus: 2, name: "MODERATE" },
+    { thermalStatus: 3, name: "SEVERE" },
+    { thermalStatus: 4, name: "CRITICAL" },
+    { thermalStatus: 5, name: "EMERGENCY" },
+    { thermalStatus: 6, name: "SHUTDOWN" },
+  ];
+
+  for (const expected of thermalCases) {
+    test("maps Android thermal service level " + expected.thermalStatus + " to " + expected.name, () => {
+      expect(parseThermal("Thermal Status: " + expected.thermalStatus)).toEqual(expected);
+    });
+
+    test("applies default admission to thermal service level " + expected.thermalStatus, () => {
+      const thermal = parseThermal("Thermal Status: " + expected.thermalStatus);
+      const result = admitRun({ batteryPct: 80, temperatureC: 30, ...thermal });
+      expect(result).toEqual(expected.thermalStatus <= 1
+        ? { ok: true, reasons: [] }
+        : { ok: false, reasons: ["Thermal status " + expected.thermalStatus + " exceeds maximum 1"] });
+    });
+  }
 
   test("ignores unrelated numeric temperatures and accepts CRLF/case differences", () => {
     const text = thermalDump.replace("Thermal Status: 2", "thermal status: 2").replace(/\n/g, "\r\n");
