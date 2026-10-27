@@ -135,15 +135,17 @@ describe("Flow 10 Hz ink-delta coalescer", () => {
 
 describe("Flow voice deixis lookup", () => {
   test("chooses the newest delta in the trailing 2 s, even for unsorted history", () => {
+    const newestInWindow = delta(2_900, [0, 0, 0.2, 0.2], "pen");
+    const oldest = delta(1_000, [0, 0, 0.2, 0.2], "pen");
     const history = [
       delta(2_750, [0, 0, 0.2, 0.2], "circle"),
       delta(1_500, [0, 0, 0.2, 0.2], "arrow"),
       delta(3_001, [0, 0, 0.2, 0.2], "box"),
-      delta(2_900, [0, 0, 0.2, 0.2], "pen"),
-      delta(1_000, [0, 0, 0.2, 0.2], "pen"),
+      newestInWindow,
+      oldest,
     ];
-    expect(resolveDeixis(history, 3_000)).toEqual(history[3]);
-    expect(resolveDeixis(history, 1_000)).toEqual(history[4]);
+    expect(resolveDeixis(history, 3_000)).toEqual(newestInWindow);
+    expect(resolveDeixis(history, 1_000)).toEqual(oldest);
     expect(resolveDeixis([], 3_000)).toBeNull();
   });
 
