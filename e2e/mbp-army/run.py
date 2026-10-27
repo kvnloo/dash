@@ -1,6 +1,7 @@
 import subprocess, os, sys, time, json, threading
 from pathlib import Path
-base=Path.home()/'dash-e2e-army-20261025'
+here=Path(__file__).resolve().parent; repo=here.parents[1]
+base=Path(os.environ.get('ARMY_BASE',str(Path.home()/'dash-e2e-army-20261025')))
 if not (base/'virtual-runtime/wayland-1').exists():raise SystemExit('Virtual display missing; never fall back to physical display')
 name=sys.argv[1]; workers=sys.argv[2]; extra=sys.argv[3:]
 env={**os.environ,'TMPDIR':str(base/'tmp'),'ARMY_TMP':str(base/'tmp'),'WAYLAND_DISPLAY':'wayland-1','XDG_RUNTIME_DIR':str(base/'virtual-runtime'),'ARMY_OUTPUT':str(base/name),'ARMY_HTML':str(base/(name+'-html')),'ARMY_JSON':str(base/(name+'.json')),'ARMY_SLOWMO':'0','ARMY_COMMAND_STARTED':str(time.time()*1000),'ARMY_STARTUP':str(base/(name+'-startup.json'))}
@@ -14,7 +15,7 @@ stopped=threading.Event()
 thread=threading.Thread(target=sample,daemon=True);thread.start()
 t=time.perf_counter()
 with (base/(name+'.log')).open('w') as f:
- p=subprocess.run(cmd,cwd=base/'repo',env=env,stdout=f,stderr=subprocess.STDOUT)
+ p=subprocess.run(cmd,cwd=repo,env=env,stdout=f,stderr=subprocess.STDOUT)
 stopped.set();thread.join()
 (base/(name+'-wall.json')).write_text(json.dumps({'run':name,'workers':int(workers),'wall_ms':(time.perf_counter()-t)*1000,'exit_code':p.returncode,'command':cmd},indent=2))
 print(name,p.returncode)

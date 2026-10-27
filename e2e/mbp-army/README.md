@@ -47,6 +47,6 @@ Official sources (no numeric latency targets):
 
 Inspect error-context.md, console.json, bridge.log, screenshot/video and trace before assigning an app bug. The context card can open even when RN Web does not expose aria-expanded; assert the rendered card, not that attribute. The cold app opens Orchestra, so select Chats explicitly. New chat from the workspace header initially opens a full screen; return and select its exact row to exercise the window. Do not select the first roster row. Do not use networkidle (polling is intentional).
 
-Append confirmed bugs immediately and under a file lock to `/mnt/zer0models/workspace/zer0/data/operations/dash-e2e-army/bugs.jsonl`, with the owner's required id/title/severity/repro steps/evidence path/suspected file:line keys. Do not publish fixture credentials or real secrets. Never fix app code in this qualification lane.
+Append confirmed bugs immediately and under a file lock to the private army bug ledger (its path lives in the private ops notes, never here), with the owner's required id/title/severity/repro steps/evidence path/suspected file:line keys. Do not publish fixture credentials or real secrets. Never fix app code in this qualification lane.
 
 Web evidence is not native phone/context-gauge acceptance; it does not prove native IME, voice, Android attachment permissions, or live model behavior.

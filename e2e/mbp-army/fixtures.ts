@@ -3,11 +3,14 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { dirname } from 'node:path';
 import { once } from 'node:events';
 export const web = process.env.ARMY_WEB || 'http://127.0.0.1:18400';
 const root = resolve(__dirname, '../..');
-const bridgeRoot = process.env.ARMY_BRIDGE_ROOT || resolve(root, '../bridge');
-const bun = process.env.ARMY_BUN || '/home/kvn/.bun/bin/bun';
+const bridgeRoot = process.env.ARMY_BRIDGE_ROOT || root;
+const bun = process.env.ARMY_BUN || execFileSync('sh',['-c','command -v bun'],{encoding:'utf8'}).trim();
+const bunDir = dirname(bun);
 const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
 export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Promise<void>; start(): Promise<void>; logs(): string };
 export async function createBridge(persistSession=true): Promise<Bridge> {
@@ -15,7 +18,7 @@ export async function createBridge(persistSession=true): Promise<Bridge> {
  const bin = join(dir,'bin'); await mkdir(bin); await mkdir(join(dir,'tmp'));await mkdir(join(dir,'.hermes'));await mkdir(join(dir,'.omp','agent'),{recursive:true});
  for (const name of ['hermes','omp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+'\n', {mode:0o700});
  await writeFile(join(bin,'tailscale'),'#!/bin/sh\nexit 1\n',{mode:0o700});
- const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':/home/kvn/.bun/bin:/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot};
+ const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot};
  const seed = spawn(bun,[join(__dirname,'seed-gate.ts')],{env,stdio:['ignore','pipe','pipe']});
  let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) throw Error('gate seed: '+seedLog);
  let child: ChildProcess; let log=''; let port=0;
