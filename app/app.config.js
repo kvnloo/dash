@@ -13,7 +13,17 @@ function withCleartextTraffic(config) {
   });
 }
 
-module.exports = ({ config }) => {
+// DASH_APP_VARIANT=e2e: separate applicationId, name and URL scheme, so a native test build
+// installs next to the live app (never over it) and pairs to the isolated test bridge.
+const E2E_PACKAGE = "app.dash.mobile.e2e";
+
+function withAppVariant(config) {
+  if (process.env.DASH_APP_VARIANT !== "e2e") return config;
+  return { ...config, name: "Dash E2E", scheme: "dash-e2e", android: { ...config.android, package: E2E_PACKAGE } };
+}
+
+module.exports = ({ config: base }) => {
+  const config = withAppVariant(base);
   if (process.env.DASH_VARIANT !== "release") return config;
   const plugins = (config.plugins ?? []).filter((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) !== "expo-dev-client");
   return withCleartextTraffic({ ...config, plugins });

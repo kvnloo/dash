@@ -8,7 +8,10 @@ import xml.etree.ElementTree as ET
 
 manifest = ET.parse(sys.argv[1]).getroot()
 android = "{http://schemas.android.com/apk/res/android}"
-assert manifest.attrib["package"] == "app.dash.mobile"
+e2e = os.environ.get("DASH_APP_VARIANT") == "e2e"
+package = "app.dash.mobile.e2e" if e2e else "app.dash.mobile"
+scheme = "dash-e2e" if e2e else "dash"
+assert manifest.attrib["package"] == package, manifest.attrib["package"]
 permissions = {node.attrib.get(android + "name") for node in manifest.findall("uses-permission")}
 assert "android.permission.POST_NOTIFICATIONS" in permissions
 activities = manifest.findall("application/activity")
@@ -22,7 +25,8 @@ for action in ["android.intent.action.SEND", "android.intent.action.SEND_MULTIPL
 schemes = {data.attrib.get(android + "scheme") for node in filters for data in node.findall("data")}
 release = os.environ.get("DASH_VARIANT") == "release"
 # exp+dash is the dev-client launcher scheme; the RC has no dev client.
-assert ({"dash"} if release else {"dash", "exp+dash"}) <= schemes, schemes
+assert ({scheme} if release else {scheme, "exp+" + scheme}) <= schemes, schemes
+assert e2e or "dash-e2e" not in schemes, schemes
 application = manifest.find("application")
 assert application is not None
 if release:
@@ -31,5 +35,5 @@ if release:
     assert application.attrib.get(android + "usesCleartextTraffic") == "true"
 else:
     assert application.attrib.get(android + "debuggable") == "true"
-result = {"package": "app.dash.mobile", "variant": "release" if release else "debug", "debuggable": not release, "cleartext": application.attrib.get(android + "usesCleartextTraffic"), "share_actions": ["SEND", "SEND_MULTIPLE"], "mime": "*/*", "schemes": sorted(s for s in schemes if s), "post_notifications_permission": True}
+result = {"package": package, "variant": "release" if release else "debug", "debuggable": not release, "cleartext": application.attrib.get(android + "usesCleartextTraffic"), "share_actions": ["SEND", "SEND_MULTIPLE"], "mime": "*/*", "schemes": sorted(s for s in schemes if s), "post_notifications_permission": True}
 print(json.dumps(result, indent=2))
