@@ -182,7 +182,9 @@ test.describe('ephemeral ACP regression',()=>{
   // 304 counts: builds with the If-None-Match roster poll get Not Modified once hosts are current.
   await page.bringToFront();
   const roster=await page.waitForResponse(response=>response.url().startsWith(`http://127.0.0.1:${bridge.port}/roster`)&&[200,304].includes(response.status()),{timeout:45000});
-  await roster.finished();
+  // Chromium can satisfy a 304 from its HTTP cache without a requestfinished event, so
+  // finished() never resolves for the conditional poll; bound it instead of hanging 180 s.
+  await Promise.race([roster.finished(),page.waitForTimeout(2000)]);
   await page.waitForTimeout(500);
   await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
   await composer(page).fill('queue behind still-running bridge turn');
