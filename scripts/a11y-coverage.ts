@@ -63,42 +63,6 @@ function skipBlock(text: string, start: number): number {
   return end < 0 ? text.length : end + 2;
 }
 
-function skipQuoted(text: string, start: number): number {
-  const quote = text[start];
-  let i = start + 1;
-  while (i < text.length) {
-    if (text[i] === "\\") {
-      i += 2;
-      continue;
-    }
-    // A nested template interpolation may contain quoted text and braces.
-    if (quote === "\x60" && text[i] === "$" && text[i + 1] === "{") {
-      i = skipBraces(text, i + 1);
-      continue;
-    }
-    if (text[i] === quote) return i + 1;
-    i++;
-  }
-  return text.length;
-}
-
-function skipBraces(text: string, start: number): number {
-  let depth = 1;
-  let i = start + 1;
-  while (i < text.length && depth > 0) {
-    if (text.startsWith("//", i)) { i = skipLine(text, i); continue; }
-    if (text.startsWith("/*", i)) { i = skipBlock(text, i); continue; }
-    if (text[i] === "'" || text[i] === '"' || text[i] === "\x60") {
-      i = skipQuoted(text, i);
-      continue;
-    }
-    if (text[i] === "{") depth++;
-    else if (text[i] === "}") depth--;
-    i++;
-  }
-  return i;
-}
-
 /** Collect aliases of Animated.createAnimatedComponent(Pressable) in this file. */
 function componentNames(text: string): Set<string> {
   const names = new Set(TOUCHABLES);
@@ -111,83 +75,181 @@ function componentNames(text: string): Set<string> {
 
 type Opening = {
   end: number;
+  selfClosing: boolean;
   hasLabel: boolean;
   hasRole: boolean;
   spreadProps: boolean;
 };
 
-function readOpening(text: string, from: number): Opening | null {
-  let i = from;
-  let hasLabel = false;
-  let hasRole = false;
-  let spreadProps = false;
-
-  while (i < text.length) {
-    const c = text[i];
-    if (c === ">") return { end: i + 1, hasLabel, hasRole, spreadProps };
-    if (c === "{") {
-      let start = i + 1;
-      while (/\s/.test(text[start] ?? "") && start < text.length) start++;
-      if (text.slice(start, start + 3) === "...") spreadProps = true;
-      i = skipBraces(text, i);
-      continue;
-    }
-    if (c === "'" || c === '"' || c === "\x60") {
-      i = skipQuoted(text, i);
-      continue;
-    }
-    if (c && /[A-Za-z_:]/.test(c)) {
-      const match = /^[A-Za-z_:][\w:-]*/.exec(text.slice(i));
-      if (match) {
-        const attr = match[0];
-        if (attr === "accessibilityLabel" || attr === "aria-label") hasLabel = true;
-        if (attr === "accessibilityRole" || attr === "role") hasRole = true;
-        i += attr.length;
-        continue;
-      }
-    }
-    i++;
-  }
-  // A malformed/unclosed opening cannot produce a reliable finding.
-  return null;
-}
-
-/** Inspect JSX openings without mistaking a nested expression's > for the tag end. */
+/**
+ * Walk JSX elements and their embedded JS separately: JSX text is not JS code.
+ * In particular, an apostrophe in a Text child must not start a JS string,
+ * and JSX nested in a prop expression must be visited, not skipped.
+ */
 export function scanSource(file: string, text: string): Finding[] {
   const names = componentNames(text);
-  const found: Finding[] = [];
-  let i = 0;
-  let line = 1;
-
-  while (i < text.length) {
-    const start = i;
-    if (text.startsWith("//", i)) i = skipLine(text, i);
-    else if (text.startsWith("/*", i)) i = skipBlock(text, i);
-    else if (text[i] === "'" || text[i] === '"' || text[i] === "\x60") i = skipQuoted(text, i);
-    else if (text[i] === "<" && text[i + 1] !== "/") {
-      const match = /^<([A-Za-z_$][\w$.]*)/.exec(text.slice(i));
-      if (match && names.has(match[1] ?? "")) {
-        const afterName = i + match[0].length;
-        const boundary = text[afterName];
-        if (boundary === ">" || boundary === "/" || (boundary !== undefined && /\s/.test(boundary))) {
-          const opening = readOpening(text, afterName);
-          if (opening) {
-            found.push({
-              file,
-              line,
-              component: match[1] ?? "",
-              hasLabel: opening.hasLabel,
-              hasRole: opening.hasRole,
-              spreadProps: opening.spreadProps,
-            });
-            i = opening.end;
-          } else i++;
-        } else i++;
-      } else i++;
-    } else i++;
-    for (let j = start; j < i; j++) if (text[j] === "\n") line++;
+  const found: { offset: number; finding: Finding }[] = [];
+  const lineStarts = [0];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\n") lineStarts.push(i + 1);
   }
-  return found;
+
+  function lineAt(offset: number): number {
+    let low = 0;
+    let high = lineStarts.length;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if ((lineStarts[mid] ?? 0) <= offset) low = mid + 1;
+      else high = mid;
+    }
+    return low;
+  }
+
+  function skipString(start: number): number {
+    const quote = text[start];
+    let i = start + 1;
+    while (i < text.length) {
+      if (text[i] === "\\") { i += 2; continue; }
+      if (text[i] === quote) return i + 1;
+      i++;
+    }
+    return text.length;
+  }
+
+  function skipTemplate(start: number): number {
+    let i = start + 1;
+    while (i < text.length) {
+      if (text[i] === "\\") { i += 2; continue; }
+      if (text[i] === "\x60") return i + 1;
+      if (text[i] === "$" && text[i + 1] === "{") {
+        i = visitCode(i + 2, true);
+        continue;
+      }
+      i++;
+    }
+    return text.length;
+  }
+
+  /** JS region, optionally terminated by its matching closing brace. */
+  function visitCode(start: number, untilBrace = false): number {
+    let i = start;
+    let depth = untilBrace ? 1 : 0;
+    while (i < text.length) {
+      if (text.startsWith("//", i)) { i = skipLine(text, i); continue; }
+      if (text.startsWith("/*", i)) { i = skipBlock(text, i); continue; }
+      if (text[i] === "'" || text[i] === '"') { i = skipString(i); continue; }
+      if (text[i] === "\x60") { i = skipTemplate(i); continue; }
+      if (text[i] === "<") {
+        const end = visitElement(i);
+        if (end !== null) { i = end; continue; }
+      }
+      if (text[i] === "{") depth++;
+      if (text[i] === "}" && untilBrace && --depth === 0) return i + 1;
+      i++;
+    }
+    return i;
+  }
+
+  function readOpening(from: number): Opening | null {
+    let i = from;
+    let hasLabel = false;
+    let hasRole = false;
+    let spreadProps = false;
+    while (i < text.length) {
+      const c = text[i];
+      if (c === ">") {
+        let previous = i - 1;
+        while (previous >= from && /\s/.test(text[previous] ?? "")) previous--;
+        return { end: i + 1, selfClosing: text[previous] === "/", hasLabel, hasRole, spreadProps };
+      }
+      if (text.startsWith("//", i)) { i = skipLine(text, i); continue; }
+      if (text.startsWith("/*", i)) { i = skipBlock(text, i); continue; }
+      if (c === "{") {
+        let prop = i + 1;
+        while (prop < text.length && /\s/.test(text[prop] ?? "")) prop++;
+        if (text.slice(prop, prop + 3) === "...") spreadProps = true;
+        i = visitCode(i + 1, true);
+        continue;
+      }
+      if (c === "'" || c === '"') { i = skipString(i); continue; }
+      if (c === "\x60") { i = skipTemplate(i); continue; }
+      if (c && /[A-Za-z_:]/.test(c)) {
+        const match = /^[A-Za-z_:][\w:-]*/.exec(text.slice(i));
+        if (match) {
+          if (match[0] === "accessibilityLabel" || match[0] === "aria-label") hasLabel = true;
+          if (match[0] === "accessibilityRole" || match[0] === "role") hasRole = true;
+          i += match[0].length;
+          continue;
+        }
+      }
+      i++;
+    }
+    return null;
+  }
+
+  /** Child text keeps quotes and punctuation literal; only tags and {JS} are special. */
+  function visitChildren(start: number): number {
+    let i = start;
+    while (i < text.length) {
+      if (text.startsWith("</", i)) {
+        const close = text.indexOf(">", i + 2);
+        return close < 0 ? text.length : close + 1;
+      }
+      if (text[i] === "<") {
+        const end = visitElement(i, true);
+        if (end !== null) { i = end; continue; }
+      }
+      if (text[i] === "{") { i = visitCode(i + 1, true); continue; }
+      i++;
+    }
+    return i;
+  }
+
+  function visitElement(start: number, inChildren = false): number | null {
+    let name = "";
+    let afterName = start + 1;
+    if (!text.startsWith("<>", start)) {
+      const match = /^<([A-Za-z_$][\w$.]*)/.exec(text.slice(start));
+      if (!match) return null;
+      name = match[1] ?? "";
+      afterName = start + match[0].length;
+      const boundary = text[afterName];
+      if (boundary !== ">" && boundary !== "/" && (boundary === undefined || !/\s/.test(boundary))) {
+        return null;
+      }
+      // Accept lower-case JSX hosts inside JSX text or in expression positions,
+      // while rejecting comparisons such as a < bound and generic <T> arrows.
+      const prefix = text.slice(0, start);
+      const before = prefix.trimEnd();
+      const previous = before[before.length - 1];
+      const lineStart = prefix.slice(prefix.lastIndexOf("\n") + 1).trim().length === 0;
+      const expressionStart = previous === undefined || "=([{,?:!&|>;".includes(previous)
+        || lineStart || /\b(?:return|yield|default)$/.test(before);
+      if (!inChildren && !expressionStart) return null;
+      if (!names.has(name) && /^\s+extends\b/.test(text.slice(afterName))) return null;
+      if (!names.has(name) && /^[A-Z]$/.test(name)) return null;
+    }
+
+    const opening = readOpening(afterName);
+    if (!opening) return null;
+    if (names.has(name)) {
+      found.push({
+        offset: start,
+        finding: {
+          file,
+          line: lineAt(start),
+          component: name,
+          hasLabel: opening.hasLabel,
+          hasRole: opening.hasRole,
+          spreadProps: opening.spreadProps,
+        },
+      });
+    }
+    return opening.selfClosing ? opening.end : visitChildren(opening.end);
+  }
+
+  visitCode(0);
+  return found.sort((a, b) => a.offset - b.offset).map(entry => entry.finding);
 }
 
 /** Scan only application TSX, excluding tests, mock and vendor directories. */

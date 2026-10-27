@@ -94,6 +94,84 @@ describe("scanSource JSX openings", () => {
   });
 });
 
+describe("JSX text and nested touchable regression coverage", () => {
+  test("finds touchables after apostrophes and quoted punctuation in JSX text", () => {
+    const source = [
+      "const view = (",
+      "  <View>",
+      "    <Text>Don't miss a user's action; quoted \"words\" and // comments are text.</Text>",
+      "    <Text>A backtick \x60 here is also JSX text.</Text>",
+      '    <Pressable accessibilityRole="button" onPress={tap} />',
+      '    <TouchableOpacity accessibilityLabel="Close" />',
+      "  </View>",
+      ");",
+      "const notAControl = '<Pressable />';",
+      "<Switch />",
+    ].join("\n");
+    expect(scanSource(FILE, source)).toEqual([
+      { file: FILE, line: 5, component: "Pressable", hasLabel: false, hasRole: true, spreadProps: false },
+      { file: FILE, line: 6, component: "TouchableOpacity", hasLabel: true, hasRole: false, spreadProps: false },
+      { file: FILE, line: 10, component: "Switch", hasLabel: false, hasRole: false, spreadProps: false },
+    ]);
+    const report = checkRatchet(scanSource(FILE, source), { unlabeled: {} });
+    expect(report.ok).toBe(false);
+    expect(report.increases).toEqual([{ file: FILE, line: 5, previous: 0, current: 2 }]);
+  });
+
+  test("finds JSX touchables nested within another target's attribute expressions", () => {
+    const source = [
+      "const ui = (",
+      '  <Pressable accessibilityRole="button"',
+      '    child={<TouchableOpacity accessibilityLabel="Nested only" />}',
+      '    render={() => <Animated.Pressable onPress={tap} />}',
+      '    details={{ value: () => <Switch accessibilityRole="switch" /> }}',
+      '    onPress={() => { if (a > b) tap(); }}',
+      "  />",
+      ");",
+      'const other = <View trailing={() => (<TouchableHighlight {...rest} />)} />;',
+    ].join("\n");
+    expect(scanSource(FILE, source)).toEqual([
+      { file: FILE, line: 2, component: "Pressable", hasLabel: false, hasRole: true, spreadProps: false },
+      { file: FILE, line: 3, component: "TouchableOpacity", hasLabel: true, hasRole: false, spreadProps: false },
+      { file: FILE, line: 4, component: "Animated.Pressable", hasLabel: false, hasRole: false, spreadProps: false },
+      { file: FILE, line: 5, component: "Switch", hasLabel: false, hasRole: true, spreadProps: false },
+      { file: FILE, line: 9, component: "TouchableHighlight", hasLabel: false, hasRole: false, spreadProps: true },
+    ]);
+    const report = checkRatchet(scanSource(FILE, source), { unlabeled: {} });
+    expect(report.ok).toBe(false);
+    expect(report.unlabeled).toEqual({ [FILE]: 3 });
+    expect(report.spreadProps).toEqual([
+      { file: FILE, line: 9, component: "TouchableHighlight", hasLabel: false, hasRole: false, spreadProps: true },
+    ]);
+  });
+
+  test("finds text after contractions in lower-case JSX hosts, not JS comparisons", () => {
+    const source = [
+      "const condition = a < bound && result > other;",
+      "const generic = pick<Pressable>(value);",
+      "const ui = <div>It's JSX text, not a quote. <Pressable /></div>;",
+      "const nested = <Text><span>Don't skip <Switch accessibilityLabel='Enabled' /></span></Text>;",
+      'const ignored = "<TouchableOpacity />";',
+    ].join("\n");
+    expect(scanSource(FILE, source)).toEqual([
+      { file: FILE, line: 3, component: "Pressable", hasLabel: false, hasRole: false, spreadProps: false },
+      { file: FILE, line: 4, component: "Switch", hasLabel: true, hasRole: false, spreadProps: false },
+    ]);
+  });
+
+  test("visits JSX in template interpolations without scanning literal template text", () => {
+    const source = [
+      'const interpolated = \x60ready: \x24{ready ? <Pressable accessibilityLabel="Go" /> : null}\x60;',
+      'const literal = \x60<Switch />\x60;',
+      "const content = <Text>It's readable <Switch /></Text>;",
+    ].join("\n");
+    expect(scanSource(FILE, source)).toEqual([
+      { file: FILE, line: 1, component: "Pressable", hasLabel: true, hasRole: false, spreadProps: false },
+      { file: FILE, line: 3, component: "Switch", hasLabel: false, hasRole: false, spreadProps: false },
+    ]);
+  });
+});
+
 describe("per-file accessibility ratchet", () => {
   test("increasing the count fails with a file and new finding line", () => {
     const report = checkRatchet([finding(3), finding(22)], { unlabeled: { [FILE]: 1 } });
@@ -125,7 +203,7 @@ describe("per-file accessibility ratchet", () => {
     const findings = [finding(2, FILE, false, true), finding(5, FILE, true)];
     const report = checkRatchet(findings, { unlabeled: {} });
     expect(report.ok).toBe(true);
-    expect(report.spreadProps).toEqual([findings[0]]);
+    expect(report.spreadProps).toEqual([finding(2, FILE, false, true)]);
     expect(report.unlabeled).toEqual({});
     expect(formatReport(report)).toContain("spread props (review separately): " + FILE + ":2");
     expect(buildBaseline([finding(4), ...findings])).toEqual({ unlabeled: { [FILE]: 1 } });
