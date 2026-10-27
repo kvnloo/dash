@@ -118,5 +118,7 @@ describe("bottom sheet native component wiring contract", () => {
     expect(component).toContain("duration: timing.state");
     expect(component).toContain("reducedMotion ? 0");
     expect(component).toContain("selectAndClose(previous, id, options)");
+    expect(component).toContain("pendingIosSelection.current = id");
+    expect(component).toContain("onDismiss={flushPendingSelection}");
   });
 });
