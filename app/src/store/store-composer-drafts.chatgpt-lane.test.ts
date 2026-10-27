@@ -101,6 +101,7 @@ if (selectedCase === undefined) {
     },
   }));
   mock.module("react-native", () => ({
+    Platform: { OS: "android" },
     AppState: {
       addEventListener(event: string, listener: (state: string) => void) {
         expect(event).toBe("change");
