@@ -66,9 +66,9 @@ export function classifyLink(href: string): LinkTarget {
     }
   }
 
-  // Reserve Expo's route marker even in malformed/prefixed links: never open
-  // an attempted app route as a local file just because it starts with '/'.
-  if (APP_SCHEME.test(value) || (value.startsWith("/") && value.includes("/--/"))) {
+  // Only the leading Expo marker reserves a path for app routing. Interior
+  // /--/ segments are ordinary POSIX directory names, not route prefixes.
+  if (APP_SCHEME.test(value) || value.startsWith("/--/")) {
     if (!APP_URL.test(value) && !APP_PATH.test(value)) return blocked("Unknown app route");
     const route = parseAppRouteLink(value);
     return route ? { kind: "app-route", route } : blocked("Unknown app route");

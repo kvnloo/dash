@@ -48,7 +48,7 @@ describe("DASH-15: tappable Markdown link targets", () => {
   test("blocks unknown and malformed app routes without falling through to file", () => {
     for (const href of [
       "dash://nope", "exp+dash://nope", "/--/nope", "dash://trace/other",
-      "/--/trace/other", "dash://untrusted/--/trace", "/foo/--/trace",
+      "/--/trace/other", "dash://untrusted/--/trace",
       "exp://localhost/--/trace",
     ]) {
       expect(classifyLink(href).kind).toBe("blocked");
@@ -56,9 +56,14 @@ describe("DASH-15: tappable Markdown link targets", () => {
     expect(classifyLink("dash://trace")).toEqual({ kind: "app-route", route: "Trace" });
   });
 
-  test("blocks prefixed Expo route markers rather than treating them as files", () => {
-    for (const href of ["/foo/--/trace", "/foo/--/nope", "/foo/--/trace/other", "/foo/--/trace.ts"]) {
-      expect(classifyLink(href)).toEqual({ kind: "blocked", reason: "Unknown app route" });
+  test("treats interior Expo route markers as ordinary POSIX file path segments", () => {
+    for (const path of [
+      "/foo/--/trace", "/foo/--/nope", "/foo/--/trace/other", "/foo/--/trace.ts",
+      "/src/--/a.ts", "/foo/--/trace/--/lab",
+    ]) {
+      expect(classifyLink(path)).toEqual({ kind: "file", path });
+      expect(classifyLink(path + ":12")).toEqual({ kind: "file", path, line: 12 });
+      expect(classifyLink(path + ":12:4")).toEqual({ kind: "file", path, line: 12, column: 4 });
     }
     expect(classifyLink("/--/trace")).toEqual({ kind: "app-route", route: "Trace" });
     expect(classifyLink("mailto:user@example.com?body=/--/trace")).toEqual({
