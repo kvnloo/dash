@@ -139,5 +139,5 @@ async function parseClaimResponse(res: Response): Promise<PairClaimResult> {
 }
 
 export function settingsFromClaim(claim: PairClaimResult, harness = "omp"): Settings {
-  return { address: claim.address, token: claim.token, harness };
+  return { address: claim.address, token: claim.token, harness, inAppFeedback: true };
 }

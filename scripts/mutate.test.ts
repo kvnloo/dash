@@ -12,11 +12,11 @@ describe("collectMutants", () => {
     expect(mutants.some((m) => m.original === "true" && m.replacement === "false")).toBe(true);
   });
 
-  test("does not mutate equivalent operators inside functions", () => {
+  test("mutates equality and logic operators that change parse/roster branches", () => {
     const source = "export const ok = (n: number) => n < 2 && n === 0;\n";
     const mutants = collectMutants(source, "cmp.ts");
-    expect(mutants.some((m) => m.original === "===")).toBe(false);
-    expect(mutants.some((m) => m.original === "&&")).toBe(false);
+    expect(mutants.some((m) => m.original === "===" && m.replacement === "!==")).toBe(true);
+    expect(mutants.some((m) => m.original === "&&" && m.replacement === "||")).toBe(true);
   });
 
   test("does not mutate numbers inside strings or comments", () => {

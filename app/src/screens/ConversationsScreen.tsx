@@ -13,7 +13,7 @@ import { confirmDestructive, timeAgo } from "../util";
 
 function preview(c: Conversation): string {
   const last = c.messages[c.messages.length - 1];
-  if (!last) return "Empty chat";
+  if (!last) return c.cwd ?? (c.sessionId ? c.title : "Empty chat");
   if (last.role === "assistant") {
     if (last.state === "streaming") return last.status ? `Working: ${last.status}` : "Working…";
     if (last.state === "error") return last.error ?? "Error";
@@ -44,7 +44,7 @@ const Row = memo(function Row({
       style={({ pressed }) => [styles.row, active && styles.rowActive, pressed && styles.pressed]}
       accessibilityRole="button"
     >
-      <HarnessAvatar name={harnessName} />
+      <HarnessAvatar name={harnessName} harnessId={item.harness} />
       <View style={styles.rowMain}>
         <View style={styles.rowTop}>
           <Text style={styles.rowTitle} numberOfLines={1}>

@@ -28,4 +28,7 @@ area:verify:
       - '**/*.test.ts'
       - 'scripts/mutate.ts'
       - 'scripts/mutate.test.ts'
+      - 'scripts/assert-nav-dots.ts'
+      - 'scripts/assert-nav-dots.test.ts'
+      - '.maestro/**/*'
       - '.cursor/skills/tdd/**/*'

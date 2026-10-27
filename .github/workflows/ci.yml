@@ -69,7 +69,7 @@ jobs:
       - name: Install app and bridge
         run: bun install --cwd app && bun install --cwd bridge
       - name: Unit tests
-        run: bun test app/src bridge/src shared scripts/mutate.test.ts
+        run: bun test app/src bridge/src shared scripts/mutate.test.ts scripts/assert-nav-dots.test.ts
 
   mutation:
     needs: unit-tests
@@ -84,4 +84,23 @@ jobs:
         run: bun install --cwd app && bun install --cwd bridge
       - name: Mutation tests
         run: bun scripts/mutate.ts --threshold 80 --max 200
+
+  maestro-nav-dots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Maestro nav flows must not kill Metro
+        run: |
+          set -euo pipefail
+          for f in .maestro/nav-dots.yaml .maestro/inspect-nav.yaml; do
+            if grep -E 'launchApp|stopApp' "$f"; then
+              echo "$f must not launchApp/stopApp (kills Metro 8097)"
+              exit 1
+            fi
+          done
+      - name: Nav-dot geometry checker (Yoga collapse class)
+        run: bun test scripts/assert-nav-dots.test.ts
 

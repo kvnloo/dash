@@ -43,6 +43,7 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
       token: token.trim(),
       harness: settings?.harness ?? "omp",
       cwd: cwd.trim() || undefined,
+      inAppFeedback: settings?.inAppFeedback ?? true,
     };
     saveSettings(next);
     bridge.start(next);
@@ -174,6 +175,30 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
           <Pressable onPress={() => navigation.navigate("Pair")} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
             <Text style={styles.secondaryText}>Pair nearby (sonic)</Text>
           </Pressable>
+
+          {!firstRun && settings ? (
+            <>
+              <Text style={styles.label}>Beta</Text>
+              <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
+                <Pressable
+                  onPress={() => {
+                    saveSettings({ ...settings, inAppFeedback: !settings.inAppFeedback });
+                    haptic.tap();
+                  }}
+                  style={({ pressed }) => [styles.harnessRow, pressed && styles.pressed]}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: settings.inAppFeedback }}
+                  accessibilityLabel="In-app feedback"
+                >
+                  <Text style={styles.harnessName}>In-app feedback</Text>
+                  <Text style={styles.statusText}>{settings.inAppFeedback ? "On" : "Off"}</Text>
+                </Pressable>
+              </GlassSurface>
+              <Text style={styles.help}>
+                Voice, typed notes on Main, and long-press on rows go to the Dash secondmate until you turn this off.
+              </Text>
+            </>
+          ) : null}
 
           {!firstRun ? (
             <Pressable onPress={forget} style={({ pressed }) => [styles.danger, pressed && styles.pressed]}>

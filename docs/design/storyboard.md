@@ -23,6 +23,7 @@ Default tab: **Chats**. Compose in header.
 - `REF-grok-drawer` → side density only; Dash uses top tabs, not a Grok drawer
 - `REF-zero-home` / `REF-zero-chizi-grid` / `REF-zero-kit-grid` → Orchestra tile density
 - `REF-zero-chat` → Zero thread chrome (black, no cartoon)
+- Pattern atlas (T3 / ChatGPT / Grok / Conductor / AODL) → [`ai-ui-patterns/`](ai-ui-patterns/README.md)
 
 ## Official designs
 

@@ -23,3 +23,16 @@ export const MOTION_MS = {
   exit: 140,
   stagger: 36,
 } as const;
+
+/** Bot-chat chrome. Same clock as MOTION_MS — not a second language. */
+export const BOT_CHAT_MS = {
+  enter: MOTION_MS.enter,
+  exit: MOTION_MS.exit,
+  stagger: MOTION_MS.stagger,
+} as const;
+
+/** translateY distances for bot-chat enter/exit. Transforms only. */
+export const BOT_CHAT_OFFSETS = {
+  enterY: 8,
+  exitY: 8,
+} as const;
