@@ -197,7 +197,9 @@ describe("agent overlay state reducer", () => {
   test("never mutates a deep-frozen prior state or aliases a mutable draw command", () => {
     const strokes: { points: [number, number][] }[] = [{ points: [[0.1, 0.2], [0.3, 0.4]] }];
     const first = put(createOverlayState(), { type: "draw", id: "ink", strokes, color: "cream", ttlMs: 1_000 }, 100);
-    strokes[0].points[0][0] = 0.9;
+    const mutablePair = strokes[0]?.points[0];
+    if (mutablePair === undefined) throw new Error("missing test fixture coordinate");
+    mutablePair[0] = 0.9;
     expect(first.items[0]?.kind).toBe("draw");
     if (first.items[0]?.kind !== "draw") throw new Error("expected drawing");
     expect(first.items[0].strokes[0]?.points[0]?.[0]).toBe(0.1);
