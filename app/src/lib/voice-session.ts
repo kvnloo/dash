@@ -34,6 +34,7 @@ export function voiceConnectionErrorLine(note: string | undefined): string {
   if (note.startsWith("Voice disconnected.") || note.startsWith("Voice connection timed out.")) {
     return voiceConnectionError("ice");
   }
+  if (note.startsWith("Voice authorization/network unavailable.")) return voiceConnectionError("token");
   if (note.startsWith("Realtime reported an error.")) return "Realtime session failed";
   if (note.startsWith("Voice unavailable.")) return "Voice connection failed";
   if (note.startsWith("Mic stopped because Dash left the foreground.")) return "Voice stopped in background";

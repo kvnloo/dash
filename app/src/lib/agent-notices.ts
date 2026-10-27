@@ -1,4 +1,4 @@
-import { parseServerMessage, type NoticeMessage } from "../../../shared/protocol";
+import { parseServerMessage, type ClientMessage, type NoticeMessage } from "../../../shared/protocol";
 import { parseNotificationTarget, type DashNotice } from "./notification-policy";
 
 /** Serialized hydration/receipts prevent two replay frames from racing the dedupe. */
@@ -24,6 +24,7 @@ export function createAgentNoticeInbox(options: {
     }
     hydrated = true; options.changed?.(items);
   }
+  async function clear() { await options.storage?.write("[]"); items = []; hydrated = true; options.changed?.(items); }
   function enqueue(run: () => Promise<void>) {
     const next = work.then(run); work = next.catch(() => {}); return next;
   }
@@ -37,8 +38,10 @@ export function createAgentNoticeInbox(options: {
       await options.storage?.write(JSON.stringify(next));
       items = next; options.changed?.(items);
       options.emit({ key: `notice:${notice.id}`, title: notice.title, body: notice.body,
-        target: parseNotificationTarget({ url: notice.url }) ?? { kind: "notices" } });
+        target: parseNotificationTarget({ url: notice.url }) ?? { kind: "notices" }, report: true });
     }),
-    clear: () => enqueue(async () => { await options.storage?.write("[]"); items = []; hydrated = true; options.changed?.(items); }),
+    clear: () => enqueue(clear),
+    /** Forget everything: also drop the bridge ring, or the next pairing replays old reports. */
+    forget: (send: (message: ClientMessage) => boolean) => enqueue(async () => { send({ type: "notices_clear" }); await clear(); }),
   };
 }

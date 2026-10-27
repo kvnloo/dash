@@ -1,13 +1,29 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
-import { tmpdir, hostname } from "node:os";
+import { homedir, hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { parseServerMessage, type ServerMessage } from "../../../shared/protocol";
 
 function shellQuote(value: string): string { return `'${value.replaceAll("'", "'\\''")}'`; }
 
+// Each fixture HOME can grow to hundreds of MB; a RAM-backed /tmp fills up when one leaks.
+// Default to a disk-backed cache dir (override with DASH_TEST_TMP) and remove every root
+// on close, on startup failure, after the file and on process exit.
+const FIXTURE_BASE = process.env.DASH_TEST_TMP ?? join(homedir(), ".cache", "dash-test-tmp");
+const fixtureRoots = new Set<string>();
+const created: string[] = [];
+function removeFixtureRoots() {
+  for (const root of fixtureRoots) { rmSync(root, { recursive: true, force: true }); fixtureRoots.delete(root); }
+}
+process.once("exit", removeFixtureRoots);
+afterAll(removeFixtureRoots);
+
 async function bridgeFixture(mode = "ok") {
-  const root = await mkdtemp(join(tmpdir(), "dash-bridge-fixture-"));
+  mkdirSync(FIXTURE_BASE, { recursive: true });
+  const root = await mkdtemp(join(FIXTURE_BASE, "dash-bridge-fixture-"));
+  fixtureRoots.add(root);
+  created.push(root);
   const bin = join(root, "bin");
   await mkdir(bin);
   await writeFile(join(bin, "tailscale"), "#!/bin/sh\nexit 1\n", { mode: 0o700 });
@@ -27,13 +43,24 @@ async function bridgeFixture(mode = "ok") {
     }
   })();
   for (let i = 0; i < 100 && !port && proc.exitCode === null; i++) await Bun.sleep(20);
-  if (!port) { proc.kill("SIGKILL"); await reading; throw new Error(`Bridge fixture failed to start: ${stderr}`); }
+  if (!port) { proc.kill("SIGKILL"); await reading; fixtureRoots.delete(root); await rm(root, { recursive: true, force: true }); throw new Error(`Bridge fixture failed to start: ${stderr}`); }
   const token = (await readFile(join(root, ".dash/token"), "utf8")).trim();
   const bootstrap = (await readFile(join(root, ".dash/bootstrap-token"), "utf8")).trim();
   return {
     port, token, bootstrap, pidFile: join(root, "agent.pid"),
     stderr: () => stderr,
-    async close() { if (proc.exitCode === null) proc.kill("SIGTERM"); await proc.exited; await reading; await rm(root, { recursive: true, force: true }); },
+    async close() {
+      try {
+        if (proc.exitCode === null) proc.kill("SIGTERM");
+        const killer = setTimeout(() => proc.kill("SIGKILL"), 5_000);
+        await proc.exited;
+        clearTimeout(killer);
+        await reading;
+      } finally {
+        fixtureRoots.delete(root);
+        await rm(root, { recursive: true, force: true });
+      }
+    },
   };
 }
 
@@ -148,4 +175,10 @@ test("bridge shutdown cancels its owned ACP process before exiting", async () =>
     if (pid) { try { process.kill(pid, "SIGKILL"); } catch {} }
     await f.close();
   }
+});
+
+test("every bridge fixture HOME is removed once its test closes it", () => {
+  expect(created.length).toBeGreaterThan(0);
+  expect(created.filter(root => existsSync(root))).toEqual([]);
+  expect(created.every(root => root.startsWith(FIXTURE_BASE))).toBe(true);
 });

@@ -66,3 +66,49 @@ describe("root-owned voice survives in-app navigation", () => {
     expect(effect).toMatch(/else if \(autoStarted\.current\) \{\s*autoStarted\.current = false;\s*void end\(\);/);
   });
 });
+
+const errorPillSource = readFileSync(new URL("./ContinuousVoiceRoot.tsx", import.meta.url), "utf8");
+describe("continuous voice error pill", () => {
+  test("shows one error line with separate Retry and End controls", () => {
+    expect(errorPillSource).toContain('testID="voice-error"');
+    expect(errorPillSource).toContain('accessibilityRole="alert" accessibilityLiveRegion="polite"');
+    expect(errorPillSource).toMatch(/testID="voice-error"[^>]+numberOfLines=\{1\}/);
+    expect(errorPillSource).toContain('testID={pill.phase === "error" ? "voice-retry"');
+    expect(errorPillSource).toContain('primaryText');
+    expect(errorPillSource).toContain('testID="voice-end"');
+    expect(errorPillSource).toContain('accessibilityLabel="End voice call and dismiss error"');
+    expect(errorPillSource).toContain('onPress={() => void stop()}');
+    expect(errorPillSource).toContain('errorLabel: { color: colors.danger');
+    expect(errorPillSource).toContain('minHeight: 44, minWidth: 56');
+  });
+
+  test("classifies native load, SDP negotiation and token failures at their actual call sites", () => {
+    expect(errorPillSource).toContain('protectVoicePeer(await createVoicePeer(event, ready, lost))');
+    expect(errorPillSource).toContain('error instanceof Error && /permission denied/i.test(error.message) ? "permission" : "webrtc"');
+    expect(errorPillSource).toContain('if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(voiceConnectionError("token"));');
+    expect(errorPillSource).toContain('if (!response.ok) throw new VoiceAccessDenied(voiceConnectionError("sdp"));');
+    expect(errorPillSource).toContain('if (!sdp.startsWith("v=0")) throw new VoiceAccessDenied(voiceConnectionError("sdp"));');
+    expect(errorPillSource).toContain('voiceConnectionErrorLine(next.note)');
+    expect(errorPillSource).not.toContain('Linking.openURL');
+  });
+
+  test("retry waits for native release and targets the same attached Hermes conversation", () => {
+    const wait = errorPillSource.indexOf("await micRelease.current.wait()");
+    const acquire = errorPillSource.indexOf('microphone.acquire("live")');
+    expect(wait).toBeGreaterThan(-1);
+    expect(acquire).toBeGreaterThan(wait);
+    expect(errorPillSource).toContain("if (beforeWait !== epoch.current) return;");
+    expect(errorPillSource).toContain('state.phase === "error" ? attached.current : null');
+    expect(errorPillSource).toContain("const releaseWhenStopped = micRelease.current.hold(release)");
+    expect(errorPillSource).toContain("captureReleased: () => { releaseWhenStopped();");
+    expect(errorPillSource).toContain("releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped)");
+  });
+
+  test("End invalidates stale work, clears target and returns to idle", () => {
+    expect(errorPillSource).toContain("epoch.current++; starting.current = false; desiredMute.current = false;");
+    expect(errorPillSource).toContain("call.current = null;");
+    expect(errorPillSource).toContain("attached.current = null;");
+    expect(errorPillSource).toContain("const cleanup = controller?.stop();");
+    expect(errorPillSource).toContain("setState(initial); await cleanup;");
+  });
+});

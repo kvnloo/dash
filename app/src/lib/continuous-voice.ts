@@ -45,6 +45,13 @@ export interface VoiceIO {
 }
 export function object(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 export const realWords = (text: string): boolean => /[\p{L}\p{N}]{2}/u.test(text) && !/^\s*(\[.*\]|\(.*\)|[.!?…]+)\s*$/.test(text);
+/** Preferred Realtime speech model and the legacy z0live broker fallback.
+ * The broker owns model selection; never remint automatically on a model error.
+ */
+export const REALTIME_VOICE_MODEL = Object.freeze({
+  preferred: "gpt-realtime-2.1",
+  fallback: "gpt-realtime",
+});
 export class VoiceAccessDenied extends Error {}
 
 export class ContinuousVoice {
@@ -115,7 +122,7 @@ export class ContinuousVoice {
       const typedTurns = this.io.typedTurns ?? lazyAppStore();
       if (!this.live(generation)) return;
       this.watchTyped(typedTurns, target, generation);
-      const mint = await this.io.request("/v1/realtime/session", { client: "dash", transports: ["realtime"], context: { app: "app.dash.mobile", hermes_target: target }, tools: [] });
+      const mint = await this.io.request("/v1/realtime/session", { client: "dash", transports: ["realtime"], model: REALTIME_VOICE_MODEL.preferred, fallback_model: REALTIME_VOICE_MODEL.fallback, context: { app: "app.dash.mobile", hermes_target: target }, tools: [] });
       if (!object(mint) || typeof mint.session_id !== "string" || typeof mint.value !== "string" || mint.transport !== "realtime") throw new Error("Unsupported voice session; no transport/model fallback was attempted.");
       const sid = mint.session_id;
       if (!this.live(generation)) { await this.io.request(`/v1/sessions/${encodeURIComponent(sid)}/end`, {}); return; }

@@ -33,11 +33,30 @@ an unbounded/durable delivery queue: reports older than 50 bridge entries are
 not recoverable. A new phone receives the retained history.
 
 Settings → **Notices · Agent reports** opens the newest-first inbox. Reports are
-saved even when foreground, notifications are disabled, or permission is denied;
-only system delivery is suppressed by the existing notification policy. Supported
+saved even when notifications are disabled or permission is denied; only system
+delivery is suppressed then. Unlike replies and approvals, reports post a native
+notification **even while Dash is in the foreground**: the app reconnects only
+when it is open, so a report sent while the phone was away arrives by replay in
+the foreground and must still reach the notification shade (once per unseen id). Supported
 chat/approvals links use existing routing; unknown Dash links remain selectable
 in the list and notifications fall back to the Notices screen. No remote URL is
-executed automatically. Forgetting the bridge clears the local inbox.
+executed automatically. Forgetting the bridge clears the local inbox and sends
+`notices_clear`, which empties the bridge ring on disk (old bridges ignore it).
+
+## Confirming delivery
+
+Each accepted report logs `notice.published id=<uuid> delivered=<n>`, where `n`
+is the number of authenticated sockets that took it live. `delivered=0` means
+the report waits in the ring and replays when the phone next connects.
+
+## Failure behavior
+
+Notices are optional; chat never depends on them. If the loopback notice port
+cannot bind (for example, it is already taken), the bridge logs
+`notices.disabled` and prints `notices disabled` in its banner, and keeps serving
+chat. If `notices.json` is corrupt, the bridge moves it aside to
+`notices.json.corrupt-<ms>` (0600), logs `notices.quarantined`, and starts with an
+empty ring.
 
 This is a WebSocket/local-notification feature, **not an OS push service**.
 If Android suspends Dash or drops its socket, replay happens on reconnect.

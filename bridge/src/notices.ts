@@ -8,7 +8,10 @@ export class NoticeService {
   private items: NoticeMessage[] = [];
   private readonly listeners = new Set<(notice: NoticeMessage) => void>();
   private readonly path: string;
-  constructor(directory: string) {
+  /** Set when a corrupt history file was moved aside at startup. */
+  readonly quarantined: string | undefined;
+  /** onPublish: called after each new notice is stored and broadcast, with the count of live sockets that took it. */
+  constructor(directory: string, private readonly onPublish?: (notice: NoticeMessage, delivered: number) => void) {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     this.path = join(directory, "notices.json");
     try {
@@ -22,8 +25,15 @@ export class NoticeService {
       }
       chmodSync(this.path, 0o600);
     } catch (error) {
-      if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") { this.quarantined = undefined; return; }
+      // A bad history must never stop the bridge: move it aside (still private) and start empty.
+      this.items = [];
+      const aside = `${this.path}.corrupt-${Date.now()}`;
+      try { renameSync(this.path, aside); chmodSync(aside, 0o600); this.quarantined = aside; }
+      catch { this.quarantined = undefined; }
+      return;
     }
+    this.quarantined = undefined;
   }
   list(): readonly NoticeMessage[] { return this.items; }
   subscribe(send: (notice: NoticeMessage) => void): () => void {
@@ -32,17 +42,23 @@ export class NoticeService {
     catch (error) { this.listeners.delete(send); throw error; }
     return () => { this.listeners.delete(send); };
   }
-  publish(input: NoticeInput): NoticeMessage {
-    const notice: NoticeMessage = { ...input, type: "notice", id: crypto.randomUUID() };
-    const next = [...this.items, notice].slice(-50);
+  private write(next: NoticeMessage[]): void {
     const temp = `${this.path}.tmp`;
     writeFileSync(temp, JSON.stringify(next), { mode: 0o600 });
     chmodSync(temp, 0o600);
     renameSync(temp, this.path);
     this.items = next;
+  }
+  /** Phone "forget everything": drop the replay ring so a re-paired phone starts clean. */
+  clear(): void { this.write([]); }
+  publish(input: NoticeInput): NoticeMessage {
+    const notice: NoticeMessage = { ...input, type: "notice", id: crypto.randomUUID() };
+    this.write([...this.items, notice].slice(-50));
+    let delivered = 0;
     for (const send of this.listeners) {
-      try { send(notice); } catch { this.listeners.delete(send); }
+      try { send(notice); delivered++; } catch { this.listeners.delete(send); }
     }
+    try { this.onPublish?.(notice, delivered); } catch { /* logging must never fail a publish */ }
     return notice;
   }
 }
@@ -89,4 +105,14 @@ export function startNoticeServer(options: { token: string; notices: NoticeServi
   const handle = createNoticeHttpHandler(options);
   return Bun.serve({ hostname: "127.0.0.1", port: options.port, maxRequestBodySize: 8192,
     fetch: (request, server) => handle(request, server.requestIP(request)?.address ?? null) });
+}
+
+/** Notices are optional: a taken port or bind error must not take the chat bridge down. */
+export function tryStartNoticeServer(options: { token: string; notices: NoticeService; port: number }, onError: (message: string) => void): ReturnType<typeof startNoticeServer> | null {
+  try { return startNoticeServer(options); }
+  catch (error) {
+    const code = error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "bind failed";
+    onError(`notice listener unavailable on 127.0.0.1:${options.port} (${code})`);
+    return null;
+  }
 }

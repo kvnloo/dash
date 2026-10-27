@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CommonActions, StackActions, StackRouter } from "@react-navigation/routers";
-import { ContinuousVoice, realWords, type VoicePeer, type VoiceTurnSource } from "./continuous-voice";
+import { ContinuousVoice, REALTIME_VOICE_MODEL, realWords, type VoicePeer, type VoiceTurnSource } from "./continuous-voice";
 import type { AssistantState, Conversation, Message } from "../model";
 
 function typedFeed() {
@@ -49,7 +49,7 @@ function harness(holdIntent = false, readyOnAnswer = true, feed = typedFeed()) {
   const peer: VoicePeer = { offer: async () => "v=0\r\n", answer: async () => { if (readyOnAnswer) ready(); }, mute: value => { muted = value; }, send: value => { sent.push(value); }, close: () => { closed++; } };
   const call = new ContinuousVoice({ changed: () => {}, transcript: () => {}, holdIntent: () => holdIntent, typedTurns: feed.source, request: async (path, body) => {
     requests.push({ path, body });
-    if (path === "/v1/realtime/session") return { session_id: "test-session", transport: "realtime", value: "ephemeral-test" };
+    if (path === "/v1/realtime/session") return { session_id: "test-session", transport: "realtime", value: "ephemeral-test", model: REALTIME_VOICE_MODEL.fallback };
     if (path.startsWith("/v1/inbox")) return { messages: [], after: 0, has_more: false };
     if (path === "provider:answer") return "v=0\r\n";
     return { ok: true, speech: "silent" };
@@ -87,6 +87,25 @@ describe("root continuous WebRTC lifecycle", () => {
     expect(h.sent.filter(x => Reflect.get(x, "type") === "response.create")).toHaveLength(0);
     h.event({ type: "output_audio_buffer.stopped" }); await settle();
     expect(h.sent.filter(x => Reflect.get(x, "type") === "response.create")).toHaveLength(1); await h.call.stop();
+  });
+  test("mint declares latest Realtime model and accepts the legacy broker model without reminting", async () => {
+    expect(REALTIME_VOICE_MODEL).toEqual({ preferred: "gpt-realtime-2.1", fallback: "gpt-realtime" });
+    expect(Object.isFrozen(REALTIME_VOICE_MODEL)).toBe(true);
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" });
+    expect(h.requests.filter(r => r.path === "/v1/realtime/session")).toEqual([{
+      path: "/v1/realtime/session",
+      body: {
+        client: "dash",
+        transports: ["realtime"],
+        model: REALTIME_VOICE_MODEL.preferred,
+        fallback_model: REALTIME_VOICE_MODEL.fallback,
+        context: { app: "app.dash.mobile", hermes_target: { profile: "test", session: "attached" } },
+        tools: [],
+      },
+    }]);
+    expect(h.requests.filter(r => r.path === "provider:answer")).toHaveLength(1);
+    expect(h.call.state.phase).toBe("listening");
+    await h.call.stop();
   });
   test("start uses realtime only and explicit stop closes local media and ends owned broker session", async () => {
     const h = harness(); await h.call.start({ profile: "test", session: "attached" });

@@ -55,16 +55,32 @@ if [ ! -d "$ANDROID_HOME/ndk/27.1.12297006" ] || [ ! -d "$ANDROID_HOME/platforms
   fi
 fi
 (cd app && CI=1 bun x expo prebuild --platform android --no-install)
-(cd app/android && ./gradlew :app:assembleDebug :dash-share:testDebugUnitTest :dash-cutout:testDebugUnitTest -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
-cp app/android/app/build/outputs/apk/debug/app-debug.apk .native-receipts/dash-native-arm64.apk
-cp -r app/modules/dash-share/android/build/test-results .native-receipts/native-test-results
-cp -r app/modules/dash-cutout/android/build/test-results .native-receipts/cutout-test-results
+# DASH_VARIANT=release: standalone RC with the JS bundle embedded (no Metro), signed with
+# the same debug keystore as the dev client so it installs in place (app.config.js).
+variant="${DASH_VARIANT:-debug}"
+case "$variant" in debug) Variant=Debug ;; release) Variant=Release ;; *) echo "DASH_VARIANT must be debug or release" >&2; exit 2 ;; esac
+printf 'Variant: %s\n' "$variant" | tee .native-receipts/variant.txt
+env | grep '^EXPO_PUBLIC_' | sort | tee .native-receipts/expo-public-env.txt || true
+gradle_tasks=(":app:assemble$Variant")
+if [ "$variant" = debug ]; then gradle_tasks+=(:dash-share:testDebugUnitTest :dash-cutout:testDebugUnitTest); fi
+(cd app/android && ./gradlew "${gradle_tasks[@]}" -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
+cp "app/android/app/build/outputs/apk/$variant/app-$variant.apk" .native-receipts/dash-native-arm64.apk
+if [ "$variant" = debug ]; then
+  cp -r app/modules/dash-share/android/build/test-results .native-receipts/native-test-results
+  cp -r app/modules/dash-cutout/android/build/test-results .native-receipts/cutout-test-results
+else
+  # The RC must boot without Metro: the Hermes bundle has to be inside the APK.
+  # No `grep -q` on a pipe here: with pipefail its early exit SIGPIPEs unzip (exit 141).
+  unzip -l .native-receipts/dash-native-arm64.apk 'assets/index.android.bundle' > .native-receipts/embedded-bundle.txt
+  cat .native-receipts/embedded-bundle.txt
+  grep -F assets/index.android.bundle .native-receipts/embedded-bundle.txt > /dev/null
+fi
 # Module inclusion: the class and its autolinked registration must be in the APK's dex.
 for module in 'Lapp/dash/cutout/DashCutoutModule;' 'Lapp/dash/share/DashShareModule;' 'Lcom/oney/WebRTCModule/WebRTCModule;' 'Lorg/webrtc/PeerConnectionFactory;' 'app.dash.cutout.DashCutoutModule' 'app.dash.share.DashShareModule'; do
   printf '%s %s\n' "$(unzip -p .native-receipts/dash-native-arm64.apk 'classes*.dex' | grep -a -c -F "$module" || true)" "$module"
 done | tee .native-receipts/module-inclusion.txt
 unzip -l .native-receipts/dash-native-arm64.apk 'lib/*' | tee .native-receipts/native-libs.txt | { grep -c 'libjingle_peerconnection_so.so' || true; } | sed 's/^/libjingle_peerconnection_so.so entries: /' | tee -a .native-receipts/module-inclusion.txt
-cp app/android/app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml .native-receipts/AndroidManifest.xml
+cp "app/android/app/build/intermediates/merged_manifests/$variant/process${Variant}Manifest/AndroidManifest.xml" .native-receipts/AndroidManifest.xml
 python3 scripts/verify-native-manifest.py .native-receipts/AndroidManifest.xml > .native-receipts/manifest-check.json
 sha256sum .native-receipts/dash-native-arm64.apk | tee .native-receipts/apk.sha256
 signer=$(printf '%s\n' "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)

@@ -192,6 +192,8 @@ export type GateServerMessage =
 export type ClientMessage =
   | GateClientMessage
   | LiveClientMessage
+  /** Phone "forget everything": clear the bridge's notice replay ring. Old bridges ignore it. */
+  | { type: "notices_clear" }
   | {
       type: "chat";
       /** Omitted by older clients: queue for the next turn. */
@@ -355,6 +357,7 @@ function isHistoryMessage(value: unknown): value is HistoryMessage {
 export function parseClientMessage(raw: unknown): ClientMessage | null {
   if (!isRecord(raw)) return null;
   switch (raw.type) {
+    case "notices_clear": return { type: "notices_clear" };
     case "gate_list": return { type: "gate_list" };
     case "gate_decide": {
       const decision = parseGateDecision(raw.decision);

@@ -22,6 +22,31 @@ export interface Settings {
   cwd?: string;
   /** Product feedback from Main composer, Voice, and row long-press. Default on in beta. */
   inAppFeedback: boolean;
+  /**
+   * Paired bridges in failover order (first = primary). `address`/`token`/`identity`
+   * above are the one in use. Absent = the single bridge above.
+   */
+  endpoints?: BridgeEndpoint[];
+}
+
+/** One paired bridge: where it is and the credential it takes. */
+export interface BridgeEndpoint {
+  address: string;
+  token: string;
+  identity?: IdentityEnrollment;
+}
+
+function parseEndpoints(raw: unknown): BridgeEndpoint[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const endpoints: BridgeEndpoint[] = [];
+  for (const item of raw) {
+    if (!isRecord(item) || typeof item.address !== "string" || !item.address || typeof item.token !== "string") continue;
+    const identity = parseIdentityEnrollment(item.identity);
+    if (item.identity !== undefined && !identity) continue;
+    if (endpoints.some(e => e.address === item.address)) continue;
+    endpoints.push({ address: item.address, token: item.token, ...(identity ? { identity } : {}) });
+  }
+  return endpoints.length > 0 ? endpoints : undefined;
 }
 
 export type AssistantState = "pending" | "streaming" | "done" | "error" | "interrupted";
@@ -131,6 +156,7 @@ export function parseSettings(raw: unknown): Settings | null {
   }
   const identity = parseIdentityEnrollment(raw.identity);
   if (raw.identity !== undefined && !identity) return null;
+  const endpoints = parseEndpoints(raw.endpoints);
   return {
     ...(identity ? { identity } : {}),
     address: raw.address,
@@ -139,6 +165,7 @@ export function parseSettings(raw: unknown): Settings | null {
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
     inAppFeedback: raw.inAppFeedback !== false,
     handedness: parseHandedness(raw.handedness),
+    ...(endpoints ? { endpoints } : {}),
   };
 }
 

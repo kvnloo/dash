@@ -282,10 +282,11 @@ export async function runMutation(opts: {
     const cap = Math.max(8, Math.floor(max / targets.length));
     const core = found.filter((m) => m.operator === "num" || m.operator === "bool");
     const branches = found.filter((m) => m.operator === "eq" || m.operator === "logic");
-    const branchBudget = Math.min(12, Math.max(0, cap - core.length), branches.length);
+    // Reserve the branch share first: a file that gains constants must not starve its parse/roster branches.
+    const branchBudget = Math.min(12, cap, branches.length);
     const ops = Array.from({ length: branchBudget }, (_, i) => branches[Math.floor(i * branches.length / branchBudget)])
       .filter((m): m is Mutant => m !== undefined);
-    for (const m of [...core, ...ops].slice(0, cap)) mutants.push(m);
+    for (const m of [...core.slice(0, cap - ops.length), ...ops]) mutants.push(m);
   }
   const selected = mutants.slice(0, max);
 
