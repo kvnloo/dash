@@ -126,22 +126,23 @@ describe("gesture math", () => {
 
 describe("deep links", () => {
   test("Expo Go and dev-build routes", () => {
-    expect(parseAppRouteLink("exp://100.113.138.100:8097/--/lab")).toBe("Lab");
-    expect(parseAppRouteLink("exp://100.113.138.100:8097/--/trace")).toBe("Trace");
+    expect(parseAppRouteLink("exp://100.64.0.10:8097/--/lab")).toBe("Lab");
+    expect(parseAppRouteLink("exp://100.64.0.10:8097/--/trace")).toBe("Trace");
     expect(parseAppRouteLink("dash://trace")).toBe("Trace");
-    expect(parseAppRouteLink("exp://100.113.138.100:8097/--/orchestra")).toBe("Orchestra");
+    expect(parseAppRouteLink("exp://100.64.0.10:8097/--/orchestra")).toBe("Orchestra");
     expect(parseAppRouteLink("dash://orchestra")).toBe("Orchestra");
-    for (const [path, route] of [["settings", "Settings"], ["bots", "Bots"]] as const) {
-      expect(parseAppRouteLink(`exp://100.113.138.100:8097/--/${path}`)).toBe(route);
+    for (const [path, route] of [["settings", "Settings"], ["bots", "Bots"], ["chats", "Chats"]] as const) {
+      expect(parseAppRouteLink(`exp://100.64.0.10:8097/--/${path}`)).toBe(route);
       expect(parseAppRouteLink(`dash://${path}`)).toBe(route);
     }
     expect(parseAppRouteLink("dash://lab/?x=1")).toBe("Lab");
   });
   test("other links are not routes", () => {
     expect(parseAppRouteLink("dash://connect?address=a&code=b")).toBeNull();
-    expect(parseAppRouteLink("exp://100.113.138.100:8097/--/stage?url=x")).toBeNull();
-    expect(parseAppRouteLink("exp://100.113.138.100:8097")).toBeNull();
+    expect(parseAppRouteLink("exp://100.64.0.10:8097/--/stage?url=x")).toBeNull();
+    expect(parseAppRouteLink("exp://100.64.0.10:8097")).toBeNull();
     expect(parseAppRouteLink(null)).toBeNull();
+    expect(parseAppRouteLink("dash://chat/abc")).toBeNull();
   });
   test("a cold-start link is held until navigation is ready, then opened once", () => {
     let ready = false;
