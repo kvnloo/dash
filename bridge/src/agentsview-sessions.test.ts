@@ -7,6 +7,9 @@ import { agentsviewSessions, nativeSessionId, rosterArchiveHead } from "./agents
 import { ChatIndexEngine } from "./chat-index/worker";
 import type { AgentInfo } from "../../shared/protocol";
 
+// Large-payload test: correctness is load-independent; 5 s default timed out at load ~37 on MBP fleet.
+const HEAVY_TEST_TIMEOUT_MS = 30_000;
+
 // The archive is read by chat-index workers; the roster gets the engine's snapshot head.
 async function engineFor(path: string): Promise<ChatIndexEngine> {
   const dir = mkdtempSync(join(tmpdir(), "dash-av-side-"));
@@ -84,7 +87,7 @@ describe("agentsview sessions", () => {
     expect(agentsviewSessions(new Set(), rows, { DASH_AGENTSVIEW: "0" })).toEqual([]);
     expect(rosterArchiveHead({})).toBe(50);
     expect(rosterArchiveHead({ DASH_ROSTER_ARCHIVE_HEAD: "3" })).toBe(3);
-  });
+  }, HEAVY_TEST_TIMEOUT_MS);
   test("history opens archived chats, skips system rows, redacts", () => {
     const history = agentsviewHistory("codex", "c1", fixture());
     expect(history.map(h => h.role)).toEqual(["user", "assistant"]);

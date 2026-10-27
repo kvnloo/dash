@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+
+// Large-payload test: correctness is load-independent; 5 s default timed out at load ~37 on MBP fleet.
+const HEAVY_TEST_TIMEOUT_MS = 30_000;
   ROW_BYTE_LIMIT,
   chunkRow,
   fitRecord,
@@ -79,7 +82,7 @@ describe("CursorWindow storage row budget", () => {
     expect(fitted.entries.old?.text.length).toBeLessThan(input.old.text.length);
     expect(fitted.dropped).toEqual([]);
     expect(input.old.text).toHaveLength(3 * 1024 * 1024);
-  });
+  }, HEAVY_TEST_TIMEOUT_MS);
 
   test("without a shrinker a large entry is dropped, never written as a giant row", () => {
     const input = {
@@ -105,7 +108,7 @@ describe("CursorWindow storage row budget", () => {
     expect(Object.keys(result.entries)).toEqual(["newest", "huge"]);
     expect(result.dropped).toEqual(["old"]);
     expect(utf8Bytes(encode(result.entries))).toBeLessThanOrEqual(ROW_BYTE_LIMIT);
-  });
+  }, HEAVY_TEST_TIMEOUT_MS);
 
   test("ties sort by key; full JSON escaping overhead is measured", () => {
     const tied = {
