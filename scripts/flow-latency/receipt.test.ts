@@ -143,8 +143,11 @@ describe("device-run receipts", () => {
   test("receipt binds the full build SHA and does not alias caller arrays", () => {
     const source = sampleInput();
     const receipt = hashedReceipt(source);
-    source.rows[0]!.p95 = 1000;
-    source.deviceState[0]!.batteryPct = 1;
+    const row = source.rows[0];
+    const state = source.deviceState[0];
+    if (!row || !state) throw new Error("fixture missing row or state");
+    row.p95 = 1000;
+    state.batteryPct = 1;
     expect(verifyReceipt(receipt)).toEqual({ ok: true });
     expect(receipt.rows[0]?.p95).toBe(28.5);
     expect(receipt.deviceState[0]?.batteryPct).toBe(87);
@@ -221,8 +224,8 @@ describe("privacy guard", () => {
     const input = sampleInput();
     input.deviceLabel = "S25 Ultra (serial)";
     expect(() => hashedReceipt(input)).toThrow(/deviceLabel/);
-    input.deviceLabel = "P".repeat(33);
-    expect(() => hashedReceipt(input)).toThrow(/deviceLabel/);
+    input.deviceLabel = "Pixel 9 Pro Pixel 9 Pro Pixel 9 Pro";
+    expect(() => hashedReceipt(input)).toThrow(/deviceLabel: expected model label of at most 32/);
     input.deviceLabel = "Pixel 9 Pro+";
     expect(verifyReceipt(hashedReceipt(input))).toEqual({ ok: true });
   });
