@@ -32,6 +32,7 @@ export function BottomActionSheet({ open, title, options, onSelect, onClose }: B
   const rows = sheetA11y(options);
   const headingRef = useRef<Text>(null);
   const selection = useRef<SheetSelection>({ open, selectedId: null });
+  const pendingIosSelection = useRef<string | null>(null);
   const progress = useSharedValue(0);
   const reducedMotion = useReducedMotion();
 
@@ -72,12 +73,24 @@ export function BottomActionSheet({ open, title, options, onSelect, onClose }: B
     const next = selectAndClose(previous, id, options);
     if (next === previous) return;
     selection.current = next;
+    // iOS cannot present another native modal until this one has dismissed.
+    if (Platform.OS === "ios") {
+      pendingIosSelection.current = id;
+      onClose();
+      return;
+    }
     try {
       onSelect(id);
     } finally {
       onClose();
     }
   }, [onSelect, onClose, options]);
+
+  const flushPendingSelection = useCallback(() => {
+    const id = pendingIosSelection.current;
+    pendingIosSelection.current = null;
+    if (id !== null) onSelect(id);
+  }, [onSelect]);
 
   const focusHeading = useCallback(() => {
     if (Platform.OS === "web") return;
@@ -93,6 +106,7 @@ export function BottomActionSheet({ open, title, options, onSelect, onClose }: B
     navigationBarTranslucent
     onRequestClose={dismiss}
     onShow={focusHeading}
+    onDismiss={flushPendingSelection}
   >
     <View style={styles.overlay}>
       <Pressable
