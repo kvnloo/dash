@@ -4,19 +4,60 @@ import { linkifyMarkdown } from "./linkify-paths";
 const tick = String.fromCharCode(96);
 const codeFence = tick.repeat(3);
 
+// Every fixture assertion also verifies the transformation's idempotence.
+function checkedLinkify(markdown: string): string {
+  const result = linkifyMarkdown(markdown);
+  expect(linkifyMarkdown(result)).toBe(result);
+  return result;
+}
+
 describe("DASH-15: bare Markdown links", () => {
+  test("container-prefixed fences protect URLs and paths and resume prose afterward", () => {
+    for (const marker of ["~~~", codeFence]) {
+      for (const prefix of ["> ", "> > ", "- ", "1. ", "> - "]) {
+        const input = prefix + marker + "text\n" + prefix +
+          "https://inside.test src/inside.ts\n" + prefix + marker +
+          "\nsrc/outside.ts\n";
+        const expected = input.replace("src/outside.ts", "[src/outside.ts](src/outside.ts)");
+        expect(checkedLinkify(input)).toBe(expected);
+      }
+      const continuedList = "10. " + marker + "\n    src/inside.ts\n    " + marker +
+        "\nsrc/outside.ts\n";
+      expect(checkedLinkify(continuedList)).toBe(
+        continuedList.replace("src/outside.ts", "[src/outside.ts](src/outside.ts)"),
+      );
+    }
+  });
+
+  test("quoted link and image titles protect parentheses and multiline content", () => {
+    for (const quote of ['"', "'"]) {
+      for (const image of ["", "!"]) {
+        for (const title of [
+          "closing ) src/inside.ts https://inside.test",
+          "opening ( src/inside.ts https://inside.test",
+          "escaped " + String.fromCharCode(92) + quote + " ) src/inside.ts https://inside.test",
+          "closing )\nsrc/inside.ts https://inside.test",
+        ]) {
+          const link = image + "[label](https://target.test " + quote + title + quote + ")";
+          expect(checkedLinkify(link + " src/outside.ts\n")).toBe(
+            link + " [src/outside.ts](src/outside.ts)\n",
+          );
+        }
+      }
+    }
+  });
   test("URLs and source files become Markdown links on completed lines", () => {
-    expect(linkifyMarkdown("Open https://example.com/docs now.\n")).toBe(
+    expect(checkedLinkify("Open https://example.com/docs now.\n")).toBe(
       "Open [https://example.com/docs](https://example.com/docs) now.\n",
     );
-    expect(linkifyMarkdown("Read src/app.ts:42, then src/app.ts:42:7.\n")).toBe(
+    expect(checkedLinkify("Read src/app.ts:42, then src/app.ts:42:7.\n")).toBe(
       "Read [src/app.ts:42](src/app.ts:42), then [src/app.ts:42:7](src/app.ts:42:7).\n",
     );
-    expect(linkifyMarkdown("Open /home/user/app.ts, ~/work/logs, ./src/file.ts or ../src/app.ts.\n")).toBe(
+    expect(checkedLinkify("Open /home/user/app.ts, ~/work/logs, ./src/file.ts or ../src/app.ts.\n")).toBe(
       "Open [/home/user/app.ts](/home/user/app.ts), [~/work/logs](~/work/logs), " +
       "[./src/file.ts](./src/file.ts) or [../src/app.ts](../src/app.ts).\n",
     );
-    expect(linkifyMarkdown("Tap https://example.com/a?q=2#head and http://localhost:8080/a.\n")).toBe(
+    expect(checkedLinkify("Tap https://example.com/a?q=2#head and http://localhost:8080/a.\n")).toBe(
       "Tap [https://example.com/a?q=2#head](https://example.com/a?q=2#head) and " +
       "[http://localhost:8080/a](http://localhost:8080/a).\n",
     );
@@ -24,15 +65,15 @@ describe("DASH-15: bare Markdown links", () => {
 
   test("trailing punctuation stays outside and balanced URL parentheses stay inside", () => {
     const input = "See https://example.com/(release). and https://example.com/help). Also src/main.ts:9; okay!\n";
-    expect(linkifyMarkdown(input)).toBe(
+    expect(checkedLinkify(input)).toBe(
       "See [https://example.com/(release)](https://example.com/(release)). and " +
       "[https://example.com/help](https://example.com/help)). Also " +
       "[src/main.ts:9](src/main.ts:9); okay!\n",
     );
-    expect(linkifyMarkdown("URL https://example.com/a(b)c)!\n")).toBe(
+    expect(checkedLinkify("URL https://example.com/a(b)c)!\n")).toBe(
       "URL [https://example.com/a(b)c](https://example.com/a(b)c))!\n",
     );
-    expect(linkifyMarkdown("See (src/app.ts:8), https://x.test/a? \n")).toBe(
+    expect(checkedLinkify("See (src/app.ts:8), https://x.test/a? \n")).toBe(
       "See ([src/app.ts:8](src/app.ts:8)), [https://x.test/a](https://x.test/a)? \n",
     );
   });
@@ -40,16 +81,16 @@ describe("DASH-15: bare Markdown links", () => {
   test("inline code (including multiline and variable-width delimiters) is unchanged", () => {
     const inline = tick + "https://inside.test src/app.ts" + tick;
     const double = tick.repeat(2) + tick + "src/main.ts" + tick + tick.repeat(2);
-    expect(linkifyMarkdown("Code " + inline + " then https://outside.test \n")).toBe(
+    expect(checkedLinkify("Code " + inline + " then https://outside.test \n")).toBe(
       "Code " + inline + " then [https://outside.test](https://outside.test) \n",
     );
     const acrossLines = "Start " + tick + "https://inside.test\n" +
       "src/app.ts" + tick + " and src/real.ts\n";
-    expect(linkifyMarkdown(acrossLines)).toBe(
+    expect(checkedLinkify(acrossLines)).toBe(
       "Start " + tick + "https://inside.test\n" +
       "src/app.ts" + tick + " and [src/real.ts](src/real.ts)\n",
     );
-    expect(linkifyMarkdown(double + " src/app.ts \n")).toBe(
+    expect(checkedLinkify(double + " src/app.ts \n")).toBe(
       double + " [src/app.ts](src/app.ts) \n",
     );
   });
@@ -81,7 +122,7 @@ describe("DASH-15: bare Markdown links", () => {
       "[src/visible.ts](src/visible.ts)",
       "",
     ].join("\n");
-    expect(linkifyMarkdown(input)).toBe(expected);
+    expect(checkedLinkify(input)).toBe(expected);
   });
 
   test("existing Markdown links, reference links, images and autolinks stay byte-identical", () => {
@@ -94,7 +135,7 @@ describe("DASH-15: bare Markdown links", () => {
       "new https://new.test",
       "",
     ].join("\n");
-    expect(linkifyMarkdown(input)).toBe([
+    expect(checkedLinkify(input)).toBe([
       "[already](https://existing.test)",
       "![asset](https://images.test/a.png)",
       "[guide][details] and [shortcut]",
@@ -132,8 +173,8 @@ describe("DASH-15: bare Markdown links", () => {
       "[plain] plus [https://after.test](https://after.test)",
       "",
     ].join("\n");
-    expect(linkifyMarkdown(input)).toBe(expected);
-    expect(linkifyMarkdown(expected)).toBe(expected);
+    expect(checkedLinkify(input)).toBe(expected);
+    expect(checkedLinkify(expected)).toBe(expected);
   });
 
   test("a fence-looking line inside a multiline label cannot steal parser state", () => {
@@ -151,21 +192,21 @@ describe("DASH-15: bare Markdown links", () => {
       "[https://outside.test](https://outside.test)",
       "",
     ].join("\n");
-    expect(linkifyMarkdown(input)).toBe(expected);
-    expect(linkifyMarkdown(expected)).toBe(expected);
+    expect(checkedLinkify(input)).toBe(expected);
+    expect(checkedLinkify(expected)).toBe(expected);
   });
 
   test("unbalanced opening and internal closing URL parentheses have safe hrefs", () => {
     const open = "See https://example.test/a(b now \n";
     const escapedOpen = "See [https://example.test/a(b](https://example.test/a\\(b) now \n";
-    expect(linkifyMarkdown(open)).toBe(escapedOpen);
-    expect(linkifyMarkdown(escapedOpen)).toBe(escapedOpen);
+    expect(checkedLinkify(open)).toBe(escapedOpen);
+    expect(checkedLinkify(escapedOpen)).toBe(escapedOpen);
 
     const close = "See https://example.test/a)b?q=1 now \n";
     const escapedClose = "See [https://example.test/a)b?q=1](https://example.test/a\\)b?q=1) now \n";
-    expect(linkifyMarkdown(close)).toBe(escapedClose);
-    expect(linkifyMarkdown(escapedClose)).toBe(escapedClose);
-    expect(linkifyMarkdown("See https://example.test/a(b)c now \n")).toBe(
+    expect(checkedLinkify(close)).toBe(escapedClose);
+    expect(checkedLinkify(escapedClose)).toBe(escapedClose);
+    expect(checkedLinkify("See https://example.test/a(b)c now \n")).toBe(
       "See [https://example.test/a(b)c](https://example.test/a(b)c) now \n",
     );
   });
@@ -182,7 +223,7 @@ describe("DASH-15: bare Markdown links", () => {
       "<br> https://void.test",
       "",
     ].join("\n");
-    expect(linkifyMarkdown(input)).toBe([
+    expect(checkedLinkify(input)).toBe([
       '<a href="https://inside.test">src/app.ts</a> [https://outside.test](https://outside.test)',
       '<span data-url="https://attribute.test">https://body.test</span> [src/after.ts](src/after.ts)',
       "<!-- https://comment.test",
@@ -201,23 +242,23 @@ describe("DASH-15: bare Markdown links", () => {
       "word/thing", "foo.bar", "42.17", "https://", "./", "../", "~/",
     ];
     for (const input of negatives) {
-      expect(linkifyMarkdown(input + " \n")).toBe(input + " \n");
+      expect(checkedLinkify(input + " \n")).toBe(input + " \n");
     }
-    expect(linkifyMarkdown("foo/thing.txt src/real.ts\n")).toBe(
+    expect(checkedLinkify("foo/thing.txt src/real.ts\n")).toBe(
       "[foo/thing.txt](foo/thing.txt) [src/real.ts](src/real.ts)\n",
     );
   });
 
   test("do not linkify an unfinished streaming tail until it ends in whitespace", () => {
-    expect(linkifyMarkdown("See https://example.test")).toBe("See https://example.test");
-    expect(linkifyMarkdown("Read src/app.ts:4")).toBe("Read src/app.ts:4");
-    expect(linkifyMarkdown("Read src/app.ts:4 ")).toBe(
+    expect(checkedLinkify("See https://example.test")).toBe("See https://example.test");
+    expect(checkedLinkify("Read src/app.ts:4")).toBe("Read src/app.ts:4");
+    expect(checkedLinkify("Read src/app.ts:4 ")).toBe(
       "Read [src/app.ts:4](src/app.ts:4) ",
     );
-    expect(linkifyMarkdown("See https://example.test\t")).toBe(
+    expect(checkedLinkify("See https://example.test\t")).toBe(
       "See [https://example.test](https://example.test)\t",
     );
-    expect(linkifyMarkdown("Done src/ok.ts\nNext src/par")).toBe(
+    expect(checkedLinkify("Done src/ok.ts\nNext src/par")).toBe(
       "Done [src/ok.ts](src/ok.ts)\nNext src/par",
     );
   });
@@ -238,8 +279,8 @@ describe("DASH-15: bare Markdown links", () => {
       "A trailing https://not-yet.test",
     ];
     for (const fixture of fixtures) {
-      const once = linkifyMarkdown(fixture);
-      expect(linkifyMarkdown(once)).toBe(once);
+      const once = checkedLinkify(fixture);
+      expect(checkedLinkify(once)).toBe(once);
     }
   });
 
@@ -250,12 +291,12 @@ describe("DASH-15: bare Markdown links", () => {
     const padding = "x".repeat(200_000 - firstLine.length);
     const atLimit = firstLine + padding;
     expect(atLimit.length).toBe(200_000);
-    expect(linkifyMarkdown(atLimit)).toBe("[src/app.ts](src/app.ts) \n" + padding);
+    expect(checkedLinkify(atLimit)).toBe("[src/app.ts](src/app.ts) \n" + padding);
     const oversized = atLimit + "x";
     expect(oversized.length).toBe(200_001);
-    expect(linkifyMarkdown(oversized)).toBe(oversized);
+    expect(checkedLinkify(oversized)).toBe(oversized);
     const slashLine = "/".repeat(50_000) + " src/ok.ts \n";
-    expect(linkifyMarkdown(slashLine)).toBe(
+    expect(checkedLinkify(slashLine)).toBe(
       "/".repeat(50_000) + " [src/ok.ts](src/ok.ts) \n",
     );
   });

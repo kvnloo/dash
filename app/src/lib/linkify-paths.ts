@@ -17,6 +17,7 @@ interface MarkdownBracket {
   phase: "label" | "destination" | "reference";
   depth: number;
   angleDestination: boolean;
+  titleQuote: string | null;
 }
 
 interface ScanState {
@@ -58,10 +59,19 @@ function boundaryBefore(line: string, index: number): boolean {
     previous !== "/" && previous !== "@" && previous !== "\\";
 }
 
-function openingFence(line: string): Fence | null {
-  let index = 0;
-  while (index < 4 && line[index] === " ") index++;
-  if (index > 3) return null;
+// Strip quote/list containers for fence detection only, never from the output.
+function fenceContent(line: string): string {
+  let content = line.trimStart();
+  while (true) {
+    const prefix = /^(?:>[ \t]?|(?:[-+*]|\d{1,9}[.)])[ \t]+)/.exec(content);
+    if (prefix === null) return content;
+    content = content.slice(prefix[0].length).trimStart();
+  }
+}
+
+function openingFence(rawLine: string): Fence | null {
+  const line = fenceContent(rawLine);
+  const index = 0;
   const marker = line[index];
   if (marker !== CODE_TICK && marker !== "~") return null;
   let end = index;
@@ -72,10 +82,10 @@ function openingFence(line: string): Fence | null {
   return { marker, width: end - index };
 }
 
-function closesFence(line: string, fence: Fence): boolean {
-  let index = 0;
-  while (index < 4 && line[index] === " ") index++;
-  if (index > 3 || line[index] !== fence.marker) return false;
+function closesFence(rawLine: string, fence: Fence): boolean {
+  const line = fenceContent(rawLine);
+  const index = 0;
+  if (line[index] !== fence.marker) return false;
   let end = index;
   while (line[end] === fence.marker) end++;
   return end - index >= fence.width && line.slice(end).trim() === "";
@@ -117,11 +127,17 @@ function scanMarkdownBracket(line: string, start: number, state: ScanState): num
     } else if (bracket.phase === "reference") {
       if (char === "[") bracket.depth++;
       else if (char === "]" && --bracket.depth === 0) state.markdownBracket = null;
+    } else if (bracket.titleQuote !== null) {
+      if (char === bracket.titleQuote) bracket.titleQuote = null;
     } else if (bracket.angleDestination) {
       // Parentheses in a <destination> are literal, not Markdown delimiters.
       if (char === ">") bracket.angleDestination = false;
     } else if (char === "<" && bracket.depth === 1) {
       bracket.angleDestination = true;
+    } else if ((char === '"' || char === "'") && bracket.depth === 1 &&
+        /\s/.test(line[index - 1] ?? "\n")) {
+      // Quotes delimit titles only after destination-separating whitespace.
+      bracket.titleQuote = char;
     } else if (char === "(") {
       bracket.depth++;
     } else if (char === ")" && --bracket.depth === 0) {
@@ -326,7 +342,9 @@ function linkifyLine(line: string, state: ScanState): string {
     if ((char === "[" || (char === "!" && line[index + 1] === "[")) &&
         !isEscaped(line, index)) {
       const opening = char === "!" ? index + 1 : index;
-      state.markdownBracket = { phase: "label", depth: 1, angleDestination: false };
+      state.markdownBracket = {
+        phase: "label", depth: 1, angleDestination: false, titleQuote: null,
+      };
       index = scanMarkdownBracket(line, opening + 1, state);
       continue;
     }
