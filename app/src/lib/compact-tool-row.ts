@@ -45,10 +45,8 @@ function compactStatus(status: string): CompactToolStatus {
 
 /** Preserve JSON shape while redacting nested values before the formatter shortens titles. */
 function safeValue(value: unknown, key = ""): unknown {
-  if (typeof value === "string") {
-    return /(?:token|secret|password|api[_-]?key|authorization)/i.test(key)
-      ? "[REDACTED]" : redactTool(value);
-  }
+  if (/(?:token|secret|password|api[_-]?key|authorization)/i.test(key)) return "[REDACTED]";
+  if (typeof value === "string") return redactTool(value);
   if (Array.isArray(value)) return value.map(item => safeValue(item));
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
