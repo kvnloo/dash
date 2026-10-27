@@ -1,9 +1,5 @@
 import { expect, mock, test } from "bun:test";
 import type { ComposerDraft } from "./composer-drafts";
-// This file must run alone too; depending on another test's RN mock makes CI order-dependent.
-mock.module("react-native", () => ({ Platform: { OS: "android" }, AppState: { currentState: "active", addEventListener() { return { remove() {} }; } } }));
-mock.module("@react-native-async-storage/async-storage", () => ({ default: { getItem: async () => null, setItem: async () => undefined, multiSet: async () => undefined } }));
-const { composerDrafts, updateComposerDraft } = await import("./composer-drafts");
 
 // Bun test files share a module registry unless --isolate is enabled. Run these
 // native-storage mocks in child processes so the full app suite is order-independent.
