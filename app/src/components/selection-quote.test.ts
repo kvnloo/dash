@@ -10,6 +10,12 @@ mock.module("react-native", () => ({
   Platform: { OS: "web" },
   PermissionsAndroid: { PERMISSIONS: {}, RESULTS: { GRANTED: "granted" }, request: async () => "granted" },
   AppState: { currentState: "active", addEventListener() { return { remove() {} }; } },
+  // bun mock.module is process-wide and the first mock fixes the export names later
+  // importers can link; keep the primitives BottomActionSheet imports (see #448).
+  AccessibilityInfo: { setAccessibilityFocus() {} },
+  Modal: () => null, Pressable: () => null, ScrollView: () => null, Text: () => null, View: () => null,
+  StyleSheet: { create: <T,>(styles: T) => styles, hairlineWidth: 1 },
+  findNodeHandle: () => null, useWindowDimensions: () => ({ height: 800, width: 400 }),
 }));
 mock.module("@react-native-async-storage/async-storage", () => ({
   default: { getItem: async () => null, setItem: async () => undefined },
