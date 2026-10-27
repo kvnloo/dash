@@ -59,7 +59,8 @@ function safeValue(value: unknown, key = ""): unknown {
 function safeArgs(raw: string): string {
   try {
     const parsed: unknown = JSON.parse(raw);
-    return JSON.stringify(safeValue(parsed));
+    const encoded = JSON.stringify(safeValue(parsed));
+    return typeof encoded === "string" ? encoded : "{}";
   } catch {
     return redactTool(raw);
   }
