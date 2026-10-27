@@ -106,6 +106,33 @@ test('prompt rail mouse scrub, Jump and Latest on real transcript',async({page,b
  await expect(page.getByTestId('transcript-viewport').getByText(/^prompt 3 /).first()).toBeInViewport();
 });
 
+test('prompt rail keeps the selected turn preview when a live reply completes',async({page,bridge})=>{
+ await openChat(page,bridge);
+ await send(page,'earlier prompt stays selected');
+ await expect(page.getByText(/ARMY_REPLY: earlier prompt stays selected/).first()).toBeVisible();
+ await expect(page.getByRole('button',{name:'Send',exact:true})).toBeVisible();
+ await send(page,'ARMY_SLOW later reply finishes during preview');
+ await expect(page.getByText(/ARMY_STREAM_BEGIN/).nth(1)).toBeVisible();
+ const rail=page.getByLabel('Prompt navigator',{exact:true});
+ const box=await rail.boundingBox();if(!box)throw Error('Prompt navigator has no box');
+ await page.mouse.move(box.x+box.width/2,box.y+1);
+ await page.mouse.down();await page.mouse.up();
+ const preview=page.getByLabel('Turn preview',{exact:true});
+ await expect(preview).toBeVisible();await expect(preview).toContainText('Prompt 1/2');
+ await expect(page.getByText(/ARMY_REPLY: ARMY_SLOW later reply finishes during preview/).first()).toBeVisible({timeout:18000});
+ await expect(page.getByRole('button',{name:'Send',exact:true})).toBeVisible();
+ await expect(preview).toBeVisible();await expect(preview).toContainText('earlier prompt stays selected');
+ await page.screenshot({path:test.info().outputPath('retained-turn-preview.png')});
+ await page.getByRole('button',{name:'Jump',exact:true}).click({noWaitAfter:true});
+ await expect(page.getByTestId('transcript-viewport').getByText('earlier prompt stays selected',{exact:true})).toBeInViewport();
+ await page.getByRole('button',{name:'Close turn preview',exact:true}).click({noWaitAfter:true});
+ await expect(preview).toHaveCount(0);
+ await page.getByRole('button',{name:'Latest reply',exact:true}).click({noWaitAfter:true});
+ await expect(page.getByTestId('transcript-viewport').getByText(/ARMY_REPLY: ARMY_SLOW later reply finishes during preview/).first()).toBeInViewport();
+ expect(bridge.logs()).toContain('pair.claim');
+ expect(bridge.logs()).toContain('ws.open');
+});
+
 test('harness picker switches OMP to Hermes without sending',async({page,bridge})=>{
  await openChat(page,bridge);await chooseHarness(page,'Hermes');
  await expect(page.getByTestId('chat-window-badge')).toContainText('Hermes');
