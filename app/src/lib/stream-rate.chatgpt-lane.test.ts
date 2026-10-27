@@ -67,6 +67,56 @@ describe("stream-rate: honest live measurements", () => {
     expect(sampler.rate(12_000)).toEqual({ kind: "measured", tokensPerSecond: 20 });
   });
 
+  test("zero-growth host reports remain measured instead of using text estimates", () => {
+    const sampler = createStreamRate({ now: () => 1_000 });
+    sampler.report(0, 20);
+    sampler.sample(0, 80);
+    sampler.sample(1_000, 800);
+    sampler.report(1_000, 20);
+    expect(sampler.rate()).toEqual({ kind: "measured", tokensPerSecond: 0 });
+    expect(formatStreamRate(sampler.rate())).toBe("0.0 tok/s");
+    sampler.finish(10_000);
+    expect(sampler.rate(20_000)).toEqual({ kind: "measured", tokensPerSecond: 0 });
+  });
+
+  test("an explicit zero host total beats estimates from a text-started turn", () => {
+    const sampler = createStreamRate({ now: () => 1_000 });
+    sampler.sample(0, 80);
+    sampler.sample(1_000, 800);
+    sampler.report(1_000, 0);
+    expect(sampler.rate()).toEqual({ kind: "measured", tokensPerSecond: 0 });
+    sampler.finish();
+    expect(sampler.rate(20_000)).toEqual({ kind: "measured", tokensPerSecond: 0 });
+  });
+
+  test("report-only zero growth needs two sufficiently separated observations", () => {
+    const sampler = createStreamRate({ now: () => 1_000 });
+    sampler.report(0, 0);
+    expect(sampler.rate(0).kind).toBe("unavailable");
+    sampler.report(249, 0);
+    expect(sampler.rate(249).kind).toBe("unavailable");
+    sampler.report(250, 0);
+    expect(sampler.rate(250)).toEqual({ kind: "measured", tokensPerSecond: 0 });
+    sampler.finish();
+    expect(sampler.rate()).toEqual({ kind: "measured", tokensPerSecond: 0 });
+  });
+
+  test("coalesced initial host totals set the same live and whole-turn baseline", () => {
+    for (const textFirst of [false, true]) {
+      const sampler = createStreamRate({ now: () => 1_000 });
+      if (textFirst) sampler.sample(0, 80);
+      sampler.report(0, 20);
+      sampler.report(0, 60);
+      expect(sampler.rate(0).kind).toBe("unavailable");
+      sampler.sample(1_000, 800);
+      sampler.report(1_000, 100);
+      expect(sampler.rate()).toEqual({ kind: "measured", tokensPerSecond: 40 });
+      // The baseline must survive pruning of the initial live observations.
+      sampler.finish(10_000);
+      expect(sampler.rate(20_000)).toEqual({ kind: "measured", tokensPerSecond: 4 });
+    }
+  });
+
   test("same-time chunks and reports coalesce rather than fake a time interval", () => {
     const sampler = createStreamRate({ now: () => 0 });
     sampler.sample(0, 80);
@@ -179,11 +229,12 @@ describe("formatStreamRate", () => {
     expect(formatStreamRate({ kind: "estimated", tokensPerSecond: 999 })).toBe("≈999 tok/s");
   });
 
-  test("unknown, non-finite and non-positive rates never produce a chip", () => {
+  test("zero is known; unknown, non-finite and negative rates never produce a chip", () => {
     expect(formatStreamRate({ kind: "unavailable", reason: "no data" })).toBeNull();
     expect(formatStreamRate({ kind: "estimated", tokensPerSecond: Number.NaN })).toBeNull();
     expect(formatStreamRate({ kind: "measured", tokensPerSecond: Number.POSITIVE_INFINITY })).toBeNull();
-    expect(formatStreamRate({ kind: "measured", tokensPerSecond: 0 })).toBeNull();
+    expect(formatStreamRate({ kind: "measured", tokensPerSecond: 0 })).toBe("0.0 tok/s");
+    expect(formatStreamRate({ kind: "estimated", tokensPerSecond: 0 })).toBe("≈0.0 tok/s");
     expect(formatStreamRate({ kind: "estimated", tokensPerSecond: -5 })).toBeNull();
   });
 });

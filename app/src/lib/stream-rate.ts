@@ -40,7 +40,7 @@ function observedRate(points: readonly TimedCount[], atMs: number): number | und
   if (!first || !last || last.atMs - first.atMs < MIN_SPAN_MS) return;
   const count = last.value - first.value;
   const elapsedMs = atMs - first.atMs;
-  if (count <= 0 || elapsedMs < MIN_SPAN_MS) return;
+  if (count < 0 || elapsedMs < MIN_SPAN_MS) return;
   const rate = (count * 1_000) / elapsedMs;
   return Number.isFinite(rate) ? rate : undefined;
 }
@@ -111,8 +111,9 @@ export function createStreamRate({
     ) return;
 
     if (startedAt === undefined) startedAt = atMs;
-    if (reportedTotal === undefined && startedAt === atMs) {
+    if (startedAt === atMs) {
       // Do not count a pre-existing host total as tokens generated after t0.
+      // Same-time reports coalesce into one observation, including its baseline.
       reportedAtStart = outputTokens;
     }
     event(atMs);
@@ -149,7 +150,7 @@ export function createStreamRate({
 
     const elapsedMs = atMs - startedAt;
     const hostTokens = reportedTotal === undefined ? 0 : reportedTotal - reportedAtStart;
-    if (hostTokens > 0) {
+    if (reportedTotal !== undefined) {
       frozen = { kind: "measured", tokensPerSecond: (hostTokens * 1_000) / elapsedMs };
     } else if (totalChars > 0) {
       frozen = { kind: "estimated", tokensPerSecond: (totalChars * 1_000) / (CHARS_PER_TOKEN * elapsedMs) };
@@ -171,7 +172,7 @@ export function createStreamRate({
 }
 
 export function formatStreamRate(rate: StreamRate): string | null {
-  if (rate.kind === "unavailable" || !Number.isFinite(rate.tokensPerSecond) || rate.tokensPerSecond <= 0) return null;
+  if (rate.kind === "unavailable" || !Number.isFinite(rate.tokensPerSecond) || rate.tokensPerSecond < 0) return null;
   const roundedTenth = Math.round(rate.tokensPerSecond * 10) / 10;
   const display = roundedTenth >= 10
     ? String(Math.round(rate.tokensPerSecond))
