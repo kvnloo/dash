@@ -153,6 +153,7 @@ interface NativeProps {
   onDismiss?: () => void;
 }
 const rendered: { kind: string; props: NativeProps; markup: string }[] = [];
+const platform = { OS: "ios" };
 function primitive(kind: string) {
   return (props: NativeProps) => {
     const markup = renderToStaticMarkup(createElement("div", null, props.children));
@@ -162,7 +163,7 @@ function primitive(kind: string) {
 }
 mock.module("react-native", () => ({
   AccessibilityInfo: { setAccessibilityFocus() {} },
-  Modal: primitive("Modal"), Platform: { OS: "ios" }, Pressable: primitive("Pressable"),
+  Modal: primitive("Modal"), Platform: platform, Pressable: primitive("Pressable"),
   ScrollView: primitive("ScrollView"), Text: primitive("Text"), View: primitive("View"),
   StyleSheet: { create: <T,>(styles: T) => styles, hairlineWidth: 1 },
   findNodeHandle: () => null, useWindowDimensions: () => ({ height: 100, width: 400 }),
@@ -205,3 +206,52 @@ test("rendered tiny sheet scrolls header, rows and inset together and dispatches
   modal?.props.onDismiss?.();
   expect(events).toEqual(["closed", "delete"]);
 });
+
+function renderAndroidSheet(events: string[]) {
+  platform.OS = "android";
+  rendered.length = 0;
+  try {
+    renderToStaticMarkup(createElement(BottomActionSheet, {
+      open: true, options: actions,
+      onSelect: id => { events.push(id); }, onClose: () => { events.push("closed"); },
+    }));
+  } finally {
+    platform.OS = "ios";
+  }
+}
+
+function nativeEvent(testID: string, event: "onPress" | "onRequestClose" | "onDismiss") {
+  const node = rendered.find(node => node.props.testID === testID || node.kind === testID);
+  const handler = node?.props[event];
+  if (!handler) throw new Error(`Missing ${event} handler on ${testID}`);
+  return handler;
+}
+
+test("rendered Android selection dispatches immediately and consumes subsequent close events", () => {
+  const events: string[] = [];
+  renderAndroidSheet(events);
+  // Platform is read on press, as it is on a native device.
+  platform.OS = "android";
+  try {
+    nativeEvent("bottom-action-sheet-option-delete", "onPress")();
+    nativeEvent("bottom-action-sheet-option-open", "onPress")();
+    nativeEvent("Modal", "onRequestClose")();
+    nativeEvent("Modal", "onDismiss")();
+    expect(events).toEqual(["delete", "closed"]);
+  } finally {
+    platform.OS = "ios";
+  }
+});
+
+for (const target of ["Modal", "bottom-action-sheet-backdrop", "bottom-action-sheet-close"]) {
+  test(`rendered ${target} dismissal closes once without selecting`, () => {
+    const events: string[] = [];
+    renderAndroidSheet(events);
+    const dismiss = nativeEvent(target, target === "Modal" ? "onRequestClose" : "onPress");
+    dismiss();
+    dismiss();
+    nativeEvent("bottom-action-sheet-option-delete", "onPress")();
+    nativeEvent("Modal", "onDismiss")();
+    expect(events).toEqual(["closed"]);
+  });
+}
