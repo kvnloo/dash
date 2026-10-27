@@ -200,9 +200,9 @@ describe("agent overlay state reducer", () => {
     const mutablePair = strokes[0]?.points[0];
     if (mutablePair === undefined) throw new Error("missing test fixture coordinate");
     mutablePair[0] = 0.9;
-    expect(first.items[0]?.kind).toBe("draw");
-    if (first.items[0]?.kind !== "draw") throw new Error("expected drawing");
-    expect(first.items[0].strokes[0]?.points[0]?.[0]).toBe(0.1);
+    const drawing = first.items[0];
+    if (drawing?.kind !== "draw") throw new Error("expected drawing");
+    expect(drawing.strokes[0]?.points[0]?.[0]).toBe(0.1);
 
     for (const item of first.items) {
       if (item.kind === "draw") {
