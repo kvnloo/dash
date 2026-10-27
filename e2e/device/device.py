@@ -1,13 +1,13 @@
 """Device layer for the Dash native journeys: adb, uiautomator2, displays, owner guard, frame stats.
 
 Adapted from the S22 harness (journey.py / probe.py / ink_journey.py / voice_journey.py) and the fleet
-owner guard (.files-mbp/scripts/fleet-adb Device.restore_guest). Behaviour kept:
+owner guard (the private fleet adb wrapper Device.restore_guest). Behaviour kept:
   - the agent phone only (S22+); never the owner's S25;
   - one UI user per device: an exclusive flock on /tmp/<node>-ui.lock for the whole run;
   - the owner-activity guard fails closed (owner_busy / in_call / owner_evidence_unavailable);
   - every agent launch is recorded in /tmp/<node>-agent-opened.json so the ChatGPT queue loop's guard
     can tell an agent-opened foreground from an owner-opened one.
-Nothing here holds a secret. The bridge bootstrap token is read from the MBP state dir at pairing time
+Nothing here holds a secret. The bridge bootstrap token is read from the stack host state dir at pairing time
 and is only typed into the device; it is never written to a receipt or a log.
 """
 from __future__ import annotations
@@ -28,15 +28,15 @@ PKG = "app.dash.mobile"
 CHATGPT_PKG = "com.openai.chatgpt"
 NODE = os.environ.get("DASH_E2E_NODE", "s22")
 # Hardware serial of the S22+ agent phone; adb reaches it over the tailnet address below.
-HARDWARE_SERIAL = os.environ.get("DASH_E2E_HW_SERIAL", "RFCTA1RZAQY")
-ADB_SERIAL = os.environ.get("S22_SERIAL", "100.72.191.23:36939")
+HARDWARE_SERIAL = os.environ.get("DASH_E2E_HW_SERIAL", "")
+ADB_SERIAL = os.environ.get("S22_SERIAL", "")
 FORBIDDEN_MODELS = ("SM-S93",)  # S25 family: the owner's phone, never a journey target
 ADB = os.environ.get("ADB", str(Path.home() / "android/sdk/platform-tools/adb"))
-MBP_HOST = os.environ.get("DASH_E2E_MBP", "mbp")
-MBP_IP = os.environ.get("DASH_E2E_MBP_IP", "100.78.215.21")
+STACK_HOST = os.environ.get("DASH_E2E_STACK_HOST", "stack-host")
+STACK_IP = os.environ.get("DASH_E2E_STACK_IP", "")
 METRO_PORT = int(os.environ.get("DASH_E2E_METRO_PORT", "18520"))
 BRIDGE_PORT = int(os.environ.get("DASH_E2E_BRIDGE_PORT", "18530"))
-STACK_BASE = os.environ.get("DASH_E2E_BASE", "~/dash-e2e-army-20261025")
+STACK_BASE = os.environ.get("DASH_E2E_BASE", "~/dash-e2e-stack")
 OWNER_IDLE_MS = 60_000
 
 
@@ -147,8 +147,8 @@ def adb(*args: str, serial: str = ADB_SERIAL, timeout: float = 60) -> str:
     return subprocess.run([ADB, "-s", serial, *args], capture_output=True, text=True, timeout=timeout).stdout
 
 
-def mbp(cmd: str, timeout: float = 120) -> str:
-    return subprocess.run(["ssh", MBP_HOST, cmd], capture_output=True, text=True, timeout=timeout).stdout
+def stack_run(cmd: str, timeout: float = 120) -> str:
+    return subprocess.run(["ssh", STACK_HOST, cmd], capture_output=True, text=True, timeout=timeout).stdout
 
 
 @contextlib.contextmanager
@@ -265,7 +265,7 @@ class Device:
         return adb("shell", *args, serial=self.serial, timeout=timeout)
 
     # -- app
-    def launch(self, metro: str = f"http://{MBP_IP}:{METRO_PORT}") -> None:
+    def launch(self, metro: str = f"http://{STACK_IP}:{METRO_PORT}") -> None:
         url = "exp+dash://expo-development-client/?url=" + metro.replace(":", "%3A").replace("/", "%2F")
         extra = ["--display", str(self.display_id)] if self.display == "virtual" else []
         self.sh("am", "start", *extra, "-a", "android.intent.action.VIEW", "-d", url, PKG)

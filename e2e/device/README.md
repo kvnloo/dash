@@ -5,16 +5,16 @@ feature has one). Each journey drives Dash like a user, asserts what a user can 
 screenshots, and writes one receipt per feature that `scripts/feature_status.py` reads.
 
 This harness was copied from the S22 journey harness and adapted. Behaviour that was kept:
-- The target is the S22+ agent phone (`RFCTA1RZAQY`, adb `S22_SERIAL`). A model in the S25 family is refused.
-- The app is the real dev-client APK. Its JS comes from an isolated Metro on the MBP (`:18520`), and the
-  bridge is isolated on the MBP tailnet IP (`:18530`) with deterministic ACP fixture agents. The live bridge is never used.
+- The target is the S22+ agent phone (serial from `DASH_E2E_HW_SERIAL`, adb address from `S22_SERIAL`). A model in the S25 family is refused.
+- The app is the real dev-client APK. Its JS comes from an isolated Metro on the stack host (`:18520`), and the
+  bridge is isolated on the stack host tailnet IP (`:18530`) with deterministic ACP fixture agents. The live bridge is never used.
 - `/tmp/s22-ui.lock` is held for the whole run. The ChatGPT driver uses the same rule: one UI user per device.
 - The owner-activity guard, ported from `fleet-adb restore_guest`, runs before every journey. A
   verdict of `owner_busy`, `in_call` or `owner_evidence_unavailable` writes a skip receipt and stops the run (exit 3).
 - Every launch is recorded in `/tmp/s22-agent-opened.json`. After a physical run, the phone goes back to the ChatGPT lane.
 
 ```
-ssh mbp bash ~/dash-e2e-army-20261025/start-device-stack.sh <sha>       # or: --start-stack
+ssh "$DASH_E2E_STACK_HOST" bash ~/dash-e2e-stack/start-device-stack.sh <sha>       # or: --start-stack
 uv run -q --with uiautomator2 python e2e/device/run_journeys.py --sha <sha> --all --display virtual --seed-archive 300
 uv run -q --with uiautomator2 python e2e/device/run_journeys.py --sha <sha> --features DF-001,DF-002,DF-035,DF-086
 python3 e2e/device/run_journeys.py --dry-run --all          # no device: linkage + plan
@@ -31,7 +31,7 @@ bun run spec:status -- --candidate <sha> --scope P0         # read the receipts
 | `framework.py` | Registry, `Ctx.check`, the per-feature pass rule and the receipt writer |
 | `device.py` | adb, uiautomator2, physical and virtual display, owner guard, `gfxinfo framestats`, PSS |
 | `seed_archive.py` | Seeds archived Codex, Claude Code, Grok and OMP sessions into the isolated bridge HOME. It refuses a real HOME. |
-| `start-device-stack.sh`, `device-bridge.ts` | Isolated candidate stack on the MBP (copied; `DASH_E2E_BASE` and `ARMY_DIR` can be overridden) |
+| `start-device-stack.sh`, `device-bridge.ts` | Isolated candidate stack on the stack host (copied; `DASH_E2E_BASE` and `ARMY_DIR` can be overridden) |
 | `probe.py` | Taps and types, then dumps the tree and a screenshot (guarded, locked) |
 | `SURFACES.md` | Mapping from the earlier surface to a journey (copied) |
 
@@ -95,7 +95,7 @@ A dev-client bundle is pessimistic, so confirm a frame regression on a release b
 ## Not yet proven on a device
 
 No journey was run on a device while this harness was written. Before the first virtual run, check these:
-- `--display virtual` needs `scrcpy >= 3.0` on groot (`--new-display`). It is not installed there now.
+- `--display virtual` needs `scrcpy >= 3.0` on the driver host (`--new-display`). It is not installed there now.
 - uiautomator2 must report nodes from the secondary display. The harness filters on `display-id` when that attribute exists.
 - `screencap -d <id>` must capture the virtual display.
 

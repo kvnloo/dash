@@ -5,8 +5,8 @@
                   [--seed-archive N] [--start-stack] [--out DIR] [--journeys J-a,J-b]
   run_journeys.py --dry-run [--sha SHA] [--features ... | --all]     # no device: validate linkage, print plan
 
-Runs on groot (uiautomator2 + adb over the tailnet) against the S22+ agent phone, with the candidate stack
-(isolated bridge + Metro) on the MBP started by start-device-stack.sh <sha>. Never the owner's S25.
+Runs on the driver host (uiautomator2 + adb over the tailnet) against the S22+ agent phone, with the candidate stack
+(isolated bridge + Metro) on the stack host started by start-device-stack.sh <sha>. Never the owner's S25.
 Holds /tmp/s22-ui.lock for the whole run; checks the owner guard before every journey and stops the run
 (exit 3) when the owner is busy. Receipts land in <out>/<journey>/<feature>.json; default
 <repo>/.acceptance-receipts/<sha12>-<UTC>/ which `bun run spec:status` reads.
@@ -125,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="validate journey/spec linkage and print the plan; no device")
     ap.add_argument("--out", help="receipt root (default .acceptance-receipts/<sha12>-<UTC>)")
     ap.add_argument("--seed-archive", type=int, metavar="N", help="seed N archived sessions per harness into the isolated bridge first")
-    ap.add_argument("--start-stack", action="store_true", help="(re)start the MBP candidate stack for --sha first")
+    ap.add_argument("--start-stack", action="store_true", help="(re)start the stack host candidate stack for --sha first")
     ap.add_argument("--capability", action="append", default=[], help=f"declare an environment capability: {sorted(CAPABILITIES)}")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
@@ -163,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     if not sha:
         ap.error("--sha is required")
 
-    from device import STACK_BASE, Device, EnvironmentUnavailable, OwnerBusy, mbp, ui_lock
+    from device import STACK_BASE, Device, EnvironmentUnavailable, OwnerBusy, stack_run, ui_lock
     from framework import Stack, run_one
 
     out_root = Path(args.out) if args.out else ROOT / ".acceptance-receipts" / f"{sha[:12]}-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
@@ -173,9 +173,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with ui_lock():
             if args.start_stack:
-                print(mbp(f"bash {STACK_BASE}/start-device-stack.sh {sha}", timeout=180))
+                print(stack_run(f"bash {STACK_BASE}/start-device-stack.sh {sha}", timeout=180))
             if args.seed_archive:
-                seeded = subprocess.run(["ssh", os.environ.get("DASH_E2E_MBP", "mbp"), "python3", "-", "--home",
+                seeded = subprocess.run(["ssh", os.environ.get("DASH_E2E_STACK_HOST", "stack-host"), "python3", "-", "--home",
                                          f"{STACK_BASE}/device-state", "--per-harness", str(args.seed_archive)],
                                         stdin=open(HERE / "seed_archive.py"), capture_output=True, text=True, timeout=600)
                 print(seeded.stdout.strip() or seeded.stderr.strip())
@@ -185,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 if re.search(r"(?i)spen|stylus", dev.sh("pm", "list", "features")):
                     caps.add("spen")
-                stack = Stack(sha=sha, capabilities=frozenset(caps), mbp=mbp, base=STACK_BASE)
+                stack = Stack(sha=sha, capabilities=frozenset(caps), run=stack_run, base=STACK_BASE)
                 # run_one checks the owner guard before each journey and records a skip, then we stop.
                 for jid, fs in plan.items():
                     res = run_one(JOURNEYS[jid], dev, stack, fs, out_root)

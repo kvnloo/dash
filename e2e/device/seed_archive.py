@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Seed archived (finished) Codex, Claude Code, Grok and OMP sessions into the ISOLATED device bridge HOME.
 
-Runs on the MBP against the stack's own state dir, never a real HOME:
+Runs on the stack host against the stack's own state dir, never a real HOME:
 
-  ssh mbp python3 - --home ~/dash-e2e-army-20261025/device-state --per-harness 300 < seed_archive.py
+  ssh "$DASH_E2E_STACK_HOST" python3 - --home ~/dash-e2e-stack/device-state --per-harness 300 < seed_archive.py
 
 Each harness gets N sessions titled "DASHE2E <Harness> archive NNNN <title token>". Session NNNN's
 transcript has `turns` user/assistant pairs: turn 0 carries the oldest-turn token, a middle turn the

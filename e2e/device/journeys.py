@@ -6,7 +6,7 @@ from the app source at the candidate: testIDs (chat-row-*, chats-pane, chat-wind
 transcript-viewport, trace-*, density-*, orchestra-graph, needs-kevin) and accessibility labels
 ("Close chat window", "Send", "Stop", "Message", "Prompt navigator", "Annotate this screen", ...).
 
-Agents behind the isolated bridge are the deterministic ACP fixture (e2e/mbp-army on the candidate):
+Agents behind the isolated bridge are the deterministic ACP fixture (e2e/army on the candidate):
 a prompt with ARMY_SLOW replies after 9 s, ARMY_HANG never finishes until Stop, ARMY_ERROR fails, and
 anything else replies `ARMY_REPLY: <text>` after 350 ms, after an ARMY_STREAM_BEGIN chunk. Journeys
 whose observable needs a real agent (markdown, generated UI, subagents, context usage) declare
@@ -58,7 +58,7 @@ def pair_with_token(ctx: Ctx) -> None:
     host = d.find(text=r"100\.64\.0\.1") or d.find(any_text=r"^100\.\d+\.\d+\.\d+")
     if host:
         d.tap(host)
-        d.type_text(f"{os.environ.get('DASH_E2E_MBP_IP', '100.78.215.21')}:{os.environ.get('DASH_E2E_BRIDGE_PORT', '18530')}")
+        d.type_text(f"{os.environ.get('DASH_E2E_STACK_IP', '')}:{os.environ.get('DASH_E2E_BRIDGE_PORT', '18530')}")
     tok = d.find(desc="Bootstrap token")
     if tok:
         d.tap(tok)
@@ -1030,7 +1030,7 @@ def j_trace_live(ctx: Ctx) -> None:
     ctx.require("trace opens", d.tap_desc("Event trace"))
     d.wait(timeout=10, rid="trace-scroll")
     before = len(d.find_all(rid="trace-entry"))
-    ctx.stack.mbp("true")  # the send below is the backend event
+    ctx.stack.run("true")  # the send below is the backend event
     d.press("back")
     tab(ctx, "Chats")
     open_chat(ctx)
@@ -1154,7 +1154,7 @@ def j_turbo_preview_brief(ctx: Ctx) -> None:
     d = ctx.dev
     home(ctx)
     port = os.environ.get("DASH_E2E_METRO_PORT", "18520")
-    ctx.check("Metro serves this candidate", ctx.stack.mbp(f"curl -sm 3 http://127.0.0.1:{port}/status").strip()
+    ctx.check("Metro serves this candidate", ctx.stack.run(f"curl -sm 3 http://127.0.0.1:{port}/status").strip()
               == "packager-status:running", "", "DF-072", host=True)
     # The running bundle must prove it is the candidate on the device; Dash exposes no bundle sha yet.
     ctx.check("the phone shows the candidate bundle sha", d.find(any_text=re.escape(ctx.sha[:7])) is not None,

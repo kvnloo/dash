@@ -1,8 +1,8 @@
 #!/bin/bash
-# Start (or restart) the isolated device bridge + dev-client Metro for one candidate SHA on the MBP.
+# Start (or restart) the isolated device bridge + dev-client Metro for one candidate SHA on the stack host.
 #   start-device-stack.sh <sha>
 set -u
-sha=$1; only=${2:-all}; B=${DASH_E2E_BASE:-$HOME/dash-e2e-army-20261025}; C=$B/cand/$sha; S=$B/device-state  # stable: pairing credentials survive candidate switches
+sha=$1; only=${2:-all}; B=${DASH_E2E_BASE:-$HOME/dash-e2e-stack}; C=$B/cand/$sha; S=$B/device-state  # stable: pairing credentials survive candidate switches
 IP=$(tailscale ip -4 | head -1)
 mkdir -p "$S"
 # One device stack at a time: stop every earlier candidate's bridge/Metro (ports are fixed).
@@ -17,12 +17,12 @@ for st in "$B"/device-state "$B"/device-state-*; do
 done
 sleep 1
 cd "$C"
-MBP_TAILNET_IP=$IP setsid nohup /home/kvn/.bun/bin/bun "$B/device-bridge.ts" "$C" "$S" 18530 >"$S/bridge.log" 2>&1 </dev/null &
+STACK_TAILNET_IP=$IP setsid nohup $HOME/.bun/bin/bun "$B/device-bridge.ts" "$C" "$S" 18530 >"$S/bridge.log" 2>&1 </dev/null &
 echo $! >"$S/bridge.pid"
 if [ "$only" != bridge ]; then
 cd "$C/app"
-CI=1 REACT_NATIVE_PACKAGER_HOSTNAME=$IP EXPO_PUBLIC_DEBUG=0 PATH=/home/kvn/.bun/bin:$PATH \
-  setsid nohup nice -n 5 /home/kvn/.bun/bin/bun node_modules/expo/bin/cli start --dev-client --port 18520 --host lan \
+CI=1 REACT_NATIVE_PACKAGER_HOSTNAME=$IP EXPO_PUBLIC_DEBUG=0 PATH=$HOME/.bun/bin:$PATH \
+  setsid nohup nice -n 5 $HOME/.bun/bin/bun node_modules/expo/bin/cli start --dev-client --port 18520 --host lan \
   >"$S/metro.log" 2>&1 </dev/null &
 echo $! >"$S/metro.pid"
 fi

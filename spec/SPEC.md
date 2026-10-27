@@ -79,8 +79,6 @@ Ledger laws (enforced by `spec/check.py`): every feature has a defined journey; 
 
 **Acceptance.** Dash lists every chat/session from every catalog harness (Hermes all profiles, OMP, Codex, Claude, Grok, pi, fx) on every paired or tailnet host, running and finished. The host is the source of truth; Dash keeps only a bounded disposable cache.
 
-> Dash must load EVERY chat from every harness/host, be searchable quickly, never lag (lazy loading, JIT UI).
-
 Code: `app/src/lib/live-sessions.ts:27`, `app/src/lib/live-sessions.ts:31`, `bridge/src/roster.ts:419`, `bridge/src/roster.ts:245`, `bridge/src/hermes-sessions.ts:19`, `app/src/store/conversation-persistence.ts:12`
 
 Note: Only host.self agents are adopted (live-sessions.ts:27); remoteAgents is never populated (roster.ts:36,424); Hermes is capped at 50 recent sessions per profile (hermes-sessions.ts:19); OMP rows come only from running processes (roster.ts:245); Codex/Claude finished sessions are not enumerated.
@@ -91,8 +89,6 @@ Sources: owner task brief 2026-10-25, hermes-telegram 2026-10-25T17:22, H-014, C
 **partial** · P0 · journey `J-chat-search-fast` · claimed unknown
 
 **Acceptance.** Search over every chat title and message body, including host-side transcripts not cached on the phone, returns results within 200 ms of the last keystroke and opens the exact session.
-
-> Dash must load EVERY chat from every harness/host, be searchable quickly, never lag (lazy loading, JIT UI).
 
 Code: `app/src/lib/global-search.ts:62`, `app/src/lib/global-search.ts:214`, `app/src/components/GlobalSearchBar.tsx:43`
 
@@ -105,8 +101,6 @@ Sources: owner task brief 2026-10-25
 
 **Acceptance.** The session list shows the Hermes and OMP sessions actually running (real identity, opens the right conversation) and marks ended/closed ones as stale, without synthetic rows.
 
-> ok the pairing worked but it doesn't show these hermes chats that i'm talking to rn - so it seems dash is outdated?
-
 Code: `app/src/lib/live-sessions.ts:31`, `bridge/src/roster.ts:202`, `bridge/src/hermes-sessions.ts:45`
 
 Note: Detection works for Hermes and running OMP; the same reconcile step wrongly marks running bridge-owned chats stale (see the bridge-owned entry).
@@ -117,8 +111,6 @@ Sources: H-014, C-010, dash#20, dash#28
 **MISSING** · P0 · recurring · journey `J-send-receive-omp` · claimed missing
 
 **Acceptance.** A bridge-owned conversation with an active streaming or pending turn is not marked stale/ended when the roster lacks its row; Send and Queue stay enabled.
-
-> Dash shows This chat has ended on the host and disables Send/Queue, although Stop and streaming state still indicate an active turn.
 
 Code: none
 Gap located at: `app/src/lib/live-sessions.ts:35`
@@ -132,8 +124,6 @@ implemented · P0 · recurring · journey `J-send-receive-hermes` · claimed unk
 
 **Acceptance.** The phone is another UI on the same backend/profile: sending into an already-running desktop Hermes or OMP session continues that session id; no replacement thread.
 
-> ok i need to go upstairs - can we do a live test of z0bridge or z0live or dash thru any one of the lanes which ever is already working
-
 Code: `bridge/index.ts:254`, `bridge/src/hermes-continue.ts:1`, `app/src/store/app.ts:261`
 Sources: H-043, dash#20, dash#81
 
@@ -143,8 +133,6 @@ implemented · P2 · journey `J-chat-search-fast` · claimed partial
 
 **Acceptance.** /live and partial /li list running catalog sessions on the paired host; choosing a row opens it; unknown scopes fail closed.
 
-> Captain cannot jump from search into the live desktop session the way they can from a Chats row
-
 Code: `app/src/lib/global-search.ts:62`
 Sources: dash#28
 
@@ -153,8 +141,6 @@ Sources: dash#28
 **MISSING** · P1 · journey `J-mesh-discovery` · claimed missing
 
 **Acceptance.** Roster discovers other tailnet hosts running the Dash bridge and lists their sessions, not only the paired laptop.
-
-> Roster / hello should discover other tailnet hosts running the bridge (not just the paired laptop).
 
 Code: none
 Gap located at: `bridge/src/roster.ts:36`, `bridge/src/roster.ts:424`
@@ -168,8 +154,6 @@ implemented · P1 · journey `J-bots-tree` · claimed partial
 
 **Acceptance.** Bots/roster shows only real running agents; empty hosts stay empty; nothing is faked; /roster does not crash when hermes is off PATH.
 
-> Roster is live, not static A2A rows.
-
 Code: `bridge/src/roster.ts:667`, `app/src/lib/roster.ts:49`
 Sources: dash#8, dash#51
 
@@ -178,8 +162,6 @@ Sources: dash#8, dash#51
 **partial** · P1 · journey `J-chat-list-all-harnesses` · claimed implemented
 
 **Acceptance.** hello.harnesses lists spawnable catalog executors (hermes, omp, grok, codex, claude, pi, fx); missing binaries show unavailable; live pi/fx sessions are adopted like others.
-
-> Dash is the thin phone UI over every AODL catalog executor.
 
 Code: `bridge/src/harnesses.ts:351`, `bridge/src/harnesses.ts:392`, `shared/catalog.ts:2`, `harnesses/catalog.json:2`
 
@@ -191,8 +173,6 @@ Sources: dash#17
 **MISSING** · P2 · journey `J-chat-list-all-harnesses` · claimed missing
 
 **Acceptance.** Tabs as branches of one session with Fork, live-miniature grid, usage hub with 5h/weekly bars and per-turn receipts, routing screen, read-only Runs/Schedules, Switch computer, Live jump pill, effort ladder.
-
-> Dash keeps its own design language, which the owner approved on 2026-10-21.
 
 Code: none
 
@@ -207,8 +187,6 @@ Sources: dash#106
 
 **Acceptance.** A Dash send reaches the host session exactly once; the UI distinguishes local, sent, acked-by-bridge, started and failed; a local bubble or queued ack is never shown as agent consumption.
 
-> i sent like 6 messages after i need a version. can us ee what happened and why they didn't deliver? i still see them inside the dash app rn
-
 Code: `app/src/store/app.ts:562`, `app/src/store/app.ts:572`, `app/src/store/app.ts:649`, `app/src/net/bridge.ts:331`
 
 Note: Lost turns are marked interrupted and unsent turns are parked and flushed on reconnect. There is no client id/turn fingerprint dedupe, no ack state, and no Not sent - Retry control.
@@ -220,8 +198,6 @@ Sources: C-001, C-002, C-003, H-153, dash#50, dash#122-#131, recurring-complaint
 
 **Acceptance.** After 10 s without bridge ack or a socket drop the message shows Not sent - Retry; retry reuses the same client id and the bridge dedupes, so it never executes twice.
 
-> ya I think it failed to send from dash app
-
 Code: none
 Gap located at: `app/src/components/MessageRow.tsx:110`
 Sources: H-153, dash#50
@@ -231,8 +207,6 @@ Sources: H-153, dash#50
 **partial** · P0 · recurring · journey `J-send-receive-omp` · claimed regressed
 
 **Acceptance.** Equivalent sends through OMP and Hermes both get correct responses; fixing OMP does not regress Hermes.
-
-> pls fix, it's happening with omp, but messages work with hermes.
 
 Code: `bridge/src/harnesses.ts:130`, `bridge/src/roster.ts:332`
 
@@ -245,8 +219,6 @@ Sources: H-146, DASH-E2E-001
 
 **Acceptance.** A blocked turn can be attributed (harness vs bridge) and recovered while the process and session continue; starting a worker does not block follow-up input.
 
-> can u lmk why the turn is stuck? is this a hermes bug?
-
 Code: `bridge/src/hermes-steer.ts:21`, `bridge/src/turn-phase.ts:1`, `bridge/src/hermes-phase.ts:45`
 
 Note: Steer through the gateway and phase polling exist; no unstick/cancel for a host turn Dash only observes (window-stop-external).
@@ -258,8 +230,6 @@ implemented · P1 · journey `J-reconnect-reboot` · claimed implemented
 
 **Acceptance.** Socket drops reattach and replay missed events or mark them; hung or malformed harness turns surface a structured error while the bridge stays up.
 
-> Phone screen lock / Tailscale blips drop the WebSocket.
-
 Code: `app/src/net/bridge.ts:27`, `app/src/net/bridge.ts:97`, `bridge/index.ts:97`
 Sources: dash#3, dash#4
 
@@ -268,8 +238,6 @@ Sources: dash#3, dash#4
 **MISSING** · P0 · journey `J-reconnect-reboot` · claimed partial
 
 **Acceptance.** After a real PC reboot the Dash services start automatically and the phone connects authenticated; the app keeps receiving updates while the owner is away.
-
-> i need my pc to be accessible across restarts from the dash app - can we set this up?
 
 Code: none
 
@@ -282,8 +250,6 @@ Sources: C-028, H-138
 
 **Acceptance.** Send-to-visible-response is measured during live tests and guidance arrives inside the active test window.
 
-> like the message needs to come faster lol
-
 Code: `app/src/net/bridge.ts:331`
 
 Note: Streaming exists; no latency measurement or budget.
@@ -294,8 +260,6 @@ Sources: H-152
 **partial** · P2 · journey `J-send-receive-hermes` · claimed implemented
 
 **Acceptance.** When a provider is exhausted, Hermes sessions reached through Dash fall back to configured providers and the reply lands in the same Dash chat.
-
-> its stuck on anthropic and ran out of usage so i cant access it thru dash, can you setup the fallback provider as gpt sol 6.1 and nous provider and openrouter/free
 
 Code: `bridge/src/model-roles.ts:39`
 
@@ -308,8 +272,6 @@ Sources: hermes-telegram 2026-10-22T02:33
 
 **Acceptance.** The recurring dev-server 500 is root-caused; after a crash the test state is restored and readiness is signalled before retry.
 
-> see screen - dev server returned error code 500
-
 Code: `bridge/index.ts:679`
 Sources: H-066, H-151
 
@@ -319,8 +281,6 @@ implemented · P1 · journey `J-send-receive-hermes` · claimed partial
 
 **Acceptance.** JSON-RPC errors fail visibly; auth failures and unknown outcomes never resubmit through another interface; identity is isolated per conversation.
 
-> Auth/authorization and accepted/unknown-outcome failures do not silently submit the same request to a different interface/CLI.
-
 Code: `bridge/src/z0bridge-hermes.ts:18`, `bridge/src/acp/client.ts:150`
 Sources: dash#9, dash#51
 
@@ -329,8 +289,6 @@ Sources: dash#9, dash#51
 **partial** · P2 · journey `J-pairing-fresh` · claimed unknown
 
 **Acceptance.** The actual encryption and authentication path is documented and demonstrated for chat and attachments; Tailscale is not assumed to give every property.
-
-> is our info e2ee w/ tailscale or not?
 
 Code: `bridge/src/bridge-security.ts:1`, `SECURITY.md:1`
 Sources: H-022
@@ -343,8 +301,6 @@ Sources: H-022
 
 **Acceptance.** One primary button sits at the left next to the text regardless of handedness: Send/Steer/Queue with a draft, Stop while a turn runs with an empty draft; Stop cancels host activity Dash only observes.
 
-> the stop button and send button should be the same. also keep the button on the left near where the text is.
-
 Code: `app/src/components/Composer.tsx:216`, `app/src/components/Composer.tsx:218`, `app/src/store/app.ts:543`
 
 Note: Single leading button implemented; Stop only cancels Dash-owned pending/streaming turns.
@@ -355,8 +311,6 @@ Sources: H-141, R-8977, findings window-stop-external
 implemented · P1 · journey `J-steer-queue-merge` · claimed implemented
 
 **Acceptance.** Steer reaches the running turn; queued messages can be edited, reordered, merged into one ordered message and delivered.
-
-> also add a way to steer rather than just queue messages
 
 Code: `app/src/lib/composer-mode.ts:4`, `app/src/components/QueuedStack.tsx:14`, `app/src/lib/pending-queue.ts:20`, `app/src/store/app.ts:638`, `bridge/src/hermes-steer.ts:21`
 
@@ -369,8 +323,6 @@ implemented · P0 · recurring · journey `J-composer-draft-restore` · claimed 
 
 **Acceptance.** An unsent draft is restored exactly after app restart, crash or agent-triggered reload.
 
-> there's another issue like every time you restart the app I lose my message if I'm typing it mid-sentence when you restart it so please add State pers
-
 Code: `app/src/store/composer-drafts.ts:18`, `app/src/store/composer-drafts.ts:9`
 
 Note: Text persists (250 ms flush, 14-day expiry); unsent attachment chips do not survive the process.
@@ -381,8 +333,6 @@ Sources: H-143, dash#149
 **MISSING** · P1 · journey `J-composer-paste-image` · claimed partial
 
 **Acceptance.** Pasting clipboard image data (and Gboard rich content) into the input creates one attachment chip delivered with the next send.
-
-> also let me paste images directly into the input field and it should auto attach
 
 Code: none
 
@@ -395,8 +345,6 @@ implemented · P2 · journey `J-composer-single-button` · claimed missing
 
 **Acceptance.** Composer text wraps multiline up to about 6 lines and never scrolls sideways.
 
-> Composer input wraps (multiline, max ~6 lines); never a single sideways-scrolling line.
-
 Code: `app/src/components/Composer.tsx:214`, `app/src/components/Composer.tsx:259`
 Sources: R-8974
 
@@ -405,8 +353,6 @@ Sources: R-8974
 **partial** · P0 · recurring · journey `J-composer-suggestions` · claimed partial
 
 **Acceptance.** Typing / or @ on both surfaces loads real commands/files/agents (under identity pairing too) and inserts or runs the selection; never stuck on Loading from bridge.
-
-> also once im inside a chat the @ and / dont work.
 
 Code: `app/src/components/ComposerSuggestions.tsx:26`, `app/src/components/ComposerSuggestions.tsx:31`, `bridge/src/suggestions-http.ts:35`
 
@@ -419,8 +365,6 @@ implemented · P1 · journey `J-composer-attach` · claimed implemented
 
 **Acceptance.** Images and files attach through the phone transport, are saved on the host, reach the agent, and the chooser uses Dash styling.
 
-> it says file attachments not supported - pls fix, can use kdeconnect to send files securely if needed.
-
 Code: `app/src/components/AttachmentChooser.tsx:14`, `app/src/lib/attachments.ts:67`, `bridge/src/files-http.ts:59`, `shared/protocol.ts:88`
 
 Note: 8 files/turn, 25 MiB/file; error chips have no retry.
@@ -432,8 +376,6 @@ implemented · P2 · journey `J-design-conformance` · claimed unknown
 
 **Acceptance.** Scrolling text never shows through the composer; the input stays readable on a blurred/occluded surface.
 
-> also the bar im typing in is clear so i can see background text thru it when i scroll.
-
 Code: `app/src/screens/ChatScreen.tsx:447`, `app/src/components/GlassSurface.tsx:1`
 Sources: H-051
 
@@ -442,8 +384,6 @@ Sources: H-051
 **partial** · P1 · journey `J-model-roles` · claimed missing
 
 **Acceptance.** From the composer the owner changes harness, quick-switches or searches models, sees pending approvals and measured tokens/s.
-
-> for me to change harness, see the pending approvals, change the model (quick toggle between my top used w/ popup view for search)
 
 Code: `app/src/screens/ChatScreen.tsx:329`, `app/src/screens/ChatScreen.tsx:330`, `app/src/components/HarnessPicker.tsx:1`
 
@@ -456,8 +396,6 @@ implemented · P2 · journey `J-chat-window-open-close` · claimed unknown
 
 **Acceptance.** Routine actions sit near the bottom; show/hide options live in the bottom consolidated menu, not at the top.
 
-> i want more of the interactive buttons to be near the bottom of the screen so i dont have to reach all the way up.
-
 Code: `app/src/components/ChatWindow.tsx:149`, `app/src/components/ComposerActionMenu.tsx:47`
 Sources: H-055, H-127
 
@@ -466,8 +404,6 @@ Sources: H-055, H-127
 **partial** · P2 · journey `J-settings-density` · claimed missing
 
 **Acceptance.** Hold the chat-settings control, slide to a row, dwell and release; force/long-press a row opens that row's own options (models, profiles, pen tools); tap still runs the row.
-
-> I really like the hold down on chat settings button to open the pop up and then like another micro interaction we should add is when I force press on 
 
 Code: `app/src/components/ComposerActionMenu.tsx:47`, `app/src/components/ComposerActionMenu.tsx:60`, `app/src/lib/filter-gesture.ts:6`, `app/src/screens/ChatScreen.tsx:325`
 
@@ -480,8 +416,6 @@ Sources: H-078, H-145, dash#120
 
 **Acceptance.** Input-attached working and typing micro-interactions copied from OMP/Tern, restyled to Dash tokens.
 
-> also copy over the micro interactions they add in the app for typing & when it is working.
-
 Code: `app/src/components/ShimmerText.tsx:12`, `app/src/components/KeyboardDock.tsx:1`
 Sources: H-096
 
@@ -490,8 +424,6 @@ Sources: H-096
 **partial** · P1 · journey `J-chat-window-open-close` · claimed partial
 
 **Acceptance.** The main input stays bound to the selected session after leaving the chat; outside a chat a compact popup shows one or two messages and status.
-
-> So like any message I send in this chat will go in the session.
 
 Code: `app/src/screens/MainScreen.tsx:359`, `app/src/lib/feedback-submit.ts:10`
 
@@ -506,8 +438,6 @@ implemented · P0 · recurring · journey `J-chat-open-history` · claimed regre
 
 **Acceptance.** Opening a live row hydrates the real history and attaches to in-flight turns; the middle and right panes are never empty after updates or reconnect.
 
-> when i click on a chat in dash it doesn't show any data.
-
 Code: `app/src/lib/live-sessions.ts:53`, `app/src/lib/live-sessions.ts:58`, `app/src/store/app.ts:193`, `bridge/src/roster.ts:360`
 
 Note: Code hydrates on open; history is requested only when the row has a session id and is not stale. Regression risk is runtime, so the journey must prove it.
@@ -518,8 +448,6 @@ Sources: H-036, dash#26, recurring-complaints-hermes#9
 **MISSING** · P1 · journey `J-text-select-reply` · claimed missing
 
 **Acceptance.** Selecting a message range (or circling it with the S Pen) and choosing reply carries that exact quote into the reply.
-
-> also I should be allowed to select text and respond to it, or circle it w my spen....
 
 Code: none
 Gap located at: `app/src/components/Markdown.tsx:29`
@@ -533,8 +461,6 @@ implemented · P0 · recurring · journey `J-chat-window-open-close` · claimed 
 
 **Acceptance.** A chat opens as a full-screen window over the retained workspace; the top nav becomes a slim pill around the S25 camera cutout; the composer grows into an attached dock with the badge; a small X (>=44 pt hit) in the handed bottom corner closes it and restores list position, draft, queue and voice; Back dismisses menus first.
 
-> in the middle page, when i click on a chat - rather than it opening a full new page, the chat should just pop-out as a window that takes up the full s
-
 Code: `app/App.tsx:172`, `app/src/components/ChatWindow.tsx:71`, `app/src/components/ChatWindow.tsx:149`, `app/src/lib/display-cutout.native.ts:1`, `app/src/lib/chat-window.ts:1`
 Sources: H-131, H-132, H-133, H-134, R-8971
 
@@ -543,8 +469,6 @@ Sources: H-131, H-132, H-133, H-134, R-8971
 **partial** · P1 · journey `J-chat-identity-badge` · claimed partial
 
 **Acceptance.** A compact host/harness/profile/session/model badge opens a tree of how it traces back; model, session or host can be switched and the switch is verified against the backend.
-
-> so something like "groot/hermes/profile/session/model" and when i click the badge i should be able to see the tree view of how it traces back.
 
 Code: `app/src/components/ChatWindow.tsx:120`, `app/src/components/ChatWindow.tsx:171`, `app/src/screens/ChatScreen.tsx:303`
 
@@ -557,8 +481,6 @@ Sources: H-129, R-8971
 
 **Acceptance.** The context gauge opens real usage and compaction (or a truthful unavailable state) under every pairing method; the web gauge exposes aria-expanded.
 
-> i dont think dash has any way to show context view.
-
 Code: `app/src/components/ContextCard.tsx:39`, `app/src/components/ContextCard.tsx:84`, `bridge/src/context-http.ts:73`, `bridge/src/context-http.ts:87`
 
 Note: Client sends settings.token (empty under identity pairing, 401); gauge sets no expanded state; served bridge returns 501 for compact.
@@ -570,8 +492,6 @@ implemented · P0 · recurring · journey `J-prompt-rail` · claimed partial
 
 **Acceptance.** Niagara-style rail scrubs prompts, previews prompt and result summary, jumps to the live bottom, and fits the keyboard-visible viewport above the composer.
 
-> additionally we can add a scroll to bottom button on the same scroll bar or have the bottom of it be sticky to the latest live message.
-
 Code: `app/src/components/PromptRail.tsx:42`, `app/src/lib/rail-turns.ts:46`, `app/src/lib/prompt-navigation.ts:1`
 Sources: H-038, H-063, H-116, owner-turns 2026-10-21T02:35
 
@@ -580,8 +500,6 @@ Sources: H-038, H-063, H-116, owner-turns 2026-10-21T02:35
 **MISSING** · P2 · journey `J-prompt-rail` · claimed partial
 
 **Acceptance.** Spacing between ticks is proportional to turn duration (prompt to reply settle, or now when live) with a minimum gap and equal-spacing fallback; hit-testing uses the same positions; an end timestamp is recorded on settle.
-
-> We should be looking at to dynamically size the horizontal bar, and then we can even go back to first principles and see if there's any other sort of 
 
 Code: none
 Gap located at: `app/src/components/PromptRail.tsx:40`
@@ -595,8 +513,6 @@ implemented · P0 · recurring · journey `J-markdown-code` · claimed partial
 
 **Acceptance.** Replies render markdown with syntax-highlighted code and visual variance; tool rows state purpose, arguments and result instead of generic Thinking/Running; reuse OSS libraries.
 
-> there's no syntax highlighting or variance in the chat messages either.
-
 Code: `app/src/components/Markdown.tsx:29`, `app/src/components/CodeBlock.tsx:4`, `shared/tool-format.ts:42`
 Sources: H-039, H-040, H-067
 
@@ -605,8 +521,6 @@ Sources: H-039, H-040, H-067
 implemented · P1 · journey `J-thinking-tools-details` · claimed partial
 
 **Acceptance.** Thinking and tools are hidden/compact/full per chat, expand as a file-tree hierarchy with an inspector, and a smol model summarises them without blocking streaming.
-
-> similar to how omp does wrapped thinking blocks.
 
 Code: `app/src/components/ReplyBlocks.tsx:37`, `app/src/lib/tool-tree.ts:14`, `app/src/components/ToolInspector.tsx:10`, `app/src/components/ThinkingSummaryChip.tsx:1`, `bridge/src/thinking-summary.ts:1`
 
@@ -619,8 +533,6 @@ Sources: H-057, H-058, H-059, R-8969
 
 **Acceptance.** Each fact shows once; diagrams stay visible; important status needs no repeated expansion; chat-list previews show a summary or repos rather than a truncated last line; rarely used switches sit behind Options.
 
-> the ui looks fine, but info density is trash....do you not ever inspect the result? why does this keep happening?
-
 Code: `app/src/lib/live-sessions.ts:14`, `app/src/screens/ChatScreen.tsx:316`, `app/src/lib/chat-row.ts:1`
 
 Note: Options holds detail controls; the chat-list preview is still the last line or status.
@@ -631,8 +543,6 @@ Sources: H-026, H-049, H-123, R-8966, recurring-complaints-hermes#8
 **MISSING** · P1 · journey `J-steer-queue-merge` · claimed missing
 
 **Acceptance.** After reload or rehydrate, steered/queued messages display the user's text with any wire envelope stripped for display.
-
-> earlier steered messages in the chat transcript display the raw message wrapper markup instead of the user's text
 
 Code: none
 Gap located at: `app/src/lib/live-sessions.ts:66`
@@ -648,8 +558,6 @@ Sources: dash#121
 
 **Acceptance.** A compressed, expandable tree of active subagents/jobs appears in the current chat (shared Tree style) and does not disappear.
 
-> what happened to the subagent indicator??
-
 Code: `app/src/screens/ChatScreen.tsx:335`, `app/src/components/WorkersStrip.tsx:61`, `bridge/src/hermes-workers.ts:80`
 
 Note: WorkersStrip is mounted in the dock but fed only by Hermes /hermes/workers; other harnesses show nothing.
@@ -661,8 +569,6 @@ implemented · P1 · journey `J-subagent-indicator` · claimed implemented
 
 **Acceptance.** During main and child work exactly one primary live indicator shows; child activity is subtle; never a second working/Queued row.
 
-> So right now I see that like the main agent is thinking, and there's actually like two parts on my screen.
-
 Code: `app/src/lib/thinking.ts:26`, `app/src/components/MessageRow.tsx:55`
 Sources: H-091, R-8966
 
@@ -672,8 +578,6 @@ implemented · P0 · recurring · journey `J-voice-live-call` · claimed partial
 
 **Acceptance.** The thinking-orbs library shows idle/thinking/working/voice states in chats and a large orb in mic/live mode.
 
-> also i don't see a single thinking orbs indicator
-
 Code: `app/src/components/AgentOrb.tsx:1`, `app/src/components/EffortOrbs.tsx:48`, `app/src/components/OrbMotion.tsx:12`, `app/src/screens/VoiceScreen.tsx:47`
 Sources: H-027, H-084, dash#27
 
@@ -682,8 +586,6 @@ Sources: H-027, H-084, dash#27
 **partial** · P2 · journey `J-perf-profile` · claimed implemented
 
 **Acceptance.** Live status text brightens the letters with a band sweeping through them (gradient shader), never an overlay box; the loop stops when unfocused or backgrounded.
-
-> the text highlight indicator looks weird - it should make the text itself llight up and get brighter and move across the screen - pls see chatgpt & ds
 
 Code: `app/src/components/ShimmerText.tsx:12`, `app/src/components/ShimmerText.tsx:30`
 
@@ -696,8 +598,6 @@ implemented · P0 · recurring · journey `J-bots-tree` · claimed unknown
 
 **Acceptance.** Profile bots use synergy.ai Moodie geometry and motion with MIT attribution; identity colour is stable per profile; state changes expression only.
 
-> so let's use the grok bot library and have each of the bots be a different profile.
-
 Code: `app/src/components/BotFace.tsx:13`, `app/src/lib/moodie-identity.ts:24`
 Sources: H-097, R-8970
 
@@ -706,8 +606,6 @@ Sources: H-097, R-8970
 implemented · P2 · journey `J-orchestra-views` · claimed partial
 
 **Acceptance.** Avatars, Orchestra cards, live rows and search hits render AODL visual.json encodings; unknown ids fail closed.
-
-> Dash does not use AODL's formalized design language. HarnessAvatar is a letter in a circle.
 
 Code: `app/src/catalog/visual.ts:9`, `app/src/components/HarnessAvatar.tsx:7`, `app/src/components/TopologyBadge.tsx:1`
 Sources: dash#21
@@ -720,8 +618,6 @@ Sources: dash#21
 
 **Acceptance.** genui, openui-lang and generated prototypes render as interactive native UI behind a bounded loader, never as a raw code flash; controls perform real actions or say unavailable.
 
-> openui lang isnt working 😢 just add an issue for it in the roadmap.
-
 Code: `app/src/components/genui/GenerativeBlock.tsx:18`, `app/src/components/genui/GenerativeBlock.tsx:25`, `app/src/lib/openui-roadmap.ts:4`, `app/src/components/genui/GenUI.tsx:14`, `app/src/lib/generation-state.ts:1`
 
 Note: openui-lang only renders the fixed Roadmap component; other OpenUI components are not supported.
@@ -733,8 +629,6 @@ implemented · P1 · journey `J-genui-render` · claimed partial
 
 **Acceptance.** Mermaid-style diagrams render as interactive xyflow; images and generated components render inline in both harness chats.
 
-> like mermaid diagrams, images, components, etc.for mermaid diagrams i wanna use xyflow.
-
 Code: `app/src/components/genui/DiagramDOM.tsx:5`, `app/src/lib/mermaid.ts:6`, `app/src/components/genui/InlineImage.tsx:27`
 Sources: H-054
 
@@ -744,8 +638,6 @@ implemented · P0 · recurring · journey `J-live-surface` · claimed partial
 
 **Acceptance.** Ripple ephemeral components render in Dash and web; fx0 is a fast sandboxed live-canvas worker while Hermes keeps the conversation.
 
-> wait ripple is just ephemeral ui....thats supposed to work in all apps web, dash, etc.
-
 Code: `app/src/components/LiveSurface.tsx:19`, `app/src/components/LiveArtifactFrame.tsx:17`, `app/src/components/LiveArtifactFrame.web.tsx:14`, `bridge/src/live-surface.ts:1`
 Sources: H-034, H-112, owner-turns 2026-10-20T19:45
 
@@ -754,8 +646,6 @@ Sources: H-034, H-112, owner-turns 2026-10-20T19:45
 **partial** · P0 · recurring · journey `J-roadmap-inline` · claimed missing
 
 **Acceptance.** Asking for the Dash roadmap renders an inline Ripple roadmap with progress bars per feature, backed by receipts.
-
-> can u go thru all my asks so far in this convo related to dash and lmk the overall progress using an ephemral roadmap w/ progress bars using ripple?
 
 Code: `app/src/components/genui/RippleRoadmap.tsx:1`, `app/src/catalog/roadmap.json:1`
 
@@ -770,8 +660,6 @@ Sources: H-110, dash#114
 
 **Acceptance.** A study mode in Dash and Ripple (phone and web) turns a prompt into an ephemeral UI (native genui JSON tier and sandboxed HTML/fx0 tier), iterates with the LLM, reuses Anatomy ('wheresryan22'), and never edits app source.
 
-> for dash & ripple - can we add a brainstorming / study mode
-
 Code: `app/src/components/LiveSurface.tsx:19`
 
 Note: Two render tiers exist through Live surface; no study mode entry, no Anatomy library.
@@ -785,8 +673,6 @@ Sources: C-020, C-021, C-022, C-023, C-024, C-025, C-026, C-027
 
 **Acceptance.** Tapping Live starts an in-app duplex call bound to the attached chat: no error, no Lawnchair/z0live popup, every utterance delivered, barge-in, mute/end, natural pacing without filler, usable away from the PC with a fast Luna liaison.
 
-> also a live voice mode still doesn't work like I tried clicking the button and it's giving me an error
-
 Code: `app/src/components/ContinuousVoiceRoot.tsx:45`, `app/src/components/ContinuousVoiceRoot.tsx:53`, `app/src/lib/continuous-voice.ts:10`, `app/src/lib/continuous-voice.ts:138`, `bridge/src/voice-bootstrap.ts:17`
 
 Note: Native in-app call exists, but normal Hermes roster ids (hermes:session:...) fail the bootstrap profile regex with 400.
@@ -797,8 +683,6 @@ Sources: H-099, H-107, H-111, H-144, H-005, H-016, C-014, C-015, recurring-compl
 implemented · P0 · recurring · journey `J-voice-dictation` · claimed regressed
 
 **Acceptance.** Dictation records and inserts editable text at the cursor without the keyboard open and without the system recognizer popup; errors stay in Dash.
-
-> dictation button doesn't work
 
 Code: `app/src/lib/recorded-speech.ts:3`, `app/src/lib/useRecordedSpeech.ts:9`, `app/src/components/Composer.tsx:104`, `bridge/src/files-http.ts:44`
 
@@ -811,8 +695,6 @@ Sources: H-092, H-099, R-8985, owner-turns 2026-10-22
 
 **Acceptance.** Holding the mic grows a pill with the other mode; sliding picks; release only switches the mode; tap uses it; settings help matches.
 
-> And then I should be able to swipe up to move the indicator to the active live voice mode.
-
 Code: `app/src/components/MicButton.tsx:24`, `app/src/lib/mic-gesture.ts:51`, `app/src/screens/SettingsScreen.tsx:158`
 
 Note: Gesture implemented; Settings help text still describes long-press as a handedness switch.
@@ -823,8 +705,6 @@ Sources: H-100, R-8983, findings help-mic
 **partial** · P1 · journey `J-z0live-service` · claimed partial
 
 **Acceptance.** One z0live service serves Dash, Lawnchair and assistant; knows work history; launches tasks via Hermes/z0intelligence; uses a high-quality realtime voice; liaison + meta-agent + worker split.
-
-> let's maybe just make z0live a long lived service that works across the whole phone - so it's available in lawnchair, as an assistant, or in dash too.
 
 Code: `app/src/lib/z0live-state.ts:26`, `bridge/src/z0live-state.ts:36`, `app/src/lib/continuous-voice.ts:61`
 
@@ -837,8 +717,6 @@ Sources: H-001, H-002, H-004, H-006, H-018, C-016
 
 **Acceptance.** z0live can see the screen (privacy-preserving local model or host inference) and click buttons/type text through accessibility as fast as phone-harness.
 
-> it could go home and open apps and it's pretty quick - but it can't yet control apps by clicking buttons or typing text.
-
 Code: none
 
 Note: External to the Dash repo.
@@ -850,8 +728,6 @@ Sources: H-003, H-015, owner-turns 2026-10-21T00:53
 
 **Acceptance.** Oura double-tap activates voice on the device in use; double tap starts/mutes, triple tap ends; separate gestures for z0live and keyboard STT.
 
-> basically i wanna be able to active voice mode contextually based on what device im using by double tapping my oura ring.
-
 Code: none
 
 Note: External to the Dash repo.
@@ -862,8 +738,6 @@ Sources: H-010, H-044, H-045
 **MISSING** · P2 · journey `J-z0live-service` · claimed unknown
 
 **Acceptance.** Candidate pipelines (SLM+TTS+STT, Moshi) are measured on one spoken task for latency and quality; latency tiers (local SLM, host, cloud) explored.
-
-> essentially i wanted u to kick off the z0live work to ssee if we can push the pareto frontier to improve conversation mode thru SLM + TTS + STT using moshi.
 
 Code: none
 
@@ -878,8 +752,6 @@ Sources: C-016, owner-turns 2026-10-21T00:53
 
 **Acceptance.** Review artifacts support drawing while speaking, old/new choice with speech-to-object association, tldraw for the expanded canvas, linked rotatable 3D views, and personal mode shortcuts.
 
-> i wanna be able to draw on the image & speak, for choosing between old or new, i want to have an option selector & as i speak it should track which ob
-
 Code: `app/src/screens/ArtifactStageScreen.tsx:21`, `app/src/components/artifact-stage/ArtifactStage.tsx:11`
 
 Note: Stage hosts an external review app in a WebView; no tldraw, 3D or speech-to-object code in Dash.
@@ -891,8 +763,6 @@ Sources: H-019, H-031, H-032, H-033
 
 **Acceptance.** Annotation mode opens without lag, freezes scrolling, shows ink, keeps the composer usable, lets the owner talk, and delivers screenshot+ink+speech to the same chat; a discoverable UI trail exists before it is called ready.
 
-> the s pen annotation doesn't work and it lags when I open annotation mode initially.
-
 Code: `app/src/components/annotate/AnnotationRoot.tsx:102`, `app/src/components/annotate/AnnotationRoot.tsx:175`, `app/src/components/annotate/AnnotationRoot.tsx:216`, `app/src/store/annotate.ts:60`, `app/src/lib/voice-annotation.ts:11`
 
 Note: Full overlay, tools, hold-talk and submit exist; entry lag and ink visibility are runtime claims that only the device journey can settle.
@@ -903,8 +773,6 @@ Sources: H-083, H-126, H-135, H-142, recurring-complaints-hermes#1, dash#119, da
 **MISSING** · P0 · recurring · journey `J-annotation-spen` · claimed missing
 
 **Acceptance.** Pressing the S Pen side button toggles between annotation and normal interaction.
-
-> I wanna be able to use the button to switch between annotation mode and normal
 
 Code: none
 Gap located at: `app/src/lib/annotate/pointer.ts:5`
@@ -918,8 +786,6 @@ Sources: H-150, dash#119
 
 **Acceptance.** Hovering the S Pen over controls and messages shows its position and a restrained contextual highlight.
 
-> so we can think of various micro interactions that we can add into the application to make the s pen interaction feel more magical.
-
 Code: none
 Sources: H-130
 
@@ -928,8 +794,6 @@ Sources: H-130
 **partial** · P1 · journey `J-annotation-agent-pointer` · claimed partial
 
 **Acceptance.** In the current conversation the agent highlights a target and flies to the relevant screen through an in-app API.
-
-> And annotate, and like, use the apps API to like fly to different screens, like without having to manually navigate using Android.
 
 Code: `app/src/debug/nav.ts:1`, `app/src/lib/app-route-link.ts:1`
 
@@ -944,8 +808,6 @@ Sources: H-125
 
 **Acceptance.** End to end: the owner talks live, marks up the screen, the agent fixes it right away and the change hot-reloads on the phone preview; the pipeline is continuously sped up. This is Dash's top feature.
 
-> the overall goal is to have Turbo mode working. So well that I can just talk to you. And use my S Pen and mark stuff up in real-time. And you're able to fix it right away.
-
 Code: `app/src/turbo.ts:1`, `app/src/components/annotate/AnnotationRoot.tsx:175`, `app/src/components/ContinuousVoiceRoot.tsx:45`
 
 Note: App side has a TURBO motion flag, annotation and voice; the fix/merge/hot-reload loop is outside the repo.
@@ -957,8 +819,6 @@ Sources: owner-turns hermes-local 2026-10-25, zer0models 2026-10-23T04:07, H-083
 
 **Acceptance.** Opt-in fanout opens the requested number of ChatGPT Android chats on the S22 (latest ask: 25), one per issue/worktree, only the intended ones; the orchestrator runs merge queue and verification and reports real counts.
 
-> can u just kick off 25 chats?
-
 Code: none
 
 Note: Lives in orchestration tooling outside this repo.
@@ -969,8 +829,6 @@ Sources: H-087, H-155, H-009, C-012, C-013
 **MISSING** · P0 · recurring · journey `J-turbo-preview-brief` · claimed partial
 
 **Acceptance.** When a worktree merges into the preview, Dash shows a compact AODL test brief (original ask, expected behaviour) and navigates to the feature; blocked/installed/test-ready are distinct and he is notified.
-
-> In to like the preview that i'm looking at, you can tell me exactly what feature we're testing and even like, take me to the screen, or like the relev
 
 Code: none
 Gap located at: `app/src/lib/app-route-link.ts:1`, `app/src/lib/notification-routing.ts:1`
@@ -984,8 +842,6 @@ Sources: H-088, C-011
 
 **Acceptance.** Features ship to a preview branch with GitOps rollback; the served tip equals the merged worktree; JS changes hot-reload on the phone; the installed build stays current; the preview is never broken.
 
-> u should be able to use fast reload in expo to just let me preview changes directly in the app.
-
 Code: `bridge/index.ts:679`, `scripts/rollout.py:1`, `scripts/ensure-rollout-branches.sh:1`, `.github/workflows/promote-preview.yml:1`
 
 Note: Rollout branches and promote workflows exist; served tip vs merged tip is not enforced.
@@ -996,8 +852,6 @@ Sources: H-082, H-101, H-106, recurring-complaints-hermes#4
 **partial** · P0 · recurring · journey `J-dogfood-loop` · claimed partial
 
 **Acceptance.** A toggle runs Dash from the preview Metro with a DOGFOOD pill; a gesture captures screen, route, logs and note as an issue that becomes a Turbo task; Fixed?/still-off confirmation; Turbo uses faster motion.
-
-> A self testing mode where it is intended for the user to dog food.
 
 Code: `app/src/turbo.ts:5`, `app/src/components/Tree.tsx:28`
 
@@ -1010,8 +864,6 @@ Sources: H-085, H-086, dash#107
 
 **Acceptance.** One Dash task runs in five chats at distinct effort levels; durations and judged quality pick Turbo worker settings.
 
-> can u kick off the same task in 5 different chats w/ varying effort levels to see how long they work for and what the quality of output is?
-
 Code: none
 Sources: C-012, C-013
 
@@ -1022,8 +874,6 @@ Sources: C-012, C-013
 **MISSING** · P0 · recurring · journey `J-process-audit` · claimed unknown
 
 **Acceptance.** A send/voice/navigation blocker found while dogfooding preempts feature work until it is usable or explicitly blocked.
-
-> like if theres a bug that is preventing me from using dash - that should be the #1 priority
 
 Code: none
 
@@ -1036,8 +886,6 @@ Sources: H-102, owner-turns hermes-local 2026-10-21T00:53
 
 **Acceptance.** Lightweight Luna watchers start automatically when the owner uses Dash and report errors visible in logs before he does.
 
-> it should basically automatically spin up when i start using the app.
-
 Code: none
 Sources: H-124, owner-turns 2026-10-25T21:01
 
@@ -1046,8 +894,6 @@ Sources: H-124, owner-turns 2026-10-25T21:01
 **partial** · P0 · recurring · journey `J-process-audit` · claimed partial
 
 **Acceptance.** Nothing is done without e2e tester army, real integration and S22/S25 native journeys with exact-SHA receipts; E2E runs on a virtual monitor; recurring breakage gets a root cause, a regression test and a law.
-
-> r u just fucking blind? or do u just REFUSE to ever run a single fucking ui test?
 
 Code: `scripts/keep-going.test.ts:1`, `scripts/fleet-native-acceptance.sh:1`, `scripts/verify-dash/control-dash.ts:1`, `.maestro/nav-dots.yaml:1`
 
@@ -1060,8 +906,6 @@ implemented · P0 · recurring · journey `J-process-audit` · claimed partial
 
 **Acceptance.** Every owner ask maps to a DF entry with code refs and a device journey; status is decided from code; the spec is iterated until it matches the app.
 
-> can you run comprehensive scans on all the messages that we've discussed regarding the dash app and improving the user experience so that I can talk t
-
 Code: `spec/features.yaml:1`, `spec/check.py:1`
 Sources: H-157, SUMMARY-repo
 
@@ -1071,19 +915,15 @@ Sources: H-157, SUMMARY-repo
 
 **Acceptance.** OMP owns a visible queue of low-hanging in-app UI fixes Hermes has not started, with ACP handoff.
 
-> can you setup a separate work queue here to help out w/ dash?
-
 Code: none
 Gap located at: `roadmap.yml:1`
 Sources: C-007, C-008, C-009
 
-#### DF-080 Turbo policy: no free-tier coding, no Grok, builds on MBP
+#### DF-080 Turbo policy: no free-tier coding, no Grok, builds on a dedicated build host
 
 **partial** · P1 · journey `J-model-roles` · claimed unknown
 
-**Acceptance.** Free-tier models never write code; Grok is cancelled; planner is Opus; builds/tests go to the MBP.
-
-> free-tier models never write code, only easy, well-defined tasks
+**Acceptance.** Free-tier models never write code; Grok is cancelled; planner is Opus; builds/tests go to a dedicated build host.
 
 Code: `bridge/src/model-roles.ts:25`
 
@@ -1096,8 +936,6 @@ Sources: dash#107, H-060
 
 **Acceptance.** S22+/S25 are used as offload workers within owner-granted limits (S25 floor 2%).
 
-> rn u have permission to utilize it 100% to speed up overall work on all goals
-
 Code: none
 
 Note: External infra.
@@ -1109,8 +947,6 @@ implemented · P2 · journey `J-process-audit` · claimed partial
 
 **Acceptance.** Patterns from supplied reference videos/apps are recorded in a Dash issue separately from proposals.
 
-> extract useful patterns & come up with ideas on how to proceed.
-
 Code: `docs/design/ai-ui-patterns/README.md:1`
 Sources: H-076, dash#106
 
@@ -1120,8 +956,6 @@ implemented · P1 · journey `J-process-audit` · claimed implemented
 
 **Acceptance.** Unit, TDD fail-then-pass, mutation >=80 including protocol/roster operators, control-dash runtime check and Maestro device checks.
 
-> AI-native work is untrusted until proven.
-
 Code: `scripts/mutate.ts:1`, `scripts/verify-dash/control-dash.ts:1`
 Sources: dash#10, dash#12, dash#65
 
@@ -1130,8 +964,6 @@ Sources: dash#10, dash#12, dash#65
 **MISSING** · P2 · journey `J-process-audit` · claimed missing
 
 **Acceptance.** Per-store unit tests, per-component accessibility labels, performance guards and boundary negative controls, one PR slice each.
-
-> approximately 100 parallel conversations, not the old serial queue
 
 Code: none
 
@@ -1144,8 +976,6 @@ implemented · P2 · journey `J-process-audit` · claimed implemented
 
 **Acceptance.** An in-repo skill documents debugging pair, roster and WS attach without pasting tokens.
 
-> teaching harnesses how to debug pair -> roster -> WS hello/attach
-
 Code: `.cursor/skills/dash-debug/SKILL.md:1`
 Sources: dash#6
 
@@ -1156,8 +986,6 @@ Sources: dash#6
 **partial** · P0 · recurring · journey `J-perf-profile` · claimed unknown
 
 **Acceptance.** Chat list and transcript are virtualized; rows and heavy content (history, tool payloads, generated UI) load on demand; scrolling and navigation stay under frame budget at full chat volume.
-
-> Dash must load EVERY chat from every harness/host, be searchable quickly, never lag (lazy loading, JIT UI).
 
 Code: `app/src/screens/panes/ChatsPane.tsx:174`, `app/src/screens/ChatScreen.tsx:447`, `app/src/store/conversation-persistence.ts:13`, `app/src/lib/live-sessions.ts:53`
 
@@ -1170,8 +998,6 @@ implemented · P1 · journey `J-perf-profile` · claimed partial
 
 **Acceptance.** Scrubbing a long conversation while streaming stays responsive with no animation stalls.
 
-> scrolling animation is extremely laggy for dash app inside a chat when using quick scroll.
-
 Code: `app/src/components/PromptRail.tsx:45`, `app/src/lib/rail-turns.ts:29`
 
 Note: UI-thread gesture and weak-keyed summaries; not measured.
@@ -1182,8 +1008,6 @@ Sources: H-061
 **partial** · P0 · recurring · journey `J-perf-profile` · claimed regressed
 
 **Acceptance.** Representative S22/S25 journeys show no sustained UI-thread jank (120 Hz target on S25), no memory growth (the ~150 MB/min chat leak is fixed), and ambient loops stop when backgrounded or unfocused.
-
-> the dash app on my phone is EXTREMELY lagg - pls check what's wrong w/ the performance lol it's like 2fps.
 
 Code: `app/src/components/OrbMotion.tsx:39`, `app/src/screens/ChatScreen.tsx:412`, `app/src/motion-ambient.ts:1`, `app/src/store/conversation-persistence.ts:13`
 
@@ -1196,8 +1020,6 @@ Sources: H-140, C-017, C-018, dash#50, dash#187, recurring-complaints-hermes#5, 
 
 **Acceptance.** Transitions are 100-120 ms ease-out on opacity/transform/colour; no entrance animations on structural change; no bounce; streaming publishes at most once per frame.
 
-> the graph view is way too bouncy, main issue is the animations are slowing down the experience we want the app to feel fast.
-
 Code: `app/src/motion.ts:12`, `app/src/turbo.ts:1`, `app/src/components/Tree.tsx:45`
 
 Note: TURBO profile matches; normal builds keep layout/entering animations in Tree.
@@ -1209,8 +1031,6 @@ implemented · P1 · journey `J-perf-profile` · claimed implemented
 
 **Acceptance.** Orb state transitions and component lab scroll without stalls; profiler rows are not squished.
 
-> also most of the thinking orbs animations are lagging and the full component lab page is lagging and not scrolling properly.
-
 Code: `app/src/components/OrbMotion.tsx:12`, `app/src/screens/LabScreen.tsx:41`
 Sources: H-068, H-118
 
@@ -1219,8 +1039,6 @@ Sources: H-068, H-118
 implemented · P2 · journey `J-perf-profile` · claimed partial
 
 **Acceptance.** Expanding product-grouped trace sessions is responsive.
-
-> in the event trace mode - i am able to see various chat sessions grouped by product / repo.
 
 Code: `app/src/components/trace/TraceTimeline.tsx:171`
 Sources: H-103
@@ -1233,8 +1051,6 @@ implemented · P0 · recurring · journey `J-orchestra-views` · claimed partial
 
 **Acceptance.** Orchestra renders the real AODL network and live roster as tree and graph; views have meaning; node colours and legend are meaningful and interactive; glyphs are intuitive; motion is functional; multi-host views keep identity explicit.
 
-> i still don't see any orchestration ui like from aodl the graphs are supposed to show agents, subagents, chats, etc.
-
 Code: `app/src/components/IntentionalOrchestra.tsx:32`, `app/src/lib/orchestra-views.ts:3`, `app/src/lib/useOrchestraEvidence.ts:5`, `bridge/src/orchestra-http.ts:144`, `app/src/catalog/orchestra.ts:7`
 
 Note: Spine/Constellation/Radial/Islands were replaced by Work/Lineage/Triage/Fleet over live last-24h evidence.
@@ -1245,8 +1061,6 @@ Sources: H-023, H-028, H-029, H-053, H-056, H-072, dash#19, dash#24
 **partial** · P0 · recurring · journey `J-trace-live` · claimed regressed
 
 **Acceptance.** Trace is wired to live events (not a bundled snapshot); each unit shows the owner's ask verbatim, the AODL intent contract, receipt-backed validation (unknown without receipt), and artifacts; LLM interpretation and a recommended action; no colour overload.
-
-> i literally just checked the agent trace component that you "implemented into the app" all u did was COPY the static code...its not even dynamic or li
 
 Code: `app/src/trace/source.ts:12`, `app/src/components/trace/TraceTimeline.tsx:171`, `app/src/components/trace/TraceDetail.tsx:55`
 
@@ -1259,8 +1073,6 @@ Sources: H-041, H-047, H-048, H-104, H-105, H-122, R-8973, findings trace-not-li
 
 **Acceptance.** Agent trace is a sub-card inside the Zero card anchored above the input; it tucks away and reappears.
 
-> also rn zero & agent trace are separate cards.
-
 Code: none
 Sources: H-080, H-081
 
@@ -1270,8 +1082,6 @@ implemented · P2 · journey `J-trace-live` · claimed implemented
 
 **Acceptance.** Holding a trace row opens a dropdown of actions for that row only.
 
-> actually for long press on the agent observability view w/ the event trace, instead of a radial menu - lets just do a drop down menu with rows i can s
-
 Code: `app/src/components/trace/TraceTimeline.tsx:171`
 Sources: H-093, H-069
 
@@ -1280,8 +1090,6 @@ Sources: H-093, H-069
 implemented · P2 · journey `J-orchestra-views` · claimed partial
 
 **Acceptance.** Selecting a product in search opens project/provider state, agents and linked chats.
-
-> Captain cannot see the network AODL actually defines.
 
 Code: `app/src/screens/OrchestraDetailScreen.tsx:20`
 Sources: dash#19
@@ -1294,8 +1102,6 @@ implemented · P1 · journey `J-approvals-batch` · claimed missing
 
 **Acceptance.** Proposed upstream actions can be bulk-approved, reviewed one by one, or answered with a required manual comment; unrelated work is not blocked waiting for the Turbo approval experience.
 
-> let's start using dash as the approval surface for HITL gate for pushing work to upstream.
-
 Code: `app/src/screens/ApprovalsScreen.tsx:27`, `app/src/store/approvals.ts:1`, `bridge/index.ts:702`, `bridge/src/gate/store.ts:17`
 
 Note: Requires DASH_GATE_ENABLED=1 on the bridge.
@@ -1307,8 +1113,6 @@ implemented · P2 · journey `J-approvals-batch` · claimed implemented
 
 **Acceptance.** Do/Not now swipes end in an in-bounds greened-out completed state with Undo.
 
-> but maybe turn the whole card into the green color and have it be *greyed* or rather *greened* out
-
 Code: `app/src/components/trace/ActionChip.tsx:89`, `app/src/trace/chip-state.ts:3`
 
 Note: Local-only decision; sends no host approval.
@@ -1319,8 +1123,6 @@ Sources: H-074
 **MISSING** · P1 · journey `J-approvals-batch` · claimed implemented
 
 **Acceptance.** ACP session/request_permission is forwarded with its options; an inline Needs OK card and 'N need OK' badge appear (never a bare 'ask'); a safe visible deny happens at 60 s; background notification.
-
-> Owner needs explicit in-chat Needs OK decisions with safe visible timeout.
 
 Code: none
 Gap located at: `bridge/src/acp/client.ts:155`, `app/src/components/trace/TraceTimeline.tsx:514`
@@ -1336,8 +1138,6 @@ Sources: dash#50, dash#132-#139, COMPLAINTS-MATRIX row 17
 
 **Acceptance.** Detail level and spacing are separate controls in a composer-side settings control beside @, contextual per page (Orchestra views/reset included); Rich is not over-spaced.
 
-> the compact, comfortable, rich settings only change layout density - also rich is way too spaced out.
-
 Code: `app/src/components/Density.tsx:32`, `app/src/screens/LabScreen.tsx:41`, `app/src/screens/ChatScreen.tsx:316`
 
 Note: Density picker exists only in the component lab; chat detail mode is per conversation; no information-density control.
@@ -1349,8 +1149,6 @@ implemented · P1 · journey `J-settings-handedness` · claimed implemented
 
 **Acceptance.** Handedness mirrors thumb-side controls, rails, close X and swipe direction; send stays at the text's leading edge.
 
-> can we add a left handed mode to the app?
-
 Code: `app/src/screens/SettingsScreen.tsx:149`, `app/src/lib/handedness.ts:15`, `app/src/lib/useHandedness.ts:15`
 Sources: H-065
 
@@ -1359,8 +1157,6 @@ Sources: H-065
 implemented · P2 · journey `J-model-roles` · claimed unknown
 
 **Acceptance.** Roles (judge/tiny/smol/large/default/vision/planning/orchestrating) mirror OMP and update with subscription changes; health is visible.
-
-> that way we can have judge, tiny, smol, large, default, vision, planning, orchestrating, etc
 
 Code: `app/src/components/ModelsPanel.tsx:8`, `bridge/src/model-roles.ts:25`, `shared/model-roles.ts:1`, `bridge/src/models-http.ts:5`
 Sources: H-060
@@ -1395,8 +1191,6 @@ Sources: findings forget-drafts (agent finding)
 
 **Acceptance.** Pairing succeeds on a fresh install by sound pairing or a link that fills details, or by asking the agent; Dash and z0live reuse one z0bridge identity; identity pairing works for every HTTP feature.
 
-> wait wtf no just do the sound pairing
-
 Code: `app/src/screens/PairScreen.tsx:115`, `app/src/screens/PairScreen.tsx:210`, `app/src/lib/pair-api.ts:87`, `app/src/lib/identity-client.ts:29`, `bridge/src/pairing-http.ts:130`
 
 Note: All pairing methods exist; identity enrollment saves token '' so context, suggestions, tool files and supervision fail.
@@ -1409,8 +1203,6 @@ Sources: H-013, H-042, H-114, H-017, dash#79, recurring-complaints-hermes#11, fi
 implemented · P2 · journey `J-notifications-share` · claimed partial
 
 **Acceptance.** Silent local notices for replies/errors/approvals deep-link to the exact chat; any file type can be shared into a chosen chat; host files can be sent to the phone.
-
-> setup notifications in dash app & share provider so i can share any file type to dash
 
 Code: `app/src/lib/native-notifications.native.ts:39`, `app/src/components/NativeEvents.tsx:62`, `app/modules/dash-share/android/src/main/java/app/dash/share/ShareInbox.kt:13`, `app/src/lib/attachments.ts:134`
 
@@ -1425,8 +1217,6 @@ implemented · P2 · journey `J-orchestra-views` · claimed partial
 
 **Acceptance.** Cold open lands on Orchestra (the self-development loop); tapping a node or chat opens a real thread, never an empty chat.
 
-> Captain wants the phone, on open, to show the self-development loop (Orchestra / AODL network doing work), not an empty chat.
-
 Code: `app/src/lib/home.ts:2`, `app/src/screens/MainScreen.tsx:114`
 
 Note: SURFACE.md says Chats is default; code at HEAD sets DEFAULT_MAIN_TAB = 2 (Orchestra).
@@ -1438,8 +1228,6 @@ implemented · P0 · recurring · journey `J-chat-window-open-close` · claimed 
 
 **Acceptance.** Opening or leaving a chat never relocates navigation unexpectedly; the top bar is kept until the chat-window pill applies; the selected surface (Chat vs Live) is always identified.
 
-> the navigation is just broken, like it is not at ALL intuitive when i click on a chat it moves the navigation tab up top.
-
 Code: `app/src/components/GelNav.tsx:166`, `app/src/screens/ChatScreen.tsx:319`, `app/src/screens/ChatScreen.tsx:397`
 Sources: H-020, H-035, H-128
 
@@ -1449,8 +1237,6 @@ implemented · P1 · journey `J-fullscreen-launch` · claimed missing
 
 **Acceptance.** Dash runs fullscreen with the status bar hidden and revealed by swipe.
 
-> can you fix the dash app? it's not fullscreen
-
 Code: `app/App.tsx:157`, `app/App.tsx:125`
 Sources: H-139, R-8979
 
@@ -1459,8 +1245,6 @@ Sources: H-139, R-8979
 implemented · P0 · recurring · journey `J-bots-tree` · claimed implemented
 
 **Acceptance.** Bots groups by collapsible host; harness, bot/profile, host and session are distinct terms; no repeated unrelated icons.
-
-> the bots page should be collapsible by host - also the ui density is really bad.
 
 Code: `app/src/lib/bots-tree.ts:19`, `app/src/components/Tree.tsx:40`
 
@@ -1473,8 +1257,6 @@ implemented · P2 · journey `J-design-conformance` · claimed partial
 
 **Acceptance.** Pager dots are vertically centred in the gold nav; a Maestro/screenshot check fails CI otherwise.
 
-> the three pager dots sit at the top of the gold nav instead of being vertically centered
-
 Code: `scripts/assert-nav-dots.ts:1`, `.maestro/nav-dots.yaml:1`, `app/src/components/golden-nav.ts:1`
 Sources: dash#7, dash#11
 
@@ -1485,8 +1267,6 @@ Sources: dash#7, dash#11
 **partial** · P2 · journey `J-subagent-indicator` · claimed partial
 
 **Acceptance.** Every hierarchy reuses the shared Tree component.
-
-> have the subagents use the tree style view same as for hosts
 
 Code: `app/src/components/Tree.tsx:40`, `app/src/lib/tool-tree.ts:14`, `app/src/lib/bots-tree.ts:19`
 
@@ -1499,8 +1279,6 @@ implemented · P0 · recurring · journey `J-design-conformance` · claimed impl
 
 **Acceptance.** Changes keep the existing DESIGN.md system (OLED black, cream ink, gold accent, glass nav, 44 dp targets); no restyle or theme module; external demos may borrow it.
 
-> dash alr has a design system and the app is alr following the right design language.
-
 Code: `app/src/theme.ts:6`, `app/src/components/GlassSurface.tsx:1`, `DESIGN.md:1`, `scripts/assert-living-night.mjs:1`
 Sources: H-008, H-137, C-019, dash#51
 
@@ -1510,8 +1288,6 @@ implemented · P0 · recurring · journey `J-design-conformance` · claimed impl
 
 **Acceptance.** Agent sessions, steering and LLM observability live in Dash; infrastructure views stay in Company OS.
 
-> they can draw on similar principles ofc but dash is more of an agent control plane, whereas this is for visualizing and controlling the infrastructure
-
 Code: `README.md:1`
 Sources: H-037
 
@@ -1520,8 +1296,6 @@ Sources: H-037
 **partial** · P0 · recurring · journey `J-design-conformance` · claimed partial
 
 **Acceptance.** Approved prototypes ship with native gestures and micro-interactions; Dash surfaces the next useful action from intent, goals and roadmap so the dev stays in flow.
-
-> this prototype looks much better, i think the next step is building it into the app and making it feel mobile native for gesuture support, micro inter
 
 Code: `app/src/components/TileGestures.tsx:57`, `app/src/components/InteractiveTile.tsx:59`
 
@@ -1534,8 +1308,6 @@ Sources: H-052, H-064, dash#15
 
 **Acceptance.** No sparse layouts or overflow at phone widths; information fits horizontally.
 
-> you are not using the space on the app well. like it is very sparse and there's no USEFUL info
-
 Code: `app/src/lib/tile-layout.ts:1`
 Sources: owner-turns 2026-10-20T16:00, 2026-10-21T08:28
 
@@ -1544,8 +1316,6 @@ Sources: owner-turns 2026-10-20T16:00, 2026-10-21T08:28
 **partial** · P0 · recurring · journey `J-orchestra-views` · claimed partial
 
 **Acceptance.** Installed is not online and accepted is not completed: unknown/offline/ended states are shown honestly and no demo catalog appears as live work.
-
-> Presence is not controllability; installed is not online; accepted is not completed.
 
 Code: `app/src/catalog/runtime-state.ts:10`, `app/src/lib/roster.ts:49`
 
@@ -1560,8 +1330,6 @@ Sources: dash#51
 
 **Acceptance.** The bridge becomes a thin persistent host ACP supervisor; voice is z0live-launched, not a new Dash audio runtime; Tailnet-only authenticated pairing with legacy CLI opt-in.
 
-> Owner chose a thin ACP supervisor and shared z0live voice
-
 Code: `bridge/acp-runtime.ts:10`, `bridge/src/acp/client.ts:150`, `bridge/src/voice-bootstrap.ts:8`
 Sources: dash#51, dash#60, dash#65
 
@@ -1573,8 +1341,6 @@ Sources: dash#51, dash#60, dash#65
 
 **Acceptance.** Installed Dash covers session and voice workflows natively; existing code is cleaned up and every page works; zerOS ideas are present.
 
-> i think all our ideas from before were really good, we just need to get all the code cleaned up & ensure that all the pages are working as intended.
-
 Code: `app/App.tsx:140`
 Sources: H-007, H-012, owner-turns hermes-cli 2026-10-19
 
@@ -1584,8 +1350,6 @@ implemented · P2 · journey `J-dogfood-loop` · claimed partial
 
 **Acceptance.** Voice, typed notes and long-press on rows file product feedback to the Dash secondmate; on by default with a setting.
 
-> Voice, typed messages in this beta, and selecting items in the app should go to the Dash secondmate as product feedback until the app is good enough
-
 Code: `app/src/lib/feedback-submit.ts:10`, `app/src/lib/chat-row-actions.ts:37`, `app/src/screens/MainScreen.tsx:359`
 Sources: dash#29, dash#65
 
@@ -1594,8 +1358,6 @@ Sources: dash#29, dash#65
 **MISSING** · P2 · journey `J-human-capability-loop` · claimed missing
 
 **Acceptance.** On open, one optional <=2-minute action from an approved goal with Do/Later/Skip/Edit/Why?; never silently alters habits; works without wearables.
-
-> one optional <=2-minute action derived from a user-approved goal/cue, with Do / Later / Skip / Edit / Why?
 
 Code: none
 

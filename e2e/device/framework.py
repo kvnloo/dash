@@ -99,23 +99,23 @@ class Ctx:
 
 @dataclass
 class Stack:
-    """The isolated candidate stack on the MBP (bridge + Metro) and the environment capabilities."""
+    """The isolated candidate stack on the stack host (bridge + Metro) and the environment capabilities."""
     sha: str
     capabilities: frozenset[str]
-    mbp: Callable[[str], str] = lambda cmd: ""
-    base: str = "~/dash-e2e-army-20261025"
+    run: Callable[[str], str] = lambda cmd: ""
+    base: str = "~/dash-e2e-stack"
 
     def restart_bridge(self) -> str:
-        return self.mbp(f"bash {self.base}/start-device-stack.sh {self.sha} bridge >/dev/null 2>&1; echo restarted").strip()
+        return self.run(f"bash {self.base}/start-device-stack.sh {self.sha} bridge >/dev/null 2>&1; echo restarted").strip()
 
     def stop_bridge(self) -> str:
-        return self.mbp(f"p={self.base}/device-state/bridge.pid; [ -f $p ] && kill -- -$(cat $p) 2>/dev/null; echo stopped").strip()
+        return self.run(f"p={self.base}/device-state/bridge.pid; [ -f $p ] && kill -- -$(cat $p) 2>/dev/null; echo stopped").strip()
 
     def bootstrap_token(self) -> str:
-        return self.mbp(f"cat {self.base}/device-state/.dash/bootstrap-token").strip()
+        return self.run(f"cat {self.base}/device-state/.dash/bootstrap-token").strip()
 
     def bridge_log(self, lines: int = 200) -> str:
-        return self.mbp(f"tail -n {lines} {self.base}/device-state/bridge.log")
+        return self.run(f"tail -n {lines} {self.base}/device-state/bridge.log")
 
 
 def _device_observed(c: dict) -> bool:

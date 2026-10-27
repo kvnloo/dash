@@ -103,7 +103,7 @@ LEDGER_OK = {"com.agent": {"boot_id": "boot-a", "opened_uptime_ms": 2000}}
 
 
 class OwnerGuard(unittest.TestCase):
-    """Same cases as .files-mbp tests/test_fleet_adb.py restore_guest, per display."""
+    """Same cases as the private fleet adb wrapper tests restore_guest, per display."""
 
     def test_physical_requires_agent_opened_foreground_after_last_touch(self):
         self.assertEqual(owner_guard(FACTS, LEDGER_OK, "physical"), "ok")
@@ -160,7 +160,7 @@ class Receipts(unittest.TestCase):
     J = Journey("J-composer-draft-restore", lambda ctx: None, ("DF-024",))
 
     def write(self, tmp, checks, **kw):
-        args = dict(journey=self.J, features=["DF-024"], sha="abcdef1234567", dev_serial="RFCTA1RZAQY", real_device=True,
+        args = dict(journey=self.J, features=["DF-024"], sha="abcdef1234567", dev_serial="TESTSERIAL01", real_device=True,
                     display="virtual", started_at="2026-10-25T00:00:00Z", checks=checks, metrics={}, evidence=["a.png"],
                     missing=[], error=None, skip=None)
         args.update(kw)
