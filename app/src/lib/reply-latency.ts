@@ -135,8 +135,19 @@ export function createLatencyMeter(options: LatencyMeterOptions = {}): LatencyMe
   // Map insertion order is the oldest-first ring order. No network or timers.
   const turns = new Map<string, TurnRecord>();
   const abandonedByHarness = new Map<string, number>();
+  // Bounded retired-ID history stops retries from reviving expired or evicted turns.
+  // Once this window fills, older IDs may be reused; memory remains O(capacity).
+  const retiredTurnIds = new Set<string>();
   let abandoned = 0;
   let observedAtMs = Number.NEGATIVE_INFINITY;
+
+  function retire(turnId: string): void {
+    retiredTurnIds.add(turnId);
+    if (retiredTurnIds.size > capacity) {
+      const oldest = retiredTurnIds.values().next().value;
+      if (oldest !== undefined) retiredTurnIds.delete(oldest);
+    }
+  }
 
   function advance(atMs: number): void {
     if (!Number.isFinite(atMs) || atMs < 0) return;
@@ -148,6 +159,7 @@ export function createLatencyMeter(options: LatencyMeterOptions = {}): LatencyMe
         observedAtMs - record.sentAtMs < LATENCY_ABANDON_MS
       ) continue;
       turns.delete(id);
+      retire(id);
       abandoned += 1;
       if (record.harness !== null) {
         abandonedByHarness.set(
@@ -167,10 +179,17 @@ export function createLatencyMeter(options: LatencyMeterOptions = {}): LatencyMe
 
       if (stage === "sent") {
         // Retries retain the original send timestamp and harness.
-        if (turns.has(turnId) || observedAtMs - atMs >= LATENCY_ABANDON_MS) return;
+        if (
+          turns.has(turnId) ||
+          retiredTurnIds.has(turnId) ||
+          observedAtMs - atMs >= LATENCY_ABANDON_MS
+        ) return;
         if (turns.size === capacity) {
           const oldest = turns.keys().next().value;
-          if (oldest !== undefined) turns.delete(oldest);
+          if (oldest !== undefined) {
+            turns.delete(oldest);
+            retire(oldest);
+          }
         }
         turns.set(turnId, {
           turnId,

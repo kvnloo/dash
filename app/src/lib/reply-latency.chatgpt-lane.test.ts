@@ -190,6 +190,61 @@ describe("reply latency meter", () => {
     expect(meter.summary(undefined, LATENCY_ABANDON_MS * 2).abandoned).toBe(2);
   });
 
+
+  test("duplicate sent at the exact TTL boundary expires once instead of resetting first sent", () => {
+    const meter = createLatencyMeter();
+    const firstSent = 1_000;
+    meter.mark("retry", "sent", firstSent, "hermes");
+    meter.mark("retry", "acked", firstSent + 20);
+    meter.mark("retry", "sent", firstSent + LATENCY_ABANDON_MS - 1, "omp");
+
+    // A retry just before expiry cannot replace the original timestamp or harness.
+    expect(meter.turn("retry")?.sentAtMs).toBe(firstSent);
+    expect(meter.turn("retry")?.harness).toBe("hermes");
+    expect(meter.turn("retry")?.ackMs).toBe(20);
+    expect(meter.summary().abandoned).toBe(0);
+
+    // The same retry at the boundary must count abandonment, not start a new turn.
+    meter.mark("retry", "sent", firstSent + LATENCY_ABANDON_MS, "omp");
+    expect(meter.turn("retry")).toBeNull();
+    expect(meter.summary().count).toBe(0);
+    expect(meter.summary().abandoned).toBe(1);
+    expect(meter.summary("hermes").abandoned).toBe(1);
+    expect(meter.summary("omp").abandoned).toBe(0);
+  });
+
+  test("retired turn cannot be reopened by sent after a separate TTL sweep", () => {
+    const meter = createLatencyMeter();
+    meter.mark("expired", "sent", 0, "hermes");
+    expect(meter.summary(undefined, LATENCY_ABANDON_MS).abandoned).toBe(1);
+    meter.mark("expired", "sent", LATENCY_ABANDON_MS + 1, "omp");
+    meter.mark("expired", "done", LATENCY_ABANDON_MS + 2);
+    expect(meter.turn("expired")).toBeNull();
+    expect(meter.summary().abandoned).toBe(1);
+    expect(meter.summary().count).toBe(0);
+    expect(meter.summary("omp").abandoned).toBe(0);
+
+    // A new identity is still admitted after a previous one expires.
+    finish(meter, "new", LATENCY_ABANDON_MS + 3, LATENCY_ABANDON_MS + 5, "omp");
+    expect(meter.summary("omp").count).toBe(1);
+    expect(meter.summary("omp").totalMs.p50).toBe(2);
+  });
+
+  test("bounded ring eviction also rejects retransmission of a recently evicted identity", () => {
+    const meter = createLatencyMeter({ capacity: 2 });
+    finish(meter, "first", 0, 10, "hermes");
+    meter.mark("second", "sent", 20, "omp");
+    meter.mark("third", "sent", 30, "omp");
+    expect(meter.turn("first")).toBeNull();
+
+    meter.mark("first", "sent", 40, "hermes"); // same id after eviction
+    expect(meter.turn("first")).toBeNull();
+    expect(meter.turn("second")?.sentAtMs).toBe(20);
+    expect(meter.turn("third")?.sentAtMs).toBe(30);
+    expect(meter.summary().abandoned).toBe(0);
+    expect(meter.summary().count).toBe(0);
+  });
+
   test("later valid marks drive expiration, but orphan marks do not", () => {
     const meter = createLatencyMeter();
     meter.mark("old", "sent", 0);
