@@ -84,7 +84,6 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
   // over it, so the new chat opened empty (e2e B5). Once per mount: the composer is keyed by it.
   useLayoutEffect(() => {
     if (draftKey && initialText) updateComposerDraft(draftKey, seed, draft => draft.text === initialText ? draft : { ...draft, text: initialText });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const setText = useCallback((value: string | ((previous: string) => string)) => changeDraft(draft => ({ ...draft, text: typeof value === "function" ? value(draft.text) : value })), [changeDraft]);
   const setDrafts = useCallback((value: DraftAttachment[] | ((previous: DraftAttachment[]) => DraftAttachment[])) => changeDraft(draft => ({ ...draft, attachments: typeof value === "function" ? value(draft.attachments) : value })), [changeDraft]);
