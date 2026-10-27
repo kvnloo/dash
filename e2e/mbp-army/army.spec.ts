@@ -124,7 +124,7 @@ test('prompt rail keeps the selected turn preview when a live reply completes',a
  await expect(preview).toBeVisible();await expect(preview).toContainText('earlier prompt stays selected');
  await page.screenshot({path:test.info().outputPath('retained-turn-preview.png')});
  await page.getByRole('button',{name:'Jump',exact:true}).click({noWaitAfter:true});
- await expect(page.getByTestId('transcript-viewport').getByText('earlier prompt stays selected',{exact:true})).toBeInViewport();
+ await expect(page.getByTestId('transcript-viewport').getByText('earlier prompt stays selected',{exact:true}).first()).toBeInViewport();
  await page.getByRole('button',{name:'Close turn preview',exact:true}).click({noWaitAfter:true});
  await expect(preview).toHaveCount(0);
  await page.getByRole('button',{name:'Latest reply',exact:true}).click({noWaitAfter:true});
