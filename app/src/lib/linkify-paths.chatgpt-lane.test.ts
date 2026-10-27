@@ -90,7 +90,7 @@ describe("DASH-15: bare Markdown links", () => {
       "![asset](https://images.test/a.png)",
       "[guide][details] and [shortcut]",
       "[details]: https://existing.test/docs",
-      "<https://autolink.test/path> <dev@example.com>",
+      "<https://autolink.test/path> <ftp://another.test/log> <dev@example.com>",
       "new https://new.test",
       "",
     ].join("\n");
@@ -99,7 +99,7 @@ describe("DASH-15: bare Markdown links", () => {
       "![asset](https://images.test/a.png)",
       "[guide][details] and [shortcut]",
       "[details]: https://existing.test/docs",
-      "<https://autolink.test/path> <dev@example.com>",
+      "<https://autolink.test/path> <ftp://another.test/log> <dev@example.com>",
       "new [https://new.test](https://new.test)",
       "",
     ].join("\n"));
