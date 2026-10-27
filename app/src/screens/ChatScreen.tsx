@@ -273,9 +273,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       haptic.select();
       saveSettings({ ...settings, harness: id });
       // Sessions are harness-specific, so switching mid-conversation starts a fresh chat.
-      if (conversation && conversation.harness !== id) setActive(null);
+      if (conversation && conversation.harness !== id) {
+        setActive(null);
+        // The route draft seeded the chat it was opened for. Without this the fresh composer
+        // re-seeds from it, so a draft the owner already cleared came back (e2e B4).
+        if (route.params?.draft !== undefined) navigation.setParams({ draft: undefined });
+      }
     },
-    [settings, conversation],
+    [settings, conversation, navigation, route.params?.draft],
   );
 
   // Window presentation: opened from the Chats list over the retained workspace.
