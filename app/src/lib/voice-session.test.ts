@@ -9,8 +9,10 @@ mock.module("expo-file-system", () => ({
   },
 }));
 
-const { VoiceSession, VoiceBootstrapSession } = await import("./voice-session");
+const { VoiceSession, VoiceBootstrapSession, VoiceMicReleaseGate, voiceConnectionError, voiceConnectionErrorLine, protectVoicePeer } = await import("./voice-session");
 import type { Recorder, VoicePhase, VoiceBootstrapPillState } from "./voice-session";
+import { ContinuousVoice, VoiceAccessDenied, type VoicePeer } from "./continuous-voice";
+import { CaptureGate } from "./recorded-speech";
 
 function deferred(): { promise: Promise<void>; finish(): void } {
   let finish = (): void => {
@@ -266,5 +268,176 @@ describe("voice bootstrap pill and manual retry", () => {
     expect(states.map(state => state.phase)).toEqual(["connecting", "idle"]);
     await session.retry();
     expect(requests).toBe(1);
+  });
+});
+
+
+describe("realtime peer failures remain visible and free the microphone", () => {
+  const attached = { profile: "hermes", session: "unchanged" };
+
+  test("WebRTC, permission, SDP, ICE and token failures have safe one-line copy", () => {
+    expect([
+      voiceConnectionError("webrtc"),
+      voiceConnectionError("permission"),
+      voiceConnectionError("sdp"),
+      voiceConnectionError("ice"),
+      voiceConnectionError("token"),
+    ]).toEqual([
+      "WebRTC could not load",
+      "Microphone permission denied",
+      "Voice signaling failed",
+      "Voice connection lost",
+      "Voice authorization failed",
+    ]);
+    expect(voiceConnectionErrorLine("Voice disconnected. Mic stopped; tap Start to reconnect.")).toBe("Voice connection lost");
+    expect(voiceConnectionErrorLine("Voice connection timed out. Microphone stopped.")).toBe("Voice connection lost");
+    expect(voiceConnectionErrorLine("Realtime reported an error. Mic stopped; no automatic resend.")).toBe("Realtime session failed");
+    expect(voiceConnectionErrorLine("Voice authorization/network unavailable. Mic stopped; tap Start to reconnect.")).toBe("Voice authorization failed");
+    expect(voiceConnectionErrorLine("  Permission denied\nRetry.  ")).toBe("Permission denied Retry.");
+    expect(voiceConnectionErrorLine(undefined)).toBe("Voice unavailable");
+    for (const kind of ["webrtc", "permission", "sdp", "ice", "token"] satisfies Array<"webrtc" | "permission" | "sdp" | "ice" | "token">) {
+      expect(voiceConnectionError(kind)).not.toContain("\n");
+    }
+  });
+
+  test("native load failure exposes an error and ends the owned broker session", async () => {
+    let released = 0;
+    const paths: string[] = [];
+    const call = new ContinuousVoice({
+      changed: () => {},
+      transcript: () => {},
+      captureReleased: () => { released++; },
+      request: async path => {
+        paths.push(path);
+        return path === "/v1/realtime/session"
+          ? { session_id: "native-failure", transport: "realtime", value: "ephemeral" }
+          : { messages: [], after: 0 };
+      },
+      peer: async () => { throw new VoiceAccessDenied(voiceConnectionError("webrtc")); },
+    });
+    await call.start(attached);
+    expect(call.state).toMatchObject({ phase: "error", muted: false, note: "WebRTC could not load" });
+    expect(released).toBe(1);
+    expect(paths).toContain("/v1/sessions/native-failure/end");
+    expect(paths.filter(path => path === "/v1/realtime/session")).toHaveLength(1);
+  });
+
+  test("a thrown local offer or remote SDP answer closes peer before capture release", async () => {
+    const brokenStages: Array<"offer" | "answer"> = ["offer", "answer"];
+    for (const broken of brokenStages) {
+      let closed = 0;
+      let released = 0;
+      let muted = false;
+      let discarded = 0;
+      const native: VoicePeer = {
+        offer: async () => {
+          if (broken === "offer") throw new Error("native SDP offer rejected");
+          return "v=0\r\n";
+        },
+        answer: async () => { if (broken === "answer") throw new Error("remote SDP rejected"); },
+        mute: value => { muted = value; },
+        send: () => { throw new Error("Unexpected send"); },
+        close: () => { closed++; },
+      };
+      const call = new ContinuousVoice({
+        changed: () => {},
+        transcript: () => {},
+        captureReleased: () => {
+          expect(closed).toBe(1);
+          released++;
+        },
+        request: async path => {
+          if (path === "/v1/realtime/session") return { session_id: broken, transport: "realtime", value: "ephemeral" };
+          if (path === "provider:answer") return "v=0\r\n";
+          if (path === "/v1/tools/cancel_work") { discarded++; return {}; }
+          return { messages: [], after: 0 };
+        },
+        peer: async () => protectVoicePeer(native),
+      });
+      await call.start(attached);
+      expect(call.state).toMatchObject({ phase: "error", muted: false, note: "Voice signaling failed" });
+      expect(closed).toBe(1);
+      expect(muted).toBe(true);
+      expect(released).toBe(1);
+      expect(discarded).toBe(1);
+    }
+  });
+
+  test("ICE loss exposes recoverable error and releases the capture before retry", async () => {
+    let lost = () => {};
+    let ready = () => {};
+    let closed = 0;
+    let released = 0;
+    const peer: VoicePeer = {
+      offer: async () => "v=0\r\n",
+      answer: async () => ready(),
+      mute: () => {},
+      send: () => {},
+      close: () => { closed++; },
+    };
+    const call = new ContinuousVoice({
+      changed: () => {},
+      transcript: () => {},
+      captureReleased: () => { released++; },
+      request: async path => {
+        if (path === "/v1/realtime/session") return { session_id: "ice", transport: "realtime", value: "ephemeral" };
+        if (path === "provider:answer") return "v=0\r\n";
+        return { messages: [], after: 0 };
+      },
+      peer: async (_event, onReady, onLost) => {
+        ready = onReady;
+        lost = onLost;
+        return protectVoicePeer(peer);
+      },
+    });
+    await call.start(attached);
+    expect(call.state.phase).toBe("listening");
+    lost();
+    await Bun.sleep(1);
+    expect(call.state.phase).toBe("error");
+    expect(voiceConnectionErrorLine(call.state.note)).toBe("Voice connection lost");
+    expect(closed).toBe(1);
+    expect(released).toBe(1);
+  });
+
+  test("Retry waits for release even when the pill already reports error", async () => {
+    const gate = new CaptureGate();
+    const barrier = new VoiceMicReleaseGate();
+    const nativeRelease = gate.acquire("live");
+    if (!nativeRelease) throw new Error("Expected live capture");
+    let released = 0;
+    const done = barrier.hold(() => { released++; nativeRelease(); });
+    let retried = false;
+    const retry = barrier.wait().then(() => { retried = true; return gate.acquire("live"); });
+    await Promise.resolve();
+    expect(retried).toBe(false);
+    expect(gate.owner).toBe("live");
+    expect(gate.acquire("dictation")).toBeUndefined();
+    done();
+    const second = await retry;
+    expect(retried).toBe(true);
+    expect(second).toBeDefined();
+    expect(gate.owner).toBe("live");
+    done();
+    expect(released).toBe(1);
+    second?.();
+    expect(gate.owner).toBeUndefined();
+  });
+
+  test("nested cleanup barriers do not unblock until all native captures finish", async () => {
+    const barrier = new VoiceMicReleaseGate();
+    const ended: number[] = [];
+    const first = barrier.hold(() => ended.push(1));
+    const second = barrier.hold(() => ended.push(2));
+    let cleared = false;
+    const pending = barrier.wait().then(() => { cleared = true; });
+    first();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(cleared).toBe(false);
+    second();
+    await pending;
+    expect(ended).toEqual([1, 2]);
+    expect(cleared).toBe(true);
   });
 });
