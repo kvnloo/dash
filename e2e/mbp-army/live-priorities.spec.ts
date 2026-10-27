@@ -33,9 +33,12 @@ test('Triage lists live blockers and roadmap priorities, opens an item and label
   await expect(stale).toContainText('Stale');
   await expect(list.getByRole('button').last()).toHaveAccessibleName('Open Outdated fixture decision');
   await expect(list.getByTestId('triage-item-roadmap:decision')).toContainText('ago');
+  await page.screenshot({ path: info.outputPath('triage-list.png') });
   await list.getByRole('button', { name: 'Open Choose fixture release', exact: true }).click();
   await expect(page.getByTestId('triage-detail')).toContainText('Approve fixture release');
   await expect(page.getByTestId('triage-detail')).toContainText('Fixture contract');
+  await expect(page.getByTestId('triage-detail').getByText('Approve fixture release', { exact: true })).toBeInViewport();
+  await expect(page.getByRole('button', { name: 'Close triage item', exact: true })).toBeInViewport();
   await page.screenshot({ path: info.outputPath('triage-open.png') });
   // Removing an ask at the source must remove it on the next foreground poll.
   await page.getByRole('button', { name: 'Close triage item', exact: true }).click();
