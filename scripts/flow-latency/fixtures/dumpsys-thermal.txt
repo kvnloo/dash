@@ -1,0 +1,8 @@
+IsStatusOverride: false
+Thermal Status: 2
+ThermalEventListeners:
+  (none)
+ThermalStatusListeners:
+  (none)
+Current temperatures from HAL:
+  Temperature{mValue=31.5, mType=3, mName=synthetic-battery, mStatus=0}
