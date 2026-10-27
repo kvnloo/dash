@@ -16,11 +16,9 @@ const KNOWN_CLASSES = new Set(BUG_CLASSES);
 const SOURCE_REFERENCE = /(?:#[1-9]\d*\b|https:\/\/github\.com\/[^\s)]+)/;
 const SEPARATOR = /^:?-{3,}:?$/;
 
-/** Split a leading/trailing-pipe Markdown row, respecting escaped pipes. */
+/** Split a Markdown row with optional boundary pipes, respecting escaped pipes. */
 function tableCells(source: string): string[] | null {
-  const trimmed = source.trim();
-  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return null;
-  const body = trimmed.slice(1, -1);
+  const body = source.trim();
   const cells: string[] = [];
   let cell = "";
   for (let i = 0; i < body.length; i++) {
@@ -35,7 +33,11 @@ function tableCells(source: string): string[] | null {
       cell += char;
     }
   }
+  // No unescaped delimiter means this is prose, not a table row.
+  if (cells.length === 0) return null;
   cells.push(cell.trim());
+  if (body.startsWith("|")) cells.shift();
+  if (cells[cells.length - 1] === "") cells.pop();
   return cells;
 }
 
@@ -124,6 +126,37 @@ describe("checkRootCauseDoc (pure)", () => {
     expect(GOOD).toContain("[#340]");
   });
 
+  for (const leading of ["", "|"]) {
+    for (const trailing of ["", "|"]) {
+      const row = (cells: string) => `${leading} ${cells} ${trailing}`.trim();
+      const header = [row("Bug class | PR/issue link | Missing gate"), row("--- | --- | ---")];
+      const valid = row("accessibility | #340 | rendered check");
+      test(`validates every row with boundary pipes ${JSON.stringify([leading, trailing])}`, () => {
+        expect(checkRootCauseDoc([...header, valid].join("\n"))).toEqual([]);
+        for (const [bad, error] of [
+          [row("performance | #340 | rendered check"), "unknown bug class"],
+          [row("accessibility | no source | rendered check"), "missing PR/issue reference"],
+          [`${leading} accessibility | #340 |   |`, "missing proposed gate"],
+        ]) {
+          expect(checkRootCauseDoc([...header, valid, bad ?? "", valid].join("\n")))
+            .toContainEqual(expect.stringContaining(error ?? ""));
+        }
+      });
+    }
+  }
+
+  test("validates unbordered rows inside a bordered table", () => {
+    const invalid = "performance | no source |   |";
+    const errors = checkRootCauseDoc(`${GOOD}\n${invalid}\n${GOOD.split("\n")[2]}`);
+    expect(errors).toContainEqual(expect.stringContaining("unknown bug class"));
+    expect(errors).toContainEqual(expect.stringContaining("missing PR/issue reference"));
+    expect(errors).toContainEqual(expect.stringContaining("missing proposed gate"));
+  });
+
+  test("preserves an escaped final pipe in an unbordered gate cell", () => {
+    expect(checkRootCauseDoc("Bug class | PR/issue link | Missing gate\n--- | --- | ---\naccessibility | #340 | \\|")).toEqual([]);
+  });
+
   test("rejects an unknown class", () => {
     expect(checkRootCauseDoc(GOOD.replace("| accessibility |", "| performance |")))
       .toContainEqual(expect.stringContaining("unknown bug class"));
@@ -188,11 +221,11 @@ describe("real ROOT-CAUSE.md", () => {
     const ledger = rowsUnder(DOC, "Per-item evidence ledger");
     const summary = rowsUnder(DOC, "Bug-class summary");
     expect(summary).toHaveLength(BUG_CLASSES.length);
-    const classCounts = new Map(BUG_CLASSES.map(name => [name, ledger.filter(row => row[0] === name).length]));
+    const classCounts = new Map<string, number>(BUG_CLASSES.map(name => [name, ledger.filter(row => row[0] === name).length]));
     for (const row of summary) {
       const name = row[0] ?? "";
       expect(BUG_CLASSES).toContain(name);
-      expect(Number(row[1])).toBe(classCounts.get(name));
+      expect(classCounts.get(name)).toBe(Number(row[1]));
     }
     expect(classCounts.get("accessibility")).toBe(16);
     expect([...classCounts.values()].reduce((sum, count) => sum + count, 0)).toBe(30);
