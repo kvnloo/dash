@@ -169,6 +169,21 @@ test("one generation bump per post-commit burst, then a new bump after next comm
   ]);
 });
 
+test("a long ink capture can refine soon after its late commit", () => {
+  const fuser = makeFuser();
+  fuser.handle({ type: "speech-start", at: 0 });
+  fuser.handle({ type: "pen-down", at: 100 });
+  fuser.handle({ type: "speech-stop", at: 200 });
+  fuser.handle({ type: "pen-up", at: 3000 });
+  expect(fuser.tick(3800)).toEqual([
+    { kind: "commit", traceId: "id-1", generation: 0, at: 3800, captureIds: ["id-2"] },
+  ]);
+  expect(fuser.handle({ type: "pen-down", at: 3900 })).toEqual([
+    { kind: "generation-bump", traceId: "id-1", generation: 1 },
+    { kind: "capture-open", captureId: "id-3", traceId: "id-1", joined: true },
+  ]);
+});
+
 test("stale events are dropped and counted without altering turn state", () => {
   const fuser = makeFuser();
   fuser.handle({ type: "pen-down", at: 100 });
@@ -197,7 +212,7 @@ test("speech events alone control floor outputs, even in deterministic pen fuzzi
     let at = 0;
     for (let step = 0; step < 80; step++) {
       at += next() % 47;
-      const event = next() % 2 === 0 ? "pen-down" : "pen-up";
+      const event = (next() >>> 17) % 2 === 0 ? "pen-down" : "pen-up";
       const outputs = fuser.handle({ type: event, at });
       expect(outputs.some(output => output.kind === "floor")).toBe(false);
       if (step % 7 === 0) {
