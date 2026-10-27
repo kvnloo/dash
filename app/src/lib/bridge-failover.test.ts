@@ -59,6 +59,15 @@ test("probe: any HTTP answer (401 from /ws) is alive; 5xx, errors and timeouts a
   expect(Date.now() - started).toBeLessThan(1000);
 });
 
+test("pickEndpoint skips the bridge whose socket just failed even when its HTTP probe answers", async () => {
+  const both = withPairedEndpoint(primary, standby);
+  const seen: string[] = [];
+  const pick = await pickEndpoint(both, async address => { seen.push(address); return true; }, "primary.test:8787");
+  expect(pick?.address).toBe("standby.test:8787");
+  expect(seen).toEqual(["standby.test:8787"]);
+  expect(await pickEndpoint(both, async address => address.startsWith("primary"), "primary.test:8787")).toBeUndefined();
+});
+
 test("pickEndpoint returns the first answering bridge in list order", async () => {
   const both = withPairedEndpoint(primary, standby);
   const seen: string[] = [];

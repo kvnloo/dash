@@ -11,7 +11,7 @@ import { visibleHarnesses } from "../lib/hidden-harnesses";
 import { activate, endpointsOf, pickEndpoint, probeBridge } from "../lib/bridge-failover";
 import { shouldRequestHistory } from "../lib/live-sessions";
 import { headerSocket } from "../lib/native-socket";
-import { reattachStreamingTurns, startSocketKeepalive } from "./socket-keepalive";
+import { isPongFrame, reattachStreamingTurns, startSocketKeepalive } from "./socket-keepalive";
 import type { Settings } from "../model";
 import { configureChatIndex, setChatsFeatures } from "../store/chat-index-store";
 import { configureHistoryPages } from "../store/history-pages";
@@ -67,6 +67,9 @@ class Bridge {
   /** May a failed connect move to another paired bridge? Off while pairing/editing until it connects once. */
   private failover = true;
   private probing = false;
+  /** Liveness of the open socket: last inbound frame, and whether this bridge answers pings. */
+  private lastInboundAt = 0;
+  private pongSeen = false;
 
   constructor() {
     RNAppState.addEventListener("change", (next) => {
@@ -161,6 +164,8 @@ class Bridge {
     this.ws = ws;
     this.connectTimer = setTimeout(() => {
       if (this.ws === ws && ws.readyState !== WebSocket.OPEN) {
+        // Detach first so the later onclose of this socket cannot run onClosed a second time.
+        this.ws = null;
         ws.close();
         this.onClosed("Timed out connecting");
       }
@@ -171,12 +176,27 @@ class Bridge {
       this.attempt = 0;
       // Connected once: from now on a lost connection may move to another paired bridge.
       this.failover = true;
+      this.lastInboundAt = Date.now();
+      this.pongSeen = false;
       this.stopKeepalive?.();
-      this.stopKeepalive = startSocketKeepalive(ws);
+      this.stopKeepalive = startSocketKeepalive(ws, undefined, {
+        lastInboundAt: () => this.lastInboundAt,
+        pongSeen: () => this.pongSeen,
+        onDead: () => {
+          if (this.ws !== ws) return;
+          // Half-open after a network switch: no onclose will come, so close and move on now.
+          this.ws = null;
+          try { ws.close(); } catch { /* already closing */ }
+          this.onClosed("Bridge stopped answering");
+        },
+      });
     };
     ws.onmessage = (event) => {
       if (this.ws !== ws) return;
-      this.onMessage(typeof event.data === "string" ? event.data : "");
+      const raw = typeof event.data === "string" ? event.data : "";
+      this.lastInboundAt = Date.now();
+      if (isPongFrame(raw)) { this.pongSeen = true; return; }
+      this.onMessage(raw);
     };
     ws.onerror = () => {
       // onclose follows; nothing to do here.
@@ -205,7 +225,7 @@ class Bridge {
     this.probing = true;
     let pick: Awaited<ReturnType<typeof pickEndpoint>>;
     try {
-      pick = await pickEndpoint(settings, address => probeBridge(address));
+      pick = await pickEndpoint(settings, address => probeBridge(address), settings.address);
     } finally {
       this.probing = false;
     }

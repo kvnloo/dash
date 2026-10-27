@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { reattachStreamingTurns, SOCKET_KEEPALIVE_INTERVAL_MS, startSocketKeepalive } from "./socket-keepalive";
+import { isPongFrame, reattachStreamingTurns, SOCKET_DEAD_AFTER_MS, SOCKET_KEEPALIVE_INTERVAL_MS, startSocketKeepalive } from "./socket-keepalive";
 
 describe("client WebSocket keepalive", () => {
   test("sends an application ping every 30 seconds only while open, and cancels the timer", () => {
@@ -58,5 +58,39 @@ describe("socket reconnect subscription", () => {
     });
     expect(reattachStreamingTurns(next, [])).toBe(false);
     expect(nextFrames).toHaveLength(1);
+  });
+  test("a bridge that answered pings and then goes silent is declared dead instead of pinged forever", () => {
+    const frames: string[] = [];
+    const socket = { readyState: 1, send(frame: string) { frames.push(frame); } };
+    let tick = () => {};
+    let now = 1_000_000;
+    let last = now;
+    let pong = false;
+    let dead = 0;
+    startSocketKeepalive(socket, t => { tick = t; return () => {}; }, {
+      lastInboundAt: () => last, pongSeen: () => pong, onDead: () => { dead += 1; }, now: () => now,
+    });
+    // Old bridge (never answers pings): quiet for minutes is not dead.
+    now += SOCKET_DEAD_AFTER_MS * 4;
+    tick();
+    expect(dead).toBe(0);
+    expect(frames).toHaveLength(1);
+    // Bridge answers a ping: liveness is armed; recent traffic keeps it alive.
+    pong = true; last = now;
+    now += SOCKET_KEEPALIVE_INTERVAL_MS;
+    tick();
+    expect(dead).toBe(0);
+    // Then nothing arrives for longer than the dead window: half-open socket.
+    now += SOCKET_DEAD_AFTER_MS;
+    tick();
+    expect(dead).toBe(1);
+    expect(frames).toHaveLength(2);
+  });
+
+  test("only an exact pong frame counts as a pong", () => {
+    expect(isPongFrame('{"type":"pong"}')).toBe(true);
+    expect(isPongFrame('{ "type": "pong" }')).toBe(true);
+    expect(isPongFrame('{"type":"pong","x":1}')).toBe(false);
+    expect(isPongFrame('{"type":"delta","text":"pong"}')).toBe(false);
   });
 });

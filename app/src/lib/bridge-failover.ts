@@ -75,9 +75,14 @@ export async function probeBridge(address: string, fetchImpl: Fetch = fetch, tim
   }
 }
 
-/** First answering bridge in list order, or undefined when none answers. */
-export async function pickEndpoint(settings: Settings, probe: (address: string) => Promise<boolean>): Promise<BridgeEndpoint | undefined> {
+/**
+ * First answering bridge in list order, or undefined when none answers.
+ * `skip` is the bridge whose socket just failed: its HTTP probe can answer while the
+ * socket cannot open (stale token, identity down), so it must not win the pick again.
+ */
+export async function pickEndpoint(settings: Settings, probe: (address: string) => Promise<boolean>, skip?: string): Promise<BridgeEndpoint | undefined> {
   for (const endpoint of endpointsOf(settings)) {
+    if (endpoint.address === skip) continue;
     if (await probe(endpoint.address)) return endpoint;
   }
   return undefined;

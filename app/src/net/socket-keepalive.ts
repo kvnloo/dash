@@ -15,15 +15,37 @@ export interface TurnCursor {
 
 export type KeepaliveScheduler = (tick: () => void, intervalMs: number) => () => void;
 
+/** No inbound frame for this long on a bridge that answers pings = half-open socket. */
+export const SOCKET_DEAD_AFTER_MS = SOCKET_KEEPALIVE_INTERVAL_MS * 2.5;
+
+/**
+ * Dead-socket detection. Armed only once the bridge has answered a ping with a pong,
+ * so an older bridge that never answers pings is never closed for being quiet.
+ */
+export interface KeepaliveLiveness {
+  lastInboundAt(): number;
+  pongSeen(): boolean;
+  onDead(): void;
+  now?: () => number;
+}
+
+export function isPongFrame(raw: string): boolean {
+  return raw.length < 64 && raw.replace(/\s/g, "") === '{"type":"pong"}';
+}
+
 const repeat: KeepaliveScheduler = (tick, intervalMs) => {
   const timer = setInterval(tick, intervalMs);
   return () => clearInterval(timer);
 };
 
 /** Begin only after onopen; dispose on close, stop and socket replacement. */
-export function startSocketKeepalive(socket: KeepaliveSocket, schedule: KeepaliveScheduler = repeat): () => void {
+export function startSocketKeepalive(socket: KeepaliveSocket, schedule: KeepaliveScheduler = repeat, liveness?: KeepaliveLiveness): () => void {
   return schedule(() => {
     if (socket.readyState !== SOCKET_OPEN) return;
+    if (liveness?.pongSeen() && (liveness.now ?? Date.now)() - liveness.lastInboundAt() > SOCKET_DEAD_AFTER_MS) {
+      liveness.onDead();
+      return;
+    }
     try {
       socket.send(PING_FRAME);
     } catch {
