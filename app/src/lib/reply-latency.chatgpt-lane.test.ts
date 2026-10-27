@@ -280,6 +280,48 @@ describe("reply latency meter", () => {
     expect(meter.summary("missing").count).toBe(0);
   });
 
+  test("abandonment attribution rotates at capacity while the global total remains cumulative", () => {
+    const meter = createLatencyMeter({ capacity: 2 });
+    for (let i = 0; i < 20; i++) {
+      const atMs = i * LATENCY_ABANDON_MS;
+      meter.mark(`turn-${i}`, "sent", atMs, `harness-${i}`);
+      expect(meter.summary(undefined, atMs + LATENCY_ABANDON_MS).abandoned).toBe(i + 1);
+      expect(meter.summary(`harness-${i}`).abandoned).toBe(1);
+      if (i > 0) expect(meter.summary(`harness-${i - 1}`).abandoned).toBe(1);
+      for (let old = 0; old < i - 1; old++) {
+        expect(meter.summary(`harness-${old}`).abandoned).toBe(0);
+      }
+    }
+    expect(meter.summary("never-seen").abandoned).toBe(0);
+    expect(meter.summary().count).toBe(0);
+  });
+
+  test("bounded attribution counts repeated harnesses and unlabeled abandonments exactly", () => {
+    const meter = createLatencyMeter({ capacity: 2 });
+    meter.mark("a", "sent", 0, "hermes");
+    meter.mark("b", "sent", 0, "hermes");
+    expect(meter.summary("hermes", LATENCY_ABANDON_MS).abandoned).toBe(2);
+    meter.mark("unlabeled", "sent", LATENCY_ABANDON_MS);
+    expect(meter.summary("hermes", 2 * LATENCY_ABANDON_MS).abandoned).toBe(1);
+    meter.mark("other", "sent", 2 * LATENCY_ABANDON_MS, "omp");
+    expect(meter.summary("hermes", 3 * LATENCY_ABANDON_MS).abandoned).toBe(0);
+    expect(meter.summary("omp").abandoned).toBe(1);
+    expect(meter.summary().abandoned).toBe(4);
+    // Reads and retired retries cannot add attribution or count abandonment twice.
+    meter.mark("other", "sent", 3 * LATENCY_ABANDON_MS, "hermes");
+    expect(meter.summary("omp", 4 * LATENCY_ABANDON_MS).abandoned).toBe(1);
+    expect(meter.summary().abandoned).toBe(4);
+
+    const single = createLatencyMeter({ capacity: 1 });
+    single.mark("old", "sent", 0, "old-harness");
+    single.summary(undefined, LATENCY_ABANDON_MS);
+    single.mark("new", "sent", LATENCY_ABANDON_MS, "new-harness");
+    single.summary(undefined, 2 * LATENCY_ABANDON_MS);
+    expect(single.summary("old-harness").abandoned).toBe(0);
+    expect(single.summary("new-harness").abandoned).toBe(1);
+    expect(single.summary().abandoned).toBe(2);
+  });
+
   test("invalid capacity cannot silently disable the ring bound", () => {
     for (const capacity of [0, -1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(() => createLatencyMeter({ capacity })).toThrow(RangeError);

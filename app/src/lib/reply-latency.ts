@@ -44,7 +44,11 @@ export interface LatencyPercentiles {
 export interface LatencySummary {
   /** Completed ("done") turns still retained in the capacity-bounded buffer. */
   count: number;
-  /** Cumulative count of unfinished turns expired after ten minutes. */
+  /**
+   * Unfiltered: cumulative unfinished turns expired after ten minutes.
+   * Harness-filtered: matching turns among the last `capacity` abandonments.
+   * Older harness attribution is discarded to keep all telemetry bounded.
+   */
   abandoned: number;
   ackMs: LatencyPercentiles;
   startMs: LatencyPercentiles;
@@ -64,7 +68,8 @@ export interface LatencyMeter {
    */
   turn(turnId: string, asOfMs?: number): LatencyTurn | null;
   /**
-   * The optional harness filters completed samples and abandoned counters.
+   * The optional harness filters completed samples and the last `capacity`
+   * abandonments; the unfiltered abandoned total is cumulative.
    * asOfMs advances a monotonic high-water timestamp for TTL collection.
    * Without asOfMs, the latest observed mark time is used.
    */
@@ -134,7 +139,9 @@ export function createLatencyMeter(options: LatencyMeterOptions = {}): LatencyMe
 
   // Map insertion order is the oldest-first ring order. No network or timers.
   const turns = new Map<string, TurnRecord>();
-  const abandonedByHarness = new Map<string, number>();
+  // Keep individual attribution only for the last capacity abandonments.
+  // Arbitrary harness names must not accumulate in a lifetime counter map.
+  const abandonedHarnesses: (string | null)[] = [];
   // Bounded retired-ID history stops retries from reviving expired or evicted turns.
   // Once this window fills, older IDs may be reused; memory remains O(capacity).
   const retiredTurnIds = new Set<string>();
@@ -161,12 +168,8 @@ export function createLatencyMeter(options: LatencyMeterOptions = {}): LatencyMe
       turns.delete(id);
       retire(id);
       abandoned += 1;
-      if (record.harness !== null) {
-        abandonedByHarness.set(
-          record.harness,
-          (abandonedByHarness.get(record.harness) ?? 0) + 1,
-        );
-      }
+      if (abandonedHarnesses.length === capacity) abandonedHarnesses.shift();
+      abandonedHarnesses.push(record.harness);
     }
   }
 
@@ -233,7 +236,9 @@ export function createLatencyMeter(options: LatencyMeterOptions = {}): LatencyMe
         completed.map((turn) => turn[key]).filter((value): value is number => value !== null);
       return {
         count: completed.length,
-        abandoned: harness === undefined ? abandoned : abandonedByHarness.get(harness) ?? 0,
+        abandoned: harness === undefined
+          ? abandoned
+          : abandonedHarnesses.filter((name) => name === harness).length,
         ackMs: percentiles(durations("ackMs")),
         startMs: percentiles(durations("startMs")),
         firstDeltaMs: percentiles(durations("firstDeltaMs")),
