@@ -10,23 +10,8 @@ export function chatLink(chatId: string): string { return `dash://chat/${encodeU
 export function notificationLink(target: NotificationTarget): string {
   return target.kind === "chat" ? chatLink(target.chatId) : target.kind === "approvals" ? "dash://approvals" : "dash://notices";
 }
-export function parseChatLink(url: string | null): string | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "dash:" || parsed.hostname !== "chat" || parsed.search || parsed.hash) return null;
-    const id = decodeURIComponent(parsed.pathname.slice(1));
-    return id && id.length <= 200 && !/[\/\x00-\x1f]/.test(id) ? id : null;
-  } catch { return null; }
-}
-export function parseNotificationTarget(data: unknown): NotificationTarget | null {
-  if (typeof data !== "object" || data === null) return null;
-  const url: unknown = Reflect.get(data, "url");
-  if (url === "dash://notices") return { kind: "notices" };
-  if (url === "dash://approvals") return { kind: "approvals" };
-  const chatId = typeof url === "string" ? parseChatLink(url) : null;
-  return chatId ? { kind: "chat", chatId } : null;
-}
+// One deep-link parser: the hardened checks live in notification-link.ts.
+export { parseChatLink, parseNotificationTarget } from "./notification-link";
 
 export function createReplyNoticeObserver(emit: (notice: DashNotice) => void) {
   let previous = new Map<string, { state: string; waiting: boolean }>();
