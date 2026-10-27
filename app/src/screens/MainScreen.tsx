@@ -353,7 +353,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   );
 
   const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<SearchListItem>) => {
+    ({ item }: ListRenderItemInfo<SearchListItem | undefined>) => {
+      if (!item) return null;
       if (item.type === "header") return <Text style={styles.sectionHeader}>{item.title}</Text>;
       if (item.type === "more") {
         return (
@@ -366,7 +367,10 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
     },
     [feedbackOn, onFeedbackRow, onRow, setQuery],
   );
-  const getItemType = useCallback((item: SearchListItem) => item.type, []);
+  // FlashList asks for the type at indices of the list it last laid out. Typing (or Send, which
+  // clears the query) shrinks the data first, so an index can be past the end: never throw there.
+  const getItemType = useCallback((item: SearchListItem | undefined) => item?.type ?? "row", []);
+  const searchKey = useCallback((item: SearchListItem | undefined, index: number) => item?.key ?? `missing-${index}`, []);
   const searchFooter = (chatScope || discoverChats) && chatSearch.status === "loading"
     ? <View>{[0, 1].map(i => <SkeletonRow key={i} />)}</View>
     : chatScope && chatSearch.partial && chatSearch.hasMore
@@ -423,7 +427,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               data={listItems}
               renderItem={renderItem}
               getItemType={getItemType}
-              keyExtractor={(item) => item.key}
+              keyExtractor={searchKey}
               drawDistance={600}
               onEndReached={chatScope ? chatSearch.loadMore : undefined}
               onEndReachedThreshold={0.5}

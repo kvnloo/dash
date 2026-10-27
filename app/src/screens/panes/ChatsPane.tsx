@@ -285,7 +285,8 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
   const longPress = useMemo(() => rowLongPress(feedbackOn, onFeedback, remove), [feedbackOn, onFeedback, remove]);
 
   const renderItem = useCallback(
-    ({ item: row }: ListRenderItemInfo<ChatListRow>) => {
+    ({ item: row }: ListRenderItemInfo<ChatListRow | undefined>) => {
+      if (!row) return null;
       if (row.type === "section") return <SectionHeader title={row.title} count={row.count} />;
       if (row.type === "skeleton") return <SkeletonRow />;
       const local = row.local;
@@ -323,8 +324,9 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
     [activeId, connectionStatus, harnessNames, liveKeys, longPress, open, selfId],
   );
 
-  const getItemType = useCallback((item: ChatListRow) => item.type, []);
-  const keyExtractor = useCallback((item: ChatListRow) => item.key, []);
+  // FlashList can ask about an index past the end of a list that just shrank: never throw there.
+  const getItemType = useCallback((item: ChatListRow | undefined) => item?.type ?? "chat", []);
+  const keyExtractor = useCallback((item: ChatListRow | undefined, index: number) => item?.key ?? `missing-${index}`, []);
   const loadMore = remote.loadMore;
   const footer = remote.loadingMore || (remote.status === "loading" && items !== SKELETONS && items.length > 0)
     ? <View>{[0, 1, 2].map(i => <SkeletonRow key={i} />)}</View>
