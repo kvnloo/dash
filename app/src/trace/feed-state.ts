@@ -5,6 +5,8 @@ export const TRACE_POLL_MS = 5000;
 export const ago = (ms: number): string => ms < 60000 ? `${Math.max(0, Math.round(ms / 1000))} s ago` : `${Math.round(ms / 60000)} min ago`;
 
 export function unavailableReason(error: unknown): string {
+  if (error instanceof Error && error.message.includes("no live source data")) return "No live sessions or source observations reported by this bridge";
+  if (error instanceof Error && error.message.includes("stale source snapshot")) return "Bridge returned a stale source snapshot";
   if (error instanceof Error && /HTTP \d+/.test(error.message)) return error.message.replace(/^Trace unavailable/, "Live trace endpoint unavailable");
   if (error instanceof Error && error.name === "AbortError") return "Bridge did not answer within 12 s";
   if (error instanceof Error && /^Invalid|trace/i.test(error.message)) return "Bridge sent an unreadable trace snapshot";

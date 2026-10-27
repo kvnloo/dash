@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseKevinBatch } from '../../shared/supervision';
 import { prUrl, ROADMAP_PRIORITIES } from '../../shared/roadmap';
-import type { TriageItem, TriageSnapshot } from '../../shared/triage';
+import { triageStale, type TriageItem, type TriageSnapshot } from '../../shared/triage';
 import { DEFAULT_SUPERVISION_DIR } from './supervision-http';
 import { readRoadmap } from './roadmap-store';
 import { record } from './orchestra-graph';
@@ -41,6 +41,8 @@ export async function collectTriage(now = Date.now()): Promise<TriageSnapshot> {
       items.push({ id: `blocked:${w.id}`, title: text(w.goal) || text(meta.goal) || w.id, reason: text(w.reason) || `Running work · ${text(w.phase)}`, next: text(w.recommended_action) || 'Inspect blocker and unblock the worker', kind: 'blocked', priority: 0, updatedAt: timestamp(w.updated_at) ?? sourceUpdatedAt, sourceUpdatedAt, source: 'Worker supervision', ...(typeof meta.session === 'string' ? { sessionId: meta.session } : {}) });
     }
   } catch { warnings.push('Worker supervision unavailable'); }
+  items.sort((a, b) => Number(triageStale(a, now)) - Number(triageStale(b, now)) || a.priority - b.priority || (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.id.localeCompare(b.id));
+  if (items.length > 500) warnings.push(`${items.length - 500} lower-priority items omitted`);
   return { generatedAt: now, items: items.slice(0, 500), warnings };
 }
 export function createTriageHttpHandler(options: { authorize(request: Request): Promise<boolean> }) {

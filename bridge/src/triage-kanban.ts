@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { TriageItem } from '../../shared/triage';
 import { record } from './orchestra-graph';
 import { redact } from './reply-parts';
@@ -22,14 +22,15 @@ export function kanbanTriage(): { items: TriageItem[]; warnings: string[] } {
   const items: TriageItem[] = [], warnings: string[] = [];
   const files = boardFiles();
   if (!files.length) return { items, warnings: ['Work board unavailable'] };
-  for (const [board, path] of files.slice(0, 20).entries()) {
+  for (const path of files.slice(0, 20)) {
+    const board = process.env.DASH_KANBAN_DB ? "configured" : basename(dirname(path));
     let db: Database | undefined;
     try {
       db = new Database(path, { readonly: true });
       db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=100;');
       const rows = db.query<{ id: string; title: string; status: string; priority: number; block_kind: string | null; last_failure_error: string | null; updated: number }, []>(`SELECT t.id, t.title, t.status, t.priority, t.block_kind, t.last_failure_error,
         coalesce((SELECT max(e.created_at) FROM task_events e WHERE e.task_id=t.id AND e.kind NOT IN ('heartbeat','considered')), t.created_at) AS updated
-        FROM tasks t WHERE t.status IN ('blocked','triage') ORDER BY t.priority DESC LIMIT 100`).all();
+        FROM tasks t WHERE t.status IN ('blocked','triage') ORDER BY t.priority DESC, t.created_at DESC LIMIT 100`).all();
       for (const row of rows) {
         const event = db.query<{ payload: string | null }, [string]>("SELECT payload FROM task_events WHERE task_id=? AND kind='blocked' ORDER BY id DESC LIMIT 1").get(row.id);
         let payload: unknown;

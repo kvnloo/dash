@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AppState, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Linking, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { parseTriage, triageAge, triageStale, type TriageItem, type TriageSnapshot } from '../../../shared/triage';
 import { executionToken } from '../lib/bridge-auth';
@@ -56,11 +56,11 @@ export function LiveTriageList() {
         <Text style={s.meta}>{item.source}</Text>
       </PressScale>)}
     </ScrollView>
-    {open ? <View style={s.detail} testID="triage-detail" accessibilityViewIsModal>
+    {open ? <Modal transparent visible animationType="fade" onRequestClose={() => setSelected(null)}><View style={s.backdrop}><View style={s.detail} testID="triage-detail" accessibilityViewIsModal>
       <ScrollView><Text style={s.title}>{open.title}</Text><Text style={s.meta}>{triageStale(open, now) ? 'Stale · not current · ' : ''}{triageAge(open, now)} · {open.source}</Text><Text selectable style={s.body}>{open.reason}</Text><Text selectable style={s.body}>{open.next}</Text>
       {open.url ? <PressScale accessibilityRole="button" accessibilityLabel="Open triage source" onPress={() => { if (open.url) void Linking.openURL(open.url); }} style={s.button}><Text style={s.body}>Open source PR</Text></PressScale> : null}</ScrollView>
       <PressScale accessibilityRole="button" accessibilityLabel="Close triage item" onPress={() => setSelected(null)} style={s.button}><Text style={s.body}>Close</Text></PressScale>
-    </View> : null}
+    </View></View></Modal> : null}
   </View>;
 }
 const rank = (item: TriageItem) => item.kind === 'blocked' ? 0 : item.kind === 'owner' ? 1 : 2;
@@ -69,5 +69,6 @@ const s = StyleSheet.create({
   heading: { color: colors.text, fontSize: 16, marginVertical: space.sm }, title: { color: colors.text, fontSize: 15 },
   body: { color: colors.text, fontSize: 13, lineHeight: 20, marginVertical: 4 }, meta: { color: colors.textMuted, fontFamily: fonts.mono, fontSize: 11, lineHeight: 17 },
   card: { alignItems: 'stretch', padding: space.md, borderWidth: 1, borderColor: colors.border, borderRadius: 8 }, stale: { opacity: 0.55 },
-  detail: { position: 'absolute', left: space.md, right: space.md, bottom: space.md, maxHeight: '75%', backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.goldLo, borderRadius: 10, padding: space.md }, button: { minHeight: 44, justifyContent: 'center' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)' },
+  detail: { position: 'absolute', left: space.md, right: space.md, bottom: space.md, top: '25%', backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.goldLo, borderRadius: 10, padding: space.md }, button: { minHeight: 44, justifyContent: 'center' },
 });
