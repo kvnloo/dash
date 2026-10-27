@@ -2,13 +2,26 @@
   "name": "dash",
   "private": true,
   "scripts": {
-    "test": "bun test app/src bridge/src shared scripts/mutate.test.ts",
+    "test": "bun test app/src bridge/src shared scripts/mutate.test.ts scripts/assert-nav-dots.test.ts scripts/oss-loop.test.ts scripts/phone-install.test.ts scripts/keep-going.test.ts",
     "test:unit": "bun test app/src bridge/src shared",
     "test:mutate": "bun scripts/mutate.ts",
-    "verify": "bun scripts/verify-dash/control-dash.ts test"
+    "typecheck": "bun app/node_modules/typescript/bin/tsc -p app --noEmit && bun bridge/node_modules/typescript/bin/tsc -p bridge --noEmit && tsc -p tsconfig.scripts.json --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "verify": "bun scripts/verify-dash/control-dash.ts test",
+    "spec": "python3 spec/check.py && python3 -I -m unittest discover -s spec -p 'test_*.py'",
+    "spec:status": "python3 scripts/feature_status.py --evidence .acceptance-receipts",
+    "spec:handoff": "python3 scripts/preview_handoff.py",
+    "spec:e2e": "python3 -I -m unittest discover -s e2e/device -p 'test_*.py' && python3 -I e2e/device/run_journeys.py --dry-run --all",
+    "spec:law": "python3 -I -m unittest discover -s tests -p 'test_*.py' && python3 -I tests/feature_completion_parity.py && python3 -I tests/feature_completion_mutation.py"
   },
   "dependencies": {},
   "devDependencies": {
-    "qrcode": "^1.5.4"
+    "@types/bun": "^1.4.3",
+    "@typescript-eslint/eslint-plugin": "^8.72.0",
+    "@typescript-eslint/parser": "^8.72.0",
+    "eslint": "^10.13.0",
+    "playwright": "^1.64.1",
+    "qrcode": "^1.5.4",
+    "typescript": "6.0.3"
   }
 }

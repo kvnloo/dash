@@ -11,6 +11,7 @@
 import { File } from "expo-file-system";
 import { bytesToBase64 } from "./pair-crypto";
 import { Vad } from "./vad";
+import { recordingPhase } from "./voice-orb";
 
 /** Metering poll interval. Fast enough to resolve the 900ms end-of-speech pause. */
 export const POLL_MS = 100;
@@ -54,8 +55,10 @@ export class VoiceSession {
   private readonly vad = new Vad();
   private busy = false;
   private running = false;
+  private generation = 0;
   private phase: VoicePhase = "idle";
   private replyActive = false;
+  private awaitingReply = false;
 
   constructor(
     private readonly recorder: Recorder,
@@ -65,15 +68,20 @@ export class VoiceSession {
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
-    await this.beginRecording();
+    const generation = ++this.generation;
+    await this.beginRecording(generation);
+    if (!this.running || generation !== this.generation) return;
     this.timer = setInterval(() => void this.tick(), POLL_MS);
   }
 
   async stop(): Promise<void> {
     this.running = false;
+    this.generation++;
     clearInterval(this.timer);
     this.timer = undefined;
     this.vad.reset();
+    this.replyActive = false;
+    this.awaitingReply = false;
     this.setPhase("idle");
     try {
       if (this.recorder.getStatus().isRecording) await this.recorder.stop();
@@ -84,23 +92,27 @@ export class VoiceSession {
 
   /** Tells the session whether a reply is currently being spoken, for barge-in. */
   setReplyActive(active: boolean): void {
+    if (!this.running) return;
     this.replyActive = active;
     if (this.phase === "thinking" || this.phase === "speaking") {
-      this.setPhase(active ? "speaking" : "listening");
+      this.setPhase(recordingPhase(active, this.awaitingReply));
     }
   }
 
   /** The turn finished, so we are back to plain listening. */
   turnSettled(): void {
-    if (this.phase === "thinking") this.setPhase(this.replyActive ? "speaking" : "listening");
+    this.awaitingReply = false;
+    if (this.running && this.phase === "thinking") this.setPhase(recordingPhase(this.replyActive, false));
   }
 
-  private async beginRecording(): Promise<void> {
+  private async beginRecording(generation: number): Promise<void> {
     try {
       await this.recorder.prepareToRecordAsync();
+      if (!this.running || generation !== this.generation) return;
       this.recorder.record();
-      this.setPhase(this.replyActive ? "speaking" : "listening");
+      this.setPhase(recordingPhase(this.replyActive, this.awaitingReply));
     } catch (error) {
+      if (!this.running || generation !== this.generation) return;
       this.hooks.onError(error instanceof Error ? error.message : String(error));
       await this.stop();
     }
@@ -132,18 +144,22 @@ export class VoiceSession {
   }
 
   private async finishUtterance(send: boolean): Promise<void> {
+    const generation = this.generation;
     await this.recorder.stop();
+    if (!this.running || generation !== this.generation) return;
     const uri = this.recorder.uri;
     if (send && uri) {
       const bytes = new Uint8Array(await new File(uri).arrayBuffer());
+      if (!this.running || generation !== this.generation) return;
       const encoded = bytesToBase64(bytes);
       const chunks: string[] = [];
       for (let i = 0; i < encoded.length; i += CHUNK_CHARS) {
         chunks.push(encoded.slice(i, i + CHUNK_CHARS));
       }
-      if (this.hooks.onUtterance(chunks, mimeFor(uri))) this.setPhase("thinking");
+      this.awaitingReply = this.hooks.onUtterance(chunks, mimeFor(uri));
+      if (this.awaitingReply) this.setPhase("thinking");
     }
-    if (this.running) await this.beginRecording();
+    if (this.running && generation === this.generation) await this.beginRecording(generation);
   }
 
   private setPhase(phase: VoicePhase): void {

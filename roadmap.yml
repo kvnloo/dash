@@ -1,0 +1,36 @@
+roadmap_revision: origin/main
+updated_at: 2026-09-11T22:45:00Z
+owners: [kvnloo]
+items:
+  - issue: 3
+    priority: P0
+    acceptance: bridge reattach replays events; composer not wedged
+    claimable: true
+  - issue: 4
+    priority: P0
+    acceptance: malformed JSON / timeout / nonzero exit surface in-thread; overnight already has PR 34
+    claimable: false
+  - issue: 8
+    priority: P0
+    acceptance: roster rows are chatable; claimed — do not remint
+    claimable: false
+  - issue: 10
+    priority: P0
+    acceptance: unit + mutate.ts >= 80 + verify-dash + Maestro; pinned
+    claimable: false
+  - issue: 15
+    priority: P0
+    acceptance: docs/ethos — thin UI, no subscriptions; pinned
+    claimable: false
+  - issue: 19
+    priority: P1
+    acceptance: Orchestra renders AODL network; PR 24 / overnight
+    claimable: false
+  - issue: 6
+    priority: P1
+    acceptance: dash-debug skill; PR 36 on overnight
+    claimable: false
+  - issue: 5
+    priority: P1
+    acceptance: mesh auto-discover HOLD needs-discussion
+    claimable: false

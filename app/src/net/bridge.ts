@@ -1,14 +1,25 @@
-import { AppState as RNAppState, type AppStateStatus } from "react-native";
-import { parseServerMessage, type ClientMessage } from "../../../shared/protocol";
+import { applyGateMessage } from "../store/approvals";
+import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
+import { parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
+import type { LiveIntent } from "../../../shared/live";
 import { isDebugMode } from "../debug/mode";
+import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf } from "../store/live";
 import { fetchRoster } from "../lib/roster";
+import { executionToken, socketUrl } from "../lib/bridge-auth";
+import { shouldRequestHistory } from "../lib/live-sessions";
+import { headerSocket } from "../lib/native-socket";
 import type { Settings } from "../model";
 import {
   applyDeltas,
+  applyLiveHistory,
   applyTranscript,
   applyTurnEvent,
+  flushPendingSends,
   markTurnLost,
+  locateTurn,
+  rejectUnavailableTurn,
   setConnection,
+  setLiveHistoryRequester,
   store,
   streamingTurns,
 } from "../store/app";
@@ -18,15 +29,17 @@ const DELTA_FLUSH_MS = 32;
 const CONNECT_TIMEOUT_MS = 8000;
 
 export function wsUrl(settings: Settings): string {
-  return `ws://${settings.address}/ws?token=${encodeURIComponent(settings.token.trim())}`;
+  return socketUrl(settings);
 }
 
 class Bridge {
   private ws: WebSocket | null = null;
+  private connectEpoch = 0;
   private settings: Settings | null = null;
   private attempt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private connectTimer: ReturnType<typeof setTimeout> | undefined;
+  private rosterTimer: ReturnType<typeof setInterval> | undefined;
   private pending = new Map<string, { text: string; seq: number }>();
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private appState: AppStateStatus = RNAppState.currentState;
@@ -75,6 +88,7 @@ class Bridge {
 
   stop(): void {
     this.settings = null;
+    this.clearTimers();
     this.teardownSocket();
     setConnection({ status: "idle", error: undefined });
   }
@@ -98,12 +112,23 @@ class Bridge {
     return true;
   }
 
-  private connectNow(): void {
+  private async connectNow(): Promise<void> {
     if (!this.settings) return;
     this.clearTimers();
     this.teardownSocket();
     setConnection({ status: "connecting", error: undefined });
-    const ws = new WebSocket(wsUrl(this.settings));
+    const settings = this.settings;
+    const epoch = ++this.connectEpoch;
+    let ws: WebSocket;
+    try {
+      if (settings.identity && Platform.OS === "web") throw new Error("z0bridge WebSockets require the native app (header authentication).");
+      const token = settings.identity ? await executionToken(settings) : undefined;
+      if (this.settings !== settings || this.connectEpoch !== epoch) return;
+      ws = token ? headerSocket(wsUrl(settings), token) : new WebSocket(wsUrl(settings));
+    } catch (error) {
+      if (this.settings === settings && this.connectEpoch === epoch) this.onClosed(error instanceof Error ? error.message : "Identity connection failed");
+      return;
+    }
     this.ws = ws;
     this.connectTimer = setTimeout(() => {
       if (this.ws === ws && ws.readyState !== WebSocket.OPEN) {
@@ -151,6 +176,9 @@ class Bridge {
     const message = parseServerMessage(parsed);
     if (!message) return;
     switch (message.type) {
+      case "gate_snapshot":
+      case "gate_status":
+      case "gate_error": applyGateMessage(message); return;
       case "hello": {
         setConnection({
           status: "online",
@@ -160,13 +188,13 @@ class Bridge {
           hosts: message.hosts ?? [],
           error: undefined,
         });
-        if (this.settings) {
-          void fetchRoster(this.settings).then((hosts) => {
-            if (hosts) setConnection({ hosts });
-          });
-        }
+        void this.refreshRoster();
+        clearInterval(this.rosterTimer);
+        this.rosterTimer = setInterval(() => { if (this.appState === "active") void this.refreshRoster(); }, 10000);
         const turns = streamingTurns();
         if (turns.length) this.send({ type: "attach", turns });
+        this.send({ type: "gate_list" });
+        flushPendingSends(sendChat);
         return;
       }
       case "lost":
@@ -192,11 +220,33 @@ class Bridge {
         // Keep ordering: text before the event that follows it.
         this.flushDeltas();
         applyTurnEvent(message);
+        if (message.type === "done" || message.type === "error") flushPendingSends(sendChat);
+        return;
+      case "history":
+        applyLiveHistory(message.harness, message.sessionId, message.messages, message.hostId, message.profileId);
+        return;
+      case "live_opened":
+      case "live_event":
+      case "live_receipts":
+      case "live_error":
+        applyLiveMessage(message);
         return;
       default: {
         const _exhaustive: never = message;
         return _exhaustive;
       }
+    }
+  }
+
+  private async refreshRoster(): Promise<void> {
+    const settings = this.settings;
+    if (!settings || !this.isOpen()) return;
+    const hosts = await fetchRoster(settings);
+    if (!hosts || this.settings !== settings || !this.isOpen()) return;
+    setConnection({ hosts });
+    const current = store.get().conversations.find(c => c.id === store.get().activeId);
+    if (current?.sessionId && shouldRequestHistory(current)) {
+      this.send({ type: "history", harness: current.harness, sessionId: current.sessionId, hostId: current.targetHostId, profileId: current.profileId });
     }
   }
 
@@ -214,6 +264,8 @@ class Bridge {
   private clearTimers(): void {
     clearTimeout(this.retryTimer);
     clearTimeout(this.connectTimer);
+    clearInterval(this.rosterTimer);
+    this.rosterTimer = undefined;
     this.retryTimer = undefined;
     this.connectTimer = undefined;
   }
@@ -247,21 +299,46 @@ function closeReason(code: number): string {
 
 export const bridge = new Bridge();
 
+setLiveHistoryRequester((input) => {
+  bridge.send({
+    type: "history",
+    harness: input.harness,
+    sessionId: input.sessionId,
+    cwd: input.cwd,
+    hostId: input.hostId,
+    profileId: input.profileId,
+  });
+});
+
+function targetForTurn(turnId: string): { hostId?: string; profileId?: string } {
+  const where = locateTurn(turnId);
+  const conversation = store.get().conversations.find(c => c.id === where?.conversationId);
+  return { hostId: conversation?.targetHostId, profileId: conversation?.profileId };
+}
+
 /** Send one chat turn for the active conversation. Returns false if offline. */
 export function sendChat(input: {
+  mode?: "steer" | "queue";
   turnId: string;
   harness: string;
   text: string;
   sessionId?: string;
+  cwd?: string;
+  attachments?: ChatAttachment[];
 }): boolean {
-  const cwd = store.get().settings?.cwd;
+  if (rejectUnavailableTurn(input.turnId)) return false;
+  const cwd = input.cwd ?? store.get().settings?.cwd;
   return bridge.send({
     type: "chat",
+    mode: input.mode,
+    summariesEnabled: store.get().conversations.find(c => c.messages.some(m => m.role === "assistant" && m.turnId === input.turnId))?.summariesEnabled === true,
     id: input.turnId,
+    ...targetForTurn(input.turnId),
     harness: input.harness,
     text: input.text,
     sessionId: input.sessionId,
     cwd,
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   });
 }
 
@@ -271,16 +348,22 @@ export function sendVoiceBegin(input: {
   harness: string;
   mime: string;
   sessionId?: string;
+  cwd?: string;
 }): boolean {
-  const cwd = store.get().settings?.cwd;
-  return bridge.send({
+  if (rejectUnavailableTurn(input.turnId)) return false;
+  const cwd = input.cwd ?? store.get().settings?.cwd;
+  const sent = bridge.send({
     type: "voice_begin",
+    summariesEnabled: store.get().conversations.find(c => c.messages.some(m => m.role === "assistant" && m.turnId === input.turnId))?.summariesEnabled === true,
     id: input.turnId,
+    ...targetForTurn(input.turnId),
     harness: input.harness,
     mime: input.mime,
     sessionId: input.sessionId,
     cwd,
   });
+  if (!sent) applyTurnEvent({ type: "error", id: input.turnId, seq: 1, message: "Not connected to your computer." });
+  return sent;
 }
 
 export function sendVoiceChunk(turnId: string, data: string): boolean {
@@ -290,4 +373,37 @@ export function sendVoiceChunk(turnId: string, data: string): boolean {
 /** End of utterance: the bridge transcribes and runs the turn. */
 export function sendVoiceCommit(turnId: string): boolean {
   return bridge.send({ type: "voice_commit", id: turnId });
+}
+
+/** Live surface (fast lane of a Hermes chat): open the worker for this conversation. */
+export function openLiveSurface(conversationId: string, target: { profileId?: string; sessionId?: string }): boolean {
+  const id = beginOpen(conversationId);
+  const ok = bridge.send({ type: "live_open", id, ...(target.profileId ? { profileId: target.profileId } : {}), ...(target.sessionId ? { sessionId: target.sessionId } : {}) });
+  if (!ok) applyLiveMessage({ type: "live_error", id, message: "Not connected to the bridge." });
+  return ok;
+}
+
+export function sendLiveTurn(conversationId: string, text: string): boolean {
+  const live = liveOf(conversationId);
+  if (!live.workerId || !live.profileId) return false;
+  const id = beginLiveTurn(conversationId, text, live.askHermes);
+  const ok = bridge.send({ type: "live_turn", id, workerId: live.workerId, profileId: live.profileId, text, ...(live.askHermes ? { askHermes: true } : {}) });
+  if (!ok) applyLiveMessage({ type: "live_error", id, message: "Not connected to the bridge." });
+  return ok;
+}
+
+/** The owner's tap on an fx0 control or a native fast control: recorded in Hermes, then the worker reacts. */
+export function sendLiveIntent(conversationId: string, intent: LiveIntent): boolean {
+  const live = liveOf(conversationId);
+  if (!live.workerId || !live.profileId) return false;
+  const id = beginIntent(conversationId, intent);
+  const ok = bridge.send({ type: "live_intent", id, workerId: live.workerId, profileId: live.profileId, intent, continue: true });
+  if (!ok) applyLiveMessage({ type: "live_error", id, message: "Not connected to the bridge." });
+  return ok;
+}
+
+export function refreshLiveReceipts(conversationId: string): boolean {
+  const live = liveOf(conversationId);
+  if (!live.workerId || !live.profileId) return false;
+  return bridge.send({ type: "live_receipts", id: beginReceipts(conversationId), workerId: live.workerId, profileId: live.profileId });
 }

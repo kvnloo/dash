@@ -1,0 +1,13 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'app.dash.cutout'
+version = '1.0.0'
+android {
+  namespace 'app.dash.cutout'
+  defaultConfig { versionCode 1; versionName '1.0.0' }
+}
+dependencies {
+  testImplementation 'junit:junit:4.13.2'
+}

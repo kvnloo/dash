@@ -7,7 +7,9 @@ const TONE_MS = 400;
 const GAP_MS = 200;
 const BASE_HZ = 880;
 const STEP_HZ = 55;
-const SAMPLE_RATE = 44100;
+export const PAIR_SAMPLE_RATE = 44100;
+export const MAX_PAIR_AUDIO_SECONDS = 12;
+const SAMPLE_RATE = PAIR_SAMPLE_RATE;
 
 function charHz(index: number): number {
   return BASE_HZ + index * STEP_HZ;
@@ -82,23 +84,64 @@ function pcmFromF32le(bytes: Uint8Array): Float32Array {
   return samples;
 }
 
+async function readBounded(
+  stream: ReadableStream<Uint8Array>,
+  limit: number,
+  overflow: () => void,
+): Promise<Uint8Array | null> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) return new Uint8Array(Buffer.concat(chunks));
+      size += chunk.value.byteLength;
+      if (size > limit) {
+        overflow();
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(chunk.value);
+    }
+  } finally { reader.releaseLock(); }
+}
+
 export async function decodePairAudio(bytes: Uint8Array): Promise<string | null> {
   const dir = mkdtempSync(join(tmpdir(), "dash-pair-"));
   const input = join(dir, "clip.bin");
   writeFileSync(input, bytes);
   try {
     const proc = Bun.spawn(
-      ["ffmpeg", "-nostdin", "-v", "error", "-i", input, "-ac", "1", "-ar", String(SAMPLE_RATE), "-f", "f32le", "pipe:1"],
-      { stdout: "pipe", stderr: "pipe" },
+      [
+        "ffmpeg", "-nostdin", "-v", "error", "-threads", "1", "-max_alloc", "16777216",
+        "-protocol_whitelist", "file,pipe", "-format_whitelist", "wav,aac,mp3,flac,ogg,mov,matroska",
+        "-i", input, "-t", String(MAX_PAIR_AUDIO_SECONDS), "-ac", "1", "-ar", String(SAMPLE_RATE),
+        "-f", "f32le", "pipe:1",
+      ],
+      { stdin: "ignore", stdout: "pipe", stderr: "pipe" },
     );
-    const pcm = new Uint8Array(await new Response(proc.stdout).arrayBuffer());
-    const err = await new Response(proc.stderr).text();
-    const code = await proc.exited;
-    if (code !== 0 || pcm.byteLength < SAMPLE_RATE) {
-      if (err) console.error("pair.decode.ffmpeg", err.trim());
-      return null;
+    let stopped = false;
+    const stop = () => {
+      stopped = true;
+      if (proc.exitCode === null) proc.kill("SIGKILL");
+    };
+    const timer = setTimeout(stop, 10_000);
+    try {
+      const [pcm, stderr, code] = await Promise.all([
+        readBounded(proc.stdout, MAX_PAIR_AUDIO_SECONDS * SAMPLE_RATE * 4, stop),
+        readBounded(proc.stderr, 8192, stop),
+        proc.exited,
+      ]);
+      if (stopped || code !== 0 || !stderr || !pcm || pcm.byteLength < SAMPLE_RATE) return null;
+      return decodePairPcm(pcmFromF32le(pcm));
+    } finally {
+      clearTimeout(timer);
+      if (proc.exitCode === null) {
+        stop();
+        await proc.exited;
+      }
     }
-    return decodePairPcm(pcmFromF32le(pcm));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
