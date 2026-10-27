@@ -175,7 +175,7 @@ export function chunkRow(value: string, limit = ROW_BYTE_LIMIT, key = "row"): En
     count: fragments.length,
     bytes: utf8Bytes(value),
     hash: rowHash(value),
-  });
+  }) ?? "";
   if (utf8Bytes(header) > limit) {
     throw new RangeError("Storage byte limit is too small for chunk header");
   }
