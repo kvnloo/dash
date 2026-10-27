@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Copied from the pinned dependency by metro.config.js for offline web bootstrap.
+/public/canvaskit.wasm
