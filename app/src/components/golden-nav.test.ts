@@ -471,6 +471,14 @@ describe("workspace header under the bar", () => {
     expect(src).not.toContain("...type.cardTitle, color: colors.gold"); // a serif "1" reads as the letter I
     expect(src).not.toContain("Bridge details"); // the chevron lives in the bar only
   });
+  test("the approvals pill cannot push the header actions off screen", () => {
+    // PressScale's inner view is flex: 1. On a row-direction PressScale it grows to the whole
+    // header width, so pending approvals hid trace, new chat and settings (e2e B3).
+    const pill = /approvals: \{([^}]*)\}/.exec(src)?.[1] ?? "";
+    expect(pill).not.toContain("flexDirection");
+    expect(src).toContain("approvalsRow: { flexDirection: \"row\"");
+    expect(src).toContain("<View style={styles.approvalsRow}>");
+  });
   test("is mounted on Main directly under the bar", () => {
     const main = readFileSync(join(import.meta.dir, "../screens/MainScreen.tsx"), "utf8");
     expect(main.indexOf("<WorkspaceHeader")).toBeGreaterThan(main.indexOf("<AppNav"));

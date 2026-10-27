@@ -26,10 +26,15 @@ export function WorkspaceActions({ navigation }: { navigation: NavigationProp<Ro
   const pending = approvals.use(s => s.items.filter(actionable).length);
   const upstreamAction = upstreamApprovalAction(pending);
   return <View style={styles.actions}>
+    {/* The pill is a column PressScale around a fixed row. A row-direction PressScale grows its
+        flex: 1 inner view to the whole header width, which pushed the trace, new chat and settings
+        buttons off screen (and out of the accessibility tree) whenever approvals were pending. */}
     {upstreamAction ? <PressScale accessibilityRole="button" accessibilityLabel={upstreamAction.label} accessibilityHint={upstreamAction.hint} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approvals}>
-      <Text style={styles.approvalsLabel}>Approvals</Text>
-      {/* A sans numeral on a gold pill: a serif "1" beside a label reads as the letter I. */}
-      <View style={styles.badge}><Text style={styles.badgeText}>{upstreamAction.badgeText}</Text></View>
+      <View style={styles.approvalsRow}>
+        <Text style={styles.approvalsLabel}>Approvals</Text>
+        {/* A sans numeral on a gold pill: a serif "1" beside a label reads as the letter I. */}
+        <View style={styles.badge}><Text style={styles.badgeText}>{upstreamAction.badgeText}</Text></View>
+      </View>
     </PressScale> : null}
     <IconButton icon="activity" label={WORKSPACE_ACTION_LABELS.trace} onPress={() => navigation.navigate("Trace")} />
     <IconButton icon="edit-3" label={WORKSPACE_ACTION_LABELS.newChat} onPress={() => { createConversation(store.get().settings?.harness ?? "omp"); navigation.navigate("Chat"); }} />
@@ -40,10 +45,11 @@ export function WorkspaceActions({ navigation }: { navigation: NavigationProp<Ro
 export const WORKSPACE_HEADER_HEIGHT = 52;
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: "row", alignItems: "center" },
+  actions: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
   header: { flexDirection: "row", alignItems: "center", minHeight: WORKSPACE_HEADER_HEIGHT, paddingVertical: 4, paddingLeft: 16, paddingRight: 8, gap: 2 },
   title: { ...type.title, color: colors.text, flex: 1 },
-  approvals: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, paddingHorizontal: 8 },
+  approvals: { minHeight: 44, paddingHorizontal: 8, justifyContent: "center" },
+  approvalsRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   approvalsLabel: { fontFamily: fonts.semibold, fontSize: 15, color: colors.textMuted },
   badge: { minWidth: 18, minHeight: 18, borderRadius: 9, paddingHorizontal: 5, paddingVertical: 2, backgroundColor: colors.gold, alignItems: "center", justifyContent: "center" },
   badgeText: { fontFamily: fonts.semibold, fontSize: 11, lineHeight: 14, color: colors.bg, fontVariant: ["tabular-nums"] },
