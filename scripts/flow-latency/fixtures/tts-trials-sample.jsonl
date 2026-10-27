@@ -1,0 +1,10 @@
+{"tag":"short/edge","k":0,"phase":"warmup","id":"short-warmup","bucket":"short","words":10,"threads":2,"ttfa_ms":1,"synth_ms":1,"audio_s":1,"rtf":0.1,"chunks":1,"max_chunk_gap_ms":1,"ok":1}
+{"tag":"short/edge","k":1,"phase":"scored","id":"short-1","bucket":"short","words":10,"threads":2,"ttfa_ms":100,"synth_ms":70,"audio_s":1,"rtf":0.2,"chunks":2,"max_chunk_gap_ms":10,"ok":1}
+{"tag":"short/edge","k":2,"phase":"scored","id":"short-2","bucket":"short","words":10,"threads":2,"ttfa_ms":200,"synth_ms":80,"audio_s":1,"rtf":0.3,"chunks":2,"max_chunk_gap_ms":20,"ok":1}
+this is not json
+{"tag":"short/edge","k":3,"phase":"scored","id":"short-3","bucket":"short","words":10,"threads":2,"ttfa_ms":300,"synth_ms":90,"audio_s":1,"rtf":0.4,"chunks":3,"max_chunk_gap_ms":30,"ok":1}
+{"tag":"short/edge","k":4,"phase":"scored","id":"short-4","bucket":"short","words":10,"threads":2,"ttfa_ms":400,"synth_ms":100,"audio_s":1,"rtf":0.5,"chunks":3,"max_chunk_gap_ms":40,"ok":1}
+{"tag":"medium/cascade","k":1,"phase":"scored","id":"medium-failed","bucket":"medium","words":50,"threads":3,"ttfa_ms":10000,"synth_ms":9000,"audio_s":0,"rtf":99,"chunks":0,"max_chunk_gap_ms":2000,"ok":0}
+{"tag":"medium/cascade","k":2,"phase":"scored","id":"medium-1","bucket":"medium","words":50,"threads":3,"ttfa_ms":500,"synth_ms":400,"audio_s":3,"rtf":0.6,"chunks":4,"max_chunk_gap_ms":40,"ok":1}
+{"tag":"medium/cascade","k":3,"phase":"scored","id":"medium-2","bucket":"medium","words":50,"threads":3,"ttfa_ms":700,"synth_ms":500,"audio_s":3,"rtf":0.7,"chunks":4,"max_chunk_gap_ms":50,"ok":1}
+{"tag":"medium/cascade","k":4,"phase":"scored","id":"medium-3","bucket":"medium","words":50,"threads":3,"ttfa_ms":900,"synth_ms":600,"audio_s":3,"rtf":0.8,"chunks":5,"max_chunk_gap_ms":60,"ok":1}
