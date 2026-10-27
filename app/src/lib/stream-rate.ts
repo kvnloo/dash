@@ -59,8 +59,6 @@ export function createStreamRate({
   let lastEventAt: number | undefined;
   let eventCount = 0;
   let totalChars = 0;
-  let lastTextAt: number | undefined;
-  let lastReportAt: number | undefined;
   let reportedTotal: number | undefined;
   let reportedAtStart = 0;
   let frozen: StreamRate | undefined;
@@ -97,7 +95,7 @@ export function createStreamRate({
     }
     event(atMs);
     totalChars += deltaChars;
-    lastTextAt = atMs;
+
     const previous = chars[chars.length - 1];
     if (previous?.atMs === atMs) previous.value = totalChars;
     else chars.push({ atMs, value: totalChars });
@@ -119,7 +117,7 @@ export function createStreamRate({
     }
     event(atMs);
     reportedTotal = outputTokens;
-    lastReportAt = atMs;
+
     const previous = tokens[tokens.length - 1];
     if (previous?.atMs === atMs) previous.value = outputTokens;
     else tokens.push({ atMs, value: outputTokens });
@@ -127,11 +125,9 @@ export function createStreamRate({
 
   function live(atMs: number): StreamRate {
     if (window < MIN_SPAN_MS) return unavailable("window too short");
-    // Text arriving after the latest host report makes that count incomplete.
-    if (lastReportAt !== undefined && (lastTextAt === undefined || lastReportAt >= lastTextAt)) {
-      const measured = observedRate(tokens, atMs);
-      if (measured !== undefined) return { kind: "measured", tokensPerSecond: measured };
-    }
+    // Valid host evidence wins even when text has arrived more recently.
+    const measured = observedRate(tokens, atMs);
+    if (measured !== undefined) return { kind: "measured", tokensPerSecond: measured };
     const charsPerSecond = observedRate(chars, atMs);
     return charsPerSecond === undefined
       ? unavailable("insufficient streaming observations")
@@ -153,11 +149,7 @@ export function createStreamRate({
 
     const elapsedMs = atMs - startedAt;
     const hostTokens = reportedTotal === undefined ? 0 : reportedTotal - reportedAtStart;
-    if (
-      hostTokens > 0 &&
-      lastReportAt !== undefined &&
-      (lastTextAt === undefined || lastReportAt >= lastTextAt)
-    ) {
+    if (hostTokens > 0) {
       frozen = { kind: "measured", tokensPerSecond: (hostTokens * 1_000) / elapsedMs };
     } else if (totalChars > 0) {
       frozen = { kind: "estimated", tokensPerSecond: (totalChars * 1_000) / (CHARS_PER_TOKEN * elapsedMs) };

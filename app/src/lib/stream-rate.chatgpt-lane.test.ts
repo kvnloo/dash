@@ -40,7 +40,7 @@ describe("stream-rate: honest live measurements", () => {
     expect(formatStreamRate(sampler.rate(5_200))).toBeNull();
   });
 
-  test("cumulative host token counts beat text estimates when current", () => {
+  test("cumulative host token counts beat even newer text estimates", () => {
     const sampler = createStreamRate({ now: () => 2_000 });
     sampler.sample(0, 80);
     sampler.sample(1_000, 80);
@@ -49,9 +49,9 @@ describe("stream-rate: honest live measurements", () => {
     expect(sampler.rate(1_000)).toEqual({ kind: "measured", tokensPerSecond: 60 });
     expect(formatStreamRate(sampler.rate(1_000))).toBe("60 tok/s");
 
-    // A host report older than fresh output is incomplete, so mark it estimated.
+    // Newer text must not downgrade valid host measurements to estimates.
     sampler.sample(2_000, 80);
-    expect(sampler.rate(2_000)).toEqual({ kind: "estimated", tokensPerSecond: 20 });
+    expect(sampler.rate(2_000)).toEqual({ kind: "measured", tokensPerSecond: 30 });
     sampler.report(2_000, 100);
     expect(sampler.rate(2_000)).toEqual({ kind: "measured", tokensPerSecond: 50 });
   });
@@ -122,7 +122,7 @@ describe("stream-rate: honest live measurements", () => {
     expect(sampler.rate(900)).toEqual(before);
     expect(sampler.rate(1_000)).toEqual(before);
     sampler.sample(2_000, 80);
-    expect(sampler.rate(2_000)).toEqual({ kind: "estimated", tokensPerSecond: 20 });
+    expect(sampler.rate(2_000)).toEqual({ kind: "measured", tokensPerSecond: 30 });
   });
 
   test("a configured window under 250ms cannot claim a live rate", () => {
@@ -131,6 +131,34 @@ describe("stream-rate: honest live measurements", () => {
     sampler.sample(200, 80);
     expect(sampler.rate(200)).toEqual({ kind: "unavailable", reason: "window too short" });
     sampler.finish(1_000);
+    expect(sampler.rate(2_000).kind).toBe("unavailable");
+    expect(formatStreamRate(sampler.rate(2_000))).toBeNull();
+  });
+
+  test("finish keeps host precedence after newer text and rolling-window expiry", () => {
+    for (const finishAt of [2_000, 10_000]) {
+      const sampler = createStreamRate({ now: () => finishAt });
+      sampler.sample(0, 80);
+      sampler.report(1_000, 60);
+      sampler.sample(2_000, 800);
+      sampler.finish();
+      const expected = {
+        kind: "measured",
+        tokensPerSecond: 60_000 / finishAt,
+      } satisfies ReturnType<typeof sampler.rate>;
+      expect(sampler.rate()).toEqual(expected);
+      sampler.sample(20_000, 800);
+      sampler.report(20_000, 600);
+      expect(sampler.rate(30_000)).toEqual(expected);
+    }
+  });
+
+  test("a short live window still permits a sufficiently observed whole-turn average", () => {
+    const sampler = createStreamRate({ windowMs: 200, now: () => 1_000 });
+    sampler.sample(0, 80);
+    sampler.sample(250, 80);
+    expect(formatStreamRate(sampler.rate(250))).toBeNull();
+    sampler.finish();
     expect(sampler.rate(2_000)).toEqual({ kind: "estimated", tokensPerSecond: 40 });
   });
 
