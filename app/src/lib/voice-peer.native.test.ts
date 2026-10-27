@@ -1,5 +1,19 @@
 import { describe, expect, mock, test } from "bun:test";
 
+if (process.env.DASH_VOICE_PEER_TEST_CHILD !== "1") {
+  test("Android realtime peer teardown in an isolated native module registry", async () => {
+    // Bun links later imports against the first react-native mock's exports.
+    // A fresh process keeps unrelated AppState-only mocks out of this suite.
+    const child = Bun.spawn([process.execPath, "test", import.meta.path], {
+      env: { ...process.env, DASH_VOICE_PEER_TEST_CHILD: "1" }, stdout: "pipe", stderr: "pipe",
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+    ]);
+    expect({ code, output: code === 0 ? "" : stdout + stderr }).toEqual({ code: 0, output: "" });
+    expect(stderr).toContain("4 pass");
+  });
+} else {
 // Exercise the Android implementation without opening real audio hardware.
 class FakeTrack {
   enabled = true;
@@ -135,3 +149,4 @@ describe("Android realtime peer teardown", () => {
     } finally { permission = "granted"; }
   });
 });
+}
