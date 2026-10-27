@@ -20,3 +20,8 @@ orchestrate/dash/status.md
 *.p12
 *.jks
 *.keystore
+.native-build-inputs/
+.native-receipts/
+.acceptance-receipts/
+.voice-deps/
+.repair-receipts/

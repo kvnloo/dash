@@ -1,0 +1,344 @@
+import { describe, expect, test } from "bun:test";
+import { CommonActions, StackActions, StackRouter } from "@react-navigation/routers";
+import { ContinuousVoice, REALTIME_VOICE_MODEL, realWords, type VoicePeer, type VoiceTurnSource } from "./continuous-voice";
+import type { AssistantState, Conversation, Message } from "../model";
+
+function typedFeed() {
+  const attached: Conversation = {
+    id: "typed-chat", harness: "hermes", title: "Attached", profileId: "test",
+    sessionId: "attached", createdAt: 1, updatedAt: 1, messages: [],
+  };
+  const other: Conversation = { ...attached, id: "other-chat", sessionId: "different", messages: [] };
+  let activeId: string | null = attached.id;
+  let conversations = [attached, other];
+  const listeners = new Set<() => void>();
+  const notify = () => { for (const listener of listeners) listener(); };
+  const change = (chatId: string, update: (messages: Message[]) => Message[]) => {
+    conversations = conversations.map(chat => chat.id === chatId ? { ...chat, messages: update(chat.messages) } : chat);
+    notify();
+  };
+  const source: VoiceTurnSource = {
+    get: () => ({ activeId, conversations }),
+    subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  };
+  return {
+    source,
+    add(chatId: string, turnId: string, question: string, state: AssistantState = "streaming", reply = "") {
+      const user: Message = { role: "user", id: `user:${turnId}`, at: 2, text: question };
+      const assistant: Message = { role: "assistant", id: `reply:${turnId}`, at: 2, text: reply, state, turnId, seq: 1 };
+      change(chatId, messages => [...messages, user, assistant]);
+    },
+    finish(chatId: string, turnId: string, reply: string, state: AssistantState = "done") {
+      change(chatId, messages => messages.map(message =>
+        message.role === "assistant" && message.turnId === turnId ? { ...message, state, text: reply } : message,
+      ));
+    },
+    select(chatId: string) { activeId = chatId; notify(); },
+    get listenerCount() { return listeners.size; },
+  };
+}
+
+function harness(holdIntent = false, readyOnAnswer = true, feed = typedFeed()) {
+  const requests: { path: string; body?: unknown }[] = [];
+  const sent: object[] = [];
+  let closed = 0;
+  let muted = true;
+  let event = (_raw: string) => {};
+  let ready = () => {};
+  let lost = () => {};
+  const peer: VoicePeer = { offer: async () => "v=0\r\n", answer: async () => { if (readyOnAnswer) ready(); }, mute: value => { muted = value; }, send: value => { sent.push(value); }, close: () => { closed++; } };
+  const call = new ContinuousVoice({ changed: () => {}, transcript: () => {}, holdIntent: () => holdIntent, typedTurns: feed.source, request: async (path, body) => {
+    requests.push({ path, body });
+    if (path === "/v1/realtime/session") return { session_id: "test-session", transport: "realtime", value: "ephemeral-test", model: REALTIME_VOICE_MODEL.fallback };
+    if (path.startsWith("/v1/inbox")) return { messages: [], after: 0, has_more: false };
+    if (path === "provider:answer") return "v=0\r\n";
+    return { ok: true, speech: "silent" };
+  }, peer: async (onEvent, onReady, onLost) => { event = onEvent; ready = onReady; lost = onLost; return peer; } });
+  return { call, requests, sent, feed, get closed() { return closed; }, get muted() { return muted; }, event: (value: object) => event(JSON.stringify(value)), lost: () => lost(), ready: () => ready() };
+}
+const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+describe("root continuous WebRTC lifecycle", () => {
+  test("mute during connecting survives late peer readiness; unmute cannot transmit before ready", async () => {
+    const h = harness(false, false); await h.call.start({ profile: "test", session: "attached" });
+    h.call.mute(false); expect(h.muted).toBe(true);
+    h.call.mute(true); h.ready(); expect(h.call.state.phase).toBe("listening");
+    expect(h.call.state.muted).toBe(true); expect(h.muted).toBe(true); await h.call.stop();
+  });
+  test("a real final utterance is dispatched once with its provider item id; acceptance is silent", async () => {
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" });
+    const event = { type: "conversation.item.input_audio_transcription.completed", event_id: "utterance", item_id: "provider-item", transcript: "Fix the marked button" };
+    h.event(event); h.event(event); await settle();
+    const work = h.requests.filter(r => r.path === "/v1/tools/ask_z0");
+    expect(work).toHaveLength(1); expect(work[0]?.body).toMatchObject({ call_id: "provider-item", arguments: { question: "Fix the marked button" } });
+    expect(h.call.state.delivery).toBe("accepted");
+    expect(h.sent.filter(x => Reflect.get(x, "type") === "response.create")).toHaveLength(0); await h.call.stop();
+  });
+  test("annotation intent stays in its draft instead of dispatching a second text-only request", async () => {
+    const h = harness(true); await h.call.start({ profile: "test", session: "attached" });
+    h.event({ type: "conversation.item.input_audio_transcription.completed", event_id: "held", item_id: "held-item", transcript: "Make this bigger" }); await settle();
+    expect(h.requests.filter(r => r.path === "/v1/tools/ask_z0")).toHaveLength(0);
+    expect(h.call.state.delivery).toBe("draft"); await h.call.stop();
+  });
+  test("a final reply waits for actual audio playback to stop, and is never duplicated", async () => {
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" });
+    h.event({ type: "response.created" }); h.event({ type: "output_audio_buffer.started" });
+    h.call.deliverFinal("same-receipt", "The fix is ready"); h.call.deliverFinal("same-receipt", "The fix is ready");
+    h.event({ type: "response.done" }); await settle();
+    expect(h.sent.filter(x => Reflect.get(x, "type") === "response.create")).toHaveLength(0);
+    h.event({ type: "output_audio_buffer.stopped" }); await settle();
+    expect(h.sent.filter(x => Reflect.get(x, "type") === "response.create")).toHaveLength(1); await h.call.stop();
+  });
+  test("mint declares latest Realtime model and accepts the legacy broker model without reminting", async () => {
+    expect(REALTIME_VOICE_MODEL).toEqual({ preferred: "gpt-realtime-2.1", fallback: "gpt-realtime" });
+    expect(Object.isFrozen(REALTIME_VOICE_MODEL)).toBe(true);
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" });
+    expect(h.requests.filter(r => r.path === "/v1/realtime/session")).toEqual([{
+      path: "/v1/realtime/session",
+      body: {
+        client: "dash",
+        transports: ["realtime"],
+        model: REALTIME_VOICE_MODEL.preferred,
+        fallback_model: REALTIME_VOICE_MODEL.fallback,
+        context: { app: "app.dash.mobile", hermes_target: { profile: "test", session: "attached" } },
+        tools: [],
+      },
+    }]);
+    expect(h.requests.filter(r => r.path === "provider:answer")).toHaveLength(1);
+    expect(h.call.state.phase).toBe("listening");
+    await h.call.stop();
+  });
+  test("start uses realtime only and explicit stop closes local media and ends owned broker session", async () => {
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" });
+    expect(h.call.state.phase).toBe("listening"); expect(h.muted).toBe(false);
+    expect(h.requests[0]?.body).toMatchObject({ transports: ["realtime"], context: { hermes_target: { profile: "test", session: "attached" } } });
+    await h.call.stop(); expect(h.closed).toBe(1); expect(h.muted).toBe(true);
+    expect(h.requests.some(r => r.path === "/v1/sessions/test-session/end")).toBe(true);
+  });
+  test("noise does not interrupt, final words do; mute clears pending input", async () => {
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" });
+    h.event({ type: "response.created" }); h.event({ type: "input_audio_buffer.speech_started" });
+    expect(h.sent.some(x => Reflect.get(x, "type") === "response.cancel")).toBe(false);
+    h.event({ type: "conversation.item.input_audio_transcription.completed", transcript: "[noise]", item_id: "noise" }); await settle();
+    expect(h.sent.some(x => Reflect.get(x, "type") === "response.cancel")).toBe(false);
+    h.event({ type: "conversation.item.input_audio_transcription.completed", transcript: "Actually change this", item_id: "words" }); await settle();
+    expect(h.sent.some(x => Reflect.get(x, "type") === "response.cancel")).toBe(true);
+    h.call.mute(true); expect(h.muted).toBe(true); expect(Reflect.get(h.sent.at(-1) ?? {}, "type")).toBe("input_audio_buffer.clear"); await h.call.stop();
+  });
+  test("disconnect shuts capture and does not resend or remint", async () => {
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" }); h.lost(); await settle();
+    expect(h.closed).toBe(1); expect(h.call.state.phase).toBe("error");
+    expect(h.requests.filter(r => r.path === "/v1/realtime/session")).toHaveLength(1);
+  });
+  test("late mint after stop is ended without acquiring microphone", async () => {
+    let resolve: (value: unknown) => void = () => {}; let peers = 0; const ended: string[] = [];
+    const call = new ContinuousVoice({ changed: () => {}, transcript: () => {}, typedTurns: typedFeed().source, peer: async () => { peers++; throw new Error(); }, request: async path => {
+      if (path === "/v1/realtime/session") return new Promise(done => { resolve = done; });
+      ended.push(path); return {};
+    } });
+    const start = call.start({ profile: "test", session: "attached" }); await call.stop();
+    resolve({ session_id: "late", value: "short-lived", transport: "realtime" }); await start;
+    expect(peers).toBe(0); expect(ended).toContain("/v1/sessions/late/end"); expect(call.state.phase).toBe("idle");
+  });
+  test("duplicate provider event never relays twice and silent acceptance never creates continuation", async () => {
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" });
+    const event = { type: "response.function_call_arguments.done", event_id: "same", name: "ask_z0", call_id: "once", arguments: '{"question":"[test] hello"}' };
+    h.event(event); h.event(event); await settle(); h.event({ type: "response.done" }); await settle();
+    expect(h.requests.filter(r => r.path === "/v1/tools/ask_z0")).toHaveLength(1);
+    expect(h.sent.filter(x => Reflect.get(x, "type") === "response.create")).toHaveLength(0); await h.call.stop();
+  });
+  test("a newly typed Hermes turn speaks only its completed reply on the existing realtime peer", async () => {
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" });
+    h.feed.add("typed-chat", "typed-1", "Fix the terminal");
+    expect(h.sent.filter(event => Reflect.get(event, "type") === "response.create")).toHaveLength(0);
+    h.feed.finish("typed-chat", "typed-1", "Terminal repaired.");
+    const creations = h.sent.filter(event => Reflect.get(event, "type") === "conversation.item.create");
+    expect(creations).toHaveLength(1);
+    expect(JSON.stringify(creations[0])).toContain("Terminal repaired.");
+    expect(h.sent.filter(event => Reflect.get(event, "type") === "response.create")).toHaveLength(1);
+    expect(h.requests.filter(request => request.path === "/v1/tools/ask_z0")).toHaveLength(0);
+    expect(h.requests.some(request => /tts|synthesize/.test(request.path))).toBe(false);
+    await h.call.stop();
+  });
+  test("typed replies wait for the existing peer readiness, then speak even when the microphone is muted", async () => {
+    const h = harness(false, false); await h.call.start({ profile: "test", session: "attached" });
+    h.call.mute(true);
+    h.feed.add("typed-chat", "queued-typed", "Type while connecting");
+    h.feed.finish("typed-chat", "queued-typed", "Ready after connection");
+    expect(h.sent.filter(event => Reflect.get(event, "type") === "response.create")).toHaveLength(0);
+    h.ready();
+    expect(h.call.state.phase).toBe("listening");
+    expect(h.call.state.muted).toBe(true);
+    expect(h.sent.filter(event => Reflect.get(event, "type") === "response.create")).toHaveLength(1);
+    await h.call.stop();
+  });
+  test("typed work never speaks previous turns, another chat, partial output, or failures", async () => {
+    const h = harness();
+    h.feed.add("typed-chat", "historical", "Sent before call");
+    await h.call.start({ profile: "test", session: "attached" });
+    h.feed.finish("typed-chat", "historical", "Old work completed");
+    h.feed.add("other-chat", "other", "Unrelated");
+    h.feed.finish("other-chat", "other", "Unrelated answer");
+    h.feed.select("other-chat");
+    h.feed.add("typed-chat", "partial", "New typed turn");
+    h.feed.finish("typed-chat", "partial", "Still working", "streaming");
+    h.feed.add("typed-chat", "failed", "Request that fails");
+    h.feed.finish("typed-chat", "failed", "Failure details", "error");
+    expect(h.sent.filter(event => Reflect.get(event, "type") === "response.create")).toHaveLength(0);
+    h.feed.finish("typed-chat", "partial", "Actual final response");
+    expect(h.sent.filter(event => Reflect.get(event, "type") === "response.create")).toHaveLength(1);
+    await h.call.stop();
+  });
+  test("annotation and typed completion for one bridge turn are spoken once", async () => {
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" });
+    h.feed.add("typed-chat", "shared-turn", "Annotate this");
+    h.feed.finish("typed-chat", "shared-turn", "Annotation finished");
+    h.call.deliverFinal("annotation:shared-turn", "Annotation finished");
+    expect(h.sent.filter(event => Reflect.get(event, "type") === "response.create")).toHaveLength(1);
+    await h.call.stop();
+  });
+  test("new typed reply queues behind active output and is released by the same peer", async () => {
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" });
+    h.event({ type: "response.created" }); h.event({ type: "output_audio_buffer.started" });
+    h.feed.add("typed-chat", "next", "Follow-up typed while speaking");
+    h.feed.finish("typed-chat", "next", "Following up now");
+    h.event({ type: "response.done" }); await settle();
+    expect(h.sent.filter(event => Reflect.get(event, "type") === "response.create")).toHaveLength(0);
+    h.event({ type: "output_audio_buffer.stopped" }); await settle();
+    expect(h.sent.filter(event => Reflect.get(event, "type") === "response.create")).toHaveLength(1);
+    await h.call.stop();
+  });
+  test("stopping the call unsubscribes typed replies and prevents late speech", async () => {
+    const h = harness(); await h.call.start({ profile: "test", session: "attached" });
+    expect(h.feed.listenerCount).toBe(1);
+    await h.call.stop();
+    expect(h.feed.listenerCount).toBe(0);
+    h.feed.add("typed-chat", "post-call", "After stop");
+    h.feed.finish("typed-chat", "post-call", "Not voiced");
+    expect(h.sent.filter(event => Reflect.get(event, "type") === "response.create")).toHaveLength(0);
+  });
+  test("noise gate rejects labels and accepts words", () => { expect(realWords("[noise]")).toBe(false); expect(realWords("…")).toBe(false); expect(realWords("cancel that")).toBe(true); });
+  test("stop/background cannot release the microphone lease before pending native acquisition closes", async () => {
+    let acquired = false, released = false, closed = false;
+    let resolvePeer: (peer: VoicePeer) => void = () => {};
+    const call = new ContinuousVoice({ changed: () => {}, transcript: () => {}, typedTurns: typedFeed().source, captureReleased: () => { released = true; },
+      request: async path => path === "/v1/realtime/session" ? { session_id: "pending", transport: "realtime", value: "ephemeral" } : { messages: [], after: 0 },
+      peer: () => { acquired = true; return new Promise(resolve => { resolvePeer = resolve; }); },
+    });
+    const start = call.start({ profile: "test", session: "attached" }); await settle(); expect(acquired).toBe(true);
+    const stop = call.stop(); const background = call.stop(); expect(released).toBe(false);
+    resolvePeer({ offer: async () => "v=0", answer: async () => {}, mute: () => {}, send: () => {}, close: () => { closed = true; } });
+    await Promise.all([start, stop, background]); expect(closed).toBe(true); expect(released).toBe(true);
+  });
+  test("data-channel loss during ready never relabels a disconnected call as listening", async () => {
+    let ready = () => {}, lost = () => {};
+    const call = new ContinuousVoice({ changed: () => {}, transcript: () => {}, typedTurns: typedFeed().source,
+      request: async path => path === "/v1/realtime/session" ? { session_id: "closed-channel", transport: "realtime", value: "ephemeral" } : path === "provider:answer" ? "v=0" : { messages: [], after: 0 },
+      peer: async (_event, onReady, onLost) => { ready = onReady; lost = onLost; return { offer: async () => "v=0", answer: async () => ready(), mute: () => {}, send: () => lost(), close: () => {} }; },
+    });
+    await call.start({ profile: "test", session: "attached" });
+    expect(call.state.phase).toBe("error"); await call.stop();
+  });
+  test("closing a chat route and switching Main pager tabs leaves the owned session live", async () => {
+    const h = harness();
+    const target = { profile: "original-hermes-profile", session: "original-hermes-session" };
+    await h.call.start(target);
+    expect(h.call.state.phase).toBe("listening");
+
+    // Actual React Navigation stack actions; ContinuousVoice is owned above this stack.
+    const router = StackRouter({});
+    const options = {
+      routeNames: ["Main", "Chat"],
+      routeParamList: { Main: undefined, Chat: undefined },
+      routeGetIdList: {},
+    };
+    // Rehydrate partial router results before the next action; stay strictly typed.
+    const navigate = (
+      state: ReturnType<typeof router.getInitialState>,
+      action: Parameters<typeof router.getStateForAction>[1],
+    ): ReturnType<typeof router.getInitialState> => {
+      const next = router.getStateForAction(state, action, options);
+      return router.getRehydratedState(next ?? state, options);
+    };
+    let navigation = router.getInitialState(options);
+    navigation = navigate(navigation, StackActions.push("Chat"));
+    expect(navigation.routes.at(-1)?.name).toBe("Chat");
+    navigation = navigate(navigation, StackActions.pop());
+    expect(navigation.routes.map(route => route.name)).toEqual(["Main"]);
+    for (const tab of [2, 0, 1]) {
+      navigation = navigate(navigation, CommonActions.setParams({ tab }));
+      expect(navigation.routes[0]?.params).toMatchObject({ tab });
+    }
+
+    expect(h.closed).toBe(0);
+    expect(h.requests.filter(request => request.path === "/v1/realtime/session")).toHaveLength(1);
+    expect(h.requests[0]?.body).toMatchObject({ context: { hermes_target: target } });
+    expect(h.requests.filter(request => request.path.endsWith("/end"))).toHaveLength(0);
+
+    // The same peer still accepts audio and dispatches to the original session.
+    h.event({ type: "conversation.item.input_audio_transcription.completed", event_id: "after-navigation", item_id: "after-navigation-item", transcript: "Continue the Hermes task" });
+    await settle();
+    expect(h.requests.filter(request => request.path === "/v1/tools/ask_z0")).toHaveLength(1);
+    expect(h.call.state.delivery).toBe("accepted");
+    expect(h.closed).toBe(0);
+
+    await h.call.stop();
+    expect(h.closed).toBe(1);
+    expect(h.requests.filter(request => request.path === "/v1/sessions/test-session/end")).toHaveLength(1);
+  });
+  test("navigation does not retarget typed replies to a different Hermes chat", async () => {
+    const h = harness();
+    await h.call.start({ profile: "test", session: "attached" });
+    h.feed.select("other-chat");
+    h.feed.add("other-chat", "other-after-nav", "Unrelated message");
+    h.feed.finish("other-chat", "other-after-nav", "Never speak this.");
+    h.feed.add("typed-chat", "attached-after-nav", "Still attached to original session");
+    h.feed.finish("typed-chat", "attached-after-nav", "This response stays in the original call.");
+    const spoken = h.sent.filter(event => Reflect.get(event, "type") === "conversation.item.create");
+    expect(spoken).toHaveLength(1);
+    expect(JSON.stringify(spoken[0])).toContain("This response stays in the original call.");
+    expect(JSON.stringify(spoken[0])).not.toContain("Never speak this.");
+    expect(h.sent.filter(event => Reflect.get(event, "type") === "response.create")).toHaveLength(1);
+    expect(h.requests.filter(request => request.path === "/v1/realtime/session")).toHaveLength(1);
+    await h.call.stop();
+  });
+
+  test("End closes the realtime peer, releases capture and permits a fresh session", async () => {
+    let minted = 0;
+    let released = 0;
+    let closed = 0;
+    let muted = false;
+    const call = new ContinuousVoice({
+      changed: () => {}, transcript: () => {}, typedTurns: typedFeed().source,
+      captureReleased: () => { released++; },
+      request: async path => {
+        if (path === "/v1/realtime/session") return { session_id: `mic-${++minted}`, transport: "realtime", value: "ephemeral" };
+        if (path.startsWith("/v1/inbox")) return { messages: [], after: 0 };
+        if (path === "provider:answer") return "v=0\r\n";
+        return { ok: true };
+      },
+      peer: async (_event, ready) => ({
+        offer: async () => "v=0\r\n",
+        answer: async () => ready(),
+        mute: value => { muted = value; },
+        send: () => {},
+        close: () => { closed++; },
+      }),
+    });
+    const target = { profile: "test", session: "attached" };
+    await call.start(target);
+    expect(call.state.phase).toBe("listening");
+    expect(muted).toBe(false);
+    await call.stop();
+    expect(closed).toBe(1);
+    expect(muted).toBe(true);
+    expect(released).toBe(1);
+    expect(call.state).toMatchObject({ phase: "idle", muted: false });
+
+    await call.start(target);
+    expect(minted).toBe(2);
+    expect(call.state.phase).toBe("listening");
+    await call.stop();
+    expect(closed).toBe(2);
+    expect(released).toBe(2);
+  });
+});

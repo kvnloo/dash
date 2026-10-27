@@ -1,0 +1,20 @@
+appId: host.exp.exponent
+name: AppNav dots centered in gold pill
+tags:
+  - nav
+  - ci
+---
+# Expo Go must already be attached to Metro. Never launchApp/stopApp here.
+# The Chats tab returns to Main and positions the selected gold pill between two dots.
+- extendedWaitUntil:
+    visible: "Chats"
+    timeout: 15000
+- tapOn: "Chats"
+- waitForAnimationToEnd
+- assertVisible: "Bots"
+- assertVisible: "Chats"
+- assertVisible: "Orchestra"
+- assertVisible: "Primary mobile workspace"
+# Capture the real device frame. CI's wrapper removes stale output, runs Maestro,
+# then checks pixels; Maestro's screenshot command alone is not an assertion.
+- takeScreenshot: artifacts/verify-dash/maestro-nav-chrome

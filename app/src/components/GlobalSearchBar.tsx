@@ -1,20 +1,20 @@
-import { Ionicons } from "@expo/vector-icons";
-import { memo, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { LinearTransition } from "react-native-reanimated";
-import {
-  applyScopePrefix,
-  filterScopeSuggestions,
-  parseSearchQuery,
-} from "../lib/global-search";
-import { PRESS_SCALE, SNAP } from "../motion";
+import { toggleHandedness, useHandedness } from "../lib/useHandedness";
+import { Feather } from "@expo/vector-icons";
+import { type RefObject, memo, useRef, useState } from "react";
+import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { applyScopePrefix } from "../lib/global-search";
+import { appendMentionTrigger } from "../lib/composer-suggestion-request";
+import { PRESS_SCALE } from "../motion";
 import { colors, radius, space, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 import { fadeOut, popIn, popOut, staggerUp } from "./motion-enter";
 import { PressScale } from "./PressScale";
+import { ComposerSuggestions } from "./ComposerSuggestions";
 
 interface Props {
   value: string;
+  blurTarget?: RefObject<View | null>;
   onChange(value: string): void;
   onScope(label: string): void;
   onClear?(): void;
@@ -27,6 +27,7 @@ interface Props {
 
 export const GlobalSearchBar = memo(function GlobalSearchBar({
   value,
+  blurTarget,
   onChange,
   onScope,
   onClear,
@@ -35,45 +36,29 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
   placeholder = "Message Dash",
   dock = "top",
 }: Props) {
+  const thumb = useHandedness();
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
-  const parsed = useMemo(() => parseSearchQuery(value), [value]);
-  const suggestions = useMemo(() => filterScopeSuggestions(value), [value]);
-  const composingScope = parsed.mode === "mention" || parsed.mode === "slash";
-  const showScopes = focused && (composingScope || suggestions.length > 0);
+  const [selection, setSelection] = useState<{ value: string; offset: number } | null>(null);
+  const activeCursor = selection?.value === value ? selection.offset : value.length;
   const canSend = value.trim().length > 0;
 
+  const changeValue = (next: string) => {
+    setSelection(null);
+    onChange(next);
+  };
+
   const insertMention = () => {
-    if (!value.trim()) onChange("@");
-    else if (!value.startsWith("@") && !value.startsWith("/")) onChange(`@${value}`);
+    const next = appendMentionTrigger(value);
+    if (next !== value) changeValue(next);
     inputRef.current?.focus();
   };
 
   return (
     <View style={[styles.wrap, dock === "bottom" && styles.wrapBottom]}>
-      {showScopes && suggestions.length > 0 ? (
-        <Animated.View
-          style={styles.suggestions}
-          accessibilityRole="list"
-          layout={LinearTransition.springify().mass(SNAP.mass).stiffness(SNAP.stiffness).damping(SNAP.damping)}
-        >
-          {suggestions.map(({ label }, i) => (
-            <Animated.View key={label} entering={staggerUp(i)} exiting={fadeOut}>
-              <PressScale
-                onPress={() => onScope(label)}
-                scaleTo={PRESS_SCALE.control}
-                accessibilityRole="button"
-              >
-                <GlassSurface variant="raised" blur={false} borderRadius={radius.lg} style={styles.suggestion}>
-                  <Text style={styles.suggestionText}>{label}</Text>
-                </GlassSurface>
-              </PressScale>
-            </Animated.View>
-          ))}
-        </Animated.View>
-      ) : null}
+      <ComposerSuggestions text={value} cursor={activeCursor} onChange={changeValue} />
 
-      <GlassSurface borderRadius={radius.pill} style={styles.shell} contentStyle={styles.field}>
+      <GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={radius.pill} style={[styles.shell, focused && { borderWidth: 1, borderColor: colors.gold }]} contentStyle={[styles.field, thumb.row]}>
         <PressScale
           onPress={insertMention}
           scaleTo={PRESS_SCALE.control}
@@ -82,12 +67,13 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
           accessibilityLabel="Mention"
           hitSlop={8}
         >
-          <Ionicons name="add" size={22} color={colors.textMuted} />
+          <Text style={{ ...type.cardTitle, color: colors.gold }}>@</Text>
         </PressScale>
         <TextInput
           ref={inputRef}
           value={value}
-          onChangeText={onChange}
+          onChangeText={changeValue}
+          onSelectionChange={event => setSelection({ value, offset: event.nativeEvent.selection.start })}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           placeholder={placeholder}
@@ -116,19 +102,21 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
               accessibilityLabel="Send"
               hitSlop={8}
             >
-              <Ionicons name="arrow-up" size={18} color={colors.onAccent} />
+              <Feather name="arrow-up" size={18} color={colors.onAccent} />
             </PressScale>
           </Animated.View>
         ) : (
           <PressScale
             onPress={onVoice}
+            onLongPress={toggleHandedness}
+            accessibilityHint="Long press to switch thumb side"
             scaleTo={PRESS_SCALE.control}
             style={styles.sideIcon}
             accessibilityRole="button"
             accessibilityLabel="Voice input"
             hitSlop={8}
           >
-            <Ionicons name="mic-outline" size={22} color={colors.textMuted} />
+            <Feather name="mic" size={22} color={colors.textMuted} />
           </PressScale>
         )}
       </GlassSurface>
@@ -143,27 +131,29 @@ export function applyScopeMention(current: string, label: string): string {
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: space.md, paddingBottom: space.sm, gap: space.sm },
   wrapBottom: { paddingTop: space.xs, paddingBottom: 0 },
-  shell: { minHeight: 48 },
+  shell: { height: 52 },
   field: {
     flexDirection: "row",
     alignItems: "center",
     paddingLeft: 6,
     paddingRight: 6,
     paddingVertical: 6,
-    minHeight: 48,
+    height: 52,
   },
   sideIcon: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
   input: {
     flex: 1,
+    minWidth: 0,
     color: colors.text,
     ...type.body,
     paddingVertical: 8,
     paddingHorizontal: 4,
+    ...(Platform.OS === "web" ? { outlineWidth: 0 } : null),
   },
   send: {
     width: 34,
@@ -174,6 +164,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   suggestions: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  suggestion: { paddingHorizontal: space.md, paddingVertical: 8 },
+  suggestion: { paddingHorizontal: space.md, paddingVertical: 12 },
   suggestionText: { color: colors.text, ...type.small, textTransform: "none", letterSpacing: 0, fontWeight: "600" },
 });

@@ -1,13 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   assembleRoster,
+  attachOmpSessions,
   dnsLabel,
+  findOmpJsonl,
   hermesA2AUrl,
   isPhoneOs,
+  liveOmpFromDaemonRoot,
+  ompSessionDirName,
   parseHermesGatewayList,
+  parseOmpTranscript,
   parseTailscaleStatus,
+  readLiveTranscript,
   timedArgv,
 } from "./roster";
 
@@ -47,8 +54,23 @@ const status = {
 describe("roster", () => {
   test("dns label prefers MagicDNS 0 over hostname groot", () => {
     expect(dnsLabel("0.example.ts.net.", "groot")).toBe("0");
+    expect(dnsLabel("", "mbp")).toBe("mbp");
+    expect(dnsLabel(".", "mbp")).toBe("mbp");
     expect(isPhoneOs("android")).toBe(true);
     expect(isPhoneOs("linux")).toBe(false);
+  });
+
+  test("parseTailscaleStatus ignores non-objects and a missing or junk Peer", () => {
+    expect(parseTailscaleStatus(null)).toEqual([]);
+    expect(parseTailscaleStatus("nope")).toEqual([]);
+    expect(parseTailscaleStatus(1)).toEqual([]);
+    expect(parseTailscaleStatus({ Self: status.Self }).map((n) => n.hostName)).toEqual(["mbp"]);
+    expect(parseTailscaleStatus({ Self: status.Self, Peer: "nope" }).map((n) => n.hostName)).toEqual(["mbp"]);
+    expect(
+      parseTailscaleStatus({
+        Self: { DNSName: "x.example.ts.net.", Online: true, OS: "linux", TailscaleIPs: ["100.64.0.1"] },
+      }),
+    ).toEqual([]);
   });
 
   test("lists mbp, 0, cursor and skips the phone", () => {
@@ -66,10 +88,11 @@ describe("roster", () => {
       ],
       selfFallback: { hostname: "mbp", address: "100.64.0.1" },
     });
-    expect(hosts.map((h) => h.id)).toEqual(["mbp", "0", "cursor"]);
+    expect(hosts.map((h) => h.id)).toEqual(["mbp", "cursor", "0"]);
+    expect(hosts.find((h) => h.id === "0")?.name).toBe("groot");
     expect(hosts.find((h) => h.id === "0")?.hostname).toBe("groot");
     expect(hosts.find((h) => h.id === "0")?.online).toBe(true);
-    expect(hosts.find((h) => h.id === "0")?.agents.map((a) => a.name)).toEqual(["Hermes"]);
+    expect(hosts.find((h) => h.id === "0")?.agents).toEqual([]);
     expect(hosts.find((h) => h.id === "cursor")?.agents).toEqual([]);
     const mbp = hosts[0]!;
     expect(mbp.self).toBe(true);
@@ -77,6 +100,7 @@ describe("roster", () => {
       "/home/you/workspace/dash",
       "/home/you/workspace/keyconf.gen",
     ]);
+    expect(mbp.agents.filter((a) => a.kind === "omp").map((a) => a.sessionId)).toEqual(["aaa", "bbb"]);
     expect(mbp.agents.some((a) => a.id === "harness:omp")).toBe(false);
     expect(mbp.agents.find((a) => a.kind === "codex")?.status).toBe("available");
     expect(mbp.agents.find((a) => a.kind === "claude")?.status).toBe("offline");
@@ -114,6 +138,7 @@ describe("roster", () => {
       id: "hermes:default",
       name: "Hermes",
       kind: "hermes",
+      profileId: "default",
       status: "running",
       detail: "Gateway",
     });
@@ -121,19 +146,20 @@ describe("roster", () => {
       id: "hermes:connect-all",
       name: "connect-all",
       kind: "hermes",
+      profileId: "connect-all",
       status: "offline",
       detail: "Gateway stopped",
     });
   });
 
   test("Hermes A2A health running vs offline overlays the default profile", () => {
-    const base = {
+    const base: Parameters<typeof assembleRoster>[0] = {
       nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
-      ompTabs: [] as const,
-      harnesses: [] as { id: string; name: string; available: boolean }[],
+      ompTabs: [],
+      harnesses: [],
       selfFallback: { hostname: "mbp", address: "100.64.0.1" },
       signals: {
-        hermesProfiles: [{ id: "default", gateway: "running" as const }],
+        hermesProfiles: [{ id: "default", gateway: "running" }],
       },
     };
     const running = assembleRoster({
@@ -192,9 +218,7 @@ describe("roster", () => {
       selfFallback: { hostname: "mbp" },
     });
     expect(hosts.find((h) => h.id === "cursor")?.agents).toEqual([]);
-    expect(hosts.find((h) => h.id === "0")?.agents).toEqual([
-      { id: "hermes", name: "Hermes", kind: "hermes", status: "running", detail: "Mesh node" },
-    ]);
+    expect(hosts.find((h) => h.id === "0")?.agents).toEqual([]);
   });
 
   test("parses hermes gateway list running vs stopped", () => {
@@ -208,6 +232,33 @@ describe("roster", () => {
       { id: "connect-all", gateway: "stopped" },
       { id: "cairn-verify", gateway: "stopped" },
     ]);
+  });
+
+  test("observed remote agents retain host, profile, and session identity", () => {
+    const nodes = parseTailscaleStatus(status);
+    const hosts = assembleRoster({ nodes, ompTabs: [], harnesses: [], selfFallback: { hostname: "mbp" },
+      signals: { remoteAgents: { "0": [{ id: "hermes:research", name: "research", kind: "hermes",
+        profileId: "research", sessionId: "remote-session", status: "running" }] } },
+    });
+    expect(hosts.find((host) => host.id === "0")?.agents).toEqual([{
+      id: "hermes:research", name: "research", kind: "hermes", hostId: "0",
+      profileId: "research", sessionId: "remote-session", status: "running",
+    }]);
+    const offline = assembleRoster({ nodes: nodes.map((node) => ({ ...node, online: node.self })),
+      ompTabs: [], harnesses: [], selfFallback: { hostname: "mbp" },
+      signals: { remoteAgents: { "0": [{ id: "hermes:research", name: "research", kind: "hermes",
+        profileId: "research", sessionId: "remote-session", status: "running" }] } },
+    });
+    expect(offline.find((host) => host.id === "0")?.agents[0]?.status).toBe("offline");
+  });
+
+  test("Hermes profile identity and native session stay distinct", () => {
+    const hosts = assembleRoster({ nodes: [], ompTabs: [], harnesses: [], selfFallback: { hostname: "mbp" },
+      signals: { hermesProfiles: [{ id: "research", gateway: "running", sessionId: "native-session" }] },
+    });
+    expect(hosts[0]?.agents[0]?.id).toBe("hermes:research");
+    expect(hosts[0]?.agents[0]?.profileId).toBe("research");
+    expect(hosts[0]?.agents[0]?.sessionId).toBe("native-session");
   });
 
   test("builds A2A URL from env or self address, never a baked 100.x", () => {
@@ -235,12 +286,179 @@ describe("timed probes", () => {
     expect(src).toContain("refreshHermesList");
     expect(src).toContain("ROSTER_TTL_MS");
     expect(src).toContain('Bun.which("hermes")');
+    expect(src).toContain("attachOmpSessions");
     expect(src).not.toContain('spawnText(["hermes", "gateway", "list"])');
+  });
+
+  test("bridge resolves its tailnet binding through the fail-closed host policy", () => {
+    const src = readFileSync(join(import.meta.dir, "../index.ts"), "utf8");
+    expect(src).toContain("const HOST = resolveBridgeHost(");
+    expect(src).toContain("tailnetIp: tailscaleIp");
+    expect(src).toContain("process.env.DASH_ALLOW_LOOPBACK");
+    expect(src).not.toContain('process.env.DASH_HOST ?? "0.0.0.0"');
+    const start = JSON.parse(readFileSync(join(import.meta.dir, "../package.json"), "utf8")).scripts.start as string;
+    expect(start).not.toContain("DASH_HOST=");
   });
 });
 
-  test("bridge listens on all interfaces so LAN pair works", () => {
-    const src = readFileSync(join(import.meta.dir, "../index.ts"), "utf8");
-    expect(src).toContain('const HOST = process.env.DASH_HOST ?? "0.0.0.0";');
-    expect(src).not.toContain("process.env.DASH_HOST ?? tailscaleIp");
+describe("live OMP sessions", () => {
+  test("prefers an explicit tab sessionId over the daemon id", () => {
+    const hosts = assembleRoster({
+      nodes: parseTailscaleStatus({ Self: status.Self, Peer: {} }),
+      ompTabs: [{ id: "aaa", cwd: "/home/you/workspace/dash", sessionId: "01liveomp", title: "dash" }],
+      harnesses: [{ id: "omp", name: "OMP", available: true }],
+      selfFallback: { hostname: "mbp" },
+    });
+    const omp = hosts[0]!.agents.find((a) => a.kind === "omp");
+    expect(omp?.sessionId).toBe("01liveomp");
+    expect(omp?.kind).toBe("omp");
   });
+
+  test("encodes cwd the way OMP session folders do", () => {
+    expect(ompSessionDirName("/home/you/workspace/dash", "/home/you")).toBe("-workspace-dash");
+    expect(ompSessionDirName("/home/you/.treehouse/dash-fecad0/2/dash", "/home/you")).toBe(
+      "-.treehouse-dash-fecad0-2-dash",
+    );
+  });
+
+  test("attaches the latest OMP session id for a live tab cwd", () => {
+    const root = mkdtempSync(join(tmpdir(), "dash-omp-"));
+    const home = join(root, "home");
+    const cwd = join(home, "workspace", "dash");
+    const sessionDir = join(root, "sessions", ompSessionDirName(cwd, home));
+    mkdirSync(sessionDir, { recursive: true });
+    writeFileSync(
+      join(sessionDir, "2026-09-10T20-00-00-000Z_01oldsession.jsonl"),
+      `${JSON.stringify({ type: "session", version: 3, id: "01oldsession" })}\n`,
+    );
+    writeFileSync(
+      join(sessionDir, "2026-09-10T23-30-36-633Z_01liveomp.jsonl"),
+      `${JSON.stringify({ type: "title", v: 1, title: "Ship chats" })}\n${JSON.stringify({ type: "session", version: 3, id: "01liveomp" })}\n`,
+    );
+    const attached = attachOmpSessions([{ id: "aaa", cwd }], join(root, "sessions"), home);
+    expect(attached).toEqual([{ id: "aaa", cwd, sessionId: "01liveomp", title: "Ship chats" }]);
+  });
+
+  test("keeps a live tab when the session store has no transcript yet", () => {
+    const root = mkdtempSync(join(tmpdir(), "dash-omp-"));
+    const attached = attachOmpSessions(
+      [{ id: "aaa", cwd: join(root, "project") }],
+      join(root, "sessions"),
+      root,
+    );
+    expect(attached).toEqual([{ id: "aaa", cwd: join(root, "project"), sessionId: "aaa" }]);
+  });
+
+  test("discovers a live daemon tab from broker pid and sock", () => {
+    const root = mkdtempSync(join(tmpdir(), "dash-omp-"));
+    const tab = join(root, "38a3f3a952f042e1");
+    mkdirSync(tab, { recursive: true });
+    writeFileSync(join(tab, "broker.sock"), "");
+    writeFileSync(join(tab, "broker.pid"), JSON.stringify({ pid: 4242 }));
+    writeFileSync(join(tab, "scope.json"), JSON.stringify({ projectDir: "/home/you/workspace/dash" }));
+    expect(liveOmpFromDaemonRoot(root, (pid) => pid === 4242)).toEqual([
+      { id: "38a3f3a952f042e1", cwd: "/home/you/workspace/dash" },
+    ]);
+  });
+
+  test("parses user and assistant turns from an OMP jsonl", () => {
+    const text = [
+      JSON.stringify({ type: "session", version: 3, id: "01liveomp" }),
+      JSON.stringify({
+        type: "message",
+        id: "u1",
+        timestamp: "2026-09-10T23:30:36.633Z",
+        message: { role: "user", content: [{ type: "text", text: "ship the live transcript" }] },
+      }),
+      JSON.stringify({
+        type: "message",
+        id: "think",
+        timestamp: "2026-09-10T23:30:37.000Z",
+        message: { role: "assistant", content: [{ type: "thinking", thinking: "planning" }] },
+      }),
+      JSON.stringify({
+        type: "message",
+        id: "tool",
+        timestamp: "2026-09-10T23:30:38.000Z",
+        message: { role: "toolResult", content: [{ type: "text", text: "ignored" }] },
+      }),
+      JSON.stringify({
+        type: "message",
+        id: "a1",
+        timestamp: "2026-09-10T23:30:40.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "draft" },
+            { type: "text", text: "opening the row shows this" },
+          ],
+        },
+      }),
+    ].join("\n");
+    expect(parseOmpTranscript(text)).toEqual([
+      { id: "u1", role: "user", text: "ship the live transcript", at: Date.parse("2026-09-10T23:30:36.633Z") },
+      { id: "a1", role: "assistant", text: "opening the row shows this", at: Date.parse("2026-09-10T23:30:40.000Z") },
+    ]);
+  });
+
+  test("reads the jsonl for a live sessionId and fails closed on unknown harness ids", () => {
+    const root = mkdtempSync(join(tmpdir(), "dash-omp-"));
+    const home = join(root, "home");
+    const cwd = join(home, "workspace", "dash");
+    const sessionRoot = join(root, "sessions");
+    const sessionDir = join(sessionRoot, ompSessionDirName(cwd, home));
+    mkdirSync(sessionDir, { recursive: true });
+    writeFileSync(
+      join(sessionDir, "2026-09-10T23-30-36-633Z_01liveomp.jsonl"),
+      `${JSON.stringify({ type: "session", version: 3, id: "01liveomp" })}\n${JSON.stringify({
+        type: "message",
+        id: "u1",
+        timestamp: "2026-09-10T23:30:36.633Z",
+        message: { role: "user", content: [{ type: "text", text: "hello from firstmate" }] },
+      })}\n${JSON.stringify({
+        type: "message",
+        id: "a1",
+        timestamp: "2026-09-10T23:30:41.000Z",
+        message: { role: "assistant", content: [{ type: "text", text: "this is the transcript" }] },
+      })}\n`,
+    );
+    expect(findOmpJsonl(sessionRoot, "01liveomp", cwd, home)?.endsWith("_01liveomp.jsonl")).toBe(true);
+    expect(readLiveTranscript("omp", "01liveomp", sessionRoot, cwd, home).map((m) => m.text)).toEqual([
+      "hello from firstmate",
+      "this is the transcript",
+    ]);
+    expect(readLiveTranscript("cursor-cloud", "01liveomp", sessionRoot, cwd, home)).toEqual([]);
+    expect(readLiveTranscript("omp", "../etc/passwd", sessionRoot, cwd, home)).toEqual([]);
+    const src = readFileSync(join(import.meta.dir, "../index.ts"), "utf8");
+    expect(src).toContain('case "history"');
+    expect(src).toContain("readLiveTranscript");
+    expect(src).not.toContain("api.cursor.com");
+  });
+});
+
+describe("chat index keeps the hello roster small and off the archive", () => {
+  test("collectRoster takes the AgentsView head from the worker snapshot, never a sync archive query", () => {
+    const roster = readFileSync(join(import.meta.dir, "roster.ts"), "utf8");
+    const adapter = readFileSync(join(import.meta.dir, "agentsview-sessions.ts"), "utf8");
+    const index = readFileSync(join(import.meta.dir, "../index.ts"), "utf8");
+    for (const src of [roster, adapter, index]) {
+      expect(src).not.toContain("bun:sqlite");
+      expect(src).not.toContain("agentsviewHistory");
+    }
+    expect(roster).toContain("agentsviewSessions(listed)");
+    expect(adapter).toContain("rows: AgentInfo[] = head");
+  });
+
+  test("hello head is bounded: 10 per catalog kind + Hermes head + live rows", async () => {
+    const { agentsviewSessions, setArchiveHead, AGENTSVIEW_KINDS } = await import("./agentsview-sessions");
+    const { rosterHermesHead } = await import("./hermes-sessions");
+    const rows = AGENTSVIEW_KINDS.flatMap(kind => Array.from({ length: 10 }, (_, i) => ({ id: `av:${kind}:${i}`, name: "x", kind, status: "available" as const, sessionId: String(i) })));
+    setArchiveHead(rows);
+    try {
+      expect(agentsviewSessions(new Set(), undefined, {}).length).toBe(10 * AGENTSVIEW_KINDS.length);
+      expect(agentsviewSessions(new Set(["codex:3"]), undefined, {}).length).toBe(10 * AGENTSVIEW_KINDS.length - 1);
+    } finally { setArchiveHead([]); }
+    expect(rosterHermesHead({})).toBe(50);
+    expect(rosterHermesHead({ DASH_ROSTER_HERMES_HEAD: "5" })).toBe(5);
+  });
+});

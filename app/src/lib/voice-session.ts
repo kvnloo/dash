@@ -8,9 +8,74 @@
  * pause that ended the utterance in the first place.
  */
 
+import { checkVoiceBootstrap, type VoiceBootstrapRequest, type VoiceBootstrapTarget } from "./voice-launch";
+import { VoiceAccessDenied, type VoicePeer } from "./continuous-voice";
 import { File } from "expo-file-system";
 import { bytesToBase64 } from "./pair-crypto";
 import { Vad } from "./vad";
+import { recordingPhase } from "./voice-orb";
+
+/** Only safe, concise connection diagnostics reach the phone; never show tokens or raw SDP. */
+export type VoiceConnectionFailure = "webrtc" | "permission" | "sdp" | "ice" | "token";
+
+export function voiceConnectionError(kind: VoiceConnectionFailure): string {
+  switch (kind) {
+    case "webrtc": return "WebRTC could not load";
+    case "permission": return "Microphone permission denied";
+    case "sdp": return "Voice signaling failed";
+    case "ice": return "Voice connection lost";
+    case "token": return "Voice authorization failed";
+  }
+}
+
+/** Normalize longer controller failure notes for the one-line error in the voice pill. */
+export function voiceConnectionErrorLine(note: string | undefined): string {
+  if (!note?.trim()) return "Voice unavailable";
+  if (note.startsWith("Voice disconnected.") || note.startsWith("Voice connection timed out.")) {
+    return voiceConnectionError("ice");
+  }
+  if (note.startsWith("Voice authorization/network unavailable.")) return voiceConnectionError("token");
+  if (note.startsWith("Realtime reported an error.")) return "Realtime session failed";
+  if (note.startsWith("Voice unavailable.")) return "Voice connection failed";
+  if (note.startsWith("Mic stopped because Dash left the foreground.")) return "Voice stopped in background";
+  return note.replace(/\s+/g, " ").trim();
+}
+
+/** Preserve a specific SDP failure through ContinuousVoice's error teardown. */
+export function protectVoicePeer(peer: VoicePeer): VoicePeer {
+  return {
+    async offer() {
+      try { return await peer.offer(); }
+      catch { throw new VoiceAccessDenied(voiceConnectionError("sdp")); }
+    },
+    async answer(sdp) {
+      try { await peer.answer(sdp); }
+      catch { throw new VoiceAccessDenied(voiceConnectionError("sdp")); }
+    },
+    mute: value => peer.mute(value),
+    send: event => peer.send(event),
+    close: () => peer.close(),
+  };
+}
+
+/** Wait until native media cleanup, not merely an error state, before re-acquiring the mic. */
+export class VoiceMicReleaseGate {
+  private pending: Promise<void> = Promise.resolve();
+
+  wait(): Promise<void> { return this.pending; }
+
+  hold(release: () => void): () => void {
+    let complete: () => void = () => {};
+    const finished = new Promise<void>(resolve => { complete = resolve; });
+    this.pending = this.pending.then(() => finished);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      try { release(); } finally { complete(); }
+    };
+  }
+}
 
 /** Metering poll interval. Fast enough to resolve the 900ms end-of-speech pause. */
 export const POLL_MS = 100;
@@ -54,8 +119,14 @@ export class VoiceSession {
   private readonly vad = new Vad();
   private busy = false;
   private running = false;
+  private generation = 0;
+  /** A new capture cannot begin until the previous native stop has completed. */
+  private stopping: Promise<void> | undefined;
+  private preparing: Promise<void> | undefined;
+  private recorderStopping: Promise<void> | undefined;
   private phase: VoicePhase = "idle";
   private replyActive = false;
+  private awaitingReply = false;
 
   constructor(
     private readonly recorder: Recorder,
@@ -64,45 +135,86 @@ export class VoiceSession {
 
   async start(): Promise<void> {
     if (this.running) return;
+    const generationBeforeWait = this.generation;
+    if (this.stopping) await this.stopping;
+    // A cancelled preparation still owns the native recorder until it settles.
+    if (this.preparing) {
+      try { await this.preparing; } catch { /* A fresh start may retry a failed preparation. */ }
+    }
+    if (this.running || this.generation !== generationBeforeWait) return;
     this.running = true;
-    await this.beginRecording();
+    const generation = ++this.generation;
+    await this.beginRecording(generation);
+    if (!this.running || generation !== this.generation) return;
     this.timer = setInterval(() => void this.tick(), POLL_MS);
   }
 
   async stop(): Promise<void> {
     this.running = false;
+    this.generation++;
     clearInterval(this.timer);
     this.timer = undefined;
     this.vad.reset();
+    this.replyActive = false;
+    this.awaitingReply = false;
+    this.hooks.onLevel(NO_SIGNAL_DB);
     this.setPhase("idle");
-    try {
-      if (this.recorder.getStatus().isRecording) await this.recorder.stop();
-    } catch {
-      // Already stopped, or the recorder was torn down with the screen.
+
+    if (this.stopping) return this.stopping;
+    const stopping = (async () => {
+      try {
+        // Reuse an in-flight utterance stop rather than stopping the same mic twice.
+        if (this.recorderStopping) await this.recorderStopping;
+        else if (this.recorder.getStatus().isRecording) await this.endRecording();
+      } catch {
+        // Already stopped, or the recorder was torn down with the screen.
+      }
+    })();
+    this.stopping = stopping;
+    try { await stopping; } finally {
+      if (this.stopping === stopping) this.stopping = undefined;
     }
   }
 
   /** Tells the session whether a reply is currently being spoken, for barge-in. */
   setReplyActive(active: boolean): void {
+    if (!this.running) return;
     this.replyActive = active;
     if (this.phase === "thinking" || this.phase === "speaking") {
-      this.setPhase(active ? "speaking" : "listening");
+      this.setPhase(recordingPhase(active, this.awaitingReply));
     }
   }
 
   /** The turn finished, so we are back to plain listening. */
   turnSettled(): void {
-    if (this.phase === "thinking") this.setPhase(this.replyActive ? "speaking" : "listening");
+    this.awaitingReply = false;
+    if (this.running && this.phase === "thinking") this.setPhase(recordingPhase(this.replyActive, false));
   }
 
-  private async beginRecording(): Promise<void> {
+  private async beginRecording(generation: number): Promise<void> {
+    let preparing: Promise<void> | undefined;
     try {
-      await this.recorder.prepareToRecordAsync();
+      preparing = this.recorder.prepareToRecordAsync();
+      this.preparing = preparing;
+      await preparing;
+      if (!this.running || generation !== this.generation) return;
       this.recorder.record();
-      this.setPhase(this.replyActive ? "speaking" : "listening");
+      this.setPhase(recordingPhase(this.replyActive, this.awaitingReply));
     } catch (error) {
+      if (!this.running || generation !== this.generation) return;
       this.hooks.onError(error instanceof Error ? error.message : String(error));
       await this.stop();
+    } finally {
+      if (this.preparing === preparing) this.preparing = undefined;
+    }
+  }
+
+  private async endRecording(): Promise<void> {
+    if (this.recorderStopping) return this.recorderStopping;
+    const stopping = Promise.resolve().then(() => this.recorder.stop());
+    this.recorderStopping = stopping;
+    try { await stopping; } finally {
+      if (this.recorderStopping === stopping) this.recorderStopping = undefined;
     }
   }
 
@@ -132,23 +244,89 @@ export class VoiceSession {
   }
 
   private async finishUtterance(send: boolean): Promise<void> {
-    await this.recorder.stop();
+    const generation = this.generation;
+    await this.endRecording();
+    if (!this.running || generation !== this.generation) return;
     const uri = this.recorder.uri;
     if (send && uri) {
       const bytes = new Uint8Array(await new File(uri).arrayBuffer());
+      if (!this.running || generation !== this.generation) return;
       const encoded = bytesToBase64(bytes);
       const chunks: string[] = [];
       for (let i = 0; i < encoded.length; i += CHUNK_CHARS) {
         chunks.push(encoded.slice(i, i + CHUNK_CHARS));
       }
-      if (this.hooks.onUtterance(chunks, mimeFor(uri))) this.setPhase("thinking");
+      this.awaitingReply = this.hooks.onUtterance(chunks, mimeFor(uri));
+      if (this.awaitingReply) this.setPhase("thinking");
     }
-    if (this.running) await this.beginRecording();
+    if (this.running && generation === this.generation) await this.beginRecording(generation);
   }
 
   private setPhase(phase: VoicePhase): void {
     if (this.phase === phase) return;
     this.phase = phase;
     this.hooks.onPhase(phase);
+  }
+}
+
+/** Presentation contract for a compact voice pill. Error always exposes Retry. */
+export type VoiceBootstrapPillState =
+  | { phase: "idle"; message: "" }
+  | { phase: "connecting"; message: "Connecting to voice…" }
+  | { phase: "ready"; message: "Voice ready" }
+  | { phase: "error"; message: string; actionLabel: "Retry" };
+
+/**
+ * A per-target bootstrap attempt. Explicit Retry reuses the exact attached
+ * conversation, never replays a spoken request and never retries automatically.
+ * Cancel invalidates in-flight responses before they can update the pill.
+ */
+export class VoiceBootstrapSession {
+  private current: VoiceBootstrapPillState = { phase: "idle", message: "" };
+  private target: VoiceBootstrapTarget | null = null;
+  private generation = 0;
+
+  constructor(
+    private readonly request: VoiceBootstrapRequest,
+    private readonly changed: (state: VoiceBootstrapPillState) => void,
+  ) {}
+
+  get state(): VoiceBootstrapPillState {
+    return this.current;
+  }
+
+  async start(target: VoiceBootstrapTarget): Promise<void> {
+    if (this.current.phase === "connecting" || this.current.phase === "ready") return;
+    // Freeze the target: Retry must never drift to another active chat.
+    this.target = { profile: target.profile, session: target.session };
+    await this.connect(this.target);
+  }
+
+  async retry(): Promise<void> {
+    if (this.current.phase !== "error" || !this.target) return;
+    await this.connect(this.target);
+  }
+
+  cancel(): void {
+    ++this.generation;
+    this.target = null;
+    this.publish({ phase: "idle", message: "" });
+  }
+
+  private async connect(target: VoiceBootstrapTarget): Promise<void> {
+    const generation = ++this.generation;
+    this.publish({ phase: "connecting", message: "Connecting to voice…" });
+    const outcome = await checkVoiceBootstrap(target, this.request);
+    if (generation !== this.generation) return;
+    if (outcome.kind === "ready") {
+      this.publish({ phase: "ready", message: "Voice ready" });
+    } else {
+      this.publish({ phase: "error", message: outcome.reason, actionLabel: outcome.retryLabel });
+    }
+  }
+
+  private publish(state: VoiceBootstrapPillState): void {
+    this.current = state;
+    this.changed(state);
   }
 }

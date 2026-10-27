@@ -322,7 +322,7 @@ describe("pinned geometry (mutation canaries)", () => {
   });
 
   test("dots sit in the pill center: three equal slots, not stuck to the top", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+    const src = readFileSync(join(import.meta.dir, "GelNav.tsx"), "utf8");
     const tabs = src.match(/tabs: \{[\s\S]*?\n  \},/)?.[0] ?? "";
     const tab = src.match(/tab: \{[\s\S]*?\n  \},/)?.[0] ?? "";
     expect(tabs).toContain("top: NAV_PAGER_PAD");
@@ -344,9 +344,13 @@ describe("pinned geometry (mutation canaries)", () => {
   });
 });
 
-describe("native AppNav wiring", () => {
-  test("does not drive the pill through a WebView JS bridge", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+// The owner asked for the top navigation bar back after the Living Night restyle: Expand,
+// the three-dot gel pager and the Bridge chevron, in their old positions, restyled to tokens.
+// The pane name, approvals, compose and settings live in the WorkspaceHeader row under it.
+describe("top navigation bar wiring", () => {
+  const src = readFileSync(join(import.meta.dir, "GelNav.tsx"), "utf8");
+  test("native and web share one Reanimated renderer, not a WebView", () => {
+    for (const file of ["AppNav.tsx", "AppNav.web.tsx"]) expect(readFileSync(join(import.meta.dir, file), "utf8")).toContain("./GelNav");
     expect(src).not.toContain("react-native-webview");
     expect(src).not.toContain("injectJavaScript");
     expect(src).not.toContain("androidLayerType");
@@ -355,8 +359,26 @@ describe("native AppNav wiring", () => {
     expect(src).toContain("setProgress");
   });
 
+  test("keeps the old controls in order: Expand, pager, Bridge details", () => {
+    const expand = src.indexOf('accessibilityLabel="Expand"');
+    const pager = src.indexOf('accessibilityLabel="Primary mobile workspace"');
+    const bridge = src.indexOf('accessibilityLabel="Bridge details"');
+    expect(expand).toBeGreaterThan(0);
+    expect(pager).toBeGreaterThan(expand);
+    expect(bridge).toBeGreaterThan(pager);
+    expect(src).toContain('navigation.navigate("Voice")');
+    expect(src).toContain("pull.toggle()");
+    expect(src).toContain("useBridgePullPan");
+  });
+
+  test("tabs are accessible with explicit web selected state", () => {
+    expect(src).toContain("TAB_LABELS.map");
+    expect(src).toContain('accessibilityRole="tab"');
+    expect(src).toContain("selected: i === active");
+    expect(src).toContain("aria-selected={i === active}");
+  });
+
   test("paints three 4dp dots as native views above the gold pill", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
     expect(src).toContain("NAV_DOT_SIZE");
     expect(src).toContain("#211b10");
     expect(src).toContain("#837F74");
@@ -366,14 +388,14 @@ describe("native AppNav wiring", () => {
   });
 
   test("does not snap the pill to the integer tab when a flick settles", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
     expect(src).not.toContain("progress.value = clampProgress(tab)");
+    expect(src).toContain("if (!progressProp) internal.value = clampSettled(tab)");
+    expect(src).toContain("const progress = progressProp ?? internal");
   });
 
   test("dots are circular and the gold pill is not a hardware-texture square", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
     expect(src).toContain("borderRadius: NAV_DOT_SIZE / 2");
-    expect(src).toContain("overflow: \"hidden\"");
+    expect(src).toContain('overflow: "hidden"');
     expect(src).not.toContain("renderToHardwareTextureAndroid");
     expect(src).not.toContain("elevation:");
     expect(src).toContain("android_ripple");
@@ -381,7 +403,6 @@ describe("native AppNav wiring", () => {
   });
 
   test("stadium layout does not eat 2px of slot width with a Yoga border", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
     expect(src).toContain("NAV_PAGER_WIDTH");
     expect(src).toContain("NAV_SLOT_WIDTH");
     expect(src).toContain("NAV_PILL_HEIGHT");
@@ -392,105 +413,100 @@ describe("native AppNav wiring", () => {
   });
 
   test("tab hit targets fill the 44px slot so the 4px dots sit in the pill center", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("height: NAV_PILL_HEIGHT");
-    expect(src).toContain("width: NAV_SLOT_WIDTH");
     const tabStyle = src.match(/tab: \{[\s\S]*?\n  \},/)?.[0] ?? "";
     expect(tabStyle).toContain("width: NAV_SLOT_WIDTH");
     expect(tabStyle).toContain("height: NAV_PILL_HEIGHT");
-    expect(tabStyle).toContain('alignItems: "center"');
-    expect(tabStyle).toContain('justifyContent: "center"');
     expect(tabStyle).not.toContain("flex: 1");
     expect(tabStyle).not.toContain("transform");
   });
 
-  test("gold pill is a UI-thread gel: spring follow, stretch X, squash Y", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).toContain("useFrameCallback");
-    expect(src).toContain("pillStep");
-    expect(src).toContain("pillStretch");
-    expect(src).toContain("scaleX");
-    expect(src).toContain("scaleY");
-  });
-
-  test("follows overscroll past page 0 instead of clamping the gel to the first slot", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
-    expect(src).not.toContain("progress.value < 0 ? 0");
-    expect(src).toContain("pillStep(follow.value, vel.value, progress.value");
+  test("gold pill directly follows the pager without lag or stretch", () => {
+    expect(src).not.toContain("useFrameCallback");
+    expect(src).not.toContain("pillStep");
+    expect(src).not.toContain("pillStretch");
+    expect(src).toContain("const n = p");
+    expect(src).toContain("translateX: n * slot");
   });
 
   test("pager outline uses the same squircle radius as the gold pill", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
     expect(src).toContain("NAV_PAGER_RADIUS");
     expect(src).toContain("NAV_PILL_RADIUS");
     expect(NAV_PAGER_RADIUS).toBe(NAV_PILL_RADIUS);
-    expect(GOLDEN_NAV_CSS).toContain(`border-radius: ${NAV_PAGER_RADIUS}px`);
     expect(src).not.toContain("borderRadius: 23");
   });
 
-  test("chrome is the 60px collapsed bar with inset pill, not an 80px spacer", () => {
-    const src = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+  test("chrome is the 60px bar in Living Night glass with an inset gold pill", () => {
     expect(src).toContain("NAV_CHROME_HEIGHT");
     expect(src).toContain("GOLD_68");
     expect(src).toContain("styles.spec");
     expect(src).toContain("styles.shade");
+    expect(src).toContain("glass.fillNavStrong");
+    expect(src).toContain("borderTopColor: glass.highlight");
     expect(src).not.toContain("styles.glow");
     expect(src).not.toContain("height: 80");
-    expect(src).not.toContain("react-native-webview");
+    // One stroke icon family (Feather), no bitmap icons.
+    expect(src).toContain('name="maximize-2"');
+    expect(src).toContain('name="chevron-down"');
+    expect(src).not.toContain("require(");
+  });
+
+  test("Main, Chat and Settings all mount the bar", () => {
+    for (const screen of ["MainScreen", "ChatScreen", "SettingsScreen"]) {
+      expect(readFileSync(join(import.meta.dir, `../screens/${screen}.tsx`), "utf8")).toContain("<AppNav");
+    }
+  });
+});
+
+describe("workspace header under the bar", () => {
+  const src = readFileSync(join(import.meta.dir, "WorkspaceHeader.tsx"), "utf8");
+  test("names the current pane and keeps compose, settings and approvals reachable", () => {
+    expect(src).toContain("TAB_LABELS[clampTab(tab)]");
+    expect(src).toContain("label={WORKSPACE_ACTION_LABELS.newChat}");
+    expect(src).toContain("label={WORKSPACE_ACTION_LABELS.settings}");
+    expect(src).toContain("createConversation");
+    expect(src).toContain("upstreamApprovalAction(pending)");
+    expect(src).toContain("s.items.filter(actionable).length");
+    expect(src).toContain('navigation.navigate("Approvals")');
+    expect(src).toContain("backgroundColor: colors.gold");
+    expect(src).not.toContain("...type.cardTitle, color: colors.gold"); // a serif "1" reads as the letter I
+    expect(src).not.toContain("Bridge details"); // the chevron lives in the bar only
+  });
+  test("the approvals pill cannot push the header actions off screen", () => {
+    // PressScale's inner view is flex: 1. On a row-direction PressScale it grows to the whole
+    // header width, so pending approvals hid trace, new chat and settings (e2e B3).
+    const pill = /approvals: \{([^}]*)\}/.exec(src)?.[1] ?? "";
+    expect(pill).not.toContain("flexDirection");
+    expect(src).toContain("approvalsRow: { flexDirection: \"row\"");
+    expect(src).toContain("<View style={styles.approvalsRow}>");
+  });
+  test("is mounted on Main directly under the bar", () => {
+    const main = readFileSync(join(import.meta.dir, "../screens/MainScreen.tsx"), "utf8");
+    expect(main.indexOf("<WorkspaceHeader")).toBeGreaterThan(main.indexOf("<AppNav"));
   });
 });
 
 describe("MainPager scroll wiring", () => {
-  test("forwards onPageScroll so the pill can track the drag", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    const types = readFileSync(join(import.meta.dir, "MainPager.tsx"), "utf8");
-    expect(types).toContain("onPageScroll");
-    expect(native).toContain("onPageScroll");
+  const pager = readFileSync(join(import.meta.dir, "GesturePager.tsx"), "utf8");
+  test("native and web share bounded UI-thread gesture rendering", () => {
+    for (const platform of ["native", "web"]) expect(readFileSync(join(import.meta.dir, `MainPager.${platform}.tsx`), "utf8")).toContain("./GesturePager");
+    expect(pager).toContain("cancelAnimation(progress)");
+    expect(pager).toContain("start.value - e.translationX / pageWidth");
+    expect(pager).toContain("navDuration(distance, velocity, reduced)");
+    expect(pager).toContain("navProgress(t, distance, velocity, duration)");
+    expect(pager).not.toContain("BOUNCE");
+    expect(pager).not.toContain("onPageScroll");
   });
-
-  test("writes pager offset on the UI thread so a fling is not JS-bridged", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    expect(native).toContain("createAnimatedComponent");
-    expect(native).toContain("useEvent");
-    expect(native).toContain("onPageScroll");
-    expect(native).toContain("worklet");
+  test("heavy unvisited panes mount only after settle; canceled completion does not mount", () => {
+    expect(pager).toContain("if (finished) runOnJS(completed)(index)");
+    expect(pager).toContain("visited.has(index) ? child");
+    expect(pager).toContain('accessibilityLabel="Loading workspace"');
+    expect(pager).toContain("page !== selected.current");
   });
-
-  test("does not call setPage again when onPageSelected reports the flick target", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    expect(native).toContain("fromPager");
-  });
-
-  test("does not keep all three panes in the GPU layer during a fling", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    expect(native).toContain("offscreenPageLimit={1}");
-  });
-
-  test("snaps pill progress on onPageSelected so Android's dummy page-0 scroll cannot stick", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    expect(native).toContain("armed.value === 0");
-    expect(native).toContain("progress.value = real");
-  });
-
-  test("wraps real pages in bounce sentinels so page 0 can overscroll to -1 then snap back", () => {
-    const native = readFileSync(join(import.meta.dir, "MainPager.native.tsx"), "utf8");
-    expect(native).toContain("bounce-start");
-    expect(native).toContain("bounce-end");
-    expect(native).toContain("e.position + e.offset - BOUNCE");
-    expect(native).toContain("inner.current?.setPage(BOUNCE)");
-    expect(native).toContain('overScrollMode="always"');
-    expect(native).toContain("pageWidth");
-    expect(native).toContain("width: pageWidth");
-    expect(native).not.toContain('overScrollMode="never"');
-  });
-
-  test("main page body follows the pager with heavier gel, not a layout height anim", () => {
-    const src = readFileSync(join(import.meta.dir, "../screens/MainScreen.tsx"), "utf8");
-    expect(src).toContain("pageStep");
-    expect(src).toContain("pageStretch");
-    expect(src).toContain("PAGE_LAG_PX");
-    expect(src).toContain("useFrameCallback");
-    expect(src).toContain("pageWidth={width}");
-    expect(src).not.toContain("height: pagerProgress");
+  test("page body has no second spring simulation", () => {
+    const main = readFileSync(join(import.meta.dir, "../screens/MainScreen.tsx"), "utf8");
+    expect(main).not.toContain("pageStep");
+    expect(main).not.toContain("pageStretch");
+    expect(main).not.toContain("useFrameCallback");
+    expect(main).toContain("pageWidth={width}");
   });
 });

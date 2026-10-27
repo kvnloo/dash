@@ -1,0 +1,622 @@
+{
+  "repositories": [
+    {
+      "repository": "pingdotgg/t3code",
+      "revision": "4741dc563f5df538babe02421dca513f2458e577",
+      "pushed_at": "2026-10-21T02:41:34Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "apps/web/src/components/ChatMarkdown.tsx",
+          "url": "https://github.com/pingdotgg/t3code/blob/4741dc563f5df538babe02421dca513f2458e577/apps/web/src/components/ChatMarkdown.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "can1357/oh-my-pi",
+      "revision": "d5cd750e41fede277f9eb933455da92a0738915e",
+      "pushed_at": "2026-10-21T02:12:35Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "packages/tui/src/components/markdown.ts",
+          "url": "https://github.com/can1357/oh-my-pi/blob/d5cd750e41fede277f9eb933455da92a0738915e/packages/tui/src/components/markdown.ts"
+        }
+      ]
+    },
+    {
+      "repository": "NousResearch/hermes-agent",
+      "revision": "0b8dee00fafe975f10be40172322d0ccfabfa7f6",
+      "pushed_at": "2026-10-21T02:23:41Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "ui-tui/src/components/markdown.tsx",
+          "url": "https://github.com/NousResearch/hermes-agent/blob/0b8dee00fafe975f10be40172322d0ccfabfa7f6/ui-tui/src/components/markdown.tsx"
+        },
+        {
+          "path": "apps/desktop/src/components/assistant-ui/markdown-text.tsx",
+          "url": "https://github.com/NousResearch/hermes-agent/blob/0b8dee00fafe975f10be40172322d0ccfabfa7f6/apps/desktop/src/components/assistant-ui/markdown-text.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "EKKOLearnAI/ekko-studio",
+      "revision": "0760128df02dbcc2c7bd3776edcfbd8035dc58d7",
+      "pushed_at": "2026-10-21T02:17:49Z",
+      "archived": false,
+      "license_api": "NOASSERTION",
+      "source": [
+        {
+          "path": "packages/client/src/components/hermes/chat/MarkdownRenderer.vue",
+          "url": "https://github.com/EKKOLearnAI/ekko-studio/blob/0760128df02dbcc2c7bd3776edcfbd8035dc58d7/packages/client/src/components/hermes/chat/MarkdownRenderer.vue"
+        }
+      ]
+    },
+    {
+      "repository": "openai/codex",
+      "revision": "c7234c1174b27d9c55199fba0d546dc27d1b0415",
+      "pushed_at": "2026-10-21T02:41:24Z",
+      "archived": false,
+      "license_api": "Apache-2.0",
+      "source": [
+        {
+          "path": "codex-rs/tui/src/markdown_render.rs",
+          "url": "https://github.com/openai/codex/blob/c7234c1174b27d9c55199fba0d546dc27d1b0415/codex-rs/tui/src/markdown_render.rs"
+        }
+      ]
+    },
+    {
+      "repository": "anomalyco/opencode",
+      "revision": "aae52146e7e11cecead7721569c02842598c83c4",
+      "pushed_at": "2026-10-21T02:47:10Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "packages/web/src/components/share/content-markdown.tsx",
+          "url": "https://github.com/anomalyco/opencode/blob/aae52146e7e11cecead7721569c02842598c83c4/packages/web/src/components/share/content-markdown.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "siteboon/claudecodeui",
+      "revision": "0ce5630f46c283653359820870df1afd67cb1cf5",
+      "pushed_at": "2026-10-20T15:43:51Z",
+      "archived": false,
+      "license_api": "AGPL-3.0",
+      "source": [
+        {
+          "path": "src/modules/chat/transcript/Markdown.tsx",
+          "url": "https://github.com/siteboon/claudecodeui/blob/0ce5630f46c283653359820870df1afd67cb1cf5/src/modules/chat/transcript/Markdown.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "LibreChat-AI/LibreChat",
+      "revision": "e081b566a42d3a83b8102157bd7806cf4ff63b17",
+      "pushed_at": "2026-10-20T22:51:00Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "client/src/components/Messages/Content/CodeBlock.tsx",
+          "url": "https://github.com/LibreChat-AI/LibreChat/blob/e081b566a42d3a83b8102157bd7806cf4ff63b17/client/src/components/Messages/Content/CodeBlock.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "open-webui/open-webui",
+      "revision": "91ea4e3421d1d8069f13d4a463fcb5986d94ea60",
+      "pushed_at": "2026-10-21T02:47:16Z",
+      "archived": false,
+      "license_api": "NOASSERTION",
+      "source": [
+        {
+          "path": "src/lib/utils/codeHighlight.ts",
+          "url": "https://github.com/open-webui/open-webui/blob/91ea4e3421d1d8069f13d4a463fcb5986d94ea60/src/lib/utils/codeHighlight.ts"
+        }
+      ]
+    },
+    {
+      "repository": "assistant-ui/assistant-ui",
+      "revision": "fd94617e5d787134dcc13300672fd1c65347c538",
+      "pushed_at": "2026-10-21T02:42:02Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "packages/ui/src/components/react/ui/base/code-block.tsx",
+          "url": "https://github.com/assistant-ui/assistant-ui/blob/fd94617e5d787134dcc13300672fd1c65347c538/packages/ui/src/components/react/ui/base/code-block.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "vercel/ai-elements",
+      "revision": "ca8be600bfd01b3131f9bf6134b51602a71f4374",
+      "pushed_at": "2026-10-14T17:04:55Z",
+      "archived": false,
+      "license_api": "NOASSERTION",
+      "source": [
+        {
+          "path": "packages/elements/src/conversation.tsx",
+          "url": "https://github.com/vercel/ai-elements/blob/ca8be600bfd01b3131f9bf6134b51602a71f4374/packages/elements/src/conversation.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "vercel/streamdown",
+      "revision": "a9fb2a2c2431e5e32af920795b9c49c075ee7c6e",
+      "pushed_at": "2026-10-21T00:41:58Z",
+      "archived": false,
+      "license_api": "NOASSERTION",
+      "source": [
+        {
+          "path": "packages/streamdown/index.tsx",
+          "url": "https://github.com/vercel/streamdown/blob/a9fb2a2c2431e5e32af920795b9c49c075ee7c6e/packages/streamdown/index.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "CopilotKit/CopilotKit",
+      "revision": "abc6807f35865e043c498398e3080f137ddbdad9",
+      "pushed_at": "2026-10-21T02:42:00Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "packages/react-ui/src/components/chat/messages/AssistantMessage.tsx",
+          "url": "https://github.com/CopilotKit/CopilotKit/blob/abc6807f35865e043c498398e3080f137ddbdad9/packages/react-ui/src/components/chat/messages/AssistantMessage.tsx"
+        },
+        {
+          "path": "packages/react-core/src/v2/index.ts",
+          "url": "https://github.com/CopilotKit/CopilotKit/blob/abc6807f35865e043c498398e3080f137ddbdad9/packages/react-core/src/v2/index.ts"
+        },
+        {
+          "path": "packages/react-core/src/v2/components/chat/CopilotChatReasoningMessage.tsx",
+          "url": "https://github.com/CopilotKit/CopilotKit/blob/abc6807f35865e043c498398e3080f137ddbdad9/packages/react-core/src/v2/components/chat/CopilotChatReasoningMessage.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "hurttlocker/o8",
+      "revision": "a2adfff72c20d6b64309f945c7fa262a6cc13664",
+      "pushed_at": "2026-10-21T02:51:04Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "src/app/mobile/mobile-markdown.tsx",
+          "url": "https://github.com/hurttlocker/o8/blob/a2adfff72c20d6b64309f945c7fa262a6cc13664/src/app/mobile/mobile-markdown.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "Shopify/flash-list",
+      "revision": "527d7678190f4f0137f14383ff560efa7fccc9fb",
+      "pushed_at": "2026-10-01T14:55:03Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "src/FlashListRef.ts",
+          "url": "https://github.com/Shopify/flash-list/blob/527d7678190f4f0137f14383ff560efa7fccc9fb/src/FlashListRef.ts"
+        },
+        {
+          "path": "src/FlashListProps.ts",
+          "url": "https://github.com/Shopify/flash-list/blob/527d7678190f4f0137f14383ff560efa7fccc9fb/src/FlashListProps.ts"
+        }
+      ]
+    },
+    {
+      "repository": "LegendApp/legend-list",
+      "revision": "10c361a47d4b257646edebcd7f68bdfb42d6c0c1",
+      "pushed_at": "2026-10-17T14:21:53Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "src/types.base.ts",
+          "url": "https://github.com/LegendApp/legend-list/blob/10c361a47d4b257646edebcd7f68bdfb42d6c0c1/src/types.base.ts"
+        }
+      ]
+    },
+    {
+      "repository": "FaridSafi/react-native-gifted-chat",
+      "revision": "4ff184b1ebd96fcfc15d54ca67b63479a984251f",
+      "pushed_at": "2026-10-19T00:02:40Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "src/GiftedChat/index.tsx",
+          "url": "https://github.com/FaridSafi/react-native-gifted-chat/blob/4ff184b1ebd96fcfc15d54ca67b63479a984251f/src/GiftedChat/index.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "Kieran-McIntyre/react-native-section-alphabet-list",
+      "revision": "2efacf0cba8b1c01e0c7f42825b86a885a53ab6f",
+      "pushed_at": "2023-01-31T00:50:05Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "src/components/ListLetterIndex/index.tsx",
+          "url": "https://github.com/Kieran-McIntyre/react-native-section-alphabet-list/blob/2efacf0cba8b1c01e0c7f42825b86a885a53ab6f/src/components/ListLetterIndex/index.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "iamacup/react-native-markdown-display",
+      "revision": "7343978dec50e6a2bcbf934a2ebc08daebb0f22f",
+      "pushed_at": "2026-03-20T15:52:45Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "src/lib/renderRules.js",
+          "url": "https://github.com/iamacup/react-native-markdown-display/blob/7343978dec50e6a2bcbf934a2ebc08daebb0f22f/src/lib/renderRules.js"
+        }
+      ]
+    },
+    {
+      "repository": "RonRadtke/react-native-markdown-display",
+      "revision": "0d74bde48e3be44c0b10ff5571d870dd28dae6d4",
+      "pushed_at": "2026-10-08T15:45:56Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "src/index.tsx",
+          "url": "https://github.com/RonRadtke/react-native-markdown-display/blob/0d74bde48e3be44c0b10ff5571d870dd28dae6d4/src/index.tsx"
+        },
+        {
+          "path": "src/lib/view/renderRules.tsx",
+          "url": "https://github.com/RonRadtke/react-native-markdown-display/blob/0d74bde48e3be44c0b10ff5571d870dd28dae6d4/src/lib/view/renderRules.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "gmsgowtham/react-native-marked",
+      "revision": "f029835bece43088d830a088623b3e952e42532b",
+      "pushed_at": "2026-10-20T14:45:22Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "src/hooks/useMarkdown.ts",
+          "url": "https://github.com/gmsgowtham/react-native-marked/blob/f029835bece43088d830a088623b3e952e42532b/src/hooks/useMarkdown.ts"
+        },
+        {
+          "path": "src/lib/Renderer.tsx",
+          "url": "https://github.com/gmsgowtham/react-native-marked/blob/f029835bece43088d830a088623b3e952e42532b/src/lib/Renderer.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "gmsgowtham/react-native-code-highlighter",
+      "revision": "006b04b0be30fa632d111e302142caa829a8e3d4",
+      "pushed_at": "2026-10-20T19:00:23Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "src/lib/CodeHighlighter.tsx",
+          "url": "https://github.com/gmsgowtham/react-native-code-highlighter/blob/006b04b0be30fa632d111e302142caa829a8e3d4/src/lib/CodeHighlighter.tsx"
+        }
+      ]
+    },
+    {
+      "repository": "software-mansion/enriched-markdown",
+      "revision": "926ef06f0c73671467e6b99cbc293e37df091fb7",
+      "pushed_at": "2026-10-20T15:59:37Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "packages/react-native-enriched-markdown/src/EnrichedMarkdownNativeComponent.ts",
+          "url": "https://github.com/software-mansion/enriched-markdown/blob/926ef06f0c73671467e6b99cbc293e37df091fb7/packages/react-native-enriched-markdown/src/EnrichedMarkdownNativeComponent.ts"
+        }
+      ]
+    },
+    {
+      "repository": "PrismJS/prism",
+      "revision": "7e435fdd21a64c8c9baad6aae39b1df12cb98727",
+      "pushed_at": "2026-10-15T12:41:23Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "components/prism-core.js",
+          "url": "https://github.com/PrismJS/prism/blob/7e435fdd21a64c8c9baad6aae39b1df12cb98727/components/prism-core.js"
+        }
+      ]
+    },
+    {
+      "repository": "shikijs/shiki",
+      "revision": "f7d0167873fd676fe4e190bc9b53832fba9ee01d",
+      "pushed_at": "2026-10-01T06:43:29Z",
+      "archived": false,
+      "license_api": "MIT",
+      "source": [
+        {
+          "path": "packages/shiki/package.json",
+          "url": "https://github.com/shikijs/shiki/blob/f7d0167873fd676fe4e190bc9b53832fba9ee01d/packages/shiki/package.json"
+        }
+      ]
+    }
+  ],
+  "npm": {
+    "@shopify/flash-list": {
+      "version": "2.3.3",
+      "published": "2026-10-01T14:55:30.693Z",
+      "unpackedSize": 850086,
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/Shopify/flash-list.git",
+        "type": "git"
+      },
+      "dependencies": {},
+      "peerDependencies": {
+        "react": "*",
+        "react-native": "*",
+        "@babel/runtime": "*"
+      }
+    },
+    "@legendapp/list": {
+      "version": "3.6.0",
+      "published": "2026-09-29T19:52:49.977Z",
+      "unpackedSize": 2390307,
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/LegendApp/legend-list.git",
+        "type": "git"
+      },
+      "dependencies": {
+        "use-sync-external-store": "^1.5.0"
+      },
+      "peerDependencies": {
+        "react": "*"
+      }
+    },
+    "react-native-gifted-chat": {
+      "version": "3.4.0",
+      "published": "2026-06-16T14:47:05.886Z",
+      "unpackedSize": 389368,
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/FaridSafi/react-native-gifted-chat.git",
+        "type": "git"
+      },
+      "dependencies": {
+        "dayjs": "^1.11.21",
+        "lodash.isequal": "^4.5.0",
+        "@types/lodash.isequal": "^4.5.8",
+        "react-native-zoom-reanimated": "^1.5.4",
+        "@expo/react-native-action-sheet": "^4.1.1"
+      },
+      "peerDependencies": {
+        "react": ">=18.0.0",
+        "react-native": "*",
+        "react-native-reanimated": ">=3.0.0 || ^4.0.0",
+        "react-native-gesture-handler": ">=2.0.0",
+        "react-native-safe-area-context": ">=5.0.0",
+        "react-native-keyboard-controller": ">=1.0.0"
+      }
+    },
+    "react-native-alphabet-flatlist": {
+      "error": "HTTP Error 404: Not Found"
+    },
+    "react-native-section-alphabet-list": {
+      "version": "3.0.0",
+      "published": "2022-11-24T20:50:59.533Z",
+      "unpackedSize": 25645,
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Kieran-McIntyre/react-native-alphabet-list.git",
+        "baseUrl": "https://github.com/Kieran-McIntyre/react-native-alphabet-list"
+      },
+      "dependencies": {
+        "react-native-section-list-get-item-layout": "^2.2.3"
+      },
+      "peerDependencies": {}
+    },
+    "react-native-markdown-display": {
+      "version": "7.0.2",
+      "published": "2023-12-11T12:07:20.703Z",
+      "unpackedSize": 69674,
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/iamacup/react-native-markdown-display.git"
+      },
+      "dependencies": {
+        "css-to-react-native": "^3.0.0",
+        "markdown-it": "^10.0.0",
+        "prop-types": "^15.7.2",
+        "react-native-fit-image": "^1.5.5"
+      },
+      "peerDependencies": {
+        "react": ">=16.2.0",
+        "react-native": ">=0.50.4"
+      }
+    },
+    "@ronradtke/react-native-markdown-display": {
+      "version": "9.0.3",
+      "published": "2026-06-29T09:38:58.421Z",
+      "unpackedSize": 359337,
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/RonRadtke/react-native-markdown-display.git"
+      },
+      "dependencies": {
+        "@react-native-vector-icons/material-design-icons": "^13.0.0",
+        "css-to-react-native": "^3.2.0",
+        "markdown-it": "^14.1.1",
+        "markdown-it-ins": "^4.0.0",
+        "prism-react-renderer": "^2.4.1",
+        "react-native-fit-image": "^1.5.5"
+      },
+      "peerDependencies": {
+        "react": ">=16.2.0",
+        "react-native": ">=0.50.4"
+      }
+    },
+    "react-native-marked": {
+      "version": "8.3.2",
+      "published": "2026-09-23T14:21:36.419Z",
+      "unpackedSize": 267042,
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/gmsgowtham/react-native-marked.git",
+        "type": "git"
+      },
+      "dependencies": {
+        "marked": "18.0.14",
+        "svg-parser": "2.1.0",
+        "html-entities": "2.6.0",
+        "github-slugger": "2.0.0",
+        "@jsamr/counter-style": "2.0.2",
+        "@jsamr/react-native-li": "2.3.1",
+        "react-native-reanimated-table": "0.0.2"
+      },
+      "peerDependencies": {
+        "react": ">=16.8.6",
+        "react-native": ">=0.76.0",
+        "react-native-svg": ">=12.3.0"
+      }
+    },
+    "react-native-enriched-markdown": {
+      "version": "1.1.1",
+      "published": "2026-10-06T10:26:40.237Z",
+      "unpackedSize": 4543736,
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/software-mansion/enriched-markdown.git",
+        "type": "git",
+        "directory": "packages/react-native-enriched-markdown"
+      },
+      "dependencies": {},
+      "peerDependencies": {
+        "katex": ">=0.16.0",
+        "react": "*",
+        "react-native": "*"
+      }
+    },
+    "prismjs": {
+      "version": "1.30.0",
+      "published": "2025-03-10T17:56:20.460Z",
+      "unpackedSize": 2052735,
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/PrismJS/prism.git",
+        "type": "git"
+      },
+      "dependencies": {},
+      "peerDependencies": {}
+    },
+    "shiki": {
+      "version": "4.5.0",
+      "published": "2026-10-01T06:46:31.760Z",
+      "unpackedSize": 602495,
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/shikijs/shiki.git",
+        "type": "git",
+        "directory": "packages/shiki"
+      },
+      "dependencies": {
+        "@types/hast": "^3.0.5",
+        "@shikijs/core": "4.5.0",
+        "@shikijs/langs": "4.5.0",
+        "@shikijs/types": "4.5.0",
+        "@shikijs/themes": "4.5.0",
+        "@shikijs/vscode-textmate": "^10.0.2",
+        "@shikijs/engine-oniguruma": "4.5.0",
+        "@shikijs/engine-javascript": "4.5.0"
+      },
+      "peerDependencies": {}
+    },
+    "react-native-code-highlighter": {
+      "version": "1.3.1",
+      "published": "2026-09-03T14:20:31.527Z",
+      "unpackedSize": 33303,
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/gmsgowtham/react-native-code-highlighter.git"
+      },
+      "dependencies": {
+        "css-to-react-native": "3.2.0",
+        "react-syntax-highlighter": "15.6.6",
+        "trim-newlines": "5.0.0"
+      },
+      "peerDependencies": {
+        "react": ">=16.8.6",
+        "react-native": ">=0.60.0",
+        "react-syntax-highlighter": ">=15.5.0"
+      }
+    },
+    "expo-clipboard": {
+      "version": "58.0.3",
+      "published": "2026-10-01T19:28:31.328Z",
+      "unpackedSize": 264176,
+      "license": "MIT",
+      "repository": {
+        "url": "https://github.com/expo/expo.git",
+        "type": "git",
+        "directory": "packages/expo-clipboard"
+      },
+      "dependencies": {},
+      "peerDependencies": {
+        "expo": "*",
+        "react": "*",
+        "react-native": "*"
+      }
+    }
+  },
+  "selected_engine_measurement": {
+    "minifiedBytes": 75283,
+    "gzipBytes": 25420
+  },
+  "design_forks": [
+    {
+      "repository": "kvnloo/apple-design-skills",
+      "revision": "2d228630ba1446365f614a108cb8252f1feda202"
+    },
+    {
+      "repository": "kvnloo/taste-skill",
+      "revision": "8815d6e3f41abc5ecaf7e073228418de5de1fcf5"
+    },
+    {
+      "repository": "kvnloo/ui-ux-pro-max-skill",
+      "revision": "56ea9cf174ed86786187daa9de0e6247cb0747e4"
+    },
+    {
+      "repository": "kvnloo/interface-design",
+      "revision": "2f9be3206855bcb2d1d0af262c8bae25cba6658d"
+    },
+    {
+      "repository": "kvnloo/superdesign",
+      "revision": "49e2b9dd9615c6dae936b326b1ddb85d4f1d6f19"
+    },
+    {
+      "repository": "kvnloo/awesome-design-md",
+      "revision": "3b605329240ce735b510037cca322f1831fdd7f8"
+    },
+    {
+      "repository": "kvnloo/motion-skills",
+      "revision": "bb5a3ce666110855a3437de2f70e9968c408e005"
+    },
+    {
+      "repository": "kvnloo/open-design",
+      "revision": "3b0df90f305c8279e748c292accf336d02b924ef"
+    }
+  ]
+}

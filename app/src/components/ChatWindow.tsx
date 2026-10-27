@@ -1,0 +1,219 @@
+import { Feather } from "@expo/vector-icons";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { PixelRatio, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import Animated, { ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Svg, { Path } from "react-native-svg";
+import { haptic } from "../haptics";
+import {
+  CLOSE_GLYPH,
+  CLOSE_HIT,
+  PILL_HIT,
+  identityLabel,
+  identityLines,
+  morphFrom,
+  topCutout,
+  type IdentityInput,
+  type PillGeometry,
+  type PillGlyph,
+  type Rect,
+  type WindowOrigin,
+} from "../lib/chat-window";
+import { readCutout } from "../lib/display-cutout";
+import { debugUi } from "../debug/ui-store";
+import type { OrbState } from "../lib/orb-phase";
+import type { TreeNode } from "../lib/tree";
+import { useHandedness } from "../lib/useHandedness";
+import { fade, snappy } from "../motion";
+import { colors, glass, radius, space, type } from "../theme";
+import { AgentOrb } from "./AgentOrb";
+import { Tree } from "./Tree";
+
+/**
+ * Open/close morph for the chat window. The window is laid out at its final size on the first
+ * frame; only transform and opacity run, on the UI thread, from the source row.
+ */
+export function useWindowMorph(origin: WindowOrigin | undefined, enabled: boolean) {
+  const { height } = useWindowDimensions();
+  const from = useMemo(() => morphFrom(origin, height), [origin, height]);
+  const progress = useSharedValue(enabled ? 0 : 1);
+  const [settling, setSettling] = useState(enabled);
+  useEffect(() => {
+    if (!enabled) return;
+    progress.value = withTiming(1, { ...snappy, reduceMotion: ReduceMotion.System }, done => { if (done) runOnJS(setSettling)(false); });
+  }, [enabled, progress]);
+  const style = useAnimatedStyle(() => enabled ? {
+    opacity: progress.value,
+    transform: [
+      { translateY: from.translateY * (1 - progress.value) },
+      { scale: from.scale + (1 - from.scale) * progress.value },
+    ],
+  } : {});
+  const close = useCallback((done: () => void) => {
+    if (!enabled) { done(); return; }
+    setSettling(true);
+    progress.value = withTiming(0, { ...fade, reduceMotion: ReduceMotion.System }, () => { runOnJS(done)(); });
+  }, [enabled, progress]);
+  return { style, close, settling };
+}
+
+/**
+ * The app window's camera cut-out, re-read on rotation/resize/inset changes. Debug fixtures can
+ * supply a synthetic reading for web proofs; it is labelled as such and never used in release.
+ */
+export function useDisplayCutout(width: number, height: number, insetTop: number): Rect | null {
+  const fixture = debugUi.use(s => s.cutoutFixture ?? null);
+  const [reading, setReading] = useState(() => readCutout());
+  useEffect(() => { setReading(readCutout()); }, [width, height, insetTop]);
+  return topCutout(fixture ?? reading, { width, insetTop });
+}
+
+/** The app-wide nav collapsed into a slim status pill around (or below) the camera cut-out. */
+export function WindowPill({ geometry, title, thinking, status, primary, open, onToggle }: {
+  geometry: PillGeometry;
+  title: string;
+  thinking: OrbState;
+  /** Every observed status, for the accessibility label. */
+  status: string[];
+  /** The one status with a reserved, unclipped slot. */
+  primary: { glyph: PillGlyph; text: string } | null;
+  open: boolean;
+  onToggle(): void;
+}) {
+  const statusText = status.join(" · ");
+  const label = `Navigation, collapsed. ${title}${statusText ? `, ${statusText}` : ""}. Double-tap to ${open ? "hide" : "show"} navigation.`;
+  const hitPad = Math.max(0, (PILL_HIT - geometry.height) / 2);
+  const left = <><AgentOrb size={14} thinking={thinking} label={`${title} ${thinking.phase}`} />
+    <Text testID="chat-window-pill-title" style={styles.pillTitle} numberOfLines={1} maxFontSizeMultiplier={1.15}>{title}</Text></>;
+  // Reserved slot: never shrinks, so the title is what truncates.
+  const right = primary ? <View testID="chat-window-pill-status" style={styles.pillStatusSlot}>
+    <Feather name={primary.glyph} size={11} color={primary.glyph === "wifi-off" ? colors.danger : colors.gold} />
+    <Text style={styles.pillStatus} numberOfLines={1} maxFontSizeMultiplier={1.1}>{primary.text}</Text>
+  </View> : null;
+  const hole = geometry.hole;
+  const r = geometry.height / 2;
+  // Cut-out mode: one pill painted around the camera with an even-odd circular hole, so nothing
+  // is drawn where the hardware lens sits. Safe-area mode keeps an ordinary filled pill.
+  const outline = `M${r} 0H${geometry.width - r}A${r} ${r} 0 0 1 ${geometry.width - r} ${geometry.height}H${r}A${r} ${r} 0 0 1 ${r} 0Z`;
+  const lens = hole ? `M${hole.left} ${r}a${hole.width / 2} ${hole.width / 2} 0 1 0 ${hole.width} 0a${hole.width / 2} ${hole.width / 2} 0 1 0 ${-hole.width} 0Z` : "";
+  return <Pressable
+    testID="chat-window-pill"
+    accessibilityRole="button"
+    accessibilityLabel={label}
+    accessibilityState={{ expanded: open }}
+    onPress={() => { haptic.select(); onToggle(); }}
+    hitSlop={{ top: hitPad, bottom: hitPad }}
+    style={[styles.pill, hole && styles.pillCutout, { left: geometry.left, top: geometry.top, width: geometry.width, height: geometry.height, borderRadius: r }]}
+  >
+    {hole ? <>
+      <Svg testID="chat-window-pill-shape" width={geometry.width} height={geometry.height} style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Path d={`${outline}${lens}`} fill={glass.fillRaised} fillRule="evenodd" stroke={glass.hair2} strokeWidth={StyleSheet.hairlineWidth} />
+      </Svg>
+      {/* Pill padding (10) + flex gap (6) put the hole spacer exactly at hole.left. */}
+      <View style={[styles.pillSide, { width: Math.max(0, hole.left - 16), flexShrink: 0 }]}>{left}</View>
+      {/* Hardware pixels: nothing is drawn over the camera hole. */}
+      <View testID="chat-window-pill-hole" style={{ width: hole.width }} />
+      <View style={[styles.pillSide, styles.pillSideEnd]}>{right}</View>
+    </> : <><View style={styles.pillSide}>{left}</View>{right}</>}
+  </Pressable>;
+}
+
+function treeNodes(identity: IdentityInput, title: string): TreeNode[] {
+  const session: TreeNode = {
+    id: "window-session", kind: "session", label: title,
+    detail: identity.sessionId ? `session ${identity.sessionId}${identity.continuedAs ? ` · continued as ${identity.continuedAs}` : ""}` : "session not attached yet",
+    meta: "✓ Current",
+  };
+  const chain: TreeNode = identity.parentSessionId && !identity.continuedAs
+    ? { id: "window-parent", kind: "session", label: `parent ${identity.parentSessionId}`, detail: "reported by host", children: [session] }
+    : session;
+  const modelMeta = identity.model ? `${identity.provider ? `${identity.provider} · ` : ""}${identity.model}` : "model unknown";
+  const harness: TreeNode = { id: "window-harness", kind: "harness", label: identity.harnessName, meta: modelMeta, children: [chain] };
+  const profile: TreeNode = { id: "window-profile", kind: "bot", label: identity.profile ?? "no profile", children: [harness] };
+  return [{ id: "window-host", kind: "host", label: identity.hostName ?? "host unknown", children: [profile] }];
+}
+
+function clock(ms: number): string {
+  const d = new Date(ms);
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, "0")).join(":");
+}
+
+const TREE_EXPANDED = ["window-host", "window-profile", "window-harness", "window-parent"];
+const BADGE_FONT = 11;
+/** Options trigger: sliders glyph + surface word, ≥ 44 hit. */
+const OPTIONS_RESERVE = 84;
+
+/**
+ * The composer grown into the window's attached rectangle: badge row + identity Tree + whatever
+ * the screen already docks (workers, queue, composer). One surface; nothing is repeated up top.
+ */
+export function WindowDock({ identity, title, options, treeOpen, onTree, onClose, notice, children }: {
+  identity: IdentityInput;
+  title: string;
+  options: ReactNode;
+  treeOpen: boolean;
+  onTree(open: boolean): void;
+  onClose(): void;
+  notice?: ReactNode;
+  children: ReactNode;
+}) {
+  const thumb = useHandedness();
+  const { width } = useWindowDimensions();
+  // Monospace advance ≈ 0.6em; the system font scale grows it. Reserve the Options trigger, the X,
+  // the chevron and paddings. Text also ellipsizes as a backstop.
+  const budget = Math.max(10, Math.floor((width - OPTIONS_RESERVE - CLOSE_HIT - 2 * space.sm - 40) / (BADGE_FONT * 0.6 * PixelRatio.getFontScale())));
+  const lines = identityLines(identity, budget);
+  const nodes = useMemo(() => treeNodes(identity, title), [identity, title]);
+  return <View testID="chat-window-dock">
+    {treeOpen ? <View testID="chat-window-identity" style={styles.identity}>
+      <Tree nodes={nodes} label="Chat identity" initialExpanded={TREE_EXPANDED} inline />
+      <Text style={styles.gap}>{identity.parentSessionId ? `Lineage: parent ${identity.parentSessionId} (reported by host)` : identity.model ? "Lineage: no parent session recorded by host" : "Lineage unavailable: host has not reported it"}</Text>
+      <Text testID="chat-window-model-source" style={styles.gap}>{identity.model && identity.observedAt ? `Model reported by host for this session · checked ${clock(identity.observedAt)}` : "Model unknown: host has not reported it for this session"}</Text>
+      <Text style={styles.gap}>Model change unavailable: no exact-session model route in this build</Text>
+    </View> : null}
+    <View testID="chat-window-badge-row" style={[styles.badgeRow, thumb.row]}>
+      {options}
+      <Pressable
+        testID="chat-window-badge"
+        accessibilityRole="button"
+        accessibilityLabel={identityLabel(identity)}
+        accessibilityState={{ expanded: treeOpen }}
+        onPress={() => { haptic.select(); onTree(!treeOpen); }}
+        style={styles.badge}
+      >
+        <View style={styles.badgeLines}>
+          <Text style={styles.badgeWho} numberOfLines={1} ellipsizeMode="middle">{lines.who}</Text>
+          <Text style={[styles.badgeModel, !identity.model && styles.badgeUnknown]} numberOfLines={1} ellipsizeMode="middle">{lines.model}</Text>
+        </View>
+        <Feather name={treeOpen ? "chevron-down" : "chevron-up"} size={14} color={colors.textTertiary} />
+      </Pressable>
+      <Pressable testID="chat-window-close" accessibilityRole="button" accessibilityLabel="Close chat window" onPress={() => { haptic.tap(); onClose(); }} style={styles.close}>
+        <View style={styles.closeGlyph}><Feather name="x" size={14} color={colors.textMuted} /></View>
+      </Pressable>
+    </View>
+    {notice}
+    {children}
+  </View>;
+}
+
+const styles = StyleSheet.create({
+  pill: {
+    position: "absolute", zIndex: 30, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10,
+    backgroundColor: glass.fillRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: glass.hair2,
+  },
+  pillCutout: { backgroundColor: "transparent", borderWidth: 0 },
+  pillSide: { flexDirection: "row", alignItems: "center", gap: 6, overflow: "hidden", flexShrink: 1, minWidth: 0 },
+  pillSideEnd: { flex: 1, justifyContent: "flex-end" },
+  pillTitle: { ...type.label, color: colors.text, flexShrink: 1, minWidth: 0, letterSpacing: 0 },
+  pillStatusSlot: { flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 0, marginLeft: "auto" },
+  pillStatus: { ...type.mono, fontSize: 10, lineHeight: 13, color: colors.text, flexShrink: 0 },
+  identity: { maxHeight: 280, paddingHorizontal: space.md, paddingTop: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: glass.hair },
+  gap: { ...type.mono, fontSize: 11, color: colors.textTertiary, paddingVertical: 4, paddingHorizontal: space.sm },
+  badgeRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.sm, minHeight: CLOSE_HIT },
+  badge: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: space.sm, borderRadius: radius.md },
+  badgeLines: { flexShrink: 1, minWidth: 0 },
+  badgeWho: { ...type.mono, fontSize: BADGE_FONT, lineHeight: 15, color: colors.textMuted },
+  badgeModel: { ...type.mono, fontSize: BADGE_FONT, lineHeight: 15, color: colors.text },
+  badgeUnknown: { color: colors.textTertiary },
+  close: { width: CLOSE_HIT, height: CLOSE_HIT, alignItems: "center", justifyContent: "center" },
+  closeGlyph: { width: CLOSE_GLYPH, height: CLOSE_GLYPH, borderRadius: CLOSE_GLYPH / 2, alignItems: "center", justifyContent: "center", backgroundColor: glass.quiet, borderWidth: StyleSheet.hairlineWidth, borderColor: glass.hair2 },
+});

@@ -1,53 +1,117 @@
-import { useEffect, useState } from "react";
+import { ModelsPanel } from "../components/ModelsPanel";
+import { NotificationSettings } from "../components/NotificationSettings";
+import { setHandedness, useHandedness } from "../lib/useHandedness";
+import type { Handedness } from "../lib/handedness";
+import { Canvas } from "../components/Canvas";
+import { ScreenHeader } from "../components/ScreenHeader";
+import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppNav } from "../components/AppNav";
 import { GlassSurface } from "../components/GlassSurface";
+import { PrimaryButton } from "../components/PrimaryButton";
 import { haptic } from "../haptics";
+import { connectSettings } from "../lib/settings-flow";
+import { settingsConnectA11y, settingsHarnessA11y, settingsModelsA11y, settingsThumbA11y } from "../lib/a11y-settings-screen";
 import { normalizeAddress } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
 import { forgetEverything, saveSettings, store } from "../store/app";
 import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
+import { screenBack } from "../lib/screen-back";
+import { endpointsOf, withEditedEndpoint } from "../lib/bridge-failover";
 
-export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
+export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
+  const thumb = useHandedness();
   const insets = useSafeAreaInsets();
   const settings = store.use((s) => s.settings);
   const connection = store.use((s) => s.connection);
-  const firstRun = settings === null;
+  const [firstRun] = useState(() => route.params?.firstRun ?? settings === null);
 
   const [address, setAddress] = useState(settings?.address ?? "");
   const [token, setToken] = useState(settings?.token ?? "");
   const [cwd, setCwd] = useState(settings?.cwd ?? "");
-  const [submitted, setSubmitted] = useState(false);
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const attemptRef = useRef<AbortController | null>(null);
+
+  // Failover (or return to the primary) swaps the bridge in use under this screen:
+  // show that bridge, so Save cannot write the old address over the new entry.
+  const activeAddress = settings?.address;
+  const activeToken = settings?.token;
+  useEffect(() => {
+    setAddress(activeAddress ?? "");
+    setToken(activeToken ?? "");
+  }, [activeAddress, activeToken]);
 
   const dirty =
     normalizeAddress(address) !== (settings?.address ?? "") ||
     token.trim() !== (settings?.token ?? "") ||
     (cwd.trim() || undefined) !== settings?.cwd;
-  const canSave = normalizeAddress(address).length > 0 && token.trim().length > 0 && (dirty || connection.status !== "online");
+  const identity = settings?.identity && !token.trim() ? settings.identity : undefined;
+  const canSave = !saving && normalizeAddress(address).length > 0 && (token.trim().length > 0 || identity !== undefined) && (dirty || connection.status !== "online");
+  const connectA11y = settingsConnectA11y({
+    firstRun,
+    dirty,
+    saving,
+    canSave,
+    hasAddress: normalizeAddress(address).length > 0,
+    hasCredential: token.trim().length > 0 || identity !== undefined,
+  });
 
-  // First run: once the bridge answers, drop straight into chat.
   useEffect(() => {
-    if (firstRun && submitted && connection.status === "online") {
-      haptic.success();
-      navigation.replace("Main");
-    }
-  }, [firstRun, submitted, connection.status, navigation]);
+    const unsubscribe = navigation.addListener("blur", () => attemptRef.current?.abort());
+    return () => {
+      unsubscribe();
+      attemptRef.current?.abort();
+    };
+  }, [navigation]);
 
-  const save = () => {
-    const next = {
+  const save = async () => {
+    if (!canSave) return;
+    const attempt = new AbortController();
+    attemptRef.current?.abort();
+    attemptRef.current = attempt;
+    setSaving(true);
+    setSaveError(null);
+    const previous = store.get().settings;
+    const next = withEditedEndpoint(previous, {
+      ...previous,
+      identity,
       address: normalizeAddress(address),
       token: token.trim(),
       harness: settings?.harness ?? "omp",
       cwd: cwd.trim() || undefined,
-    };
-    saveSettings(next);
-    bridge.start(next);
-    setSubmitted(true);
+      inAppFeedback: settings?.inAppFeedback ?? true,
+    });
     haptic.tap();
+    try {
+      await connectSettings({
+        settings: next,
+        connection: store,
+        save: saveSettings,
+        start: (saved) => bridge.start(saved, { failover: false }),
+        signal: attempt.signal,
+        onConnected: () => {
+          haptic.success();
+          if (firstRun || !navigation.canGoBack()) navigation.replace("Main");
+          else navigation.goBack();
+        },
+      });
+    } catch (error) {
+      if (!attempt.signal.aborted) {
+        setSaveError(error instanceof Error ? error.message : String(error));
+        haptic.error();
+      }
+    } finally {
+      if (attemptRef.current === attempt) {
+        attemptRef.current = null;
+        setSaving(false);
+      }
+    }
   };
 
   const forget = () => {
@@ -75,8 +139,9 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
   })();
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
       <AppNav navigation={navigation} tab={1} />
+      <ScreenHeader title="Settings" onBack={() => screenBack(navigation)} />
       <KeyboardAvoidingView style={styles.body} behavior="padding">
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.xxl }]}
@@ -84,20 +149,47 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
           keyboardDismissMode="on-drag"
         >
           {firstRun ? (
-            <Pressable onPress={() => navigation.replace("Pair")} style={({ pressed }) => [styles.linkWrap, pressed && styles.pressed]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Pair with sonic code instead" accessibilityHint="Opens the pairing screen" onPress={() => navigation.replace("Pair")} style={({ pressed }) => [styles.linkWrap, pressed && styles.pressed]}>
               <Text style={styles.link}>← Pair with sonic code instead</Text>
             </Pressable>
           ) : null}
           {firstRun ? (
             <Text style={styles.intro}>
-              Chat with the coding agents on your own computer. Run the bridge there, then enter what it prints.
+              Chat with the coding agents on your own computer. Run the bridge there, then enter its address and privately transferred execution token.
             </Text>
           ) : null}
 
+          <Pressable
+            {...settingsModelsA11y(modelsOpen)}
+            accessibilityRole="button"
+            onPress={() => setModelsOpen((open) => !open)}
+            style={styles.secondary}
+          >
+            <Text style={styles.secondaryText}>Models {modelsOpen ? "−" : "+"}</Text>
+          </Pressable>
+          {modelsOpen ? <ModelsPanel /> : null}
+          <NotificationSettings />
+          <Pressable accessibilityRole="button" onPress={() => navigation.navigate("Notices")} style={styles.secondary}><Text style={styles.secondaryText}>Notices · Agent reports</Text></Pressable>
+          <Text style={styles.label}>Display</Text>
+          <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+            <View style={styles.harnessRow}><Text style={styles.harnessName}>Thumb side</Text></View>
+            <View style={{ flexDirection: "row", paddingHorizontal: space.md, gap: space.sm }}>
+              {(["right", "left", "auto"] satisfies Handedness[]).map(value => <Pressable key={value}
+                accessibilityRole="radio"
+                {...settingsThumbA11y(value, thumb.preference, settings !== null)}
+                disabled={!settings}
+                onPress={() => { setHandedness(value); haptic.select(); }}
+                style={{ flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, borderWidth: 1, borderColor: thumb.preference === value ? colors.gold : colors.border }}>
+                <Text style={{ ...type.body, color: thumb.preference === value ? colors.gold : colors.textMuted }}>{value[0]?.toUpperCase()}{value.slice(1)}</Text>
+              </Pressable>)}
+            </View>
+            <Text style={[styles.help, { padding: space.md }]}>{settings ? "Auto follows a system preference when available; otherwise Right. This platform exposes no handedness signal. Long-press the composer mic to switch hands." : "Pair a bridge to save display preferences."}</Text>
+          </GlassSurface>
           <Text style={styles.label}>Bridge</Text>
-          <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
+          <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field
               label="Address"
+              hint="Required bridge network address"
               value={address}
               onChangeText={setAddress}
               placeholder="100.64.0.1:4747"
@@ -108,9 +200,10 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
             <View style={styles.divider} />
             <Field
               label="Token"
+              hint="Private bridge execution token"
               value={token}
               onChangeText={setToken}
-              placeholder="from the bridge output"
+              placeholder="from ~/.dash/token (private)"
               autoCapitalize="none"
               autoComplete="off"
               secure
@@ -118,6 +211,7 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
             <View style={styles.divider} />
             <Field
               label="Folder"
+              hint="Optional working folder; leave blank for bridge default"
               value={cwd}
               onChangeText={setCwd}
               placeholder={connection.cwd ? `${connection.cwd} (bridge default)` : "optional, e.g. ~/code/myapp"}
@@ -125,37 +219,47 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
               autoComplete="off"
             />
           </GlassSurface>
-          <View style={styles.statusRow}>
+          <View style={styles.statusRow} accessible accessibilityRole="text" accessibilityLabel={statusLine.text} accessibilityLiveRegion="polite">
             <View style={[styles.statusDot, { backgroundColor: statusLine.color }]} />
             <Text style={styles.statusText} numberOfLines={2}>
               {statusLine.text}
             </Text>
           </View>
 
-          <Pressable
-            onPress={save}
+          <PrimaryButton
+            onPress={() => void save()}
             disabled={!canSave}
-            style={({ pressed }) => [styles.primary, !canSave && styles.primaryDisabled, pressed && styles.pressed]}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.primaryText, !canSave && styles.primaryTextDisabled]}>
-              {firstRun ? "Connect" : dirty ? "Save and reconnect" : "Reconnect"}
-            </Text>
-          </Pressable>
+            label={connectA11y.label}
+            accessibilityLabel={connectA11y.label}
+            accessibilityHint={connectA11y.accessibilityHint}
+            accessibilityState={connectA11y.accessibilityState}
+          />
+          {saveError ? <Text style={[styles.help, styles.dangerText]} accessibilityRole="alert">{saveError}</Text> : null}
+
+          {settings && endpointsOf(settings).length > 1 ? (
+            <>
+              <Text style={styles.label}>Paired bridges (failover order)</Text>
+              <Text style={styles.help} testID="settings-bridge-endpoints">
+                {endpointsOf(settings).map((e, i) => `${i + 1}. ${e.address}${e.address === settings.address ? " (in use)" : ""}`).join("\n")}
+              </Text>
+            </>
+          ) : null}
 
           {connection.harnesses.length > 0 ? (
             <>
-              <Text style={styles.label}>Harnesses on {connection.host}</Text>
-              <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
+              <Text style={styles.label}>Harnesses on {connection.host ?? "bridge"}</Text>
+              <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
                 {connection.harnesses.map((h, i) => (
                   <View key={h.id}>
                     {i > 0 ? <View style={styles.divider} /> : null}
-                    <View style={styles.harnessRow}>
+                    <View
+                      style={styles.harnessRow}
+                      accessible
+                      accessibilityRole="text"
+                      accessibilityLabel={settingsHarnessA11y(h.name, h.available)}
+                    >
                       <Text style={styles.harnessName}>{h.name}</Text>
-                      <View
-                        style={[styles.statusDot, { backgroundColor: h.available ? colors.ok : colors.textFaint }]}
-                        accessibilityLabel={h.available ? "Installed" : "Not found"}
-                      />
+                      <View style={[styles.statusDot, { backgroundColor: h.available ? colors.ok : colors.textFaint }]} />
                     </View>
                   </View>
                 ))}
@@ -163,20 +267,47 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
             </>
           ) : null}
 
+          <Pressable accessibilityRole="button" accessibilityLabel="Review approvals" onPress={() => navigation.navigate("Approvals")} style={styles.secondary}><Text style={styles.secondaryText}>Review approvals</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Component lab" onPress={() => navigation.navigate("Lab")} style={styles.secondary}><Text style={styles.secondaryText}>Component lab</Text></Pressable>
           <Text style={styles.label}>On your computer</Text>
-          <GlassSurface variant="raised" borderRadius={radius.lg} style={styles.card}>
-            <Text style={styles.mono}>cd dash/server && bun run start</Text>
+          <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+            <Text style={styles.mono}>cd bridge && bun run start</Text>
           </GlassSurface>
           <Text style={styles.help}>
-            The bridge prints its Tailscale address and token. Both devices need to be on the same tailnet.
+            Run this from the Dash repository. The bridge prints its Tailscale address, never credentials. Transfer ~/.dash/token privately for manual setup, or use Pair with ~/.dash/bootstrap-token. Both devices need the same tailnet.
           </Text>
 
-          <Pressable onPress={() => navigation.navigate("Pair")} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Pair nearby with sonic code" accessibilityHint="Opens the pairing screen" onPress={() => navigation.navigate("Pair")} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
             <Text style={styles.secondaryText}>Pair nearby (sonic)</Text>
           </Pressable>
 
-          {!firstRun ? (
-            <Pressable onPress={forget} style={({ pressed }) => [styles.danger, pressed && styles.pressed]}>
+          {!firstRun && settings ? (
+            <>
+              <Text style={styles.label}>Beta</Text>
+              <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+                <Pressable
+                  onPress={() => {
+                    saveSettings({ ...settings, inAppFeedback: !settings.inAppFeedback });
+                    haptic.tap();
+                  }}
+                  style={({ pressed }) => [styles.harnessRow, pressed && styles.pressed]}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: settings.inAppFeedback }}
+                  accessibilityLabel="In-app feedback"
+                  accessibilityHint="Turn feedback to Dash secondmate on or off"
+                >
+                  <Text style={styles.harnessName}>In-app feedback</Text>
+                  <Text style={styles.statusText}>{settings.inAppFeedback ? "On" : "Off"}</Text>
+                </Pressable>
+              </GlassSurface>
+              <Text style={styles.help}>
+                Voice, typed notes on Main, and long-press on rows go to the Dash secondmate until you turn this off.
+              </Text>
+            </>
+          ) : null}
+
+          {!firstRun && settings ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Forget this bridge" accessibilityHint="Opens confirmation before removing the saved bridge and chats" onPress={forget} style={({ pressed }) => [styles.danger, pressed && styles.pressed]}>
               <Text style={styles.dangerText}>Forget this bridge</Text>
             </Pressable>
           ) : null}
@@ -189,10 +320,12 @@ export function SettingsScreen({ navigation }: ScreenProps<"Settings">) {
 function Field({
   label,
   secure,
+  hint,
   ...input
 }: {
   label: string;
   secure?: boolean;
+  hint?: string;
 } & Pick<
   React.ComponentProps<typeof TextInput>,
   "value" | "onChangeText" | "placeholder" | "autoCapitalize" | "keyboardType" | "autoComplete"
@@ -208,6 +341,7 @@ function Field({
         secureTextEntry={secure}
         keyboardAppearance="dark"
         accessibilityLabel={label}
+        accessibilityHint={hint}
       />
     </View>
   );
@@ -218,7 +352,7 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   content: { paddingHorizontal: space.lg, paddingTop: space.sm },
   intro: { color: colors.textMuted, ...type.body, marginBottom: space.xl },
-  label: { color: colors.textMuted, ...type.label, marginTop: space.xl, marginBottom: space.sm, marginLeft: space.xs },
+  label: { color: colors.text, ...type.cardTitle, marginTop: space.xl, marginBottom: space.sm, marginLeft: space.xs },
   card: {
     overflow: "hidden",
   },
@@ -228,7 +362,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     color: colors.text,
-    ...type.body,
+    ...type.mono,
     paddingVertical: 14,
     ...(Platform.OS === "web" ? { outlineStyle: "none" as never } : null),
   },
@@ -245,7 +379,7 @@ const styles = StyleSheet.create({
   primaryDisabled: { backgroundColor: colors.surfaceRaised },
   secondary: {
     marginTop: space.lg,
-    borderRadius: radius.pill,
+    borderRadius: radius.sm,
     paddingVertical: 14,
     alignItems: "center",
     borderWidth: StyleSheet.hairlineWidth,
@@ -261,6 +395,6 @@ const styles = StyleSheet.create({
   help: { color: colors.textMuted, ...type.small, marginTop: space.sm, marginLeft: space.xs },
   danger: { marginTop: space.xxl, alignItems: "center", paddingVertical: 14 },
   dangerText: { color: colors.danger, ...type.body },
-  linkWrap: { marginBottom: space.md, alignItems: "center" },
+  linkWrap: { marginBottom: space.md, minHeight: 44, alignItems: "center", justifyContent: "center" },
   link: { color: colors.textMuted, ...type.body, textDecorationLine: "underline" },
 });
