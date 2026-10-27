@@ -13,6 +13,9 @@ function referenceMerge(input: MergeInput): ChatListRow[] {
   const timeline: ConversationEntry[] = [];
   const ended: ConversationEntry[] = [];
   const localKeys = new Set<string>();
+  const keyCount = new Map<string, number>();
+  for (const entry of input.local) keyCount.set(entry.key, (keyCount.get(entry.key) ?? 0) + 1);
+  const rowKey = (entry: ConversationEntry) => (keyCount.get(entry.key) ?? 0) > 1 ? `${entry.key}#${entry.id}` : entry.key;
   for (const entry of input.local) {
     localKeys.add(entry.key);
     if (entry.attention) attention.push(entry);
@@ -35,7 +38,7 @@ function referenceMerge(input: MergeInput): ChatListRow[] {
     section.count += 1;
     out.push(row);
   };
-  for (const entry of attention) push(entry.attention ?? "", { type: "chat", key: entry.key, local: entry });
+  for (const entry of attention) push(entry.attention ?? "", { type: "chat", key: rowKey(entry), local: entry });
   const remote = input.remote;
   const last = remote.at(-1);
   const cutoff = !input.exhausted && last ? last.lastActivityAt : -Infinity;
@@ -45,10 +48,10 @@ function referenceMerge(input: MergeInput): ChatListRow[] {
     if (r && localKeys.has(r.key)) { j += 1; continue; }
     const l = timeline[i];
     if (l && l.updatedAt < cutoff) { i = timeline.length; continue; }
-    if (l && (!r || l.updatedAt >= r.lastActivityAt)) { push(l.stale && input.endedLast ? "Ended" : groupOf(l.updatedAt), { type: "chat", key: l.key, local: l }); i += 1; }
+    if (l && (!r || l.updatedAt >= r.lastActivityAt)) { push(l.stale && input.endedLast ? "Ended" : groupOf(l.updatedAt), { type: "chat", key: rowKey(l), local: l }); i += 1; }
     else if (r) { push(groupOf(r.lastActivityAt), { type: "chat", key: r.key, remote: r }); j += 1; }
   }
-  for (const entry of ended) push("Ended", { type: "chat", key: entry.key, local: entry });
+  for (const entry of ended) push("Ended", { type: "chat", key: rowKey(entry), local: entry });
   return out;
 }
 
@@ -171,6 +174,28 @@ describe("incremental merge", () => {
       }
     }
     expect(checked).toBeGreaterThan(300);
+  });
+
+  test("phone chats that share one index key still get unique list keys (FlashList blank rows)", () => {
+    const groupOf = groupLabeler(NOW);
+    const remote = [summary(0, NOW - 3_600_000), summary(1, NOW - 7_200_000)];
+    const shared = remote[0]!;
+    // A bridge that reuses one session id: three phone chats resolve to the same host session key.
+    const local = conversationEntries(["a", "b", "c"].map((id, k): Conversation => ({
+      id, harness: "codex", title: id, createdAt: NOW, updatedAt: NOW - k * 60_000, messages: [],
+      sessionId: shared.sessionId, targetHostId: "groot",
+    })));
+    expect(new Set(local.map(entry => entry.key)).size).toBe(1);
+    const rows = mergeLocal(labelRemote(remote, groupOf), { local, exhausted: true, groupOf });
+    const keys = rows.map(row => row.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    const chats = rows.filter(row => row.type === "chat");
+    expect(chats.filter(row => row.local).map(row => row.key)).toEqual([`${shared.key}#a`, `${shared.key}#b`, `${shared.key}#c`]);
+    // The remote copy of the shared session is replaced, the unrelated remote row stays.
+    expect(chats.filter(row => row.remote).map(row => row.key)).toEqual([remote[1]!.key]);
+    // A key that is not shared keeps its plain form.
+    const single = mergeLocal(labelRemote(remote, groupOf), { local: local.slice(0, 1), exhausted: true, groupOf });
+    expect(single.filter(row => row.type === "chat" && row.local).map(row => row.key)).toEqual([shared.key]);
   });
 
   test("remote rows and untouched section headers keep their identity across local changes", () => {
