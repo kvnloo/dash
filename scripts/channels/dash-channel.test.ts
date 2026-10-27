@@ -121,6 +121,18 @@ describe("dash-channel", () => {
     expect(run("switch", "preview-x", "--force").status).toBe(0);
   });
 
+  test("default install uses the pinned bun with a frozen lockfile, not the host bun", () => {
+    commit("a");
+    run("init");
+    run("add", "main", "main");
+    delete env.DASH_CHANNEL_INSTALL_CMD;
+    const bun = join(env.DASH_CHANNELS_HOME, "toolchain/bun-1.4.3/bun");
+    mkdirSync(join(env.DASH_CHANNELS_HOME, "toolchain/bun-1.4.3"), { recursive: true });
+    writeFileSync(bun, `#!/bin/sh\necho "$@" >> ${root}/bun-args.log\nmkdir -p node_modules/expo/bin && touch node_modules/expo/bin/cli\n`, { mode: 0o755 });
+    expect(run("build", "--all").status).toBe(0);
+    expect(readFileSync(join(root, "bun-args.log"), "utf8").trim()).toBe("install --frozen-lockfile");
+  });
+
   test("a failed dependency install fails the build and leaves no release", () => {
     const a = commit("a");
     run("init");
