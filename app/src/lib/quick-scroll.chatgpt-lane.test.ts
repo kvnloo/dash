@@ -51,17 +51,23 @@ describe("quickScroll visibility", () => {
   });
 
   test("down hysteresis uses the previous result and hides only within 40px", () => {
-    const offsets = [1700, 2010, 2459, 2460, 2430, 1999];
-    const expected = [true, true, true, false, false, true];
+    const steps = [
+      { offset: 1700, visible: true },
+      { offset: 2010, visible: true },
+      { offset: 2459, visible: true },
+      { offset: 2460, visible: false },
+      { offset: 2430, visible: false },
+      { offset: 1999, visible: true },
+    ];
     let previous: QuickScrollState | undefined;
-    for (let i = 0; i < offsets.length; i++) {
+    for (const step of steps) {
       const next = quickScroll(fixture({
         contentHeight: 3000,
         viewportHeight: 500,
-        offset: offsets[i]!,
+        offset: step.offset,
         previous,
       }));
-      expect(next.down.visible).toBe(expected[i]);
+      expect(next.down.visible).toBe(step.visible);
       previous = next;
     }
     expect(quickScroll(fixture({ contentHeight: 3000, viewportHeight: 500, offset: 2459 })).down.visible).toBe(false);
@@ -79,7 +85,11 @@ describe("quickScroll visibility", () => {
 describe("quickScroll keyboard and composer placement", () => {
   const cases = [
     { name: "closed IME uses the bottom safe area", keyboardHeight: 0, bottom: 88 },
-    { name: "negative IME height lifts above the keyboard", keyboardHeight: -240, bottom: 304 },
+    { name: "negative IME height lifts above the keyboard below the clamp", keyboardHeight: -200, bottom: 264 },
+    { name: "negative IME placement one pixel below half the viewport", keyboardHeight: -235, bottom: 299 },
+    { name: "negative IME placement exactly at half the viewport", keyboardHeight: -236, bottom: 300 },
+    { name: "negative IME placement one pixel above half is clamped", keyboardHeight: -237, bottom: 300 },
+    { name: "negative IME height lifts but cannot exceed half the viewport", keyboardHeight: -240, bottom: 300 },
     { name: "positive height follows KeyboardController semantics: closed", keyboardHeight: 240, bottom: 88 },
     { name: "huge keyboard is clamped", keyboardHeight: -800, bottom: 300 },
   ];
