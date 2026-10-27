@@ -1,8 +1,9 @@
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, { ReduceMotion, ZoomIn } from "react-native-reanimated";
+import Animated, { Keyframe, ReduceMotion } from "react-native-reanimated";
 import {
   quickScrollBadge,
+  quickScrollEntranceKeyframes,
   quickScrollLabel,
   quickScrollPosition,
   shouldRenderQuickScroll,
@@ -28,7 +29,7 @@ export interface QuickScrollButtonProps {
  * Enter with opacity + scale, but unmount immediately on hide to remove the hit area.
  * Reanimated honors the OS reduce-motion preference for entrance and press feedback.
  */
-const enter = ZoomIn.duration(timing.state).reduceMotion(ReduceMotion.System);
+const enter = new Keyframe(quickScrollEntranceKeyframes()).duration(timing.state).reduceMotion(ReduceMotion.System);
 
 export function QuickScrollButton({
   direction,

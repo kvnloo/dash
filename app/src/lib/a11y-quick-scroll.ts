@@ -3,6 +3,14 @@ import { space } from "../theme";
 export type QuickScrollDirection = "down" | "up";
 export type QuickScrollSide = "left" | "right";
 
+/** Both properties must change: a scale-only entrance does not fade in. */
+export function quickScrollEntranceKeyframes() {
+  return {
+    0: { opacity: 0, transform: [{ scale: 0.9 }] },
+    100: { opacity: 1, transform: [{ scale: 1 }] },
+  };
+}
+
 /** No transparent press target remains in the transcript when the control is hidden. */
 export function shouldRenderQuickScroll(visible: boolean): boolean {
   return visible === true;

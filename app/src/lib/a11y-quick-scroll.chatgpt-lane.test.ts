@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
   quickScrollBadge,
+  quickScrollEntranceKeyframes,
   quickScrollLabel,
   quickScrollPosition,
   quickScrollSidePosition,
@@ -86,8 +87,16 @@ describe("keyboard-aware QuickScrollButton accessibility", () => {
     expect(component).toContain("importantForAccessibility=");
   });
 
-  test("entrance fades and scales with timing tokens and system reduced motion", () => {
-    expect(component).toContain("ZoomIn.duration(timing.state).reduceMotion(ReduceMotion.System)");
+  test("entrance animates both opacity and scale from hidden to fully visible", () => {
+    const frames = quickScrollEntranceKeyframes();
+    expect(frames[0].opacity).toBe(0);
+    expect(frames[100].opacity).toBe(1);
+    expect(frames[0].transform).toEqual([{ scale: 0.9 }]);
+    expect(frames[100].transform).toEqual([{ scale: 1 }]);
+  });
+
+  test("the button uses the tested keyframes with timing tokens and system reduced motion", () => {
+    expect(component).toContain("new Keyframe(quickScrollEntranceKeyframes()).duration(timing.state).reduceMotion(ReduceMotion.System)");
     expect(component).toContain("entering={enter}");
     expect(component).toContain("scaleTo={PRESS_SCALE.control}");
   });
