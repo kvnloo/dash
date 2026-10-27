@@ -43,6 +43,30 @@ function compactStatus(status: string): CompactToolStatus {
   return "running";
 }
 
+/** Preserve JSON shape while redacting nested values before the formatter shortens titles. */
+function safeValue(value: unknown, key = ""): unknown {
+  if (typeof value === "string") {
+    return /(?:token|secret|password|api[_-]?key|authorization)/i.test(key)
+      ? "[REDACTED]" : redactTool(value);
+  }
+  if (Array.isArray(value)) return value.map(item => safeValue(item));
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([field, item]) => [redactTool(field), safeValue(item, field)]),
+    );
+  }
+  return value;
+}
+
+function safeArgs(raw: string): string {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return JSON.stringify(safeValue(parsed));
+  } catch {
+    return redactTool(raw);
+  }
+}
+
 function finiteDuration(durationMs: number): number | undefined {
   return Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : undefined;
 }
@@ -86,7 +110,7 @@ export function truncateToolTarget(value: string, maxLength = 48): string {
 export function compactToolRow(tool: FormatTool, harness = "hermes", targetBudget = 48): CompactToolRowModel {
   const safeTool: FormatTool = {
     name: redactTool(tool.name),
-    args: redactTool(tool.args),
+    args: safeArgs(tool.args),
     // Titles come from arguments; retained output may be megabytes and stays lazy.
     output: "",
     status: tool.status,
