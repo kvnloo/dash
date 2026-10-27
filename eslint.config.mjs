@@ -20,7 +20,7 @@ export default [
   // Metro relay previews cannot load dynamic JS chunks on the native path.
   {
     files: ["app/src/**/*.{ts,tsx}"],
-    ignores: ["app/src/**/*.web.ts", "app/src/**/*.web.tsx", "app/src/**/*.test.ts"],
+    ignores: ["app/src/**/*.web.ts", "app/src/**/*.web.tsx", "app/src/**/*.test.ts", "app/src/**/*.harness.tsx"],
     rules: {
       "no-restricted-syntax": [
         "error",
