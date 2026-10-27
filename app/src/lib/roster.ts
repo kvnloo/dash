@@ -84,10 +84,7 @@ export async function fetchRosterIfChanged(settings: Settings, etag: string | un
   try {
     const headers: Record<string, string> = { Authorization: `Bearer ${await executionToken(settings)}` };
     if (etag) headers["If-None-Match"] = etag;
-    // This poll owns its validator and the corresponding hosts in memory. Do not
-    // let the browser's HTTP cache also revalidate/substitute a cached response:
-    // a raw 304 must complete as an empty response, not an aborted cache load.
-    const res = await fetch(`http://${settings.address}/roster`, { method: "GET", headers, cache: "no-store" });
+    const res = await fetch(`http://${settings.address}/roster`, { method: "GET", headers });
     if (res.status === 304) return "unchanged";
     if (!res.ok) return undefined;
     const raw: unknown = await res.json();
