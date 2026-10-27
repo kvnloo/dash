@@ -32,6 +32,8 @@
     {"id": "chat-window-identity", "title": "Chat window identity badge at phone and tablet widths",
      "tests": ["safe exploratory controls and context hit target at 390",
                "safe exploratory controls and context hit target at 800"]},
+    {"id": "conditional-roster-lifecycle", "title": "Conditional roster polls complete without aborting a bridge-owned turn",
+     "tests": ["conditional roster polls finish while an ephemeral turn stays queueable and stoppable"]},
     {"id": "running-turn-survives-roster", "title": "A running turn survives a missing roster row",
      "tests": ["a missing roster row must not terminate a bridge-owned running turn"]}
   ],
