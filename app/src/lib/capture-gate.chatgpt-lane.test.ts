@@ -20,14 +20,27 @@ function decide(input: Partial<CaptureGateInput> = {}, now = NOW) {
 }
 
 describe("DASH-41: bedtime capture-only composer gate", () => {
-  test("truth table: capture mode, enforcement and Stop priority", () => {
+  test("truth table: capture × enforcement × Stop × override states", () => {
+    const overrides = [
+      { name: "none", override: undefined, active: false },
+      { name: "valid", override: createCaptureOverride(NOW), active: true },
+      { name: "expired", override: { until: NOW }, active: false },
+      { name: "over-long", override: { issuedAt: NOW, until: NOW + 60 * 60_000 }, active: true },
+    ];
     for (const captureMode of [false, true]) {
       for (const captureEnforced of [false, true]) {
         for (const isStopAction of [false, true]) {
-          const result = decide({ captureMode, captureEnforced, isStopAction });
-          const expected = isStopAction ? "stop" : captureMode && captureEnforced ? "capture" : "send";
-          expect(result.action).toBe(expected);
-          expect(result.enabled).toBe(true);
+          for (const item of overrides) {
+            const result = decide({ captureMode, captureEnforced, isStopAction, override: item.override });
+            const expected = isStopAction
+              ? "stop" : captureMode && captureEnforced && !item.active ? "capture" : "send";
+            expect(result.action).toBe(expected);
+            expect(result.enabled).toBe(true);
+            if (isStopAction) expect(result.label).toBe("Stop");
+            if (captureMode && captureEnforced && !isStopAction && item.active) {
+              expect(result.label).toBe("Send anyway");
+            }
+          }
         }
       }
     }
