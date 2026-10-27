@@ -46,7 +46,7 @@ jobs:
       - name: Tester army on ${{ env.SHA }}
         env:
           DASH_ARMY_RECEIPTS: ${{ runner.temp }}/army-receipts
-          ARMY_WORKERS: "4"
+          ARMY_WORKERS: "2"
         run: bash scripts/army.sh
       - name: Army receipt (canonical O15 evidence for this commit)
         if: always()

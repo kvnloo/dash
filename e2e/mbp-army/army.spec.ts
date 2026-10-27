@@ -1,11 +1,12 @@
 import {test,expect,pair,openChat,composer,chooseHarness,send,act,web,chatRow} from './fixtures';
 import {writeFile} from 'node:fs/promises';
+import {hostname} from 'node:os';
 
 test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({path:info.outputPath('final.png')});});
 
 test('pairing, Chats tab, open and close real chat window',async({page,bridge})=>{
  await openChat(page,bridge);
- await expect(page.getByTestId('chat-window-badge')).toContainText('mbp');
+ await expect(page.getByTestId('chat-window-badge')).toContainText(hostname()); // the bridge host, on any machine
  await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});
  await expect(page.getByTestId('chat-window')).toHaveCount(0);
  await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected','true');
