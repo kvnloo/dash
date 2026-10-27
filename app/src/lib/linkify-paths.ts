@@ -81,7 +81,6 @@ function closesFence(line: string, fence: Fence): boolean {
   return end - index >= fence.width && line.slice(end).trim() === "";
 }
 
-/** Keep all bracketed labels protected, including reference-style links. */
 /**
  * Keep an existing Markdown link or image protected across line boundaries.
  * The parser consumes nested labels, reference labels, and destinations without
@@ -372,8 +371,9 @@ export function linkifyMarkdown(markdown: string): string {
       result.push(rawLine);
       continue;
     }
-    if (state.codeWidth === 0 && !state.htmlComment &&
-        state.tagBuffer === null && state.htmlStack.length === 0) {
+    if (state.codeWidth === 0 && state.markdownBracket === null &&
+        !state.htmlComment && state.tagBuffer === null &&
+        state.htmlStack.length === 0) {
       const opened = openingFence(line);
       if (opened !== null) {
         fence = opened;

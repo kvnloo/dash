@@ -136,6 +136,25 @@ describe("DASH-15: bare Markdown links", () => {
     expect(linkifyMarkdown(expected)).toBe(expected);
   });
 
+  test("a fence-looking line inside a multiline label cannot steal parser state", () => {
+    const input = [
+      "[open label",
+      codeFence,
+      "https://inside.test](target) and src/after.ts",
+      "https://outside.test",
+      "",
+    ].join("\n");
+    const expected = [
+      "[open label",
+      codeFence,
+      "https://inside.test](target) and [src/after.ts](src/after.ts)",
+      "[https://outside.test](https://outside.test)",
+      "",
+    ].join("\n");
+    expect(linkifyMarkdown(input)).toBe(expected);
+    expect(linkifyMarkdown(expected)).toBe(expected);
+  });
+
   test("unbalanced opening and internal closing URL parentheses have safe hrefs", () => {
     const open = "See https://example.test/a(b now \n";
     const escapedOpen = "See [https://example.test/a(b](https://example.test/a\\(b) now \n";
