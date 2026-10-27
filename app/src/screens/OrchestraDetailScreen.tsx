@@ -13,7 +13,7 @@ import { projectsFromHosts } from "../lib/project-data";
 import type { AgentTarget } from "../mock/agents";
 import type { ScreenProps } from "../navigation";
 import { openAgentConversation, setActive, store } from "../store/app";
-import { colors, radius, space, type } from "../theme";
+import { colors, radius, space, type, surfaces } from "../theme";
 import { timeAgo } from "../util";
 import { screenBack } from "../lib/screen-back";
 
@@ -143,7 +143,7 @@ export function OrchestraDetailScreen({ navigation, route }: ScreenProps<"Orches
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: surfaces.scene },
   hero: { paddingHorizontal: space.lg, paddingBottom: space.lg, gap: space.md },
   heroTop: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
   heroCopy: { flex: 1, minWidth: 0 },

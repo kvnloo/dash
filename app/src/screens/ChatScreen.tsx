@@ -60,7 +60,8 @@ import {
 import { onTurnSettled } from "../store/queue";
 import { queuedParts } from "../lib/pending-queue";
 import { QueuedStack } from "../components/QueuedStack";
-import { colors, glass, radius, space, type } from "../theme";
+import { colors, glass, glassBuild, radius, space, type, surfaces } from "../theme";
+import { useGlassScene } from "../store/glass";
 import { useLiveThinking } from "../lib/live-thinking";
 import type { OrbState } from "../lib/orb-phase";
 import { useContinuousVoice, useDeviceInsets, voiceWindowOpen } from "../components/ContinuousVoiceRoot";
@@ -282,6 +283,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const windowOrigin = route.params?.window;
   const windowed = windowOrigin !== undefined;
   const morph = useWindowMorph(windowOrigin, windowed);
+  // Glass build: the window sits over the still-mounted workspace, so it must occlude it.
+  const windowFill = useGlassScene().window;
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [navOpen, setNavOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
@@ -429,7 +432,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Keep them still in the chat; ShimmerText (Skia) still shows live activity.
   return (
     <OrbActivity active={false}>
-    <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
+    <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, glassBuild && windowed && { backgroundColor: windowFill }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
       {windowed ? <>
         <WindowPill geometry={pill} title={conversation?.title || harnessName} thinking={thinking}
           status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
@@ -541,7 +544,7 @@ const styles = StyleSheet.create({
   approvalDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.warn },
   optionsToggle: { alignSelf: "flex-start", marginLeft: 20, marginTop: -2, marginBottom: 4, paddingVertical: 4 },
   optionsToggleText: { ...type.mono, fontSize: 10, color: colors.textFaint },
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: surfaces.scene },
   approval: { minHeight: 44, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: space.lg, borderBottomWidth: 1, borderColor: colors.hair },
   approvalText: { ...type.small, color: colors.warn },
   targetError: { color: colors.danger, ...type.small, paddingHorizontal: space.lg, paddingVertical: space.sm },

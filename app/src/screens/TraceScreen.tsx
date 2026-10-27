@@ -18,7 +18,7 @@ import type { ScreenProps } from "../navigation";
 import { CHIP_REORDER_MS, orderChips, restoreChip } from "../trace/chip-state";
 import { activeSeries, clock, type TraceRow } from "../trace/model";
 import { feedbackStore, latest, loadFeedback, record, traceStore } from "../trace/source";
-import { colors, fonts, space } from "../theme";
+import { colors, fonts, space, surfaces } from "../theme";
 
 /** Agent trace, native: READ strip, swipe chips, stat tiles and the gesture timeline. */
 export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
@@ -85,7 +85,7 @@ export function TraceScreen({ navigation }: ScreenProps<"Trace">) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+  root: { flex: 1, backgroundColor: surfaces.scene },
   scroll: { paddingBottom: 120, gap: space.md },
   sub: { fontFamily: fonts.mono, fontSize: 11, color: tc.text3, paddingHorizontal: space.lg },
   chips: { paddingHorizontal: space.lg },

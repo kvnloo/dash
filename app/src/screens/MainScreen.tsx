@@ -34,7 +34,7 @@ import type { AgentTarget } from "../mock/agents";
 import type { ScreenProps } from "../navigation";
 import { createConversation, openAgentConversation, openChat, openListedConversation, saveSettings, setActive, store } from "../store/app";
 import type { Conversation } from "../model";
-import { colors, space, type } from "../theme";
+import { colors, space, type, surfaces } from "../theme";
 import { BotsPane } from "./panes/BotsPane";
 import { ChatsPane } from "./panes/ChatsPane";
 import { OrchestraPane } from "./panes/OrchestraPane";
@@ -486,7 +486,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: surfaces.scene },
   body: { flex: 1, overflow: "visible" },
   pager: { flex: 1, overflow: "visible" },
   searchDock: {

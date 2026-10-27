@@ -10,6 +10,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppNav } from "../components/AppNav";
 import { GlassSurface } from "../components/GlassSurface";
+import { GlassThemePicker } from "../components/GlassThemePicker";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { haptic } from "../haptics";
 import { connectSettings } from "../lib/settings-flow";
@@ -18,7 +19,7 @@ import { normalizeAddress } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
 import { forgetEverything, saveSettings, store } from "../store/app";
-import { colors, radius, space, type } from "../theme";
+import { colors, radius, space, type, surfaces } from "../theme";
 import { confirmDestructive } from "../util";
 import { screenBack } from "../lib/screen-back";
 
@@ -160,6 +161,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           <NotificationSettings />
           <Pressable accessibilityRole="button" onPress={() => navigation.navigate("Notices")} style={styles.secondary}><Text style={styles.secondaryText}>Notices · Agent reports</Text></Pressable>
           <Text style={styles.label}>Display</Text>
+          <GlassThemePicker />
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <View style={styles.harnessRow}><Text style={styles.harnessName}>Thumb side</Text></View>
             <View style={{ flexDirection: "row", paddingHorizontal: space.md, gap: space.sm }}>
@@ -328,7 +330,7 @@ function Field({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: surfaces.scene },
   body: { flex: 1 },
   content: { paddingHorizontal: space.lg, paddingTop: space.sm },
   intro: { color: colors.textMuted, ...type.body, marginBottom: space.xl },

@@ -33,7 +33,7 @@ import { bridge } from "../net/bridge";
 import { nextPrefill } from "../lib/deep-link";
 import { saveSettings, store } from "../store/app";
 import type { Settings } from "../model";
-import { colors, radius, space, type } from "../theme";
+import { colors, radius, space, type, surfaces } from "../theme";
 import { screenBack } from "../lib/screen-back";
 import { pairActionState, type PairAction } from "../lib/a11y-pair-screen";
 
@@ -344,7 +344,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: surfaces.scene },
   content: { paddingHorizontal: space.lg },
   title: { color: colors.text, ...type.title, marginBottom: space.sm },
   intro: { color: colors.textMuted, ...type.body, marginBottom: space.xl },

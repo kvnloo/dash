@@ -11,7 +11,7 @@ import { screenBack } from "../lib/screen-back";
 import { fade } from "../motion";
 import type { ScreenProps } from "../navigation";
 import { agentNoticeInbox, noticeFailure, notices } from "../store/notices";
-import { colors, radius, space, type } from "../theme";
+import { colors, radius, space, type, surfaces } from "../theme";
 
 export function NoticesScreen({ navigation }: ScreenProps<"Notices">) {
   const insets = useSafeAreaInsets();
@@ -38,7 +38,7 @@ export function NoticesScreen({ navigation }: ScreenProps<"Notices">) {
   </View>;
 }
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
+  screen: { flex: 1, backgroundColor: surfaces.scene },
   content: { padding: space.lg, gap: space.md },
   card: { padding: space.lg, gap: space.sm },
   title: { ...type.cardTitle, color: colors.text },

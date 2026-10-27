@@ -29,7 +29,7 @@ import type { ScreenProps } from "../navigation";
 import { store } from "../store/app";
 import { activeSeries } from "../trace/model";
 import { feedbackStore, latest, loadFeedback, record, traceStore } from "../trace/source";
-import { colors, fonts, radius, space, type } from "../theme";
+import { colors, fonts, radius, space, type, surfaces } from "../theme";
 
 const SECTIONS = ["timeline", "lane-row", "read-strip", "action-chip", "stat-tile", "orb-states"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -213,7 +213,7 @@ function PickBar({ letter, name, picked, onPick, stacked = false }: { letter: st
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+  root: { flex: 1, backgroundColor: surfaces.scene },
   scroll: { paddingBottom: 140, gap: space.xl },
   intro: { ...type.small, color: tc.text2, paddingHorizontal: space.lg },
   block: { gap: space.sm },
