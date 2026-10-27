@@ -34,13 +34,14 @@ export async function createBridge(persistSession=true): Promise<Bridge> {
  };await f.start();
  if(persistSession){
   const token=(await readFile(join(dir,'.dash/token'),'utf8')).trim();
+  let lastRoster='';
   await expect.poll(async()=>{
    const response=await fetch(`http://127.0.0.1:${f.port}/roster`,{headers:{Authorization:`Bearer ${token}`}});
    const body:unknown=await response.json();
    const text=JSON.stringify(body);
-   await writeFile(join(dir,'fixture-roster.json'),text);
+   await writeFile(join(dir,'fixture-roster.json'),text);lastRoster=text;
    return text.includes('omp:')&&text.includes('army-fixture-session')&&text.includes('hermes:session:default:army-fixture-session');
-  },{timeout:15000,message:'fixture must expose real native OMP and Hermes session rows before UI tests'}).toBe(true);
+  },{timeout:15000,message:'fixture must expose real native OMP and Hermes session rows before UI tests'}).toBe(true).catch((e:unknown)=>{throw Error(String(e)+'\nlast roster: '+lastRoster.slice(0,1500)+'\nbridge log tail: '+f.logs().slice(-1500));});
  }
  return f;
 }
