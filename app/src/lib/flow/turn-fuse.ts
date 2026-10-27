@@ -130,10 +130,10 @@ export function createTurnFuser({
     if (current.speechActive || current.penDepth > 0) return true;
     // A completed speech turn has the stricter speech-stop join boundary.
     if (current.committed) {
-      if (current.lastSpeechStop !== null) {
-        return isRecent(at, current.lastSpeechStop, joinWindowMs);
-      }
-      return isRecent(at, current.committedAt, joinWindowMs);
+      // A recently committed pen capture stays refinable even when speech
+      // ended much earlier; a speech-only commit still uses speech-stop time.
+      return isRecent(at, current.lastSpeechStop, joinWindowMs) ||
+        isRecent(at, current.committedAt, joinWindowMs);
     }
     return isRecent(at, current.lastSpeechStop, joinWindowMs) ||
       isRecent(at, current.lastPenUp, penIdleMs);
