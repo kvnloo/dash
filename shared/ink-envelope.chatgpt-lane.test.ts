@@ -27,7 +27,7 @@ test("all six event types parse into versioned, capture-scoped envelopes", () =>
     const parsed = parseInkEnvelope(input);
     expect(parsed.ok).toBe(true);
     if (parsed.ok) {
-      expect(parsed.value).toEqual(input);
+      expect<unknown>(parsed.value).toEqual(input);
       expect(parsed.value.v).toBe(1);
       expect(parsed.value.capture_id).toBe(stream.capture_id);
     }
@@ -41,14 +41,14 @@ test("optional references, all ink shapes and normalized bounding-box endpoints 
       event_type: "annotation_delta",
       payload: { shape, bbox: [0, 0, 1, 1] },
     };
-    expect(parseInkEnvelope(event)).toEqual({ ok: true, value: event });
+    expect<unknown>(parseInkEnvelope(event)).toEqual({ ok: true, value: event });
   }
   for (const event of [
     { ...common, event_type: "capture_open", payload: { width: 1, height: 1 } },
     { ...common, event_type: "annotation_commit", payload: { stroke_count: 0 } },
     { ...common, event_type: "annotation_undo", payload: { count: 0 } },
   ]) {
-    expect(parseInkEnvelope(event)).toEqual({ ok: true, value: event });
+    expect<unknown>(parseInkEnvelope(event)).toEqual({ ok: true, value: event });
   }
   expect(parseInkEnvelope({
     ...common,
