@@ -297,7 +297,8 @@ describe("Brainstorm visual-pane reducer", () => {
             result.state.content.status === "invalid") {
           expect(result.state.content.source).toBe("");
         }
-        if (result.state.content.kind === "artifact") {
+        if (result.state.content.kind === "artifact" &&
+            result.state.content.generation === result.state.generation) {
           expect(result.state.turnEnded).toBe(true);
         }
         visit(result.state, remaining - 1);
