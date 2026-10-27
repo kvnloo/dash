@@ -492,6 +492,18 @@ function localRow(entry: ConversationEntry): ChatRowOf {
   return row;
 }
 
+/**
+ * Two phone conversations can resolve to one index key (the same host session opened twice, or a
+ * bridge that reuses a session id). FlashList needs unique keys: duplicate keys make it re-render
+ * without committing and leave blank cells. Every local row whose key is shared gets `key#id`.
+ */
+const sharedKeyRowCache = new WeakMap<ConversationEntry, ChatRowOf>();
+function sharedKeyRow(entry: ConversationEntry): ChatRowOf {
+  let row = sharedKeyRowCache.get(entry);
+  if (!row) { row = { type: "chat", key: `${entry.key}#${entry.id}`, local: entry }; sharedKeyRowCache.set(entry, row); }
+  return row;
+}
+
 export interface LocalMergeInput {
   local: readonly ConversationEntry[];
   exhausted: boolean;
@@ -527,6 +539,9 @@ export function mergeLocal(labeled: RemoteLabeled, input: LocalMergeInput): Chat
   const ended: ConversationEntry[] = [];
   // Remote rows a local conversation replaces, per run.
   const drops = new Map<Run, ChatRowOf[]>();
+  const keyCount = new Map<string, number>();
+  for (const entry of input.local) keyCount.set(entry.key, (keyCount.get(entry.key) ?? 0) + 1);
+  const localRowOf = (entry: ConversationEntry): ChatRowOf => (keyCount.get(entry.key) ?? 0) > 1 ? sharedKeyRow(entry) : localRow(entry);
   for (const entry of input.local) {
     const hit = remoteHit(labeled, entry.key);
     if (hit) {
@@ -567,7 +582,7 @@ export function mergeLocal(labeled: RemoteLabeled, input: LocalMergeInput): Chat
     if (last && !last.run && last.title === title) { last.parts.push(part); last.count += part.length; return; }
     segments.push({ title, count: part.length, parts: [part] });
   };
-  for (const entry of attention) add(entry.attention ?? "", [localRow(entry)]);
+  for (const entry of attention) add(entry.attention ?? "", [localRowOf(entry)]);
   for (const run of runs) {
     const locals = placed.get(run);
     const dropped = drops.get(run);
@@ -585,12 +600,12 @@ export function mergeLocal(labeled: RemoteLabeled, input: LocalMergeInput): Chat
     };
     if (locals) {
       locals.sort((a, b) => a.pos - b.pos);
-      for (const { entry, pos } of locals) { remoteUntil(pos); add(groupOf(entry.updatedAt), [localRow(entry)]); }
+      for (const { entry, pos } of locals) { remoteUntil(pos); add(groupOf(entry.updatedAt), [localRowOf(entry)]); }
     }
     remoteUntil(run.rows.length);
   }
-  for (const entry of tail) add(groupOf(entry.updatedAt), [localRow(entry)]);
-  for (const entry of ended) add("Ended", [localRow(entry)]);
+  for (const entry of tail) add(groupOf(entry.updatedAt), [localRowOf(entry)]);
+  for (const entry of ended) add("Ended", [localRowOf(entry)]);
 
   // Adjacent segments with one title become one section (as the single-pass merge produced).
   const pieces: ChatListRow[][] = [];
