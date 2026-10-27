@@ -189,6 +189,161 @@ describe("toGestures - frame and slot grouping", () => {
     expect(dropped).toHaveLength(0);
     expect(dropped.warnings.join(" ")).toContain("SYN_DROPPED");
   });
+  test("reuses persistent slot coordinates for consecutive BTN_TOUCH-only contacts", () => {
+    const events: InputEvent[] = [
+      event(100, "EV_ABS", "ABS_MT_POSITION_X", 55),
+      event(200, "EV_ABS", "ABS_MT_POSITION_Y", 66),
+      event(1_000, "EV_KEY", "BTN_TOUCH", 1),
+      event(10_000, "EV_SYN", "SYN_REPORT", 0),
+      event(11_000, "EV_KEY", "BTN_TOUCH", 0),
+      event(20_000, "EV_SYN", "SYN_REPORT", 0),
+      event(21_000, "EV_KEY", "BTN_TOUCH", 1),
+      event(30_000, "EV_SYN", "SYN_REPORT", 0),
+      event(31_000, "EV_KEY", "BTN_TOUCH", 0),
+      event(40_000, "EV_SYN", "SYN_REPORT", 0),
+    ];
+    const gestures = toGestures(events);
+    expect(gestures.warnings).toEqual([]);
+    expect(gestures).toHaveLength(2);
+    expect(gestures[0]).toEqual({
+      startUs: 10_000, endUs: 20_000, durationMs: 10,
+      points: [{ tUs: 10_000, x: 55, y: 66 }],
+    });
+    expect(gestures[1]).toEqual({
+      startUs: 30_000, endUs: 40_000, durationMs: 10,
+      points: [{ tUs: 30_000, x: 55, y: 66 }],
+    });
+  });
+
+  test("reuses slot-0 positions on new tracking ID without duplicate axis events", () => {
+    const events: InputEvent[] = [
+      event(1, "EV_ABS", "ABS_MT_TRACKING_ID", 12),
+      event(2, "EV_ABS", "ABS_MT_POSITION_X", 70),
+      event(3, "EV_ABS", "ABS_MT_POSITION_Y", 80),
+      event(10_000, "EV_SYN", "SYN_REPORT", 0),
+      event(11_000, "EV_ABS", "ABS_MT_TRACKING_ID", -1),
+      event(20_000, "EV_SYN", "SYN_REPORT", 0),
+      event(21_000, "EV_ABS", "ABS_MT_TRACKING_ID", 13),
+      event(30_000, "EV_SYN", "SYN_REPORT", 0),
+      event(31_000, "EV_ABS", "ABS_MT_TRACKING_ID", -1),
+      event(40_000, "EV_SYN", "SYN_REPORT", 0),
+    ];
+    const gestures = toGestures(events);
+    expect(gestures.warnings).toEqual([]);
+    expect(gestures).toHaveLength(2);
+    expect(gestures[0]?.points).toEqual([{ tUs: 10_000, x: 70, y: 80 }]);
+    expect(gestures[1]?.points).toEqual([{ tUs: 30_000, x: 70, y: 80 }]);
+    expect(gestures[1]?.durationMs).toBe(10);
+  });
+
+  test("separates a same-frame lift/new tracking ID and preserves both paths", () => {
+    const events: InputEvent[] = [
+      event(10, "EV_ABS", "ABS_MT_TRACKING_ID", 1),
+      event(20, "EV_ABS", "ABS_MT_POSITION_X", 10),
+      event(30, "EV_ABS", "ABS_MT_POSITION_Y", 20),
+      event(100_000, "EV_SYN", "SYN_REPORT", 0),
+      event(150_000, "EV_ABS", "ABS_MT_POSITION_X", 15),
+      event(150_010, "EV_ABS", "ABS_MT_POSITION_Y", 25),
+      event(150_020, "EV_ABS", "ABS_MT_TRACKING_ID", -1),
+      event(150_030, "EV_KEY", "BTN_TOUCH", 0),
+      event(150_040, "EV_ABS", "ABS_MT_TRACKING_ID", 2),
+      event(150_050, "EV_KEY", "BTN_TOUCH", 1),
+      event(150_060, "EV_ABS", "ABS_MT_POSITION_X", 90),
+      event(150_070, "EV_ABS", "ABS_MT_POSITION_Y", 120),
+      event(200_000, "EV_SYN", "SYN_REPORT", 0),
+      event(250_000, "EV_ABS", "ABS_MT_POSITION_X", 100),
+      event(250_010, "EV_ABS", "ABS_MT_POSITION_Y", 130),
+      event(300_000, "EV_SYN", "SYN_REPORT", 0),
+      event(350_000, "EV_ABS", "ABS_MT_TRACKING_ID", -1),
+      event(350_010, "EV_KEY", "BTN_TOUCH", 0),
+      event(400_000, "EV_SYN", "SYN_REPORT", 0),
+    ];
+    const gestures = toGestures(events);
+    expect(gestures.warnings).toEqual([]);
+    expect(gestures).toHaveLength(2);
+    expect(gestures[0]).toEqual({
+      startUs: 100_000, endUs: 200_000, durationMs: 100,
+      points: [
+        { tUs: 100_000, x: 10, y: 20 },
+        { tUs: 200_000, x: 15, y: 25 },
+      ],
+    });
+    expect(gestures[1]).toEqual({
+      startUs: 200_000, endUs: 400_000, durationMs: 200,
+      points: [
+        { tUs: 200_000, x: 90, y: 120 },
+        { tUs: 300_000, x: 100, y: 130 },
+      ],
+    });
+  });
+
+  test("splits an implicit tracking-ID replacement without merging contacts", () => {
+    const events: InputEvent[] = [
+      event(1, "EV_ABS", "ABS_MT_TRACKING_ID", 8),
+      event(2, "EV_ABS", "ABS_MT_POSITION_X", 10),
+      event(3, "EV_ABS", "ABS_MT_POSITION_Y", 20),
+      event(10_000, "EV_SYN", "SYN_REPORT", 0),
+      event(11_000, "EV_ABS", "ABS_MT_TRACKING_ID", 9),
+      event(12_000, "EV_ABS", "ABS_MT_POSITION_X", 40),
+      event(13_000, "EV_ABS", "ABS_MT_POSITION_Y", 50),
+      event(20_000, "EV_SYN", "SYN_REPORT", 0),
+      event(21_000, "EV_ABS", "ABS_MT_TRACKING_ID", -1),
+      event(30_000, "EV_SYN", "SYN_REPORT", 0),
+    ];
+    const gestures = toGestures(events);
+    expect(gestures).toHaveLength(2);
+    expect(gestures.warnings).toHaveLength(1);
+    expect(gestures.warnings[0]).toContain("tracking ID changed without lift");
+    expect(gestures[0]).toEqual({
+      startUs: 10_000, endUs: 20_000, durationMs: 10,
+      points: [{ tUs: 10_000, x: 10, y: 20 }],
+    });
+    expect(gestures[1]).toEqual({
+      startUs: 20_000, endUs: 30_000, durationMs: 10,
+      points: [{ tUs: 20_000, x: 40, y: 50 }],
+    });
+  });
+
+  test("does not lose two complete contacts within one SYN_REPORT", () => {
+    const gestures = toGestures([
+      event(1, "EV_ABS", "ABS_MT_TRACKING_ID", 8),
+      event(2, "EV_ABS", "ABS_MT_POSITION_X", 10),
+      event(3, "EV_ABS", "ABS_MT_POSITION_Y", 20),
+      event(4, "EV_ABS", "ABS_MT_TRACKING_ID", -1),
+      event(5, "EV_ABS", "ABS_MT_TRACKING_ID", 9),
+      event(6, "EV_ABS", "ABS_MT_POSITION_X", 40),
+      event(7, "EV_ABS", "ABS_MT_POSITION_Y", 50),
+      event(8, "EV_ABS", "ABS_MT_TRACKING_ID", -1),
+      event(10_000, "EV_SYN", "SYN_REPORT", 0),
+    ]);
+    expect(gestures.warnings).toEqual([]);
+    expect(gestures).toHaveLength(2);
+    expect(gestures[0]).toEqual({
+      startUs: 10_000, endUs: 10_000, durationMs: 0,
+      points: [{ tUs: 10_000, x: 10, y: 20 }],
+    });
+    expect(gestures[1]).toEqual({
+      startUs: 10_000, endUs: 10_000, durationMs: 0,
+      points: [{ tUs: 10_000, x: 40, y: 50 }],
+    });
+  });
+
+  test("ignores secondary-only BTN_TOUCH transitions instead of making a ghost gesture", () => {
+    const gestures = toGestures([
+      event(1, "EV_ABS", "ABS_MT_SLOT", 1),
+      event(2, "EV_ABS", "ABS_MT_TRACKING_ID", 5),
+      event(3, "EV_ABS", "ABS_MT_POSITION_X", 999),
+      event(4, "EV_ABS", "ABS_MT_POSITION_Y", 999),
+      event(5, "EV_KEY", "BTN_TOUCH", 1),
+      event(10_000, "EV_SYN", "SYN_REPORT", 0),
+      event(11_000, "EV_ABS", "ABS_MT_TRACKING_ID", -1),
+      event(12_000, "EV_KEY", "BTN_TOUCH", 0),
+      event(20_000, "EV_SYN", "SYN_REPORT", 0),
+    ]);
+    expect(gestures).toHaveLength(0);
+    expect(gestures.warnings).toContain("/dev/input/event2 at 10000: ignoring multi-touch slot 1");
+  });
+
 });
 
 describe("replayPlan / toInputCommand", () => {

@@ -88,14 +88,70 @@ type DeviceState = {
   frame: InputEvent[];
   active: boolean;
   slot: number;
+  // ABS_MT_POSITION_* are persistent slot values, not contact-local values.
+  // Keep them across lifts/new tracking IDs; SYN_DROPPED invalidates them.
   x: number | null;
   y: number | null;
+  trackingId: number | null;
   startUs: number;
   points: GesturePoint[];
 };
 
 function newDeviceState(): DeviceState {
-  return { frame: [], active: false, slot: 0, x: null, y: null, startUs: 0, points: [] };
+  return {
+    frame: [],
+    active: false,
+    slot: 0,
+    x: null,
+    y: null,
+    trackingId: null,
+    startUs: 0,
+    points: [],
+  };
+}
+
+function samplePoint(state: DeviceState, tUs: number): void {
+  if (!state.active || state.x === null || state.y === null) return;
+  const last = state.points[state.points.length - 1];
+  if (!last || last.x !== state.x || last.y !== state.y) {
+    state.points.push({ tUs, x: state.x, y: state.y });
+  }
+}
+
+function beginContact(state: DeviceState, tUs: number, trackingId: number | null): void {
+  state.active = true;
+  state.startUs = tUs;
+  state.trackingId = trackingId;
+  state.points = [];
+}
+
+function endContact(
+  state: DeviceState,
+  device: string,
+  tUs: number,
+  gestures: Gesture[],
+  warnings: string[],
+): void {
+  if (!state.active) return;
+  // A final position change before lift belongs to the ending contact,
+  // even when the next contact starts before this SYN_REPORT.
+  samplePoint(state, tUs);
+  if (state.points.length === 0) {
+    warnings.push(device + " at " + tUs + ": contact ended without slot-0 coordinates");
+  } else if (tUs < state.startUs) {
+    warnings.push(device + " at " + tUs + ": nonmonotonic gesture timestamps");
+  } else {
+    gestures.push({
+      startUs: state.startUs,
+      endUs: tUs,
+      durationMs: (tUs - state.startUs) / 1_000,
+      points: state.points,
+    });
+  }
+  state.active = false;
+  state.trackingId = null;
+  state.points = [];
+  // Do NOT reset state.x/state.y: protocol-B slot axes persist across contacts.
 }
 
 function processFrame(
@@ -105,78 +161,63 @@ function processFrame(
   gestures: Gesture[],
   warnings: string[],
 ): void {
-  // First establish whether this frame opens a slot-0 contact. Reset stale
-  // coordinates before applying position events, regardless of event order.
+  // Tracking-ID changes are authoritative within their frame. BTN_TOUCH
+  // duplicates must not close a newly replaced slot-0 contact or start a
+  // phantom slot-0 contact when only a secondary slot is active.
+  const hasTrackingChange = state.frame.some(
+    (event) => event.type === "EV_ABS" && event.code === "ABS_MT_TRACKING_ID",
+  );
   let slot = state.slot;
-  let begins = false;
-  let ends = false;
+  let needsSample = false;
+
+  // Process *in order*: lift and new-down can share one SYN_REPORT.
+  // Collapsing a frame into "begins"/"ends" loses the replacement contact.
   for (const event of state.frame) {
     if (event.type === "EV_ABS" && event.code === "ABS_MT_SLOT") {
       slot = event.value;
-      if (slot !== 0) warnings.push(device + " at " + tUs + ": ignoring multi-touch slot " + slot);
-    } else if (event.type === "EV_ABS" && event.code === "ABS_MT_TRACKING_ID" && slot === 0) {
-      if (event.value >= 0) begins = true;
-      else if (event.value === -1) ends = true;
-      else warnings.push(device + " at " + tUs + ": invalid tracking id " + event.value);
-    } else if (event.type === "EV_KEY" && event.code === "BTN_TOUCH") {
-      if (event.value === 0) ends = true;
-      else if (event.value === 1) begins = true;
-    }
-  }
-
-  if (begins && ends) {
-    warnings.push(device + " at " + tUs + ": down and up in one frame; single frame replay may lose transitions");
-  }
-  if (begins && !state.active) {
-    state.active = true;
-    state.startUs = tUs;
-    state.points = [];
-    state.x = null;
-    state.y = null;
-  }
-
-  slot = state.slot;
-  let changed = false;
-  for (const event of state.frame) {
-    if (event.type !== "EV_ABS") continue;
-    if (event.code === "ABS_MT_SLOT") {
-      slot = event.value;
-    } else if (slot === 0 && event.code === "ABS_MT_POSITION_X") {
+      if (slot !== 0) {
+        warnings.push(device + " at " + tUs + ": ignoring multi-touch slot " + slot);
+      }
+    } else if (event.type === "EV_ABS" && slot === 0 &&
+               event.code === "ABS_MT_TRACKING_ID") {
+      if (event.value >= 0) {
+        if (state.active && state.trackingId !== null &&
+            state.trackingId !== event.value) {
+          warnings.push(device + " at " + tUs + ": tracking ID changed without lift");
+          endContact(state, device, tUs, gestures, warnings);
+        }
+        if (!state.active) beginContact(state, tUs, event.value);
+        state.trackingId = event.value;
+        needsSample = true;
+      } else if (event.value === -1) {
+        endContact(state, device, tUs, gestures, warnings);
+        needsSample = false;
+      } else {
+        warnings.push(device + " at " + tUs + ": invalid tracking id " + event.value);
+      }
+    } else if (event.type === "EV_ABS" && slot === 0 &&
+               event.code === "ABS_MT_POSITION_X") {
       state.x = event.value;
-      changed = true;
-    } else if (slot === 0 && event.code === "ABS_MT_POSITION_Y") {
+      needsSample = true;
+    } else if (event.type === "EV_ABS" && slot === 0 &&
+               event.code === "ABS_MT_POSITION_Y") {
       state.y = event.value;
-      changed = true;
+      needsSample = true;
+    } else if (event.type === "EV_KEY" && event.code === "BTN_TOUCH" &&
+               !hasTrackingChange) {
+      if (event.value === 0) {
+        endContact(state, device, tUs, gestures, warnings);
+        needsSample = false;
+      } else if (event.value === 1) {
+        if (!state.active) beginContact(state, tUs, null);
+        needsSample = true;
+      }
     }
   }
+
   state.slot = slot;
   state.frame = [];
-
-  if (state.active && state.x !== null && state.y !== null && (begins || changed)) {
-    const last = state.points[state.points.length - 1];
-    if (!last || last.x !== state.x || last.y !== state.y) {
-      state.points.push({ tUs, x: state.x, y: state.y });
-    }
-  }
-
-  if (ends && state.active) {
-    if (state.points.length === 0) {
-      warnings.push(device + " at " + tUs + ": contact ended without slot-0 coordinates");
-    } else if (tUs < state.startUs) {
-      warnings.push(device + " at " + tUs + ": nonmonotonic gesture timestamps");
-    } else {
-      gestures.push({
-        startUs: state.startUs,
-        endUs: tUs,
-        durationMs: (tUs - state.startUs) / 1_000,
-        points: state.points,
-      });
-    }
-    state.active = false;
-    state.points = [];
-    state.x = null;
-    state.y = null;
-  }
+  if (state.active && needsSample) samplePoint(state, tUs);
 }
 
 /**
