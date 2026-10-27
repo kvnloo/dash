@@ -76,15 +76,46 @@ function elapsed(now: () => number, since: number): number {
   return Math.max(0, now() - since);
 }
 
-export function createFigureCache({ load, capacity = 8, now }: FigureCacheOptions): {
-  get: (id: string) => Promise<FigureLoadResult>;
+/**
+ * @internal Bounded storage used by the figure loader. Kept independent of the
+ * two-ID catalogue so eviction policy can be verified with three fixture IDs
+ * without admitting unknown figures through createFigureCache.
+ */
+export function createLruHtmlStore<Id extends string>(capacity: number): {
+  get: (id: Id) => string | undefined;
+  set: (id: Id, html: string) => void;
 } {
   if (!Number.isSafeInteger(capacity) || capacity < 1) {
     throw new RangeError("Figure cache capacity must be a positive integer");
   }
 
   // Map insertion order is the LRU order: oldest first, newest last.
-  const cached = new Map<FigureId, string>();
+  const cached = new Map<Id, string>();
+  return {
+    get(id) {
+      const html = cached.get(id);
+      if (html !== undefined) {
+        cached.delete(id);
+        cached.set(id, html);
+      }
+      return html;
+    },
+    set(id, html) {
+      cached.delete(id);
+      cached.set(id, html);
+      while (cached.size > capacity) {
+        const oldest = cached.keys().next();
+        if (oldest.done) break;
+        cached.delete(oldest.value);
+      }
+    },
+  };
+}
+
+export function createFigureCache({ load, capacity = 8, now }: FigureCacheOptions): {
+  get: (id: string) => Promise<FigureLoadResult>;
+} {
+  const cached = createLruHtmlStore<FigureId>(capacity);
   const loading = new Map<FigureId, Promise<FigureLoadResult>>();
 
   function get(id: string): Promise<FigureLoadResult> {
@@ -95,8 +126,6 @@ export function createFigureCache({ load, capacity = 8, now }: FigureCacheOption
     const start = now();
     const html = cached.get(id);
     if (html !== undefined) {
-      cached.delete(id);
-      cached.set(id, html);
       return Promise.resolve({ html, fromCache: true, loadMs: elapsed(now, start) });
     }
 
@@ -113,13 +142,7 @@ export function createFigureCache({ load, capacity = 8, now }: FigureCacheOption
           fromCache: false,
           loadMs: elapsed(now, start),
         };
-        cached.delete(id);
         cached.set(id, loadedHtml);
-        while (cached.size > capacity) {
-          const oldest = cached.keys().next().value;
-          if (oldest === undefined) break;
-          cached.delete(oldest);
-        }
         return result;
       })
       .finally(() => {

@@ -3,6 +3,7 @@ import {
   FIGURES,
   FIGURE_FRAME,
   createFigureCache,
+  createLruHtmlStore,
   matchFigure,
   withinLoadBudget,
 } from "./anatomy-catalog";
@@ -47,6 +48,44 @@ describe("static anatomy figure catalogue and matcher", () => {
     expect(matchFigure("explain a dial indicator next to a test rig")).toBeNull();
     expect(matchFigure("show me a dial indicator with a test bench")).toBe("dial-indicator");
     expect(matchFigure("what is a dial indicator indicator indicator?")).toBe("dial-indicator");
+  });
+});
+
+describe("anatomy loader LRU storage policy", () => {
+  test("capacity two evicts the least recently read of three fixture IDs, not FIFO", () => {
+    const store = createLruHtmlStore<string>(2);
+    store.set("first", "<figure>first</figure>");
+    store.set("second", "<figure>second</figure>");
+    expect(store.get("first")).toBe("<figure>first</figure>");
+    store.set("third", "<figure>third</figure>");
+    expect(store.get("second")).toBeUndefined();
+    expect(store.get("first")).toBe("<figure>first</figure>");
+    expect(store.get("third")).toBe("<figure>third</figure>");
+  });
+
+  test("an overwrite refreshes recency without consuming another slot", () => {
+    const store = createLruHtmlStore<string>(2);
+    store.set("first", "old");
+    store.set("second", "second");
+    store.set("first", "updated");
+    expect(store.get("second")).toBe("second");
+    store.set("first", "latest");
+    store.set("third", "third");
+    expect(store.get("second")).toBeUndefined();
+    expect(store.get("first")).toBe("latest");
+    expect(store.get("third")).toBe("third");
+  });
+
+  test("empty HTML is a hit and refreshes recency; misses do not evict", () => {
+    const store = createLruHtmlStore<string>(2);
+    store.set("first", "");
+    store.set("second", "second");
+    expect(store.get("missing")).toBeUndefined();
+    expect(store.get("first")).toBe("");
+    store.set("third", "third");
+    expect(store.get("second")).toBeUndefined();
+    expect(store.get("first")).toBe("");
+    expect(store.get("third")).toBe("third");
   });
 });
 
@@ -112,8 +151,8 @@ describe("injected anatomy HTML cache", () => {
   });
 
   test("at capacity two, repeated accesses retain both known catalogue IDs", async () => {
-    // The catalogue has only two allowed IDs; a third distinct ID must reject.
-    // Actual eviction is exercised above with capacity one.
+    // The production catalogue still rejects a third distinct ID. The shared
+    // storage policy is tested with three fixture IDs above.
     let loads = 0;
     const cache = createFigureCache({
       capacity: 2,
