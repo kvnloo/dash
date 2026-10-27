@@ -238,6 +238,55 @@ describe("strict persisted/bridge capture parser", () => {
     expect(parseCaptures(null)).toEqual([]);
   });
 
+  test("validates and returns the same single-read snapshot for every untrusted field", () => {
+    const good = capture("snapshot", 10, { conversationId: "chat", attachments: 2 });
+    const invalidAfterRead: Record<string, unknown> = {
+      id: 42,
+      text: null,
+      conversationId: false,
+      capturedAt: -1,
+      attachments: "invalid",
+      status: "sent",
+    };
+    for (const field of Object.keys(good)) {
+      let reads = 0;
+      const row = new Proxy(good, {
+        get(target, property, receiver): unknown {
+          if (property === field) {
+            reads++;
+            if (reads > 1) return invalidAfterRead[field];
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      });
+      expect(parseCaptures([row])).toEqual([good]);
+      expect(reads).toBe(1);
+    }
+  });
+
+  test("snapshots absent conversation IDs and rejects invalid first reads without rereading", () => {
+    const good = capture("optional", 1);
+    let reads = 0;
+    const optional = {
+      ...good,
+      get conversationId(): unknown {
+        reads++;
+        return reads === 1 ? undefined : "bad id";
+      },
+    };
+    expect(parseCaptures([optional])).toEqual([good]);
+    expect(reads).toBe(1);
+
+    for (const field of Object.keys(good)) {
+      const row = new Proxy(good, {
+        get(target, property, receiver): unknown {
+          return property === field ? null : Reflect.get(target, property, receiver);
+        },
+      });
+      expect(parseCaptures([row, good])).toEqual([good]);
+    }
+  });
+
   test("caps parsed arrays and removes dismissed before queued, regardless of input order", () => {
     const raw = [
       capture("dismissed", 5, { status: "dismissed" }),

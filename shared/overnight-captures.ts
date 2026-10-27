@@ -165,26 +165,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseCapture(raw: unknown): Capture | null {
-  if (!isRecord(raw)
-    || !validId(raw.id)
-    || typeof raw.text !== "string"
-    || raw.text.length === 0
-    || raw.text.length > MAX_CAPTURE_TEXT_LENGTH
-    || raw.text.trim() !== raw.text
-    || !validTime(raw.capturedAt)
-    || !validCount(raw.attachments)
-    || (raw.conversationId !== undefined && !validId(raw.conversationId))
-    || (raw.status !== "queued" && raw.status !== "planned" && raw.status !== "dismissed")) {
+  if (!isRecord(raw)) return null;
+  // Getters and proxies may change on each read. Validate the exact primitive
+  // snapshot returned below, never reread untrusted properties after checking.
+  const { id, text, conversationId, capturedAt, attachments, status } = raw;
+  if (!validId(id)
+    || typeof text !== "string"
+    || text.length === 0
+    || text.length > MAX_CAPTURE_TEXT_LENGTH
+    || text.trim() !== text
+    || !validTime(capturedAt)
+    || !validCount(attachments)
+    || (conversationId !== undefined && !validId(conversationId))
+    || (status !== "queued" && status !== "planned" && status !== "dismissed")) {
     return null;
   }
 
   return {
-    id: raw.id,
-    text: raw.text,
-    ...(raw.conversationId === undefined ? {} : { conversationId: raw.conversationId }),
-    capturedAt: raw.capturedAt,
-    attachments: raw.attachments,
-    status: raw.status,
+    id,
+    text,
+    ...(conversationId === undefined ? {} : { conversationId }),
+    capturedAt,
+    attachments,
+    status,
   };
 }
 
