@@ -56,8 +56,6 @@ jobs:
           fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           echo "BEND=$HOME/.bend/bin/bend" >> "$GITHUB_ENV"
-      - name: Anchors (the code still reads as laws/send models it)
-        run: python3 laws/send/anchors.py
       - name: Proofs (bend PROOF.bend --verdict, every law family)
         run: |
           status=0
@@ -84,3 +82,5 @@ jobs:
             echo "::endgroup::"
           done
           exit $status
+      - name: Anchors (the code still reads as laws/send models it)
+        run: python3 laws/send/anchors.py
