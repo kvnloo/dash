@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, preview, nightly, dev, integrate/dash-v2, integrate/dash-20261020]
+    branches: [main, preview, nightly, dev, 'integrate/**', 'integ/**']
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -13,6 +13,62 @@ env:
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
 jobs:
+  # The test suite IS the e2e tester army (O15, laws/release). It runs on the exact
+  # head commit, writes the army receipt, and the O15 gate then decides the merge.
+  test:
+    name: test (tester army + O15 gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'app/bun.lock', 'bridge/bun.lock') }}
+      - name: Install locked root and bridge dependencies; public app without private renderer
+        run: bun install --frozen-lockfile && bun scripts/install-public-ci.ts && bun install --frozen-lockfile --cwd bridge
+      - name: Headless Chromium and the bridge sandbox (bubblewrap)
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends bubblewrap ffmpeg
+          # Ubuntu 24.04 restricts unprivileged user namespaces; the army isolates each bridge with bwrap.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 node node_modules/playwright/cli.js install --with-deps chromium
+      - name: Tester army on ${{ env.SHA }}
+        env:
+          DASH_ARMY_RECEIPTS: ${{ runner.temp }}/army-receipts
+          ARMY_WORKERS: "4"
+        run: bash scripts/army.sh
+      - name: Army receipt (canonical O15 evidence for this commit)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: army-receipt-${{ env.SHA }}
+          path: ${{ runner.temp }}/army-receipts/${{ env.SHA }}/
+          if-no-files-found: ignore
+          retention-days: 90
+      - name: Army evidence (report, traces, screenshots)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: army-evidence-${{ env.SHA }}
+          path: |
+            artifacts/army/${{ env.SHA }}/html
+            artifacts/army/${{ env.SHA }}/test-results
+            artifacts/army/${{ env.SHA }}/web-export.log
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: O15 release gate (merge)
+        if: always()
+        run: python3 laws/release/check.py --action merge --sha "$SHA" --receipts "$RUNNER_TEMP/army-receipts"
+
   checks:
     name: ${{ matrix.gate }}
     runs-on: ubuntu-latest
@@ -20,7 +76,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gate: [typecheck, lint, test, mutation]
+        gate: [typecheck, lint, invariants, mutation]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -39,21 +95,22 @@ jobs:
         if: matrix.gate == 'lint'
         run: bun run lint
       - name: Install real audio decoder for pairing regression
-        if: matrix.gate == 'test'
+        if: matrix.gate == 'invariants'
         run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends ffmpeg
-      - name: Unit and regression tests
-        if: matrix.gate == 'test'
-        run: bun run test
+      - name: Invariants the army cannot reach (protocol, security, storage, native-only logic) and the O15 checker
+        if: matrix.gate == 'invariants'
+        run: bun run test:invariants && python3 -m unittest laws/release/test_check.py -v
       - name: Mutation tests (including protocol and roster branches)
         if: matrix.gate == 'mutation'
         run: bun scripts/mutate.ts --threshold 80 --max 200
 
   required-gates:
     if: always()
-    needs: checks
+    needs: [test, checks]
     runs-on: ubuntu-latest
     steps:
       - name: Reject failed, cancelled or skipped gates
         env:
+          TEST_RESULT: ${{ needs.test.result }}
           GATE_RESULT: ${{ needs.checks.result }}
-        run: test "$GATE_RESULT" = success
+        run: test "$TEST_RESULT" = success && test "$GATE_RESULT" = success

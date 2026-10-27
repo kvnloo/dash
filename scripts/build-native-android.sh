@@ -3,6 +3,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .native-receipts
 exec > >(tee .native-receipts/build.log 9>&-) 2>&1
+# O15 (laws/release): no green, complete tester-army receipt for this exact commit, no APK.
+# Runs before any dependency install, build or signing step.
+if ! python3 laws/release/check.py --action install --fetch; then
+  printf 'build-native-android: refused by O15 before building or signing anything.\n' >&2
+  exit 1
+fi
 printf 'Native Android build host: %s\n' "$(hostname)"
 printf '%s\n' "${DASH_PROOF_REVISION:-uncommitted}" > .native-receipts/source-revision.txt
 if [ -f .native-build-inputs/source-revision.txt ]; then cp .native-build-inputs/source-revision.txt .native-receipts/source-revision.txt; fi
@@ -27,7 +33,7 @@ if [ ! -f app/node_modules/@shopify/react-native-skia/libs/android/arm64-v8a/lib
 fi
 if [ "${DASH_NATIVE_ONLY:-0}" != 1 ]; then
   bun app/node_modules/typescript/bin/tsc -p app --noEmit > .native-receipts/typecheck.log 2>&1
-  bun test app/src bridge/src shared > .native-receipts/unit.log 2>&1
+  bun run test:invariants > .native-receipts/unit.log 2>&1
   bun scripts/mutate.ts > .native-receipts/mutation.log 2>&1
   (cd app && CI=1 bun x expo export --platform android --output-dir ../.native-receipts/export) > .native-receipts/export.log 2>&1
 else

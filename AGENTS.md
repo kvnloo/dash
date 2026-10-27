@@ -3,6 +3,15 @@
 Dash is a phone app (Expo, Android + iOS) that chats with free-tier models in
 parallel and with the coding agents on your own computer over Tailscale.
 
+## Release law O15: tester army or nothing ships
+
+Read this before you build, install, promote or merge Dash.
+
+- The test suite is the e2e tester army: `bun run test` (`scripts/army.sh`, specs in `e2e/mbp-army`). It writes a receipt for the exact commit.
+- No green, complete army receipt for that exact commit: no APK, no phone install, no channel/OTA promotion, no merge. `laws/release/check.py` decides; `scripts/build-native-android.sh`, `scripts/phone-install.sh`, CI and `promote-preview.yml` call it and exit non-zero before anything is built, signed or installed.
+- The law and its proof are in `laws/release/` (Bend, O15). Do not weaken a law, edit the army, or hand-write a receipt to get a pass; the checker rejects all three.
+- Ad-hoc harnesses and one-off proof scripts never count. Put a new journey in `e2e/mbp-army/army.spec.ts` and its feature in `features.json`.
+
 ## Autodevelop
 
 If you are an agent told to autodevelop, donate a coding pass, or pick the
@@ -37,7 +46,8 @@ receipt (`head_revision` must be this PR's SHA). Receipt CI runs on
 
 | Layer | Command |
 |---|---|
-| Unit | `bun test app/src bridge/src shared` |
+| Test suite (tester army, O15) | `bun run test` |
+| Invariants | `bun run test:invariants` |
 | Mutation | `bun scripts/mutate.ts` (score ≥ 80). Not Stryker. |
 | Runtime | `.cursor/skills/verify-dash` (`bun scripts/verify-dash/control-dash.ts`) |
 

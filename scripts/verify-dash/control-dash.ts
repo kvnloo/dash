@@ -128,7 +128,7 @@ async function roster(): Promise<number> {
 }
 
 async function tests(): Promise<number> {
-  const unit = Bun.spawnSync(["bun", "test", "app/src", "bridge/src", "shared", "scripts/mutate.test.ts"], {
+  const unit = Bun.spawnSync(["bun", "test", "app/src", "bridge/src", "shared"], {
     cwd: ROOT,
     stdout: "pipe",
     stderr: "pipe",

@@ -1,0 +1,43 @@
+{
+  "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
+  "features": [
+    {"id": "pairing", "title": "Pair with a bridge, Chats tab, open and close a chat window",
+     "tests": ["pairing, Chats tab, open and close real chat window"]},
+    {"id": "send-stream", "title": "Composer send and streamed agent reply",
+     "tests": ["composer typing, Send and streamed ACP reply"]},
+    {"id": "stop", "title": "Stop cancels a running turn",
+     "tests": ["Stop cancels an active ACP turn and restores composer"]},
+    {"id": "queue", "title": "Queue the next prompt behind a running turn",
+     "tests": ["Queue preserves next prompt and sends after running turn"]},
+    {"id": "steer", "title": "Steer a running turn (honest unsupported delivery)",
+     "tests": ["Steer running Hermes turn surfaces unsupported ACP delivery honestly"]},
+    {"id": "attachments", "title": "File attachments upload to the bridge",
+     "tests": ["file chooser uploads real bytes to isolated bridge"]},
+    {"id": "context-gauge", "title": "Context gauge card",
+     "tests": ["context gauge opens a readable card inside the viewport",
+               "safe exploratory controls and context hit target at 390",
+               "safe exploratory controls and context hit target at 800"]},
+    {"id": "prompt-rail", "title": "Prompt rail scrub, Jump and Latest",
+     "tests": ["prompt rail mouse scrub, Jump and Latest on real transcript"]},
+    {"id": "harness-picker", "title": "Harness picker (OMP / Hermes)",
+     "tests": ["harness picker switches OMP to Hermes without sending"]},
+    {"id": "approvals", "title": "Upstream approvals: dry-run outbox, reject, history",
+     "tests": ["approvals screen reads real dry-run outbox and persists rejection"]},
+    {"id": "drafts", "title": "Draft text survives close, reopen and reload",
+     "tests": ["draft text survives close, reopen and real browser reload"]},
+    {"id": "reconnect", "title": "Bridge death disables Send; restart reconnects",
+     "tests": ["bridge process death disables Send and restart reconnects"]},
+    {"id": "agent-errors", "title": "Agent errors are surfaced and the composer stays usable",
+     "tests": ["real ACP error is surfaced visibly and leaves composer usable"]},
+    {"id": "chat-window-identity", "title": "Chat window identity badge at phone and tablet widths",
+     "tests": ["safe exploratory controls and context hit target at 390",
+               "safe exploratory controls and context hit target at 800"]},
+    {"id": "running-turn-survives-roster", "title": "A running turn survives a missing roster row",
+     "tests": ["a missing roster row must not terminate a bridge-owned running turn"]}
+  ],
+  "not_yet_in_army": [
+    "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
+    "live model behaviour", "Orchestra / orchestration screens", "tool activity rendering", "handedness",
+    "Hermes session history", "notifications and deep links"
+  ]
+}
