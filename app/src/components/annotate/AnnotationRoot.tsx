@@ -425,6 +425,7 @@ function Tray({ onSend, screenHeight, tldraw }: { onSend(keep: boolean): void; s
     <TrayViewport atTop={top} screenHeight={screenHeight}>
       {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `Sending to ${s.sink ?? "chat"}…`} /> : null}
       {s.status === "error" && s.error ? <Text accessibilityRole="alert" style={styles.error}>{s.error}</Text> : null}
+      {s.voiceNote ? <Text testID="annotation-voice-note" style={[styles.hint, { fontSize: 12, color: colors.textMuted }]}>Live voice unavailable: {s.voiceNote.replace(/[.!?]+$/, "")}. Hold Talk or type a note.</Text> : null}
       <View style={[styles.row, thumb.row]}>
         {TOOLS.map(t => <Chip key={t.id} label={t.label} a11y={t.a11y} selected={s.tool === t.id} onPress={() => setTool(t.id)} />)}
         <Swatch color="accent" selected={s.color === "accent"} />
@@ -489,7 +490,7 @@ function Swatch({ color, selected }: { color: InkColor; selected: boolean }): Re
 /** Hold to talk: the bridge transcribes the clip; the segment's time span aligns strokes. */
 function HoldToTalk(): React.JSX.Element {
   const voice = useContinuousVoice();
-  const liveVoice = !["idle", "error"].includes(voice.state.phase);
+  const liveVoice = !["idle", "error", "connecting"].includes(voice.state.phase);
   const speech = useRecordedSpeech("annotation", (text, start, end) => addSegment({ id: `mic-${start}`, text, start, end, source: "mic" }));
   const recording = speech.state.phase === "recording";
   const busy = speech.state.phase === "transcribing";
