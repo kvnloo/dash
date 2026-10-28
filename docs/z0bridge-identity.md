@@ -59,7 +59,7 @@ The bridge's explicitly selected environment would then contain:
 ```text
 DASH_IDENTITY=1
 DASH_IDENTITY_URL=http://127.0.0.1:4789
-DASH_IDENTITY_ISSUER=z0bridge:groot
+DASH_IDENTITY_ISSUER=z0bridge:host-b
 DASH_IDENTITY_KID=<RFC-7638 kid checked privately against the identity service>
 DASH_IDENTITY_CREDENTIAL_FILE=/absolute/path/to/.dash/z0bridge-verifier.json
 ```

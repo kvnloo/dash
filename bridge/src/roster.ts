@@ -603,7 +603,7 @@ let rosterCache: { at: number; key: string; hosts: HostInfo[] } | null = null;
 
 /**
  * The phone addresses this computer by its roster host id: the Tailscale MagicDNS label
- * (e.g. "0"), which need not equal the OS hostname (e.g. "groot"). Both name this bridge.
+ * (e.g. "0"), which need not equal the OS hostname (e.g. "host-b"). Both name this bridge.
  */
 export class SelfHost {
   private ids = new Set<string>();

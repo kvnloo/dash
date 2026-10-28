@@ -10,7 +10,7 @@ Use these words exactly, in UI strings, accessibility labels, code and tests. If
 
 | Word | Means | Examples | Not |
 |------|-------|----------|-----|
-| **Host** | A machine on the tailnet that runs a Dash bridge or is listed by one. | groot, mbp, `0` | a harness, a bot |
+| **Host** | A machine on the tailnet that runs a Dash bridge or is listed by one. | host-b, host-a, `0` | a harness, a bot |
 | **Harness** | An agent CLI or runtime installed on a host. Dash starts chats with it. | hermes, omp, codex, claude, grok, pi, fx | a bot |
 | **Bot** | A deployed messaging identity that people talk to on a chat platform. The host reports it in `HostInfo.bots`. | a Hermes gateway profile bound to Telegram or Discord, OpenDots, GrokBot | a harness, a Hermes profile with no platform, a session |
 | **Session / chat** | One conversation, on the phone or held by a harness on the host. | a live OMP tab, a saved Hermes session | a bot |
@@ -88,7 +88,7 @@ Typography: system sans. Display 22/700. Heading 17/600. Body 16/24. Small 13/18
 8. `settings` — grouped rows
 9. `voice` — orb + “Say something…”
 
-Sample content: OMP / Grok / Codex / Hermes, “fix the auth bug in login.ts”, host `mbp`, address `100.64.0.1:4747`.
+Sample content: OMP / Grok / Codex / Hermes, “fix the auth bug in login.ts”, host `host-a`, address `100.64.0.1:4747`.
 
 ## Pattern atlas
 

@@ -3200,9 +3200,9 @@
                 {
                   "type": "text",
                   "id": "g5VGN0",
-                  "name": "mbp",
+                  "name": "host-a",
                   "fill": "$text",
-                  "content": "mbp",
+                  "content": "host-a",
                   "fontFamily": "Inter",
                   "fontSize": 15,
                   "fontWeight": "normal"
@@ -3574,7 +3574,7 @@
                   "id": "jfzD6",
                   "name": "conn-t",
                   "fill": "$muted",
-                  "content": "Connected to mbp",
+                  "content": "Connected to host-a",
                   "fontFamily": "Inter",
                   "fontSize": 13,
                   "fontWeight": "normal"

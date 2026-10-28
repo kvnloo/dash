@@ -2,11 +2,12 @@
  * In-app routes reachable by deep link:
  *   Expo Go:    exp://<metro>/--/lab   exp://<metro>/--/trace
  *   Dev build:  dash://lab             dash://trace
+ * Also orchestra, settings, bots and chats (the preview hand-off opens the screen to test).
  * They open screens only and carry no parameters.
  */
-export type AppRoute = "Lab" | "Trace" | "Orchestra" | "Settings" | "Bots";
+export type AppRoute = "Lab" | "Trace" | "Orchestra" | "Settings" | "Bots" | "Chats";
 
-const ROUTES: Record<string, AppRoute> = { lab: "Lab", trace: "Trace", orchestra: "Orchestra", settings: "Settings", bots: "Bots" };
+const ROUTES: Record<string, AppRoute> = { lab: "Lab", trace: "Trace", orchestra: "Orchestra", settings: "Settings", bots: "Bots", chats: "Chats" };
 
 export function parseAppRouteLink(raw: string | null | undefined): AppRoute | null {
   if (!raw) return null;

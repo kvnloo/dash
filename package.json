@@ -4,7 +4,11 @@
   "scripts": {
     "test": "bash scripts/army.sh",
     "typecheck": "bun app/node_modules/typescript/bin/tsc -p app --noEmit && bun bridge/node_modules/typescript/bin/tsc -p bridge --noEmit && tsc -p tsconfig.scripts.json --noEmit",
-    "lint": "eslint . --max-warnings 0"
+    "lint": "eslint . --max-warnings 0",
+    "spec": "python3 spec/check.py",
+    "spec:status": "python3 scripts/feature_status.py --evidence .acceptance-receipts",
+    "spec:handoff": "python3 scripts/preview_handoff.py",
+    "spec:law": "python3 -I tests/feature_completion_parity.py && python3 -I tests/feature_completion_mutation.py"
   },
   "dependencies": {},
   "devDependencies": {

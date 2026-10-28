@@ -33,7 +33,7 @@ Phone Pair screen talks HTTP first.
 
 | Symptom | Check |
 |---------|--------|
-| Pair code never appears | `GET /pair` on the laptop. MagicDNS `mbp` is often wrong. Use Tailscale IPv4 (`100.64.0.1`). |
+| Pair code never appears | `GET /pair` on the laptop. MagicDNS `host-a` is often wrong. Use Tailscale IPv4 (`100.64.0.1`). |
 | Listen for sound does nothing | Pair audio is queued. Do not rewrite the decoder while debugging attach. |
 | LAN pair fails, Tailscale works | `DASH_HOST` must not be pinned to Tailscale-only. `bun run start` listens on all interfaces. |
 

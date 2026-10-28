@@ -117,8 +117,9 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
       // chats.v1 rosters list only running/host-held chats and a short head: a chat opened from the
       // paged list is simply not running, not ended. Only live-only sessions end with the roster row.
       if (options.adopt === "live" && resumableWithoutRoster(c, hosts, options.routes)) {
-        if (c.openIn === undefined) return c;
-        changed = true; return { ...c, openIn: undefined };
+        // A chat marked ended before the routes arrived must come back, or it stays unsendable forever.
+        if (c.openIn === undefined && c.stale !== true) return c;
+        changed = true; return { ...c, stale: false, openIn: undefined };
       }
       if (c.stale && c.openIn === undefined) return c;
       changed = true; return { ...c, stale: true, openIn: undefined };

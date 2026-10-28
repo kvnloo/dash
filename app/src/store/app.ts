@@ -275,7 +275,7 @@ export function setLiveHistoryRequester(fn: LiveHistoryRequest | undefined): voi
 
 /**
  * The roster id for a host id a bridge reported. An older bridge names itself by OS hostname
- * ("groot") while the roster keys the same computer by its MagicDNS label ("0").
+ * ("host-b") while the roster keys the same computer by its MagicDNS label ("0").
  */
 export function rosterHostId(hostId: string | undefined, connection: Pick<Connection, "hosts" | "host">): string | undefined {
   if (!hostId || connection.hosts.some(h => h.id === hostId)) return hostId;
@@ -453,11 +453,11 @@ export function createConversation(harness: string, opts?: { id?: string; title?
 
 export function conversationTargetError(target: Pick<Conversation, "targetHostId" | "profileId" | "harness" | "sessionId" | "stale"> & { viewOnly?: boolean }): string | undefined {
   if (target.viewOnly) return "View only: Dash can read this chat but cannot send to it.";
-  if (target.stale) return "This chat has ended on the host. Its saved history is still on this phone.";
-  if (!target.targetHostId) return undefined;
   const { connection } = store.get();
   // A chat recorded on another computer that the paired bridge continues there (hello `routes`).
-  if (target.sessionId && connection.status === "online" && connection.routes?.includes(target.targetHostId)) return undefined;
+  if (target.sessionId && target.targetHostId && connection.status === "online" && connection.routes?.includes(target.targetHostId)) return undefined;
+  if (target.stale) return "This chat has ended on the host. Its saved history is still on this phone.";
+  if (!target.targetHostId) return undefined;
   const host = connection.hosts.find((h) => h.id === target.targetHostId);
   if (!host || !host.online) return "This target host is unavailable. Reconnect to that computer.";
   if (!host.self) return `The paired bridge cannot route to remote host ${host.name}. Pair with that computer to chat.`;

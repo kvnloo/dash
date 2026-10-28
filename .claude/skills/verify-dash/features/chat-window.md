@@ -27,7 +27,7 @@ Preconditions:
 - `openChat(page, bridge)` does the pairing, creates `New chat`, goes Back, records the exact row and opens it.
 
 - **Open.** `await chatRow(page).click({noWaitAfter:true})`; `await expect(page.getByTestId('chat-window')).toBeVisible()`.
-- **Badge.** `await expect(page.getByTestId('chat-window-badge')).toContainText('mbp')`.
+- **Badge.** `await expect(page.getByTestId('chat-window-badge')).toContainText(hostname())`.
 - **Close.** `await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true})`. `chat-window` has count 0 and `getByRole('tab').nth(1)` is still `aria-selected="true"`.
 - **Reopen.** `await chatRow(page).click({noWaitAfter:true})`; `composer(page)` is in the viewport.
 - **Pill status (not driven).** `ARMY_HANG` then `getByTestId('chat-window-pill-status')` reads `working`; `Stop` clears it.
