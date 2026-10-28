@@ -1,7 +1,7 @@
 // Deterministic ACP peer derived from bridge/src/acp/fixtures/agent.ts.
 // No LLM, provider, private files, network requests, or real tool execution.
 import { createInterface } from 'node:readline';
-import {appendFileSync} from 'node:fs';
+import {appendFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 process.on('uncaughtException',e=>{appendFileSync(join(process.env.HOME || '.', 'fixture-errors.log'),String(e.stack)+'\n');process.exit(1);});
 function isRecord(v:unknown):v is Record<string,unknown>{return typeof v==='object'&&v!==null&&!Array.isArray(v);}
@@ -13,6 +13,8 @@ const replyTag = agent === 'claude' ? 'ARMY_CLAUDE_REPLY: ' : 'ARMY_REPLY: ';
 const update = (text: string) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text}}}});
 // Evidence for specs: which session method ran, for which id, in which directory.
 const calls = (method: string, params: unknown) => {if(!isRecord(params))return;try{appendFileSync(join(process.env.HOME || '.', 'army-acp-calls.jsonl'),JSON.stringify({agent,method,sessionId:params.sessionId,cwd:params.cwd,pwd:process.cwd()})+'\n');}catch{/* evidence only */}};
+// Evidence for concurrency specs: when each prompt started and finished, in which fixture process.
+const turnLog = (event: string, text: string) => {try{appendFileSync(join(process.env.HOME || '.', 'army-acp-turns.jsonl'),JSON.stringify({agent,pid:process.pid,event,at:Date.now(),text:text.slice(0,80)})+'\n');}catch{/* evidence only */}};
 let timer: ReturnType<typeof setTimeout> | undefined;
 const think = (text: string) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'agent_thought_chunk',content:{type:'text',text}}}});
 const tool = (toolCallId: string, title: string, rawInput: unknown) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'tool_call',toolCallId,title,kind:'other',status:'in_progress',rawInput}}});
@@ -59,12 +61,19 @@ createInterface({input:process.stdin}).on('line', line => {
   active = r.id;
   const params=typeof r.params==='object'&&r.params!==null&&'prompt' in r.params?r.params.prompt:[];
   const text = Array.isArray(params)?params.map((p:unknown)=>typeof p==='object'&&p!==null&&'text' in p&&typeof p.text==='string'?p.text:'').join(''):'';
+  turnLog('start', text);
+  // Provider failures as a real agent reports them: an HTTP status in the error data, provider text in details.
+  if (text.includes('ARMY_402')) { send({jsonrpc:'2.0',id:r.id,error:{code:-32000,message:'Internal error',data:{http_status:402,details:'ARMY_PROVIDER_DETAIL usage balance exhausted'}}}); return; }
+  if (text.includes('ARMY_429')) { send({jsonrpc:'2.0',id:r.id,error:{code:-32000,message:'Internal error',data:{http_status:429,details:'ARMY_PROVIDER_DETAIL too many requests'}}}); return; }
   if (text.includes('ARMY_ERROR')) { send({jsonrpc:'2.0',id:r.id,error:{code:-32000,message:'ARMY_EXPECTED_AGENT_ERROR'}}); return; }
   // What a real agent reports for context occupancy: the bridge turns this ACP usage_update into the gauge's snapshot.
   if (text.includes('ARMY_USAGE')) send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'usage_update',used:85000,size:200000}}});
   update('ARMY_STREAM_BEGIN ');
   if (text.includes('ARMY_HANG')) return;
-  const finish = () => { timer = setTimeout(() => { update(replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); }, text.includes('ARMY_SLOW') ? 9000 : 350); };
+  const answer = () => { turnLog('end', text); update(replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); };
+  // ARMY_HOLD: no answer until the spec creates $HOME/army-release, so overlap never races a clock.
+  const hold = () => { if (existsSync(join(process.env.HOME || '.', 'army-release'))) answer(); else timer = setTimeout(hold, 100); };
+  const finish = () => { if (text.includes('ARMY_HOLD')) hold(); else timer = setTimeout(answer, text.includes('ARMY_SLOW') ? 9000 : 350); };
   if (text.includes('ARMY_TOOLS')) toolTurn(finish, text.includes('ARMY_TOOLS_MANY')); else finish();
  } else if (r.method === 'session/cancel') {
   clearTimeout(timer); send({jsonrpc:'2.0',id:active,result:{stopReason:'cancelled'}});
