@@ -216,13 +216,14 @@ export function useLiveUpdate(): LiveUpdate {
     };
   }, [origin, runningSha]);
 
-  // A reload that landed on the served build clears the retry guard.
+  // Only actually RUNNING the attempted SHA proves its reload succeeded.
+  // A Metro rollback to the old SHA must not erase the failed SHA's retry marker.
   useEffect(() => {
-    if (served !== null && running !== null && served.sha === running.sha && lastAutoFor !== null) {
+    if (runningSha !== null && lastAutoFor === runningSha) {
       setLastAutoFor(null);
       void writePref(TRIED_KEY, null);
     }
-  }, [served, lastAutoFor]);
+  }, [runningSha, lastAutoFor]);
 
   const blockedBy = reloadBlockedBy();
   const decision = decideReload({
