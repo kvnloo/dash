@@ -24,12 +24,13 @@ test('annotation-palm: pen stroke survives a second touch with every pen point',
     { x: 234, y: 391 },
   ];
   const start = pen[0];
+  const second = pen[1];
   const end = pen.at(-1);
-  if (!start || !end) throw Error('Pen path is empty');
+  if (!start || !second || !end) throw Error('Pen path needs at least two points');
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...start, button: 'none', buttons: 0, pointerType: 'pen' });
   await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...start, button: 'left', buttons: 1, clickCount: 1, pointerType: 'pen' });
   await expect(page.locator('body')).toHaveAttribute('data-army-pen', 'true');
-  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...pen[1], button: 'none', buttons: 1, pointerType: 'pen' });
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...second, button: 'none', buttons: 1, pointerType: 'pen' });
 
   // Palm touches down and lifts before the pen finishes; the active manual pan
   // must never enter FAILED, and its centroid must not leak into the ink.
