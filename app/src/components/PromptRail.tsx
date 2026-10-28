@@ -10,12 +10,16 @@ import { railLayout, railTargetAt } from "../lib/prompt-navigation";
 import { railColors, railWidth, type RailTurn } from "../lib/rail-turns";
 import { colors, type } from "../theme";
 
+type RailSelection = { kind: "turn"; id: string } | { kind: "latest" };
+
 export function PromptRail({ anchors, following, live, onJump, onLatest, onContinue }: {
   anchors: readonly RailTurn[]; following: boolean; live: boolean;
   onJump(prompt: number): void; onLatest(): void; onContinue(prompt: number): void;
 }) {
   const thumb = useHandedness();
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selection, setSelection] = useState<RailSelection | null>(null);
+  const selectedIndex = selection?.kind === "turn" ? anchors.findIndex(anchor => anchor.id === selection.id) : -1;
+  const selected = selection?.kind === "latest" ? anchors.length : selectedIndex >= 0 ? selectedIndex : null;
   const [copyState, setCopyState] = useState("");
   const [confirmContinue, setConfirmContinue] = useState(false);
   const height = useSharedValue(240);
@@ -24,20 +28,28 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
   const positions = useMemo(() => railLayout(anchors.map(anchor => anchor.durationMs), railHeight), [anchors, railHeight]);
   const tickPositions = useSharedValue(positions);
   useEffect(() => { tickPositions.set(positions); }, [positions, tickPositions]);
-  useEffect(() => { setSelected(null); }, [anchors]);
+  // Reply completion and history paging replace the anchors array. Keep the preview
+  // attached to its prompt identity, not the array instance or its current index.
+  useEffect(() => {
+    setSelection(current => current?.kind === "turn" && !anchors.some(anchor => anchor.id === current.id) ? null : current);
+  }, [anchors]);
   const actions = useRef({ anchors, onJump, onLatest });
   actions.current = { anchors, onJump, onLatest };
+  const select = useCallback((index: number) => {
+    const anchor = actions.current.anchors[index];
+    setSelection(anchor ? { kind: "turn", id: anchor.id } : { kind: "latest" });
+  }, []);
   const choose = useCallback((index: number) => {
-    setSelected(index); setCopyState(""); setConfirmContinue(false);
+    select(index); setCopyState(""); setConfirmContinue(false);
     const state = actions.current.anchors[index]?.state;
     if (state === "error" || state === "needs-you") haptic.tap(); else haptic.select();
-  }, []);
+  }, [select]);
   const commit = useCallback((index: number) => {
-    setSelected(index);
+    select(index);
     const current = actions.current;
     if (index >= current.anchors.length) current.onLatest(); else current.onJump(index);
-  }, []);
-  const clear = useCallback(() => setSelected(null), []);
+  }, [select]);
+  const clear = useCallback(() => setSelection(null), []);
   const cursor = useAnimatedStyle(() => ({
     opacity: last.get() < 0 ? 0 : 1,
     transform: [{ translateY: Math.min(height.get() - 2, Math.max(0, tickPositions.get()[last.get()] ?? height.get())) }],
