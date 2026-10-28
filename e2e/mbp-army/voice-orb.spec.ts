@@ -39,7 +39,7 @@ test("live hero orb follows each voice phase, mutes, passes through and hides fo
   await page.getByRole("button", { name: "Close chat window", exact: true }).click({ noWaitAfter: true });
 
   await page.getByRole("tab").nth(0).click({ noWaitAfter: true });
-  await page.getByRole("button", { name: "Voice input", exact: true }).click({ noWaitAfter: true });
+  await page.getByRole("button", { name: "Expand", exact: true }).click({ noWaitAfter: true });
   await expect(page.getByTestId("voice-caption")).toBeVisible();
   await page.getByRole("button", { name: "Start voice in Dash", exact: true }).click({ noWaitAfter: true });
   const orb = page.getByTestId("voice-orb-overlay");
