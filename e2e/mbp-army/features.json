@@ -112,7 +112,10 @@
      "tests": ["voice bootstrap resolves the real fixture Hermes chat IDs",
                "voice bootstrap rejects unknown sessions and legacy credentials",
                "voice bootstrap reports disabled native voice",
-               "voice bootstrap echoes configured broker origin"]}
+               "voice bootstrap echoes configured broker origin"]},
+    {"id": "annotation-voice-quiet", "title": "Annotation launches without global voice errors or safe-area shifts on either ink engine",
+     "tests": ["annotation-voice-quiet: skia entry does not surface voice UI or shift header",
+               "annotation-voice-quiet: tldraw entry does not surface voice UI or shift header"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",

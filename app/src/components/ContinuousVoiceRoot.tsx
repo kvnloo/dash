@@ -18,7 +18,11 @@ import { debugUi } from "../debug/ui-store";
 import { voiceTarget } from "../lib/voice-target";
 
 /** One logcat line per failed voice stage (phone-watch turns these into incidents). Notes never carry secrets. */
-function voiceTrace(stage: string, note: string | undefined): void { console.warn(`[voice] ${stage} failed: ${note ?? "unknown"}`); }
+function voiceTrace(stage: string, note: string | undefined, quiet = false): void {
+  // An annotation auto-start that cannot connect is expected and stays at info; every other failure stays a warning.
+  if (quiet) console.info(`[voice] ${stage} failed: ${note ?? "unknown"}`);
+  else console.warn(`[voice] ${stage} failed: ${note ?? "unknown"}`);
+}
 
 /** A bootstrap broker is never an arbitrary URL; validate before any /v1 request. */
 function trustedVoiceBroker(raw: unknown): { origin: string; fake: boolean } {
@@ -44,7 +48,7 @@ const DeviceInsets = createContext<EdgeInsets | null>(null);
 export function useDeviceInsets(): EdgeInsets {
   const device = useContext(DeviceInsets); const app = useSafeAreaInsets(); return device ?? app;
 }
-interface VoiceContext { state: VoiceState; start(): Promise<void>; stop(): Promise<void>; mute(): void }
+interface VoiceContext { state: VoiceState; start(opts?: { auto?: boolean }): Promise<void>; stop(): Promise<void>; mute(): void }
 const Context = createContext<VoiceContext | null>(null);
 export function useContinuousVoice(): VoiceContext {
   const value = useContext(Context); if (!value) throw new Error("Voice root not mounted"); return value;
@@ -64,9 +68,12 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const windowOpen = voiceWindowOpen.use(open => open);
   const [barRow, setBarRow] = useState(0);
   const [attempted, setAttempted] = useState(false);
+  // Auto-start belongs to the annotation tray, not the app-wide voice bar or its safe-area inset.
+  const suppressAutoBar = useRef(false);
   // SYNTHETIC debug-only state for rendered proofs (never set outside the debug controller).
   const fixture = debugUi.use(s => s.voiceStateFixture ?? null);
-  const start = async () => {
+  const start = async (opts?: { auto?: boolean }) => {
+    const automatic = opts?.auto === true;
     if (starting.current) return;
     if (call.current && !["idle", "error"].includes(call.current.state.phase)) return;
     starting.current = true;
@@ -74,7 +81,22 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     // An error is published before ContinuousVoice finishes native teardown.
     await micRelease.current.wait();
     if (beforeWait !== epoch.current) return; // End/background already cancelled this attempt.
-    setAttempted(true);
+    if (automatic) {
+      if (!attempted) suppressAutoBar.current = true;
+    } else {
+      suppressAutoBar.current = false;
+      setAttempted(true);
+    }
+    const reportFailure = (stage: string, reason: string | undefined) => {
+      voiceTrace(stage, reason, automatic);
+      const note = voiceConnectionErrorLine(reason);
+      if (automatic) {
+        setState(initial);
+        annotate.set(s => s.active ? { ...s, voiceNote: note } : s);
+      } else {
+        setState({ ...initial, phase: "error", note });
+      }
+    };
     desiredMute.current = false;
     const settings = store.get().settings;
     // Retry is pinned to the original conversation, even if the user navigated elsewhere.
@@ -84,16 +106,14 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       voiceTarget(store.get().conversations, store.get().activeId);
     if (!settings?.identity || !conversation?.sessionId || !conversation.profileId) {
       const note = !settings?.identity ? "Pair Dash with z0bridge identity to use voice" : "Open a Hermes chat once, then start voice";
-      voiceTrace("target", note);
-      setState({ ...initial, phase: "error", note });
+      reportFailure("target", note);
       starting.current = false;
       return;
     }
     const target = { profile: conversation.profileId, session: conversation.sessionId };
     const release = microphone.acquire("live");
     if (!release) {
-      voiceTrace("mic-lease", `in use by ${microphone.owner}`);
-      setState({ ...initial, phase: "error", note: `Microphone in use by ${microphone.owner}` });
+      reportFailure("mic-lease", `Microphone in use by ${microphone.owner}`);
       starting.current = false;
       return;
     }
@@ -157,8 +177,17 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
         }
       }, changed: next => {
         if (generation !== epoch.current) return;
-        if (next.phase === "error") voiceTrace("call", next.note);
-        setState(next.phase === "error" ? { ...next, note: voiceConnectionErrorLine(next.note) } : next);
+        if (next.phase === "error") {
+          voiceTrace("call", next.note, automatic);
+          if (automatic) {
+            setState(initial);
+            annotate.set(s => s.active ? { ...s, voiceNote: voiceConnectionErrorLine(next.note) } : s);
+          } else {
+            setState({ ...next, note: voiceConnectionErrorLine(next.note) });
+          }
+          return;
+        }
+        setState(next);
       },
         captureReleased: () => { releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined; },
         holdIntent: () => annotate.get().active,
@@ -171,13 +200,12 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       await connecting;
     } catch (error) {
       releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined;
-      voiceTrace("bootstrap", error instanceof Error ? error.message : undefined);
-      if (generation === epoch.current) setState({ ...initial, phase: "error", note: voiceConnectionErrorLine(error instanceof Error ? error.message : undefined) });
+      if (generation === epoch.current) reportFailure("bootstrap", error instanceof Error ? error.message : undefined);
     }
     finally { if (generation === epoch.current) starting.current = false; }
   };
   const stop = async () => {
-    epoch.current++; starting.current = false; desiredMute.current = false;
+    epoch.current++; starting.current = false; desiredMute.current = false; suppressAutoBar.current = false;
     const controller = call.current;
     call.current = null;
     attached.current = null;
@@ -199,7 +227,8 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       const controller = call.current;
       void controller?.stop("Mic stopped because Dash left the foreground. Tap Start to resume.");
       if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
-      setState(previous => ["idle", "error"].includes(previous.phase) ? previous : { ...previous, phase: "error", note: "Mic stopped because Dash left the foreground. Tap Start to resume." });
+      if (suppressAutoBar.current) annotate.set(s => s.active ? { ...s, voiceNote: "Voice stopped in background" } : s);
+      setState(previous => ["idle", "error"].includes(previous.phase) ? previous : suppressAutoBar.current ? initial : { ...previous, phase: "error", note: "Mic stopped because Dash left the foreground. Tap Start to resume." });
     } });
     return () => {
       epoch.current++; subscription.remove(); const controller = call.current; void controller?.stop();
@@ -214,7 +243,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   useEffect(() => {
     const { start: begin, stop: end, phase } = latest.current;
     if (annotating) {
-      if (["idle", "error"].includes(phase) && !starting.current) { autoStarted.current = true; void begin(); }
+      if (["idle", "error"].includes(phase) && !starting.current) { autoStarted.current = true; void begin({ auto: true }); }
     } else if (autoStarted.current) {
       autoStarted.current = false;
       void end();
@@ -222,7 +251,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   }, [annotating]);
   const shown = fixture ?? state;
   const active = !["idle", "error"].includes(shown.phase);
-  const visible = voiceBarVisible(shown.phase, attempted);
+  const visible = voiceBarVisible(shown.phase, attempted) && (fixture !== null || !suppressAutoBar.current);
   const pill = voiceBarPresentation(shown);
   useEffect(() => {
     const target = attached.current;
