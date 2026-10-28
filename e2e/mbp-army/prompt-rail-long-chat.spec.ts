@@ -121,6 +121,8 @@ async function expectTapDragJump(page:Page,prompts:number,label:(n:number)=>stri
  await expect(viewport.getByText(newest).first()).toBeInViewport({timeout:15000});
 }
 
+// The chat opens at its latest message: the start of the newest answer. (Not its prompt: answer 125 is about
+// 3000 characters, so prompt 125 sits well above the screen and the virtualized list may not draw it.)
 const newestClaude=new RegExp(`^ARMY answer ${pad(LONG_CHAT_PROMPTS)} `);
 const claudeLabel=(n:number)=>`ARMY prompt ${pad(n)}`;
 const olderPages=/\/chats\/history\?.*before=/;
@@ -141,7 +143,7 @@ test.describe('prompt rail on a 1000-message Claude Code chat',()=>{
  test('every prompt is on the rail, on the right edge clear of the text, and tap and drag jump to the prompt shown',async({page,bridge},info)=>{
   const release=await holdOlderPages(page);
   await pair(page,bridge);
-  await openChatByTitle(page,LONG_CHAT_TITLE,/^ARMY prompt 12[0-9]$/);
+  await openChatByTitle(page,LONG_CHAT_TITLE,newestClaude);
   const viewport=viewportOf(page);
   const ticks=railOf(page).getByTestId('rail-tick');
 
@@ -177,7 +179,7 @@ test.describe('prompt rail on a 1000-message Claude Code chat',()=>{
   // Every older page is held until the owner has scrolled up, then answered a page at a time (the phone's latency).
   const release=await holdOlderPages(page,600);
   await pair(page,bridge);
-  await openChatByTitle(page,LONG_CHAT_TITLE,/^ARMY prompt 12[0-9]$/);
+  await openChatByTitle(page,LONG_CHAT_TITLE,newestClaude);
   const viewport=viewportOf(page);
   const ticks=railOf(page).getByTestId('rail-tick');
   const vb=await viewport.boundingBox();if(!vb)throw Error('transcript has no box');
@@ -214,7 +216,7 @@ test.describe('prompt rail on a 1000-message Claude Code chat',()=>{
   let refused=0;
   await page.route(olderPages,async route=>{if(refused<2){refused++;await route.abort('failed');return;}await route.continue();});
   await pair(page,bridge);
-  await openChatByTitle(page,LONG_CHAT_TITLE,/^ARMY prompt 12[0-9]$/);
+  await openChatByTitle(page,LONG_CHAT_TITLE,newestClaude);
   await expect.poll(()=>railOf(page).getByTestId('rail-tick').count(),{timeout:60000,message:'one bar per prompt after the blip'}).toBe(LONG_CHAT_PROMPTS);
   expect(refused).toBe(2);
  });
@@ -230,7 +232,7 @@ test.describe('prompt rail on the left thumb side',()=>{
   await expect(page.getByRole('tab').nth(1)).toBeVisible({timeout:30000});
   await page.getByRole('tab').nth(1).click({noWaitAfter:true});
   await expect(page.getByTestId('chats-pane')).toBeVisible();
-  await openChatByTitle(page,LONG_CHAT_TITLE,/^ARMY prompt 12[0-9]$/);
+  await openChatByTitle(page,LONG_CHAT_TITLE,newestClaude);
   await expect.poll(()=>railOf(page).getByTestId('rail-tick').count(),{timeout:60000,message:'one bar per prompt'}).toBe(LONG_CHAT_PROMPTS);
   const geometry=await railGeometry(page);
   expectCoverage(geometry);

@@ -183,9 +183,16 @@ test('live voice connection times out from Start when peer never becomes ready',
     };
     new MutationObserver(seen).observe(document.body, { subtree: true, childList: true, characterData: true });
   });
+  // The provider's SDP answer comes 6 s after Start. A timeout that ran from the answer would show at
+  // 26 s; one that runs from Start shows at 20 s, whatever the host's load adds to rendering it.
+  const releaseAnswer = voiceBroker.holdAnswer();
   await page.getByRole('button', { name: 'Start voice in Dash', exact: true }).click({ noWaitAfter: true });
+  await expect.poll(() => voiceBroker.calls().some(call => call.path === '/v1/fake/answer' && call.method === 'POST'),
+    { message: 'the app sent its SDP offer' }).toBe(true);
+  await page.waitForTimeout(6000);
+  releaseAnswer();
   await expect(page.getByTestId('voice-caption'))
-    .toContainText('Voice connection timed out', { timeout: 25000 });
+    .toContainText('Voice connection timed out', { timeout: 30000 });
   const times = await page.evaluate(() => {
     const value: unknown = Reflect.get(window, '__armyVoiceTimes');
     return typeof value === 'object' && value !== null ? { tap: Reflect.get(value, 'tap'), timedOut: Reflect.get(value, 'timedOut') } : {};
@@ -194,7 +201,7 @@ test('live voice connection times out from Start when peer never becomes ready',
   expect(typeof times.timedOut, 'the timeout was seen').toBe('number');
   const elapsed = Number(times.timedOut) - Number(times.tap);
   expect(elapsed, 'the 20 s timeout runs from Start').toBeGreaterThanOrEqual(19_900);
-  expect(elapsed, '20 s timeout must start before the SDP answer').toBeLessThan(21000);
+  expect(elapsed, '20 s timeout must start before the SDP answer').toBeLessThan(23000);
   await expect(page.getByTestId('voice-error'))
     .toContainText('Voice connection timed out');
   expect(voiceBroker.calls().filter(call => call.path === '/v1/tools/ask_z0')).toHaveLength(0);
