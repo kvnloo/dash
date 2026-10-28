@@ -9,11 +9,13 @@ test('Chats paired with groot lists mbp live and native finished chats and retai
   try {
    await pair(page,local);
    // Both computers deliberately use identical session IDs: neither row may overwrite the other.
-   for (const id of ['live:omp:army-fixture-session','mbp:omp:army-fixture-session']) {
-    const row=page.getByTestId('chat-row-'+id);
-    await row.scrollIntoViewIfNeeded({timeout:20000});
-    await expect(row).toBeVisible();
-   }
+   // The local row is keyed 'live:omp:...' once the roster adopted it and '<host>:omp:...' before that:
+   // both are the same row, so count the two OMP sessions and require the peer's own key.
+   const ompRows=page.locator('[data-testid^="chat-row-"][data-testid$="omp:army-fixture-session"]');
+   await expect(ompRows).toHaveCount(2,{timeout:20000});
+   const peerRow=page.getByTestId(/^chat-row-(live:)?mbp:omp:army-fixture-session$/);
+   await peerRow.scrollIntoViewIfNeeded({timeout:20000});
+   await expect(peerRow).toBeVisible();
    for (const host of ['groot','mbp']) for (const kind of ['codex','claude']) {
     const row=page.getByTestId(`chat-row-${host}:${kind}:army-finished-${kind}`);
     await row.scrollIntoViewIfNeeded({timeout:20000});
