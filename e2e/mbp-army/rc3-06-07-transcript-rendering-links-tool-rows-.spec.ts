@@ -194,7 +194,7 @@ test('07.03 markdown [text](https://) link opens the URL; a non-http link does n
 });
 
 test('07.04 RC3 #419/#386 bare https URL and file:line outside code are tappable links; inside code they stay plain',async({page,bridge})=>{
- // Expected to FAIL at 2c948dc: linkify-paths.ts / link-target.ts have no importer, Markdown never linkifies bare text.
+ // Exercise the production Markdown renderer against a scripted completed fixture reply.
  const out=await egress(page);
  await openFullscreen(page,bridge);
  await send(page,scenario('LINKS','bare links journey'));
@@ -209,6 +209,11 @@ test('07.04 RC3 #419/#386 bare https URL and file:line outside code are tappable
  await path.click({noWaitAfter:true});
  // link-target classifies '/path:12' as {kind:'file', path, line:12}: the host opens that file position.
  await expect.poll(async()=>requests.some(u=>u.includes(encodeURIComponent('/srv/army/src/file.ts')))||await page.getByText(/file\.ts.*(line 12|:12)/).count()>1,{message:'file-position target used'}).toBe(true);
+ const preview=page.getByTestId('file-link-preview');
+ await expect(preview).toBeVisible();
+ await expect(preview.getByText('/srv/army/src/file.ts · line 12',{exact:true})).toBeVisible();
+ await preview.getByRole('button',{name:'Close file preview',exact:true}).click({noWaitAfter:true});
+ await expect(preview).toHaveCount(0);
  await expect(page.getByRole('link',{name:/army-in-code/})).toHaveCount(0);
  await expect(page.getByRole('link',{name:/in-code\.ts/})).toHaveCount(0);
 });
