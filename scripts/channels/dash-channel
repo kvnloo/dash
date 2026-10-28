@@ -20,6 +20,8 @@
 #     a head moved, and a bundle probe of the live Metro otherwise (restarts it once if it 500s);
 #   - a head whose switch failed health is not retried until the head moves (no restart loop);
 #   - DASH_CHANNEL_POST_SWITCH runs after every healthy switch (best effort);
+#   - the native gate compares only packages that ship native code (a baseline starting 'v2:');
+#     older baselines keep the all-dependencies comparison until `baseline` is run again;
 #   - DASH_CHANNEL_REQUIRE_RECEIPT=1 holds a head back until laws/release/check.py allows it (O15).
 #   One instance per Metro: DASH_CHANNEL_CONF_DIR / DASH_CHANNELS_HOME / DASH_CHANNEL_METRO_UNIT.
 set -Eeuo pipefail
@@ -140,7 +142,7 @@ deps_key() { # dir -> key of app dependencies
   cat "$1/app/package.json" "$1/app/bun.lock" 2>/dev/null | sha1sum | cut -c1-16
 }
 
-native_fp() { # release dir -> fingerprint of what the native dev client must contain
+native_fp_legacy() { # release dir -> fingerprint over EVERY dependency in package.json (JS-only ones included)
   python3 - "$1" <<'PY'
 import hashlib, json, sys
 root = sys.argv[1]
@@ -153,6 +155,47 @@ native = {
   "newArch": app.get("newArchEnabled"),
 }
 print(hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
+PY
+}
+
+native_fp() { # release dir -> v2:<hash> of the native code the dev client must contain
+  # Only installed packages that ship native code count (android/, ios/, an Expo module config,
+  # react-native.config.js or a codegenConfig), by their installed version, plus plugins, Android
+  # package/permissions and newArch. A JS-only dependency (tldraw) no longer demands a new APK.
+  python3 - "$1" <<'PY'
+import hashlib, json, os, sys
+root = sys.argv[1]
+app = json.load(open(f"{root}/app/app.json")).get("expo", {})
+nm = f"{root}/app/node_modules"
+MARKERS = ("android", "ios", "expo-module.config.json", "react-native.config.js")
+
+def package_names():
+    for entry in sorted(os.listdir(nm)):
+        if entry.startswith("."):
+            continue
+        path = os.path.join(nm, entry)
+        if entry.startswith("@") and os.path.isdir(path):
+            for sub in sorted(os.listdir(path)):
+                yield f"{entry}/{sub}"
+        else:
+            yield entry
+
+modules = {}
+for name in package_names():
+    directory = os.path.join(nm, name)
+    try:
+        meta = json.load(open(os.path.join(directory, "package.json")))
+    except (OSError, ValueError):
+        continue
+    if any(os.path.exists(os.path.join(directory, m)) for m in MARKERS) or meta.get("codegenConfig"):
+        modules[name] = meta.get("version", "?")
+native = {
+  "modules": modules,
+  "plugins": app.get("plugins", []),
+  "android": {k: v for k, v in app.get("android", {}).items() if k in ("package", "permissions")},
+  "newArch": app.get("newArchEnabled"),
+}
+print("v2:" + hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
 PY
 }
 
@@ -273,7 +316,8 @@ do_switch() { # name [--force]
   [[ -L "$H/ch/$name" ]] || build_one "$name" >/dev/null
   sha="$(link_sha "$H/ch/$name")"
   if [[ -f "$H/native-baseline" ]]; then
-    fp="$(native_fp "$REL/$sha")"; base="$(cat "$H/native-baseline")"
+    base="$(cat "$H/native-baseline")"
+    if [[ "$base" == v2:* ]]; then fp="$(native_fp "$REL/$sha")"; else fp="$(native_fp_legacy "$REL/$sha")"; fi
     if [[ "$fp" != "$base" && "$force" != "--force" ]]; then
       die "$name (${sha:0:12}) needs different native code than the installed dev client (fingerprint $fp, client $base). Build and install a new dev client, then run: dash-channel baseline $name. Or pass --force to try anyway."
     fi
