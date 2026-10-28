@@ -41,7 +41,7 @@ async function startMetro(): Promise<MetroStub> {
         // Deliberately stale host: the app must fetch the asset at the polled Metro origin.
         launchAsset: { key: served, url: 'https://stale-metro.invalid/bundles/' + served + '.bundle', contentType: 'application/javascript' },
         assets: [],
-        extra: { expoClient: { extra: { dashBuild: { sha: served, builtAtMs: Date.now() - 180_000 } } } },
+        extra: { expoClient: { extra: { dashBuild: { sha: served, builtAtMs: Date.now() - 210_000 } } } },
       }));
       return;
     }
