@@ -46,6 +46,8 @@
                "an agent-reported context reading fills the grid in the peek and the card"]},
     {"id": "acp-context-reading", "title": "An ACP agent's usage_update reaches the gauge",
      "tests": ["an agent-reported context reading fills the grid in the peek and the card"]},
+    {"id": "prompt-rail-popover-anchor", "title": "Prompt preview follows the selected rail bar and clamps to the logical viewport (#505)",
+     "tests": ["prompt preview follows the selected rail bar and stays inside the viewport"]},
     {"id": "prompt-rail", "title": "Prompt rail scrub, Jump and Latest, one bar per prompt of a 1000-message chat",
      "tests": ["prompt rail mouse scrub, Jump and Latest on real transcript",
                "prompt rail keeps the selected turn preview when a live reply completes",
