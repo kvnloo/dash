@@ -84,6 +84,7 @@ export interface OutboxStore {
   enqueue(message: NewOutboxMessage, options?: { readonly dispatch?: boolean }): Promise<OutboxResult<OutboxDispatch>>;
   receiveReceipt(receipt: OutboxReceipt): Promise<OutboxResult<OutboxRecord>>;
   retry(clientId: string, options: { readonly dedupeSupported: boolean }): Promise<OutboxResult<OutboxDispatch>>;
+  markUnconfirmed(clientId: string): Promise<void>;
   disconnect(): Promise<OutboxResult<number>>;
   get(): readonly OutboxRecord[];
   subscribe(listener: () => void): () => void;
@@ -400,6 +401,15 @@ export function createOutboxStore(deps: OutboxDependencies): OutboxStore {
           return failed("storage", `Could not persist receipt: ${errorText(error)}`);
         }
         return { ok: true, value: lookup(receipt.clientId) ?? updated };
+      });
+    },
+    markUnconfirmed(clientId) {
+      return exclusive(async () => {
+        await ensureHydrated();
+        const record = lookup(clientId);
+        if (!record || confirmed(record.stage)) return;
+        await save(records.map(item => item.clientId === clientId
+          ? immutable({ ...item, retryNeeded: true, updatedAt: Math.max(now(), item.updatedAt) }) : item));
       });
     },
     disconnect() {

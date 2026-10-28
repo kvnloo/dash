@@ -19,6 +19,7 @@ import { isImageRef } from "../lib/genui";
 import { ReplyBlocks } from "./ReplyBlocks";
 import type { DetailMode } from "../lib/reply-details";
 import { bridge } from "../net/bridge";
+import { MessageDelivery } from "./MessageDelivery";
 import { StageLinks } from "./artifact-stage/StageLinks";
 import { PressScale } from "./PressScale";
 
@@ -45,6 +46,7 @@ export const MessageRow = memo(function MessageRow({
               {message.text}
             </Text>
           ) : null}
+          <MessageDelivery message={message} />
         </View>
       </View>
     );

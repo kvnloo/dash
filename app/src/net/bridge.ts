@@ -35,6 +35,8 @@ import {
   streamingTurns,
 } from "../store/app";
 
+import { deliveryConnected, deliveryDisconnected, deliveryOutbox, enqueueDelivery, receiveDelivery } from "./delivery";
+
 const BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
 /** Newest history page size when the bridge pages history (chats.v1). */
 const HISTORY_HEAD = 50;
@@ -210,6 +212,7 @@ class Bridge {
   }
 
   private onClosed(reason: string): void {
+    deliveryDisconnected();
     this.clearTimers();
     this.flushDeltas();
     if (!this.settings) return;
@@ -293,6 +296,7 @@ class Bridge {
         if (record) permissionRequests.receiveResolution(record.conversationId, record.sessionId, message);
         return;
       }
+      case "delivery_receipt": void receiveDelivery(message); return;
       case "hello": {
         this.chats = message.features?.includes(CHATS_FEATURE) === true;
         this.rosterEtag = undefined;
@@ -310,8 +314,15 @@ class Bridge {
         void this.refreshRoster();
         clearInterval(this.rosterTimer);
         this.rosterTimer = setInterval(() => { if (this.appState === "active") void this.refreshRoster(); }, 10000);
-        if (this.ws) reattachStreamingTurns(this.ws, streamingTurns());
+        const socket = this.ws;
+        void deliveryOutbox.hydrate().then(() => {
+          if (socket && this.ws === socket) reattachStreamingTurns(socket, streamingTurns().filter(turn => {
+            const record = deliveryOutbox.get().find(item => item.turnId === turn.id);
+            return !record || record.stage === "acked-by-bridge" || record.stage === "started";
+          }));
+        });
         this.send({ type: "gate_list" });
+        deliveryConnected(message => this.send(message), message.capabilities?.deliveryReceipts === true);
         flushPendingSends(sendChat);
         this.scheduleMigration();
         return;
@@ -431,6 +442,7 @@ class Bridge {
   }
 
   private teardownSocket(): void {
+    deliveryDisconnected();
     const ws = this.ws;
     this.ws = null;
     if (ws) {
@@ -490,19 +502,8 @@ export function sendChat(input: {
   attachments?: ChatAttachment[];
 }): boolean {
   if (rejectUnavailableTurn(input.turnId)) return false;
-  const cwd = input.cwd ?? store.get().settings?.cwd;
-  return bridge.send({
-    type: "chat",
-    mode: input.mode,
-    summariesEnabled: store.get().conversations.find(c => c.messages.some(m => m.role === "assistant" && m.turnId === input.turnId))?.summariesEnabled === true,
-    id: input.turnId,
-    ...targetForTurn(input.turnId),
-    harness: input.harness,
-    text: input.text,
-    sessionId: input.sessionId,
-    cwd,
-    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-  });
+  void enqueueDelivery(input).catch(console.warn);
+  return true;
 }
 
 /** Open a spoken turn; the utterance follows as `sendVoiceChunk` calls. */

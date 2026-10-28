@@ -36,15 +36,14 @@ import type { ChatAttachment } from "../../../shared/protocol";
 import type { Message } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge, openLiveSurface, permissionRequests, sendChat, sendLiveTurn } from "../net/bridge";
+import { enqueueDelivery } from "../net/delivery";
 import { PermissionCard } from "../components/PermissionCard";
 import { EMPTY_LIVE, liveOf, liveStore, setLiveOpen } from "../store/live";
 import {
-  applyTurnEvent,
   beginTurn,
   conversationBusy,
   conversationTargetError,
   createConversation,
-  parkUnsentTurn,
   flushPendingSends,
   releaseViewOnly,
   replaceMessageText,
@@ -224,11 +223,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   };
 
   const sendTurn = useCallback(
-    (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId), mode: SendMode = "queue") => {
+    async (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId), mode: SendMode = "queue") => {
       const { turnId } = beginTurn(active.id, text, { attachments, mode });
       haptic.tap();
       const current = store.get().conversations.find((c) => c.id === active.id) ?? active;
-      const ok = sendChat({
+      await enqueueDelivery({
         turnId,
         harness: current.harness,
         mode,
@@ -237,10 +236,6 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         cwd: current.cwd,
         attachments,
       });
-      if (!ok) {
-        if (mode === "steer") applyTurnEvent({ type: "error", id: turnId, seq: 1, message: "Offline: steer was not sent. It will not be retried automatically." });
-        else parkUnsentTurn(turnId);
-      }
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     },
     [conversation, harnessId],
@@ -252,11 +247,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   );
 
   const onSend = useCallback(
-    (text: string, attachments: ChatAttachment[], mode: SendMode = "queue") => {
+    async (text: string, attachments: ChatAttachment[], mode: SendMode = "queue") => {
       dragging.current = false;
       setFollow(true);
       const active = conversation ?? createConversation(harnessId);
-      if (mode === "steer") { sendTurn(text, attachments, active, "steer"); return; }
+      if (mode === "steer") { await sendTurn(text, attachments, active, "steer"); return; }
       if (conversationBusy(active.id) || thinking.phase !== "idle") {
         if (!streamingMessage && thinking.phase !== "idle") setQueueWaiting(active.id, true);
         beginTurn(active.id, text, { pending: true, attachments });
@@ -264,7 +259,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
         return;
       }
-      sendTurn(text, attachments, active);
+      await sendTurn(text, attachments, active);
     },
     [conversation, harnessId, sendTurn, setFollow, thinking.phase, streamingMessage],
   );
@@ -432,6 +427,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       initialAttachments={isDebugActive() ? debugAttachments ?? undefined : undefined}
       sharedDraft={sharedDraft}
       onSharedDraftConsumed={id => { if (conversation) consumeSharedDraft(conversation.id, id); }}
+      offlineText={!online && targetError === undefined && !liveOn}
       disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
       streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
       steerBusy={canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn)}

@@ -37,13 +37,14 @@ import { ComposerSuggestions } from "./ComposerSuggestions";
 import { composerMode, type SendMode } from "../lib/composer-mode";
 import { haptic } from "../haptics";
 import type { IncomingShare } from "../lib/incoming-share";
-import { composerDrafts, updateComposerDraft, type ComposerDraft } from "../store/composer-drafts";
+import { draftSaveNotes, composerDrafts, updateComposerDraft, type ComposerDraft } from "../store/composer-drafts";
 
 interface Props {
   /** Conversation id: the unsent text and attachments outlive this view (window close, surface switch). */
   draftKey?: string;
   context?: ContextControl;
   disabled: boolean;
+  offlineText?: boolean;
   streaming: boolean;
   steerBusy?: boolean;
   placeholder: string;
@@ -58,7 +59,7 @@ interface Props {
   initialAttachments?: DraftAttachment[];
   sharedDraft?: IncomingShare;
   onSharedDraftConsumed?(id: string): void;
-  onSend(text: string, attachments: ChatAttachment[], mode?: SendMode): void;
+  onSend(text: string, attachments: ChatAttachment[], mode?: SendMode): void | Promise<void>;
   onStop(): void;
   onVoice(): void;
   /** A live z0live call's orb state: the mic shows a small live orb instead of the glyph. */
@@ -67,7 +68,8 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ draftKey, context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
+export const Composer = memo(function Composer({ draftKey, context, disabled, offlineText = false, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
+  const submitting = useRef(false);
   const thumb = useHandedness();
   const [choice, setChoice] = useState<SendMode>("steer");
   useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
@@ -75,6 +77,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
   const switchMode = () => { setChoice(value => value === "steer" ? "queue" : "steer"); haptic.select(); };
   const [seed] = useState<ComposerDraft>(() => ({ text: initialText ?? "", attachments: initialAttachments ?? [] }));
   const [localDraft, setLocalDraft] = useState(seed);
+  const saveNote = draftSaveNotes.use(notes => draftKey ? notes[draftKey] : undefined);
   const savedDraft = composerDrafts.use(all => draftKey ? all[draftKey] : undefined);
   const { text, attachments: drafts } = savedDraft ?? localDraft;
   const changeDraft = useCallback((update: (draft: ComposerDraft) => ComposerDraft) => {
@@ -136,7 +139,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
   const draftText = queuePreview ?? text;
   const changeText = editingQueue ? onQueuePreviewChange ?? setText : setText;
   const localUsage = !editingQueue && Boolean(context) && isUsageCommand(draftText);
-  const canSend = localUsage || (editingQueue ? Boolean(draftText.trim()) : canSendDrafts(draftText, drafts) && !disabled);
+  const canSend = localUsage || (editingQueue ? Boolean(draftText.trim()) : canSendDrafts(draftText, drafts) && (!disabled || (offlineText && drafts.length === 0 && sendMode.mode !== "steer")));
 
   const update = useCallback((key: string, patch: Partial<DraftAttachment>) => {
     // An upload completion belongs to its original draft even while offscreen.
@@ -268,12 +271,16 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
     if (queuePreview !== undefined) { onSaveQueuePreview?.(); return; }
     const refs = readyRefs(drafts);
     const value = text.trim();
-    setText("");
-    setDrafts([]);
-    onSend(value, refs, sendMode.mode);
-  }, [localUsage, context, canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
+    if (submitting.current) return;
+    submitting.current = true;
+    Promise.resolve(onSend(value, refs, sendMode.mode)).then(() => {
+      changeDraft(draft => draft.text === text ? { ...draft, text: "", attachments: [] } : draft);
+    }).catch(error => Alert.alert("Message not saved", error instanceof Error ? error.message : "Keep your draft and retry."))
+      .finally(() => { submitting.current = false; });
+  }, [localUsage, context, canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview, changeDraft]);
 
   return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} onUsage={context ? () => { if (isUsageCommand(draftText)) changeText(""); Keyboard.dismiss(); context.showUsage(); } : undefined} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
+    {saveNote ? <Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{saveNote}</Text> : null}
     {drafts.length > 0 ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips} accessibilityLabel="Attachments">
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}
