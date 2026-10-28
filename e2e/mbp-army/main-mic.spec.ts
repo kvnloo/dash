@@ -19,6 +19,7 @@ test("main mic tap then tap inserts the real bridge STT fixture transcript", asy
   await expect(field).toBeVisible();
   await page.getByRole("button", { name: "Dictate", exact: true }).click({ noWaitAfter: true });
   await expect(page.getByText("Listening · tap Stop when finished", { exact: true })).toBeVisible({ timeout: 20000 });
+  await page.waitForTimeout(400); // Record actual Chromium fake-microphone samples before stopping.
   await page.getByRole("button", { name: "Stop dictation", exact: true }).click({ noWaitAfter: true });
   await expect(field).toHaveValue("ARMY heard you", { timeout: 20000 });
 
@@ -28,6 +29,7 @@ test("main mic tap then tap inserts the real bridge STT fixture transcript", asy
   for (let i = 0; i < 6; i++) await field.press("ArrowRight");
   await page.getByRole("button", { name: "Dictate", exact: true }).click({ noWaitAfter: true });
   await expect(page.getByText("Listening · tap Stop when finished", { exact: true })).toBeVisible({ timeout: 20000 });
+  await page.waitForTimeout(400); // Record actual Chromium fake-microphone samples before stopping.
   await page.getByRole("button", { name: "Stop dictation", exact: true }).click({ noWaitAfter: true });
   await expect(field).toHaveValue("before ARMY heard you after", { timeout: 20000 });
   expect(errors.filter(error => error.startsWith("PAGEERROR"))).toEqual([]);
@@ -66,6 +68,7 @@ test("chat composer mic still dictates through the real bridge fixture", async (
   const controls = page.getByTestId("composer-controls");
   await controls.getByRole("button", { name: "Dictate", exact: true }).click({ noWaitAfter: true });
   await expect(page.getByText("Listening · tap Stop when finished", { exact: true })).toBeVisible({ timeout: 20000 });
+  await page.waitForTimeout(400); // Record actual Chromium fake-microphone samples before stopping.
   await controls.getByRole("button", { name: "Stop dictation", exact: true }).click({ noWaitAfter: true });
   await expect(field).toHaveValue("ARMY heard you", { timeout: 20000 });
   expect(errors.filter(error => error.startsWith("PAGEERROR"))).toEqual([]);
