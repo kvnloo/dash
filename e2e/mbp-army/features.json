@@ -29,6 +29,8 @@
      "tests": ["approvals screen reads real dry-run outbox and persists rejection"]},
     {"id": "drafts", "title": "Draft text survives close, reopen and reload",
      "tests": ["draft text survives close, reopen and real browser reload"]},
+    {"id": "tool-cards", "title": "Tool, thinking and activity cards are compact and un-nested at phone width",
+     "tests": ["tool and thinking cards stay compact and un-nested at phone width", "a long tool stack folds to its header and opens to every row"]},
     {"id": "reconnect", "title": "Bridge death disables Send; restart reconnects",
      "tests": ["bridge process death disables Send and restart reconnects"]},
     {"id": "agent-errors", "title": "Agent errors are surfaced and the composer stays usable",
@@ -55,7 +57,7 @@
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
-    "live model behaviour", "Orchestra / orchestration screens", "tool activity rendering", "handedness",
+    "live model behaviour", "Orchestra / orchestration screens", "handedness",
     "Hermes session history", "notifications and deep links"
   ]
 }

@@ -14,6 +14,38 @@ const update = (text: string) => send({jsonrpc:'2.0',method:'session/update',par
 // Evidence for specs: which session method ran, for which id, in which directory.
 const calls = (method: string, params: unknown) => {if(!isRecord(params))return;try{appendFileSync(join(process.env.HOME || '.', 'army-acp-calls.jsonl'),JSON.stringify({agent,method,sessionId:params.sessionId,cwd:params.cwd,pwd:process.cwd()})+'\n');}catch{/* evidence only */}};
 let timer: ReturnType<typeof setTimeout> | undefined;
+const think = (text: string) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'agent_thought_chunk',content:{type:'text',text}}}});
+const tool = (toolCallId: string, title: string, rawInput: unknown) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'tool_call',toolCallId,title,kind:'other',status:'in_progress',rawInput}}});
+const toolDone = (toolCallId: string, rawOutput: string) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'tool_call_update',toolCallId,status:'completed',rawOutput}}});
+// ARMY_TOOLS: the shape of a real tool-heavy turn (the RC3 owner screenshots): thinking between
+// every step, two parallel vision calls, then three terminal calls. Titles are bare tool names, as
+// Hermes sends them. Five calls, no real execution. ARMY_TOOLS_MANY adds a read and one more
+// terminal call: four unlike runs, past the stack's open-by-default length.
+const toolTurn = (done: () => void, many: boolean) => {
+ const steps: (() => void)[] = [
+  () => think('Reading the owner screenshots before touching any code. '),
+  () => {tool('army-v1','vision_analyze',{image_url:'/shots/first.png',question:'what floats?'});tool('army-v2','vision_analyze',{image_url:'/shots/second.png',question:'what overlaps?'});},
+  () => {toolDone('army-v1','attach sheet floats mid-screen');toolDone('army-v2','prompt popover floats mid-screen');},
+  () => think('Now checking the bridge log. '),
+  () => tool('army-t1','terminal',{command:'tail bridge.log'}),
+  () => toolDone('army-t1','voice unavailable'),
+  () => think('Checking whether the model exists anywhere. '),
+  () => tool('army-t2','terminal',{command:'find . -name model'}),
+  () => toolDone('army-t2','no match'),
+  () => think('Copying it over. '),
+  () => tool('army-t3','terminal',{command:'cp model dest'}),
+  () => toolDone('army-t3','copied'),
+  ...(many ? [
+   () => tool('army-r1','read_file',{path:'/shots/notes.txt'}),
+   () => toolDone('army-r1','notes'),
+   () => tool('army-t4','terminal',{command:'ls'}),
+   () => toolDone('army-t4','shots'),
+  ] : []),
+ ];
+ let i = 0;
+ const next = () => { const step = steps[i++]; if (!step) {done();return;} step(); timer = setTimeout(next, 60); };
+ next();
+};
 let active: unknown;
 createInterface({input:process.stdin}).on('line', line => {
  const value:unknown = JSON.parse(line);
@@ -30,7 +62,8 @@ createInterface({input:process.stdin}).on('line', line => {
   if (text.includes('ARMY_ERROR')) { send({jsonrpc:'2.0',id:r.id,error:{code:-32000,message:'ARMY_EXPECTED_AGENT_ERROR'}}); return; }
   update('ARMY_STREAM_BEGIN ');
   if (text.includes('ARMY_HANG')) return;
-  timer = setTimeout(() => { update(replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); }, text.includes('ARMY_SLOW') ? 9000 : 350);
+  const finish = () => { timer = setTimeout(() => { update(replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); }, text.includes('ARMY_SLOW') ? 9000 : 350); };
+  if (text.includes('ARMY_TOOLS')) toolTurn(finish, text.includes('ARMY_TOOLS_MANY')); else finish();
  } else if (r.method === 'session/cancel') {
   clearTimeout(timer); send({jsonrpc:'2.0',id:active,result:{stopReason:'cancelled'}});
  }

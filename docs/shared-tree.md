@@ -10,13 +10,9 @@ Rows without `onPress` expand/collapse. Rows with `onPress` activate; if they al
 
 Default mode fills its parent with a virtualized FlashList. Use `inline` only for small bounded trees inside an existing chat scroll owner, to avoid nested virtualized scroll views. Large standalone reply inspectors should use the default virtualized mode. Reduced motion is delegated to Reanimated's System setting on chevrons, entering/exiting and layout transitions. Native layout transitions run on FlashList's positioned cell (not the inner row). Web uses row fades and spring chevrons without the additional positioned-cell layout transition, which otherwise double-translates RN Web cells. The Bots pager child must keep `flex: 1`; without a constrained viewport FlashList will mount the entire tree.
 
-## Thinking/tool worker adapter
+## Thinking and tool calls
 
-The worker `sol/dash-thinking-tools-20261021` had not pushed at implementation time. Its local `ReplyDetails` shape was read, not modified. `toolTree(reply)` intentionally accepts that shape structurally, without duplicating its protocol or reducer. Supply `{ ...details, turnId: reply.turnId }`; details must already be bridge-redacted. The result is turn -> Thinking / Tool calls -> individual calls -> Arguments / Output, retaining duration, error and truncation metadata. `TOOL_TREE_FIXTURE` is a safe synthetic fixture for previews/tests.
-
-In `ReplyBlocks.tsx`, import `Tree` and `toolTree`. Memoize nodes with the reply's stable turnId and the subscribed ReplyDetails snapshot. Render `<Tree inline nodes={nodes} label="Turn details" initialExpanded={[`${reply.turnId}:turn`]} />` in the Full state, leaving Hide and Compact unchanged. Do not put streaming content into the conversations store to drive this tree. For unbounded output, retain the worker's output cap/detail-fetch policy; this adapter does not retrieve raw output or remove redaction.
-
-Legacy `AssistantMessage` can also be passed to `toolTree`; only its actual `activity` strings are shown, never invented arguments or output. Tree IDs are reply-scoped. Do not combine two replies without supplying distinct turnIds.
+Chat replies do not render their thinking and tool calls through `Tree`. `ReplyBlocks` draws one quiet row per block with dense `CompactToolRow` lines under the tool header; see `docs/tool-activity.md`. The earlier `toolTree` adapter, which nested Turn details > Tool calls > calls in an inline `Tree`, was removed with that UI.
 
 ## Bots
 
