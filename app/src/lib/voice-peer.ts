@@ -37,11 +37,11 @@ export async function createVoicePeer(
     async offer() { return "v=0 army-scripted-offer"; },
     async answer(sdp: string) {
       if (!sdp.startsWith("v=0")) throw new Error("Scripted voice peer received invalid SDP");
-      later(240, () => {
+      later(950, () => {
         ready();
-        later(900, () => emit({ type: "input_audio_buffer.speech_started" }));
-        later(1250, () => emit({ type: "input_audio_buffer.speech_stopped" }));
-        later(1500, () => emit({
+        later(750, () => emit({ type: "input_audio_buffer.speech_started" }));
+        later(1500, () => emit({ type: "input_audio_buffer.speech_stopped" }));
+        later(2300, () => emit({
           type: "conversation.item.input_audio_transcription.completed",
           item_id: "army-voice-item-1",
           transcript: window.__dashVoiceSay ?? "ARMY voice hello",
