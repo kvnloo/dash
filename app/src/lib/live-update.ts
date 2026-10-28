@@ -2,7 +2,7 @@
  * Live preview: which build this bundle is, which build the Metro it came from serves now, and
  * when to reload. Pure logic; the chip (components/ServedBuildChip.tsx) owns the side effects.
  *
- * Identity flow: the groot follower (scripts/turbo/dash-channel) writes {sha, builtAtMs} into
+ * Identity flow: the groot follower (scripts/channels/dash-channel) writes {sha, builtAtMs} into
  * src/lib/build-info.json of an immutable release before Metro starts. The bundle bakes that file
  * in (what this app RUNS) and app.config.js republishes it in the manifest (what Metro SERVES).
  * Both come from one file, so they cannot disagree about the same release.
