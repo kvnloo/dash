@@ -395,12 +395,23 @@ test('04 mic long-press switches the thumb side (handedness)',async({page,bridge
 // ---------- RC3 chips + bedtime gate (expected FAIL at 2c948dc) ----------
 test('04 RC3 #396/#416 tok/s chip in the reserved rate slot while streaming (expect FAIL at 2c948dc: not mounted)',async({page,bridge})=>{
  await openChat(page,bridge);
+ // The chip waits for 1.2 s of samples (useStreamRate MIN_RATE_AGE_MS). Checking its absence with Playwright
+ // round trips after the reply is visible races that window on a loaded host, so the page records, on the
+ // DOM mutation where the streamed reply first appears, whether the rate chip was already there.
+ await page.evaluate(()=>{
+  const w=window as unknown as {__rateAtBegin?:boolean|null};w.__rateAtBegin=null;
+  const check=()=>{if(w.__rateAtBegin!==null||!document.body.innerText.includes('ARMY_STREAM_BEGIN'))return;
+   w.__rateAtBegin=document.querySelector('[data-testid="composer-stat-rate"]')!==null;observer.disconnect();};
+  const observer=new MutationObserver(check);observer.observe(document.body,{subtree:true,childList:true,characterData:true});
+ });
  await send(page,'ARMY_SLOW ARMY_TOKENS rate chip journey');
  await expect(page.getByText(/ARMY_STREAM_BEGIN/).filter({visible:true}).first()).toBeVisible();
  const slot=page.getByTestId('composer-stat-rate-slot');
  await expect(slot).toBeVisible();
- await expect(page.getByTestId('composer-stat-rate')).toHaveCount(0);
+ // No rate chip yet when the reply starts streaming: the slot is reserved and empty.
+ expect(await page.evaluate(()=>(window as unknown as {__rateAtBegin?:boolean|null}).__rateAtBegin)).toBe(false);
  await expect(page.getByTestId('composer-stat-rate')).toHaveText(/^≈?\d+(\.\d+)? tok\/s$/,{timeout:15000});
+ await expect(slot.getByTestId('composer-stat-rate')).toHaveCount(1);
 });
 
 // Spec fix (opt-in): enforced capture is an owner choice. shared/interaction-policy.ts sets
