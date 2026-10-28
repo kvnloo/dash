@@ -423,7 +423,7 @@ function Tray({ onSend, screenHeight, tldraw }: { onSend(keep: boolean): void; s
   const [top, setTop] = useState(true);
   return (
     <TrayViewport atTop={top} screenHeight={screenHeight}>
-      {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `Sending to ${s.sink ?? "chat"}…`} /> : null}
+      {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `${s.sink ?? "Sending to chat"}…`} /> : null}
       {s.status === "error" && s.error ? <Text accessibilityRole="alert" style={styles.error}>{s.error}</Text> : null}
       <View style={[styles.row, thumb.row]}>
         {TOOLS.map(t => <Chip key={t.id} label={t.label} a11y={t.a11y} selected={s.tool === t.id} onPress={() => setTool(t.id)} />)}
@@ -454,7 +454,7 @@ function Toast({ screenHeight }: { screenHeight: number }): React.JSX.Element | 
     return () => clearTimeout(id);
   }, [s.status]);
   if (s.status !== "sent" || !s.preview) return null;
-  return <TrayViewport atTop screenHeight={screenHeight}><Preview image={s.preview.image} text={s.preview.text} label={`Sent to ${s.sink ?? "chat"} · ${s.preview.strokes} strokes`} /></TrayViewport>;
+  return <TrayViewport atTop screenHeight={screenHeight}><Preview image={s.preview.image} text={s.preview.text} label={`${(s.sink ?? "Sending to chat").replace(/^Sending to /, "Sent to ")} · ${s.preview.strokes} strokes`} /></TrayViewport>;
 }
 
 function Preview({ image, text, label }: { image: string; text: string; label: string }): React.JSX.Element {
