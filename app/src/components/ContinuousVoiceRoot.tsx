@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaInsetsContext, useSafeAreaInsets, type EdgeInsets } from "react-native-safe-area-context";
 import { appInsets, VOICE_BAR_ROW, voiceBarPresentation, voiceBarVisible, voiceControlHome, voiceMuteAccessibilityLabel, voiceStatusAccessibilityLabel } from "../lib/voice-bar";
 import { executionToken, voiceAccessToken } from "../lib/bridge-auth";
@@ -61,13 +61,18 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     setAttempted(true);
     desiredMute.current = false;
     const settings = store.get().settings;
+    // Only a flagged web tester-army export accepts ephemeral fixture tokens.
+    // Keep legacy pairing for the live WebSocket; never persist an identity or change native auth.
+    const fakeIdentity = Platform.OS === "web" && process.env.EXPO_PUBLIC_DASH_VOICE_FAKE === "1"
+      ? window.__dashVoiceArmy : undefined;
+    const identity = settings?.identity ?? (fakeIdentity?.dash && fakeIdentity?.z0live ? fakeIdentity.identity : undefined);
     // Retry is pinned to the original conversation, even if the user navigated elsewhere.
     // Conversation mode is usually opened from the main screen, where the open chat is rarely an
     // attached Hermes chat: bind the most recent attached one instead of refusing before the mic.
     const conversation = (state.phase === "error" ? attached.current : null) ??
       voiceTarget(store.get().conversations, store.get().activeId);
-    if (!settings?.identity || !conversation?.sessionId || !conversation.profileId) {
-      const note = !settings?.identity ? "Pair Dash with z0bridge identity to use voice" : "Open a Hermes chat once, then start voice";
+    if (!settings || !identity || !conversation?.sessionId || !conversation.profileId) {
+      const note = !identity ? "Pair Dash with z0bridge identity to use voice" : "Open a Hermes chat once, then start voice";
       voiceTrace("target", note);
       setState({ ...initial, phase: "error", note });
       starting.current = false;
@@ -105,7 +110,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
         return sdp;
       }
       let token: string;
-      try { token = await voiceAccessToken(settings); }
+      try { token = fakeIdentity?.z0live ?? await voiceAccessToken(settings); }
       catch { throw new VoiceAccessDenied(voiceConnectionError("token")); }
       const response = await fetch(`https://0.taila30dc.ts.net:8791${path}`, { method: body === undefined ? "GET" : "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000), redirect: "error" });
       if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(voiceConnectionError("token"));
@@ -115,7 +120,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     try {
       setState({ ...initial, phase: "connecting" });
       let bootstrapToken: string;
-      try { bootstrapToken = await executionToken(settings); }
+      try { bootstrapToken = fakeIdentity?.dash ?? await executionToken(settings); }
       catch { throw new VoiceAccessDenied(voiceConnectionError("token")); }
       const response = await fetch(`http://${settings.address}/voice/bootstrap`, { method: "POST", headers: { authorization: `Bearer ${bootstrapToken}`, "content-type": "application/json" }, body: JSON.stringify(target), signal: AbortSignal.timeout(8000), redirect: "error" });
       if (!response.ok) {
@@ -127,7 +132,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       if (!object(bootstrap) || bootstrap.profile !== target.profile || bootstrap.session !== target.session || bootstrap.ready !== true) throw new Error("Voice target not confirmed");
       if (generation !== epoch.current) return;
       if (AppState.currentState !== "active") throw new Error("Dash is backgrounded");
-      const cursorKey = `dash.voice.inbox.${settings.identity.credentialId}`;
+      const cursorKey = `dash.voice.inbox.${identity.credentialId}`;
       const controller = new ContinuousVoice({ request, peer: async (event, ready, lost) => {
         try { return protectVoicePeer(await createVoicePeer(event, ready, lost)); }
         catch (error) {
