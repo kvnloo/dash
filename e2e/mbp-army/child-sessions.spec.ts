@@ -38,7 +38,7 @@ test.describe('Hermes child sessions are not top-level chats', () => {
     expect(response.status).toBe(200);
     const graph = parseOrchestra(await response.json());
     if (!graph) throw Error('Orchestra response failed the shared protocol');
-    const root = graph.nodes.find(node => node.sessionId === 'army-fixture-session');
+    const root = graph.nodes.find(node => node.sessionId === 'army-fixture-session' && node.harness === 'hermes');
     expect(root?.kind).toBe('chat');
     for (const sessionId of ['army-worker-verify', 'army-worker-review', 'army-worker-done']) {
       const child = graph.nodes.find(node => node.sessionId === sessionId);
