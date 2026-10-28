@@ -61,6 +61,8 @@ test('annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Sk
       await stroke(page);
       const uploaded = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'application/json');
       await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
+      await expect(page.getByText('No words captured. Send the marks only?')).toBeVisible();
+      await page.getByRole('button', { name: 'Send anyway', exact: true }).click();
       const bytes = (await uploaded).postDataBuffer();
       expect(bytes).not.toBeNull();
       documents.push(bytes!.toString('utf8'));
