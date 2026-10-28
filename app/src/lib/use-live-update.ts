@@ -10,8 +10,11 @@ import {
   endpointOrigin,
   fetchServedBuild,
   metroOrigin,
+  probeLaunchAsset,
   reloadBlockedBy,
+  sameBuild,
   scriptUrlOrigin,
+  type BundleHealth,
   type LiveBuild,
   type MetroEndpoint,
   type ReloadDecision,
@@ -116,6 +119,11 @@ export function useLiveUpdate(): LiveUpdate {
     ? metroOrigin(requestedOrigin)
     : running === null ? null : bundleOrigin() ?? metroOrigin(Constants.expoConfig?.hostUri);
   const [served, setServed] = useState<LiveBuild | null>(null);
+  const [bundleHealth, setBundleHealth] = useState<BundleHealth | null>(null);
+  // A successful bundle probe is cached per SHA and origin; failures retry on later polls.
+  const healthyKeys = useRef(new Set<string>());
+  const latestServedKey = useRef<string | null>(null);
+  const verifiedKey = useRef<string | null>(null);
   const [autoReload, setAutoState] = useState(true);
   const [lastAutoFor, setLastAutoFor] = useState<string | null>(null);
   const [prefsReady, setPrefsReady] = useState(false);
@@ -140,11 +148,52 @@ export function useLiveUpdate(): LiveUpdate {
   useEffect(() => {
     if (origin === null) return;
     let alive = true;
+    let polling = false;
     const poll = () => {
-      if (AppState.currentState !== "active") return;
-      void fetchServedBuild(origin, fetch).then((build) => {
-        if (alive && build !== null) setServed(build);
-      });
+      if (AppState.currentState !== "active" || polling) return;
+      polling = true;
+      void (async () => {
+        try {
+          const manifest = await fetchServedBuild(origin, fetch);
+          if (!alive) return;
+          if (manifest === null) {
+            // A vanished Metro manifest must not leave a previously verified update reloadable.
+            verifiedKey.current = null;
+            setBundleHealth(null);
+            return;
+          }
+          const { build, launchAssetUrl } = manifest;
+          const key = origin + "|" + build.sha;
+          if (latestServedKey.current !== key) {
+            verifiedKey.current = null;
+            setBundleHealth(null);
+          }
+          latestServedKey.current = key;
+          setServed(build);
+          if (running === null || sameBuild(running, build)) {
+            verifiedKey.current = null;
+            setBundleHealth(null);
+            return;
+          }
+          if (healthyKeys.current.has(key)) {
+            verifiedKey.current = key;
+            setBundleHealth({ sha: build.sha, origin, state: "healthy" });
+            return;
+          }
+          const health = await probeLaunchAsset(launchAssetUrl, fetch);
+          if (!alive || latestServedKey.current !== key) return;
+          if (health.ok) {
+            healthyKeys.current.add(key);
+            verifiedKey.current = key;
+            setBundleHealth({ sha: build.sha, origin, state: "healthy" });
+          } else {
+            verifiedKey.current = null;
+            setBundleHealth({ sha: build.sha, origin, state: "failed", reason: health.reason });
+          }
+        } finally {
+          polling = false;
+        }
+      })();
     };
     poll();
     const timer = setInterval(poll, webPollMs() ?? POLL_MS);
@@ -157,11 +206,13 @@ export function useLiveUpdate(): LiveUpdate {
     });
     return () => {
       alive = false;
+      verifiedKey.current = null;
+      latestServedKey.current = null;
       clearInterval(timer);
       clearInterval(tick);
       sub.remove();
     };
-  }, [origin]);
+  }, [origin, running?.sha]);
 
   // A reload that landed on the served build clears the retry guard.
   useEffect(() => {
@@ -175,6 +226,8 @@ export function useLiveUpdate(): LiveUpdate {
   const decision = decideReload({
     running,
     served,
+    origin,
+    bundleHealth,
     autoReload: autoReload && prefsReady,
     sinceForegroundMs: foregroundAt.current === null ? Number.POSITIVE_INFINITY : Date.now() - foregroundAt.current,
     idleMs: idleMs(),
@@ -189,20 +242,24 @@ export function useLiveUpdate(): LiveUpdate {
     if (blocked && served !== null && autoReload) heldFor.current = served.sha;
   }, [blocked, served, autoReload]);
 
+  const servedKey = origin !== null && served !== null ? origin + "|" + served.sha : null;
+  const needsBundleCheck = running !== null && served !== null && !sameBuild(running, served);
   const requestReload = useCallback((automatic: boolean) => {
-    if (reloading.current || (automatic && reloadBlockedBy() !== null)) return;
+    const healthy = () => !needsBundleCheck ||
+      (servedKey !== null && verifiedKey.current === servedKey && latestServedKey.current === servedKey);
+    if (reloading.current || !healthy() || (automatic && reloadBlockedBy() !== null)) return;
     reloading.current = true;
     void (async () => {
       let invoked = false;
       try {
         // Don't trust the 250ms debounce to finish before a full JS reload.
         await flushDrafts();
-        // Work can start during either the draft flush or the retry-marker write.
-        if (automatic && reloadBlockedBy() !== null) return;
+        // Health or a guard can change while a draft is being persisted.
+        if (!healthy() || (automatic && reloadBlockedBy() !== null)) return;
         if (automatic && served !== null) await writePref(TRIED_KEY, served.sha);
         // This is the final check: no await between observing a safe app and reloadApp().
-        if (automatic && reloadBlockedBy() !== null) {
-          if (served !== null) await writePref(TRIED_KEY, null);
+        if (!healthy() || (automatic && reloadBlockedBy() !== null)) {
+          if (automatic && served !== null) await writePref(TRIED_KEY, null);
           return;
         }
         if (automatic && served !== null) setLastAutoFor(served.sha);
@@ -218,7 +275,7 @@ export function useLiveUpdate(): LiveUpdate {
         }
       }
     })();
-  }, [served]);
+  }, [served, servedKey, needsBundleCheck]);
   const reloadNow = useCallback(() => requestReload(false), [requestReload]);
 
   useEffect(() => {
