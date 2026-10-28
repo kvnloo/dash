@@ -74,7 +74,7 @@ const CANCELLED: AcpPermissionOutcome = { outcome: "cancelled" };
 const LABELS: Record<AcpPermissionKind, string> = {
   allow_once: "Allow once",
   allow_always: "Always allow",
-  reject_once: "Deny once",
+  reject_once: "Reject",
   reject_always: "Always deny",
 };
 

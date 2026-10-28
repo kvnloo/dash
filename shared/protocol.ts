@@ -3,6 +3,7 @@
 // Imported by both `bridge/` and `app/`, so it must stay dependency-free.
 
 import { isGateItem, parseGateDecision, type GateItem, type GateDecision } from "./gate";
+import { parsePermissionDecision, parsePermissionRequest, parsePermissionResolution, type PermissionDecision, type PermissionRequest, type PermissionResolution } from "./permission";
 import { parseLiveClientMessage, parseLiveServerMessage, type LiveClientMessage, type LiveServerMessage } from "./live";
 import { parseReplyPart, parseReplyParts, type ReplyPart } from "./reply-parts";
 export type { ReplyPart } from "./reply-parts";
@@ -192,6 +193,8 @@ export type GateServerMessage =
 export type ClientMessage =
   | GateClientMessage
   | LiveClientMessage
+  /** The owner's choice on an ACP permission request (shared/permission.ts). */
+  | PermissionDecision
   /** Phone "forget everything": clear the bridge's notice replay ring. Old bridges ignore it. */
   | { type: "notices_clear" }
   | {
@@ -285,6 +288,8 @@ export type ServerMessage =
   | NoticeMessage
   | GateServerMessage
   | LiveServerMessage
+  | PermissionRequest
+  | PermissionResolution
   | {
       type: "hello";
       version: number;
@@ -373,6 +378,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
     case "live_turn":
     case "live_intent":
     case "live_receipts": return parseLiveClientMessage(raw);
+    case "permission_decision": return parsePermissionDecision(raw);
     case "chat": {
       const attachments = parseChatAttachments(raw.attachments);
       if (raw.mode !== undefined && raw.mode !== "steer" && raw.mode !== "queue") return null;
@@ -524,6 +530,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     case "live_event":
     case "live_receipts":
     case "live_error": return parseLiveServerMessage(raw);
+    case "permission_request": return parsePermissionRequest(raw);
+    case "permission_resolved": return parsePermissionResolution(raw);
     case "gate_snapshot": return Array.isArray(raw.items) && raw.items.every(isGateItem) && typeof raw.dry_run === "boolean" ? { type: "gate_snapshot", items: raw.items, dry_run: raw.dry_run, owner_decisions: raw.owner_decisions === true } : null;
     case "gate_status": return str(raw.id) && str(raw.message) ? { type: "gate_status", id: raw.id, message: raw.message } : null;
     case "gate_error": return str(raw.message) ? { type: "gate_error", message: raw.message } : null;

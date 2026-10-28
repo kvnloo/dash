@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseCommands, type CommandSuggestion } from "../../../shared/suggestions";
 import type { Sink, TurnInput } from "../harnesses";
+import { AcpPermissionAdapter, type AcpPermissionBrokerPort } from "./permission-adapter";
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -45,7 +46,9 @@ type Pending = { resolve(value: unknown): void; reject(error: Error): void };
  * process starts when `cwd` is on another computer (the command then reaches that computer).
  * `timeoutMs` defaults to and is normally capped at 2 minutes; a caller may pass up to an hour.
  */
-export type AcpOptions = { command: string[]; cwd: string; spawnCwd?: string; timeoutMs?: number; sink: Sink; env?: Record<string, string>; onUsage?(session: string, update: unknown): void };
+export type AcpOptions = { command: string[]; cwd: string; spawnCwd?: string; timeoutMs?: number; sink: Sink; env?: Record<string, string>; onUsage?(session: string, update: unknown): void;
+  /** Routes session/request_permission to the owner. Absent: every request is cancelled (fail closed). */
+  permissions?: { principalId: string; turnId: string; broker: AcpPermissionBrokerPort } };
 
 /** One owned stdio connection. Client capabilities are deliberately empty. */
 export class AcpClient {
@@ -79,8 +82,18 @@ export class AcpClient {
   get exitCode(): number | null { return this.proc.exitCode; }
   get exitSignal(): NodeJS.Signals | null { return this.proc.signalCode; }
 
+  private permissions: AcpPermissionAdapter;
+
   constructor(private options: AcpOptions) {
     if (options.command.length === 0) throw new Error("ACP executable unavailable");
+    this.permissions = new AcpPermissionAdapter({
+      activeSessionId: () => this.sessionId,
+      principalId: options.permissions?.principalId ?? "",
+      turnId: options.permissions?.turnId ?? "",
+      broker: options.permissions?.broker,
+      send: response => this.send(response),
+      resolved: () => this.options.sink.status("Thinking"),
+    });
     this.proc = spawn("nice", ["-n", "10", ...options.command], {
       cwd: options.spawnCwd ?? options.cwd,
       detached: true,
@@ -157,10 +170,7 @@ export class AcpClient {
     }
     if (typeof message.method === "string") {
       if (message.id !== undefined) {
-        if (message.method === "session/request_permission") {
-          this.send({ jsonrpc: "2.0", id: message.id, result: { outcome: { outcome: "cancelled" } } });
-          this.options.sink.status("Thinking");
-        } else {
+        if (!this.permissions.receive(message)) {
           this.send({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Client capability unavailable" } });
         }
       } else if (message.method === "session/update" && record(message.params)) {
@@ -279,6 +289,7 @@ export class AcpClient {
 
   private async shutdown(): Promise<void> {
     clearTimeout(this.timer);
+    this.permissions.cleanup();
     this.fail(new Error("ACP connection closed"));
     this.proc.stdin.end();
     this.kill("SIGTERM");

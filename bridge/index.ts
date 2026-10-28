@@ -61,6 +61,8 @@ import type { LiveOwner } from "./src/hermes-owner";
 import { z0bridgeHermes } from "./src/z0bridge-hermes";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
 import { acpCommand, AcpSupervisor, type AcpHandle } from "./src/acp/supervisor";
+import { AcpPermissionRouter } from "./src/acp/permission-port";
+import { PermissionBroker, type PermissionNotice } from "./src/permission-broker";
 import { remoteAcpCommand, remoteHostFor, remoteHosts, remoteRouteIds, remoteTurnProblem, type RemoteHost } from "./src/remote-hosts";
 import {
   CANCELLED_EXIT_CODE,
@@ -115,6 +117,19 @@ const MAX_RETAINED = 50;
 const acpSupervisor = new AcpSupervisor();
 /** Turns that run on another computer (DASH_REMOTE_HOSTS) are admitted separately: they use none of this host. */
 const remoteAcpSupervisor = new AcpSupervisor();
+/**
+ * ACP permission requests wait for the owner: the PermissionCard on the phone. One owner per
+ * bridge; a decision is accepted only from a socket subscribed to that turn.
+ */
+const PERMISSION_PRINCIPAL = "owner";
+const permissions = new AcpPermissionRouter(new PermissionBroker(), (_principal: string, notice: PermissionNotice) => {
+  const turn = turns.get(notice.turnId);
+  if (!turn) return;
+  const message = notice.type === "permission_request"
+    ? { ...notice, options: notice.options.map(option => ({ ...option })) }
+    : { ...notice };
+  for (const ws of turn.listeners) sendTo(ws, message);
+});
 
 class Turn implements Sink {
   readonly events: TurnEvent[] = [];
@@ -200,7 +215,7 @@ class Turn implements Sink {
   private runAcp(command: string[], input: TurnInput, env?: Record<string, string>, release?: () => void, remote?: { spawnCwd: string; timeoutMs: number }): void {
     try {
       // The id keys the agent's usage_update readings; /chat/context looks them up by harness, not by turn.
-      this.acp = (remote ? remoteAcpSupervisor : acpSupervisor).start({ id: this.harness.id, command, input, sink: this, env, ...remote });
+      this.acp = (remote ? remoteAcpSupervisor : acpSupervisor).start({ id: this.harness.id, command, input, sink: this, env, ...remote, permissions: { principalId: PERMISSION_PRINCIPAL, turnId: this.id, broker: permissions.port } });
       void this.acp.done.then(
         () => { release?.(); this.finish(0); },
         error => {
@@ -1046,6 +1061,13 @@ const server = Bun.serve<SocketData>({
           if (part) sendTo(ws, { type: "status", id: turn.id, seq: turn.events.length, text: "", part });
           break;
         }
+        case "permission_decision": {
+          // Only a socket that owns or attached to the turn may answer its permission requests.
+          if (!ws.data.turns.has(message.turnId)) break;
+          const decided = permissions.decide(message.turnId, message.requestId, message.optionId);
+          log("permission.decision", { id: message.turnId, accepted: decided });
+          break;
+        }
         case "cancel": {
           utterances.delete(message.id);
           turns.get(message.id)?.cancel();
@@ -1061,6 +1083,7 @@ const server = Bun.serve<SocketData>({
             ws.data.turns.add(id);
             turn.attach(ws, seq);
           }
+          permissions.replay(PERMISSION_PRINCIPAL);
           log("ws.attach", { remote: ws.remoteAddress, count: message.turns.length });
           break;
         case "history": {

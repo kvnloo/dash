@@ -35,7 +35,8 @@ import { canSteer, type SendMode } from "../lib/composer-mode";
 import type { ChatAttachment } from "../../../shared/protocol";
 import type { Message } from "../model";
 import type { ScreenProps } from "../navigation";
-import { bridge, openLiveSurface, sendChat, sendLiveTurn } from "../net/bridge";
+import { bridge, openLiveSurface, permissionRequests, sendChat, sendLiveTurn } from "../net/bridge";
+import { PermissionCard } from "../components/PermissionCard";
 import { EMPTY_LIVE, liveOf, liveStore, setLiveOpen } from "../store/live";
 import {
   applyTurnEvent,
@@ -174,6 +175,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const [chatOptions, setChatOptions] = useState(false);
   const context = useContextView(settings, online && (!conversation?.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)), harnessId, conversation?.profileId, conversation?.sessionId, thinking.phase !== "idle");
   const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
+  const permissionRecords = permissionRequests.state.use(s => s.records);
+  // Open requests, plus the settled ones of the latest turn so the owner sees the host's outcome.
+  const permissionCards = conversation ? Object.values(permissionRecords).filter(record => record.conversationId === conversation.id &&
+    (record.phase === "pending" || record.phase === "deciding" || record.turnId === latestAssistant?.turnId)) : [];
   const voice = useContinuousVoice();
   const voiceActive = !["idle", "error"].includes(voice.state.phase);
   // Broker liveness/another client's call is not evidence that Dash's mic is live.
@@ -378,6 +383,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
     </View>
     </> : null}
+    {permissionCards.map(record => <PermissionCard key={record.turnId + "/" + record.requestId} requestId={record.requestId} turnId={record.turnId}
+      options={record.options} deadlineAt={record.deadlineAt} phase={record.phase} onChoose={optionId => permissionRequests.decide(record, optionId)} />)}
     {conversation && !liveOn ? <QueuedStack conversation={conversation} canSteer={online && !targetError && canSteer(harnessId, conversation.sessionId, thinking.phase, liveOn)} onSteer={() => { const payload = takeQueuedForSteer(conversation.id); if (payload) sendTurn(payload.text, payload.attachments, conversation, "steer"); }} /> : null}
     <Composer
       draftKey={conversation?.id}

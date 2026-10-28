@@ -1,4 +1,5 @@
 import { applyGateMessage } from "../store/approvals";
+import { createPermissionsStore } from "../store/permissions";
 import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
 import { CHATS_FEATURE, parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
 import { agentNoticeInbox, noticeFailure } from "../store/notices";
@@ -281,6 +282,17 @@ class Bridge {
       case "gate_snapshot":
       case "gate_status":
       case "gate_error": applyGateMessage(message); return;
+      case "permission_request": {
+        const where = locateTurn(message.turnId);
+        if (where) permissionRequests.receiveRequest(where.conversationId, message);
+        return;
+      }
+      case "permission_resolved": {
+        const record = Object.values(permissionRequests.state.get().records)
+          .find(item => item.turnId === message.turnId && item.requestId === message.requestId);
+        if (record) permissionRequests.receiveResolution(record.conversationId, record.sessionId, message);
+        return;
+      }
       case "hello": {
         this.chats = message.features?.includes(CHATS_FEATURE) === true;
         this.rosterEtag = undefined;
@@ -446,6 +458,13 @@ function closeReason(code: number): string {
 }
 
 export const bridge = new Bridge();
+
+/** ACP permission requests (PermissionCard). The bridge's permission_resolved is the only grant. */
+export const permissionRequests = createPermissionsStore({
+  sendDecision: (_scope, decision) => {
+    if (!bridge.send(decision)) throw new Error("Bridge offline");
+  },
+});
 
 setLiveHistoryRequester((input) => {
   bridge.requestHistory(input);
