@@ -63,6 +63,7 @@ import { queuedParts } from "../lib/pending-queue";
 import { QueuedStack } from "../components/QueuedStack";
 import { colors, glass, radius, space, type } from "../theme";
 import { useLiveThinking } from "../lib/live-thinking";
+import { useStreamRate } from "../lib/useStreamRate";
 import type { OrbState } from "../lib/orb-phase";
 import { useContinuousVoice, useDeviceInsets, voiceWindowOpen } from "../components/ContinuousVoiceRoot";
 import { sendVoiceAnnotation } from "../lib/voice-annotation";
@@ -204,6 +205,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, [conversation]);
 
   const { thinking, caption, external, observed, streamingMessage } = useLiveThinking(conversation);
+  const { rateLabel, recent } = useStreamRate(conversation?.id, streamingMessage?.turnId);
   useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
   const workers = useSessionWorkers(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
   const [chatOptions, setChatOptions] = useState(false);
@@ -434,6 +436,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       onSharedDraftConsumed={id => { if (conversation) consumeSharedDraft(conversation.id, id); }}
       disabled={!online || targetError !== undefined || (liveOn && live.status !== "ready")}
       streaming={liveOn ? live.busy : conversation ? conversationBusy(conversation.id) : false}
+      model={identity.model}
+      provider={identity.provider}
+      rateLabel={rateLabel}
+      recent={recent}
       steerBusy={canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn)}
       initialText={composerDraft}
       queuePreview={conversation?.queuePreview}
