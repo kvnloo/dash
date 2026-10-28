@@ -127,10 +127,17 @@ export class ContinuousVoice {
     clearTimeout(this.transcriptTimeout);
     this.update({ phase: "connecting", muted: false, note: undefined, lines: [] });
     // Covers mint, cursor recovery, microphone acquisition, SDP and ICE, not just the final handshake.
+    let finishDeadline: () => void = () => {};
+    const deadline = new Promise<void>(resolve => { finishDeadline = resolve; });
     this.timeout = setTimeout(() => {
-      if (this.live(generation) && this.state.phase === "connecting")
+      if (this.live(generation) && this.state.phase === "connecting") {
         void this.stop("Voice connection timed out. Microphone stopped.");
+        // A hung mint/permission/getUserMedia must not pin the UI's Start promise forever.
+        // Late acquisition still closes through stop()'s existing cleanup path.
+        finishDeadline();
+      }
     }, 20_000);
+    const connecting = (async () => {
     try {
       const typedTurns = this.io.typedTurns ?? lazyAppStore();
       if (!this.live(generation)) return;
@@ -178,6 +185,8 @@ export class ContinuousVoice {
       if (!this.live(generation)) return;
       this.timer = setInterval(() => void this.poll(generation), 1000);
     } catch (error) { if (this.live(generation)) await this.stop(error instanceof VoiceAccessDenied ? error.message : "Voice unavailable. Check the reviewed voice grant, bridge/broker deployment, native microphone permission and Tailscale. Tap Start to retry."); }
+    })();
+    await Promise.race([connecting, deadline]);
   }
   private send(event: object): void { this.peer?.send(event); }
   private reply(): void {
