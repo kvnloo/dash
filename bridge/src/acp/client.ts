@@ -40,6 +40,15 @@ export function acpPromptBlocks(input: Pick<TurnInput, "text" | "attachments">, 
   return blocks;
 }
 
+/** Only a closed set of diagnostic templates may cross from an agent onto the phone. */
+export function acpRequestFailure(error: unknown, phase: string): string {
+  const code = record(error) && typeof error.code === "number" && Number.isFinite(error.code) ? error.code : "unknown";
+  const detail = record(error) && record(error.data) && typeof error.data.details === "string" ? error.data.details : "";
+  const model = /^Could not restore model ([\w./:-]{1,80})$/.exec(detail)?.[1];
+  const hint = model ? `could not restore model ${model}; the host may have lost provider login` : "check host authentication and agent diagnostics";
+  return `ACP request failed during ${phase} (code ${code}); ${hint}`;
+}
+
 type Pending = { resolve(value: unknown): void; reject(error: Error): void };
 /**
  * `cwd` is the session's working directory, sent to the agent. `spawnCwd` is where the adapter
@@ -211,8 +220,7 @@ export class AcpClient {
     if (!pending) return;
     this.pending.delete(message.id);
     if (message.error !== undefined) {
-      const code = record(message.error) && typeof message.error.code === "number" ? message.error.code : "unknown";
-      pending.reject(new Error(`ACP request failed (code ${code}); check host authentication and agent diagnostics`));
+      pending.reject(new Error(acpRequestFailure(message.error, this.phase)));
     } else if ("result" in message) pending.resolve(message.result);
     else pending.reject(new Error("ACP response missing result"));
   }
