@@ -65,6 +65,8 @@ variant="${DASH_VARIANT:-debug}"
 case "$variant" in debug) Variant=Debug ;; release) Variant=Release ;; *) echo "DASH_VARIANT must be debug or release" >&2; exit 2 ;; esac
 printf 'Variant: %s\n' "$variant" | tee .native-receipts/variant.txt
 env | grep '^EXPO_PUBLIC_' | sort | tee .native-receipts/expo-public-env.txt || true
+# Clear prior Gradle receipts so a stale XML cannot mask missing results.
+rm -rf .native-receipts/dash-stylus
 # Existing Kotlin ButtonEdges test is a native build check, not O15 acceptance.
 # The exact-head web army receipt and owner S25 verification remain mandatory.
 gradle_result=0
