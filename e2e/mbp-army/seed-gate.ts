@@ -11,6 +11,22 @@ if(process.env.ARMY_PERSIST_SESSION==='1'){
  db.query('INSERT OR REPLACE INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run('army-fixture-session','acp','ARMY native fixture',Date.now()/1000,Date.now()/1000,0,process.env.DASH_CWD || home,0,0,null,null,'{}');db.close();
 }
 
+// Delegated workers of that native chat, as Hermes records delegate_task children: rows whose
+// parent_session_id is the chat. Two are live (one on a tool, one thinking); one has ended and must
+// not count. The columns a live Hermes adds for this are added here, only for this fixture.
+if(process.env.ARMY_SUBAGENTS==='1'){
+ const {Database}=await import('bun:sqlite');const {join}=await import('node:path');
+ const home=process.env.HERMES_HOME;if(!home)throw Error('isolated Hermes home required');
+ const db=new Database(join(home,'state.db'));
+ db.exec('ALTER TABLE sessions ADD COLUMN ended_at REAL');db.exec('ALTER TABLE sessions ADD COLUMN last_activity_description TEXT');
+ const now=Date.now()/1000;
+ const child=db.query('INSERT INTO sessions (id,source,title,started_at,last_activity_at,message_count,cwd,archived,hidden,parent_session_id,end_reason,model_config,ended_at,last_activity_description) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+ child.run('army-worker-verify','acp','ARMY worker verify',now-30,now-5,0,process.env.DASH_CWD||home,0,1,'army-fixture-session',null,'{}',null,'executing tool: terminal');
+ child.run('army-worker-review','acp','ARMY worker review',now-20,now-10,0,process.env.DASH_CWD||home,0,1,'army-fixture-session',null,'{}',null,'');
+ child.run('army-worker-done','acp','ARMY worker done',now-120,now-60,0,process.env.DASH_CWD||home,0,1,'army-fixture-session','done','{}',now-60,'');
+ db.close();
+}
+
 // A long native Hermes chat: user and assistant rows one minute apart, the last one now, as Hermes writes
 // them (one answer per prompt). The ws window and the paged /chats/history both read these rows.
 if(process.env.ARMY_LONG_HERMES){
