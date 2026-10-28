@@ -134,7 +134,7 @@ test.describe("STT real-host checks", () => {
           window.setTimeout(() => {
             socket.send(JSON.stringify({ type: "voice_chunk", id: turnId, data: chunk }));
             socket.send(JSON.stringify({ type: "voice_commit", id: turnId }));
-          }, 150);
+          }, 1000);
         };
       }), { port: bridge.port, token, id, cwd: bridge.dir, chunk: Buffer.alloc(1024, 0x55).toString("base64") });
 
