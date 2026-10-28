@@ -43,6 +43,10 @@ def admit(k: str, me: str, route: str, dup: str, speech: str, known: str, avail:
     return f"S.a_admit(S.{k}{{}}, {args})"
 
 
+def remote(ok: str, known: str, dup: str) -> str:
+    return f"S.a_remote({ok}{{}}, {known}{{}}, {dup}{{}})"
+
+
 NOT = "Bool.not"
 FEEDBACK = "S.GPick{S.GFeedback{}}"
 REFUSE_ANY = f"S.a_accounted({admit('AChat', 'False', 'True', 'False', 'True', 'True', 'True', 'True', 'True')})"
@@ -93,10 +97,18 @@ MUTATIONS = [
      "Bool.or(Nat.is_eq(machine, host), x_mem(machine, extra))",
      "S.x_self(7n, 1n, Some{7n}, [])",
      "AgentsView stamps local sessions with its install id -> listed as 'Other machine', view only"),
-    ("S6 chatable_is_self", "chatable ignores the host (other machines' chats sendable)",
-     "  Bool.and(catalog, x_self(machine, host, inst, extra))", "  catalog",
-     f"{NOT}(S.x_chatable(True{{}}, 7n, 1n, None{{}}, []))",
-     "a Claude Code chat from another machine is marked chatable on this host"),
+    ("S6 chatable_is_self_or_routed", "chatable ignores the host (other machines' chats sendable)",
+     "  Bool.and(catalog, Bool.or(self, x_routed(self, rh, machine, routable)))", "  Bool.and(catalog, Bool.or(self, Bool.not(self)))",
+     f"{NOT}(S.x_chatable(True{{}}, 7n, 1n, None{{}}, [], False{{}}, []))",
+     "a Grok chat from another machine is marked chatable on this host"),
+    ("S6 chatable_is_self_or_routed", "routed ignores DASH_REMOTE_HOSTS (any machine's Claude Code or Codex chat is sendable)",
+     "  Bool.and(Bool.not(self), Bool.and(rh, x_mem(machine, routable)))", "  Bool.and(Bool.not(self), rh)",
+     f"{NOT}(S.x_chatable(True{{}}, 7n, 1n, None{{}}, [], True{{}}, []))",
+     "a Codex chat from a machine this bridge has no route to is marked chatable; the send is then refused"),
+    ("S6 chatable_is_self_or_routed", "routed ignores the harness (any chat on a routable machine is sendable)",
+     "  Bool.and(Bool.not(self), Bool.and(rh, x_mem(machine, routable)))", "  Bool.and(Bool.not(self), x_mem(machine, routable))",
+     f"{NOT}(S.x_chatable(True{{}}, 7n, 1n, None{{}}, [], False{{}}, [7n]))",
+     "a Grok chat recorded on a routable machine is marked chatable, but only Claude Code and Codex resume over ACP there"),
     ("S7 archived_chat_routes", "pre-#457 bridge refuses av: profiles",
      "    case XAvProfile{k, s}:\n      x_self_archive(k, s, h, sid)", "    case XAvProfile{k, s}:\n      False{}",
      "S.x_row_routes(3n, 9n)",
@@ -132,8 +144,8 @@ MUTATIONS = [
      f"{NOT}(S.a_is_dup({admit('AChat', 'True', 'False', 'False', 'True', 'True', 'True', 'True', 'True')}))",
      "a profile the bridge refuses is dropped as if it were a resend"),
     ("S11 start_only_through_every_gate", "duplicate id starts a second turn",
-     "          match dup:\n            case True{}:\n              ADup{}",
-     "          match dup:\n            case True{}:\n              AStarted{}",
+     "          match dup:\n            case True{}:\n              ADup{}\n            case False{}:\n              a_tail(",
+     "          match dup:\n            case True{}:\n              AStarted{}\n            case False{}:\n              a_tail(",
      f"{NOT}(S.a_is_start({admit('AChat', 'True', 'True', 'True', 'True', 'True', 'True', 'True', 'True')}))",
      "the phone resends a live turn id -> a second agent process starts"),
     ("S11 start_only_through_every_gate", "chat skips the cwd check",
@@ -149,6 +161,37 @@ MUTATIONS = [
      CHAT_ATT, CHAT_ATT.replace("AStarted{}", "a_reject()"),
      f"S.a_is_start({admit('AChat', 'True', 'True', 'False', 'True', 'True', 'True', 'True', 'True')})",
      "a valid new chat turn -> refused"),
+    # S13-S15: a chat resumed on another computer
+    ("S13 no_silent_remote_refusal", "remote chat refused by remoteTurnProblem: bare return",
+     "  match ok:\n    case False{}:\n      a_reject()\n    case True{}:\n      match known:",
+     "  match ok:\n    case False{}:\n      ASilent{}\n    case True{}:\n      match known:",
+     f"S.a_accounted({remote('False', 'True', 'False')})",
+     "continue a chat on another computer with no usable working directory -> no log, no answer"),
+    ("S13 no_silent_remote_refusal", "remote chat with an unknown harness: bare return",
+     "      match known:\n        case False{}:\n          a_reject()\n        case True{}:\n          match dup:",
+     "      match known:\n        case False{}:\n          ASilent{}\n        case True{}:\n          match dup:",
+     f"S.a_accounted({remote('True', 'False', 'False')})",
+     "remote chat for a harness this bridge does not know -> no log, no answer"),
+    ("S14 remote_start_only_through_gates", "remote chat skips remoteTurnProblem",
+     "  match ok:\n    case False{}:\n      a_reject()\n    case True{}:\n      match known:",
+     "  match ok:\n    case False{}:\n      AStarted{}\n    case True{}:\n      match known:",
+     f"{NOT}(S.a_is_start({remote('False', 'True', 'False')}))",
+     "a chat whose profile, session id, cwd or attachments fail the remote checks -> starts an SSH-carried turn anyway"),
+    ("S14 remote_start_only_through_gates", "remote chat with an unknown harness starts",
+     "      match known:\n        case False{}:\n          a_reject()\n        case True{}:\n          match dup:",
+     "      match known:\n        case False{}:\n          AStarted{}\n        case True{}:\n          match dup:",
+     f"{NOT}(S.a_is_start({remote('True', 'False', 'False')}))",
+     "remote chat for a harness this bridge does not know -> a Turn is created for it"),
+    ("S14 remote_start_only_through_gates", "duplicate id starts a second remote turn",
+     "          match dup:\n            case True{}:\n              ADup{}\n            case False{}:\n              AStarted{}",
+     "          match dup:\n            case True{}:\n              AStarted{}\n            case False{}:\n              AStarted{}",
+     f"{NOT}(S.a_is_start({remote('True', 'True', 'True')}))",
+     "the phone resends a live remote turn id -> a second SSH-carried agent starts"),
+    ("S15 remote_gates_start", "remote chat never starts (vacuous)",
+     "            case False{}:\n              AStarted{}\n\n# Every gate a started remote chat",
+     "            case False{}:\n              a_reject()\n\n# Every gate a started remote chat",
+     f"S.a_is_start({remote('True', 'True', 'False')})",
+     "a valid chat on another computer -> refused"),
 ]
 
 WITNESS = """import Base

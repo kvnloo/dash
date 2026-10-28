@@ -30,6 +30,7 @@ AVS = "bridge/src/agentsview-sessions.ts"
 SIDECAR = "bridge/src/chat-index/sidecar.ts"
 LIVE = "app/src/lib/live-sessions.ts"
 NET = "app/src/net/bridge.ts"
+REMOTE = "bridge/src/remote-hosts.ts"
 
 # (laws, model def, file, exact text, expected count)
 ANCHORS = [
@@ -48,7 +49,9 @@ ANCHORS = [
     ("S5", "x_self", BRIDGE, "selfMachines: [HOST_NAME, ...[agentsviewMachineId()].filter(", 1),
     ("S5", "x_install", AVS, 'const id = readFileSync(join(dirname(path), "telemetry-install-id"), "utf8").trim();', 1),
     ("S5-S6", "x_self", AVSRC, 'if (self.has(raw.toLowerCase()) || self.has(short)) return { host_id: SELF_HOST, host_name: "" };', 1),
-    ("S6", "x_chatable", AVSRC, "chatable: isCatalogHarness(row.agent) && host.host_id === SELF_HOST ? 1 : 0", 1),
+    ("S6", "x_routed", AVSRC, "const routed = host.host_id !== SELF_HOST && REMOTE_HARNESSES.includes(row.agent) && self.routable?.has((row.machine ?? \"\").trim().toLowerCase()) === true;", 1),
+    ("S6", "x_chatable", AVSRC, "chatable: isCatalogHarness(row.agent) && (host.host_id === SELF_HOST || routed) ? 1 : 0", 1),
+    ("S6", "x_routed (harnesses)", REMOTE, 'export const REMOTE_HARNESSES: readonly string[] = ["claude", "codex"];', 1),
     ("S7", "x_row_routes", AVSRC, "agent_id: `${AGENTSVIEW_PREFIX}${row.agent}:${sessionId}`", 1),
     ("S7", "x_row_routes", SIDECAR, "const mine = row.host_id === SELF_HOST;", 1),
     ("S7", "x_row_routes", LIVE, "...(summary.agentId ? { profileId: summary.agentId } : {})", 1),
@@ -56,7 +59,11 @@ ANCHORS = [
     ("S7-S8", "x_self_archive", AVS, "return Boolean(profileId && sessionId && profileId === `${AGENTSVIEW_PREFIX}${harness}:${sessionId}`);", 1),
     ("S7-S8", "x_profile_ok", BRIDGE, "&& !isSelfArchiveProfile(message.profileId, message.harness, message.sessionId) && !(message.harness === \"hermes\" && message.profileId === \"hermes:default\")) return rejectTurn(ws, message.id, \"Profile routing unavailable on this bridge.\");", 2),
     ("S9", "a_reject", BRIDGE, 'log("turn.rejected", { id, reason: message });\n  sendTo(ws, { type: "error", id, seq: 1, message });\n  sendTo(ws, { type: "done", id, seq: 2, exitCode: 1 });', 1),
-    ("S9-S11", "a_admit dup (chat)", BRIDGE, "if (turns.has(message.id)) return;", 1),
+    ("S9-S11", "a_admit dup (chat)", BRIDGE, "if (turns.has(message.id)) return;\n          const harness = HARNESSES.find((h) => h.id === message.harness);", 1),
+    ("S13-S15", "a_remote remote", BRIDGE, "const remote = SELF.matches(message.hostId) ? undefined : remoteHostFor(message.hostId);", 1),
+    ("S13-S15", "a_remote ok + known", BRIDGE, 'if (problem || !harness) return rejectTurn(ws, message.id, problem ?? `Unknown agent "${message.harness}".`);', 1),
+    ("S13-S15", "a_remote dup", BRIDGE, "if (turns.has(message.id)) return;\n            const turn = new Turn(message.id, harness);", 1),
+    ("S13-S15", "a_remote ok (profile)", REMOTE, "turn.profileId !== `${AGENTSVIEW_PREFIX}${turn.harness}:${turn.sessionId}`) return", 1),
     ("S9-S11", "a_admit dup (voice)", BRIDGE, "if (turns.has(message.id) || utterances.has(message.id)) return;", 1),
     ("S9-S11", "a_admit me", BRIDGE, "if (!(await isSelfHost(message.hostId))) return rejectTurn(ws, message.id,", 2),
     ("S11", "a_tail cwd", BRIDGE, "if (!isDirectory(cwd)) return rejectTurn(ws, message.id,", 2),

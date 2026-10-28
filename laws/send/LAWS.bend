@@ -62,15 +62,20 @@ law own_install_is_self:
   for extra: List<&2, Nat>
   T(S.x_self(i, host, Some{i}, extra))
 
-# S6. The index marks a chat chatable only when it is this host's.
-law chatable_is_self:
+# S6. The index marks a chat chatable only when it is this host's, or when it
+# is a Claude Code or Codex chat recorded on a computer this bridge is
+# configured to carry turns to (DASH_REMOTE_HOSTS). Every other machine's
+# chats stay view only.
+law chatable_is_self_or_routed:
   for catalog: Bool
   for machine: Nat
   for host: Nat
   for inst: Maybe<&2, Nat>
   for extra: List<&2, Nat>
-  for w: T(S.x_chatable(catalog, machine, host, inst, extra))
-  T(S.x_self(machine, host, inst, extra))
+  for rh: Bool
+  for routable: List<&2, Nat>
+  for w: T(S.x_chatable(catalog, machine, host, inst, extra, rh, routable))
+  T(Bool.or(S.x_self(machine, host, inst, extra), Bool.and(rh, S.x_mem(machine, routable))))
 
 # S7. Every archived chat the phone sends to (profile av:<kind>:<session>)
 # passes the bridge's profile gate.
@@ -158,3 +163,30 @@ law start_only_through_every_gate:
 law all_gates_start:
   for k: S.AKind
   T(S.a_is_start(S.a_admit(k, True{}, True{}, False{}, True{}, True{}, True{}, True{}, True{})))
+
+# ---------------------------------------------------------------------------
+# S13-S15. A chat resumed on another computer (remote resume) is held to the
+# same standard as a local one: it is never refused in silence, and it starts
+# only after the route, harness and duplicate gates.
+# ---------------------------------------------------------------------------
+
+# S13. A chat for another computer is started, a duplicate of a live turn, or
+# refused with a turn.rejected log line AND an error + done answer.
+law no_silent_remote_refusal:
+  for ok: Bool
+  for known: Bool
+  for dup: Bool
+  T(S.a_accounted(S.a_remote(ok, known, dup)))
+
+# S14. A chat for another computer starts only after remoteTurnProblem is
+# clear, the harness is known and the id is not already live.
+law remote_start_only_through_gates:
+  for ok: Bool
+  for known: Bool
+  for dup: Bool
+  for w: T(S.a_is_start(S.a_remote(ok, known, dup)))
+  T(S.a_remote_gates(ok, known, dup))
+
+# S15. Not vacuous: a new remote chat that passes every gate starts.
+law remote_gates_start:
+  T(S.a_is_start(S.a_remote(True{}, True{}, False{})))

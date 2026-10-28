@@ -200,8 +200,17 @@ def Laws.own_install_is_self(i, host, extra):
   own_self(i, host, extra)
 
 # S6
-def Laws.chatable_is_self(catalog, machine, host, inst, extra, w):
-  and_r(catalog, S.x_self(machine, host, inst, extra), w)
+# chatable = catalog && (self || (!self && rh && mem)); on self the answer is
+# the left branch, off self the `!self` conjunct is True and drops away.
+def routed_cases(+s: Bool, -rh: Bool, -mem: Bool, w: Laws.T(Bool.or(s, Bool.and(Bool.not(s), Bool.and(rh, mem))))) -> Laws.T(Bool.or(s, Bool.and(rh, mem))):
+  match s:
+    case True{}:
+      Unit{}
+    case False{}:
+      w
+
+def Laws.chatable_is_self_or_routed(catalog, machine, host, inst, extra, rh, routable, w):
+  routed_cases(S.x_self(machine, host, inst, extra), rh, S.x_mem(machine, routable), and_r(catalog, Bool.or(S.x_self(machine, host, inst, extra), S.x_routed(S.x_self(machine, host, inst, extra), rh, machine, routable)), w))
 
 # S7
 def routes(+kind: Nat, +sid: Nat) -> Laws.T(S.x_row_routes(kind, sid)):
@@ -407,3 +416,39 @@ def Laws.all_gates_start(k):
       Unit{}
     case S.AVoice{}:
       Unit{}
+
+# S13
+def Laws.no_silent_remote_refusal(ok, known, dup):
+  match ok:
+    case False{}:
+      Unit{}
+    case True{}:
+      match known:
+        case False{}:
+          Unit{}
+        case True{}:
+          match dup:
+            case True{}:
+              Unit{}
+            case False{}:
+              Unit{}
+
+# S14
+def Laws.remote_start_only_through_gates(ok, known, dup, w):
+  match ok:
+    case False{}:
+      w
+    case True{}:
+      match known:
+        case False{}:
+          w
+        case True{}:
+          match dup:
+            case True{}:
+              w
+            case False{}:
+              Unit{}
+
+# S15
+def Laws.remote_gates_start():
+  Unit{}

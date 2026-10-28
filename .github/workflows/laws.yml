@@ -1,7 +1,7 @@
 name: Formal laws
 
-# Every Bend law family under laws/ (laws/send: S1-S12; laws/release: O15 once it
-# lands) is proven, rechecked by Bend's proven kernel, and mutation-tested on every
+# Every Bend law family under laws/ (laws/send: S1-S15; laws/release: O15) is
+# proven, rechecked by Bend's proven kernel, and mutation-tested on every
 # PR. A proof failure or a surviving mutant fails this check and blocks the merge.
 # Separate from ci.yml on purpose: the build gate (O15) owns that file.
 

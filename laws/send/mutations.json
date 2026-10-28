@@ -91,12 +91,30 @@
       "law_false_here": true
     },
     {
-      "law": "S6 chatable_is_self",
+      "law": "S6 chatable_is_self_or_routed",
       "mutation": "chatable ignores the host (other machines' chats sendable)",
-      "counterexample": "a Claude Code chat from another machine is marked chatable on this host",
+      "counterexample": "a Grok chat from another machine is marked chatable on this host",
       "rejected": true,
       "proofs_check": false,
-      "where": "Laws.chatable_is_self",
+      "where": "Laws.chatable_is_self_or_routed",
+      "law_false_here": true
+    },
+    {
+      "law": "S6 chatable_is_self_or_routed",
+      "mutation": "routed ignores DASH_REMOTE_HOSTS (any machine's Claude Code or Codex chat is sendable)",
+      "counterexample": "a Codex chat from a machine this bridge has no route to is marked chatable; the send is then refused",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.chatable_is_self_or_routed",
+      "law_false_here": true
+    },
+    {
+      "law": "S6 chatable_is_self_or_routed",
+      "mutation": "routed ignores the harness (any chat on a routable machine is sendable)",
+      "counterexample": "a Grok chat recorded on a routable machine is marked chatable, but only Claude Code and Codex resume over ACP there",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.chatable_is_self_or_routed",
       "law_false_here": true
     },
     {
@@ -215,8 +233,62 @@
       "proofs_check": false,
       "where": "Laws.all_gates_start",
       "law_false_here": true
+    },
+    {
+      "law": "S13 no_silent_remote_refusal",
+      "mutation": "remote chat refused by remoteTurnProblem: bare return",
+      "counterexample": "continue a chat on another computer with no usable working directory -> no log, no answer",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.no_silent_remote_refusal",
+      "law_false_here": true
+    },
+    {
+      "law": "S13 no_silent_remote_refusal",
+      "mutation": "remote chat with an unknown harness: bare return",
+      "counterexample": "remote chat for a harness this bridge does not know -> no log, no answer",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.no_silent_remote_refusal",
+      "law_false_here": true
+    },
+    {
+      "law": "S14 remote_start_only_through_gates",
+      "mutation": "remote chat skips remoteTurnProblem",
+      "counterexample": "a chat whose profile, session id, cwd or attachments fail the remote checks -> starts an SSH-carried turn anyway",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.remote_start_only_through_gates",
+      "law_false_here": true
+    },
+    {
+      "law": "S14 remote_start_only_through_gates",
+      "mutation": "remote chat with an unknown harness starts",
+      "counterexample": "remote chat for a harness this bridge does not know -> a Turn is created for it",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.remote_start_only_through_gates",
+      "law_false_here": true
+    },
+    {
+      "law": "S14 remote_start_only_through_gates",
+      "mutation": "duplicate id starts a second remote turn",
+      "counterexample": "the phone resends a live remote turn id -> a second SSH-carried agent starts",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.remote_start_only_through_gates",
+      "law_false_here": true
+    },
+    {
+      "law": "S15 remote_gates_start",
+      "mutation": "remote chat never starts (vacuous)",
+      "counterexample": "a valid chat on another computer -> refused",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.remote_gates_start",
+      "law_false_here": true
     }
   ],
-  "rejected": 23,
-  "total": 23
+  "rejected": 31,
+  "total": 31
 }

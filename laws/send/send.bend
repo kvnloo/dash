@@ -188,9 +188,20 @@ def x_install(n: Nat, inst: Maybe<&2, Nat>) -> Bool:
 def x_self(+machine: Nat, host: Nat, inst: Maybe<&2, Nat>, extra: List<&2, Nat>) -> Bool:
   Bool.or(Nat.is_eq(machine, host), Bool.or(x_install(machine, inst), x_mem(machine, extra)))
 
-# avChatRow: chatable = isCatalogHarness(agent) && host_id === SELF_HOST.
-def x_chatable(catalog: Bool, machine: Nat, host: Nat, inst: Maybe<&2, Nat>, extra: List<&2, Nat>) -> Bool:
-  Bool.and(catalog, x_self(machine, host, inst, extra))
+# avChatRow: routed = host_id !== SELF_HOST && REMOTE_HARNESSES.includes(agent)
+#   && self.routable.has(machine). `routable` is DASH_REMOTE_HOSTS (selfMachines'
+#   third argument): the other computers this bridge carries Claude Code and
+#   Codex turns to over SSH (bridge/src/remote-hosts.ts). rh: the agent is one of
+#   REMOTE_HARNESSES.
+def x_routed(self: Bool, rh: Bool, machine: Nat, routable: List<&2, Nat>) -> Bool:
+  Bool.and(Bool.not(self), Bool.and(rh, x_mem(machine, routable)))
+
+# avChatRow: chatable = isCatalogHarness(agent) && (host_id === SELF_HOST || routed).
+def x_chat_or_routed(+self: Bool, catalog: Bool, rh: Bool, machine: Nat, routable: List<&2, Nat>) -> Bool:
+  Bool.and(catalog, Bool.or(self, x_routed(self, rh, machine, routable)))
+
+def x_chatable(catalog: Bool, +machine: Nat, host: Nat, inst: Maybe<&2, Nat>, extra: List<&2, Nat>, rh: Bool, routable: List<&2, Nat>) -> Bool:
+  x_chat_or_routed(x_self(machine, host, inst, extra), catalog, rh, machine, routable)
 
 # The profileId the phone sends for a chat (Conversation.profileId).
 #   AvProfile{k, s}  `av:<k>:<s>`: adoptSummary sets profileId = agentId,
@@ -353,6 +364,36 @@ def a_is_start(o: AOut) -> Bool:
       True{}
     case _:
       False{}
+
+# A chat recorded on another computer: bridge/index.ts case "chat", the
+# `if (remote)` branch, and bridge/src/remote-hosts.ts remoteTurnProblem.
+# remote = SELF.matches(hostId) ? undefined : remoteHostFor(hostId): the host id
+# is one of DASH_REMOTE_HOSTS. That branch replaces a_admit's me, route, avail,
+# cwd and attachment gates (the other computer's own adapter checks the session
+# and directory there); a_admit models every other chat and voice turn.
+#   ok     remoteTurnProblem(...) is undefined: harness is a REMOTE_HARNESS, the
+#          profile is av:<harness>:<session> for the message's own session, the
+#          session id is well formed, cwd is absolute, no attachments
+#   known  HARNESSES.find(harness)
+#   dup    turns.has(id)
+def a_remote(ok: Bool, known: Bool, dup: Bool) -> AOut:
+  match ok:
+    case False{}:
+      a_reject()
+    case True{}:
+      match known:
+        case False{}:
+          a_reject()
+        case True{}:
+          match dup:
+            case True{}:
+              ADup{}
+            case False{}:
+              AStarted{}
+
+# Every gate a started remote chat must have passed.
+def a_remote_gates(ok: Bool, known: Bool, dup: Bool) -> Bool:
+  Bool.and(ok, Bool.and(known, Bool.not(dup)))
 
 # Every gate a started turn must have passed.
 def a_gates(k: AKind, me: Bool, route: Bool, dup: Bool, speech: Bool, known: Bool, avail: Bool, cwd: Bool, att: Bool) -> Bool:

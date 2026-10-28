@@ -3,7 +3,7 @@
 # proofs rechecked by Bend's proven kernel, then every mutant.
 #
 #   laws/send/run.sh            # here
-#   laws/send/run.sh --heavy    # on groot: take the heavy slot first
+#   laws/send/run.sh --heavy    # on the heavy build host: take the heavy slot first
 #
 # Exit 0 only when every anchor is in place, PROOF.bend prints ALL PROOFS CHECK
 # under --verdict, and every mutant is rejected. Writes laws/send/mutations.json.
