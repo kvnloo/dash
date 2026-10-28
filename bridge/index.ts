@@ -21,6 +21,7 @@ import { homedir, hostname } from "node:os";
 import { basename, join } from "node:path";
 import {
   CHATS_FEATURE,
+  MESSAGE_TEXT_MAX,
   PROTOCOL_VERSION,
   chatKey,
   parseClientMessage,
@@ -1121,7 +1122,8 @@ const server = Bun.serve<SocketData>({
             const target = hermesSessions.target(message.profileId, message.sessionId);
             const all = (await isSelfHost(message.hostId)) && target
               ? await hermesSessions.history(target.profile, message.sessionId) : [];
-            const page = limit === undefined ? { messages: all, before: null } : hermesWsPage(all, limit);
+            const page = limit === undefined ? { messages: all, before: null } : hermesWsPage(all.map(m => m.text.length > MESSAGE_TEXT_MAX
+              ? { ...m, text: m.text.slice(0, MESSAGE_TEXT_MAX), truncated: true } : m), limit);
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: SELF.id(), profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages: page.messages, ...paging(page.before) });
             break;
           }
