@@ -485,13 +485,17 @@ cmd_follow() {
   done <"$TABLE"
   active="$(cat "$H/active.channel" 2>/dev/null || true)"
   if [[ -n "$active" && "$(link_sha "$H/ch/$active")" != "$(link_sha "$H/active")" ]]; then moved=1; fi
-  if (( moved )); then nightly_run; return; fi
-  [[ -n "$active" ]] || return 0
-  probe_live && return 0
+  local rc=0
+  (( moved )) && { nightly_run || rc=$?; }
+  # A head that failed health keeps `moved` true; the live Metro still has to be alive and compiling.
+  [[ -n "$active" ]] || return "$rc"
+  probe_live && return "$rc"
   log "follow: live Metro failed its bundle probe; restarting it once"
   history "probe-failed $active $(link_sha "$H/active"); restarting Metro"
   restart_metro
-  probe_live || { history "probe still failing after restart $active"; log "follow: still unhealthy after restart"; return 1; }
+  health || { history "probe still failing after restart $active"; log "follow: still unhealthy after restart"; return 1; }
+  history "probe recovered $active $(link_sha "$H/active")"
+  return "$rc"
 }
 
 probe_live() { # 0 when the live Metro serves its manifest and compiles the Android bundle
