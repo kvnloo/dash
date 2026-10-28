@@ -119,7 +119,9 @@
     {"id": "voice-status", "title": "Authenticated bridge voice readiness and backward-compatible hello capabilities",
      "tests": ["voice status diagnoses missing model, rejects anonymous requests, and announces hello",
                "voice status follows fixture STT availability",
-               "voice status accepts either principal and reports disabled native voice"]}
+               "voice status accepts either principal and reports disabled native voice"]},
+    {"id": "stt-does-not-block-bridge", "title": "Worker speech-to-text cannot stall authenticated bridge requests",
+     "tests": ["STT fixture returns text while authenticated bridge GETs stay responsive"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
