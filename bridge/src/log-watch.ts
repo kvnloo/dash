@@ -48,7 +48,7 @@ type SignatureRule = {
 const SIGNATURES: readonly SignatureRule[] = [
   {
     id: "react-native-redbox",
-    pattern: /\bInvariant Violation\b|\bRedBox\b|\bReactNativeJS\b.*\bred[\s-]*box\b/i,
+    pattern: /\bInvariant Violation\b|\bRedBox\b|\b(?:React[\s-]*Native|ReactNativeJS)\b.*\bred[\s-]*box\b/i,
     threshold: 1,
   },
   {
