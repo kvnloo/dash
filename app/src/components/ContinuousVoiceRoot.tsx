@@ -232,7 +232,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
         autoStopTimer.current = setTimeout(() => {
           autoStopTimer.current = null;
           // Timeout is a bounded stop, not a reason to cancel a confirmed chat turn.
-          const preserveWork = successfulAnnotation.current || annotate.get().status === "sent";
+          const preserveWork = successfulAnnotation.current || annotate.get().status === "sent" || pendingFinals.current.size > 0 || !!annotate.get().pendingTurn;
           void latest.current.stop({ preserveWork });
         }, 90_000);
       }
