@@ -160,7 +160,8 @@ function tail(text: string, keep: number): string {
   return text.length <= keep + 1 ? text : `${text.slice(0, keep)}…`;
 }
 
-function middle(text: string, keep: number): string {
+/** Keep `keep` characters of `text`, half from each end, with an ellipsis between them. */
+export function middleTruncate(text: string, keep: number): string {
   if (text.length <= keep + 1) return text;
   const head = Math.ceil(keep / 2);
   return `${text.slice(0, head)}…${text.slice(text.length - (keep - head))}`;
@@ -185,7 +186,15 @@ export function identityLines(input: IdentityInput, budget: number): { who: stri
     join([profile, session]),
   ];
   const who = candidates.find(text => text.length <= budget) ?? join([tail(profile, 6), session]);
-  return { who, model: model.length <= budget ? model : middle(model, Math.max(6, budget - 1)) };
+  return { who, model: model.length <= budget ? model : middleTruncate(model, Math.max(6, budget - 1)) };
+}
+
+/** A session id is never shown wider than this, however much room there is: the ends identify it. */
+export const SESSION_ID_CHARS = 24;
+
+/** One line for a session id: middle-truncated so its recognisable prefix and its distinguishing tail both survive. */
+export function sessionIdLabel(id: string, budget: number): string {
+  return middleTruncate(id, Math.max(8, Math.min(budget, SESSION_ID_CHARS)));
 }
 
 export function identityLabel(input: IdentityInput): string {

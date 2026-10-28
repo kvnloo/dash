@@ -9,7 +9,11 @@ conversation, session and composer; only the presentation differs. Other entry p
   safe-area fallback; a native DisplayCutout reader can pass its rect as `cutout` without UI changes.
 - Bottom: the dock becomes one attached surface: Options menu trigger (`ComposerActionMenu`), the
   identity badge (host · harness · profile · session8 · model; model is `model unknown` until the host
-  reports one) with the shared `Tree`, and the close X on the handedness side.
+  reports one), whose tap opens a compact identity sheet, and the close X on the handedness side.
+  The sheet is flat rows, never a nested tree: one breadcrumb line (host › profile › harness), the
+  session (title, middle-truncated id, copy button; a parent or continuation is indented one level),
+  the model, and a provenance footer inside the sheet (lineage, where the model reading came from,
+  and why the model cannot be changed here).
 - Close (X or Android Back after menu → tree → nav) only pops the window; it never cancels a turn or
   touches voice. Drafts persist per conversation in `store/composer-drafts.ts` (shared with the interaction repair).
 - Motion: transform/opacity only, `snappy` open and `fade` close, reduced motion honoured.
