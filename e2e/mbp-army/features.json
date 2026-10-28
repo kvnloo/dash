@@ -92,6 +92,7 @@
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
     "live model behaviour", "Orchestra / orchestration screens", "handedness",
     "Hermes session history", "notifications and deep links",
-    "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)"
+    "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)",
+    "Android RECORD_AUDIO first-run dialog during dictation and live voice (native, device only)"
   ]
 }
