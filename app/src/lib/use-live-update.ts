@@ -114,6 +114,7 @@ export interface LiveUpdate {
  */
 export function useLiveUpdate(): LiveUpdate {
   const running = runningBuild();
+  const runningSha = running?.sha ?? null;
   const requestedOrigin = webParams?.get("liveOrigin");
   const origin = requestedOrigin !== null && requestedOrigin !== undefined
     ? metroOrigin(requestedOrigin)
@@ -157,7 +158,8 @@ export function useLiveUpdate(): LiveUpdate {
           const manifest = await fetchServedBuild(origin, fetch);
           if (!alive) return;
           if (manifest === null) {
-            // A vanished Metro manifest must not leave a previously verified update reloadable.
+            // Metro may have restarted into a different bundle; revalidate after an outage.
+            if (latestServedKey.current !== null) healthyKeys.current.delete(latestServedKey.current);
             verifiedKey.current = null;
             setBundleHealth(null);
             return;
@@ -170,7 +172,7 @@ export function useLiveUpdate(): LiveUpdate {
           }
           latestServedKey.current = key;
           setServed(build);
-          if (running === null || sameBuild(running, build)) {
+          if (runningSha === null || runningSha === build.sha) {
             verifiedKey.current = null;
             setBundleHealth(null);
             return;
@@ -212,7 +214,7 @@ export function useLiveUpdate(): LiveUpdate {
       clearInterval(tick);
       sub.remove();
     };
-  }, [origin, running?.sha]);
+  }, [origin, runningSha]);
 
   // A reload that landed on the served build clears the retry guard.
   useEffect(() => {
