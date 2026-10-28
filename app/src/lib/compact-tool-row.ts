@@ -104,10 +104,10 @@ export function truncateToolTarget(value: string, maxLength = 48): string {
 }
 
 /**
- * Pure presentation projection. Always use the shared formatter's redacted
- * title, never its raw path or args; redact input before formatter shortening.
+ * Pure presentation projection. Use the bridge's pre-cap summary when available,
+ * otherwise the shared formatter's title; redact before shortening either one.
  */
-export function compactToolRow(tool: FormatTool, harness = "hermes", targetBudget = 48): CompactToolRowModel {
+export function compactToolRow(tool: FormatTool & { summary?: string }, harness = "hermes", targetBudget = 48): CompactToolRowModel {
   const safeTool: FormatTool = {
     name: redactTool(tool.name),
     args: safeArgs(tool.args),
@@ -120,7 +120,10 @@ export function compactToolRow(tool: FormatTool, harness = "hermes", targetBudge
   const family = knownVerb(tool.name);
   const verb = family ?? redactTool(tool.name).replace(/\s+/g, " ").trim();
   const glyph = family ? glyphs[family] : "·";
-  const target = truncateToolTarget(redactTool(formatted.title), targetBudget);
+  // The bridge formats the summary before capping argument previews. A capped
+  // JSON preview cannot be parsed again, but its action summary is still intact.
+  const title = tool.summary?.trim() || formatted.title;
+  const target = truncateToolTarget(redactTool(title), targetBudget);
   const status = compactStatus(tool.status);
   const duration = status === "running" ? undefined : durationLabel(tool.durationMs);
   const spokenStatus = status === "ok" ? "completed" : status === "error" ? "failed" : "running";

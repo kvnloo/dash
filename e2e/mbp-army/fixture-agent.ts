@@ -74,7 +74,13 @@ createInterface({input:process.stdin}).on('line', line => {
   // ARMY_HOLD: no answer until the spec creates $HOME/army-release, so overlap never races a clock.
   const hold = () => { if (existsSync(join(process.env.HOME || '.', 'army-release'))) answer(); else timer = setTimeout(hold, 100); };
   const finish = () => { if (text.includes('ARMY_HOLD')) hold(); else timer = setTimeout(answer, text.includes('ARMY_SLOW') ? 9000 : 350); };
-  if (text.includes('ARMY_TOOLS')) toolTurn(finish, text.includes('ARMY_TOOLS_MANY')); else finish();
+  if (text.includes('ARMY_TOOL_DETAIL')) {
+   // A real write payload can exceed the bridge's 8 KiB preview before its path.
+   // The bridge still formats the action summary from the complete input.
+   tool('army-detail','write_file',{content:'army detail line\n'.repeat(700)+'ARMY_CONTENT_END',path:'/project/release-notes.md'});
+   toolDone('army-detail','ARMY_WRITE_RESULT: release notes saved');
+   finish();
+  } else if (text.includes('ARMY_TOOLS')) toolTurn(finish, text.includes('ARMY_TOOLS_MANY')); else finish();
  } else if (r.method === 'session/cancel') {
   clearTimeout(timer); send({jsonrpc:'2.0',id:active,result:{stopReason:'cancelled'}});
  }
