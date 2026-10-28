@@ -1,16 +1,11 @@
 import { test, expect, openChat, send } from './fixtures';
-import type { DashDebugApi } from '../../app/src/debug/expose';
 
-// Simulate only the hardware input through the existing cutout fixture. Start at the
-// unpaired scenario; all pairing, chat creation and replies still use the real isolated bridge.
+declare global { interface Window { __dashCutout?: { simulate(reading: unknown): void } } }
+
+// Simulate only the hardware input (the DisplayCutout reading) through window.__dashCutout, the
+// web counterpart of __dashDex. Pairing, chat creation and replies use the real isolated bridge.
 test('camera pill and hole stay centred on a simulated non-square cutout rect', async ({ page, bridge }, info) => {
   await page.setViewportSize({ width: 390, height: 780 });
-  await page.addInitScript(() => {
-    const url = new URL(location.href);
-    url.searchParams.set('debug', '1');
-    url.searchParams.set('scenario', 'pair');
-    history.replaceState(null, '', url);
-  });
   await openChat(page, bridge);
   await send(page, 'camera geometry journey');
   await expect(page.getByText(/ARMY_REPLY: camera geometry journey/).first()).toBeVisible();
@@ -22,12 +17,11 @@ test('camera pill and hole stay centred on a simulated non-square cutout rect', 
     { x: 70, y: 0, width: 30, height: 18 },
   ]) {
     await page.evaluate(async rect => {
-      const api: DashDebugApi | undefined = window.__DASH_DEBUG__;
-      if (!api) throw Error('Existing hardware fixture API was not exposed');
-      await api.run({ action: 'setCutoutFixture', reading: {
+      if (!window.__dashCutout) throw Error('The web cutout simulation hook is missing');
+      window.__dashCutout.simulate({
         supported: true, rects: [rect], windowWidth: innerWidth, windowHeight: innerHeight,
         safeInsetTop: 44, rotation: 0,
-      } });
+      });
     }, rect);
     const pill = page.getByTestId('chat-window-pill');
     const hole = page.getByTestId('chat-window-pill-hole');
@@ -46,9 +40,8 @@ test('camera pill and hole stay centred on a simulated non-square cutout rect', 
 
   // Losing the hardware reading must restore the honest safe-area capsule, not a guessed lens.
   await page.evaluate(async () => {
-    const api: DashDebugApi | undefined = window.__DASH_DEBUG__;
-    if (!api) throw Error('Existing hardware fixture API was not exposed');
-    await api.run({ action: 'setCutoutFixture', reading: null });
+    if (!window.__dashCutout) throw Error('The web cutout simulation hook is missing');
+    window.__dashCutout.simulate(null);
   });
   await expect(page.getByTestId('chat-window-pill-hole')).toHaveCount(0);
   await expect(page.getByTestId('chat-window-pill')).toBeVisible();
