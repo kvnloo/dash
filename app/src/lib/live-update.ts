@@ -56,6 +56,11 @@ export function metroOrigin(hostUri: unknown): string | null {
   return scheme + "://" + host + (port ? ":" + port : "");
 }
 
+/** Origin of the bundle URL the app was loaded from (SourceCode.scriptURL); null for embedded bundles. */
+export function scriptUrlOrigin(scriptUrl: unknown): string | null {
+  return typeof scriptUrl === "string" && /^https?:\/\//.test(scriptUrl.trim()) ? metroOrigin(scriptUrl) : null;
+}
+
 export interface MetroEndpoint {
   id: "turbo" | "channel";
   label: string;

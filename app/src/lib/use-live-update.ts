@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, DevSettings, Keyboard, Linking } from "react-native";
+import { AppState, DevSettings, Keyboard, Linking, NativeModules } from "react-native";
 import {
   POLL_MS,
   RUNNING_BUILD,
@@ -11,6 +11,7 @@ import {
   fetchServedBuild,
   metroOrigin,
   reloadBlockedBy,
+  scriptUrlOrigin,
   type LiveBuild,
   type MetroEndpoint,
   type ReloadDecision,
@@ -44,6 +45,18 @@ function appScheme(): string {
   return "dash";
 }
 
+/** Where this bundle was fetched from: the origin a reload will fetch from again. */
+function bundleOrigin(): string | null {
+  const source: unknown = NativeModules.SourceCode;
+  if (typeof source !== "object" || source === null) return null;
+  if ("scriptURL" in source) return scriptUrlOrigin(source.scriptURL);
+  if ("getConstants" in source && typeof source.getConstants === "function") {
+    const constants: unknown = source.getConstants();
+    if (typeof constants === "object" && constants !== null && "scriptURL" in constants) return scriptUrlOrigin(constants.scriptURL);
+  }
+  return null;
+}
+
 export interface LiveUpdate {
   running: LiveBuild | null;
   served: LiveBuild | null;
@@ -60,7 +73,7 @@ export interface LiveUpdate {
  * (when the owner returns to it, or after 30 s without a touch), unless a guard says busy.
  */
 export function useLiveUpdate(): LiveUpdate {
-  const origin = RUNNING_BUILD === null ? null : metroOrigin(Constants.expoConfig?.hostUri);
+  const origin = RUNNING_BUILD === null ? null : bundleOrigin() ?? metroOrigin(Constants.expoConfig?.hostUri);
   const [served, setServed] = useState<LiveBuild | null>(null);
   const [autoReload, setAutoState] = useState(true);
   const [lastAutoFor, setLastAutoFor] = useState<string | null>(null);
