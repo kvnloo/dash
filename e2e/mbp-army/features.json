@@ -170,10 +170,12 @@
     {"id": "main-bar-mic", "title": "The main bar mic dictates into the cursor or hold-slides to autostart Live without breaking the composer mic",
      "tests": ["main mic tap then tap inserts the real bridge STT fixture transcript",
                "main mic hold and slide up opens Voice and attempts Live autostart",
-               "chat composer mic still dictates through the real bridge fixture"]}
+               "chat composer mic still dictates through the real bridge fixture"]},
+    {"id": "live-voice-states", "title": "Web-army live voice session, transcript, broker delivery and clean mute/teardown",
+     "tests": ["live voice moves connecting listening hearing thinking speaking listening and ends cleanly"]}
   ],
   "not_yet_in_army": [
-    "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
+    "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",
     "live model behaviour", "Orchestra / orchestration screens", "handedness",
     "Hermes session history", "notifications and deep links",
     "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)",
