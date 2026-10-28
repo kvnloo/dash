@@ -8,4 +8,8 @@ try {
     CREATE TABLE task_events (id INTEGER PRIMARY KEY, task_id TEXT, kind TEXT, payload TEXT, created_at INTEGER);`);
   db.query('INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?)').run('army-board-blocked', 'Fixture current board blocker', 'blocked', 9, 'capability', null, stamp);
   db.query('INSERT INTO task_events VALUES (?, ?, ?, ?, ?)').run(1, 'army-board-blocked', 'blocked', JSON.stringify({ reason: 'Fixture credential is missing' }), stamp);
+  // A resumed task may retain old blocker metadata; it must not appear blocked.
+  db.query('INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?)').run('army-board-running', 'Fixture current running work', 'running', 9, 'needs_input', 'Old resolved failure', stamp);
+  db.query('INSERT INTO task_events VALUES (?, ?, ?, ?, ?)').run(2, 'army-board-running', 'blocked', JSON.stringify({ reason: 'Old resolved blocker' }), stamp - 60);
+  db.query('INSERT INTO task_events VALUES (?, ?, ?, ?, ?)').run(3, 'army-board-running', 'claimed', null, stamp);
 } finally { db.close(); }

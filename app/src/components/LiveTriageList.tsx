@@ -44,14 +44,14 @@ export function LiveTriageList() {
   const items = feed.phase === 'live' ? [...feed.snapshot.items].sort((a, b) => Number(triageStale(a, now)) - Number(triageStale(b, now)) || a.priority - b.priority || rank(a) - rank(b) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.id.localeCompare(b.id)) : [];
   const open = items.find(i => i.id === selected);
   return <View style={s.root}>
-    <Text style={s.heading}>What needs you, in priority order</Text>
+    <Text style={s.heading}>Current work and priorities</Text>
     {feed.phase !== 'live' ? <Text accessibilityRole="alert" style={s.meta}>{feed.phase === 'loading' ? 'Loading current priorities…' : `Triage unavailable · ${feed.reason}`}</Text> : null}
     {feed.phase === 'live' && feed.snapshot.warnings.length ? <Text style={s.meta}>{feed.snapshot.warnings.join(' · ')}</Text> : null}
     <ScrollView testID="live-triage-list" contentContainerStyle={s.list}>
-      {feed.phase === 'live' && !items.length ? <Text style={s.meta}>No current blockers or owner-needed items reported. Missing sources are listed above.</Text> : null}
+      {feed.phase === 'live' && !items.length ? <Text style={s.meta}>No running work, blockers or owner-needed items reported. Missing sources are listed above.</Text> : null}
       {items.map(item => <PressScale key={item.id} accessibilityRole="button" accessibilityLabel={`Open ${item.title}`} onPress={() => setSelected(item.id)} testID={`triage-item-${item.id}`} style={[s.card, triageStale(item, now) && s.stale]}>
         <Text style={s.title}>{item.title}</Text>
-        <Text style={s.meta}>{triageStale(item, now) ? 'Stale · not current' : item.kind === 'blocked' ? 'Running · blocked' : item.kind === 'owner' ? 'Needs you' : 'Waiting on you'} · P{item.priority} · {triageAge(item, now)}</Text>
+        <Text style={s.meta}>{triageStale(item, now) ? 'Stale · not current' : item.kind === 'running' ? 'Running · board status' : item.kind === 'blocked' ? 'Running · blocked' : item.kind === 'owner' ? 'Needs you' : 'Waiting on you'} · P{item.priority} · {triageAge(item, now)}</Text>
         <Text style={s.body}>{item.next}</Text>
         <Text style={s.meta}>{item.source}</Text>
       </PressScale>)}

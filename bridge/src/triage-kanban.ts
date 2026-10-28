@@ -30,13 +30,18 @@ export function kanbanTriage(): { items: TriageItem[]; warnings: string[] } {
       db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=100;');
       const rows = db.query<{ id: string; title: string; status: string; priority: number; block_kind: string | null; last_failure_error: string | null; updated: number }, []>(`SELECT t.id, t.title, t.status, t.priority, t.block_kind, t.last_failure_error,
         coalesce((SELECT max(e.created_at) FROM task_events e WHERE e.task_id=t.id AND e.kind NOT IN ('heartbeat','considered')), t.created_at) AS updated
-        FROM tasks t WHERE t.status IN ('blocked','triage') ORDER BY t.priority DESC, t.created_at DESC LIMIT 100`).all();
+        FROM tasks t WHERE t.status IN ('running','blocked','triage') ORDER BY t.priority DESC, t.created_at DESC LIMIT 100`).all();
       for (const row of rows) {
+        const stamp = Number.isFinite(row.updated) && row.updated > 0 ? row.updated * 1000 : null;
+        const priority = Math.max(0, 3 - Math.min(3, Math.floor(row.priority / 3)));
+        if (row.status === 'running') {
+          items.push({ id: `kanban:${board}:${row.id}`, title: redact(row.title), reason: 'The work board records this task as running. Process liveness is not independently verified.', next: 'Inspect current work and its latest progress', kind: 'running', priority, updatedAt: stamp, sourceUpdatedAt: stamp, source: `Work board · ${row.id}` });
+          continue;
+        }
         const event = db.query<{ payload: string | null }, [string]>("SELECT payload FROM task_events WHERE task_id=? AND kind='blocked' ORDER BY id DESC LIMIT 1").get(row.id);
         let payload: unknown;
         try { payload = JSON.parse(event?.payload ?? 'null'); } catch { /* Legacy block without structured payload. */ }
         const reason = record(payload) && typeof payload.reason === 'string' ? payload.reason : row.last_failure_error || row.block_kind || 'Review blocked work';
-        const stamp = Number.isFinite(row.updated) && row.updated > 0 ? row.updated * 1000 : null;
         items.push({ id: `kanban:${board}:${row.id}`, title: redact(row.title), reason: redact(reason), next: row.block_kind === 'needs_input' || row.status === 'triage' ? 'Review the blocker and supply the owner decision' : 'Inspect the blocker and resume work when its dependency is resolved', kind: row.block_kind === 'needs_input' || row.status === 'triage' ? 'owner' : 'blocked', priority: Math.max(0, 3 - Math.min(3, Math.floor(row.priority / 3))), updatedAt: stamp, sourceUpdatedAt: stamp, source: `Work board · ${row.id}` });
       }
     } catch { warnings.push('Work board unavailable'); } finally { db?.close(); }

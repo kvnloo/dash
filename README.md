@@ -59,6 +59,11 @@ In debug mode, `window.__DASH_DEBUG__` exposes `scenario(id)`, `run({ action })`
 
 See `AGENTS.md` for multi-agent ownership rules.
 
+Triage includes running work from the canonical Hermes work board alongside
+blockers and owner-needed priorities. “Running · board status” reports the
+board's state, not independently verified process liveness. Source ages and
+stale labels remain visible; resumed work does not reuse an old blocker reason.
+
 ## Contributing / AI Agents
 
 - **Contributing guide:** See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute (unattended compute donation vs copilot paired PR workflow).
