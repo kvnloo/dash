@@ -6,8 +6,9 @@ on:
     branches: [main, preview, nightly, dev, 'integrate/**', 'integ/**']
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded PR updates may cancel; each integration push keeps its own O15 army receipt.
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
@@ -78,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gate: [typecheck, lint]
+        gate: [typecheck, lint, android-export]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -96,9 +97,13 @@ jobs:
       - name: Lint
         if: matrix.gate == 'lint'
         run: bun run lint
+      - name: Android Metro export (turbo)
+        if: matrix.gate == 'android-export'
+        run: bash scripts/ci-android-export.sh
 
   required-gates:
     if: always()
+    # The checks matrix succeeds only if typecheck, lint and android-export all pass.
     needs: [test, checks]
     runs-on: ubuntu-latest
     steps:
