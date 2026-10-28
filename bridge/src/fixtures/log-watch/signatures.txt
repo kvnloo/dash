@@ -1,0 +1,10 @@
+react-native-redbox|app|ReactNativeJS: Invariant Violation: Invalid child at render (/data/user/0/com.dash/App123.tsx:48:7)
+typeerror-undefined|app|TypeError: undefined is not an object (evaluating 'store.chat') at select (C:\Users\Dash\Store321.ts:17:2)
+unhandled-rejection|app|Possible Unhandled Promise Rejection (id: 12): Error: failed at fetch (file:///app/src/async42.ts:22:6)
+android-fatal-exception|device|E/AndroidRuntime: FATAL EXCEPTION: main at android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3636)
+android-anr|device|ActivityManager: ANR in com.dash.agent at retry (/app/src/Loop12.ts:88:1)
+js-stack-overflow|app|RangeError: Maximum call stack size exceeded at loop (/app/src/Loop19.ts:89:1)
+bridge-eaddrinuse|bridge|Error: listen EADDRINUSE: address already in use 0.0.0.0:4747 at serve (/bridge/src/index23.ts:68:8)
+bridge-econnrefused-burst|bridge|connect ECONNREFUSED 127.0.0.1:4747 at dial (/bridge/src/socket11.ts:31:1)
+hermes-auth-burst|bridge|Hermes gateway returned HTTP 401 Unauthorized at auth (/bridge/src/hermes-session42.ts:71:1)
+out-of-memory|device|lowmemorykiller: Killing 'com.dash' to reclaim memory
