@@ -141,7 +141,11 @@
     {"id": "live-reload-guards", "title": "Defer auto-reload during streaming, annotation, and drafts; flush a draft before manual reload",
      "tests": ["live-reload-guards: a streaming agent reply holds the update until done","live-reload-guards: annotation holds an update until Exit","live-reload-guards: a nonempty unsent draft holds an update","live-reload-guards: manual Reload now flushes a sub-debounce draft before reload"]},
     {"id": "live-preview-health", "title": "Never reload a served SHA until its launch bundle responds HTTP 200",
-     "tests": ["live-preview-health: an HTTP 500 bundle cannot reload until the same SHA builds", "live-preview-health: rollback to the old SHA preserves the attempted SHA retry guard"]}
+     "tests": ["live-preview-health: an HTTP 500 bundle cannot reload until the same SHA builds", "live-preview-health: rollback to the old SHA preserves the attempted SHA retry guard"]},
+    {"id": "chat-row-preview", "title": "Chats list rows preview an empty chat, an agent failure, a reply in flight and the last reply (#437, PR #483)",
+     "tests": ["Chats list rows preview an empty chat, an agent failure, a reply in flight, and the last reply"]},
+    {"id": "harness-hold-menu", "title": "Holding the Harness row in the chat options lists the harnesses; choosing one switches without sending (#277, PR #210)",
+     "tests": ["holding the Harness row in the chat options lists the harnesses and choosing one switches without sending"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
