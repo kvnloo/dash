@@ -75,6 +75,7 @@ export class AcpClient {
   private sequence = 0;
   private sessionId?: string;
   private prompting = false;
+  private promptRequest?: Promise<unknown>;
   private phaseUpdate?: Record<string, unknown>;
   private parts = new PartEmitter(part => this.options.sink.part?.(part));
   private thinking = new TurnPhase(text => this.options.sink.status(text, this.phaseUpdate && this.sessionId ? { sessionId: this.sessionId, update: this.phaseUpdate } : undefined));
@@ -282,10 +283,11 @@ export class AcpClient {
     this.options.sink.session(this.sessionId);
     this.prompting = true;
     this.phase = "session/prompt";
-    const result = await this.request("session/prompt", {
+    this.promptRequest = this.request("session/prompt", {
       sessionId: this.sessionId,
       prompt: acpPromptBlocks(input, promptImages(initialized)),
     });
+    const result = await this.promptRequest;
     this.prompting = false;
     if (!record(result) || typeof result.stopReason !== "string") throw new Error("ACP prompt missing stop reason");
     if (result.stopReason === "cancelled") throw new Error("ACP turn cancelled");
@@ -295,6 +297,20 @@ export class AcpClient {
 
   async cancel(): Promise<void> {
     if (this.sessionId) this.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: this.sessionId } });
+    if (this.promptRequest) {
+      // Keep stdin and the process alive until the agent handles cancel. An unresponsive
+      // agent still gets the existing forced shutdown after this bounded grace period.
+      let grace: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          this.promptRequest.then(() => undefined, () => undefined),
+          this.exit,
+          new Promise<void>(resolve => { grace = setTimeout(resolve, 1500); }),
+        ]);
+      } finally {
+        clearTimeout(grace);
+      }
+    }
     this.fail(new Error("ACP turn cancelled"));
     await this.close();
   }
