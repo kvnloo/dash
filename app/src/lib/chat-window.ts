@@ -235,12 +235,10 @@ export interface PillStatusInput {
   queued: number;
 }
 
-/** What the pill says. Only observed facts; idle says nothing beyond the title. */
+/** Navigation status only; live turn activity belongs to the transcript. */
 export function pillStatus(input: PillStatusInput): string[] {
   const parts: string[] = [];
   if (!input.online) parts.push("offline");
-  else if (input.phase === "tool") parts.push(input.tool ? `running ${input.tool}` : "running tool");
-  else if (input.phase !== "idle") parts.push("working");
   if (input.voicePhase) parts.push(`voice ${input.voicePhase}`);
   if (input.queued > 0) parts.push(`${input.queued} queued`);
   return parts;
@@ -251,14 +249,12 @@ export const STATUS_CHARS = 12;
 export type PillGlyph = "wifi-off" | "mic" | "tool" | "activity" | "layers";
 /**
  * The one status the pill shows next to the title. Its slot is reserved, so the title truncates
- * first. Priority: offline, live voice, running tool, working, queued. Idle shows nothing.
+ * first. Priority: offline, live voice, queued. Turn activity stays in the transcript.
  */
 export function pillPrimary(input: PillStatusInput): { glyph: PillGlyph; text: string } | null {
   const fit = (text: string) => tail(text, STATUS_CHARS - 1);
   if (!input.online) return { glyph: "wifi-off", text: "offline" };
   if (input.voicePhase) return { glyph: "mic", text: fit(input.voicePhase) };
-  if (input.phase === "tool") return { glyph: "tool", text: fit(input.tool ?? "tool") };
-  if (input.phase !== "idle") return { glyph: "activity", text: "working" };
   if (input.queued > 0) return { glyph: "layers", text: fit(`${input.queued} queued`) };
   return null;
 }
