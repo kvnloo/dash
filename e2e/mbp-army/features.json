@@ -94,7 +94,10 @@
                "two windows sending into one chat at the same moment: the second waits and is answered after the first"]},
     {"id": "provider-failures", "title": "A provider that is out of usage (402) or rate limiting (429) is named in the chat, never as a host authentication problem (#501)",
      "tests": ["a provider 402 says the agent's account is out of usage, and the chat stays usable",
-               "a provider 429 says the host is being rate limited, and the chat stays usable"]}
+               "a provider 429 says the host is being rate limited, and the chat stays usable"]},
+    {"id": "annotation-voice-target", "title": "Annotated ink reaches the open chat; a bound voice call stays alive to speak a final reply before ending",
+     "tests": ["annotation-voice-target: OMP chat beats a voice call bound to Hermes",
+               "annotation-voice-target: accepted Hermes ink stays live until spoken reply without cancel"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
