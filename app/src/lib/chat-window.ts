@@ -113,6 +113,7 @@ export function backTarget(state: { menuOpen: boolean; treeOpen: boolean; navOpe
 }
 
 export interface IdentityInput {
+  hostId?: string;
   hostName?: string;
   harnessName: string;
   profile?: string;

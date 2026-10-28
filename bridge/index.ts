@@ -88,6 +88,7 @@ import { ThinkingSummarizer } from "./src/thinking-summary";
 import { TurnSummaries } from "./src/turn-summaries";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
 import { createOrchestraHttpHandler } from "./src/orchestra-http";
+import { createHostsHttpHandler } from "./src/hosts-http";
 import { createRoadmapHttpHandler } from "./src/roadmap-http";
 import { createPmHttpHandler } from "./src/pm-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
@@ -792,6 +793,7 @@ const handleChats = createChatsHttpHandler({
 const contextCompaction = compactionEnabled();
 const handleContext = contextHttp({ sessions: hermesSessions, compaction: contextCompaction });
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
+const handleHosts = createHostsHttpHandler({ authorize, hostId: () => SELF.id() });
 const handleRoadmap = createRoadmapHttpHandler({ authorize });
 const handlePm = createPmHttpHandler({ authorize });
 const handleModels = createModelsHttpHandler({ authorize });
@@ -840,6 +842,8 @@ const server = Bun.serve<SocketData>({
       if (url.pathname === "/chat/context/compact" && request.method === "POST" && contextCompaction) server.timeout(request, 255);
       const context = await handleContext(request, await authorize(request));
       if (context) return cors(context);
+      const hosts = await handleHosts(request);
+      if (hosts) return cors(hosts);
       const orchestra = await handleOrchestra(request);
       if (orchestra) return cors(orchestra);
       const roadmap = await handleRoadmap(request);

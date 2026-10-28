@@ -369,12 +369,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const identity = useMemo((): IdentityInput => ({
     // A chat-index host (`machine:<name>`) that the roster does not list: show the machine name.
     hostName: conversation?.targetHostId ? connection.hosts.find(host => host.id === conversation.targetHostId)?.name ?? conversation.targetHostId.replace(/^machine:/, "") : selfHost?.name ?? (connection.host || undefined),
+    hostId: conversation?.targetHostId ?? selfHost?.id,
     harnessName,
     profile: conversation?.profileName ?? conversation?.profileId,
     sessionId: conversation?.sessionId,
     // Never a default name: unknown unless the host reported it for this exact session.
     ...hostIdentity(hostReading ?? undefined, conversation?.sessionId, observedAt),
-  }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, connection.hosts, connection.host, selfHost?.name, harnessName, hostReading, observedAt]);
+  }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, connection.hosts, connection.host, selfHost?.id, selfHost?.name, harnessName, hostReading, observedAt]);
   const queuedCount = conversation ? queuedParts(conversation).length : 0;
   const detailMode = conversation?.detailMode ?? "Compact";
   const menuRows = useMemo((): ComposerMenuRow[] => {

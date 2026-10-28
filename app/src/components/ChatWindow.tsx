@@ -29,6 +29,7 @@ import { useHandedness } from "../lib/useHandedness";
 import { fade, snappy } from "../motion";
 import { colors, glass, radius, space, type } from "../theme";
 import { AgentOrb } from "./AgentOrb";
+import { HostStatsRow } from "./HostStatsRow";
 
 /**
  * Open/close morph for the chat window. The window is laid out at its final size on the first
@@ -206,6 +207,7 @@ export function WindowDock({ identity, title, options, treeOpen, onTree, onClose
           {crumbs.map((crumb, index) => <Text key={index}>{index > 0 ? <Text style={styles.crumbSep}>{"  ›  "}</Text> : null}{crumb}</Text>)}
         </Text>
       </SheetRow>
+      <HostStatsRow key={identity.hostId} hostId={identity.hostId} />
       {parentFirst && identity.parentSessionId ? <IdRow icon="corner-up-left" caption={<Text style={styles.sheetCaption}>Parent session · reported by host</Text>}
         id={identity.parentSessionId} chars={idChars} what="parent session id" testID="chat-window-parent-id" /> : null}
       {identity.sessionId
