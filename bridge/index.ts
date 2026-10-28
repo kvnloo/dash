@@ -141,6 +141,8 @@ class Turn implements Sink {
   readonly events: TurnEvent[] = [];
   readonly listeners = new Set<Socket>();
   finished = false;
+  /** True only after the final done frame has been emitted to listeners. */
+  settled = false;
 
   readonly details = new ToolDetails();
   part(part: ReplyPart): void {
@@ -513,6 +515,7 @@ class Turn implements Sink {
     this.finished = true;
     const done = () => {
       this.emit({ type: "done", id: this.id, seq: 0, exitCode });
+      this.settled = true;
       maybeFinishDrain();
     };
     if (this.summaries) void this.summaries.finish().then(done, done);
@@ -544,12 +547,12 @@ const turns = new Map<string, Turn>();
 /** Retained finished turns are replayable but never count as running agents. */
 function runningTurns(): number {
   let running = 0;
-  for (const turn of turns.values()) if (!turn.finished) running++;
+  for (const turn of turns.values()) if (!turn.settled) running++;
   return running;
 }
 function activeVoiceSessions(): number {
   let voice = 0;
-  for (const turn of turns.values()) if (!turn.finished && turn.voice) voice++;
+  for (const turn of turns.values()) if (!turn.settled && turn.voice) voice++;
   return voice;
 }
 
