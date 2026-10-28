@@ -802,6 +802,7 @@ function liveChats(): ChatSummary[] {
     out.push({
       key, kind: agent.kind, sessionId: agent.sessionId, hostId: SELF.id(), hostName: self.name, ...(profileId ? { profileId } : {}), agentId: agent.id,
       title: agent.name, ...(agent.cwd ? { cwd: agent.cwd } : {}), startedAt: since, lastActivityAt: agent.lastActivityAt ?? since,
+      ...(agent.model ? { model: agent.model } : {}),
       messageCount: agent.messageCount ?? 0, origin: "live", chatable: isCatalogHarness(agent.kind),
       ...(agent.status === "running" ? { running: true } : {}), ...(agent.openIn ? { openIn: agent.openIn } : {}),
     });

@@ -368,8 +368,10 @@ export function openChat(summary: ChatSummary): Conversation {
   const { conversations } = store.get();
   const existing = conversations.find(c => conversationKey(c) === summary.key);
   if (existing) {
+    const updated = summary.model ? { ...existing, sessionModel: { sessionId: summary.sessionId, model: summary.model } } : existing;
+    if (updated !== existing) store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id === existing.id ? updated : c) }));
     setActive(existing.id);
-    return existing;
+    return updated;
   }
   let conversation = adoptSummary(summary, Date.now());
   if (conversations.some(c => c.id === conversation.id)) conversation = { ...conversation, id: `${conversation.id}:${summary.hostId}` };

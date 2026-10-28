@@ -11,7 +11,7 @@ export const AGENTSVIEW_KINDS = ["omp", "codex", "claude", "grok"] as const;
 export const AGENTSVIEW_PREFIX = "av:";
 
 type Row = { id: string; agent: string; project: string; cwd: string | null; title: string | null;
-  started_at: string | null; ended_at: string | null; message_count: number };
+  started_at: string | null; ended_at: string | null; message_count: number; model?: string | null };
 
 export function agentsviewPath(env: Record<string, string | undefined> = process.env): string | undefined {
   if (env.DASH_AGENTSVIEW === "0") return undefined;
@@ -71,6 +71,7 @@ export function agentsviewRow(row: Row): AgentInfo {
     lastActivityAt: stamp(row.ended_at) || stamp(row.started_at),
     messageCount: row.message_count,
     source: "agentsview",
+    ...(row.model ? { model: row.model } : {}),
   };
 }
 

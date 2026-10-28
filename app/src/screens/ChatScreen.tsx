@@ -373,9 +373,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     harnessName,
     profile: conversation?.profileName ?? conversation?.profileId,
     sessionId: conversation?.sessionId,
+    // Summary/roster model is exact-session metadata; a fresh context reading takes precedence.
+    ...(conversation?.sessionModel?.sessionId === conversation?.sessionId && conversation?.sessionModel
+      ? { model: conversation.sessionModel.model } : {}),
     // Never a default name: unknown unless the host reported it for this exact session.
     ...hostIdentity(hostReading ?? undefined, conversation?.sessionId, observedAt),
-  }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, connection.hosts, connection.host, selfHost?.id, selfHost?.name, harnessName, hostReading, observedAt]);
+  }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, conversation?.sessionModel, connection.hosts, connection.host, selfHost?.id, selfHost?.name, harnessName, hostReading, observedAt]);
   const queuedCount = conversation ? queuedParts(conversation).length : 0;
   const detailMode = conversation?.detailMode ?? "Compact";
   const menuRows = useMemo((): ComposerMenuRow[] => {

@@ -117,6 +117,8 @@ export interface Conversation {
   targetHostId?: string;
   profileId?: string;
   profileName?: string;
+  /** Model from a host summary/roster, bound to the reported session. */
+  sessionModel?: { sessionId: string; model: string };
   messageCount?: number;
   /** Live host surface holding this chat open (e.g. "CLI"); replies wait for it. */
   openIn?: string;
@@ -271,6 +273,8 @@ export function parseConversation(raw: unknown): Conversation | null {
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     sessionId: optionalId(raw.sessionId),
+    sessionModel: isRecord(raw.sessionModel) && nonBlank(raw.sessionModel.sessionId) && nonBlank(raw.sessionModel.model)
+      ? { sessionId: raw.sessionModel.sessionId, model: raw.sessionModel.model } : undefined,
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
     targetHostId: optionalId(raw.targetHostId),
     profileId: optionalId(raw.profileId),

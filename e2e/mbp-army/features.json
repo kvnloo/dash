@@ -82,6 +82,8 @@
      "tests": ["a missing roster row must not terminate a bridge-owned running turn"]},
     {"id": "long-press-menu", "title": "Long-press on a chat row opens the row menu and sends nothing",
      "tests": ["long-press on a chat row opens the row menu and sends nothing"]},
+    {"id": "claude-session-model", "title": "Claude Code session model from host metadata appears in the chat header",
+     "tests": ["fixture Claude session model shows in the chat header"]},
     {"id": "claude-code-send", "title": "Claude Code chats send: a new chat and an archived chat recorded on this host",
      "tests": ["send to a new Claude Code chat gets a streamed reply",
                "opens sendable (not view-only) from Chats and gets a streamed reply"]},
