@@ -34,10 +34,7 @@ export interface TargetSwitcherBadgeProps {
   onSwitch(intent: TargetSwitchIntent): TargetSwitchResult | Promise<TargetSwitchResult>;
 }
 
-/**
- * Optional, standalone header control. It is not mounted by the parallel lane;
- * Hermes owns integration with ChatScreen and the authenticated model setter.
- */
+/** Window-dock routing control. Authenticated inventory and route changes come from ChatScreen. */
 export function TargetSwitcherBadge({ inventory, onSwitch }: TargetSwitcherBadgeProps) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);

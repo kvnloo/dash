@@ -1,5 +1,7 @@
 import { applyGateMessage } from "../store/approvals";
 import { createPermissionsStore } from "../store/permissions";
+import { createReconnectLifecycle } from "../lib/reconnect-lifecycle";
+import { reconnectStore } from "../store/reconnect";
 import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
 import { CHATS_FEATURE, parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
 import { agentNoticeInbox, noticeFailure } from "../store/notices";
@@ -35,11 +37,9 @@ import {
   streamingTurns,
 } from "../store/app";
 
-const BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
 /** Newest history page size when the bridge pages history (chats.v1). */
 const HISTORY_HEAD = 50;
 const DELTA_FLUSH_MS = 32;
-const CONNECT_TIMEOUT_MS = 8000;
 
 export function wsUrl(settings: Settings): string {
   return socketUrl(settings);
@@ -49,10 +49,27 @@ class Bridge {
   private ws: WebSocket | null = null;
   private connectEpoch = 0;
   private settings: Settings | null = null;
-  private attempt = 0;
-  private retryTimer: ReturnType<typeof setTimeout> | undefined;
-  private connectTimer: ReturnType<typeof setTimeout> | undefined;
   private rosterTimer: ReturnType<typeof setInterval> | undefined;
+  /** One owner for hello deadlines, bounded retry timing, foreground and stale generations. */
+  private reconnect = createReconnectLifecycle({
+    now: () => Date.now(),
+    setTimeout: (callback: () => void, delay: number) => setTimeout(callback, delay),
+    clearTimeout: (handle: ReturnType<typeof setTimeout>) => clearTimeout(handle),
+  }, {
+    connect: generation => { void this.connectNow(generation); },
+    abort: () => {
+      // Also invalidate an in-flight executionToken() resolution, not just an open socket.
+      this.connectEpoch += 1;
+      this.clearTimers();
+      this.teardownSocket();
+    },
+    publish: snapshot => {
+      reconnectStore.set(snapshot);
+      if (snapshot.phase === "waiting" || snapshot.phase === "paused" || snapshot.phase === "blocked") {
+        setConnection({ status: "offline", error: snapshot.reason });
+      }
+    },
+  });
   private stopKeepalive: (() => void) | undefined;
   private pending = new Map<string, { text: string; seq: number }>();
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -76,9 +93,14 @@ class Bridge {
     RNAppState.addEventListener("change", (next) => {
       const wasBackground = this.appState !== "active";
       this.appState = next;
-      // Coming back to the foreground: don't wait out the backoff.
-      if (next === "active" && wasBackground && this.settings && !this.isOpen()) this.connectNow();
-      else if (next === "active" && wasBackground) void this.returnToPrimary();
+      if (next !== "active") {
+        this.reconnect.background();
+      } else if (wasBackground && this.settings) {
+        // A stale half-open socket must also be retired on foreground.
+        if (!this.isOpen() && this.reconnect.snapshot().phase === "online") this.reconnect.start();
+        else this.reconnect.foreground();
+        if (this.isOpen()) void this.returnToPrimary();
+      }
     });
   }
 
@@ -90,6 +112,7 @@ class Bridge {
     this.settings = settings;
     this.failover = options?.failover ?? true;
     if (isDebugMode()) {
+      this.reconnect.stop();
       this.clearTimers();
       this.teardownSocket();
       const harnesses = store.get().connection.harnesses;
@@ -114,23 +137,24 @@ class Bridge {
       });
       return;
     }
-    this.attempt = 0;
-    this.teardownSocket();
-    this.connectNow();
+    // Retire the previous connection, reset failures and immediately dial this pairing.
+    this.connectEpoch += 1;
+    this.reconnect.start(this.appState === "active" || Platform.OS === "web");
   }
 
   stop(): void {
     this.settings = null;
+    this.reconnect.stop();
+    this.connectEpoch += 1;
     this.clearTimers();
     this.teardownSocket();
     setConnection({ status: "idle", error: undefined });
   }
 
-  /** User-initiated retry (tap on the offline pill). */
+  /** User-initiated retry (both the existing ConnectionPill and ReconnectNotice). */
   retry(): void {
     if (!this.settings) return;
-    this.attempt = 0;
-    this.connectNow();
+    this.reconnect.retry();
   }
 
   isOpen(): boolean {
@@ -145,8 +169,8 @@ class Bridge {
     return true;
   }
 
-  private async connectNow(): Promise<void> {
-    if (!this.settings) return;
+  private async connectNow(generation: number): Promise<void> {
+    if (!this.settings || this.reconnect.snapshot().generation !== generation) return;
     this.clearTimers();
     this.teardownSocket();
     setConnection({ status: "connecting", error: undefined });
@@ -159,22 +183,14 @@ class Bridge {
       if (this.settings !== settings || this.connectEpoch !== epoch) return;
       ws = token ? headerSocket(wsUrl(settings), token) : new WebSocket(wsUrl(settings));
     } catch (error) {
-      if (this.settings === settings && this.connectEpoch === epoch) this.onClosed(error instanceof Error ? error.message : "Identity connection failed");
+      if (this.settings === settings && this.connectEpoch === epoch) this.onClosed(error instanceof Error ? error.message : "Identity connection failed", generation);
       return;
     }
     this.ws = ws;
-    this.connectTimer = setTimeout(() => {
-      if (this.ws === ws && ws.readyState !== WebSocket.OPEN) {
-        // Detach first so the later onclose of this socket cannot run onClosed a second time.
-        this.ws = null;
-        ws.close();
-        this.onClosed("Timed out connecting");
-      }
-    }, CONNECT_TIMEOUT_MS);
+    // The lifecycle watchdog covers both WebSocket OPEN and authenticated hello.
     ws.onopen = () => {
       if (this.ws !== ws) return;
-      clearTimeout(this.connectTimer);
-      this.attempt = 0;
+      this.reconnect.socketOpen(generation);
       // Connected once: from now on a lost connection may move to another paired bridge.
       this.failover = true;
       this.lastInboundAt = Date.now();
@@ -188,7 +204,7 @@ class Bridge {
           // Half-open after a network switch: no onclose will come, so close and move on now.
           this.ws = null;
           try { ws.close(); } catch { /* already closing */ }
-          this.onClosed("Bridge stopped answering");
+          this.onClosed("Bridge stopped answering", generation);
         },
       });
     };
@@ -197,7 +213,7 @@ class Bridge {
       const raw = typeof event.data === "string" ? event.data : "";
       this.lastInboundAt = Date.now();
       if (isPongFrame(raw)) { this.pongSeen = true; return; }
-      this.onMessage(raw);
+      this.onMessage(raw, generation);
     };
     ws.onerror = () => {
       // onclose follows; nothing to do here.
@@ -205,20 +221,22 @@ class Bridge {
     ws.onclose = (event) => {
       if (this.ws !== ws) return;
       this.ws = null;
-      this.onClosed(closeReason(event.code));
+      this.onClosed(closeReason(event.code), generation, event.code !== 1008 && event.code !== 4001);
     };
   }
 
-  private onClosed(reason: string): void {
+  private onClosed(reason: string, generation: number, retryable = true): void {
     this.clearTimers();
     this.flushDeltas();
-    if (!this.settings) return;
+    if (!this.settings || this.reconnect.snapshot().generation !== generation) return;
     setConnection({ status: "offline", error: reason });
-    if (this.failover && !this.probing && this.appState === "active" && endpointsOf(this.settings).length > 1) {
+    this.reconnect.closed(generation, reason, retryable);
+    // Failover is an alternative endpoint selection, never a second retry timer.
+    // If probing outlasts the lifecycle retry, the epoch guard discards its stale result.
+    if (retryable && this.failover && !this.probing && this.appState === "active" &&
+        endpointsOf(this.settings).length > 1) {
       void this.failOver(this.settings, this.connectEpoch);
-      return;
     }
-    this.scheduleRetry();
   }
 
   /** Health-probe the paired bridges in order and move to the first one that answers. */
@@ -236,11 +254,9 @@ class Bridge {
       const next = activate(settings, pick);
       this.settings = next;
       saveSettings(next);
-      this.attempt = 0;
-      void this.connectNow();
-      return;
+      this.reconnect.retry();
     }
-    this.scheduleRetry();
+    // No healthy alternative: the lifecycle's bounded retry remains scheduled.
   }
 
   /** On a fallback bridge and back in the foreground: return to the primary when it answers and nothing streams. */
@@ -256,19 +272,10 @@ class Bridge {
     const next = activate(settings, primary);
     this.settings = next;
     saveSettings(next);
-    this.attempt = 0;
-    void this.connectNow();
+    this.reconnect.start();
   }
 
-  private scheduleRetry(): void {
-    if (!this.settings) return;
-    const delay = BACKOFF_MS[Math.min(this.attempt, BACKOFF_MS.length - 1)] ?? 8000;
-    this.attempt += 1;
-    // In the background the OS will likely kill the socket anyway; reconnect on foreground.
-    if (this.appState === "active") this.retryTimer = setTimeout(() => this.connectNow(), delay);
-  }
-
-  private onMessage(raw: string): void {
+  private onMessage(raw: string, generation: number): void {
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
@@ -294,6 +301,8 @@ class Bridge {
         return;
       }
       case "hello": {
+        // A socket is never considered connected until the bridge's authenticated hello.
+        this.reconnect.authenticatedHello(generation);
         this.chats = message.features?.includes(CHATS_FEATURE) === true;
         this.rosterEtag = undefined;
         setChatsFeatures(message.features);
@@ -420,14 +429,10 @@ class Bridge {
   }
 
   private clearTimers(): void {
-    clearTimeout(this.retryTimer);
-    clearTimeout(this.connectTimer);
     clearInterval(this.rosterTimer);
     this.stopKeepalive?.();
     this.stopKeepalive = undefined;
     this.rosterTimer = undefined;
-    this.retryTimer = undefined;
-    this.connectTimer = undefined;
   }
 
   private teardownSocket(): void {
