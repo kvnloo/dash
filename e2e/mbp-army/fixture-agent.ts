@@ -60,6 +60,8 @@ createInterface({input:process.stdin}).on('line', line => {
   const params=typeof r.params==='object'&&r.params!==null&&'prompt' in r.params?r.params.prompt:[];
   const text = Array.isArray(params)?params.map((p:unknown)=>typeof p==='object'&&p!==null&&'text' in p&&typeof p.text==='string'?p.text:'').join(''):'';
   if (text.includes('ARMY_ERROR')) { send({jsonrpc:'2.0',id:r.id,error:{code:-32000,message:'ARMY_EXPECTED_AGENT_ERROR'}}); return; }
+  // What a real agent reports for context occupancy: the bridge turns this ACP usage_update into the gauge's snapshot.
+  if (text.includes('ARMY_USAGE')) send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'usage_update',used:85000,size:200000}}});
   update('ARMY_STREAM_BEGIN ');
   if (text.includes('ARMY_HANG')) return;
   const finish = () => { timer = setTimeout(() => { update(replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); }, text.includes('ARMY_SLOW') ? 9000 : 350); };

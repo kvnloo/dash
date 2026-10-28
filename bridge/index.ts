@@ -199,7 +199,8 @@ class Turn implements Sink {
 
   private runAcp(command: string[], input: TurnInput, env?: Record<string, string>, release?: () => void, remote?: { spawnCwd: string; timeoutMs: number }): void {
     try {
-      this.acp = (remote ? remoteAcpSupervisor : acpSupervisor).start({ id: this.id, command, input, sink: this, env, ...remote });
+      // The id keys the agent's usage_update readings; /chat/context looks them up by harness, not by turn.
+      this.acp = (remote ? remoteAcpSupervisor : acpSupervisor).start({ id: this.harness.id, command, input, sink: this, env, ...remote });
       void this.acp.done.then(
         () => { release?.(); this.finish(0); },
         error => {

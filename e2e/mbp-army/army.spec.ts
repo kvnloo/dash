@@ -167,6 +167,40 @@ test('context gauge stays pressable while its card is open: pressing it closes t
  }
 });
 
+test('an agent-reported context reading fills the grid in the peek and the card',async({page,bridge},info)=>{
+ await page.setViewportSize({width:390,height:780});
+ await openChat(page,bridge);await send(page,'ARMY_USAGE grid fill');
+ await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+ // The fixture agent reports 85000 of 200000 tokens (usage_update): 1000 tokens a cell, 85 of 200 cells.
+ const gauge=page.getByRole('button',{name:/^Context window,/});
+ await gauge.click({noWaitAfter:true});
+ const card=page.getByLabel('Context window details',{exact:true});
+ await expect(card).toBeVisible();
+ await expect(card.getByText('Context ~43%',{exact:true})).toBeVisible({timeout:20000});
+ const grid=card.getByLabel('Context grid',{exact:true});
+ await expect(grid.locator('rect')).toHaveCount(200);
+ await expect(grid.locator('rect[fill="none"]')).toHaveCount(115);
+ // The legend: the one reported category, Free space and the Autocompact buffer with tokens and percent.
+ await expect(card.getByLabel('Used, estimated 85.0k tokens, 43%',{exact:true})).toBeVisible();
+ await expect(card.getByText('~85.0k tokens (43%)',{exact:true})).toBeVisible();
+ await expect(card.getByLabel('Free space, 115.0k tokens, 57%',{exact:true})).toBeVisible();
+ await expect(card.getByText('~115.0k tokens (57%)',{exact:true})).toBeVisible();
+ // No compaction threshold was reported, so the buffer is unknown, not zero.
+ await expect(card.getByLabel('Autocompact buffer, unknown',{exact:true})).toBeVisible();
+ await page.screenshot({path:info.outputPath('context-card-filled-390.png')});
+ await closeContextCard(page,gauge);
+ await expect(page.getByRole('button',{name:'Context window, approximately 43 percent',exact:true})).toBeVisible();
+ await holdGauge(page,gauge);
+ const peek=page.getByLabel('Context grid peek',{exact:true});
+ await expect(peek).toBeVisible();await expect(peek).toBeInViewport({ratio:1});
+ await expect(peek.getByText('~43% · 85k / 200k',{exact:true})).toBeVisible();
+ const cells=peek.getByLabel('Context grid cells',{exact:true});
+ await expect(cells.locator('rect')).toHaveCount(200);await expect(cells.locator('rect[fill="none"]')).toHaveCount(115);
+ await page.screenshot({path:info.outputPath('context-grid-peek-filled-390.png')});
+ await page.getByRole('button',{name:'Dismiss context preview',exact:true}).click({noWaitAfter:true,position:{x:8,y:8}});
+ await expect(peek).toHaveCount(0);
+});
+
 test('prompt rail mouse scrub, Jump and Latest on real transcript',async({page,bridge})=>{
  await openChat(page,bridge);
  for(let i=0;i<4;i++) {await send(page,'prompt '+i+' '+('transcript text '.repeat(24)));await expect(page.getByText(/ARMY_REPLY:/).nth(i)).toBeVisible();}

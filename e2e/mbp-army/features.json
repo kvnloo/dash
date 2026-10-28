@@ -22,9 +22,13 @@
                "safe exploratory controls and context hit target at 390",
                "safe exploratory controls and context hit target at 800"]},
     {"id": "context-grid-peek", "title": "Long-press the context gauge: a small 20x10 grid peek anchored above it; tap opens the card, tap outside dismisses",
-     "tests": ["context gauge long-press opens a small grid peek just above the gauge"]},
+     "tests": ["context gauge long-press opens a small grid peek just above the gauge",
+               "an agent-reported context reading fills the grid in the peek and the card"]},
     {"id": "context-grid-card", "title": "Context card draws the 20x10 grid instead of the bar, with Free space and Autocompact buffer rows",
-     "tests": ["context card shows the grid instead of the bar"]},
+     "tests": ["context card shows the grid instead of the bar",
+               "an agent-reported context reading fills the grid in the peek and the card"]},
+    {"id": "acp-context-reading", "title": "An ACP agent's usage_update reaches the gauge",
+     "tests": ["an agent-reported context reading fills the grid in the peek and the card"]},
     {"id": "prompt-rail", "title": "Prompt rail scrub, Jump and Latest",
      "tests": ["prompt rail mouse scrub, Jump and Latest on real transcript",
                "prompt rail keeps the selected turn preview when a live reply completes"]},
@@ -63,6 +67,7 @@
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
     "live model behaviour", "Orchestra / orchestration screens", "handedness",
-    "Hermes session history", "notifications and deep links"
+    "Hermes session history", "notifications and deep links",
+    "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)"
   ]
 }
