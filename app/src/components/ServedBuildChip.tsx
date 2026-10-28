@@ -44,11 +44,13 @@ export function ServedBuildChip() {
   const failureReason = live.decision.kind === "failed" ? live.decision.reason : null;
   const failed = failureReason !== null;
   const heldBy = live.decision.kind === "ready" && live.decision.why === "blocked" ? live.blockedBy : null;
+  // Don't advertise an unverified SHA while the launch bundle probe is pending.
+  const displayedServed = live.decision.kind === "checking" ? runningWithAge : live.served;
   const label = failed ? shortSha(live.served) + " failed to build (" + failureReason + ")" :
     heldBy !== null ? "update ready - held: " + heldBy :
     live.running === null
       ? servedBuildLabel(SERVED_BUILD, now)
-      : liveChipLabel(runningWithAge, live.served, now, servedAgeLabel);
+      : liveChipLabel(runningWithAge, displayedServed, now, servedAgeLabel);
 
   const openMenu = () => {
     if (Platform.OS === "web") {
