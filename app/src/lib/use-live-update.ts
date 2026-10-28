@@ -197,12 +197,15 @@ export function useLiveUpdate(): LiveUpdate {
       try {
         // Don't trust the 250ms debounce to finish before a full JS reload.
         await flushDrafts();
-        // New work may have started during the storage write.
+        // Work can start during either the draft flush or the retry-marker write.
         if (automatic && reloadBlockedBy() !== null) return;
-        if (automatic && served !== null) {
-          await writePref(TRIED_KEY, served.sha);
-          setLastAutoFor(served.sha);
+        if (automatic && served !== null) await writePref(TRIED_KEY, served.sha);
+        // This is the final check: no await between observing a safe app and reloadApp().
+        if (automatic && reloadBlockedBy() !== null) {
+          if (served !== null) await writePref(TRIED_KEY, null);
+          return;
         }
+        if (automatic && served !== null) setLastAutoFor(served.sha);
         invoked = true;
         reloadApp();
       } catch (error) {
