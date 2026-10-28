@@ -14,6 +14,7 @@ import {
   identityLines,
   middleTruncate,
   morphFrom,
+  pillLensPath,
   sessionIdLabel,
   topCutout,
   type IdentityInput,
@@ -65,8 +66,21 @@ export function useWindowMorph(origin: WindowOrigin | undefined, enabled: boolea
 export function useDisplayCutout(width: number, height: number, insetTop: number): Rect | null {
   const fixture = debugUi.use(s => s.cutoutFixture ?? null);
   const [reading, setReading] = useState(() => readCutout());
-  useEffect(() => { setReading(readCutout()); }, [width, height, insetTop]);
-  return topCutout(fixture ?? reading, { width, insetTop });
+  useEffect(() => {
+    // Window insets may not be attached yet, or may still describe the previous rotation.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    const refresh = () => {
+      const next = readCutout();
+      setReading(next);
+      if ((!next || Math.abs(next.windowWidth - width) > 2 || Math.abs(next.windowHeight - height) > 2) && ++attempts < 10) {
+        timer = setTimeout(refresh, 100);
+      }
+    };
+    refresh();
+    return () => clearTimeout(timer);
+  }, [width, height, insetTop]);
+  return topCutout(fixture ?? reading, { width, height, insetTop });
 }
 
 /** The app-wide nav collapsed into a slim status pill around (or below) the camera cut-out. */
@@ -93,10 +107,10 @@ export function WindowPill({ geometry, title, thinking, status, primary, open, o
   </View> : null;
   const hole = geometry.hole;
   const r = geometry.height / 2;
-  // Cut-out mode: one pill painted around the camera with an even-odd circular hole, so nothing
+  // Cut-out mode: one pill painted around the camera with an even-odd rect-sized hole, so nothing
   // is drawn where the hardware lens sits. Safe-area mode keeps an ordinary filled pill.
   const outline = `M${r} 0H${geometry.width - r}A${r} ${r} 0 0 1 ${geometry.width - r} ${geometry.height}H${r}A${r} ${r} 0 0 1 ${r} 0Z`;
-  const lens = hole ? `M${hole.left} ${r}a${hole.width / 2} ${hole.width / 2} 0 1 0 ${hole.width} 0a${hole.width / 2} ${hole.width / 2} 0 1 0 ${-hole.width} 0Z` : "";
+  const lens = pillLensPath(hole);
   return <Pressable
     testID="chat-window-pill"
     accessibilityRole="button"
@@ -113,7 +127,7 @@ export function WindowPill({ geometry, title, thinking, status, primary, open, o
       {/* Pill padding (10) + flex gap (6) put the hole spacer exactly at hole.left. */}
       <View style={[styles.pillSide, { width: Math.max(0, hole.left - 16), flexShrink: 0 }]}>{left}</View>
       {/* Hardware pixels: nothing is drawn over the camera hole. */}
-      <View testID="chat-window-pill-hole" style={{ width: hole.width }} />
+      <View testID="chat-window-pill-hole" style={{ width: hole.width, height: hole.height }} />
       <View style={[styles.pillSide, styles.pillSideEnd]}>{right}</View>
     </> : <><View style={styles.pillSide}>{left}</View>{right}</>}
   </Pressable>;

@@ -24,8 +24,8 @@ export interface PillGeometry {
   top: number;
   width: number;
   height: number;
-  /** Transparent gap over the hardware hole, pill-local x. Null in safe-area mode. */
-  hole: { left: number; width: number } | null;
+  /** Transparent gap over the hardware rect, in pill-local DIP. Null in safe-area mode. */
+  hole: { left: number; top: number; width: number; height: number } | null;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -45,11 +45,23 @@ export function pillGeometry({ insetTop, width, cutout }: { insetTop: number; wi
     return { mode: "safe-area", left: (width - pillWidth) / 2, top: insetTop + PILL_GAP, width: pillWidth, height: PILL_HEIGHT, hole: null };
   }
   const height = Math.max(PILL_HEIGHT, cutout.height + 2 * PILL_GAP);
-  const top = Math.max(0, cutout.y + cutout.height / 2 - height / 2);
-  const pillWidth = Math.min(Math.max(maxWidth, cutout.width + 2 * PILL_LABEL_SLOT), width);
+  const top = cutout.y + cutout.height / 2 - height / 2;
   const centre = cutout.x + cutout.width / 2;
-  const left = clamp(centre - pillWidth / 2, 0, width - pillWidth);
-  return { mode: "cutout", left, top, width: pillWidth, height, hole: { left: cutout.x - left - PILL_GAP, width: cutout.width + 2 * PILL_GAP } };
+  // Shrink symmetrically near a screen edge; clamping left would move the pill off the lens.
+  const pillWidth = Math.min(Math.max(maxWidth, cutout.width + 2 * PILL_LABEL_SLOT), 2 * Math.min(centre, width - centre));
+  const left = centre - pillWidth / 2;
+  return { mode: "cutout", left, top, width: pillWidth, height, hole: {
+    left: cutout.x - left - PILL_GAP, top: cutout.y - top - PILL_GAP,
+    width: cutout.width + 2 * PILL_GAP, height: cutout.height + 2 * PILL_GAP,
+  } };
+}
+
+/** A rounded rect, not a width-derived circle: Android's bounding rect need not be square. */
+export function pillLensPath(hole: PillGeometry["hole"]): string {
+  if (!hole) return "";
+  const r = Math.min(hole.width, hole.height) / 2;
+  const left = hole.left, right = left + hole.width, top = hole.top, bottom = top + hole.height;
+  return `M${left + r} ${top}H${right - r}A${r} ${r} 0 0 1 ${right} ${top + r}V${bottom - r}A${r} ${r} 0 0 1 ${right - r} ${bottom}H${left + r}A${r} ${r} 0 0 1 ${left} ${bottom - r}V${top + r}A${r} ${r} 0 0 1 ${left + r} ${top}Z`;
 }
 
 /**
@@ -89,8 +101,9 @@ export function parseCutout(value: unknown): CutoutReading | null {
  * The cut-out to wrap: the top-band rect of a reading taken for this window size. A reading for
  * another size (rotation in flight, split screen, stale) is ignored rather than mis-placed.
  */
-export function topCutout(reading: CutoutReading | null, window: { width: number; insetTop: number }): Rect | null {
-  if (!reading || Math.abs(reading.windowWidth - window.width) > 2) return null;
+export function topCutout(reading: CutoutReading | null, window: { width: number; height?: number; insetTop: number }): Rect | null {
+  if (!reading || Math.abs(reading.windowWidth - window.width) > 2
+    || (window.height !== undefined && Math.abs(reading.windowHeight - window.height) > 2)) return null;
   const band = Math.max(window.insetTop, reading.safeInsetTop) + PILL_HEIGHT;
   const top = reading.rects.filter(r => r.y < band && r.y + r.height <= band + PILL_HEIGHT).sort((a, b) => a.y - b.y)[0];
   return top ?? null;
