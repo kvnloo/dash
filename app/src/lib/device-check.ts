@@ -162,12 +162,13 @@ export async function runDeviceCheck(): Promise<DeviceCheckReport> {
     const present = Platform.OS === "android" && NativeModules.WebRTCModule != null;
     return { state: present ? "ok" : "fail", detail: present ? "present" : "missing - rebuild the APK" };
   }, true);
-  for (const [id, label, module] of [
+  const modules: readonly (readonly [string, string, string])[] = [
     ["stylus", "DashStylus", "DashStylus"],
     ["audioRoute", "DashAudioRoute", "DashAudioRoute"],
     ["share", "DashShare", "DashShareFiles"],
     ["cutout", "DashCutout", "DashDisplayCutout"],
-  ]) {
+  ];
+  for (const [id, label, module] of modules) {
     await inspect(id, label, () => {
       const present = nativeModule(module);
       return { state: present ? "ok" : "fail", detail: present ? "present" : "missing - rebuild the APK" };
