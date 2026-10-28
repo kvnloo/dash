@@ -73,10 +73,10 @@ export function layoutModel(root: OpenUINode): OpenUILayoutRow[] {
         break;
       }
       case "List":
-        rows.push({ ...base, type: "List", items: node.items, accessibilityLabel: `List, ${node.items.length} items` });
+        rows.push({ ...base, type: "List", items: node.items, accessibilityLabel: `List, ${node.items.length} ${node.items.length === 1 ? "item" : "items"}` });
         break;
       case "Table":
-        rows.push({ ...base, type: "Table", columns: node.columns, rows: node.rows, accessibilityLabel: `Table, ${node.columns.length} columns, ${node.rows.length} rows` });
+        rows.push({ ...base, type: "Table", columns: node.columns, rows: node.rows, accessibilityLabel: `Table, ${node.columns.length} ${node.columns.length === 1 ? "column" : "columns"}, ${node.rows.length} ${node.rows.length === 1 ? "row" : "rows"}` });
         break;
       case "Callout":
         rows.push({ ...base, type: "Callout", tone: node.tone, text: node.text, accessibilityLabel: `${node.tone} callout: ${node.text}` });
