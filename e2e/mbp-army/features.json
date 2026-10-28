@@ -86,7 +86,11 @@
     {"id": "subagent-strip", "title": "A Hermes chat with delegated workers shows the subagent strip above the composer: live count, newest first, opens to a tree",
      "tests": ["a Hermes chat with delegated workers shows the subagent strip, newest first, and opens to a tree"]},
     {"id": "pm-ledger", "title": "The repository's pm ledger (pm/events.jsonl) parses cleanly and tracks the Hermes tasks",
-     "tests": ["the Dash repository's own pm ledger parses cleanly and tracks the Hermes tasks"]}
+     "tests": ["the Dash repository's own pm ledger parses cleanly and tracks the Hermes tasks"]},
+    {"id": "voice-status", "title": "Authenticated bridge voice readiness and backward-compatible hello capabilities",
+     "tests": ["voice status diagnoses missing model, rejects anonymous requests, and announces hello",
+               "voice status follows fixture STT availability",
+               "voice status accepts either principal and reports disabled native voice"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
