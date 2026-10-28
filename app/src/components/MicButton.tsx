@@ -13,6 +13,8 @@ import { colors, glass } from "../theme";
 interface Props {
   onDictate(): void;
   onLive(): void;
+  /** A stationary long hold switches the thumb side without changing voice mode. */
+  onHold?(): void;
   /** Kept for API compatibility; the pill always grows straight up from the mic. */
   side: "left" | "right";
   /** Optional glyph override (the live-call orb). */
@@ -34,13 +36,14 @@ const PILL = SLOT + TRAVEL;
  * Live voice (or down onto Dictate); release and the pill folds back down and that mode becomes the mic's icon.
  * Release only switches the mode; tap to use it.
  */
-export const MicButton = memo(function MicButton({ onDictate, onLive, children, onTap, accessibilityLabel }: Props) {
+export const MicButton = memo(function MicButton({ onDictate, onLive, onHold, children, onTap, accessibilityLabel }: Props) {
   const [mode, setMode] = useState<MicChoice>("dictate");
   const open = useSharedValue(0);
   /** Knob: 0 = bottom slot (Dictate), 1 = top slot (Live voice). */
   const knob = useSharedValue(0);
   const startKnob = useSharedValue(0);
   const lastSlot = useSharedValue(0);
+  const slid = useSharedValue(false);
   const live = useSharedValue(0);
 
   useEffect(() => { void AsyncStorage.getItem(MIC_DEFAULT_KEY).then(v => setMode(parseMicChoice(v)), () => {}); }, []);
@@ -68,19 +71,23 @@ export const MicButton = memo(function MicButton({ onDictate, onLive, children, 
     .onStart(() => {
       startKnob.value = knob.value;
       lastSlot.value = Math.round(knob.value);
+      slid.value = false;
       open.value = withTiming(1, spatial(snappy));
       runOnJS(opened)();
     })
     .onUpdate(e => {
+      if (Math.abs(e.translationY) >= 12) slid.value = true;
       const k = Math.min(1, Math.max(0, startKnob.value - e.translationY / TRAVEL));
       knob.value = k;
       const slot = Math.round(k);
       if (slot !== lastSlot.value) { lastSlot.value = slot; runOnJS(tick)(); }
     })
-    .onEnd(() => {
+    .onEnd(e => {
       const slot = Math.round(knob.value);
+      const stationary = !slid.value && slot === Math.round(startKnob.value) && Math.abs(e.translationY) < 12;
       knob.value = withTiming(slot, spatial(snappy));
-      runOnJS(commit)(slot);
+      if (stationary && onHold) runOnJS(onHold)();
+      else runOnJS(commit)(slot);
     })
     .onFinalize(() => { open.value = withTiming(0, spatial(snappy)); });
   const tap = Gesture.Tap().maxDuration(HOLD_MS).onEnd((_e, ok) => { if (ok) runOnJS(tapNow)(); });
@@ -96,9 +103,9 @@ export const MicButton = memo(function MicButton({ onDictate, onLive, children, 
   return <GestureDetector gesture={gesture}>
     <View accessible accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? (mode === "live" ? "Live voice" : "Dictate")}
-      accessibilityHint="Tap to use. Hold and slide up for Live voice, down for Dictate."
-      accessibilityActions={[{ name: "activate" }, { name: "longpress", label: mode === "live" ? "Switch to Dictate" : "Switch to Live voice" }]}
-      onAccessibilityAction={e => { if (e.nativeEvent.actionName === "activate") tapNow(); else commit(mode === "live" ? 0 : 1); }}
+      accessibilityHint="Tap to use. Hold to switch thumb side; hold and slide up for Live voice, down for Dictate."
+      accessibilityActions={[{ name: "activate" }, { name: "longpress", label: onHold ? "Switch thumb side" : mode === "live" ? "Switch to Dictate" : "Switch to Live voice" }]}
+      onAccessibilityAction={e => { if (e.nativeEvent.actionName === "activate") tapNow(); else if (e.nativeEvent.actionName === "longpress") { if (onHold) onHold(); else commit(mode === "live" ? 0 : 1); } }}
       style={styles.hit}>
       <Animated.View pointerEvents="none" style={[styles.pill, pill]} />
       <Animated.View pointerEvents="none" style={[styles.knob, knobStyle]} />

@@ -3,8 +3,12 @@ import { ContextCard, ContextGauge, type ContextControl } from "./ContextCard";
 import { Feather } from "@expo/vector-icons";
 import { AgentOrb } from "./AgentOrb";
 import type { OrbState } from "../lib/orb-phase";
-import { useHandedness } from "../lib/useHandedness";
+import { toggleHandedness, useHandedness } from "../lib/useHandedness";
 import { MicButton } from "./MicButton";
+import { ComposerPrimaryAction } from "./ComposerPrimaryAction";
+import { ComposerStatChips } from "./ComposerStatChips";
+import { AttachmentNotice } from "./AttachmentNotice";
+import type { AttachmentNoticeRequest } from "../lib/attachment-notice";
 import { useRecordedSpeech } from "../lib/useRecordedSpeech";
 import { insertAtCursor, type Selection } from "../lib/mic-gesture";
 import { type RefObject, memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -46,6 +50,10 @@ interface Props {
   disabled: boolean;
   offlineText?: boolean;
   streaming: boolean;
+  model?: string;
+  provider?: string;
+  rateLabel?: string | null;
+  recent?: boolean;
   steerBusy?: boolean;
   placeholder: string;
   initialText?: string;
@@ -68,10 +76,11 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ draftKey, context, disabled, offlineText = false, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
+export const Composer = memo(function Composer({ draftKey, context, disabled, offlineText = false, streaming, model, provider, rateLabel, recent, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
   const submitting = useRef(false);
   const thumb = useHandedness();
   const [choice, setChoice] = useState<SendMode>("steer");
+  const [notice, setNotice] = useState<AttachmentNoticeRequest | null>(null);
   useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
   const sendMode = composerMode(steerBusy, choice);
   const switchMode = () => { setChoice(value => value === "steer" ? "queue" : "steer"); haptic.select(); };
@@ -97,7 +106,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, of
     if (!sharedDraft || lastShare.current === sharedDraft.id) return;
     // Keep the share queued rather than silently dropping files when a draft is full.
     if (drafts.length + sharedDraft.files.length > MAX_ATTACHMENTS_PER_TURN) {
-      if (blockedShare.current !== sharedDraft.id) Alert.alert("Shared files waiting", `Remove attachments to make room for ${sharedDraft.files.length} shared files.`);
+      if (blockedShare.current !== sharedDraft.id) setNotice({ kind: "shared-files-waiting", count: sharedDraft.files.length });
       blockedShare.current = sharedDraft.id;
       return;
     }
@@ -148,7 +157,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, of
 
   const addFiles = useCallback((picked: PickedFile[]) => {
     const settings = store.get().settings;
-    if (!settings) { Alert.alert("Attachments", "Pair with a computer first."); return; }
+    if (!settings) { setNotice({ kind: "pair-required" }); return; }
     const added: DraftAttachment[] = picked.map(file => {
       const reason = rejectReason(file);
       return { key: `att-${++draftSeq}`, name: file.name, mime: file.mime, size: file.size, uri: file.uri, state: reason ? "error" : "uploading", error: reason ?? undefined };
@@ -186,8 +195,8 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, of
 
   const pasteImage = useCallback(async (): Promise<boolean> => {
     if (Platform.OS === "web" || disabled || editingQueue || pasteBusy.current) return false;
-    if (remainingSlots(drafts) === 0) { Alert.alert("Attachments", `Up to ${MAX_ATTACHMENTS_PER_TURN} files per message.`); return false; }
-    if (!store.get().settings) { Alert.alert("Attachments", "Pair with a computer first."); return false; }
+    if (remainingSlots(drafts) === 0) { setNotice({ kind: "limit-reached", limit: MAX_ATTACHMENTS_PER_TURN }); return false; }
+    if (!store.get().settings) { setNotice({ kind: "pair-required" }); return false; }
     pasteBusy.current = true;
     setPastingImage(true);
     try {
@@ -196,7 +205,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, of
       addFiles([file]);
       return true;
     } catch (error) {
-      if (mounted.current) Alert.alert("Attachments", error instanceof Error ? error.message : "Could not paste the clipboard image.");
+      if (mounted.current) setNotice({ kind: "picker-error", message: error instanceof Error ? error.message : "Could not paste the clipboard image." });
       return false;
     } finally {
       pasteBusy.current = false;
@@ -219,12 +228,12 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, of
 
   const pick = useCallback(async (kind: "photos" | "files") => {
     const room = remainingSlots(drafts);
-    if (room === 0) { Alert.alert("Attachments", `Up to ${MAX_ATTACHMENTS_PER_TURN} files per message.`); return; }
+    if (room === 0) { setNotice({ kind: "limit-reached", limit: MAX_ATTACHMENTS_PER_TURN }); return; }
     try {
       const picked = kind === "photos" ? await pickPhotos(room) : await pickFiles(room);
       if (picked.length) addFiles(picked);
     } catch (error) {
-      Alert.alert("Attachments", error instanceof Error ? error.message : "Could not open the picker.");
+      setNotice({ kind: "picker-error", message: error instanceof Error ? error.message : "Could not open the picker." });
     }
   }, [addFiles, drafts]);
 
@@ -251,16 +260,15 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, of
     if (disabled || editingQueue) { attachRequest.current++; setAttachAnchor(null); }
   }, [disabled, editingQueue]);
 
-  const uploadShared = () => {
+  const confirmSharedUpload = () => {
     const local = drafts.filter(d => d.state === "local");
     if (!local.length || disabled) return;
-    Alert.alert("Upload shared files?", "Uploads these files to your paired computer over Tailscale. This does not send a message to an agent.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Upload files", onPress: () => {
-        setDrafts(list => list.filter(d => !local.some(item => item.key === d.key)));
-        addFiles(local.map(d => ({ uri: d.uri, name: d.name, mime: d.mime, size: d.size })));
-      } },
-    ]);
+    setDrafts(list => list.filter(d => !local.some(item => item.key === d.key)));
+    addFiles(local.map(d => ({ uri: d.uri, name: d.name, mime: d.mime, size: d.size })));
+  };
+  const uploadShared = () => {
+    const count = drafts.filter(d => d.state === "local").length;
+    if (count > 0 && !disabled) setNotice({ kind: "shared-upload", count });
   };
 
   const remove = useCallback((key: string) => setDrafts(list => list.filter(d => d.key !== key)), []);
@@ -294,16 +302,15 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, of
       {speechBusy ? <PressScale accessibilityRole="button" accessibilityLabel="Stop dictation" onPress={() => void speech.end()} style={styles.modeToggle}><Text style={styles.chipName}>Stop</Text></PressScale> : null}
       {speech.state.phase === "error" ? <PressScale accessibilityRole="button" accessibilityLabel="Retry dictation" onPress={onDictate} style={styles.modeToggle}><Text style={styles.chipName}>Retry</Text></PressScale> : null}
     </View> : null}
+    <ComposerStatChips model={model} provider={provider} rateLabel={rateLabel} streaming={streaming} recent={recent} />
     <View testID="composer-field" style={[styles.field, editingQueue && styles.previewField]}>
       <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={onTextChange} onFocus={() => setFieldFocused(true)} onBlur={() => setFieldFocused(false)} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
       <View testID="composer-controls" style={[styles.controls, { flexDirection: "row", justifyContent: "flex-start" }, editingQueue && thumb.align]}>
         {/* One primary button at the text's leading edge: Send/Steer/Queue when there is a draft, Stop while a turn runs with an empty draft. */}
-        {editingQueue ? <PressScale accessibilityRole="button" accessibilityLabel="Save queued merge" accessibilityHint="Keep this merged message queued for the next turn" onPress={submit} disabled={!canSend} style={[styles.hit, styles.previewSave]}><Text style={styles.chipName}>Save queued</Text></PressScale>
-          : (streaming || steerBusy) && !canSend ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale>
-          : <PressScale accessibilityRole="button" accessibilityLabel={streaming && !steerBusy ? "Queue" : sendMode.action} accessibilityHint={sendMode.label} onPress={submit} disabled={!canSend} style={styles.hit}><View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View></PressScale>}
+        <ComposerPrimaryAction editingQueue={editingQueue} streaming={streaming} steerBusy={steerBusy} canSend={canSend} sendMode={sendMode} onSubmit={submit} onStop={onStop} />
         {context ? <ContextGauge control={context} /> : null}
         <View ref={attachRef} collapsable={false}><PressScale accessibilityRole="button" accessibilityLabel="Attach file" accessibilityState={{ expanded: attachAnchor !== null }} onPress={onAttach} disabled={disabled || editingQueue} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale></View>
-        <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onTap={speechBusy ? onDictate : voiceCall ? onVoice : undefined} accessibilityLabel={speechBusy ? "Stop dictation" : voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
+        <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onHold={toggleHandedness} onTap={speechBusy ? onDictate : voiceCall ? onVoice : undefined} accessibilityLabel={speechBusy ? "Stop dictation" : voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
 
       </View>
     </View>
@@ -314,6 +321,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, of
     // Keep this synchronous on web: the OS picker requires the row's user activation.
     void pick(kind);
   }} /> : null}
+  {notice ? <AttachmentNotice request={notice} onDismiss={() => setNotice(null)} onConfirmUpload={confirmSharedUpload} /> : null}
   </View>;
 });
 
@@ -339,16 +347,11 @@ const styles = StyleSheet.create({
   field: { flexDirection: "column", alignItems: "stretch", minHeight: 96 },
   previewField: { flexDirection: "column", alignItems: "stretch" },
   previewInput: { flex: 0, minHeight: 168, maxHeight: 192 },
-  previewSave: { width: 100 },
   input: { flex: 0, alignSelf: "stretch", minWidth: 0, minHeight: 48, maxHeight: 148, ...type.body, color: colors.text, paddingLeft: 8, paddingTop: 12, paddingBottom: 12 },
   controls: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
   modeRow: { alignItems: "center", justifyContent: "space-between", paddingHorizontal: 8 },
   modeToggle: { minHeight: 44, paddingHorizontal: 8 },
   hit: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  send: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.gold, alignItems: "center", justifyContent: "center" },
-  stop: { backgroundColor: colors.text },
-  disabled: { opacity: .3 },
-  square: { width: 12, height: 12, borderRadius: 2, backgroundColor: colors.bg },
   chips: { gap: 8, paddingTop: 10, paddingHorizontal: 4 },
   chip: { flexDirection: "row", alignItems: "center", gap: 8, height: 44, maxWidth: 220, paddingLeft: 4, paddingRight: 2, borderRadius: radius.card + 2, backgroundColor: glass.fillChipOn, borderWidth: 1, borderColor: glass.hair, borderTopColor: glass.highlight },
   chipError: { borderColor: colors.danger },
