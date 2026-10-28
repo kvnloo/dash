@@ -2,6 +2,7 @@ import type { ChatAttachment } from "../../../shared/protocol";
 import type { Conversation } from "../model";
 import { sendChat } from "../net/bridge";
 import { annotate } from "../store/annotate";
+import { partsFor, replyParts, replyText } from "../store/text";
 import { applyTurnEvent, beginTurn, conversationTargetError, store } from "../store/app";
 import { annotationReceipt } from "./voice-annotation-receipt";
 
@@ -33,28 +34,51 @@ export async function sendVoiceAnnotation(conversation: Conversation, text: stri
   await new Promise<void>((resolve, reject) => {
     let settled = false;
     let off = () => {};
+    let offText = () => {};
+    let offParts = () => {};
+    // The empty seq-0 placeholder is not a receipt. Only a turn with no
+    // bridge event or streamed content can reach this deadline.
     const receiptTimer = setTimeout(() => {
       if (!settled) { settled = true; reject(new Error("Delivery unconfirmed. Drawing is kept. Check the original turn; do not send a duplicate.")); }
     }, 30_000);
-    const lifetime = setTimeout(() => { off(); clearTimeout(receiptTimer); }, 5 * 60_000);
+    const lifetime = setTimeout(() => { off(); offText(); offParts(); clearTimeout(receiptTimer); }, 5 * 60_000);
+    const stopWatching = () => {
+      off(); offText(); offParts();
+      clearTimeout(receiptTimer); clearTimeout(lifetime);
+    };
+    const clearPending = () => {
+      annotate.set(s => s.pendingTurn?.id === exactTurn ? { ...s, pendingTurn: undefined } : s);
+    };
     const inspect = () => {
       const current = store.get().conversations.find(c => c.id === conversation.id);
       const reply = current?.messages.find(m => m.role === "assistant" && m.turnId === exactTurn);
       if (!reply || reply.role !== "assistant") return;
-      const receipt = annotationReceipt(reply);
+      // Token/part updates live outside the conversation store to avoid
+      // rerendering the entire chat. Observe those same streams for this receipt.
+      const streamedParts = partsFor(exactTurn);
+      const receipt = annotationReceipt({
+        ...reply,
+        text: replyText.get(exactTurn) || reply.text,
+        parts: streamedParts.length ? streamedParts : reply.parts,
+      });
       if (receipt === "failed") {
-        off(); clearTimeout(receiptTimer); clearTimeout(lifetime);
+        stopWatching();
         if (!settled) { settled = true; reject(new Error("The annotation turn failed or was interrupted. Check its receipt before retrying; drawing is kept.")); }
       } else if (receipt === "final") {
-        off(); clearTimeout(receiptTimer); clearTimeout(lifetime);
+        stopWatching();
         if (reply.text.trim()) final(exactTurn, reply.text);
-        if (!settled) { settled = true; resolve(); }
+        if (!settled) { settled = true; clearPending(); resolve(); }
       } else if (receipt === "accepted") {
-        // A local/pre-submit 'queued' marker is not proof of gateway acceptance.
         clearTimeout(receiptTimer);
-        if (!settled) { settled = true; resolve(); }
+        // Keep watching the conversation for the eventual final reply, but
+        // streaming deltas no longer need to inspect an accepted receipt.
+        offText(); offParts();
+        if (!settled) { settled = true; clearPending(); resolve(); }
       }
     };
-    off = store.subscribe(inspect); inspect();
+    off = store.subscribe(inspect);
+    offText = replyText.subscribe(exactTurn, inspect);
+    offParts = replyParts.subscribe(exactTurn, inspect);
+    inspect();
   });
 }
