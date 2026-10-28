@@ -5,24 +5,29 @@ import { LoadSkiaWeb } from "@shopify/react-native-skia/lib/module/web";
 const CANVASKIT = "/canvaskit.wasm";
 let loading: Promise<void> | undefined;
 
-async function prepareSkia(): Promise<void> {
-  // ShimmerText loads CanvasKit during bootstrap, before annotation can be opened.
-  // Only the loopback army probe re-fetches WASM so an aborted request can exercise
-  // annotation's real skia-load error/retry path without breaking app bootstrap.
-  if (typeof location !== "undefined" &&
-      (location.hostname === "localhost" || location.hostname === "127.0.0.1") &&
-      new URLSearchParams(location.search).get("inkWasmProbe") === "1") {
-    const response = await fetch(CANVASKIT, { cache: "no-store" });
-    if (!response.ok) throw new Error("CanvasKit probe HTTP " + response.status);
-  }
-  await LoadSkiaWeb({ locateFile: () => CANVASKIT });
+/**
+ * Loopback-only army probe (?inkWasmProbe=1): every loadSkia() call re-fetches the WASM first, so a
+ * request aborted after pairing reaches annotation's real skia-load error and Retry path. Without
+ * the probe, ShimmerText's bootstrap load is cached and a later abort could never be observed.
+ */
+function readWasmProbe(): boolean {
+  return typeof location !== "undefined" &&
+    (location.hostname === "localhost" || location.hostname === "127.0.0.1") &&
+    new URLSearchParams(location.search).get("inkWasmProbe") === "1";
 }
+// Read once at load: navigation later rewrites the URL and drops the query string.
+const wasmProbe = readWasmProbe();
 
 export function loadSkia(): Promise<void> {
-  loading ??= prepareSkia().catch(error => {
+  loading ??= LoadSkiaWeb({ locateFile: () => CANVASKIT }).catch(error => {
     // Failed attempts are never cached; Retry must be able to fetch again.
     loading = undefined;
     throw error;
   });
-  return loading;
+  if (!wasmProbe) return loading;
+  const ready = loading;
+  return fetch(CANVASKIT, { cache: "no-store" }).then(response => {
+    if (!response.ok) throw new Error("CanvasKit probe HTTP " + response.status);
+    return ready;
+  });
 }
