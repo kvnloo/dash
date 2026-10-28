@@ -93,18 +93,63 @@ export const MANIFEST_HEADERS = {
   accept: "application/expo+json,application/json",
 } as const;
 
-/** The build the Metro at `origin` serves right now; null when unreachable or not a live-follow release. */
-export async function fetchServedBuild(origin: string, fetcher: typeof fetch, timeoutMs = 6_000): Promise<LiveBuild | null> {
+/** The manifest identifies both the served SHA and the JavaScript bundle Metro will launch. */
+export interface ServedManifest {
+  build: LiveBuild;
+  launchAssetUrl: string | null;
+}
+
+export type BundleHealth =
+  | { sha: string; origin: string; state: "healthy" }
+  | { sha: string; origin: string; state: "failed"; reason: string };
+
+/** Repoint the manifest asset at the Metro that we actually polled, not its advertised host. */
+export function launchAssetUrl(manifest: unknown, origin: string): string | null {
+  if (!isRecord(manifest) || !isRecord(manifest.launchAsset)) return null;
+  const raw = manifest.launchAsset.url;
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+  try {
+    const url = new URL(raw, origin + "/");
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return origin + url.pathname + url.search;
+  } catch {
+    return null;
+  }
+}
+
+/** Read the served build and its launch bundle; null if the manifest cannot be read. */
+export async function fetchServedBuild(origin: string, fetcher: typeof fetch, timeoutMs = 6_000): Promise<ServedManifest | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetcher(origin + "/", { headers: MANIFEST_HEADERS, signal: controller.signal });
     if (!response.ok) return null;
-    return manifestBuild(await response.json());
+    const manifest: unknown = await response.json();
+    const build = manifestBuild(manifest);
+    return build === null ? null : { build, launchAssetUrl: launchAssetUrl(manifest, origin) };
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/** GET the real bundle, aborting after response headers so no JavaScript is downloaded. */
+export async function probeLaunchAsset(url: string | null, fetcher: typeof fetch, timeoutMs = 6_000):
+  Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (url === null) return { ok: false, reason: "missing launch asset" };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetcher(url, { method: "GET", signal: controller.signal, cache: "no-store" });
+    return response.status === 200
+      ? { ok: true }
+      : { ok: false, reason: "HTTP " + response.status };
+  } catch {
+    return { ok: false, reason: "network error" };
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
   }
 }
 
@@ -138,6 +183,9 @@ export const FOREGROUND_GRACE_MS = 5_000;
 export interface ReloadInput {
   running: LiveBuild | null;
   served: LiveBuild | null;
+  /** Health is specific to both the advertised SHA and the Metro origin. */
+  origin: string | null;
+  bundleHealth: BundleHealth | null;
   autoReload: boolean;
   /** Milliseconds since the app returned to the foreground. */
   sinceForegroundMs: number;
@@ -155,12 +203,17 @@ export interface ReloadInput {
 
 export type ReloadDecision =
   | { kind: "current" }
+  | { kind: "checking" }
+  | { kind: "failed"; reason: string }
   | { kind: "reload" }
   | { kind: "ready"; why: "manual" | "retried" | "blocked" | "keyboard" | "busy" };
 
 export function decideReload(input: ReloadInput): ReloadDecision {
   const { running, served } = input;
   if (running === null || served === null || sameBuild(running, served)) return { kind: "current" };
+  const health = input.bundleHealth;
+  if (health === null || health.sha !== served.sha || health.origin !== input.origin) return { kind: "checking" };
+  if (health.state === "failed") return { kind: "failed", reason: health.reason };
   if (input.blockedBy !== null) return { kind: "ready", why: "blocked" };
   if (!input.autoReload) return { kind: "ready", why: "manual" };
   if (input.lastAutoFor === served.sha) return { kind: "ready", why: "retried" };
