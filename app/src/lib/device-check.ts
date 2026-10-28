@@ -189,7 +189,8 @@ export async function runDeviceCheck(): Promise<DeviceCheckReport> {
     await loadSkia();
     // Native loadSkia is a no-op; actually link the renderer to detect stale APKs.
     if (Platform.OS !== "web") {
-      const renderer: unknown = await import("@shopify/react-native-skia");
+      // A lazy require, not import(): a dynamic import can 404 in native Metro previews.
+      const renderer: unknown = require("@shopify/react-native-skia");
       if (!isRecord(renderer) || !("Skia" in renderer)) {
         return { state: "fail", detail: "renderer missing - rebuild the APK" };
       }
