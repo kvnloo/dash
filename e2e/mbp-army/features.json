@@ -3,6 +3,11 @@
   "features": [
     {"id": "mesh-native-chat-roster", "title": "Chats across hosts and native finished Codex/Claude stores, with validated last-good peer rosters (#474, #476, #481)",
      "tests": ["Chats paired with groot lists mbp live and native finished chats and retains the last good peer roster"]},
+    {"id": "openui-native-catalog", "title": "Agent OpenUI blocks use the bounded static catalog and accessible native cards (#114, PRs #484 and #488), retaining GenUI JSON",
+     "tests": ["OpenUI reply streams into accessible native catalog cards instead of source",
+               "OpenUI reply rejects components outside the static catalog without exposing source",
+               "GenUI JSON reply still renders a native card",
+               "OpenUI JSON reply still renders a native card"]},
     {"id": "host-stats", "title": "Local host hardware usage in the host info sheet, separate from roster updates",
      "tests": ["host info sheet shows local CPU, RAM, disk and load from the authenticated bridge",
                "chat host info sheet shows resources without replacing session identity"]},

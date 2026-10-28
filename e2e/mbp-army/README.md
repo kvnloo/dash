@@ -26,6 +26,23 @@ unsafe or unprovisioned credentials leave the peer undiscovered. Native peer ros
 remain view-only: existing archive SSH routing is unchanged. No credential provisioning,
 live service or device changes are part of this journey.
 
+## OpenUI / GenUI native reply journey
+
+`openui-native.spec.ts` uses `bridgeOptions.generatedUI` in `fixtures.ts` to enable
+fenced replies from the stdio ACP fixture over the real bridge. It sends through
+the composer, holds an unfinished OpenUI fence until the loading UI is visible,
+then releases it via the fixture's existing `army-release` file. The completed
+reply must expose #484's native card heading, percentage progressbar, list and
+table roles from #488's bounded catalog. The old Roadmap-only hookup fails this
+journey. Separate cases reject an unknown action component without showing source
+and retain the `genui` / `openui` JSON card formats.
+
+Run only this feature with the verify-dash skill's isolated stack:
+`army-stack.sh drive <run> 1 e2e/mbp-army/openui-native.spec.ts`.
+ACP turn files and the normal bridge log back the visible assertions; no route
+mocks or app store seeding. Web evidence does not prove native screen-reader or
+text-selection behavior. No passing receipt is claimed merely by adding specs.
+
 ## Host preparation
 
 Use the served source SHAs, not current branch names:
