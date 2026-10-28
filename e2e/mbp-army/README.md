@@ -6,6 +6,26 @@ The fixture is not a model turn. It implements initialize/session/new/load/promp
 Each test has its own bridge, HOME, credential/config/outbox directories, loopback port, PID namespace, and browser context.
 A fixture-native Hermes SQLite row and a fixture-only discoverable OMP process support persisted-session journeys. The separate ephemeral regression intentionally omits them.
 
+## Mesh/native roster journey (#474, #476, #481)
+
+`mesh-roster.spec.ts` starts two isolated real bridges named `groot` and `mbp`, pairs the
+real web app only with groot, and checks both hosts' identically named live OMP sessions,
+finished Codex/Claude JSONL chats and mbp's nonzero Hosts count. `fixtures.ts` seeds only
+external discovery and native files, never app stores or HTTP routes. Stopping the peer
+exercises last-good cache through an authenticated roster refresh and browser reload.
+The local-only peer endpoint is checked separately to prevent recursive mesh fanout.
+Status: authored, not executed in the memory-limited wiring worktree; no acceptance claimed.
+
+Production prerequisite: explicitly provision each peer's own authenticated credential in
+`$DASH_CREDENTIAL_DIR/peer-roster-tokens.json` (default `~/.dash`), owned by the bridge user
+with mode 0600. Keys are exact Tailscale DNS labels; values are peer token strings (port
+4747), or objects with `token` and `port`. No credential is inferred or copied from the local
+bridge token. Only discovered tailnet computer addresses are used (loopback requires the
+existing explicit `DASH_ALLOW_LOOPBACK=1` switch for isolated army bridges). Missing,
+unsafe or unprovisioned credentials leave the peer undiscovered. Native peer roster rows
+remain view-only: existing archive SSH routing is unchanged. No credential provisioning,
+live service or device changes are part of this journey.
+
 ## Host preparation
 
 Use the served source SHAs, not current branch names:
