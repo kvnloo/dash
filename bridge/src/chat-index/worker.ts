@@ -11,7 +11,7 @@ import { HermesSessions } from "../hermes-sessions";
 import { redact } from "../reply-parts";
 import {
   avContent, avFtsBatch, avHistory, avMessage, coldList, hasTable, ingestBatch, lookupSession, openAgentsview, reconcilePage,
-  selfMachines, AV_BATCH, avChatRow, type FtsRow,
+  selfMachines, AV_BATCH, avChatRow, type FtsRow, type MachineNames,
 } from "./agentsview-src";
 import { HermesFts, hermesIngest, hermesReconcile } from "./hermes-src";
 import {
@@ -30,6 +30,8 @@ export interface EngineConfig {
   archiveHead?: number;
   /** Extra names AgentsView may use for this machine. */
   selfMachines?: string[];
+  /** AgentsView machines whose Claude Code / Codex chats this bridge routes to (DASH_REMOTE_HOSTS). */
+  remoteMachines?: string[];
   ingestEveryMs?: number;
   reconcileEveryMs?: number;
   hermesReconcileEveryMs?: number;
@@ -63,7 +65,7 @@ export class ChatIndexEngine {
   private avHandle: Database | null | undefined;
   readonly hermes: HermesSessions;
   private readonly fts: HermesFts;
-  private readonly self: Set<string>;
+  private readonly self: MachineNames;
   private lastIngest = 0;
   private ingesting: Promise<number> | undefined;
   private eligibleRev = -1;
@@ -74,7 +76,7 @@ export class ChatIndexEngine {
   constructor(readonly config: EngineConfig) {
     this.hermes = new HermesSessions(config.hermesRoot ? { root: config.hermesRoot } : {});
     this.fts = new HermesFts(this.hermes);
-    this.self = selfMachines(config.selfMachines ?? []);
+    this.self = selfMachines(config.selfMachines ?? [], config.remoteMachines ?? []);
   }
 
   get avEnabled(): boolean { return this.config.agentsviewPath !== undefined; }

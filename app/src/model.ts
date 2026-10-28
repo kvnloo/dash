@@ -141,6 +141,8 @@ export interface Connection {
   hosts: HostInfo[];
   /** Bridge capability flags from hello (e.g. "chats.v1"). Old bridges send none. */
   features?: string[];
+  /** Hosts besides the paired computer whose chats the paired bridge carries there (hello `routes`). */
+  routes?: string[];
   /** Human-readable reason for the last failure. */
   error?: string;
 }

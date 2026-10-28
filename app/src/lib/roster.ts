@@ -85,7 +85,9 @@ export async function fetchRosterIfChanged(settings: Settings, etag: string | un
     const headers: Record<string, string> = { Authorization: `Bearer ${await executionToken(settings)}` };
     if (etag) headers["If-None-Match"] = etag;
     const res = await fetch(`http://${settings.address}/roster`, { method: "GET", headers });
-    if (res.status === 304) return "unchanged";
+    // Read the empty 304 body too: an unread response keeps its request open (Chromium never
+    // finishes it; a native client holds the connection), one per 10 s poll.
+    if (res.status === 304) { await res.text().catch(() => ""); return "unchanged"; }
     if (!res.ok) return undefined;
     const raw: unknown = await res.json();
     if (typeof raw !== "object" || raw === null) return undefined;

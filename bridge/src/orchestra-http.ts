@@ -5,12 +5,18 @@ import { homedir, hostname } from "node:os";
 import { spawnSync } from "node:child_process";
 import type { HostInfo } from "../../shared/protocol";
 import type { OrchestraSnapshot, OrchestraState } from "../../shared/orchestra";
-import { parseKevinBatch } from "../../shared/supervision";
+import { parseKevinBatch, type KevinItem } from "../../shared/supervision";
+import type { RoadmapDocument } from "../../shared/roadmap";
+import { readRoadmap } from "./roadmap-store";
 import { buildOrchestra, record, toolPaths, reconcileWorkerEvidence, type GraphSession, type RepoEvidence } from "./orchestra-graph";
 import { readSessionPhase } from "./hermes-phase";
 import { DEFAULT_SUPERVISION_DIR } from "./supervision-http";
 import { redact } from "./reply-parts";
 
+/** Roadmap items waiting on the owner, as Needs-you triage items (same lane as the supervision batch). */
+export function roadmapNeeds(doc: RoadmapDocument): KevinItem[] {
+  return doc.items.filter(i => i.attention === "you").map(i => ({ id: `roadmap:${i.id}`, worker: "roadmap", goal: i.title, why: i.evidence || "Waiting on you (Dash roadmap)", recommended_action: i.next || i.title, options: [], evidence_path: "dash roadmap", phase: "waiting-on-you" }));
+}
 const text = (v: unknown) => typeof v === "string" ? v : "";
 const number = (v: unknown) => typeof v === "number" ? v : 0;
 function json(path: string): unknown { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return undefined; } }
@@ -134,7 +140,9 @@ export async function collectOrchestra(hosts: HostInfo[], hours = 24, now = Date
   if (record(supervision) && Array.isArray(supervision.workers)) reconcileWorkerEvidence(sessions, supervision.workers);
   const batch = parseKevinBatch(json(join(DEFAULT_SUPERVISION_DIR, "needs-kevin.json")));
   if (!batch) warnings.push("Needs Kevin queue unavailable");
-  return buildOrchestra({ hosts: fleetHosts, sessions, repos: [...repos.values()], needs: batch?.items, health, now, hours, warnings: [...new Set(warnings)] });
+  let roadmap: KevinItem[] = [];
+  try { roadmap = roadmapNeeds(readRoadmap()); } catch { warnings.push("Dash roadmap unavailable"); }
+  return buildOrchestra({ hosts: fleetHosts, sessions, repos: [...repos.values()], needs: [...roadmap, ...(batch?.items ?? [])], health, now, hours, warnings: [...new Set(warnings)] });
 }
 export function createOrchestraHttpHandler(options: { authorize(request: Request): Promise<boolean>; roster(): Promise<HostInfo[]> }) {
   let cache: OrchestraSnapshot | undefined;

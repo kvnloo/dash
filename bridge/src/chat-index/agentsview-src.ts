@@ -4,6 +4,7 @@ import { isCatalogHarness } from "../../../shared/catalog";
 import { MESSAGE_TEXT_MAX, type HistoryMessage } from "../../../shared/protocol";
 import { redact } from "../reply-parts";
 import { AGENTSVIEW_PREFIX, nativeSessionId } from "../agentsview-sessions";
+import { machineHostId, REMOTE_HARNESSES } from "../remote-hosts";
 import { firstLine, REDACT_SLACK, SELF_HOST, SNIPPET_SOURCE_MAX } from "./query";
 import { internalKey, type NewChatRow, type Sidecar } from "./sidecar";
 
@@ -34,12 +35,18 @@ export function openAgentsview(path: string): Database {
 
 function stamp(value: string | null): number { return value ? Date.parse(value) || 0 : 0; }
 
-/** Names AgentsView may record for this machine. */
-export function selfMachines(extra: string[] = []): Set<string> {
-  const names = new Set(["local", "", ...extra.map(n => n.toLowerCase())]);
+/**
+ * Names AgentsView may record for this machine. `routable`: other machines whose Claude Code /
+ * Codex chats this bridge carries to that machine (DASH_REMOTE_HOSTS, see src/remote-hosts.ts).
+ */
+export type MachineNames = Set<string> & { routable?: ReadonlySet<string> };
+
+export function selfMachines(extra: string[] = [], routable: string[] = []): MachineNames {
+  const names: MachineNames = new Set(["local", "", ...extra.map(n => n.toLowerCase())]);
   const host = hostname().toLowerCase();
   names.add(host);
   names.add(host.split(".")[0] ?? host);
+  names.routable = new Set(routable.map(n => n.toLowerCase()).filter(n => !names.has(n)));
   return names;
 }
 
@@ -47,19 +54,25 @@ function machineHost(machine: string | null, self: Set<string>): { host_id: stri
   const raw = (machine ?? "").trim();
   const short = raw.toLowerCase().split(".")[0] ?? "";
   if (self.has(raw.toLowerCase()) || self.has(short)) return { host_id: SELF_HOST, host_name: "" };
-  const safe = raw.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 56) || "unknown";
-  return { host_id: `machine:${safe}`, host_name: /^[0-9a-f]{16,}$/i.test(raw) ? `Other machine (${raw.slice(0, 6)})` : raw };
+  return { host_id: machineHostId(raw), host_name: /^[0-9a-f]{16,}$/i.test(raw) ? `Other machine (${raw.slice(0, 6)})` : raw };
 }
 
-export function avChatRow(row: AvSessionRow, self: Set<string>): NewChatRow {
-  const sessionId = nativeSessionId(row.agent, row.id);
+/** AgentsView ids of synced sessions carry the recording machine: `<machine>~<agent>:<id>`. */
+function localId(row: AvSessionRow): string {
+  const prefix = `${(row.machine ?? "").trim()}~`;
+  return prefix.length > 1 && row.id.startsWith(prefix) ? row.id.slice(prefix.length) : row.id;
+}
+
+export function avChatRow(row: AvSessionRow, self: MachineNames): NewChatRow {
+  const sessionId = nativeSessionId(row.agent, localId(row));
   const host = machineHost(row.machine, self);
   const title = redact(firstLine(row.title)) || firstLine(row.project) || row.agent;
+  const routed = host.host_id !== SELF_HOST && REMOTE_HARNESSES.includes(row.agent) && self.routable?.has((row.machine ?? "").trim().toLowerCase()) === true;
   const r = {
     origin: "agentsview" as const, kind: row.agent, session_id: sessionId, ...host, profile_id: null,
     agent_id: `${AGENTSVIEW_PREFIX}${row.agent}:${sessionId}`, title, cwd: row.cwd || null,
     started_at: stamp(row.started_at), last_activity_at: stamp(row.ended_at) || stamp(row.started_at),
-    message_count: row.message_count ?? 0, chatable: isCatalogHarness(row.agent) && host.host_id === SELF_HOST ? 1 : 0, src_id: row.id,
+    message_count: row.message_count ?? 0, chatable: isCatalogHarness(row.agent) && (host.host_id === SELF_HOST || routed) ? 1 : 0, src_id: row.id,
   };
   return { key: internalKey(r), ...r };
 }
@@ -70,7 +83,7 @@ function hasEndedIndex(db: Database): boolean {
 const indexHint = (db: Database) => (hasEndedIndex(db) ? "indexed by idx_sessions_ended" : "");
 
 /** One incremental batch past (av.maxEnded, av.maxId). Returns rows read and rows changed. */
-export function ingestBatch(db: Database, sidecar: Sidecar, self: Set<string>): { read: number; changed: number } {
+export function ingestBatch(db: Database, sidecar: Sidecar, self: MachineNames): { read: number; changed: number } {
   const maxEnded = sidecar.meta("av.maxEnded") ?? "";
   const maxId = sidecar.meta("av.maxId") ?? "";
   const rows = db.query<AvSessionRow, [string, string, number]>(`select ${FIELDS} from sessions ${indexHint(db)}
@@ -86,7 +99,7 @@ export function ingestBatch(db: Database, sidecar: Sidecar, self: Set<string>): 
  * One page of the reconcile walk over every session, descending keyset. Rows that pass the
  * owner filter are upserted and recorded in `seen`; NULL ended_at rows come in the final page.
  */
-export function reconcilePage(db: Database, sidecar: Sidecar, self: Set<string>, seen: Set<string>, after: { e: string; i: string } | null | "nulls"): { next: { e: string; i: string } | null | "nulls" | "done"; changed: number } {
+export function reconcilePage(db: Database, sidecar: Sidecar, self: MachineNames, seen: Set<string>, after: { e: string; i: string } | null | "nulls"): { next: { e: string; i: string } | null | "nulls" | "done"; changed: number } {
   let rows: AvSessionRow[];
   if (after === "nulls") {
     rows = db.query<AvSessionRow, []>(`select ${FIELDS}, (${OWNER_FILTER}) as ok from sessions where ended_at is null`).all();
@@ -105,7 +118,7 @@ export function reconcilePage(db: Database, sidecar: Sidecar, self: Set<string>,
 }
 
 /** Cold-start list straight from AgentsView, (ended_at desc, id asc) keyset, while the sidecar builds. */
-export function coldList(db: Database, self: Set<string>, after: { e: string; i: string } | undefined, limit: number): { rows: NewChatRow[]; raw: AvSessionRow[] } {
+export function coldList(db: Database, self: MachineNames, after: { e: string; i: string } | undefined, limit: number): { rows: NewChatRow[]; raw: AvSessionRow[] } {
   const raw = db.query<AvSessionRow, [string, string, number]>(`select ${FIELDS} from sessions ${indexHint(db)}
     where ended_at is not null and (ended_at < ?1 or (ended_at = ?1 and id > ?2)) and ${OWNER_FILTER}
     order by ended_at desc, id asc limit ?3`).all(after?.e ?? "￿", after?.i ?? "", limit);

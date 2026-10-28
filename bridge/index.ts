@@ -39,7 +39,7 @@ import { createPairingHttpHandler } from "./src/pairing-http";
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
-import { AGENTSVIEW_PREFIX, agentsviewPath, rosterArchiveHead } from "./src/agentsview-sessions";
+import { AGENTSVIEW_PREFIX, agentsviewMachineId, agentsviewPath, isSelfArchiveProfile, rosterArchiveHead } from "./src/agentsview-sessions";
 import { ChatIndexClient } from "./src/chat-index/client";
 import { createChatsHttpHandler } from "./src/chat-index/http";
 import { hermesWsPage } from "./src/chat-index/hermes-src";
@@ -61,6 +61,7 @@ import type { LiveOwner } from "./src/hermes-owner";
 import { z0bridgeHermes } from "./src/z0bridge-hermes";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
 import { acpCommand, AcpSupervisor, type AcpHandle } from "./src/acp/supervisor";
+import { remoteAcpCommand, remoteHostFor, remoteHosts, remoteRouteIds, remoteTurnProblem, type RemoteHost } from "./src/remote-hosts";
 import {
   CANCELLED_EXIT_CODE,
   TIMEOUT_EXIT_CODE,
@@ -85,6 +86,8 @@ import { ThinkingSummarizer } from "./src/thinking-summary";
 import { TurnSummaries } from "./src/turn-summaries";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
 import { createOrchestraHttpHandler } from "./src/orchestra-http";
+import { createRoadmapHttpHandler } from "./src/roadmap-http";
+import { createPmHttpHandler } from "./src/pm-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 import { acknowledgeSocketPing, BRIDGE_WS_IDLE_TIMEOUT_SECONDS } from "./src/ws-keepalive";
 
@@ -110,6 +113,8 @@ const STDERR_TAIL = 2000;
 const RETAIN_MS = 10 * 60 * 1000;
 const MAX_RETAINED = 50;
 const acpSupervisor = new AcpSupervisor();
+/** Turns that run on another computer (DASH_REMOTE_HOSTS) are admitted separately: they use none of this host. */
+const remoteAcpSupervisor = new AcpSupervisor();
 
 class Turn implements Sink {
   readonly events: TurnEvent[] = [];
@@ -155,11 +160,17 @@ class Turn implements Sink {
   private hermesProfile?: string;
   private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
 
-  start(input: TurnInput): void {
+  start(input: TurnInput, remote?: RemoteHost): void {
     if (input.mode === "steer" && (this.harness.id !== "hermes" || !input.sessionId)) { this.endWithout("Steer requires a gateway-hosted Hermes session."); return; }
     // A spoken turn is transcribed before it starts, so a cancel can arrive
     // while there is no process to kill yet.
     if (this.cancelled || this.finished) return;
+    if (remote) {
+      // The session lives on another computer: run that computer's ACP adapter over SSH.
+      log("turn.remote", { id: this.id, harness: this.harness.id, machine: remote.machine, session: "resume" });
+      this.runAcp(remoteAcpCommand(remote, this.harness.id, input.cwd), input, undefined, undefined, { spawnCwd: DEFAULT_CWD, timeoutMs: turnTimeoutMs() });
+      return;
+    }
     if (this.harness.id === "hermes" && input.sessionId) {
       this.continueHermes(input);
       return;
@@ -186,9 +197,9 @@ class Turn implements Sink {
     this.spawnCli(input);
   }
 
-  private runAcp(command: string[], input: TurnInput, env?: Record<string, string>, release?: () => void): void {
+  private runAcp(command: string[], input: TurnInput, env?: Record<string, string>, release?: () => void, remote?: { spawnCwd: string; timeoutMs: number }): void {
     try {
-      this.acp = acpSupervisor.start({ id: this.id, command, input, sink: this, env });
+      this.acp = (remote ? remoteAcpSupervisor : acpSupervisor).start({ id: this.id, command, input, sink: this, env, ...remote });
       void this.acp.done.then(
         () => { release?.(); this.finish(0); },
         error => {
@@ -604,6 +615,8 @@ function sendTo(ws: Socket, message: ServerMessage): void {
 
 /** A turn that failed before its process could start still needs a well-formed event stream. */
 function rejectTurn(ws: Socket, id: string, message: string): void {
+  // A refused turn used to leave no trace on the host, so "the phone can't send" was undiagnosable.
+  log("turn.rejected", { id, reason: message });
   sendTo(ws, { type: "error", id, seq: 1, message });
   sendTo(ws, { type: "done", id, seq: 2, exitCode: 1 });
 }
@@ -724,7 +737,8 @@ const chatIndex = new ChatIndexClient({
     agentsviewPath: agentsviewPath(),
     ...(process.env.DASH_HERMES_ROOT ? { hermesRoot: process.env.DASH_HERMES_ROOT } : {}),
     archiveHead: rosterArchiveHead(),
-    selfMachines: [HOST_NAME, ...(process.env.DASH_CHAT_SELF_MACHINES ?? "").split(",").filter(Boolean)],
+    selfMachines: [HOST_NAME, ...[agentsviewMachineId()].filter((id): id is string => Boolean(id)), ...(process.env.DASH_CHAT_SELF_MACHINES ?? "").split(",").filter(Boolean)],
+    remoteMachines: remoteHosts().map(h => h.machine),
   },
 });
 const liveSince = new Map<string, number>();
@@ -762,6 +776,8 @@ const handleChats = createChatsHttpHandler({
 const contextCompaction = compactionEnabled();
 const handleContext = contextHttp({ sessions: hermesSessions, compaction: contextCompaction });
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
+const handleRoadmap = createRoadmapHttpHandler({ authorize });
+const handlePm = createPmHttpHandler({ authorize });
 const handleModels = createModelsHttpHandler({ authorize });
 const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
 
@@ -810,6 +826,10 @@ const server = Bun.serve<SocketData>({
       if (context) return cors(context);
       const orchestra = await handleOrchestra(request);
       if (orchestra) return cors(orchestra);
+      const roadmap = await handleRoadmap(request);
+      if (roadmap) return cors(roadmap);
+      const pm = await handlePm(request);
+      if (pm) return cors(pm);
       const models = await handleModels(request);
       if (models) return cors(models);
       const supervision = await handleSupervision(request);
@@ -852,6 +872,7 @@ const server = Bun.serve<SocketData>({
         harnesses,
         hosts: await selfRoster(harnesses, tailscaleIp ?? undefined),
         features: [CHATS_FEATURE],
+        routes: remoteRouteIds(),
       });
       if (ws.readyState === WebSocket.OPEN) ws.data.stopNotices = notices.subscribe(notice => {
         if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) { ws.close(1008, "Identity authorization expired"); return; }
@@ -869,7 +890,8 @@ const server = Bun.serve<SocketData>({
       })) return;
       const message = parseClientMessage(payload);
       if (!message) {
-        log("ws.bad_message", { remote: ws.remoteAddress });
+        const kind = payload !== null && typeof payload === "object" && typeof (payload as { type?: unknown }).type === "string" ? String((payload as { type: string }).type).slice(0, 32) : "-";
+        log("ws.bad_message", { remote: ws.remoteAddress, type: kind });
         return;
       }
       switch (message.type) {
@@ -895,13 +917,30 @@ const server = Bun.serve<SocketData>({
           break;
         }
         case "chat": {
+          log("ws.chat", { id: message.id, harness: message.harness, hostId: message.hostId ?? "-", profileId: message.profileId ?? "-", session: message.sessionId ? "resume" : "new", mode: message.mode ?? "-" });
+          const remote = SELF.matches(message.hostId) ? undefined : remoteHostFor(message.hostId);
+          if (remote) {
+            // A chat recorded on another computer (DASH_REMOTE_HOSTS): its session and directory
+            // are checked there, by that computer's own adapter.
+            const problem = remoteTurnProblem(remote, { harness: message.harness, profileId: message.profileId, sessionId: message.sessionId, cwd: message.cwd, attachments: message.attachments?.length ?? 0 });
+            const harness = HARNESSES.find((h) => h.id === message.harness);
+            if (problem || !harness) return rejectTurn(ws, message.id, problem ?? `Unknown agent "${message.harness}".`);
+            if (turns.has(message.id)) return;
+            const turn = new Turn(message.id, harness);
+            turn.listeners.add(ws);
+            ws.data.turns.add(message.id);
+            turns.set(message.id, turn);
+            if (message.summariesEnabled) turn.enableSummaries();
+            turn.start({ text: message.text, cwd: message.cwd ?? "", sessionId: message.sessionId, profileId: message.profileId }, remote);
+            break;
+          }
           if (!(await isSelfHost(message.hostId))) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
           if (message.harness === "hermes" && message.sessionId) {
             if (!hermesSessions.target(message.profileId, message.sessionId)) return rejectTurn(ws, message.id, "Unknown or ambiguous Hermes profile/session.");
           } else if (message.harness === "omp" && message.profileId?.startsWith("omp:")) {
             const hosts = await selfRoster(harnessList(), HOST);
             if (!hosts.some(h => h.self && h.agents.some(a => a.id === message.profileId && a.sessionId === message.sessionId && a.status === "running"))) return rejectTurn(ws, message.id, "This OMP session has ended on the host.");
-          } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !(message.harness === "hermes" && message.profileId === "hermes:default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
+          } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !isSelfArchiveProfile(message.profileId, message.harness, message.sessionId) && !(message.harness === "hermes" && message.profileId === "hermes:default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
           if (turns.has(message.id)) return;
           const harness = HARNESSES.find((h) => h.id === message.harness);
           if (!harness) return rejectTurn(ws, message.id, `Unknown agent "${message.harness}".`);
@@ -937,7 +976,7 @@ const server = Bun.serve<SocketData>({
           } else if (message.harness === "omp" && message.profileId?.startsWith("omp:")) {
             const hosts = await selfRoster(harnessList(), HOST);
             if (!hosts.some(h => h.self && h.agents.some(a => a.id === message.profileId && a.sessionId === message.sessionId && a.status === "running"))) return rejectTurn(ws, message.id, "This OMP session has ended on the host.");
-          } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !(message.harness === "hermes" && message.profileId === "hermes:default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
+          } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !isSelfArchiveProfile(message.profileId, message.harness, message.sessionId) && !(message.harness === "hermes" && message.profileId === "hermes:default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
           if (turns.has(message.id) || utterances.has(message.id)) return;
           const ready = speechAvailable();
           if (!ready.ok) {
@@ -1036,6 +1075,13 @@ const server = Bun.serve<SocketData>({
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, hostId: SELF.id(), profileId: target ? hermesSessionAgentId(target.profile, message.sessionId) : message.profileId, messages: page.messages, ...paging(page.before) });
             break;
           }
+          const routed = SELF.matches(message.hostId) ? undefined : remoteHostFor(message.hostId);
+          if (routed) {
+            // A chat recorded on a routed computer: its history is the copy AgentsView synced here.
+            const page = await chatIndex.history({ kind: message.harness, sessionId: message.sessionId, host: routed.hostId, limit: limit ?? 400, self: { id: SELF.id(), name: HOST_NAME } }).catch(() => ({ messages: [], before: null }));
+            sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, messages: page.messages, ...paging(page.before) });
+            break;
+          }
           if (!(await isSelfHost(message.hostId)) || (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && !message.profileId.startsWith("omp:") && !message.profileId.startsWith(AGENTSVIEW_PREFIX))) {
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, messages: [], ...paging(null) });
             break;
@@ -1083,7 +1129,7 @@ function shutdown(): void {
   noticeServer?.stop(true);
   chatIndex.stop();
   for (const turn of turns.values()) turn.cancel();
-  void acpSupervisor.close().then(() => {
+  void Promise.all([acpSupervisor.close(), remoteAcpSupervisor.close()]).then(() => {
     log("bridge.stopped");
     process.exit(0);
   }, () => process.exit(1));

@@ -295,6 +295,11 @@ export type ServerMessage =
       hosts?: HostInfo[];
       /** Optional capability flags, e.g. CHATS_FEATURE. Old bridges omit this. */
       features?: string[];
+      /**
+       * Optional. Host ids besides this computer (chat-index `machine:<name>`) whose recorded
+       * Claude Code / Codex chats this bridge continues on that computer. Old bridges omit this.
+       */
+      routes?: string[];
     }
   /** Reply to `attach` for a turn the bridge no longer knows about. */
   | { type: "lost"; id: string }
@@ -538,6 +543,7 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
           harnesses: raw.harnesses,
           hosts: parseHosts(raw.hosts),
           features: Array.isArray(raw.features) && raw.features.length <= 32 && raw.features.every(str) ? raw.features : undefined,
+          routes: Array.isArray(raw.routes) && raw.routes.length <= 32 && raw.routes.every(str) ? raw.routes : undefined,
         };
       }
       return null;

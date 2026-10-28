@@ -1,3 +1,4 @@
+import type { BottomActionOption } from "./bottom-action-sheet";
 import type { WindowOrigin } from "./chat-window";
 
 /** Anything with React Native's `measureInWindow` (a row's host View). */
@@ -33,7 +34,31 @@ export function chatRowActions(deps: ChatRowDeps) {
   };
 }
 
-/** Long-press: in-app feedback selection when enabled, otherwise delete. */
-export function rowLongPress<T>(feedbackOn: boolean, onFeedback: T, remove: T): T {
-  return feedbackOn ? onFeedback : remove;
+/**
+ * Long-press on a chat row opens this menu and does nothing else. It used to submit
+ * in-app feedback directly (feedback defaults on), which created a "Dash feedback" chat,
+ * SENT "Selected chat …" to the agent and navigated into it: a long-press sent a message.
+ */
+export type ChatRowMenuChoice = "open" | "feedback" | "delete";
+
+export function chatRowMenu(feedbackOn: boolean, title: string): { title: string; options: BottomActionOption[] } {
+  const name = title.trim() || "Chat";
+  return {
+    title: name,
+    options: [
+      { id: "open", label: "Open", accessibilityLabel: `Open ${name}`, destructive: false },
+      ...(feedbackOn ? [{ id: "feedback", label: "Send feedback about this chat", accessibilityLabel: `Send feedback about ${name}`, destructive: false }] : []),
+      { id: "delete", label: "Delete from this phone", accessibilityLabel: `Delete ${name} from this phone`, destructive: true },
+    ],
+  };
+}
+
+/** Run one explicit menu choice. Unknown ids (or a dismissed menu) do nothing. */
+export function runChatRowMenu(choice: string, id: string, handlers: { open(id: string): void; feedback(id: string): void; remove(id: string): void }): boolean {
+  switch (choice) {
+    case "open": handlers.open(id); return true;
+    case "feedback": handlers.feedback(id); return true;
+    case "delete": handlers.remove(id); return true;
+    default: return false;
+  }
 }

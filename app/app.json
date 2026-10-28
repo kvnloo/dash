@@ -2,7 +2,7 @@
   "expo": {
     "name": "Dash",
     "slug": "dash",
-    "version": "0.1.0",
+    "version": "0.1.0-rc4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "dash",
@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "app.dash.mobile",
-      "versionCode": 1,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/android-icon-foreground.png",

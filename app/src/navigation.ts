@@ -13,6 +13,10 @@ export type RootStackParamList = {
   Pair: { address?: string; code?: string; identityLink?: string } | undefined;
   Settings: { firstRun?: boolean } | undefined;
   Trace: undefined;
+  /** Projects, features and tasks tracked in git (pm/events.jsonl). */
+  Roadmap: undefined;
+  RoadmapProject: { projectId: string; feature?: string };
+  RoadmapTask: { taskId: string };
   Lab: undefined;
 };
 

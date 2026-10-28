@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { AgentInfo } from "../../shared/protocol";
 
 // Persisted chats for every catalog harness Dash lists, from AgentsView's unified
@@ -17,6 +17,24 @@ export function agentsviewPath(env: Record<string, string | undefined> = process
   if (env.DASH_AGENTSVIEW === "0") return undefined;
   const path = env.DASH_AGENTSVIEW_DB ?? join(homedir(), ".agentsview", "sessions.db");
   return existsSync(path) ? path : undefined;
+}
+
+/**
+ * The machine name AgentsView stamps on sessions it records on THIS computer. AgentsView
+ * uses its install id (a hex hash, not the hostname), so without it every local session
+ * looked like "Other machine (…)" and was listed view-only: nothing on this host was chatable.
+ */
+export function agentsviewMachineId(path: string | undefined = agentsviewPath()): string | undefined {
+  if (!path) return undefined;
+  try {
+    const id = readFileSync(join(dirname(path), "telemetry-install-id"), "utf8").trim();
+    return /^[A-Za-z0-9._-]{1,128}$/.test(id) ? id : undefined;
+  } catch { return undefined; }
+}
+
+/** An archived (AgentsView) chat on this host is addressed as `av:<harness>:<sessionId>`. */
+export function isSelfArchiveProfile(profileId: string | undefined, harness: string, sessionId: string | undefined): boolean {
+  return Boolean(profileId && sessionId && profileId === `${AGENTSVIEW_PREFIX}${harness}:${sessionId}`);
 }
 
 /**
