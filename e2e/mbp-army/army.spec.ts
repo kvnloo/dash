@@ -331,7 +331,11 @@ test.describe('ephemeral ACP regression',()=>{
    await expect(page.getByText('This chat has ended on the host. Its saved history is still on this phone.',{exact:true})).toHaveCount(0);
   }
   expect(failedPolls).toEqual([]);
+  // With a sendable draft the primary action is Queue; Stop is the running-and-empty action.
+  await composer(page).fill('');
   await page.getByRole('button',{name:'Stop',exact:true}).click({noWaitAfter:true});
+  // Stopped: a fresh draft is Send again, not Queue.
+  await composer(page).fill('after stop');
   await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled();
  });
  test('a missing roster row must not terminate a bridge-owned running turn',async({page,bridge})=>{
