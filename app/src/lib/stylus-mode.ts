@@ -13,11 +13,6 @@ export function penButton(state: StylusModeState, pressed: boolean): StylusModeS
   return { active: pressed ? !state.active : state.active, buttonDown: pressed };
 }
 
-/** The pill stays usable even when the native stylus module is absent. */
-export function toggleMode(state: StylusModeState): StylusModeState {
-  return { active: !state.active, buttonDown: state.buttonDown };
-}
-
 export interface StylusButtonSource {
   addListener(event: "button", listener: (payload: unknown) => void): { remove(): void };
 }
