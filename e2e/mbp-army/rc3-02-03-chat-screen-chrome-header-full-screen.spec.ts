@@ -265,14 +265,15 @@ test('03.12 window pill status slot reflects idle/thinking/tool/queued/offline a
  // Thinking.
  await send(page,'ARMY_HANG pill thinking');
  await expect(page.getByText(/ARMY_STREAM_BEGIN/).filter({visible:true}).first()).toBeVisible();
- // The slot is a Feather glyph followed by the text, so the element text is '\uf100working'; match the label at the end.
- await expect(status).toHaveText(/working$/);
+ // #516: the transcript owns the live working indicator; the pill's slot is only offline, live voice and queue.
+ await expect(status).toHaveCount(0);
  await page.getByRole('button',{name:'Stop',exact:true}).click({noWaitAfter:true});
  await expect(status).toHaveCount(0,{timeout:20000});
- // Running tool.
+ // Running tool: shown in the transcript, still nothing in the pill.
  await send(page,'ARMY_TOOLHANG pill tool');
- await expect(status).toContainText('armytool',{timeout:20000});
- // Queued behind the running tool (tool outranks queued in the reserved slot; the label lists both).
+ await expect(page.getByText(/armytool/).filter({visible:true}).first()).toBeVisible({timeout:20000});
+ await expect(status).toHaveCount(0);
+ // Queued behind the running tool (the pill label lists the queue).
  await composer(page).fill('queued behind tool');
  await page.getByRole('button',{name:'Queue',exact:true}).click({noWaitAfter:true});
  await expect(pill).toHaveAttribute('aria-label',/1 queued/);

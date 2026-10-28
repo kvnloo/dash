@@ -93,7 +93,7 @@ const badge=(page:Page)=>page.getByTestId('chat-window-badge');
 const optionsTrigger=(page:Page)=>page.getByRole('button',{name:'Options. Current surface: Chat',exact:true});
 const back=(page:Page)=>page.getByRole('button',{name:'Back',exact:true});
 // Spec fix: In-app feedback is on by default, which swaps the Main search bar placeholder to 'Feedback for Dash' (MainScreen.tsx).
-const searchBox=(page:Page)=>page.getByPlaceholder(/^(Search or message|Feedback for) Dash$/);
+const searchBox=(page:Page)=>page.getByPlaceholder(/^((Search or message|Feedback for) Dash|Message .+)$/);
 
 /** Pair, then New chat from the workspace header: RC3 opens it full screen with the harness chip. */
 async function openFullscreen(page:Page,b:Bridge){

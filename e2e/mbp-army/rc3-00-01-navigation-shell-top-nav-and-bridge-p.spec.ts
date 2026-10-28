@@ -281,9 +281,8 @@ test.describe('rc3 01 connection banner',()=>{
 test.describe('rc3 01 global search bar',()=>{
  test('Mention inserts @, Voice input opens Voice, Send submits the note into a chat',async({page,bridge})=>{
   await pairCold(page,bridge);
-  // In-app feedback defaults to on (inAppFeedbackEnabled: settings.inAppFeedback !== false; pair claim sets true),
-  // so the bar reads 'Feedback for Dash'; 'Search or message Dash' is the Settings > In-app feedback Off wording.
-  await expect(search(page)).toHaveAttribute('placeholder','Feedback for Dash');
+  // #506: the bar names the configured agent (default harness OMP in the fixture); feedback on/off no longer changes the placeholder.
+  await expect(search(page)).toHaveAttribute('placeholder','Message OMP');
   await btn(page,'Mention').click({noWaitAfter:true});
   await expect(search(page)).toHaveValue('@');
   await expect(search(page)).toBeFocused();

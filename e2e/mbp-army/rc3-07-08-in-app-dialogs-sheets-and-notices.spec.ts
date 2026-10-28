@@ -387,9 +387,10 @@ test.describe('RC3 08 reconnect notice',()=>{
   await openChat(page,bridge);
   await expect(page.getByTestId('pc-reconnect-notice')).toHaveCount(0);
   await bridge.stop();
-  const notice=page.getByTestId('pc-reconnect-notice');
+  // The retained Main page behind the chat window mounts its own notice; the owner sees the one in the window.
+  const notice=page.getByTestId('chat-window').getByTestId('pc-reconnect-notice');
   await expect(notice,'connection loss must show the ReconnectNotice').toBeVisible({timeout:15000});
-  const action=page.getByTestId('pc-reconnect-action');
+  const action=notice.getByTestId('pc-reconnect-action');
   await expect(action).toHaveAttribute('aria-label',/^(Connecting to PC… Retry connection now\.|Reconnecting to PC… Retry connection now\.|PC unavailable · retrying in \d+s\. Retry connection now\.|Offline · reconnects when Dash is active\. Retry connection now\.)$/);
   await expect(notice.getByText(/^(Connecting to PC…|Reconnecting to PC…|PC unavailable · retrying in \d+s|Offline · reconnects when Dash is active)$/)).toBeVisible();
   await expect(notice.getByText('Retry now',{exact:true})).toBeVisible();

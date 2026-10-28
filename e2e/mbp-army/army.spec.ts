@@ -319,16 +319,17 @@ test('draft text survives close, reopen and real browser reload',async({page,bri
  await expect(composer(page)).toHaveValue(draft);
 });
 
-test('bridge process death disables Send and restart reconnects',async({page,bridge})=>{
+test('bridge process death keeps the draft, queues a text send offline and restart delivers it',async({page,bridge})=>{
  await openChat(page,bridge);await composer(page).fill('draft while offline');
  await bridge.stop();
- await expect(page.getByRole('button',{name:'Send',exact:true})).toBeDisabled({timeout:15000});
- await expect(page.getByText(/tap to retry|Connecting to bridge|Offline|Disconnected/i).filter({visible:true}).first()).toBeVisible();
+ await expect(page.getByText(/tap to retry|Connecting to bridge|Offline|Disconnected/i).filter({visible:true}).first()).toBeVisible({timeout:15000});
  await expect(composer(page)).toHaveValue('draft while offline');
- await bridge.start();
- await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled({timeout:30000});
+ // Delivery outbox (COV-G04): offline Send accepts a text-only message and keeps it queued on the phone; attachments stay blocked.
+ await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled({timeout:15000});
+ await expect(page.getByRole('button',{name:'Attach file',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'Send',exact:true}).click({noWaitAfter:true});
- await expect(page.getByText(/ARMY_REPLY: draft while offline/).filter({visible:true}).first()).toBeVisible();
+ await bridge.start();
+ await expect(page.getByText(/ARMY_REPLY: draft while offline/).filter({visible:true}).first()).toBeVisible({timeout:30000});
 });
 
 test('real ACP error is surfaced visibly and leaves composer usable',async({page,bridge})=>{

@@ -156,11 +156,14 @@ test.describe('RC3 06 delivery status',()=>{
    await expect(status,'RC3 must mount DeliveryStatus on the sent user bubble').toBeVisible();
    await expect(status).toContainText('Not sent · Retry',{timeout:60000});
    await expect(status).toContainText('Delivery is unconfirmed.');
+   // Retry while the bridge is still frozen: the first frame is still buffered in the socket, so the second carries the same
+   // client id. Once the bridge thaws it must dedupe them into exactly one turn. (Retrying after thawing is moot: the first
+   // frame is then delivered and the Retry control disappears.)
+   const retry=page.getByTestId('delivery-retry').last();
+   await expect(page.getByRole('button',{name:'Retry message delivery',exact:true})).toBeVisible({timeout:30000});
+   await retry.click({noWaitAfter:true});
+   await expect.poll(async()=>(await deliveryLog(page)).some(row=>row.endsWith('|Retrying message delivery')),{message:'Retry label becomes Retrying message delivery'}).toBe(true);
   }finally{for(const pid of pids){try{process.kill(pid,'SIGCONT');}catch{/* exited */}}}
-  const retry=page.getByTestId('delivery-retry').last();
-  await expect(page.getByRole('button',{name:'Retry message delivery',exact:true})).toBeVisible({timeout:30000});
-  await retry.click({noWaitAfter:true});
-  await expect.poll(async()=>(await deliveryLog(page)).some(row=>row.endsWith('|Retrying message delivery')),{message:'Retry label becomes Retrying message delivery'}).toBe(true);
   await expect(page.getByTestId('delivery-status').last()).toContainText(/Received by bridge|Started/,{timeout:30000});
   await expect(page.getByText(new RegExp('ARMY_REPLY: '+esc(text))).first()).toBeVisible();
   await expect(page.getByTestId('transcript-viewport').getByText(new RegExp('ARMY_REPLY: '+esc(text)))).toHaveCount(1);

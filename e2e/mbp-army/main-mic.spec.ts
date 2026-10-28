@@ -6,6 +6,7 @@ test.use({
   bridgeOptions: fixtureOptions,
   launchOptions: {
     args: [
+      ...(process.env.ARMY_HEADED === "1" ? ["--ozone-platform=wayland"] : []),
       "--disable-dev-shm-usage",
       "--use-fake-device-for-media-stream",
       "--use-fake-ui-for-media-stream",

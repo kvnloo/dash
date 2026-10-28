@@ -51,7 +51,8 @@ test('G08 reconnect notice appears on real bridge loss and clears after authenti
   await openChat(page, bridge);
   await expect(page.getByTestId('pc-reconnect-notice')).toHaveCount(0);
   await bridge.stop();
-  const notice = page.getByTestId('pc-reconnect-notice');
+  // Main behind the window mounts its own notice; assert the one in the chat window.
+  const notice = page.getByTestId('chat-window').getByTestId('pc-reconnect-notice');
   await expect(notice).toBeVisible({ timeout: 15000 });
   await expect(notice.getByTestId('pc-reconnect-action')).toHaveAttribute('aria-label', /Retry connection now\.$/);
   await expect(notice.getByText('Retry now', { exact: true })).toBeVisible();

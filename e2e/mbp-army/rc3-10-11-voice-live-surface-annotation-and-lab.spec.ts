@@ -312,7 +312,7 @@ async function firstStroke(page:Page){
 test('11.09 annotation tray: no strokes disables Undo/Clear/Keep/Send; tool chips and ink swatches select',async({page,bridge})=>{
  await enterAnnotate(page,bridge);
  for(const name of ['Undo','Clear','Send and keep drawing','Send annotation'])await expect(chip(page,name)).toBeDisabled();
- await expect(tray(page).getByText(/^→ .*chat · hold Talk to speak$/)).toBeVisible();
+ await expect(tray(page).getByText(/^→ .+ · hold Talk or type a note/)).toBeVisible();
  const tools=['Pen','Highlighter','Arrow','Box','Circle','Eraser'];
  await chipOn(chip(page,'Pen'));
  for(const o of tools.slice(1))await chipOff(chip(page,o));
@@ -391,6 +391,9 @@ test('11.12 annotation: Keep sends and keeps drawing; Send sends, exits and show
  await enterAnnotate(page,bridge);
  await firstStroke(page);
  await chip(page,'Send and keep drawing').click({noWaitAfter:true});
+ // C19: marks without words ask first; Send anyway sends them as they are.
+ await expect(tray(page).getByText('No words captured. Send the marks only?',{exact:true})).toBeVisible();
+ await chip(page,'Send anyway').click({noWaitAfter:true});
  // The chat receives the composed annotation turn (fixture echoes it).
  await expect(page.getByText(/ARMY_REPLY: Annotated .*\(1 stroke\)/).filter({visible:true}).first()).toBeVisible({timeout:30000});
  await expect(tray(page)).toBeVisible();
@@ -399,6 +402,8 @@ test('11.12 annotation: Keep sends and keeps drawing; Send sends, exits and show
  await stroke(page);await stroke(page,24);
  await expect(chip(page,'Send annotation')).toBeEnabled();
  await chip(page,'Send annotation').click({noWaitAfter:true});
+ await expect(tray(page).getByText('No words captured. Send the marks only?',{exact:true})).toBeVisible();
+ await chip(page,'Send anyway').click({noWaitAfter:true});
  await expect(page.getByLabel(/^Annotation preview\. Sent to .* · 2 strokes$/)).toBeVisible({timeout:30000});
  await expect(page.getByText(/ARMY_REPLY: Annotated .*\(2 strokes\)/).filter({visible:true}).first()).toBeVisible({timeout:30000});
  await expect(chip(page,'Exit annotation')).toHaveCount(0);
@@ -420,7 +425,7 @@ test('11.13 annotation: Hold to talk on web reports the missing microphone hones
  await page.waitForTimeout(600);await page.mouse.up();
  // The fake capture device records; the isolated bridge has no speech model (DASH_STT_MODEL is a missing file), so transcription must fail visibly.
  await expect(tray(page).getByRole('alert').filter({hasText:/\S/}).first()).toBeVisible({timeout:45000});
- await expect(tray(page).getByText(/hold Talk to speak/)).toBeVisible();
+ await expect(tray(page).getByText(/hold Talk or type a note/)).toBeVisible();
  await expect(tray(page).getByText(/\d+ spoken/)).toHaveCount(0);
 });
 

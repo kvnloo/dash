@@ -439,7 +439,8 @@ test.describe('RC3 12 voice protocol',()=>{
   await stop.click({noWaitAfter:true});
   await expect(stop).toHaveCount(0,{timeout:20000});
   await expect.poll(()=>transcribes,{message:'the recording is POSTed once to the bridge HTTP /transcribe'}).toEqual([{method:'POST',status:503}]);
-  await expect(page.getByText('Speech-to-text is not available on this host.').filter({visible:true}).first(),'the bridge refusal is shown on the composer').toBeVisible();
+  // C03/C07: the bridge's 503 now carries the real reason ('No speech model at <path>...') and the composer shows it.
+  await expect(page.getByText(/^No speech model at .*no-model\. Run `omp setup speech`\.$/).filter({visible:true}).first(),'the bridge refusal is shown on the composer').toBeVisible();
   await expect(page.getByRole('button',{name:'Retry dictation',exact:true})).toBeVisible();
   await expect(composer(page),'a failed transcription leaves the draft untouched').toHaveValue('');
   for(const type of ['voice_begin','voice_chunk','voice_commit'])expect(wire.sent(type),`dictation sends no ${type} frame (the WebSocket spoken-turn path is LegacyVoiceScreen only)`).toEqual([]);

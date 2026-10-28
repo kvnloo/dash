@@ -94,17 +94,19 @@ test('04 placeholder names Hermes after switching harness',async({page,bridge})=
  await expect.poll(()=>placeholder(page)).toMatch(/^Message Hermes|^Message…$/);
 });
 
-test('04 composer disabled while offline: Send and Attach blocked, nothing reaches the agent',async({page,bridge})=>{
+test('04 composer offline: a text Send queues in the outbox, Attach stays blocked, nothing reaches the agent until the bridge returns',async({page,bridge})=>{
  await openChat(page,bridge);
  await bridge.stop();
  await expect(page.getByText(/tap to retry|Connecting to bridge|Offline|Disconnected/i).filter({visible:true}).first()).toBeVisible({timeout:20000});
- await composer(page).fill('offline blocked send');
- await expect(primary(page,'Send')).toBeDisabled();
+ await composer(page).fill('offline queued send');
+ // Delivery outbox (COV-G04): text-only Send is accepted offline and kept on the phone.
+ await expect(primary(page,'Send')).toBeEnabled();
  await expect(page.getByRole('button',{name:'Attach file',exact:true})).toBeDisabled();
- await composer(page).press('Enter');
- await primary(page,'Send').click({force:true,noWaitAfter:true}).catch(()=>{});
- expect(await promptsSent(bridge)).not.toEqual(expect.arrayContaining([expect.stringContaining('offline blocked send')]));
- await expect(composer(page)).toHaveValue(/offline blocked send/);
+ await primary(page,'Send').click({noWaitAfter:true});
+ await expect(composer(page)).toHaveValue('');
+ expect(await promptsSent(bridge),'nothing reaches the agent while the bridge is down').not.toEqual(expect.arrayContaining([expect.stringContaining('offline queued send')]));
+ await bridge.start();
+ await expect.poll(async()=>(await promptsSent(bridge)).filter(t=>t.includes('offline queued send')).length,{timeout:30000,message:'delivered once after the bridge returns'}).toBe(1);
 });
 
 // Open-in placeholder + target error. The fixture-only OMP holder process (same PID namespace as the
