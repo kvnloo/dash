@@ -101,7 +101,11 @@
                "two windows sending into one chat at the same moment: the second waits and is answered after the first"]},
     {"id": "provider-failures", "title": "A provider that is out of usage (402) or rate limiting (429) is named in the chat, never as a host authentication problem (#501)",
      "tests": ["a provider 402 says the agent's account is out of usage, and the chat stays usable",
-               "a provider 429 says the host is being rate limited, and the chat stays usable"]}
+               "a provider 429 says the host is being rate limited, and the chat stays usable"]},
+    {"id": "annotation-entry", "title": "Consistent annotation entry from the window and nav pill, stylus-aware drawing and clean re-entry",
+     "tests": ["annotation-entry: window button opens annotation at 390",
+               "annotation-entry: window button opens annotation at 800",
+               "annotation-entry: pill exit and re-entry clear failed Send and cold reload closes mode"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
