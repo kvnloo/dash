@@ -26,7 +26,7 @@ export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Pro
  * longHermes: a 1000-message native Hermes chat (LONG_HERMES_PROMPTS prompts, each with one answer):
  *   Hermes pages by (timestamp, id) keyset over user and assistant rows, not by AgentsView ordinal.
  */
-export type BridgeOptions = { archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; env?: Record<string,string>; identity?: boolean };
+export type BridgeOptions = { archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; rosterHost?: string; rosterPeer?: Bridge; finishedSessions?: boolean; env?: Record<string,string>; identity?: boolean };
 export const LONG_CHAT_TITLE = 'ARMY long Claude Code chat';
 export const LONG_CHAT_PROMPTS = 125;
 export const LONG_HERMES_TITLE = 'ARMY long Hermes chat';
@@ -38,7 +38,26 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
  for (const name of ['hermes','omp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+'\n', {mode:0o700});
  // Claude Code: the bridge drives it through `claude-agent-acp` (ACP over stdio).
  for (const name of ['claude','claude-agent-acp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' claude\n', {mode:0o700});
- if (options.phoneHosts) {
+ if (options.finishedSessions) {
+  const codex = join(dir,'.codex','sessions','2026','10','28');
+  const claude = join(dir,'.claude','projects','army');
+  await mkdir(codex,{recursive:true}); await mkdir(claude,{recursive:true});
+  await writeFile(join(codex,'rollout-2026-10-28T00-00-00-army-finished-codex.jsonl'),[
+   {type:'session_meta',payload:{cwd:join(dir,'finished-codex')}},
+   {type:'event_msg',payload:{type:'user_message',message:'ARMY finished Codex native chat'}},
+  ].map(row=>JSON.stringify(row)).join('\n')+'\n');
+  await writeFile(join(claude,'army-finished-claude.jsonl'),JSON.stringify({type:'user',cwd:join(dir,'finished-claude'),message:{role:'user',content:'ARMY finished Claude native chat'}})+'\n');
+ }
+ if (options.rosterHost) {
+  const node = (name:string) => ({HostName:name,DNSName:name+'.army.ts.net.',Online:true,OS:'linux',TailscaleIPs:['127.0.0.1']});
+  await writeFile(join(dir,'tailscale.json'),JSON.stringify({Self:node(options.rosterHost),Peer:options.rosterPeer?{mbp:node('mbp')}: {}}));
+  await writeFile(join(bin,'tailscale'),'#!/bin/sh\ncat '+quote(join(dir,'tailscale.json'))+'\n',{mode:0o700});
+  if (options.rosterPeer) {
+   await mkdir(join(dir,'.dash'),{recursive:true});
+   const token=(await readFile(join(options.rosterPeer.dir,'.dash','token'),'utf8')).trim();
+   await writeFile(join(dir,'.dash','peer-roster-tokens.json'),JSON.stringify({mbp:{token,port:options.rosterPeer.port}}),{mode:0o600});
+  }
+ } else if (options.phoneHosts) {
   // Seed the external discovery command, not an app store or HTTP route.
   const recent = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const stale = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();

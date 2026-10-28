@@ -19,7 +19,7 @@ export interface ChatsHttpOptions {
   authorize(request: Request): Promise<boolean>;
   client: ChatIndexClient;
   self(): SelfIdentity;
-  /** Live rows (running, openIn) on this host, already keyed with chatKey. A few dozen at most. */
+  /** Roster-only rows across hosts, already keyed with chatKey (including native-store fallbacks). */
   live(): ChatSummary[];
 }
 
@@ -72,7 +72,7 @@ export function createChatsHttpHandler(options: ChatsHttpOptions) {
     const self = options.self();
     const fh = filterHash(query);
     const value = await client.list({ limit: query.limit, ...(query.cursor ? { cursor: query.cursor } : {}), fh, kinds: query.kinds, hosts: query.hosts.map(h => internalHost(self, h)), chatable: query.chatable, self: { id: self.id, name: self.name } }, request.signal);
-    const live = options.live().filter(row => (!query.kinds.length || query.kinds.includes(row.kind)) && (!query.hosts.length || query.hosts.some(h => self.matches(h))) && (!query.chatable || row.chatable));
+    const live = options.live().filter(row => (!query.kinds.length || query.kinds.includes(row.kind)) && (!query.hosts.length || query.hosts.some(h => h === row.hostId || (row.hostId === self.id && self.matches(h)))) && (!query.chatable || row.chatable));
     const liveKeys = new Set(live.map(row => row.key));
     // Page 1 carries the live overlay; later pages skip those keys so each chat appears once.
     const items = query.cursor ? value.items.filter(item => !liveKeys.has(item.key)) : overlayLive(value.items, live);

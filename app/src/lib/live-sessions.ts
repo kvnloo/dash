@@ -1,10 +1,11 @@
 import type { AgentInfo, ChatSummary, HistoryMessage, HostInfo } from "../../../shared/protocol";
 import { isCatalogHarness } from "../../../shared/catalog";
 import { unwrapHermesHistoryText } from "./history-display";
+import { adoptableSessions } from "./remote-host-sessions";
 import type { Conversation, Message } from "../model";
 
-export function liveConversationId(harness: string, sessionId: string): string {
-  return `live:${harness}:${sessionId}`;
+export function liveConversationId(harness: string, sessionId: string, remoteHostId?: string): string {
+  return remoteHostId === undefined ? `live:${harness}:${sessionId}` : `live:${remoteHostId}:${harness}:${sessionId}`;
 }
 export function liveSessionTitle(agent: Pick<AgentInfo, "name" | "cwd"> & { kind?: string }): string {
   if (agent.kind === "hermes") return agent.name;
@@ -46,7 +47,7 @@ export function liveConversationIndex(conversations: Conversation[]): (agent: { 
 }
 
 function sessionAgents(hosts: HostInfo[]) {
-  return hosts.flatMap(host => !host.self || !host.online ? [] : host.agents.filter(agent => agent.status !== "offline" && isCatalogHarness(agent.kind) && agent.sessionId).map(agent => ({ host, agent })));
+  return adoptableSessions(hosts, { includeRemote: true });
 }
 
 /**
@@ -137,18 +138,18 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     const sessionId = agent.sessionId;
     if (!sessionId || owned.has(`${agent.kind}\u0000${sessionId}\u0000${host.id}\u0000${agent.id}`)) continue;
     if (options.adopt === "live" && agent.status !== "running" && !agent.openIn) continue;
-    const baseId = liveConversationId(agent.kind, sessionId);
+    const baseId = liveConversationId(agent.kind, sessionId, host.self ? undefined : host.id);
     adopted.push({ id: agent.kind === "hermes" ? `${baseId}:${host.id}:${agent.profileId ?? agent.id}` : baseId,
       harness: agent.kind, title: liveSessionTitle(agent), createdAt: agent.lastActivityAt ?? now, updatedAt: agent.lastActivityAt ?? now,
       ...(agent.model ? { sessionModel: { sessionId, model: agent.model } } : {}),
-      sessionId, cwd: agent.cwd, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, messageCount: agent.messageCount, stale: false, ...(agent.openIn ? { openIn: agent.openIn } : {}), messages: [] });
+      sessionId, cwd: agent.cwd, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, messageCount: agent.messageCount, stale: false, ...(!host.self ? { viewOnly: true } : {}), ...(agent.openIn ? { openIn: agent.openIn } : {}), messages: [] });
   }
   return adopted.length ? [...adopted, ...rows] : changed ? rows : existing;
 }
 
 /** The conversation a tapped chat summary becomes. Ids match roster adoption so both paths meet. */
-export function adoptSummary(summary: ChatSummary, now: number): Conversation {
-  const baseId = liveConversationId(summary.kind, summary.sessionId);
+export function adoptSummary(summary: ChatSummary, now: number, selfHostId?: string): Conversation {
+  const baseId = liveConversationId(summary.kind, summary.sessionId, selfHostId && summary.hostId !== selfHostId ? summary.hostId : undefined);
   return {
     id: summary.kind === "hermes" ? `${baseId}:${summary.hostId}:${summary.profileId ?? summary.agentId ?? "default"}` : baseId,
     harness: summary.kind, title: summary.title || liveSessionTitle({ name: summary.kind, cwd: summary.cwd, kind: summary.kind }),

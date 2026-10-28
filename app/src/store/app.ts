@@ -373,7 +373,7 @@ export function openChat(summary: ChatSummary): Conversation {
     setActive(existing.id);
     return updated;
   }
-  let conversation = adoptSummary(summary, Date.now());
+  let conversation = adoptSummary(summary, Date.now(), store.get().connection.hosts.find(host => host.self)?.id);
   if (conversations.some(c => c.id === conversation.id)) conversation = { ...conversation, id: `${conversation.id}:${summary.hostId}` };
   store.set(s => ({ ...s, conversations: [conversation, ...s.conversations] }));
   persistence.markLoaded(conversation.id);

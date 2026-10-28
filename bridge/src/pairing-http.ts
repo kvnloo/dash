@@ -19,7 +19,7 @@ export interface PairingHttpOptions {
   address: string;
   cwd: string;
   harnesses(): HarnessInfo[];
-  roster(): unknown;
+  roster(localOnly?: boolean): unknown;
   pairing: PairingSessions;
   playCode(code: string): void;
   decodeAudio(audio: Uint8Array): Promise<string | null>;
@@ -126,7 +126,7 @@ export function createPairingHttpHandler(options: PairingHttpOptions) {
     if (url.pathname === "/roster") {
       if (!(options.authorize ? await options.authorize(request, true) : secretMatches(bearer ?? url.searchParams.get("token"), options.token))) return unauthorized();
       // ETag over the body: a poll with nothing changed costs one 304 and no client re-render.
-      const body = JSON.stringify({ host: options.hostname, hosts: await options.roster() });
+      const body = JSON.stringify({ host: options.hostname, hosts: await options.roster(url.searchParams.get("local") === "1") });
       const etag = `W/"${hash(body)}-${body.length}"`;
       if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers: { ETag: etag, "cache-control": "no-cache" } });
       return new Response(body, { status: 200, headers: { "content-type": "application/json;charset=utf-8", ETag: etag, "cache-control": "no-cache" } });

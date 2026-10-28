@@ -39,6 +39,7 @@ import { createPairingHttpHandler } from "./src/pairing-http";
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
+import { peerRosterCollector } from "./src/peer-roster";
 import { AGENTSVIEW_PREFIX, agentsviewMachineId, agentsviewPath, isSelfArchiveProfile, rosterArchiveHead } from "./src/agentsview-sessions";
 import { ChatIndexClient } from "./src/chat-index/client";
 import { createChatsHttpHandler } from "./src/chat-index/http";
@@ -599,9 +600,11 @@ const HOST_NAME = hostname();
 const SELF = new SelfHost(HOST_NAME);
 /** Last assembled roster: the live overlay for GET /chats reads it without waiting. */
 let lastHosts: HostInfo[] = [];
+const collectPeers = peerRosterCollector();
 /** Roster for this bridge, remembering the id the phone uses for this computer. */
 async function selfRoster(harnesses: HarnessInfo[], address?: string): Promise<HostInfo[]> {
-  const hosts = await collectRoster(harnesses, { hostname: HOST_NAME, address });
+  const remote = await collectPeers();
+  const hosts = await collectRoster(harnesses, { hostname: HOST_NAME, address }, remote.remoteAgents);
   SELF.remember(hosts);
   lastHosts = hosts;
   return hosts;
@@ -745,7 +748,9 @@ const handleHttp = createPairingHttpHandler({
   get address() { return bridgeAddress; },
   cwd: DEFAULT_CWD,
   harnesses: harnessList,
-  roster: () => selfRoster(harnessList(), HOST),
+  roster: localOnly => localOnly
+    ? collectRoster(harnessList(), { hostname: HOST_NAME, address: HOST })
+    : selfRoster(harnessList(), HOST),
   pairing: { currentOrCreateSession, startBoundSession, claimSession },
   playCode: queuePairPlayback,
   decodeAudio: decodePairAudio,
@@ -787,23 +792,24 @@ const chatIndex = new ChatIndexClient({
   },
 });
 const liveSince = new Map<string, number>();
-/** Running and host-held chats on this computer, keyed like the index. */
+/** Roster-only chats across hosts, including native-store fallbacks, keyed like the index. */
 function liveChats(): ChatSummary[] {
   const self = lastHosts.find(h => h.self);
   if (!self) { void selfRoster(harnessList(), HOST).catch(() => undefined); return []; }
   const now = Date.now();
   const out: ChatSummary[] = [];
-  for (const agent of self.agents) {
-    if (!agent.sessionId || (agent.status !== "running" && !agent.openIn)) continue;
+  for (const host of lastHosts) for (const agent of host.agents) {
+    if (!host.online || agent.status === "offline" || !agent.sessionId || !isCatalogHarness(agent.kind)) continue;
+    if (host.self && agent.status !== "running" && !agent.openIn && agent.source !== "local-store") continue;
     const profileId = agent.kind === "hermes" ? agent.profileId : undefined;
-    const key = chatKey({ hostId: SELF.id(), kind: agent.kind, sessionId: agent.sessionId, ...(profileId ? { profileId } : {}) });
+    const key = chatKey({ hostId: host.id, kind: agent.kind, sessionId: agent.sessionId, ...(profileId ? { profileId } : {}) });
     if (!liveSince.has(key)) liveSince.set(key, now);
     const since = liveSince.get(key) ?? now;
     out.push({
-      key, kind: agent.kind, sessionId: agent.sessionId, hostId: SELF.id(), hostName: self.name, ...(profileId ? { profileId } : {}), agentId: agent.id,
+      key, kind: agent.kind, sessionId: agent.sessionId, hostId: host.id, hostName: host.name, ...(profileId ? { profileId } : {}), agentId: agent.id,
       title: agent.name, ...(agent.cwd ? { cwd: agent.cwd } : {}), startedAt: since, lastActivityAt: agent.lastActivityAt ?? since,
       ...(agent.model ? { model: agent.model } : {}),
-      messageCount: agent.messageCount ?? 0, origin: "live", chatable: isCatalogHarness(agent.kind),
+      messageCount: agent.messageCount ?? 0, origin: "live", chatable: host.self && isCatalogHarness(agent.kind),
       ...(agent.status === "running" ? { running: true } : {}), ...(agent.openIn ? { openIn: agent.openIn } : {}),
     });
   }
