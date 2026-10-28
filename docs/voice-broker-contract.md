@@ -6,7 +6,7 @@
 
 - Dash obtains a short-lived z0bridge token for **audience `z0live`** and **scope `z0live:voice`**, independently of its bridge `dash:chat` token. Each broker request sends `Authorization: Bearer <token>`.
 - The bridge's authenticated `POST /voice/bootstrap` confirms the exact attached Hermes profile/session and supplies the broker origin (as amended by TURBO-C02). No broker bearer or OpenAI provider token crosses that endpoint.
-- The app accepts only a canonical HTTPS `.ts.net` broker origin with an explicit port. An explicit, loopback-only web-army build can use an HTTP `127.0.0.1` origin; that exception is **not** an authorization or deployment path for native users.
+- The app accepts only a canonical HTTPS `.ts.net` broker origin with an explicit port. An explicit, loopback-only web-army build can use an HTTP `127.0.0.1` origin; that exception is **not** an authorization or deployment path for native users. The bridge also requires `DASH_ARMY_VOICE_WEB=1`, a loopback `DASH_Z0LIVE_BROKER`, an allowed loopback browser `Origin`, and a verified Dash identity token to authorize web-army `/voice/bootstrap`.
 - Broker requests use JSON with `Content-Type: application/json`, except provider SDP signaling. The short-lived provider `value` returned at session mint goes only to the fixed provider call signaling endpoint, not to other broker calls.
 
 ## Endpoints used by the client
@@ -31,3 +31,5 @@ At teardown, the app closes its peer/mic first, then attempts `cancel_work` and 
 The normal provider answer is the SDP text response from `POST https://api.openai.com/v1/realtime/calls`, using the minted provider secret. In **web-army-only** builds, TURBO-C02 routes that signaling call to `POST <loopback broker>/v1/fake/answer`, which replies with SDP text starting `v=0`; this is a fixture extension, **not** a deployed broker endpoint.
 
 `e2e/mbp-army/fixture-z0live-broker.ts` and `voice.spec.ts` exercise the real Expo web app and real bridge with a local broker and scripted web peer. They are not proof of native WebRTC capture/playback, speaker selection, Android permissions, deployed z0live, or a real OpenAI realtime call.
+
+The web army pairs its WebSocket normally, then provides ephemeral `window.__dashVoiceArmy = {dash, z0live, identity:{credentialId}}` credentials through Playwright's pre-navigation initialization script. This identity exists only with `EXPO_PUBLIC_DASH_VOICE_FAKE=1` and is not enrolled, stored in settings, or sent as the WebSocket credential. Production web builds still cannot start continuous voice.
