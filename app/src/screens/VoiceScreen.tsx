@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
@@ -7,6 +7,7 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { useContinuousVoice } from "../components/ContinuousVoiceRoot";
 import { screenBack } from "../lib/screen-back";
+import { firstFailingVoiceProbe, runDeviceCheck } from "../lib/device-check";
 
 import type { ScreenProps } from "../navigation";
 import type { OrbState } from "../lib/orb-phase";
@@ -16,6 +17,17 @@ import { colors, radius, space, type } from "../theme";
 /** Live conversation mode: the hero orb follows a live z0live call, else the chat's live phase. */
 export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const [firstFailure, setFirstFailure] = useState<string | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    void runDeviceCheck().then(report => {
+      const failed = firstFailingVoiceProbe(report);
+      if (mounted) setFirstFailure(failed ? failed.label + ": " + failed.detail : null);
+    }).catch(() => {
+      if (mounted) setFirstFailure("Device self-check: unavailable");
+    });
+    return () => { mounted = false; };
+  }, []);
   const { state, start, stop, mute } = useContinuousVoice();
   const live = !["idle", "error"].includes(state.phase);
   const opening = state.phase === "connecting";
@@ -45,6 +57,11 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
       </View>
       <View style={styles.controls}>
         <PrimaryButton accessibilityLabel={live ? "Stop voice in Dash" : "Start voice in Dash"} onPress={() => void (live ? stop() : start())} label={opening ? "Cancel connection" : live ? "Stop voice" : "Start voice"} />
+        {!live && firstFailure ? (
+          <Text testID="voice-first-failure" accessibilityLiveRegion="polite" style={styles.failure}>
+            First failing voice check: {firstFailure}
+          </Text>
+        ) : null}
         {live ? (
           <>
             <Pressable accessibilityRole="button" onPress={() => screenBack(props.navigation)} style={styles.secondary}>
@@ -80,4 +97,5 @@ const styles = StyleSheet.create({
   secondary: { minHeight: 44, justifyContent: "center", alignItems: "center", paddingHorizontal: space.lg },
   secondaryText: { ...type.body, color: colors.textMuted },
   note: { ...type.small, color: colors.textFaint, textAlign: "center" },
+  failure: { ...type.small, color: colors.warn, textAlign: "center" },
 });

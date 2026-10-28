@@ -94,7 +94,10 @@
                "two windows sending into one chat at the same moment: the second waits and is answered after the first"]},
     {"id": "provider-failures", "title": "A provider that is out of usage (402) or rate limiting (429) is named in the chat, never as a host authentication problem (#501)",
      "tests": ["a provider 402 says the agent's account is out of usage, and the chat stays usable",
-               "a provider 429 says the host is being rate limited, and the chat stays usable"]}
+               "a provider 429 says the host is being rate limited, and the chat stays usable"]},
+    {"id": "device-self-check", "title": "Settings reports local device, voice, bridge and annotation readiness",
+     "tests": ["device self-check reports Skia, missing native modules and bridge model reason without external hosts",
+               "device self-check follows bridge nativeVoice disabled environment"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
