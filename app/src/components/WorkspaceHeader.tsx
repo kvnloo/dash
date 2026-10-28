@@ -36,6 +36,7 @@ export function WorkspaceActions({ navigation }: { navigation: NavigationProp<Ro
         <View style={styles.badge}><Text style={styles.badgeText}>{upstreamAction.badgeText}</Text></View>
       </View>
     </PressScale> : null}
+    <IconButton icon="map" label={WORKSPACE_ACTION_LABELS.roadmap} onPress={() => navigation.navigate("Roadmap")} />
     <IconButton icon="activity" label={WORKSPACE_ACTION_LABELS.trace} onPress={() => navigation.navigate("Trace")} />
     <IconButton icon="edit-3" label={WORKSPACE_ACTION_LABELS.newChat} onPress={() => { createConversation(store.get().settings?.harness ?? "omp"); navigation.navigate("Chat"); }} />
     <IconButton icon="settings" label={WORKSPACE_ACTION_LABELS.settings} onPress={() => navigation.navigate("Settings")} />

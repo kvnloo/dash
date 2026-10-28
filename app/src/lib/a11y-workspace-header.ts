@@ -7,6 +7,7 @@ export function workspaceHeadingLabel(tab: number): string {
 
 /** These labels describe the existing actions, not a second navigation mechanism. */
 export const WORKSPACE_ACTION_LABELS = {
+  roadmap: "Open roadmap",
   trace: "Open event trace",
   newChat: "Create new chat",
   settings: "Open settings",
