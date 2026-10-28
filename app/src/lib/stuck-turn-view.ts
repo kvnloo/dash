@@ -44,9 +44,10 @@ export function parseTurnDiagnosis(raw: unknown): TurnDiagnosis | null {
       typeof raw.idleMs !== "number" || !Number.isFinite(raw.idleMs) || raw.idleMs < 0 ||
       !Array.isArray(raw.actions)) return null;
 
+  const candidates: unknown[] = raw.actions;
   const actions: TurnAction[] = [];
   const seen = new Set<TurnAction>();
-  for (const item of raw.actions) {
+  for (const item of candidates) {
     if (!isTurnAction(item) || seen.has(item)) return null;
     seen.add(item);
     actions.push(item);
