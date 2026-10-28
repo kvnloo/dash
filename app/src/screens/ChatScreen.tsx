@@ -79,6 +79,8 @@ import { enterAnnotation, registerSink } from "../store/annotate";
 import { sharedDrafts, consumeSharedDraft } from "../store/shared-drafts";
 
 const EMPTY: Message[] = [];
+/** A scroll this soon after the owner's own input is theirs (web smooth wheel scrolling runs on after the event). */
+const USER_SCROLL_MS = 1000;
 
 function keyExtractor(item: Message): string {
   return item.id;
@@ -99,6 +101,25 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const followRef = useRef(true);
   const dragging = useRef(false);
   const previousOffset = useRef(0);
+  // Web: when the owner last scrolled the transcript themselves (wheel, touch, pointer, keys). Web has no
+  // onScrollBeginDrag, and the list also scrolls itself while it measures rows (startRenderingFromBottom)
+  // and when a page lands; those scrolls must not detach following, or a chat opens away from its latest
+  // message on a slow device.
+  const userScrollAt = useRef(Number.NEGATIVE_INFINITY);
+  // A ref callback (React 19 cleanup), so a remounted viewport (live surface closed) listens again.
+  const viewportRef = useCallback((node: View | null) => {
+    const element: unknown = node;
+    if (Platform.OS !== "web" || typeof HTMLElement === "undefined" || !(element instanceof HTMLElement)) return;
+    const mark = (event: Event) => {
+      // Typing in a field is not scrolling, and a mouse moving with no button down is not a drag.
+      if (event.type === "keydown" && event.target instanceof HTMLElement && event.target.closest("input, textarea, [contenteditable=\"true\"]")) return;
+      if (event.type === "pointermove" && event instanceof PointerEvent && event.buttons === 0) return;
+      userScrollAt.current = Date.now();
+    };
+    const events = ["wheel", "touchstart", "touchmove", "pointerdown", "pointermove", "keydown"];
+    for (const type of events) element.addEventListener(type, mark, { capture: true, passive: true });
+    return () => { for (const type of events) element.removeEventListener(type, mark, { capture: true }); };
+  }, []);
   const [following, setFollowing] = useState(true);
   const setFollow = useCallback((next: boolean) => { followRef.current = next; setFollowing(next); }, []);
   const scrollToNewest = useCallback(() => {
@@ -518,7 +539,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       </View> : null}
       {liveOn && conversation ? <KeyboardInsetView style={styles.body}><LiveSurface conversationId={conversation.id} /></KeyboardInsetView> : <KeyboardInsetView style={styles.body} onOpen={scrollToNewest}>
         {/* Absolute overlays must use the unpadded list viewport, not the IME inset box. */}
-        <View style={styles.viewport} testID="transcript-viewport">
+        <View ref={viewportRef} style={styles.viewport} testID="transcript-viewport">
         <BlurTargetView ref={blurTarget} style={styles.body}><FlashList
           ref={listRef}
           data={visibleMessages}
@@ -538,9 +559,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             const { contentSize, layoutMeasurement, contentOffset } = event.nativeEvent;
             const moved = Math.abs(contentOffset.y - previousOffset.current) > 1;
             previousOffset.current = contentOffset.y;
-            // Web wheel scrolling has no onScrollBeginDrag. A content resize alone
-            // must not detach following before onContentSizeChange can scroll.
-            if (!moved || (!dragging.current && Platform.OS !== "web")) return;
+            // Only the owner's own scroll changes following. A content resize, or the list's own
+            // measuring scroll, must not detach it before onContentSizeChange can scroll.
+            const byOwner = dragging.current || (Platform.OS === "web" && Date.now() - userScrollAt.current < USER_SCROLL_MS);
+            if (!moved || !byOwner) return;
             setFollow(followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y));
           }}
           scrollEventThrottle={16}

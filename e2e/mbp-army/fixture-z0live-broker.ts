@@ -9,6 +9,8 @@ export interface FixtureZ0liveBroker {
   origin: string;
   calls(): readonly VoiceBrokerCall[];
   authorize(token: string): void;
+  /** Hold the provider's SDP answer (the call stays connecting) until the returned release() is called. */
+  holdAnswer(): () => void;
   stop(): Promise<void>;
 }
 type InboxMessage = { id: string; session_id: string; params: Record<string, never>; say: string };
@@ -40,6 +42,8 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
   const providerSecret = 'army-fake-provider-secret';
   let allowedToken = '';
   let cursor = 0;
+  let answerHeld: Promise<void> = Promise.resolve();
+  let releaseHeld = () => {};
   const server = createServer(async (request, response) => {
     const method = request.method ?? 'GET';
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -121,6 +125,7 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
         json(response, 200, { ok: true }, cors); return;
       }
       if (method === 'POST' && provider && typeof body === 'string' && body.startsWith('v=0')) {
+        await answerHeld;
         response.writeHead(200, { ...headers(cors), 'content-type': 'application/sdp' });
         response.end('v=0 fake'); return;
       }
@@ -138,7 +143,14 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
     origin: 'http://127.0.0.1:' + address.port,
     calls: () => calls,
     authorize: token => { allowedToken = token; },
-    stop: () => new Promise<void>((resolve, reject) =>
-      server.close(error => error ? reject(error) : resolve())),
+    holdAnswer: () => {
+      answerHeld = new Promise<void>(resolve => { releaseHeld = resolve; });
+      return () => releaseHeld();
+    },
+    // A held answer is released first: an open request would keep close() waiting.
+    stop: () => {
+      releaseHeld();
+      return new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    },
   };
 }

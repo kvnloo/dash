@@ -4,6 +4,7 @@ import { AppState } from "react-native";
 import { parseServerMessage } from "../../../shared/protocol";
 import type { Settings } from "../model";
 import { applyLiveHistory } from "../store/app";
+import { HISTORY_PAGE } from "../store/history-pages";
 
 /** Foreground, one request at a time; full snapshots replace by native message/call ID. */
 export function useSessionActivity(settings: Settings | null, online: boolean, profile?: string, session?: string, host?: string) {
@@ -18,10 +19,12 @@ export function useSessionActivity(settings: Settings | null, online: boolean, p
         controller = new AbortController();
         const timeout = setTimeout(() => controller?.abort(), 5000);
         try {
-          const response = await fetch(`http://${settings.address}/hermes/activity?profile=${encodeURIComponent(profile)}&session=${encodeURIComponent(session)}`, { headers: { Authorization: `Bearer ${await executionToken(settings)}`, ...(etag ? { "If-None-Match": etag } : {}) }, signal: controller.signal });
+          const response = await fetch(`http://${settings.address}/hermes/activity?profile=${encodeURIComponent(profile)}&session=${encodeURIComponent(session)}&limit=${HISTORY_PAGE}`, { headers: { Authorization: `Bearer ${await executionToken(settings)}`, ...(etag ? { "If-None-Match": etag } : {}) }, signal: controller.signal });
           if (response.ok) {
             const parsed = parseServerMessage({ type: "history", harness: "hermes", sessionId: session, messages: await response.json() });
-            if (!stopped && parsed?.type === "history") { applyLiveHistory("hermes", session, parsed.messages, host, profile); etag = response.headers.get("ETag") ?? ""; }
+            // The newest window only, like the ws history reply: a whole long chat in the list would move the
+            // reader and defeat paging (an older bridge ignores `limit` and sends up to 600 rows).
+            if (!stopped && parsed?.type === "history") { applyLiveHistory("hermes", session, parsed.messages.slice(-HISTORY_PAGE), host, profile); etag = response.headers.get("ETag") ?? ""; }
           }
         } catch { /* A missed observation is not a failed chat turn. */ }
         finally { clearTimeout(timeout); }
