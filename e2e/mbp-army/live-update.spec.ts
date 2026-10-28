@@ -10,6 +10,7 @@ type MetroStub = {
   setBuild(sha: string): void;
   setBundleStatus(status: number): void;
   manifestRequests(): number;
+  bundleRequests(): number;
   close(): Promise<void>;
 };
 
@@ -18,6 +19,7 @@ async function startMetro(): Promise<MetroStub> {
   let served = A;
   let bundleStatus = 200;
   let manifestRequests = 0;
+  let bundleRequests = 0;
   let origin = '';
   const server = createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -36,13 +38,15 @@ async function startMetro(): Promise<MetroStub> {
       res.writeHead(200, { 'Content-Type': 'application/expo+json; charset=utf-8' });
       res.end(JSON.stringify({
         id: 'dash-army-live-preview',
-        launchAsset: { key: served, url: origin + '/bundles/' + served + '.bundle', contentType: 'application/javascript' },
+        // Deliberately stale host: the app must fetch the asset at the polled Metro origin.
+        launchAsset: { key: served, url: 'https://stale-metro.invalid/bundles/' + served + '.bundle', contentType: 'application/javascript' },
         assets: [],
         extra: { expoClient: { extra: { dashBuild: { sha: served, builtAtMs: Date.now() - 180_000 } } } },
       }));
       return;
     }
     if (path === '/bundles/' + served + '.bundle') {
+      bundleRequests++;
       res.writeHead(bundleStatus, { 'Content-Type': 'application/javascript' });
       res.end(bundleStatus === 200 ? '// fixture Metro bundle\n' : 'Bundle unavailable');
       return;
@@ -64,6 +68,7 @@ async function startMetro(): Promise<MetroStub> {
     setBuild: (sha) => { served = sha; },
     setBundleStatus: (status) => { bundleStatus = status; },
     manifestRequests: () => manifestRequests,
+    bundleRequests: () => bundleRequests,
     close: () => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
   };
 }
@@ -186,6 +191,35 @@ test('live-preview-chip: long-press offers reload, Metro switch and auto-reload 
     await expect(menu.getByRole('button', { name: 'Turn auto-reload on' })).toBeVisible();
     await menu.getByRole('button', { name: 'Turn auto-reload on' }).click({ noWaitAfter: true });
     expect(await reloads(page)).toBe(0);
+  } finally { await metro.close(); }
+});
+
+test('live-preview-health: an HTTP 500 bundle cannot reload until the same SHA builds', async ({ page, bridge }) => {
+  const metro = await startMetro();
+  metro.setBuild(B);
+  metro.setBundleStatus(500);
+  try {
+    const url = appUrl(metro, 1_000, 250);
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    const chip = page.getByTestId('turbo-served-build');
+    await expect(chip).toContainText('bbbbbbb failed to build (HTTP 500)', { timeout: 10_000 });
+    expect(metro.bundleRequests()).toBeGreaterThan(0);
+    expect(await reloads(page)).toBe(0);
+    // Let the idle gate expire while the head is still advertised but its bundle 500s.
+    await page.waitForTimeout(1_500);
+    await expect(chip).toContainText('bbbbbbb failed to build (HTTP 500)');
+    expect(await reloads(page)).toBe(0);
+    await chip.click({ noWaitAfter: true }); // Even a manual tap must not load a broken bundle.
+    expect(await reloads(page)).toBe(0);
+
+    metro.setBundleStatus(200);
+    await expect(chip).toContainText('aaaaaaa → bbbbbbb', { timeout: 10_000 });
+    await expect.poll(() => reloads(page), { timeout: 10_000 }).toBe(1);
+    const requestsWhenHealthy = metro.bundleRequests();
+    await page.waitForTimeout(1_200);
+    expect(await reloads(page)).toBe(1);
+    expect(metro.bundleRequests()).toBe(requestsWhenHealthy); // One successful probe per SHA.
+    await pair(page, bridge, url);
   } finally { await metro.close(); }
 });
 
