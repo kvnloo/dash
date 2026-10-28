@@ -16,6 +16,8 @@ test('annotate-tldraw: confirmed send removes only submitted ink, retaining newe
   const uploading = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'image/png');
   const confirmed = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/attachments?') && response.request().headers()['content-type'] === 'image/png', { timeout: 45000 });
   await page.getByRole('button', { name: 'Send and keep drawing', exact: true }).click();
+  await expect(page.getByText('No words captured. Send the marks only?')).toBeVisible();
+  await page.getByRole('button', { name: 'Send anyway', exact: true }).click();
   await uploading;
   // The busy preview expands the tray down to the lower part of the canvas.
   // Draw below that rendered tray, not over its Highlighter button.
@@ -28,6 +30,8 @@ test('annotate-tldraw: confirmed send removes only submitted ink, retaining newe
   await network.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
   const nextUpload = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'application/json');
   await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
+  await expect(page.getByText('No words captured. Send the marks only?')).toBeVisible();
+  await page.getByRole('button', { name: 'Send anyway', exact: true }).click();
   const bytes = (await nextUpload).postDataBuffer()!;
   const doc = JSON.parse(bytes.toString('utf8'));
   expect(doc.strokes.map((stroke: { id: number }) => stroke.id)).toEqual([2]);
