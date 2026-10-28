@@ -97,6 +97,10 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
         return;
       }
       if (method === 'POST' && url.pathname === '/v1/events' && Array.isArray(body)) {
+        // Intentional transient broker outage: the phone must keep the call alive after 500.
+        if (body.some((item: unknown) => record(item) && item.type === 'assistant_transcript')) {
+          json(response, 500, { error: 'fixture assistant transcript telemetry unavailable' }, cors); return;
+        }
         json(response, 200, { ok: true }, cors); return;
       }
       if (method === 'POST' && url.pathname === '/v1/tools/ask_z0') {

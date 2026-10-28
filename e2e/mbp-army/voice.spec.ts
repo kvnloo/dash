@@ -1,7 +1,8 @@
 // Actual Expo web UI -> authenticated real bridge -> fixture z0live HTTP broker.
 // This proves only browser state/transport, never Android audio or native WebRTC.
-import { test as base, expect, pair } from './fixtures';
-import { startFixtureZ0liveBroker, type FixtureZ0liveBroker } from './fixture-z0live-broker';
+import { test as base, expect, pair, type Bridge } from './fixtures';
+import { startFixtureZ0liveBroker, type FixtureZ0liveBroker, type VoiceBrokerCall } from './fixture-z0live-broker';
+import type { Page } from 'playwright/test';
 
 const test = base.extend<{ voiceBroker: FixtureZ0liveBroker }>({
   voiceBroker: async ({}, use) => {
@@ -85,4 +86,96 @@ test('live voice moves connecting listening hearing thinking speaking listening 
   expect(calls().filter(call => call.method === 'POST' && call.path === '/v1/realtime/session')).toHaveLength(1);
   expect(calls().filter(call => call.method === 'POST' && call.path === '/v1/fake/answer')).toHaveLength(1);
   expect(calls().filter(call => call.method !== 'OPTIONS').every(call => call.authorized)).toBe(true);
+});
+
+
+// These journeys run the actual Expo UI, real authenticated bridge and C08 loopback broker.
+// Only the web peer is deterministic; native ICE recovery still requires device checks.
+async function enterScriptedVoice(
+  page: Page,
+  bridge: Bridge,
+  broker: FixtureZ0liveBroker,
+  options: { noTranscript?: boolean; neverReady?: boolean } = {},
+): Promise<void> {
+  const dash = bridge.identityToken();
+  const z0live = bridge.identityToken({ aud: 'z0live', scope: 'z0live:voice' });
+  broker.authorize(z0live);
+  await page.addInitScript((settings: {
+    dash: string; z0live: string; noTranscript: boolean; neverReady: boolean;
+  }) => {
+    Object.defineProperty(window, '__dashVoiceArmy', {
+      value: { dash: settings.dash, z0live: settings.z0live, identity: { credentialId: 'cred_armyvoice0021' } },
+      configurable: true,
+    });
+    Object.defineProperty(window, '__dashVoiceNoTranscript', { value: settings.noTranscript, configurable: true });
+    Object.defineProperty(window, '__dashVoiceNeverReady', { value: settings.neverReady, configurable: true });
+  }, { dash, z0live, noTranscript: options.noTranscript === true, neverReady: options.neverReady === true });
+
+  await pair(page, bridge);
+  const row = page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]')
+    .filter({ hasText: 'ARMY native fixture' });
+  await expect(row).toHaveCount(1, { timeout: 30000 });
+  await row.click({ noWaitAfter: true });
+  await expect(page.getByTestId('chat-window')).toBeVisible();
+  await page.getByRole('button', { name: 'Close chat window', exact: true }).click({ noWaitAfter: true });
+  await page.getByRole('tab').nth(0).click({ noWaitAfter: true });
+  await page.getByRole('button', { name: 'Voice input', exact: true }).click({ noWaitAfter: true });
+  await expect(page.getByTestId('voice-caption')).toBeVisible();
+}
+function isAssistantObservation(call: VoiceBrokerCall): boolean {
+  return call.method === 'POST' && call.path === '/v1/events' &&
+    Array.isArray(call.body) && call.body.some((item: unknown) =>
+      typeof item === 'object' && item !== null && 'type' in item && item.type === 'assistant_transcript');
+}
+
+test('live voice survives assistant transcript broker 500 and returns to listening', async ({ page, bridge, voiceBroker }) => {
+  const info: string[] = [];
+  page.on('console', message => { if (message.type() === 'info') info.push(message.text()); });
+  await enterScriptedVoice(page, bridge, voiceBroker);
+  await page.getByRole('button', { name: 'Start voice in Dash', exact: true }).click({ noWaitAfter: true });
+  await expect(page.getByTestId('voice-transcript')).toContainText('ARMY voice reply', { timeout: 15000 });
+  await expect.poll(() => voiceBroker.calls().filter(isAssistantObservation).length,
+    { message: 'broker received assistant transcript observation and returned 500' }).toBe(1);
+  await expect(page.getByTestId('voice-phase'))
+    .toHaveAttribute('aria-label', 'Voice status: listening', { timeout: 15000 });
+  await expect.poll(() => info.filter(line => line.includes('[voice] transcription on')).length)
+    .toBe(1);
+  await expect.poll(() => info.some(line => line.includes('[voice] assistant_transcript observation failed')))
+    .toBe(true);
+  await expect(page.getByRole('button', { name: 'Stop voice in Dash', exact: true })).toBeVisible();
+  expect(voiceBroker.calls().filter(call => call.path === '/v1/tools/ask_z0')).toHaveLength(1);
+  await page.getByRole('button', { name: 'Stop voice in Dash', exact: true }).click({ noWaitAfter: true });
+});
+
+test('live voice reports no transcript within nine seconds and stays connected', async ({ page, bridge, voiceBroker }) => {
+  const info: string[] = [];
+  page.on('console', message => { if (message.type() === 'info') info.push(message.text()); });
+  await enterScriptedVoice(page, bridge, voiceBroker, { noTranscript: true });
+  await page.getByRole('button', { name: 'Start voice in Dash', exact: true }).click({ noWaitAfter: true });
+  await expect.poll(() => page.evaluate(() => performance.getEntriesByName('dash-voice-speech-stopped')[0]?.startTime ?? 0),
+    { timeout: 8000, message: 'scripted peer emitted speech_stopped' }).toBeGreaterThan(0);
+  await expect(page.getByTestId('voice-caption'))
+    .toHaveText('Speech heard but no transcript - voice setup issue', { timeout: 9000 });
+  const elapsed = await page.evaluate(() => performance.now() - (performance.getEntriesByName('dash-voice-speech-stopped')[0]?.startTime ?? 0));
+  expect(elapsed, 'warning must be visible within 9 s of speech_stopped').toBeLessThan(9000);
+  await expect(page.getByTestId('voice-phase'))
+    .toHaveAttribute('aria-label', 'Voice status: listening. Speech heard but no transcript - voice setup issue');
+  await expect(page.getByTestId('voice-phase'))
+    .toContainText('Speech heard but no transcript - voice setup issue');
+  await expect.poll(() => info.some(line => line.includes('[voice] no-transcript'))).toBe(true);
+  expect(voiceBroker.calls().filter(call => call.path === '/v1/tools/ask_z0')).toHaveLength(0);
+  await expect(page.getByRole('button', { name: 'Stop voice in Dash', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Stop voice in Dash', exact: true }).click({ noWaitAfter: true });
+});
+
+test('live voice connection times out from Start when peer never becomes ready', async ({ page, bridge, voiceBroker }) => {
+  await enterScriptedVoice(page, bridge, voiceBroker, { neverReady: true });
+  const started = Date.now();
+  await page.getByRole('button', { name: 'Start voice in Dash', exact: true }).click({ noWaitAfter: true });
+  await expect(page.getByTestId('voice-caption'))
+    .toContainText('Voice connection timed out', { timeout: 21000 });
+  expect(Date.now() - started, '20 s timeout must start before the SDP answer').toBeLessThan(21000);
+  await expect(page.getByTestId('voice-error'))
+    .toContainText('Voice connection timed out');
+  expect(voiceBroker.calls().filter(call => call.path === '/v1/tools/ask_z0')).toHaveLength(0);
 });

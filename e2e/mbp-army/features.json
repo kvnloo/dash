@@ -172,7 +172,11 @@
                "main mic hold and slide up opens Voice and attempts Live autostart",
                "chat composer mic still dictates through the real bridge fixture"]},
     {"id": "live-voice-states", "title": "Web-army live voice session, transcript, broker delivery and clean mute/teardown",
-     "tests": ["live voice moves connecting listening hearing thinking speaking listening and ends cleanly"]}
+     "tests": ["live voice moves connecting listening hearing thinking speaking listening and ends cleanly"]},
+    {"id": "live-voice-resilience", "title": "A live call detects missing transcripts, survives transcript telemetry outages, and times out during connection",
+     "tests": ["live voice survives assistant transcript broker 500 and returns to listening",
+               "live voice reports no transcript within nine seconds and stays connected",
+               "live voice connection times out from Start when peer never becomes ready"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",
@@ -181,6 +185,8 @@
     "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)",
     "live preview chip on the dev client: the web army drives the chip, guards and bundle-health gate against a real manifest endpoint, but SourceCode.scriptURL, DevSettings.reload and the Metro-switch deep link run only on a device",
     "Android RECORD_AUDIO first-run dialog during dictation and live voice (native, device only)",
-    "live voice reload guard: fake peer needs TURBO-C08 integration; native S25 call proof remains outstanding"
+    "live voice reload guard: fake peer needs TURBO-C08 integration; native S25 call proof remains outstanding",
+    "live preview chip: old -> new build marker, auto-reload and Metro switch (dev client only: needs a Metro serving a build manifest; none exists in the web export)",
+    "live voice five-second WebRTC disconnected grace (native Android ICE state; device only, not simulated in the web army)"
   ]
 }
