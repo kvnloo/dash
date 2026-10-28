@@ -7,10 +7,17 @@ const gib = (bytes: number) => (bytes / 1073741824).toFixed(1);
 const pct = (value: number | undefined) => value === undefined ? "sampling…" : `${Math.round(value)}%`;
 
 /** Local stats only: a remote chat must never inherit the connected bridge's readings. */
-export function HostStatsRow({ hostId }: { hostId: string | undefined }) {
+export function HostStatsRow({ hostId, compact = false }: { hostId: string | undefined; compact?: boolean }) {
   const settings = store.use(s => s.settings);
   const local = store.use(s => s.connection.hosts.some(h => h.id === hostId && h.self && h.online));
   const { snapshot: stats, error } = useHostStats(local ? settings : null, hostId);
+  // The chat sheet stays compact (owner report 2026-10-27): one line, CPU and RAM. The host sheet shows it all.
+  if (compact) return <View testID="host-stats-row" style={[styles.row, styles.rowCompact]}>
+    <Text style={styles.text} numberOfLines={1}>
+      {!local || error ? "Stats unavailable for this host" : !stats ? "Loading host stats…"
+        : `CPU ${pct(stats.cpuPct)} · ${stats.cpuCount} cores · ${stats.memory ? `RAM ${gib(stats.memory.usedBytes)}/${gib(stats.memory.totalBytes)} GiB` : "RAM unavailable"}`}
+    </Text>
+  </View>;
   return <View testID="host-stats-row" style={styles.row}>
     {!local || error ? <Text style={styles.text}>Stats unavailable for this host</Text> : !stats ? <Text style={styles.text}>Loading host stats…</Text> : <>
       <Text style={styles.text}>CPU {pct(stats.cpuPct)} · {stats.cpuCount} cores</Text>
@@ -25,5 +32,6 @@ export function HostStatsRow({ hostId }: { hostId: string | undefined }) {
 }
 const styles = StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", columnGap: 10, rowGap: 2, paddingVertical: 4 },
+  rowCompact: { flexWrap: "nowrap", paddingVertical: 2 },
   text: { ...type.mono, fontSize: 11, lineHeight: 15, color: colors.textMuted, flexShrink: 1 },
 });

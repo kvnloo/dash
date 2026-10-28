@@ -220,7 +220,7 @@ export function WindowDock({ identity, title, options, treeOpen, onTree, onClose
           {crumbs.map((crumb, index) => <Text key={index}>{index > 0 ? <Text style={styles.crumbSep}>{"  ›  "}</Text> : null}{crumb}</Text>)}
         </Text>
       </SheetRow>
-      <HostStatsRow key={identity.hostId} hostId={identity.hostId} />
+      <HostStatsRow key={identity.hostId} hostId={identity.hostId} compact />
       {parentFirst && identity.parentSessionId ? <IdRow icon="corner-up-left" caption={<Text style={styles.sheetCaption}>Parent session · reported by host</Text>}
         id={identity.parentSessionId} chars={idChars} what="parent session id" testID="chat-window-parent-id" /> : null}
       {identity.sessionId
