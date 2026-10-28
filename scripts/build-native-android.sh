@@ -1,6 +1,75 @@
 #!/usr/bin/env bash
 set -euo pipefail
+caller_dir="$PWD"
 cd "$(dirname "$0")/.."
+
+# Inclusion checks also work on an already-installed APK without running the O15
+# build gate, installing dependencies, compiling, or modifying build receipts.
+check_apk_inclusion() {
+  local apk="$1" module count lib_count failed=0
+  if [ ! -f "$apk" ]; then
+    printf 'build-native-android: APK not found: %s\n' "$apk" >&2
+    return 1
+  fi
+  if ! unzip -Z -1 "$apk" > /dev/null; then
+    printf 'build-native-android: unreadable APK: %s\n' "$apk" >&2
+    return 1
+  fi
+
+  # Dex strings contain JVM class descriptors, including the L...; delimiters.
+  local -a required_classes=(
+    'Lapp/dash/dex/DashDexModule;'
+    'Lapp/dash/dex/DashPadActivity;'
+    'app.dash.dex.DashDexModule'
+    'Lapp/dash/cutout/DashCutoutModule;'
+    'Lapp/dash/share/DashShareModule;'
+    'Lcom/oney/WebRTCModule/WebRTCModule;'
+    'Lorg/webrtc/PeerConnectionFactory;'
+    'app.dash.cutout.DashCutoutModule'
+    'app.dash.share.DashShareModule'
+  )
+  if [ -d app/modules/dash-audio-route ]; then
+    required_classes+=('Lapp/dash/audio/DashAudioRouteModule;')
+  fi
+  if [ -d app/modules/dash-stylus ]; then
+    required_classes+=('Lapp/dash/stylus/DashStylusModule;')
+  fi
+  for module in "${required_classes[@]}"; do
+    # grep -c consumes the complete dex stream; grep -q could SIGPIPE unzip.
+    count=$(unzip -p "$apk" 'classes*.dex' | grep -a -c -F "$module" || true)
+    printf '%s %s\n' "$count" "$module"
+    if [ "$count" -eq 0 ]; then
+      printf 'build-native-android: required native class absent from APK: %s\n' "$module" >&2
+      failed=1
+    fi
+  done
+
+  # Exact ABI and path matter: a library for another ABI cannot run on the S25.
+  lib_count=$(unzip -Z -1 "$apk" | grep -Fxc 'lib/arm64-v8a/libjingle_peerconnection_so.so' || true)
+  printf 'lib/arm64-v8a/libjingle_peerconnection_so.so entries: %s\n' "$lib_count"
+  if [ "$lib_count" -eq 0 ]; then
+    printf 'build-native-android: missing lib/arm64-v8a/libjingle_peerconnection_so.so in APK.\n' >&2
+    failed=1
+  fi
+  if [ "$failed" -ne 0 ]; then
+    printf 'build-native-android: native APK inclusion FAILED (%s). Rebuild and reinstall the dev client; Metro JS cannot add native modules.\n' "$apk" >&2
+    return 1
+  fi
+  printf 'build-native-android: native APK inclusion OK (%s).\n' "$apk"
+}
+
+if [ "$#" -ne 0 ]; then
+  if [ "$#" -ne 2 ] || [ "$1" != '--check-apk' ]; then
+    printf 'Usage: %s [--check-apk <path>]\n' "$0" >&2
+    exit 2
+  fi
+  case "$2" in
+    /*) check_apk_inclusion "$2" ;;
+    *) check_apk_inclusion "$caller_dir/$2" ;;
+  esac
+  exit 0
+fi
+
 mkdir -p .native-receipts
 exec > >(tee .native-receipts/build.log 9>&-) 2>&1
 # O15 (laws/release): no green, complete tester-army receipt for this exact commit, no APK.
@@ -74,13 +143,9 @@ if [ "$variant" = release ]; then
   cat .native-receipts/embedded-bundle.txt
   grep -F assets/index.android.bundle .native-receipts/embedded-bundle.txt > /dev/null
 fi
-# Module inclusion: the class and its autolinked registration must be in the APK's dex.
-for module in 'Lapp/dash/dex/DashDexModule;' 'Lapp/dash/dex/DashPadActivity;' 'app.dash.dex.DashDexModule' 'Lapp/dash/cutout/DashCutoutModule;' 'Lapp/dash/share/DashShareModule;' 'Lcom/oney/WebRTCModule/WebRTCModule;' 'Lorg/webrtc/PeerConnectionFactory;' 'app.dash.cutout.DashCutoutModule' 'app.dash.share.DashShareModule'; do
-  count=$(unzip -p .native-receipts/dash-native-arm64.apk 'classes*.dex' | grep -a -c -F "$module" || true)
-  printf '%s %s\n' "$count" "$module"
-  [ "$count" -gt 0 ] || { printf 'Required native class absent: %s\n' "$module" >&2; exit 1; }
-done | tee .native-receipts/module-inclusion.txt
-unzip -l .native-receipts/dash-native-arm64.apk 'lib/*' | tee .native-receipts/native-libs.txt | { grep -c 'libjingle_peerconnection_so.so' || true; } | sed 's/^/libjingle_peerconnection_so.so entries: /' | tee -a .native-receipts/module-inclusion.txt
+# Build outputs are subject to the same checks as --check-apk.
+check_apk_inclusion .native-receipts/dash-native-arm64.apk | tee .native-receipts/module-inclusion.txt
+unzip -l .native-receipts/dash-native-arm64.apk 'lib/*' | tee .native-receipts/native-libs.txt
 cp "app/android/app/build/intermediates/merged_manifests/$variant/process${Variant}Manifest/AndroidManifest.xml" .native-receipts/AndroidManifest.xml
 python3 scripts/verify-native-manifest.py .native-receipts/AndroidManifest.xml > .native-receipts/manifest-check.json
 sha256sum .native-receipts/dash-native-arm64.apk | tee .native-receipts/apk.sha256
