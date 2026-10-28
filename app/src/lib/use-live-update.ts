@@ -187,7 +187,7 @@ export function useLiveUpdate(): LiveUpdate {
   const blocked = decision.kind === "ready" && decision.why === "blocked";
   useEffect(() => {
     if (blocked && served !== null && autoReload) heldFor.current = served.sha;
-  }, [blocked, served?.sha, autoReload]);
+  }, [blocked, served, autoReload]);
 
   const requestReload = useCallback((automatic: boolean) => {
     if (reloading.current || (automatic && reloadBlockedBy() !== null)) return;
@@ -220,7 +220,7 @@ export function useLiveUpdate(): LiveUpdate {
 
   useEffect(() => {
     if (decision.kind === "reload" && served !== null && !reloading.current) requestReload(true);
-  }, [decision.kind, served?.sha, requestReload]);
+  }, [decision.kind, served, requestReload]);
 
   const setAutoReload = useCallback((on: boolean) => {
     setAutoState(on);
