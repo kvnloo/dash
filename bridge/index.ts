@@ -53,6 +53,7 @@ import { sessionPhaseHttp } from "./src/hermes-phase";
 import { sessionWorkersHttp } from "./src/hermes-workers";
 import { z0liveStateHttp } from "./src/z0live-state";
 import { voiceBootstrap } from "./src/voice-bootstrap";
+import { createVoiceStatusHttpHandler, voiceStatus } from "./src/voice-status";
 import { flowTraceHttp } from "./src/flow-trace-http";
 const handleFlowTrace = flowTraceHttp(process.env.DASH_DEBUG_FLOW_TRACE === "1");
 import { activityHttp } from "./src/hermes-activity";
@@ -801,6 +802,7 @@ const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => se
 const handleHosts = createHostsHttpHandler({ authorize, hostId: () => SELF.id() });
 const handleRoadmap = createRoadmapHttpHandler({ authorize });
 const handlePm = createPmHttpHandler({ authorize });
+const handleVoiceStatus = createVoiceStatusHttpHandler({ authorize });
 const handleTrace = createTraceRoute({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleTriage = createTriageHttpHandler({ authorize });
 const handleModels = createModelsHttpHandler({ authorize });
@@ -851,6 +853,8 @@ const server = Bun.serve<SocketData>({
         const voice = await voiceBootstrap(request, principal?.kind === "identity", (profile, session) => hermesSessions.target(profile.startsWith("hermes:") && !profile.startsWith("hermes:session:") ? profile.slice("hermes:".length) : profile, session));
         if (voice) return cors(voice);
       }
+      const voiceReadiness = await handleVoiceStatus(request);
+      if (voiceReadiness) return cors(voiceReadiness);
       if (url.pathname === "/chat/context/compact" && request.method === "POST" && contextCompaction) server.timeout(request, 255);
       const context = await handleContext(request, await authorize(request));
       if (context) return cors(context);
@@ -900,6 +904,7 @@ const server = Bun.serve<SocketData>({
       ws.data.stopIdentityWatch = bridgeAuth.identity?.watch(ws.data.principal, () => ws.close(1008, "Identity authorization expired or revoked"));
       log("ws.open", { remote: ws.remoteAddress });
       const harnesses = harnessList();
+      const voice = voiceStatus();
       sendTo(ws, {
         type: "hello",
         version: PROTOCOL_VERSION,
@@ -909,6 +914,7 @@ const server = Bun.serve<SocketData>({
         hosts: await selfRoster(harnesses, tailscaleIp ?? undefined),
         features: [CHATS_FEATURE],
         routes: remoteRouteIds(),
+        voice: { stt: voice.stt.ok, nativeVoice: voice.nativeVoice },
       });
       if (ws.readyState === WebSocket.OPEN) ws.data.stopNotices = notices.subscribe(notice => {
         if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) { ws.close(1008, "Identity authorization expired"); return; }

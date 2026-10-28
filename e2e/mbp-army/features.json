@@ -115,7 +115,11 @@
                "voice bootstrap echoes configured broker origin"]},
     {"id": "annotation-voice-quiet", "title": "Annotation launches without global voice errors or safe-area shifts on either ink engine",
      "tests": ["annotation-voice-quiet: skia entry does not surface voice UI or shift header",
-               "annotation-voice-quiet: tldraw entry does not surface voice UI or shift header"]}
+               "annotation-voice-quiet: tldraw entry does not surface voice UI or shift header"]},
+    {"id": "voice-status", "title": "Authenticated bridge voice readiness and backward-compatible hello capabilities",
+     "tests": ["voice status diagnoses missing model, rejects anonymous requests, and announces hello",
+               "voice status follows fixture STT availability",
+               "voice status accepts either principal and reports disabled native voice"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
