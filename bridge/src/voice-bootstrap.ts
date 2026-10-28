@@ -7,7 +7,14 @@ import { record } from "../../shared/z0bridge-identity";
 export async function voiceBootstrap(request: Request, identityAuthorized: boolean, knownTarget: (profile: string, session: string) => boolean, enabled = process.env.DASH_NATIVE_VOICE === "1"): Promise<Response | undefined> {
   if (new URL(request.url).pathname !== "/voice/bootstrap") return undefined;
   const json = (body: object, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
-  if (!identityAuthorized || request.headers.has("origin")) return json({ error: "z0bridge-authenticated native Dash required" }, 401);
+  // A browser Origin is prohibited outside an explicit loopback-only army run.
+  // This is not native voice authorization: the bridge still verifies identity.
+  const origin = request.headers.get("origin");
+  const armyWeb = process.env.DASH_ARMY_VOICE_WEB === "1" &&
+    /^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.DASH_Z0LIVE_BROKER ?? "") &&
+    origin !== null && /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) &&
+    (process.env.DASH_ALLOWED_ORIGINS ?? "").split(",").includes(origin);
+  if (!identityAuthorized || (origin !== null && !armyWeb)) return json({ error: "z0bridge-authenticated native Dash required" }, 401);
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
   if (!enabled) return json({ error: "native voice deployment not enabled" }, 503);
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") return json({ error: "JSON required" }, 415);
