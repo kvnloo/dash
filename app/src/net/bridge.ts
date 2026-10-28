@@ -61,6 +61,7 @@ class Bridge {
       // Also invalidate an in-flight executionToken() resolution, not just an open socket.
       this.connectEpoch += 1;
       this.clearTimers();
+      this.flushDeltas();
       this.teardownSocket();
     },
     publish: snapshot => {
@@ -139,7 +140,7 @@ class Bridge {
     }
     // Retire the previous connection, reset failures and immediately dial this pairing.
     this.connectEpoch += 1;
-    this.reconnect.start(this.appState === "active" || Platform.OS === "web");
+    this.reconnect.start(this.appState !== "background" && this.appState !== "inactive");
   }
 
   stop(): void {
