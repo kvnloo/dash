@@ -40,9 +40,11 @@ export function ServedBuildChip() {
   }, [visible]);
 
   if (!visible || hidden) return null;
-  const update = live.decision.kind !== "current";
+  const update = live.decision.kind === "ready" || live.decision.kind === "reload";
+  const failed = live.decision.kind === "failed";
   const heldBy = live.decision.kind === "ready" && live.decision.why === "blocked" ? live.blockedBy : null;
-  const label = heldBy !== null ? "update ready - held: " + heldBy :
+  const label = failed ? shortSha(live.served) + " failed to build (" + live.decision.reason + ")" :
+    heldBy !== null ? "update ready - held: " + heldBy :
     live.running === null
       ? servedBuildLabel(SERVED_BUILD, now)
       : liveChipLabel(runningWithAge, live.served, now, servedAgeLabel);
@@ -91,15 +93,16 @@ export function ServedBuildChip() {
         accessibilityLabel={
           "Served bundle " + (live.running?.sha ?? SERVED_BUILD.sha ?? "unknown SHA") + ", " +
           servedAgeLabel(runningWithAge?.builtAtMs ?? SERVED_BUILD.servedAtMs, now) + "." +
-          (update ? " Newer build " + shortSha(live.served) + " is served." + (heldBy ? " Held: " + heldBy + "." : "") + " Tap to reload." : " Tap to hide.")
+          (failed ? " " + shortSha(live.served) + " failed to build (" + live.decision.reason + "). Reload disabled." :
+            update ? " Newer build " + shortSha(live.served) + " is served." + (heldBy ? " Held: " + heldBy + "." : "") + " Tap to reload." : " Tap to hide.")
         }
         accessibilityHint="Long press for reload and server options"
-        onPress={() => (update ? live.reloadNow() : setHiddenFor(key))}
+        onPress={() => { if (!failed) update ? live.reloadNow() : setHiddenFor(key); }}
         onLongPress={openMenu}
         style={styles.touchTarget}
       >
-        <View pointerEvents="none" style={[styles.chip, update && styles.chipUpdate]}>
-          <Text style={[styles.label, update && styles.labelUpdate]} numberOfLines={1}>{label}</Text>
+        <View pointerEvents="none" style={[styles.chip, update && styles.chipUpdate, failed && styles.chipFailed]}>
+          <Text style={[styles.label, update && styles.labelUpdate, failed && styles.labelFailed]} numberOfLines={1}>{label}</Text>
         </View>
       </Pressable>
       {Platform.OS === "web" && menuOpen && (
@@ -140,8 +143,10 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
   },
   chipUpdate: { borderColor: colors.accent },
+  chipFailed: { borderColor: colors.danger },
   label: { ...type.mono, color: colors.textMuted, fontSize: 11, lineHeight: 16 },
   labelUpdate: { color: colors.accent },
+  labelFailed: { color: colors.danger },
   webMenu: { alignSelf: "flex-end", backgroundColor: colors.surfaceRaised, borderColor: glass.hair2, borderWidth: 1, borderRadius: radius.md, padding: space.xs, minWidth: 220 },
   menuHeading: { color: colors.textMuted, fontSize: 12, paddingHorizontal: space.md, paddingVertical: space.sm },
   menuAction: { minHeight: controlMin, justifyContent: "center", paddingHorizontal: space.md },
