@@ -8,7 +8,6 @@ declare global {
     __dashVoiceSay?: string;
     __dashVoiceNoTranscript?: boolean;
     __dashVoiceNeverReady?: boolean;
-    __dashVoiceSpeechStoppedAt?: number;
     __dashVoiceArmy?: {
       dash: string;
       z0live: string;
@@ -45,7 +44,7 @@ export async function createVoicePeer(
         ready();
         later(750, () => emit({ type: "input_audio_buffer.speech_started" }));
         later(1500, () => {
-          window.__dashVoiceSpeechStoppedAt = performance.now();
+          performance.mark("dash-voice-speech-stopped");
           emit({ type: "input_audio_buffer.speech_stopped" });
         });
         if (!window.__dashVoiceNoTranscript) later(2300, () => emit({
