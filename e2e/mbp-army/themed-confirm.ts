@@ -7,7 +7,8 @@ import { expect, type Page } from 'playwright/test';
  * text the old window.confirm carried, after pressing Cancel (accept=false) or the destructive action (accept=true).
  */
 export async function answerNextDialog(page: Page, accept: boolean, timeout = 15000): Promise<string> {
-  const dialog = page.getByRole('dialog').last();
+  // The row action sheet is a role=dialog Modal too and may still be closing: pick the card that holds the confirm buttons.
+  const dialog = page.getByRole('dialog').filter({ has: page.getByTestId('dash-dialog-action-cancel') }).last();
   await expect(dialog).toBeVisible({ timeout });
   const title = (await dialog.getByRole('heading').first().innerText()).trim();
   const labels = await dialog.locator('[data-testid^="dash-dialog-action-"]').allInnerTexts();
