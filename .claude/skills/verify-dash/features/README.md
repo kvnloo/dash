@@ -7,7 +7,7 @@ This directory is the maintained source for verifying what a Dash user can see a
 - A stack is up for the commit under test: `army-stack.sh up <run>`, then `army-stack.sh doctor <run>` prints `doctor: stack '<run>' is worth driving`.
 - The private headless Sway is running (`army-stack.sh sway-up`). The physical display, the owner's phone and the live bridge are never touched.
 - Each test gets its own real bridge from `createBridge()` in `e2e/mbp-army/fixtures.ts`: a temporary HOME, a loopback port, a PID namespace, and `hermes`/`omp` that resolve to the scripted fixture agent `e2e/mbp-army/fixture-agent.ts`. The bridge also has the gate enabled with a seeded dry-run approval (`seed-gate.ts`). It exposes a native OMP row and a Hermes row named `army-fixture-session`.
-- The fixture agent's replies are scripted by prompt text. Any prompt streams `ARMY_STREAM_BEGIN `, then `ARMY_REPLY: <prompt>` after 350 ms. With `ARMY_SLOW` the reply comes after 9 s, with `ARMY_HANG` it never ends (until Stop), and with `ARMY_ERROR` the agent fails with `ARMY_EXPECTED_AGENT_ERROR`.
+- The fixture agent's replies are scripted by prompt text. Any prompt streams `ARMY_STREAM_BEGIN `, then `ARMY_REPLY: <prompt>` after 350 ms. With `ARMY_SLOW` the reply comes after 9 s, with `ARMY_HANG` it never ends (until Stop), and with `ARMY_ERROR` the agent fails with `ARMY_EXPECTED_AGENT_ERROR`. With `ARMY_HOLD` it answers only after the spec creates `$HOME/army-release` in the bridge directory, with `ARMY_402` / `ARMY_429` it fails like a provider that is out of usage / rate limiting, and every prompt's start and end is logged to `army-acp-turns.jsonl` there.
 
 ## Driving conventions
 
@@ -44,7 +44,7 @@ Then come exactly four H2 sections, in this order:
 The status counts were taken at the commit this map was written on. Maintain them with `/pstack:maintain-verification-skill` whenever a spec lands or a feature changes.
 
 <!-- index:start -->
-63 features: 20 COVERED, 43 UNCOVERED.
+65 features: 22 COVERED, 43 UNCOVERED.
 
 
 ### Navigation shell
@@ -76,6 +76,7 @@ The status counts were taken at the commit this map was written on. Maintain the
 - [Stop a running turn](./stop.md): COVERED
 - [Queue and the queued stack](./queue.md): COVERED
 - [Steer a running Hermes turn](./steer.md): COVERED
+- [Chats reply side by side, and in order](./concurrent-chats.md): COVERED
 - [Drafts survive](./drafts.md): COVERED
 - [Slash commands and @ mentions](./slash-and-mentions.md): UNCOVERED
 - [Attachments](./attachments.md): COVERED
@@ -93,6 +94,7 @@ The status counts were taken at the commit this map was written on. Maintain the
 
 - [Delivery status and outbox](./delivery-status-outbox.md): UNCOVERED
 - [Agent errors](./agent-errors.md): COVERED
+- [Provider out of usage or rate limited](./provider-failures.md): COVERED
 - [A running turn survives a missing roster row](./running-turn-survives-roster.md): COVERED
 
 ### Transcript
