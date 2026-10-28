@@ -6,7 +6,7 @@
 import {test,expect,web,type Bridge,bun} from './fixtures';
 import type {Page} from 'playwright/test';
 import {execFileSync} from 'node:child_process';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {basename,join} from 'node:path';
 
 test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({path:info.outputPath('final.png')});});
@@ -51,13 +51,31 @@ async function openSheet(page:Page){
  await expect(btn(page,'Dismiss bridge details')).toBeVisible();
  await expect(btn(page,'Edit bridge')).toBeVisible();
 }
-/** Fixture-only Hermes rows in the isolated HERMES_HOME (same schema seed-gate.ts creates). */
+/** Fixture-only Hermes rows in the isolated HERMES_HOME (same schema seed-gate.ts creates).
+ *  Call only while the bridge is stopped: the chat index ingests Hermes incrementally past a per-profile
+ *  high-water mark (hermesIngest), and these rows are older than the fixture row seed-gate wrote, so a live
+ *  bridge would only pick them up at its next full reconcile (every 10 min), never within the test. */
 function seedHermesSessions(b:Bridge,prefix:string,count:number){
  const script=`const {Database}=await import('bun:sqlite');const db=new Database(process.env.HERMES_HOME+'/state.db');
 db.exec('CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY,source TEXT,title TEXT,started_at REAL,last_activity_at REAL,message_count INTEGER,cwd TEXT,archived INTEGER,hidden INTEGER,parent_session_id TEXT,end_reason TEXT,model_config TEXT)');
 const q=db.query('INSERT OR REPLACE INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');const now=Date.now()/1000;
 for(let i=1;i<=${count};i++){const n=String(i).padStart(2,'0');q.run('army-page-'+n,'acp','${prefix} '+n,now-600+i,now-600+i,0,process.env.DASH_CWD,0,0,null,null,'{}');}db.close();`;
  execFileSync(bun,['-e',script],{env:{...process.env,HERMES_HOME:join(b.dir,'.hermes'),DASH_CWD:b.dir},stdio:'pipe'});
+}
+
+/** Stop the bridge, write the fixture rows while it is down, restart it and wait until GET /chats serves them. */
+async function reseedHermes(b:Bridge,prefix:string,count:number){
+ await b.stop();
+ seedHermesSessions(b,prefix,count);
+ await b.start();
+ const first=prefix+' 01',last=prefix+' '+String(count).padStart(2,'0');
+ await expect.poll(async()=>{
+  try{
+   const token=(await readFile(join(b.dir,'.dash/token'),'utf8')).trim();
+   const text=await (await fetch(`http://127.0.0.1:${b.port}/chats?limit=200`,{headers:{Authorization:`Bearer ${token}`}})).text();
+   return text.includes(first)&&text.includes(last);
+  }catch{return false;}
+ },{timeout:45000,message:'real bridge chat index must serve the seeded Hermes rows'}).toBe(true);
 }
 
 test.describe('rc3 01 top nav and pager',()=>{
@@ -230,7 +248,9 @@ test.describe('rc3 01 workspace header',()=>{
  test('Orchestra workspace header is title-only',async({page,bridge})=>{
   await pairCold(page,bridge);
   await expect(heading(page,'Orchestra workspace')).toBeVisible();
-  await expect(btn(page,'Create new chat')).toHaveCount(0);
+  // The workspace actions (Create new chat, trace, settings...) move into the Orchestra graph dock (OrchestraPane
+  // actions={<WorkspaceActions/>}); the header row itself, the title's parent, must hold no button.
+  await expect(heading(page,'Orchestra workspace').locator('xpath=..').getByRole('button')).toHaveCount(0);
  });
 });
 
@@ -261,7 +281,9 @@ test.describe('rc3 01 connection banner',()=>{
 test.describe('rc3 01 global search bar',()=>{
  test('Mention inserts @, Voice input opens Voice, Send submits the note into a chat',async({page,bridge})=>{
   await pairCold(page,bridge);
-  await expect(search(page)).toHaveAttribute('placeholder','Search or message Dash');
+  // In-app feedback defaults to on (inAppFeedbackEnabled: settings.inAppFeedback !== false; pair claim sets true),
+  // so the bar reads 'Feedback for Dash'; 'Search or message Dash' is the Settings > In-app feedback Off wording.
+  await expect(search(page)).toHaveAttribute('placeholder','Feedback for Dash');
   await btn(page,'Mention').click({noWaitAfter:true});
   await expect(search(page)).toHaveValue('@');
   await expect(search(page)).toBeFocused();
@@ -273,7 +295,10 @@ test.describe('rc3 01 global search bar',()=>{
   await search(page).fill('army global note');
   await expect(btn(page,'Voice input')).toHaveCount(0);
   await btn(page,'Send').click({noWaitAfter:true});
-  await expect(chatComposer(page)).toHaveValue('army global note');
+  // Feedback on: Send files the note as a typed feedback turn into the Dash feedback chat and opens Chat
+  // (MainScreen onSend -> submitInAppFeedback); the note is the first user message, not a composer draft.
+  await expect(chatComposer(page)).toBeVisible();
+  await expect(page.getByTestId('transcript-viewport').getByText('army global note',{exact:true})).toBeVisible();
  });
 
  test('typing a query lists a conversation row; tapping it opens that chat',async({page,bridge})=>{
@@ -290,12 +315,14 @@ test.describe('rc3 01 global search bar',()=>{
 
  test('harness search row opens that harness chat; skill and plugin scopes answer honestly',async({page,bridge})=>{
   await pairCold(page,bridge);
-  await search(page).fill('/harness');
+  // A bare '/harness' is the composer's slash-command trigger (composerTrigger): the bar shows the harness command
+  // suggestions instead of the scoped search. The scope search runs once the scope word is followed by a space.
+  await search(page).fill('/harness ');
   await expect(page.getByText(/^\/harness · all /)).toBeVisible();
   await expect(btn(page,/^OMP, Harness, Available/)).toBeVisible();
-  await search(page).fill('/skill');
+  await search(page).fill('/skill ');
   await expect(page.getByText('The bridge does not report skill inventory yet.',{exact:true})).toBeVisible();
-  await search(page).fill('/plugin');
+  await search(page).fill('/plugin ');
   await expect(page.getByText('The bridge does not report plugin inventory yet.',{exact:true})).toBeVisible();
   await search(page).fill('/harness hermes');
   const row=btn(page,/^Hermes, Harness, Available/);
@@ -333,7 +360,7 @@ test.describe('rc3 01 global search bar',()=>{
  });
 
  test('chat-scope search loads older matches when scrolled to the end',async({page,bridge})=>{
-  seedHermesSessions(bridge,'ARMYPAGE',25);
+  await reseedHermes(bridge,'ARMYPAGE',25);
   await pairCold(page,bridge);
   await search(page).fill('@chats armypage');
   await expect(btn(page,/^ARMYPAGE 25,/)).toBeVisible({timeout:45000});

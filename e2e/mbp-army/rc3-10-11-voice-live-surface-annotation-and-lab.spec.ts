@@ -7,12 +7,15 @@
 // LiveSurface.tsx, LiveArtifactFrame.web.tsx, ArtifactStageScreen.tsx, annotate/AnnotationRoot.tsx, LabScreen.tsx,
 // BotFaceLab.tsx, InteractiveTile.tsx, TileGestures.tsx, trace/{StatTile,ActionChip,ReadStrip}.tsx.
 // Web evidence only: no real microphone, WebRTC, S Pen, IME or Android permission acceptance.
-import {test,expect,pair,composer,send,createBridge,type Bridge} from './fixtures';
+import {test,expect,pair,composer,send,createBridge,web,type Bridge} from './fixtures';
 import {startFxFixture,FX,type FxFixture} from './rc3-11-fx-fixture';
 import type {Page,Locator} from 'playwright/test';
 import {writeFile} from 'node:fs/promises';
 
 test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({path:info.outputPath('final.png')});});
+// Spec fix (11.13): launchOptions must be file-level (forces a new worker); a fake capture device plus an explicit microphone grant is how the
+// army exercises the web recorder (rc3-03-04 and rc3-11-12 do the same). Without it headed Chromium leaves getUserMedia on an unanswered prompt.
+test.use({launchOptions:{args:[...(process.env.ARMY_HEADED==='1'?['--ozone-platform=wayland']:[]),'--disable-dev-shm-usage','--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream'],slowMo:Number(process.env.ARMY_SLOWMO||0)}});
 
 // ---------- shared helpers ----------
 const btn=(scope:Page|Locator,name:string|RegExp)=>scope.getByRole('button',typeof name==='string'?{name,exact:true}:{name});
@@ -269,6 +272,12 @@ live('11.08 Live surface: Ask Hermes chip toggles ask mode (placeholder) and rou
 
 const tray=(page:Page)=>page.getByTestId('annotation-tray');
 const chip=(page:Page,name:string)=>btn(tray(page),name);
+// Spec fix: RN Web 0.21 drops accessibilityState.selected/checked, so the rendered state is asserted instead. A selected tool chip is painted
+// with a fill (styles.chipOn), an unselected chip is transparent; the selected ink swatch carries a 2px ring (styles.swatchOn).
+const CLEAR='rgba(0, 0, 0, 0)';
+const chipOn=(l:Locator)=>expect(l).not.toHaveCSS('background-color',CLEAR);
+const chipOff=(l:Locator)=>expect(l).toHaveCSS('background-color',CLEAR);
+const swatchRing=(l:Locator)=>l.evaluate(el=>{let n:Element=el;while(n.firstElementChild)n=n.firstElementChild;return getComputedStyle(n).borderTopWidth;});
 
 /** Full-screen OMP chat with one finished turn (a registered annotation sink), then Options → Annotate. */
 async function enterAnnotate(page:Page,bridge:Bridge){
@@ -305,22 +314,25 @@ test('11.09 annotation tray: no strokes disables Undo/Clear/Keep/Send; tool chip
  for(const name of ['Undo','Clear','Send and keep drawing','Send annotation'])await expect(chip(page,name)).toBeDisabled();
  await expect(tray(page).getByText(/^→ .*chat · hold Talk to speak$/)).toBeVisible();
  const tools=['Pen','Highlighter','Arrow','Box','Circle','Eraser'];
- await expect(chip(page,'Pen')).toHaveAttribute('aria-selected','true');
+ await chipOn(chip(page,'Pen'));
+ for(const o of tools.slice(1))await chipOff(chip(page,o));
  for(const t of tools.slice(1)){
   await chip(page,t).click({noWaitAfter:true});
-  await expect(chip(page,t)).toHaveAttribute('aria-selected','true');
-  for(const o of tools.filter(x=>x!==t))await expect(chip(page,o)).toHaveAttribute('aria-selected','false');
+  await chipOn(chip(page,t));
+  for(const o of tools.filter(x=>x!==t))await chipOff(chip(page,o));
  }
  await chip(page,'Pen').click({noWaitAfter:true});
+ await chipOn(chip(page,'Pen'));
  const red=tray(page).getByRole('radio',{name:'Red ink',exact:true});
  const accent=tray(page).getByRole('radio',{name:'Accent ink',exact:true});
- await expect(accent).toHaveAttribute('aria-checked','true');
- await expect(red).toHaveAttribute('aria-checked','false');
+ await expect.poll(()=>swatchRing(accent)).toBe('2px');
+ await expect.poll(()=>swatchRing(red)).toBe('0px');
  await red.click({noWaitAfter:true});
- await expect(red).toHaveAttribute('aria-checked','true');
- await expect(accent).toHaveAttribute('aria-checked','false');
+ await expect.poll(()=>swatchRing(red)).toBe('2px');
+ await expect.poll(()=>swatchRing(accent)).toBe('0px');
  await accent.click({noWaitAfter:true});
- await expect(accent).toHaveAttribute('aria-checked','true');
+ await expect.poll(()=>swatchRing(accent)).toBe('2px');
+ await expect.poll(()=>swatchRing(red)).toBe('0px');
 });
 
 test('11.10 annotation: pan on the overlay draws; Undo removes it, Clear wipes all; S Pen mode lets the mouse pass through',async({page,bridge})=>{
@@ -342,15 +354,17 @@ test('11.10 annotation: pan on the overlay draws; Undo removes it, Clear wipes a
  // S Pen pen-only mode: only a stylus draws; a mouse/finger stroke passes through.
  const pen=chip(page,'Pen mode: only the S Pen draws, fingers scroll');
  await expect(pen).toHaveText('S Pen');
+ await chipOff(pen);
  await pen.click({noWaitAfter:true});
- await expect(pen).toHaveAttribute('aria-selected','true');
  await expect(pen).toHaveText('S Pen ✓');
+ await chipOn(pen);
  await expect(tray(page).getByText(/ · fingers scroll$/)).toBeVisible();
  await stroke(page);
  await page.waitForTimeout(400);
  await expect(chip(page,'Clear'),'mouse must not ink in pen-only mode').toBeDisabled();
  await pen.click({noWaitAfter:true});
- await expect(pen).toHaveAttribute('aria-selected','false');
+ await expect(pen).toHaveText('S Pen');
+ await chipOff(pen);
  await stroke(page);
  await expect(chip(page,'Clear')).toBeEnabled();
 });
@@ -391,7 +405,8 @@ test('11.12 annotation: Keep sends and keeps drawing; Send sends, exits and show
  await expect(page.getByLabel('Annotation mode on',{exact:true})).toHaveCount(0);
 });
 
-test('11.13 annotation: Hold to talk on web reports the missing microphone honestly and adds no spoken segment',async({page,bridge})=>{
+test('11.13 annotation: Hold to talk on web reports the missing microphone honestly and adds no spoken segment',async({page,bridge,context})=>{
+ await context.grantPermissions(['microphone'],{origin:web});
  await enterAnnotate(page,bridge);
  // Entering annotation auto-starts conversation voice; on web it errors, so the talk chip stays a manual hold control.
  const talk=chip(page,'Hold to talk');
@@ -399,8 +414,12 @@ test('11.13 annotation: Hold to talk on web reports the missing microphone hones
  await expect(talk).toHaveText('Talk');
  const box=await talk.boundingBox();if(!box)throw Error('talk chip has no box');
  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
- await page.mouse.down();await page.waitForTimeout(900);await page.mouse.up();
- await expect(tray(page).getByRole('alert').filter({hasText:/\S/}).first()).toBeVisible({timeout:20000});
+ await page.mouse.down();
+ // Releasing before the recorder is prepared cancels the capture silently, so hold until the chip shows it is recording.
+ await expect(talk).toHaveText('● Talk',{timeout:15000});
+ await page.waitForTimeout(600);await page.mouse.up();
+ // The fake capture device records; the isolated bridge has no speech model (DASH_STT_MODEL is a missing file), so transcription must fail visibly.
+ await expect(tray(page).getByRole('alert').filter({hasText:/\S/}).first()).toBeVisible({timeout:45000});
  await expect(tray(page).getByText(/hold Talk to speak/)).toBeVisible();
  await expect(tray(page).getByText(/\d+ spoken/)).toHaveCount(0);
 });
@@ -497,7 +516,8 @@ test('11.17 Lab: stat tile tap opens detail, hold → Segment cycles the focused
  await expect(page.getByTestId('tile-detail')).toHaveCount(0);
  const meter=block.getByTestId('stat-meter-cut');
  await meter.scrollIntoViewIfNeeded();
- await expect.poll(()=>meter.innerText()).toMatch(/^\s*cut/);
+ // Spec fix: the tile label is rendered with text-transform: uppercase, so innerText is "CUT".
+ await expect.poll(()=>meter.innerText()).toMatch(/^\s*cut/i);
  const box=await meter.boundingBox();if(!box)throw Error('meter tile has no box');
  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
  await page.mouse.down();
@@ -507,24 +527,26 @@ test('11.17 Lab: stat tile tap opens detail, hold → Segment cycles the focused
  await page.mouse.move(seg.x+seg.width/2,seg.y+seg.height/2,{steps:12});
  await page.mouse.up();
  await expect(page.getByTestId('radial-wheel')).toHaveCount(0);
- await expect.poll(()=>meter.innerText(),{message:'Segment focuses the first segment (resumed)'}).toMatch(/^\s*resumed/);
+ await expect.poll(()=>meter.innerText(),{message:'Segment focuses the first segment (resumed)'}).toMatch(/^\s*resumed/i);
  // Pin a tile, then Replay (key=replay) remounts it and drops the local pin.
  await number.dblclick({noWaitAfter:true});
  await expect(number.getByText(/Pinned · this view/)).toBeVisible();
  await btn(block,'Replay').click({noWaitAfter:true});
  await expect(block.getByTestId('stat-number-cut').getByText(/Pinned · this view/)).toHaveCount(0);
- await expect.poll(()=>block.getByTestId('stat-meter-cut').innerText()).toMatch(/^\s*cut/);
+ await expect.poll(()=>block.getByTestId('stat-meter-cut').innerText()).toMatch(/^\s*cut/i);
 });
 
 test('11.18 Lab: bot faces Face state <x>, orb states Animate 20 / Cap at 6, voice orb hero cycles',async({page,bridge})=>{
  await openLab(page,bridge);
  const faces=await reveal(page,'lab-bot-faces');
- await expect(btn(faces,'Face state idle')).toHaveAttribute('aria-selected','true');
+ // Spec fix: RN Web drops accessibilityState.selected; the chosen state is what every profile face reports ("<profile> · <state> · <expression> face").
+ const shows=(state:string)=>faces.getByRole('img',{name:new RegExp(' · '+state+' · ')});
+ await expect(shows('idle')).toHaveCount(4);
  for(const s of ['thinking','working','done','error','waiting-approval','idle']){
   await btn(faces,`Face state ${s}`).click({noWaitAfter:true});
-  await expect(btn(faces,`Face state ${s}`)).toHaveAttribute('aria-selected','true');
+  await expect(shows(s)).toHaveCount(4);
  }
- await expect(btn(faces,'Face state thinking')).toHaveAttribute('aria-selected','false');
+ await expect(shows('thinking')).toHaveCount(0);
  const orbs=await reveal(page,'lab-orb-states');
  await expect(orbs.getByRole('img',{name:'waiting-approval',exact:true})).toHaveCount(4);
  await btn(orbs,'Animate 20').click({noWaitAfter:true});
@@ -535,7 +557,7 @@ test('11.18 Lab: bot faces Face state <x>, orb states Animate 20 / Cap at 6, voi
  await expect(btn(orbs,'Animate 20')).toBeVisible();
  await expect(orbs.getByRole('img',{name:'thinking stress orb',exact:true})).toHaveCount(0);
  await btn(orbs,'Pick 64px').click({noWaitAfter:true});
- await expect(btn(orbs,'Pick 64px')).toHaveAttribute('aria-selected','true');
+ await expect(btn(orbs,'Pick 64px')).toHaveText('Picked'); // Spec fix: rendered label is the state (same as 11.15)
  const hero=await reveal(page,'lab-orb-hero');
  const phases=['listening','speaking','thinking','tool','connecting','idle','listening'];
  for(let i=0;i<phases.length-1;i++){

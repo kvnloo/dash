@@ -87,10 +87,21 @@ test.describe('rc3 10 orchestra graph',()=>{
   await mode(page,'Lineage');
   await expect(graph(page).getByText(/^Delegation tree · \d+ recorded links$/)).toBeVisible();
   await expect(graph(page).getByText('ARMY delegated child').filter({visible:true}).first()).toBeVisible();
+  // Spec fix: since RC3 (dca0dc3) the Triage tab is LiveTriageList over GET /triage (owner-needed items, board blockers, roadmap asks),
+  // not the five node lanes. Feed it a real supervision batch in this bridge's DASH_SUPERVISION_DIR; the Kanban board file does not exist here.
+  seed('supervision',join(bridge.dir,'.local/state/dash/supervision'),'2');
   await mode(page,'Triage');
-  await expect(graph(page).getByText(/^Needs you \d+ → Failing \/ stalled 1 → Live [1-9]\d* → /)).toBeVisible();
-  await expect(graph(page).getByText('Failing / stalled · 1',{exact:true})).toBeVisible();
-  await expect(card(page,'ARMY failing worker')).toBeVisible();
+  await expect(graph(page).getByText('Live priority sources · source ages shown · Tap a label to inspect',{exact:true})).toBeVisible();
+  await expect(graph(page).getByText('What needs you, in priority order',{exact:true})).toBeVisible();
+  const list=graph(page).getByTestId('live-triage-list');
+  for(const n of [1,2]){
+   const item=list.getByTestId('triage-item-owner:army-kevin-'+n);
+   await expect(item).toContainText('ARMY_KEVIN_GOAL_'+n);
+   await expect(item).toContainText(/Needs you · P0 · \d+[sm] ago/);
+   await expect(item).toContainText('Worker supervision');
+  }
+  await expect(graph(page).getByText('Work board unavailable',{exact:true})).toBeVisible();
+  await expect(graph(page).getByText(/^Needs you \d+ → /)).toHaveCount(0);
  });
 
  test('tap a node: Node details shows label, kind/state/harness/model, reason, action, path, parent, children; Close closes',async({page,bridge})=>{
@@ -235,7 +246,9 @@ test.describe('rc3 10 orchestra detail (product)',()=>{
   await expect(page.getByLabel(new RegExp('^'+esc(project)+' · \\S'))).toBeVisible();
   await expect(page.getByText('No linked chats yet',{exact:true})).toHaveCount(0);
   // FlashList renders the chat rows after the agent rows; the chat title is the profile name.
-  await page.getByText(name,{exact:true}).last().click({noWaitAfter:true});
+  // Spec fix: the always-mounted BridgePull sheet also renders a "<harness>" button after this screen, so .last() hit that off-screen
+  // copy ("element is outside of the viewport"). The chat row is the first match after the "Chats" section label.
+  await page.getByText('Chats',{exact:true}).filter({visible:true}).locator('xpath=following::*[normalize-space(.)="'+name+'"]').first().click({noWaitAfter:true});
   await expect(composer(page)).toBeVisible({timeout:20000});
  });
 });
@@ -424,11 +437,26 @@ const plot=(page:Page,id='trace-timeline')=>page.getByTestId(id+'-plot');
 const layer=(l:Locator)=>l.evaluate(el=>{const c=el.firstElementChild;if(!(c instanceof HTMLElement))throw Error('timeline content layer missing');const r=c.getBoundingClientRect();return {width:r.width,left:r.left};});
 async function openTrace(page:Page,b:Bridge){
  await pairCold(page,b);
- const entry=btn(page,/^Agent trace: \d+ live, \d+ cut, \d+ need OK$/);
+ // Spec fix: since dca0dc3 Trace is the live bridge feed. Before the first visit the entry card reads "Agent trace: Open to load live events"
+ // (counts only exist after a snapshot), so match the card by its testID and then require the live feed, not an unavailable state.
+ const entry=page.getByTestId('trace-entry');
  await expect(entry).toBeVisible();
+ await expect(entry).toHaveAttribute('aria-label',/^Agent trace: \S/);
  await entry.click({noWaitAfter:true});
+ await expect(page.getByTestId('trace-feed-live')).toBeVisible();
  await expect(timeline(page)).toBeVisible();
  await expect(page.getByTestId('trace-scroll')).toBeVisible();
+}
+/** Component lab is a FlashList window: wheel the list until the block is mounted, then bring it on screen. */
+async function revealLab(page:Page,testId:string){
+ const target=page.getByTestId(testId);
+ const vp=page.viewportSize();if(!vp)throw Error('no viewport');
+ await expect(async()=>{
+  if(await target.count()===0){await page.mouse.move(vp.width/2,vp.height*0.6);await page.mouse.wheel(0,500);}
+  await expect(target).toBeAttached({timeout:800});
+ }).toPass({timeout:30000});
+ await target.scrollIntoViewIfNeeded();
+ return target;
 }
 async function zoom(page:Page,label:'fit'|'3h'|'1h',scope:Locator=timeline(page)){
  await btn(scope,'Zoom '+label).click({noWaitAfter:true});
@@ -480,6 +508,7 @@ test.describe('rc3 10 trace screen',()=>{
  test('Component lab timeline long-press shows the scrub readout',async({page,bridge})=>{
   await openTrace(page,bridge);
   await btn(page,'Component lab').click({noWaitAfter:true});
+  await revealLab(page,'lab-timeline');
   const lab=page.locator('[data-testid^="lab-timeline-"]:not([data-testid$="-plot"])').first();
   await expect(lab).toBeVisible();
   const id=await lab.getAttribute('data-testid');if(!id)throw Error('lab timeline id missing');
@@ -528,8 +557,10 @@ test.describe('rc3 10 trace screen',()=>{
   const menu=page.getByRole('menu');
   await expect(menu).toBeVisible();
   const items=menu.getByRole('menuitem');
-  await expect(items).toHaveCount(3);
-  await expect(items).toHaveText(['Open details','Zoom to this run','Copy summary']);
+  // Spec fix: copy actions are per row (trace/row-actions.ts). Every live-feed row carries a source, so "Copy source path" is listed;
+  // this fixture records no owner request, so there is no "Copy original request".
+  await expect(items).toHaveCount(4);
+  await expect(items).toHaveText(['Open details','Zoom to this run','Copy source path','Copy summary']);
   const back=page.getByLabel('Close row menu',{exact:true});
   const box=await back.boundingBox();if(!box)throw Error('row menu backdrop has no box');
   await back.click({position:{x:box.width-6,y:6},noWaitAfter:true});
@@ -542,8 +573,13 @@ test.describe('rc3 10 trace screen',()=>{
  });
 
  test('action chip: swipe right commits Do, Undo reverts; swipe left commits Not now and Undo expires after 5 s',async({page,bridge})=>{
+  // Spec fix: the live Trace feed has no action chips (bridge /trace/snapshot sends actions: [] and production Trace never shows the bundled
+  // sample a-resume/a-triage chips). The swipe chip is the same ActionChip in the Component lab (card and pill variants, demo data).
   await openTrace(page,bridge);
-  const surface=page.getByTestId('chip-surface-a-resume');
+  await btn(page,'Component lab').click({noWaitAfter:true});
+  await expect(page.getByRole('heading',{name:'Component lab',exact:true})).toBeVisible();
+  await revealLab(page,'lab-action-chip');
+  const surface=page.getByTestId('chip-surface-lab-card');
   const swipe=async(s:Locator,dir:1|-1)=>{
    await s.scrollIntoViewIfNeeded();
    const b=await s.boundingBox();if(!b)throw Error('chip has no box');
@@ -555,26 +591,25 @@ test.describe('rc3 10 trace screen',()=>{
   await swipe(surface,1);
   await expect(surface).toHaveAttribute('aria-label',/\. Done$/);
   await expect(surface).toContainText('✓ Done');
-  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('dash.trace.feedback/v1'))).toMatch(/"id":"a-resume","value":"do"/);
-  const undo=btn(page.getByTestId('chip-a-resume'),'Undo');
+  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('dash.trace.feedback/v1'))).toMatch(/"id":"lab-card","value":"do"/);
+  const undo=btn(page.getByTestId('chip-lab-card'),'Undo');
   await expect(undo).toBeVisible();
   await undo.click({noWaitAfter:true});
   await expect(surface).toHaveAttribute('aria-label',/Swipe right for Do, left for Not now\.$/);
-  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('dash.trace.feedback/v1'))).toMatch(/"id":"a-resume","value":"undo"/);
-  const triage=page.getByTestId('chip-surface-a-triage');
-  await swipe(triage,-1);
-  await expect(triage).toHaveAttribute('aria-label',/\. Not now$/);
-  const undo2=btn(page.getByTestId('chip-a-triage'),'Undo');
+  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('dash.trace.feedback/v1'))).toMatch(/"id":"lab-card","value":"undo"/);
+  const pill=page.getByTestId('chip-surface-lab-pill');
+  await swipe(pill,-1);
+  await expect(pill).toHaveAttribute('aria-label',/\. Not now$/);
+  const undo2=btn(page.getByTestId('chip-lab-pill'),'Undo');
   await expect(undo2).toBeVisible();
   await expect(undo2).toHaveCount(0,{timeout:8000});
-  await expect(triage).toHaveAttribute('aria-label',/\. Not now$/);
+  await expect(pill).toHaveAttribute('aria-label',/\. Not now$/);
  });
 
  test('action chip buttons: tap Do commits, Undo reverts, tap Not now commits',async({page,bridge})=>{
   await openTrace(page,bridge);
   await btn(page,'Component lab').click({noWaitAfter:true});
-  const chip=page.getByTestId('chip-lab-buttons'),surface=page.getByTestId('chip-surface-lab-buttons');
-  await chip.scrollIntoViewIfNeeded();
+  const chip=await revealLab(page,'chip-lab-buttons'),surface=page.getByTestId('chip-surface-lab-buttons');
   await expect(btn(chip,'Do')).toBeVisible();await expect(btn(chip,'Not now')).toBeVisible();
   await btn(chip,'Do').click({noWaitAfter:true});
   await expect(surface).toHaveAttribute('aria-label',/\. Done$/);

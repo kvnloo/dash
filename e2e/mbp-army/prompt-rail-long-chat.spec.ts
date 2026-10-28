@@ -12,6 +12,10 @@ const pad=(n:number)=>String(n).padStart(3,'0');
 const railOf=(page:Page)=>page.getByLabel('Prompt navigator',{exact:true});
 const viewportOf=(page:Page)=>page.getByTestId('transcript-viewport');
 
+/**
+ * `newest` must be a row that stays mounted: the latest answer. The newest prompt sits above a latest answer taller than the
+ * phone, so the virtualized list only mounts it while rows are still being measured; a locator can miss that instant.
+ */
 async function openChatByTitle(page:Page,title:string,newest:RegExp){
  const row=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({hasText:title});
  await expect(row).toHaveCount(1,{timeout:30000});
@@ -141,7 +145,7 @@ test.describe('prompt rail on a 1000-message Claude Code chat',()=>{
  test('every prompt is on the rail, on the right edge clear of the text, and tap and drag jump to the prompt shown',async({page,bridge},info)=>{
   const release=await holdOlderPages(page);
   await pair(page,bridge);
-  await openChatByTitle(page,LONG_CHAT_TITLE,/^ARMY prompt 12[0-9]$/);
+  await openChatByTitle(page,LONG_CHAT_TITLE,newestClaude);
   const viewport=viewportOf(page);
   const ticks=railOf(page).getByTestId('rail-tick');
 
@@ -177,7 +181,7 @@ test.describe('prompt rail on a 1000-message Claude Code chat',()=>{
   // Every older page is held until the owner has scrolled up, then answered a page at a time (the phone's latency).
   const release=await holdOlderPages(page,600);
   await pair(page,bridge);
-  await openChatByTitle(page,LONG_CHAT_TITLE,/^ARMY prompt 12[0-9]$/);
+  await openChatByTitle(page,LONG_CHAT_TITLE,newestClaude);
   const viewport=viewportOf(page);
   const ticks=railOf(page).getByTestId('rail-tick');
   const vb=await viewport.boundingBox();if(!vb)throw Error('transcript has no box');
@@ -214,7 +218,7 @@ test.describe('prompt rail on a 1000-message Claude Code chat',()=>{
   let refused=0;
   await page.route(olderPages,async route=>{if(refused<2){refused++;await route.abort('failed');return;}await route.continue();});
   await pair(page,bridge);
-  await openChatByTitle(page,LONG_CHAT_TITLE,/^ARMY prompt 12[0-9]$/);
+  await openChatByTitle(page,LONG_CHAT_TITLE,newestClaude);
   await expect.poll(()=>railOf(page).getByTestId('rail-tick').count(),{timeout:60000,message:'one bar per prompt after the blip'}).toBe(LONG_CHAT_PROMPTS);
   expect(refused).toBe(2);
  });
@@ -230,7 +234,7 @@ test.describe('prompt rail on the left thumb side',()=>{
   await expect(page.getByRole('tab').nth(1)).toBeVisible({timeout:30000});
   await page.getByRole('tab').nth(1).click({noWaitAfter:true});
   await expect(page.getByTestId('chats-pane')).toBeVisible();
-  await openChatByTitle(page,LONG_CHAT_TITLE,/^ARMY prompt 12[0-9]$/);
+  await openChatByTitle(page,LONG_CHAT_TITLE,newestClaude);
   await expect.poll(()=>railOf(page).getByTestId('rail-tick').count(),{timeout:60000,message:'one bar per prompt'}).toBe(LONG_CHAT_PROMPTS);
   const geometry=await railGeometry(page);
   expectCoverage(geometry);

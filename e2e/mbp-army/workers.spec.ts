@@ -16,7 +16,8 @@ test.describe('subagent strip',()=>{
   await expect(strip).toBeVisible({timeout:20000});
   await expect(strip).toContainText('ARMY worker verify · terminal');
   await expect(strip).toContainText('+1');
-  await expect(page.getByText('ARMY worker done')).toHaveCount(0);
+  // Scoped to the Chat window: the always-mounted Orchestra pane behind it lists every worker, including the finished one.
+  await expect(page.getByTestId('chat-window').getByText('ARMY worker done')).toHaveCount(0);
   const box=await strip.boundingBox();
   if(!box)throw Error('strip has no box');
   expect(box.x).toBeGreaterThanOrEqual(0);
@@ -25,7 +26,7 @@ test.describe('subagent strip',()=>{
   await strip.click({noWaitAfter:true});
   await expect(page.getByRole('treeitem',{name:/ARMY worker verify/})).toBeVisible();
   await expect(page.getByRole('treeitem',{name:/ARMY worker review/})).toBeVisible();
-  await expect(page.getByText('ARMY worker done')).toHaveCount(0);
+  await expect(page.getByTestId('chat-window').getByText('ARMY worker done')).toHaveCount(0);
   await strip.click({noWaitAfter:true});
   await expect(page.getByRole('treeitem',{name:/ARMY worker verify/})).toHaveCount(0);
  });

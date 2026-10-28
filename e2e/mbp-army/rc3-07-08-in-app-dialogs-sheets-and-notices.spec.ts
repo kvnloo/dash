@@ -100,14 +100,38 @@ async function endedAndLocal(page:Page,bridge:Bridge){
  await btn(page,'Close chat window').click({noWaitAfter:true});
  await expect(page.getByTestId('chat-window')).toHaveCount(0);
  await setInAppFeedback(page,false);
- const liveRow=rows(page).filter({has:page.getByLabel('Live on host',{exact:true})}).first();
- await expect(liveRow).toBeVisible({timeout:30000});
- const endedId=await liveRow.getAttribute('data-testid');if(!endedId)throw Error('live row id missing');
+ const liveRow=()=>rows(page).filter({has:page.getByLabel('Live on host',{exact:true})}).first();
+ await expect(liveRow()).toBeVisible({timeout:30000});
+ // Triage fix: open the host-held row once so the phone owns it. A never-opened roster row can be shown from the paged list only
+ // (a remote row has no "ended" state: it kept its live dot after the host process died in run 1), or be pruned by the one-time
+ // chats.v1 archive migration. Opening stamps openedAt, so the next roster without it turns the owned row "ended" deterministically.
+ await liveRow().click({noWaitAfter:true});
+ await expect(page.getByTestId('chat-window')).toBeVisible();
+ await btn(page,'Close chat window').click({noWaitAfter:true});
+ await expect(page.getByTestId('chat-window')).toHaveCount(0);
+ await expect(liveRow()).toBeVisible();
+ // The owned row has its own id; read it only now.
+ const endedId=await liveRow().getAttribute('data-testid');if(!endedId)throw Error('live row id missing');
  expect(await killOmpHolder(bridge)).toBeGreaterThan(0);
  await expect(page.getByTestId(endedId).getByText('ended',{exact:true})).toBeVisible({timeout:45000});
  const clear=btn(pane(page),'Clear ended');
  await expect(clear).toBeVisible();
  return {endedId,clear};
+}
+
+/**
+ * Triage fix: since 0e145ec a chat-row long-press opens the BottomActionSheet and sends/asks nothing; the "Delete chat?"
+ * confirm is requested only by choosing the sheet's destructive row (feedback is Off in these tests).
+ */
+async function openRowSheet(page:Page,row:Locator){
+ await longPress(page,row);
+ const sheet=page.getByTestId('bottom-action-sheet');
+ await expect(sheet).toBeVisible({timeout:THEMED_TIMEOUT});
+ return {sheet,del:sheet.getByRole('button',{name:/^Delete .*from this phone/})};
+}
+async function requestDeleteConfirm(page:Page,row:Locator){
+ const {del}=await openRowSheet(page,row);
+ await del.click({noWaitAfter:true});
 }
 
 // ======================================================================
@@ -145,12 +169,12 @@ test.describe('RC3 08 themed in-app dialogs',()=>{
   await btn(page,'Close chat window').click({noWaitAfter:true});
   await setInAppFeedback(page,false);
   const row=chatRow(page);
-  await longPress(page,row);
+  await requestDeleteConfirm(page,row);
   let dialog=await expectThemedConfirm(page,native,'Delete chat?','Delete');
   await btn(dialog,'Cancel').click({noWaitAfter:true});
   await expect(dialog).toHaveCount(0);
   await expect(row).toHaveCount(1);
-  await longPress(page,row);
+  await requestDeleteConfirm(page,row);
   dialog=await expectThemedConfirm(page,native,'Delete chat?','Delete');
   await btn(dialog,'Delete').click({noWaitAfter:true});
   await expect(dialog).toHaveCount(0);
@@ -178,12 +202,11 @@ test.describe('RC3 08 themed in-app dialogs',()=>{
   const native=guardNativeDialogs(page);
   const {endedId,clear}=await endedAndLocal(page,bridge);
   const row=chatRow(page);
-  await row.scrollIntoViewIfNeeded();
-  const box=await row.boundingBox();if(!box)throw Error('row has no box');
-  // Arm the row long-press (Delete chat?), then request Clear ended immediately: two confirms back to back.
-  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
+  // Triage fix: long-press opens the row sheet; request Clear ended, then the sheet's Delete row: two confirms back to back.
+  // DOM clicks: the first dialog's scrim covers the sheet, and a real pointer click would be intercepted.
+  const {del}=await openRowSheet(page,row);
   await clear.evaluate(el=>(el as HTMLElement).click());
-  await page.waitForTimeout(900);await page.mouse.up();
+  await del.evaluate(el=>(el as HTMLElement).click());
   const first=dashDialog(page,'Clear ended chats?');const second=dashDialog(page,'Delete chat?');
   await expect(first,'RC3 #390: first request must be the visible themed dialog').toBeVisible({timeout:THEMED_TIMEOUT});
   expect(native,'RC3 #389: no system popup').toEqual([]);
@@ -240,11 +263,10 @@ test.describe('RC3 08 web confirm path (window.confirm)',()=>{
   const native=guardNativeDialogs(page);
   const {endedId,clear}=await endedAndLocal(page,bridge);
   const row=chatRow(page);
-  await row.scrollIntoViewIfNeeded();
-  const box=await row.boundingBox();if(!box)throw Error('row has no box');
-  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
+  // Triage fix: long-press opens the row sheet (it no longer asks "Delete chat?" itself); Clear ended, then the sheet's Delete row.
+  const {del}=await openRowSheet(page,row);
   await clear.evaluate(el=>(el as HTMLElement).click());
-  await page.waitForTimeout(900);await page.mouse.up();
+  await del.evaluate(el=>(el as HTMLElement).click());
   await expect.poll(()=>native.length,{timeout:10000}).toBe(2);
   expect(native).toEqual([CLEAR_MSG,DELETE_MSG]);
   // Both dismissed: nothing destructive ran.
@@ -274,11 +296,13 @@ test.describe('RC3 08 bottom action sheet',()=>{
   await expect(sheet(page).getByRole('heading',{name:'New chat',exact:true})).toBeVisible();
   await expect(btn(sheet(page),'Close actions')).toBeVisible();
   await expect(page.getByTestId('bottom-action-sheet-close')).toBeVisible();
+  // Triage fix: the shipped row menu (lib/chat-row-actions.ts chatRowMenu, since 0e145ec) has ids open/delete and labels
+  // "Open New chat, 1 of 2" / "Delete New chat from this phone, 2 of 2"; accept the unshipped lib/chat-row-menu.ts wording too.
   const open=page.getByTestId('bottom-action-sheet-option-open');
-  const del=page.getByTestId('bottom-action-sheet-option-delete-local');
+  const del=sheet(page).getByRole('button',{name:/^Delete .*from this phone/});
   await expect(open).toBeVisible();await expect(del).toBeVisible();
-  await expect(open).toHaveAttribute('aria-label',/^Open chat: New chat, 1 of \d+$/);
-  await expect(del).toHaveAttribute('aria-label',/^Delete chat from this phone: New chat, \d+ of \d+$/);
+  await expect(open).toHaveAttribute('aria-label',/^Open (chat: )?New chat, 1 of \d+$/);
+  await expect(del).toHaveAttribute('aria-label',/^Delete (chat from this phone: New chat|New chat from this phone), \d+ of \d+$/);
   // Bottom-anchored once the slide-in settles.
   const vh=page.viewportSize()?.height??0;
   await expect.poll(async()=>{const b=await sheet(page).boundingBox();return b?Math.round(b.y+b.height):-1;},{timeout:5000}).toBeGreaterThanOrEqual(vh-24);

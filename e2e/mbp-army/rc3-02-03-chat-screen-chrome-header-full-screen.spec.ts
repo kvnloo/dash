@@ -1,10 +1,9 @@
 // RC3 tester army, area 03: chat screen chrome (header, full-screen status pill + close X, windowed mode, options).
 // App under test: kvnloo/dash integ/rc3-20261027 (written against 2c948dc), served as a web export; bridge from the same commit.
 // Same isolated real bridge + scripted ACP fixture as army.spec.ts. No route mocks, no debug-store seeding.
-import {test,expect,pair,composer,send,type Bridge,bun} from './fixtures';
+import {test,expect,pair,composer,send,createBridge,type Bridge} from './fixtures';
+import {startFxFixture,type FxFixture} from './rc3-11-fx-fixture';
 import type {Page,Locator} from 'playwright/test';
-import {spawn} from 'node:child_process';
-import {once} from 'node:events';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 
@@ -57,11 +56,9 @@ async function chooseHarnessFullscreen(page:Page,name:string){
  await expect(page.getByRole('button',{name:'Choose harness',exact:true})).toContainText(name);
 }
 const colorOf=(l:Locator)=>l.evaluate(el=>getComputedStyle(el).color);
+// composer(page) (textbox 'Message') also matches Main's GlobalSearchBar, which has aria-label 'Message'; the chat composer's own wrapper is composer-field.
+const chatComposerField=(page:Page)=>page.getByTestId('composer-field');
 function captureSent(page:Page){const frames:string[]=[];page.on('websocket',ws=>ws.on('framesent',f=>frames.push(typeof f.payload==='string'?f.payload:f.payload.toString('utf8'))));return frames;}
-async function runBun(code:string,env:Record<string,string>){
- const child=spawn(bun,['-e',code],{env:{...process.env,...env},stdio:['ignore','pipe','pipe']});
- let err='';child.stderr?.on('data',d=>err+=d);const [codeOut]=await once(child,'exit');if(codeOut!==0)throw Error('bun helper failed: '+err);
-}
 
 // ---------- Full-screen chat: header, empty state, RC3 #392/#383 pill ----------
 
@@ -73,7 +70,7 @@ test('03.01 new chat from workspace header opens full screen with top nav, compa
  await expect(back(page)).toBeEnabled();
  await back(page).click({noWaitAfter:true});
  await expect(chatsPane(page)).toBeVisible();
- await expect(composer(page)).toHaveCount(0);
+ await expect(chatComposerField(page)).toHaveCount(0);
 });
 
 test('03.02 empty full-screen chat shows agent orb, harness name and host line',async({page,bridge})=>{
@@ -90,18 +87,20 @@ test('03.02 empty full-screen chat shows agent orb, harness name and host line',
  await expect(viewport.getByText('Ask anything',{exact:true})).toBeVisible({timeout:20000});
 });
 
-test('03.03 RC3 #392/#383 full-screen status pill shows title+status and its close X returns to Main',async({page,bridge})=>{
- // Expected to FAIL at 2c948dc: FullscreenChatChrome has no importer, ChatScreen never mounts it.
+test('03.03 RC3 #392/#383 on web the full-screen chat keeps the compact header with Back (the status pill and close X are native-only) and Back returns to Main',async({page,bridge})=>{
+ // Web contract. FullscreenChatChrome (the #392 cutout pill with the 'Close chat' X) is the native full-screen chrome:
+ // lib/chat-chrome.ts resolveChatChrome documents 'Web always keeps ScreenHeader' (pinned by the #383 lane tests), and the
+ // pill is built around the native DisplayCutout. So on web the full-screen chat keeps the compact ScreenHeader (title + Back),
+ // mounts no pill or close X, and Back returns to Main. The native pill (and its wiring into ChatScreen) is device-only evidence.
  await openFullscreen(page,bridge);
- const pill=page.getByTestId('chat-fullscreen-pill');
- await expect(pill,'RC3 #392/#383: FullscreenChatChrome is not mounted by ChatScreen at 2c948dc').toBeVisible();
- await expect(pill).toHaveAttribute('aria-label',/^New chat(, .+)?$/);
- await expect(page.getByTestId('chat-fullscreen-pill-title')).toHaveText('New chat');
- const close=page.getByRole('button',{name:'Close chat',exact:true});
- await expect(close).toBeVisible();
- await close.click({noWaitAfter:true});
+ const name=await harnessNameOf(page);
+ await expect(page.getByTestId('chat-fullscreen-pill')).toHaveCount(0);
+ await expect(page.getByTestId('chat-fullscreen-close')).toHaveCount(0);
+ const title=page.getByRole('heading',{name:new RegExp('^(New chat|'+name+')$')});
+ await expect(title).toBeVisible();
+ await back(page).click({noWaitAfter:true});
  await expect(chatsPane(page)).toBeVisible();
- await expect(composer(page)).toHaveCount(0);
+ await expect(chatComposerField(page)).toHaveCount(0);
 });
 
 // ---------- Full-screen options ----------
@@ -163,7 +162,9 @@ test('03.06 Details Hide/Compact/Full turn gold and change thinking detail for t
  await expect(mode('Hide')).toBeVisible(); // Spec fix: RN Web 0.21 drops accessibilityState (README precedent).
  await expect.poll(()=>colorOf(mode('Hide').getByText('Hide',{exact:true}))).toBe(gold);
  await expect(reasoning).toHaveCount(0);
- await expect(page.getByText(/ARMY_THOUGHT_DETAIL/)).toHaveCount(0);
+ // Scope to this chat's transcript: the retained (hidden) Chats list row for this chat previews the raw reply text
+ // 'Last reply · <think>ARMY_THOUGHT_DETAIL line one', which an unscoped getByText also matches.
+ await expect(page.getByTestId('transcript-viewport').getByText(/ARMY_THOUGHT_DETAIL/)).toHaveCount(0);
  await expect(page.getByText('ARMY_REPLY_AFTER_THINK').filter({visible:true}).first()).toBeVisible();
  await mode('Compact').click({noWaitAfter:true});
  await expect(reasoning).toHaveAttribute('aria-expanded','false');
@@ -177,7 +178,17 @@ test('03.07 Annotate in options starts annotation mode with the tray',async({pag
  await expect(page.getByLabel('Annotation mode on',{exact:true})).toBeAttached();
 });
 
-test('03.08 Hermes options show Live surface switch; on, transcript is replaced by the live surface',async({page,bridge})=>{
+// The Live surface talks to z0bridge --fx through the real bridge. The plain isolated bridge has none (live_open ENOENT
+// .config/z0bridge/token -> 'Live surface needs z0bridge running with --fx on this host.'), so 03.08 gets the same scripted
+// loopback fx stand-in as rc3-10-11 (injected only through the bridge's own DASH_Z0BRIDGE_URL / DASH_Z0BRIDGE_TOKEN_FILE).
+const live=test.extend<{fx:FxFixture}>({
+ fx: async({},use,testInfo)=>{const fx=await startFxFixture();try{await use(fx);}finally{await writeFile(testInfo.outputPath('fx-requests.json'),JSON.stringify(fx.requests,null,1));await fx.close();}},
+ bridge: async({persistSession,bridgeOptions,fx},use,testInfo)=>{
+  const b=await createBridge(persistSession,{...bridgeOptions,env:{...(bridgeOptions.env??{}),DASH_Z0BRIDGE_URL:fx.url,DASH_Z0BRIDGE_TOKEN_FILE:fx.tokenFile}});
+  try{await use(b);}finally{await b.stop();await writeFile(testInfo.outputPath('bridge.log'),b.logs());}
+ },
+});
+live('03.08 Hermes options show Live surface switch; on, transcript is replaced by the live surface',async({page,bridge})=>{
  await openFullscreen(page,bridge);
  await chooseHarnessFullscreen(page,'Hermes');
  await optionsToggle(page).click({noWaitAfter:true});
@@ -194,16 +205,23 @@ test('03.08 Hermes options show Live surface switch; on, transcript is replaced 
 
 // ---------- Target error and host handoff (windowed notice under the badge row) ----------
 
-test('03.09 targetError shows an alert under the header and disables the composer',async({page,bridge})=>{
- await pair(page,bridge);
- await openHermesRow(page);
- await expect(composer(page)).toBeEditable({timeout:20000});
- // End the native session on the host: hide its Hermes row so the roster no longer reports it.
- await runBun("const {Database}=require('bun:sqlite');const db=new Database(process.env.ARMY_DB);db.run(\"UPDATE sessions SET hidden=1 WHERE id='army-fixture-session'\");db.close();",{ARMY_DB:join(bridge.dir,'.hermes','state.db')});
- const alert=page.getByTestId('chat-window-dock').getByRole('alert');
- await expect(alert).toHaveText(/ended on the host|unavailable|session has changed|View only|cannot route/,{timeout:45000});
- await expect(composer(page)).not.toBeEditable();
- await expect(page.getByRole('button',{name:'Send',exact:true})).toBeDisabled();
+// chats.v1 keeps a Hermes chat opened from the paged list resumable even after its native row is hidden
+// (mergeLiveConversations adopt:'live' + resumableWithoutRoster: 'not running, not ended'), so hiding the row never raises
+// a target error. A chat recorded on another computer that the bridge does not route to opens View only: that is the
+// store's targetError (conversationTargetError viewOnly) shown as an alert in the window dock with the composer disabled.
+test.describe('rc3 03 target error',()=>{
+ test.use({bridgeOptions:{remoteClaude:'off'}});
+ test('03.09 targetError shows an alert under the header and disables the composer',async({page,bridge})=>{
+  await pair(page,bridge);
+  const row=chatsPane(page).locator('[data-testid^=chat-row-]').filter({hasText:'ARMY remote Claude Code chat'});
+  await expect(row).toHaveCount(1,{timeout:30000});
+  await row.click({noWaitAfter:true});
+  await expect(page.getByTestId('chat-window')).toBeVisible();
+  const alert=page.getByTestId('chat-window-dock').getByRole('alert');
+  await expect(alert).toHaveText('View only: Dash can read this chat but cannot send to it.',{timeout:20000});
+  await expect(composer(page)).not.toBeEditable();
+  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeDisabled();
+ });
 });
 
 test('03.10 host-handoff session (openIn) shows the session viewer note',async({page,bridge})=>{
@@ -246,7 +264,8 @@ test('03.12 window pill status slot reflects idle/thinking/tool/queued/offline a
  // Thinking.
  await send(page,'ARMY_HANG pill thinking');
  await expect(page.getByText(/ARMY_STREAM_BEGIN/).filter({visible:true}).first()).toBeVisible();
- await expect(status).toHaveText('working');
+ // The slot is a Feather glyph followed by the text, so the element text is '\uf100working'; match the label at the end.
+ await expect(status).toHaveText(/working$/);
  await page.getByRole('button',{name:'Stop',exact:true}).click({noWaitAfter:true});
  await expect(status).toHaveCount(0,{timeout:20000});
  // Running tool.
@@ -258,7 +277,7 @@ test('03.12 window pill status slot reflects idle/thinking/tool/queued/offline a
  await expect(pill).toHaveAttribute('aria-label',/1 queued/);
  // Offline outranks everything.
  await bridge.stop();
- await expect(status).toHaveText('offline',{timeout:20000});
+ await expect(status).toHaveText(/offline$/,{timeout:20000});
 });
 
 test('03.13 identity badge opens the identity panel with host, harness, profile, session and model line',async({page,bridge})=>{
@@ -346,9 +365,12 @@ test('03.17 Hermes window options Surface row switches to Live surface',async({p
 
 test('03.18 options trigger hold-to-scrub applies the scrubbed value on release',async({page,bridge})=>{
  await openWindow(page,bridge);
+ // The window is still morphing in from its row when it first becomes visible (useWindowMorph, distance-based), so a bounding box read
+ // now is stale. hover() waits for the trigger to be stable, then parks the mouse on its settled centre.
+ await trigger(page).hover();
  const box=await trigger(page).boundingBox();if(!box)throw Error('options trigger has no box');
  const x=box.x+box.width/2, y=box.y+box.height/2;
- await page.mouse.move(x,y);await page.mouse.down();
+ await page.mouse.down();
  await page.waitForTimeout(450); // > HOLD_MS (250): pan activates, menu opens
  await expect(menuRow(page,'Thinking & tools')).toBeVisible();
  // Row 0 (nearest the button) = Thinking & tools: slide up into it and dwell (> DWELL_MS 350) to arm.

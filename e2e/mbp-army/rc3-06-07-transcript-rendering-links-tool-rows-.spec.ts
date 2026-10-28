@@ -38,7 +38,6 @@ const sendBtn=(page:Page)=>page.getByRole('button',{name:'Send',exact:true});
 const stopBtn=(page:Page)=>page.getByRole('button',{name:'Stop',exact:true});
 const optionsToggle=(page:Page)=>page.getByRole('button',{name:'Chat options',exact:true});
 const detailMode=(page:Page,m:'Hide'|'Compact'|'Full')=>page.getByRole('button',{name:`Details ${m}`,exact:true});
-const treeRow=(page:Page,suffix:string)=>page.locator(`[data-testid^="tree-row-"][data-testid$="${suffix}"]`);
 const fontPx=(l:Locator)=>l.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
 const clipboard=(page:Page)=>page.evaluate(()=>navigator.clipboard.readText());
 function captureSent(page:Page){const frames:string[]=[];page.on('websocket',ws=>ws.on('framesent',f=>frames.push(typeof f.payload==='string'?f.payload:f.payload.toString('utf8'))));return frames;}
@@ -182,13 +181,15 @@ test('07.03 markdown [text](https://) link opens the URL; a non-http link does n
  await expect(web).toBeVisible();
  await web.click({noWaitAfter:true});
  await expect.poll(()=>out.urls.some(u=>u.startsWith('https://example.com/army-doc')),{message:'Linking.openURL opened the https link'}).toBe(true);
- const before={urls:out.urls.length,popups:out.popups.length};
+ // The aborted popup navigation to the https link is re-requested by Chromium itself (same popup frame, same URL, ~1.7 s later),
+ // so compare the set of distinct egress URLs rather than the raw request count.
+ const before={urls:[...new Set(out.urls)],popups:out.popups.length};
  const mail=page.getByRole('link',{name:'ARMY mail link',exact:true});
  await expect(mail).toBeVisible();
  await mail.click({noWaitAfter:true});
  await page.waitForTimeout(1500);
  expect(out.popups.slice(before.popups).filter(u=>u.startsWith('mailto:'))).toEqual([]);
- expect(out.urls.length).toBe(before.urls);
+ expect([...new Set(out.urls)].filter(u=>!before.urls.includes(u)),'the mailto tap reached no new egress URL').toEqual([]);
  await expect(composer(page)).toBeVisible();
 });
 
@@ -217,66 +218,95 @@ test('07.04 RC3 #419/#386 bare https URL and file:line outside code are tappable
 // ======================================================================
 
 test('07.05 tool call rows: label, expand (aria-expanded), tool_detail loads full output, collapse; reasoning preview shows tail',async({page,bridge})=>{
+ // RC3 #420 (wired at 9c7ae14): ReplyBlocks renders a `N tools · s` header (aria-expanded), CompactToolRow lines (testIDs reply-tool-row /
+ // reply-tool-call; a coalesced row lists its calls on tap, a single call opens the ToolInspector modal) and a one-line `Reasoning · <summary>`
+ // row (aria-expanded) that shows the trace only when opened. CompactToolRow sets accessibilityState only, which RN Web 0.21 drops, so row
+ // state is asserted through the rendered calls, not aria-expanded.
  const frames=captureSent(page);
  await openFullscreen(page,bridge);
  await send(page,scenario('TOOLS','tool rows journey'));
  await expect(page.getByText(/ARMY_TOOLS_DONE/).filter({visible:true}).first()).toBeVisible({timeout:15000});
- // Header chip: N tools · seconds.
- await expect(page.getByText(/^4 tools · /).filter({visible:true}).first()).toBeVisible();
- // Collapsed reasoning block (Compact): label + tail of the trace in the preview.
+ // Header chip: N tools · seconds; a stack of up to three lines starts open.
+ const header=page.getByRole('button',{name:/^4 tools · /});
+ await expect(header).toBeVisible();
+ await expect(header).toHaveAttribute('aria-expanded','true');
+ // Reasoning: one quiet row while folded (documented text "Reasoning · summary unavailable"); opening it shows the trace tail.
  const reasoning=page.getByRole('button',{name:/^Reasoning · /});
+ const tail=viewport(page).getByText(/ARMY_REASON_TAIL five/).filter({visible:true});
  await expect(reasoning).toHaveAttribute('aria-expanded','false');
- await expect(page.getByText(/ARMY_REASON_TAIL five/).filter({visible:true}).first()).toBeVisible();
- // Same-name consecutive calls are grouped (read ×3) in the turn tree.
- const group=treeRow(page,':group:r07-read-1');
+ await expect(tail).toHaveCount(0);
+ await reasoning.click({noWaitAfter:true});
+ await expect(reasoning).toHaveAttribute('aria-expanded','true');
+ await expect(tail.first()).toBeVisible();
+ await reasoning.click({noWaitAfter:true});
+ await expect(reasoning).toHaveAttribute('aria-expanded','false');
+ await expect(tail).toHaveCount(0);
+ // Same-name consecutive calls are grouped (Read ×3); tapping the group lists each call, tapping again folds it.
+ const rows=viewport(page).getByTestId('reply-tool-row');
+ const calls=viewport(page).getByTestId('reply-tool-call');
+ const group=page.getByRole('button',{name:/^Read, 3 successful calls, latest target .*c\.ts/});
  await expect(group).toBeVisible();
- await expect(group).toHaveAttribute('aria-label',/^read ×3/);
- await expect(group).toHaveAttribute('aria-expanded','false');
+ await expect(group).toContainText('Read ×3');
+ await expect(rows).toHaveCount(2);
+ await expect(calls).toHaveCount(0);
  await group.click({noWaitAfter:true});
- await expect(group).toHaveAttribute('aria-expanded','true');
- for(const id of ['r07-read-1','r07-read-2','r07-read-3'])await expect(treeRow(page,':call:'+id)).toHaveAttribute('aria-label',/^read/);
- // The bash call: expand shows Output (truncated); Load retained output sends tool_detail and the full tail arrives.
- const call=treeRow(page,':call:r07-big');
- await expect(call).toHaveAttribute('aria-label',/^bash/);
- await expect(call).toHaveAttribute('aria-expanded','false');
+ await expect(calls).toHaveCount(3);
+ for(const [i,file] of ['a','b','c'].entries())await expect(calls.nth(i)).toHaveAttribute('aria-label',new RegExp('^Read, .*'+file+'\\.ts'));
+ await group.click({noWaitAfter:true});
+ await expect(calls).toHaveCount(0);
+ // The bash call: tapping opens the inspector with the truncated live output; Load retained output sends tool_detail and the full tail arrives.
+ const call=page.getByRole('button',{name:/^Run, army-bulk-output, completed/});
+ await expect(call).toBeVisible();
  await call.click({noWaitAfter:true});
- await expect(call).toHaveAttribute('aria-expanded','true');
- await expect(treeRow(page,':output:r07-big')).toHaveAttribute('aria-label',/^Output \(truncated\)/);
- await expect(page.getByText(/ARMY_TOOL_TAIL/)).toHaveCount(0);
- const load=page.getByRole('button',{name:/^bash: Load retained output/});
+ const close=page.getByRole('button',{name:'Close tool details',exact:true});
+ await expect(close).toBeVisible();
+ await expect(page.getByText('Output is capped by the source or retention budget.',{exact:true})).toBeVisible();
+ const load=page.getByRole('button',{name:'Load retained output (up to 1 MiB)',exact:true});
  await expect(load).toBeVisible();
+ // The inspector list is virtualized, so read the output through its Copy output action (it copies the whole Output tab text).
+ const copyOutput=page.getByRole('button',{name:'Copy output',exact:true});
+ await copyOutput.click({noWaitAfter:true});
+ await expect.poll(()=>clipboard(page)).toContain('army bulk output line 0000');
+ expect(await clipboard(page),'preview output has no tail yet').not.toContain('ARMY_TOOL_TAIL');
  await load.click({noWaitAfter:true});
  await expect.poll(()=>frames.some(f=>f.includes('"tool_detail"')&&f.includes('r07-big')),{message:'tool_detail request sent for the call'}).toBe(true);
- await expect(page.getByText('bash: retained output capped at 1 MiB.',{exact:true})).toBeVisible();
- await expect(page.getByText(/ARMY_TOOL_TAIL retained end/).filter({visible:true}).first()).toBeVisible();
- await call.click({noWaitAfter:true});
- await expect(call).toHaveAttribute('aria-expanded','false');
- await expect(treeRow(page,':output:r07-big')).toHaveCount(0);
+ await expect(load).toHaveCount(0);
+ await expect(page.getByText('Output is capped by the source or retention budget.',{exact:true})).toHaveCount(0);
+ await copyOutput.click({noWaitAfter:true});
+ await expect.poll(()=>clipboard(page)).toContain('ARMY_TOOL_TAIL retained end');
+ await close.click({noWaitAfter:true});
+ await expect(close).toHaveCount(0);
+ // The header folds the whole stack and opens it again.
+ await header.click({noWaitAfter:true});
+ await expect(header).toHaveAttribute('aria-expanded','false');
+ await expect(rows).toHaveCount(0);
+ await header.click({noWaitAfter:true});
+ await expect(header).toHaveAttribute('aria-expanded','true');
+ await expect(rows).toHaveCount(2);
 });
 
 test('07.06 RC3 #420 consecutive tool calls render as grouped CompactToolRow rows with count and model accessibilityLabel',async({page,bridge})=>{
- // Expected to FAIL at 2c948dc: CompactToolRow / compactGroup have no importer; ReplyBlocks renders the Tree only.
+ // RC3 #420 is wired at 9c7ae14: ReplyBlocks renders CompactToolRow rows (testIDs reply-tool-row / reply-tool-call).
  await openFullscreen(page,bridge);
  await send(page,scenario('TOOLS','compact rows journey'));
  await expect(page.getByText(/ARMY_TOOLS_DONE/).filter({visible:true}).first()).toBeVisible({timeout:15000});
  // compactGroup label: "<Verb>, 3 successful calls, latest target <target>, completed[, duration]".
  const grouped=page.getByRole('button',{name:/^Read, 3 successful calls, latest target .*c\.ts.*, completed/});
- await expect(grouped,'RC3 #420: CompactToolRow has no importer at 2c948dc').toBeVisible({timeout:6000});
+ await expect(grouped,'RC3 #420: CompactToolRow groups consecutive read calls').toBeVisible({timeout:6000});
  await expect(grouped).toContainText('×3');
- // A single call row: "<verb>, <target>, completed, <duration>".
- await expect(page.getByRole('button',{name:/^bash, army-bulk-output, completed/})).toBeVisible();
+ // A single call row: "<verb>, <target>, completed, <duration>"; compact-tool-row.ts maps the bash tool to the verb "Run".
+ await expect(page.getByRole('button',{name:/^Run, army-bulk-output, completed/})).toBeVisible();
 });
 
 test('07.07 a running tool shows live status; Inspect shows Waiting for output… and closes; Stop ends it',async({page,bridge})=>{
  await openFullscreen(page,bridge);
  await send(page,scenario('LIVETOOL','live tool journey'));
  await expect(page.getByText(/ARMY_LIVETOOL_STARTED/).filter({visible:true}).first()).toBeVisible({timeout:15000});
- const call=treeRow(page,':call:r07-live');
- await expect(call).toHaveAttribute('aria-label',/^bash/);
+ // RC3 #420 rows: a live call is one CompactToolRow ("Run, <target>, running"); tapping it opens the ToolInspector modal directly.
+ const call=page.getByRole('button',{name:/^Run, army-never-finishes, running/});
+ await expect(call).toBeVisible();
  await expect(call).toContainText('running');
  await call.click({noWaitAfter:true});
- await expect(call).toHaveAttribute('aria-expanded','true');
- await treeRow(page,':inspect:r07-live').click({noWaitAfter:true});
  const close=page.getByRole('button',{name:'Close tool details',exact:true});
  await expect(close).toBeVisible();
  await expect(page.getByText('Waiting for output…',{exact:true}).filter({visible:true}).first()).toBeVisible();
@@ -291,7 +321,7 @@ test('07.08 detail mode Hide/Compact/Full changes how many thinking/tool blocks 
  await send(page,scenario('TOOLS','detail mode journey'));
  await expect(page.getByText(/ARMY_TOOLS_DONE/).filter({visible:true}).first()).toBeVisible({timeout:15000});
  const reasoning=page.getByRole('button',{name:/^Reasoning · /});
- const rows=page.locator('[data-testid^="tree-row-"]');
+ const rows=viewport(page).getByTestId('reply-tool-row'); // RC3 #420: CompactToolRow lines (the Tree rows are no longer rendered in replies)
  const expanded=viewport(page).locator('[aria-expanded="true"]');
  await optionsToggle(page).click({noWaitAfter:true});
  await expect(detailMode(page,'Compact')).toBeVisible(); // Spec fix: RN Web 0.21 drops accessibilityState (README precedent: assert rendered state, not the attribute).
@@ -459,12 +489,14 @@ test('07.16 RC3 #385/#393 jump-to-latest quick scroll button with unread badge s
 
 test('07.17 prompt rail: drag preview, Jump, Copy, Copy file path, Open PR, Continue then Replace draft, Close',async({page,bridge})=>{
  const out=await egress(page);
+ const frames=captureSent(page);
  await openFullscreen(page,bridge);
  const pr='https://github.com/example/army-fixture/pull/7';
  for(let i=0;i<4;i++){
   const extra=i===0?` see ${pr} and /srv/army/src/rail.ts for details`:'';
   await send(page,'rail prompt '+i+extra+' '+('transcript text '.repeat(20)));
-  await expect(page.getByText(/ARMY_REPLY: rail prompt/).nth(i)).toBeVisible({timeout:15000});
+  // The inactive Chats pane keeps a hidden row "Last reply · ...ARMY_REPLY: rail prompt N", so match this turn's reply by its own prompt number among visible nodes.
+  await expect(page.getByText(new RegExp('ARMY_REPLY: rail prompt '+i+' ')).filter({visible:true}).first()).toBeVisible({timeout:15000});
  }
  let preview=await dragRail(page);
  await expect(preview).toContainText(/Prompt 1\/4 · \w+/);
@@ -491,24 +523,25 @@ test('07.17 prompt rail: drag preview, Jump, Copy, Copy file path, Open PR, Cont
  await preview.getByRole('button',{name:'Replace draft',exact:true}).click({noWaitAfter:true});
  await expect(preview).toHaveCount(0);
  await expect(composer(page)).toHaveValue(/^Continue from prompt 1: rail prompt 0 [\s\S]*\nResult: .*ARMY_REPLY: rail prompt 0/);
- await expect(page.getByText(/ARMY_REPLY: rail prompt/)).toHaveCount(4);
+ // Nothing was sent: the socket carried exactly the four chat turns (the list is virtualized and the hidden Chats row also matches ARMY_REPLY, so count frames, not text nodes).
+ expect(frames.filter(f=>f.includes('"type":"chat"')),'Continue / Replace draft sends nothing').toHaveLength(4);
 });
 
 test('07.18 scrolling to the top of a long session loads older history with a skeleton header',async({page,bridge})=>{
+ // Design at 9c7ae14 (store/history-pages.ts fillOlder/loadOlder): opening a chat pages the rest of the session in behind the newest window
+ // in the background (GET /chats/history?limit=200, "unlisted" rows), and the reader reaching the top lists those rows with NO request. The
+ // SkeletonRow header (history.loading) is drawn only for the reader's own fetch when nothing was prefetched, which a 120-message session never needs.
+ // So the web-observable contract here is: the newest window opens first, the oldest rows are absent, and scrolling to the top brings them in.
  const title='ARMY R07 history';
  const messages=Array.from({length:120},(_,i)=>({role:(i%2?'assistant':'user') as 'assistant'|'user',text:(i%2?'ARMY_HIST_A_':'ARMY_HIST_Q_')+String(i).padStart(3,'0')}));
  await reseed(bridge,{hermes:[{id:'army-r07-history',title,activityMs:Date.now(),messages}]},[title]);
  await openSeededRow(page,bridge,title);
  await expect(page.getByText('ARMY_HIST_A_119',{exact:true})).toBeVisible({timeout:20000});
  await expect(page.getByText('ARMY_HIST_Q_000',{exact:true})).toHaveCount(0);
- await latency(page,1500);
- let sawSkeleton=false;
  await expect.poll(async()=>{
   await wheelTranscript(page,-4000,3);
-  if(await skeletonCount(page)>0)sawSkeleton=true;
   return page.getByText('ARMY_HIST_Q_000',{exact:true}).count();
- },{timeout:60000,intervals:[200],message:'onStartReached loads the oldest page'}).toBe(1);
- expect(sawSkeleton,'SkeletonRow list header shown while an older page loads').toBe(true);
+ },{timeout:60000,intervals:[200],message:'onStartReached lists the oldest rows'}).toBe(1);
  await expect(page.getByText('ARMY_HIST_Q_000',{exact:true})).toBeVisible();
 });
 

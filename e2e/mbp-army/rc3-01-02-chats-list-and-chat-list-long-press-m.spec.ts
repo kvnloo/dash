@@ -15,7 +15,8 @@ import type {SeedSpec,HermesSeed} from './rc3-chat-index-seed';
 test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({path:info.outputPath('final.png')});});
 
 const bunBin=bun;
-const ACTIVE_TINT='rgba(215, 185, 134, 0.035)';
+// The app style is rgba(215,185,134,.035); Chromium serializes that alpha as 0.04 in getComputedStyle.
+const ACTIVE_TINT='rgba(215, 185, 134, 0.04)';
 const SHEET_TIMEOUT=6000; // #415 sheet: fail fast and report, do not hang the run.
 
 // ---------- bridge-side fixture data ----------
@@ -107,6 +108,16 @@ async function latency(page:Page,ms:number,cdp?:CDPSession):Promise<CDPSession>{
  return s;
 }
 const sheet=(page:Page)=>page.getByTestId('bottom-action-sheet');
+/** Spec fix (0e145ec): a long-press only opens the themed row sheet and does nothing else; every action is an explicit choice in it.
+ *  Rows are picked by their visible text (the sheet's aria-labels carry a ", N of M" suffix and differ per menu model). */
+async function longPressOpensSheet(page:Page,target:Locator){
+ await longPress(page,target);
+ await expect(sheet(page),'long-press must open the row sheet').toBeVisible({timeout:SHEET_TIMEOUT});
+}
+async function deleteViaSheet(page:Page,target:Locator){
+ await longPressOpensSheet(page,target);
+ await sheet(page).getByText('Delete from this phone',{exact:true}).click({noWaitAfter:true});
+}
 /** Open a remote Hermes row once (it becomes a phone conversation with a session id), then return to Chats. */
 async function adoptRemoteRow(page:Page,title:string){
  await rowByTitle(page,title).click({noWaitAfter:true});
@@ -243,13 +254,14 @@ test.describe('RC3 02 Chats list (clean index)',()=>{
   await adoptRemoteRow(page,'ARMY delete row');
   await setInAppFeedback(page,false);
   const localId=await rowByTitle(page,'ARMY delete row').getAttribute('data-testid');
+  // Long-press opens the row sheet; choosing Delete from this phone asks first (native confirm on web).
   let dialog=answerNextDialog(page,false);
-  await longPress(page,rowByTitle(page,'ARMY delete row'));
+  await deleteViaSheet(page,rowByTitle(page,'ARMY delete row'));
   expect(await dialog).toBe('Delete chat?\n\nThis removes it from this phone only.');
   await expect(page.getByTestId(localId??'missing')).toHaveCount(1);
   await expect(page.getByTestId('chat-window')).toHaveCount(0);
   dialog=answerNextDialog(page,true);
-  await longPress(page,rowByTitle(page,'ARMY delete row'));
+  await deleteViaSheet(page,rowByTitle(page,'ARMY delete row'));
   expect(await dialog).toBe('Delete chat?\n\nThis removes it from this phone only.');
   await expect(page.getByTestId(localId??'missing')).toHaveCount(0);
   // Phone-local delete only: the host's index row is listed again as not opened.
@@ -283,6 +295,13 @@ test.describe('RC3 02 Chats list (live fixture session)',()=>{
   await pair(page,bridge);
   const liveRow=rows(page).filter({has:page.getByLabel('Live on host',{exact:true})}).first();
   await expect(liveRow).toBeVisible({timeout:30000});
+  // Spec fix: a never-opened live row is a host-index row (chats.v1 prunes never-opened adopted rows), not a phone
+  // conversation, so it can never read "ended". Open it once so it is a phone conversation, then return to Chats.
+  await liveRow.click({noWaitAfter:true});
+  await expect(page.getByTestId('chat-window')).toBeVisible();
+  await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});
+  await expect(page.getByTestId('chat-window')).toHaveCount(0);
+  await expect(liveRow).toHaveAttribute('data-testid',/^chat-row-live:omp:/);
   const id=await liveRow.getAttribute('data-testid');if(!id)throw Error('live row id missing');
   const clear=pane(page).getByRole('button',{name:'Clear ended',exact:true});
   await expect(clear).toHaveCount(0);
@@ -305,8 +324,11 @@ test.describe('RC3 02 Chats list (live fixture session)',()=>{
   await openChat(page,bridge);
   await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});
   await setInAppFeedback(page,true);
-  await longPress(page,chatRow(page));
-  await expect(composer(page)).toBeVisible();
+  // Spec fix (0e145ec): long-press only opens the row sheet and sends nothing; feedback is sent by choosing its row.
+  await longPressOpensSheet(page,chatRow(page));
+  await expect(page.getByText(/Selected chat New chat/).filter({visible:true})).toHaveCount(0);
+  await sheet(page).getByText(/^Send feedback/).click({noWaitAfter:true});
+  await expect(page.getByTestId('composer-field')).toBeVisible();
   await expect(page.getByText(/Selected chat New chat/).filter({visible:true}).first()).toBeVisible({timeout:15000});
  });
 
@@ -316,7 +338,7 @@ test.describe('RC3 02 Chats list (live fixture session)',()=>{
   await setInAppFeedback(page,false);
   const row=chatRow(page);
   const dialog=answerNextDialog(page,true);
-  await longPress(page,row);
+  await deleteViaSheet(page,row);
   expect(await dialog).toBe('Delete chat?\n\nThis removes it from this phone only.');
   await expect(row).toHaveCount(0);
  });
@@ -342,14 +364,15 @@ test.describe('RC3 #415 chat-row long-press bottom action sheet',()=>{
   await longPress(page,rowByTitle(page,title));
   await expect(sheet(page),'#415 long-press must open the themed bottom action sheet').toBeVisible({timeout:SHEET_TIMEOUT});
  }
- const option=(page:Page,label:string)=>sheet(page).getByRole('button',{name:label,exact:true});
+ // BottomActionSheet appends ", <position> of <total>" to every option's aria-label (sheetA11y), so match the label then that suffix.
+ const option=(page:Page,label:string)=>sheet(page).getByRole('button',{name:new RegExp('^'+label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+', \\d+ of \\d+$')});
 
  test('sheet shows chat title and Open, Open as window, Copy session id, Send feedback, Delete from this phone',async({page,bridge})=>{
   await prepared(page,bridge,true);
   await openMenu(page);
   await expect(sheet(page).getByRole('heading',{name:TITLE,exact:true})).toBeVisible();
   const labels=[`Open chat: ${TITLE}`,`Open chat as window: ${TITLE}`,`Copy session id for chat: ${TITLE}`,`Send feedback about chat: ${TITLE}`,`Delete chat from this phone: ${TITLE}`];
-  for(const l of labels)await expect(option(page,l)).toBeVisible();
+  for(const [i,l] of labels.entries())await expect(sheet(page).getByRole('button',{name:`${l}, ${i+1} of ${labels.length}`,exact:true})).toBeVisible();
   await expect(sheet(page).getByText('Open',{exact:true})).toBeVisible();
   await expect(sheet(page).getByText('Open as window',{exact:true})).toBeVisible();
   await expect(sheet(page).getByText('Copy session id',{exact:true})).toBeVisible();

@@ -2,8 +2,8 @@
 // App + bridge under test: kvnloo/dash integ/rc3-20261027 (written against 2c948dc). Same isolated fixtures as army.spec.ts:
 // real web export -> real per-test bridge -> scripted ACP fixture. No route mocks, no phone, no live services.
 // Tests marked "RC3 ... expect FAIL at 2c948dc" target components that have no importer at that commit.
-import {test,expect,pair,openChat,composer,chooseHarness,send,chatRow,createBridge,web,type Bridge,bun} from './fixtures';
-import {mkdtemp,readFile,writeFile,mkdir,rm,chmod} from 'node:fs/promises';
+import {test,expect,pair,openChat,composer,chooseHarness,send,chatRow,createBridge,web,type Bridge} from './fixtures';
+import {mkdtemp,readFile,writeFile,mkdir,chmod,readdir} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -24,6 +24,19 @@ const promptsSent=async(b:Bridge)=>(await rpcLog(b)).filter(r=>r.method==='sessi
 const ARMY_COMMANDS=[{name:'army-help',description:'ARMY fixture help command'},{name:'army-review',description:'ARMY fixture review command'}];
 async function advertiseCommands(b:Bridge){await writeFile(join(b.dir,'army-commands.json'),JSON.stringify(ARMY_COMMANDS));}
 const placeholder=(page:Page)=>composer(page).getAttribute('placeholder');
+/** Kill the fixture-only discoverable OMP holder of this bridge (comm "omp", this HOME's agent dir): a live OMP session ends with its host process. */
+async function killOmpHolder(b:Bridge):Promise<number>{
+ const want='PI_CODING_AGENT_DIR='+join(b.dir,'.omp','agent');let killed=0;
+ for(const pid of await readdir('/proc')){
+  if(!/^\d+$/.test(pid))continue;
+  try{
+   if((await readFile(`/proc/${pid}/comm`,'utf8')).trim()!=='omp')continue;
+   if(!(await readFile(`/proc/${pid}/environ`,'utf8')).split('\0').includes(want))continue;
+   process.kill(Number(pid),'SIGTERM');killed++;
+  }catch{/* raced exit or foreign process */}
+ }
+ return killed;
+}
 
 // A bridge whose native Hermes context reader is a fixture script (DASH_HERMES_PYTHON is read by the real
 // /chat/context route). No Hermes source, no owner home: it prints one deterministic snapshot with categories.
@@ -96,7 +109,10 @@ test('04 composer disabled while offline: Send and Attach blocked, nothing reach
 
 // Open-in placeholder + target error. The fixture-only OMP holder process (same PID namespace as the
 // bridge) is recorded as the live CLI owner of the fixture Hermes session, which is how the real bridge
-// derives openIn. Hiding the native row then ends the session on the host -> target error.
+// derives openIn. Spec fix: a self-host Hermes session resumes by session id and needs no roster row
+// (app/src/lib/live-sessions.ts resumableWithoutRoster), so hiding its native row is NOT a target error.
+// A live OMP session does end with its host process (omp: profiles are the documented exception), so the
+// target-error half ends the fixture OMP holder and opens that live OMP chat instead.
 test('04 open-in host placeholder, then target error disables the composer',async({page,bridge})=>{
  const pid=Number((await readFile(join(bridge.dir,'.omp/agent/army-holder.pid'),'utf8')).trim());
  expect(pid).toBeGreaterThan(0);
@@ -108,11 +124,16 @@ test('04 open-in host placeholder, then target error disables the composer',asyn
  await row.first().click({noWaitAfter:true});
  await expect(composer(page)).toBeVisible();
  await expect.poll(()=>placeholder(page),{timeout:30000}).toBe('Reply to session…');
- // End the host session: no owner, and the native row hidden.
- await rm(join(bridge.dir,'.hermes/runtime/active_sessions.json'),{force:true});
- const hide=spawnSync(bun,['-e',"const {Database}=require('bun:sqlite');const db=new Database(process.argv[1]);db.query(\"UPDATE sessions SET hidden=1 WHERE id='army-fixture-session'\").run();db.close();",join(bridge.dir,'.hermes/state.db')],{encoding:'utf8'});
- expect(hide.status,hide.stderr).toBe(0);
- await expect(page.getByText(/This chat has ended on the host|unavailable|cannot send|has changed/).filter({visible:true}).first()).toBeVisible({timeout:45000});
+ // Target error: a live OMP chat ends when the host stops listing it. Back to the list, open the live OMP row, then end the holder.
+ await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});
+ await expect(page.getByTestId('chat-window')).toHaveCount(0);
+ const live=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({has:page.getByLabel('Live on host',{exact:true})}).first();
+ await expect(live).toBeVisible({timeout:30000});
+ await live.click({noWaitAfter:true});
+ await expect(composer(page)).toBeVisible();
+ await expect(page.getByRole('button',{name:'Attach file',exact:true})).toBeEnabled();
+ expect(await killOmpHolder(bridge)).toBeGreaterThan(0);
+ await expect(page.getByRole('alert').filter({hasText:'This chat has ended on the host. Its saved history is still on this phone.'}).first()).toBeVisible({timeout:45000});
  await composer(page).fill('target error blocked send');
  await expect(primary(page,'Send')).toBeDisabled();
  await expect(page.getByRole('button',{name:'Attach file',exact:true})).toBeDisabled();
@@ -254,7 +275,9 @@ ctxTest('04 context chip opens card with segments + legend; legend highlights; c
  const card=page.getByLabel('Context window details',{exact:true});
  await expect(card).toBeVisible();
  await expect(card.getByText('Model · army-fixture-model',{exact:true})).toBeVisible();
- for(const name of ['System','Tools','Messages']) await expect(card.getByLabel(name+' segment',{exact:true})).toBeAttached();
+ // The grid is one image (the cells are unlabelled SVG rects); each category segment is a legend button named "<Label>, estimated <tokens> tokens, <pct>".
+ await expect(card.getByRole('img',{name:'Context grid',exact:true})).toBeAttached();
+ for(const name of ['System','Tools','Messages']) await expect(card.getByRole('button',{name:new RegExp('^'+name+', estimated \\d')})).toBeVisible();
  const legend=card.getByRole('button',{name:/^System, /});
  await expect(legend).toBeVisible();
  await legend.click({noWaitAfter:true});

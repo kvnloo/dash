@@ -92,7 +92,8 @@ const pickerRow=(page:Page,h:Harness,available=true)=>page.getByRole('button',{n
 const badge=(page:Page)=>page.getByTestId('chat-window-badge');
 const optionsTrigger=(page:Page)=>page.getByRole('button',{name:'Options. Current surface: Chat',exact:true});
 const back=(page:Page)=>page.getByRole('button',{name:'Back',exact:true});
-const searchBox=(page:Page)=>page.getByPlaceholder('Search or message Dash',{exact:true});
+// Spec fix: In-app feedback is on by default, which swaps the Main search bar placeholder to 'Feedback for Dash' (MainScreen.tsx).
+const searchBox=(page:Page)=>page.getByPlaceholder(/^(Search or message|Feedback for) Dash$/);
 
 /** Pair, then New chat from the workspace header: RC3 opens it full screen with the harness chip. */
 async function openFullscreen(page:Page,b:Bridge){
@@ -131,7 +132,11 @@ async function sendAndExpectReply(page:Page,text:string){
 /** Settings > Harnesses on <host>: one row per harness, labelled installed/not found, with an ok or faint dot. */
 async function expectSettingsHarnesses(page:Page,expected:Map<string,boolean>){
  await page.getByRole('button',{name:'Open settings',exact:true}).first().click({noWaitAfter:true});
- await expect(page.getByText(`Harnesses on ${hostname()}`,{exact:true}).filter({visible:true})).toHaveCount(1);
+ // Spec fix: BridgePull (always mounted) renders the same 'Harnesses on <host>' label as Settings; scope to the smallest block holding Settings-only 'Thumb side' plus the label.
+ const title=`Harnesses on ${hostname()}`;
+ const settings=page.locator('div').filter({has:page.getByText('Thumb side',{exact:true})}).filter({has:page.getByText(title,{exact:true})}).last();
+ await expect(settings.getByText(title,{exact:true})).toHaveCount(1);
+ await expect(settings.getByText(title,{exact:true})).toBeVisible();
  for(const h of ALL){
   const available=expected.get(h.id);
   const row=page.getByLabel(`${h.name}, ${available?'installed':'not found'}`,{exact:true});
@@ -225,7 +230,8 @@ for(const h of [CLAUDE,CODEX,OMP,HERMES,GROK])test(`${h.name}: pick it, send, th
  const text=`hello ${h.id} ARMY_TO_${h.id.toUpperCase()}`;
  await sendAndExpectReply(page,text);
  await expectCompletedTurn(wire,h.id,text);
- await expect(badge(page)).toContainText(h.name);
+ // Spec fix: once the session attaches, the badge text shows the profile/session ('hermes… · army-fix'); the harness name is in the identity label.
+ await expect(badge(page)).toHaveAttribute('aria-label',re('harness '+h.name+','));
  // The fixture binary for exactly this harness received the prompt.
  await expect.poll(async()=>(await calls(bridge)).some(c=>c.harness===h.bin&&c.method==='session/prompt'&&c.text?.includes(text))).toBe(true);
  expect((await calls(bridge)).filter(c=>c.method==='session/prompt'&&c.text?.includes(text)).map(c=>c.harness)).toEqual([h.bin]);
@@ -273,7 +279,10 @@ test('harness error: a Claude Code fixture error shows on the reply and the comp
  await openWindow(page,bridge);await pickHarness(page,CLAUDE,'window');
  const failing='ARMY_ERROR claude harness failure';
  await send(page,failing);
- await expect(page.getByText(/ARMY_EXPECTED_AGENT_ERROR/).filter({visible:true}).first()).toBeVisible();
+ // Spec fix: bridge/src/acp/client.ts acpRequestFailure lets only a closed set of diagnostic templates cross onto the phone,
+ // so the reply shows the templated ACP error and the agent's own message must not appear.
+ await expect(page.getByText(/ACP request failed during session\/prompt \(code -32000\)/).filter({visible:true}).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_EXPECTED_AGENT_ERROR/)).toHaveCount(0);
  const frame=await chatFrame(wire,'claude',failing);
  await expect.poll(()=>wire.got.some(f=>f.type==='error'&&f.id===frame.id)).toBe(true);
  await expect(page.getByRole('button',{name:'Stop',exact:true})).toHaveCount(0);
@@ -353,7 +362,8 @@ test('Bots pane: tapping an installed harness opens a chat on it; an unavailable
  await page.getByTestId(`tree-row-${host}:new:harness:pi`).click({noWaitAfter:true});
  await expect(page.getByTestId(`tree-row-host:${host}`)).toBeVisible();
  await expect(chip(page)).toHaveCount(0);
- await expect(composer(page)).toHaveCount(0);
+ // Spec fix: composer(page) (role textbox 'Message') also matches the Main search bar; the chat composer is the 'composer-field' wrapper.
+ await expect(page.getByTestId('composer-field')).toHaveCount(0);
  // Installed: the harness chat opens on Claude Code and a send reaches it with the roster target.
  await revealTreeRow(page,host,`tree-row-${host}:new:harness:claude`);
  await page.getByTestId(`tree-row-${host}:new:harness:claude`).click({noWaitAfter:true});

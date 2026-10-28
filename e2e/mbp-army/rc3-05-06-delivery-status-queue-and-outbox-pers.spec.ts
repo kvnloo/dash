@@ -182,7 +182,9 @@ test.describe('RC3 06 outbox persistence across restart',()=>{
   await expect.poll(()=>page.evaluate(()=>Object.keys(localStorage).map(key=>localStorage.getItem(key)??'').join('\n')),
    {message:'queued send is written to device storage before restart'}).toContain(text);
   await restartApp(page);
-  await expect(page.getByText(text,{exact:true}).first(),'queued message still in the transcript after restart').toBeVisible();
+  // Queued parts stay in the compact stack above the composer, not as chat bubbles (docs/queued-messages.md), so the restored queue is the "1 queued" stack item.
+  await expand(page,1);
+  await expect(item(page,1),'queued message still queued after restart').toHaveValue(text);
   await bridge.start();
   await expect(page.getByText(new RegExp('ARMY_REPLY: '+esc(text))).first()).toBeVisible({timeout:30000});
   await expect(page.getByText(new RegExp('ARMY_REPLY: '+esc(text)))).toHaveCount(1);
@@ -217,6 +219,9 @@ test.describe('RC3 06 outbox persistence across restart',()=>{
   const tok=token();const running=holder(tok,'mid-stream reload');
   await send(page,running);
   await expect(page.getByText(/ARMY_STREAM_BEGIN/).nth(1)).toBeVisible();
+  // The running turn reaches device storage through a 400 ms debounced save (store/app.ts scheduleSave); reloading inside that window loses it before any restart could restore it.
+  await expect.poll(()=>page.evaluate(()=>Object.keys(localStorage).map(key=>localStorage.getItem(key)??'').join('\n')),
+   {message:'running turn is written to device storage before restart'}).toContain(tok);
   await restartApp(page);
   await expect(page.getByText('restore prior message',{exact:true}).filter({visible:true}).first()).toBeVisible();
   await expect(page.getByText(/ARMY_REPLY: restore prior message/).filter({visible:true}).first()).toBeVisible();
@@ -255,7 +260,8 @@ test.describe('RC3 06 queued stack',()=>{
   await queue(page,a);await queue(page,b);await expand(page,2);
   await item(page,1).fill(a+' edited');
   await expect(item(page,1)).toHaveValue(a+' edited');
-  await expect(page.getByTestId('transcript-viewport').getByText(a+' edited',{exact:true}),'transcript bubble shows the edited payload').toBeVisible();
+  // Queued parts live in the stack, not as chat bubbles (docs/queued-messages.md): the edited payload is the stack item's value and no transcript bubble carries it.
+  await expect(page.getByTestId('transcript-viewport').getByText(a+' edited',{exact:true}),'queued parts are not transcript bubbles').toHaveCount(0);
   await page.getByRole('button',{name:'Delete queued message 1',exact:true}).click({noWaitAfter:true});
   await expect(header(page,1)).toBeVisible();
   await expect(item(page,1)).toHaveValue(b);

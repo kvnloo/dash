@@ -10,6 +10,9 @@ import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 
 test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({path:info.outputPath('final.png')});});
+// Triage fix: headed Chromium leaves the getUserMedia permission prompt pending forever (no user), so "Listen for pairing sound"
+// stalled on "Requesting microphone…" and never reached its error. A fake (silent) capture device lets the real sonic attempt run.
+test.use({launchOptions:{args:[...(process.env.ARMY_HEADED==='1'?['--ozone-platform=wayland']:[]),'--disable-dev-shm-usage','--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream'],slowMo:Number(process.env.ARMY_SLOWMO||0)}});
 
 // theme.ts night palette (rendered as computed rgb()).
 const GOLD='rgb(215, 185, 134)';   // colors.gold = palette.accent #d7b986
@@ -85,7 +88,7 @@ async function coldPair(page:Page){
 /** Paired app: Chats pane -> 'Open settings'. */
 async function openSettings(page:Page){
  await page.getByRole('tab',{name:'Chats',exact:true}).click({noWaitAfter:true});
- await expect(page.getByTestId('chats-pane').first()).toBeVisible();
+ await expect(page.getByTestId('chats-pane').filter({visible:true}).first()).toBeVisible(); // Triage fix: an earlier Main stays mounted and hidden after a re-pair
  await btn(page,'Open settings').first().click({noWaitAfter:true});
  await expect(heading(page,'Settings')).toBeVisible();
 }
@@ -176,7 +179,8 @@ test.describe('rc3 09 first run and manual connect',()=>{
   expect(message).not.toContain('army-wrong-token');
   expect(message).toMatch(/reach|token|closed|Timed out|Disconnected|answering/);
   await expect(heading(page,'Settings')).toBeVisible();
-  await expect(page.getByRole('tab',{name:'Orchestra',exact:true})).toHaveCount(0);
+  // Triage fix: Settings itself renders AppNav (Orchestra tab), so "no navigation" means Main is not mounted.
+  await expect(page.getByTestId('chats-pane')).toHaveCount(0);
   const status=page.getByLabel(OFFLINE);
   await expect(status).toBeVisible({timeout:15000});
   expect(await status.evaluate(el=>el.firstElementChild?getComputedStyle(el.firstElementChild).backgroundColor:'')).toBe(DANGER);
@@ -202,8 +206,9 @@ test.describe('rc3 09 paired Settings',()=>{
    const now=await savedSettings(page);
    expect(now?.address).not.toBe(first?.address);
    await openSettings(page);
-   await expect(page.getByText('Paired bridges (failover order)',{exact:true})).toBeVisible();
-   const list=page.getByTestId('settings-bridge-endpoints');
+   // Triage fix: the first Settings screen stays mounted (hidden) in the stack; scope to the visible one.
+   await expect(page.getByText('Paired bridges (failover order)',{exact:true}).filter({visible:true})).toBeVisible();
+   const list=page.getByTestId('settings-bridge-endpoints').filter({visible:true});
    await expect(list).toHaveText(`1. ${String(first?.address)}\n2. ${String(now?.address)} (in use)`,{useInnerText:true});
   } finally {await second.stop();}
  });
@@ -259,10 +264,11 @@ test.describe('rc3 09 paired Settings',()=>{
 
  test('Thumb side Right / Left / Automatic: selection turns gold, persists and mirrors the nav row',async({page,bridge})=>{
   await pair(page,bridge);
-  // Default Automatic resolves to Right on web (no system handedness signal).
+  // Triage fix: a fresh pairing has no saved handedness and parseHandedness() defaults to Right (not Auto); Auto also resolves to Right on web.
   expect(await expandIsLeftOfDots(page)).toBe(true);
   await openSettings(page);
-  await expect.poll(()=>textColor(radio(page,'Automatic'))).toBe(GOLD); // Spec fix: RN Web drops accessibilityState.checked; selection is gold
+  await expect.poll(()=>textColor(radio(page,'Right'))).toBe(GOLD); // Spec fix: RN Web drops accessibilityState.checked; selection is gold
+  expect(await textColor(radio(page,'Automatic'))).not.toBe(GOLD);
 
   await radio(page,'Left').click({noWaitAfter:true});
   await expect.poll(()=>textColor(radio(page,'Left'))).toBe(GOLD); // Spec fix: RN Web drops accessibilityState.checked; selection is gold
@@ -311,25 +317,30 @@ test.describe('rc3 09 paired Settings',()=>{
   const row=await pairWithChatRow(page,bridge);
   await btn(page,'Open settings').first().click({noWaitAfter:true});
   const sw=feedbackSwitch(page);
-  await expect(sw).toHaveAttribute('aria-checked','true');
+  // Triage fix: RN Web 0.21 drops accessibilityState.checked (no aria-checked); the rendered On/Off text is the state.
   await expect(sw).toContainText('On');
   await sw.click({noWaitAfter:true});
-  await expect(sw).toHaveAttribute('aria-checked','false');
   await expect(sw).toContainText('Off');
   await expect.poll(async()=>(await savedSettings(page))?.inAppFeedback).toBe(false);
-  // Off: long-press on a row is the phone-local delete confirm.
+  // Triage fix: since 0e145ec long-press opens the row BottomActionSheet and sends nothing. Off: only Open and Delete.
+  const sheet=page.getByTestId('bottom-action-sheet');
+  const close=sheet.getByRole('button',{name:'Close actions',exact:true});
   await back(page);
   await page.getByRole('tab',{name:'Chats',exact:true}).click({noWaitAfter:true});
   await expect(row).toBeVisible();
-  const dialog=answerNextDialog(page,false);
   await longPress(page,row);
-  expect(await dialog).toBe('Delete chat?\n\nThis removes it from this phone only.');
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole('button',{name:/^Open /})).toBeVisible();
+  await expect(sheet.getByRole('button',{name:/^Delete .*from this phone/})).toBeVisible();
+  await expect(sheet.getByRole('button',{name:/^Send feedback/})).toHaveCount(0);
+  await expect(page.getByTestId('composer-field').filter({visible:true})).toHaveCount(0);
+  await close.click({noWaitAfter:true});
+  await expect(sheet).toHaveCount(0);
   await expect(row).toHaveCount(1);
-  // On again: long-press is in-app feedback (no delete confirm; opens the chat).
+  // On again: the sheet gains "Send feedback about <chat>"; choosing it opens the feedback chat. No delete confirm.
   await btn(page,'Open settings').first().click({noWaitAfter:true});
-  await expect(sw).toHaveAttribute('aria-checked','false');
+  await expect(sw).toContainText('Off');
   await sw.click({noWaitAfter:true});
-  await expect(sw).toHaveAttribute('aria-checked','true');
   await expect(sw).toContainText('On');
   await expect.poll(async()=>(await savedSettings(page))?.inAppFeedback).toBe(true);
   await back(page);
@@ -337,7 +348,12 @@ test.describe('rc3 09 paired Settings',()=>{
   await expect(row).toBeVisible();
   let dialogs=0;page.on('dialog',d=>{dialogs++;void d.dismiss();});
   await longPress(page,row);
-  await expect(page.getByRole('textbox',{name:'Message',exact:true})).toBeVisible();
+  await expect(sheet).toBeVisible();
+  const feedback=sheet.getByRole('button',{name:/^Send feedback about New chat/});
+  await expect(feedback).toBeVisible();
+  await expect(page.getByTestId('composer-field').filter({visible:true})).toHaveCount(0); // long-press alone sends nothing and opens nothing
+  await feedback.click({noWaitAfter:true});
+  await expect(page.getByTestId('composer-field').filter({visible:true}).first()).toBeVisible();
   await page.waitForTimeout(500);
   expect(dialogs).toBe(0);
  });
