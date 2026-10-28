@@ -40,11 +40,19 @@ class DashStylusModule : Module() {
         tool == MotionEvent.TOOL_TYPE_STYLUS || tool == MotionEvent.TOOL_TYPE_ERASER
       }) return
     val pressed = (event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0
-    edges.sample(pressed)?.let { sendEvent("button", mapOf("pressed" to it)) }
+    edges.sample(pressed)?.let { publish(it) }
+  }
+
+  private fun publish(pressed: Boolean) {
+    try {
+      sendEvent("button", mapOf("pressed" to pressed))
+    } catch (error: Exception) {
+      Log.w("DashStylus", "Could not publish S Pen button edge", error)
+    }
   }
 
   private fun release() {
-    edges.sample(false)?.let { sendEvent("button", mapOf("pressed" to it)) }
+    edges.sample(false)?.let { publish(it) }
   }
 
   private fun install() {
