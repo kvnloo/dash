@@ -200,6 +200,7 @@ describe("DF-117 allowlist ratchet", () => {
       put("app/src/screens/Other.ts", 'import { run } from "../debug/run";\nif (isDemo) run();');
       put("app/src/screens/Other.test.ts", 'import "../mock/seed";');
       put("app/src/screens/__tests__/Unit.tsx", 'import "../mock/seed";');
+      put("app/src/screens/tests/Unit.tsx", 'import "../mock/seed";');
       put("app/src/mock/seed.ts", 'import "../debug/seed";');
       put("app/src/debug/seed.ts", 'import "../mock/seed";');
       const imports = scanTree(root);
