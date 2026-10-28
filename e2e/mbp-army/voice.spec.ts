@@ -170,11 +170,38 @@ test('live voice reports no transcript within nine seconds and stays connected',
 
 test('live voice connection times out from Start when peer never becomes ready', async ({ page, bridge, voiceBroker }) => {
   await enterScriptedVoice(page, bridge, voiceBroker, { neverReady: true });
-  const started = Date.now();
+  // Both ends are timed in the page, so Playwright's click and poll round trips on a loaded host do not count:
+  // from the owner's tap on Start to the first frame that shows the timeout.
+  await page.evaluate(() => {
+    const times: { tap?: number; timedOut?: number } = {};
+    Object.defineProperty(window, '__armyVoiceTimes', { value: times, configurable: true });
+    document.addEventListener('click', event => {
+      if (times.tap === undefined && event.target instanceof Element && event.target.closest('[aria-label="Start voice in Dash"]')) times.tap = performance.now();
+    }, true);
+    const seen = () => {
+      if (times.timedOut === undefined && document.querySelector('[data-testid="voice-caption"]')?.textContent?.includes('Voice connection timed out')) times.timedOut = performance.now();
+    };
+    new MutationObserver(seen).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  // The provider's SDP answer comes 6 s after Start. A timeout that ran from the answer would show at
+  // 26 s; one that runs from Start shows at 20 s, whatever the host's load adds to rendering it.
+  const releaseAnswer = voiceBroker.holdAnswer();
   await page.getByRole('button', { name: 'Start voice in Dash', exact: true }).click({ noWaitAfter: true });
+  await expect.poll(() => voiceBroker.calls().some(call => call.path === '/v1/fake/answer' && call.method === 'POST'),
+    { message: 'the app sent its SDP offer' }).toBe(true);
+  await page.waitForTimeout(6000);
+  releaseAnswer();
   await expect(page.getByTestId('voice-caption'))
-    .toContainText('Voice connection timed out', { timeout: 21000 });
-  expect(Date.now() - started, '20 s timeout must start before the SDP answer').toBeLessThan(21000);
+    .toContainText('Voice connection timed out', { timeout: 30000 });
+  const times = await page.evaluate(() => {
+    const value: unknown = Reflect.get(window, '__armyVoiceTimes');
+    return typeof value === 'object' && value !== null ? { tap: Reflect.get(value, 'tap'), timedOut: Reflect.get(value, 'timedOut') } : {};
+  });
+  expect(typeof times.tap, 'the Start tap was seen').toBe('number');
+  expect(typeof times.timedOut, 'the timeout was seen').toBe('number');
+  const elapsed = Number(times.timedOut) - Number(times.tap);
+  expect(elapsed, 'the 20 s timeout runs from Start').toBeGreaterThanOrEqual(19_900);
+  expect(elapsed, '20 s timeout must start before the SDP answer').toBeLessThan(23000);
   await expect(page.getByTestId('voice-error'))
     .toContainText('Voice connection timed out');
   expect(voiceBroker.calls().filter(call => call.path === '/v1/tools/ask_z0')).toHaveLength(0);

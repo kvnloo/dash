@@ -125,6 +125,8 @@ async function expectTapDragJump(page:Page,prompts:number,label:(n:number)=>stri
  await expect(viewport.getByText(newest).first()).toBeInViewport({timeout:15000});
 }
 
+// The chat opens at its latest message: the start of the newest answer. (Not its prompt: answer 125 is about
+// 3000 characters, so prompt 125 sits well above the screen and the virtualized list may not draw it.)
 const newestClaude=new RegExp(`^ARMY answer ${pad(LONG_CHAT_PROMPTS)} `);
 const claudeLabel=(n:number)=>`ARMY prompt ${pad(n)}`;
 const olderPages=/\/chats\/history\?.*before=/;
@@ -254,13 +256,20 @@ test.describe('prompt rail on a 1000-message Hermes chat',()=>{
    const body:unknown=await response.json().catch(()=>undefined);
    if(typeof body==='object'&&body!==null&&'before' in body&&body.before===null)reachedStart=true;
   });
+  // The open chat's live activity snapshots (once a second) carry the newest window, not the whole chat.
+  let activitySnapshots=0;
+  page.on('response',response=>{if(/\/hermes\/activity\?/.test(response.url())&&response.status()===200)activitySnapshots++;});
   const release=await holdOlderPages(page);
   await pair(page,bridge);
   const newest=new RegExp(`^ARMY hermes answer ${pad(LONG_HERMES_PROMPTS)} `);
   await openChatByTitle(page,LONG_HERMES_TITLE,newest);
   const ticks=railOf(page).getByTestId('rail-tick');
+  await expect.poll(()=>activitySnapshots,{message:'the open chat polled its live activity'}).toBeGreaterThan(0);
   // Only the newest page is loaded and the reader is at the latest message; then the rest is paged in behind it.
   const atOpen=await stableReading(page);
+  // The newest page is 50 messages, 25 prompts. (A whole-chat snapshot would put hundreds of prompts in the
+  // list, folded into a dense rail, and move the reader as their rows are measured.)
+  expect(await ticks.count(),'only the newest page is on the rail before the older pages land').toBeLessThanOrEqual(25);
   await expect(viewportOf(page).getByText(newest).first()).toBeInViewport();
   release();
 

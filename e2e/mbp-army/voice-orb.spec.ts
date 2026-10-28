@@ -41,28 +41,53 @@ test("live hero orb follows each voice phase, mutes, passes through and hides fo
   await page.getByRole("tab").nth(0).click({ noWaitAfter: true });
   await page.getByRole("button", { name: "Expand", exact: true }).click({ noWaitAfter: true });
   await expect(page.getByTestId("voice-caption")).toBeVisible();
+  // The call stays connecting until the orb is on screen: the provider's SDP answer is held until then.
+  const releaseAnswer = voiceBroker.holdAnswer();
   await page.getByRole("button", { name: "Start voice in Dash", exact: true }).click({ noWaitAfter: true });
   const orb = page.getByTestId("voice-orb-overlay");
   await expect(orb, "full-screen Voice owns its hero, not the overlay").toHaveCount(0);
   await page.getByRole("button", { name: "Back to chat · call keeps going" }).click({ noWaitAfter: true });
 
   const pill = page.getByTestId("voice-phase");
-  const caption = page.getByTestId("voice-orb-caption");
   const phases = [
     ["connecting", "Connecting"], ["listening", "Listening"], ["hearing", "Hearing"],
     ["thinking", "Thinking"], ["speaking", "Speaking"], ["listening", "Listening"],
   ];
-  for (const [phase, label] of phases) {
-    // Same-tick invariant, evaluated in the page: whenever the real voice pill shows a phase, the orb's
-    // caption already shows its label (stricter than a 300 ms budget, and immune to Playwright round trips
-    // on a loaded host, where two sequential 300 ms checks raced the next phase).
-    await page.waitForFunction(([wantPhase, wantLabel]) => {
+  // Same-tick invariant, recorded in the page on every DOM change: whenever the real voice pill shows a
+  // phase, the orb's caption shows its label. The scripted phases last under a second each, so a recorder
+  // in the page sees every one; Playwright round trips on a loaded host can fall between two of them.
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    Object.defineProperty(window, "__armyOrbPhases", { value: seen, configurable: true });
+    const record = () => {
       const pillNode = document.querySelector('[data-testid="voice-phase"]');
       const captionNode = document.querySelector('[data-testid="voice-orb-caption"]');
-      return pillNode?.getAttribute('aria-label') === 'Voice status: ' + wantPhase && captionNode?.textContent === wantLabel;
-    }, [phase, label], { timeout: 15000, polling: 'raf' });
-    await expect(orb, "orb is on screen: " + phase).toBeVisible();
-  }
+      const overlay = document.querySelector('[data-testid="voice-orb-overlay"]');
+      if (!pillNode || !captionNode || !overlay) return;
+      const entry = (pillNode.getAttribute("aria-label") ?? "") + "|" + (captionNode.textContent ?? "");
+      if (seen[seen.length - 1] !== entry) seen.push(entry);
+    };
+    record();
+    new MutationObserver(record).observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+  });
+  const recorded = () => page.evaluate(() => {
+    const value: unknown = Reflect.get(window, "__armyOrbPhases");
+    return Array.isArray(value) ? value.map(String) : [];
+  });
+  /** How many of `phases`, in order, the orb has shown with the pill (each pill phase with its caption label). */
+  const shownInOrder = (seen: string[]) => {
+    let next = 0;
+    for (const entry of seen) {
+      const want = phases[next];
+      if (want && entry === "Voice status: " + want[0] + "|" + want[1]) next++;
+    }
+    return next;
+  };
+  await expect.poll(async () => shownInOrder(await recorded()), { timeout: 15000, message: "the orb shows Connecting while the call connects" }).toBeGreaterThanOrEqual(1);
+  await expect(orb, "orb is on screen: connecting").toBeVisible();
+  releaseAnswer();
+  await expect.poll(async () => shownInOrder(await recorded()), { timeout: 20000, message: "the orb follows every voice phase in order, in the same tick as the pill" }).toBe(phases.length);
+  await expect(orb, "orb is on screen: listening").toBeVisible();
   const drawing = await orb.getByTestId("agent-orb").boundingBox();
   expect(drawing?.width).toBeGreaterThanOrEqual(220);
 

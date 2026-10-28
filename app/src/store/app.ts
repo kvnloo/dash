@@ -289,7 +289,10 @@ export function applyLiveHistory(harness: string, sessionId: string, messages: H
   const candidates = store.get().conversations.filter(c => c.harness === harness && c.sessionId === sessionId && (!host || c.targetHostId === host) && (!profileId || c.profileId === profileId));
   const conv = candidates.length === 1 ? candidates[0] : undefined;
   if (!conv) return;
-  updateConversation(conv.id, (c) => hydrateLiveConversation(c, messages));
+  // Once older pages are loaded, a refreshed newest window merges (as a ws history reply does), so the
+  // rows that slid out of it stay in the scrollback.
+  const merge = olderLoaded(historyState(conv.id)) > 0;
+  updateConversation(conv.id, (c) => merge ? mergeHistoryWindow(c, messages) : hydrateLiveConversation(c, messages));
 }
 
 /** A ws history reply matched to its request: no harness/session guessing. */

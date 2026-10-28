@@ -89,6 +89,10 @@ import { captureForTomorrow, capturesFor, dismissCapture, overnightCaptures, pla
 import type { ComposerBedtime } from "../components/Composer";
 
 const EMPTY: Message[] = [];
+/** A scroll this soon after the owner's own input is theirs (web smooth wheel scrolling runs on after the event). */
+const USER_SCROLL_MS = 1000;
+/** How long a rail jump keeps re-aiming at its prompt while the rows it passed over are measured. */
+const JUMP_SETTLE_MS = 3000;
 
 function keyExtractor(item: Message): string {
   return item.id;
@@ -126,6 +130,27 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       previous.down.visible === next.down.visible && previous.down.bottom === next.down.bottom &&
       previous.down.badge === next.down.badge && previous.up.visible === next.up.visible &&
       previous.up.top === next.up.top ? previous : next);
+  }, []);
+  /** The furthest the transcript can scroll, as of its last scroll event. */
+  const scrollMax = useRef(Number.POSITIVE_INFINITY);
+  // Web: when the owner last scrolled the transcript themselves (wheel, touch, pointer, keys). Web has no
+  // onScrollBeginDrag, and the list also scrolls itself while it measures rows (startRenderingFromBottom)
+  // and when a page lands; those scrolls must not detach following, or a chat opens away from its latest
+  // message on a slow device.
+  const userScrollAt = useRef(Number.NEGATIVE_INFINITY);
+  // A ref callback (React 19 cleanup), so a remounted viewport (live surface closed) listens again.
+  const viewportRef = useCallback((node: View | null) => {
+    const element: unknown = node;
+    if (Platform.OS !== "web" || typeof HTMLElement === "undefined" || !(element instanceof HTMLElement)) return;
+    const mark = (event: Event) => {
+      // Typing in a field is not scrolling, and a mouse moving with no button down is not a drag.
+      if (event.type === "keydown" && event.target instanceof HTMLElement && event.target.closest("input, textarea, [contenteditable=\"true\"]")) return;
+      if (event.type === "pointermove" && event instanceof PointerEvent && event.buttons === 0) return;
+      userScrollAt.current = Date.now();
+    };
+    const events = ["wheel", "touchstart", "touchmove", "pointerdown", "pointermove", "keydown"];
+    for (const type of events) element.addEventListener(type, mark, { capture: true, passive: true });
+    return () => { for (const type of events) element.removeEventListener(type, mark, { capture: true }); };
   }, []);
   const [following, setFollowing] = useState(true);
   const setFollow = useCallback((next: boolean) => {
@@ -198,12 +223,32 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const anchors = useMemo(() => railTurns(railMessages), [railMessages]);
   useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
   const jumpedTo = useRef<string | null>(null);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(settleTimer.current), []);
   const scrollToPrompt = useCallback((anchor: RailTurn, railOnlyRows: number) => {
     // `anchor.index` counts the rail's rows; the list's own rows start after the rail-only ones.
     const at = { ...anchor, index: anchor.index - railOnlyRows };
     const offset = promptOffset([at], 0, index => listRef.current?.getLayout(index));
     if (offset !== null) listRef.current?.scrollToOffset({ offset, animated: false });
     else void listRef.current?.scrollToIndex({ index: at.index, animated: false, viewPosition: 0 });
+    // The rows between were placed by estimate: as they are measured the prompt moves away from where the
+    // jump aimed. Re-aim at it until it holds still, unless the owner scrolls or resumes following meanwhile.
+    clearTimeout(settleTimer.current);
+    const startedAt = Date.now();
+    let still = 0;
+    const settle = () => {
+      if (followRef.current || dragging.current || userScrollAt.current > startedAt || Date.now() - startedAt > JUMP_SETTLE_MS) return;
+      const layout = listRef.current?.getLayout(at.index);
+      if (layout) {
+        const target = Math.max(0, Math.min(layout.y, scrollMax.current));
+        if (Math.abs(target - previousOffset.current) > 4) {
+          still = 0;
+          listRef.current?.scrollToOffset({ offset: target, animated: false });
+        } else if (++still >= 3) return;
+      }
+      settleTimer.current = setTimeout(settle, 100);
+    };
+    settleTimer.current = setTimeout(settle, 100);
   }, []);
   const jumpPrompt = useCallback((prompt: number) => {
     const anchor = anchors[prompt];
@@ -610,7 +655,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       </View> : null}
       {liveOn && conversation ? <KeyboardInsetView style={styles.body}><LiveSurface conversationId={conversation.id} /></KeyboardInsetView> : <KeyboardInsetView style={styles.body} onOpen={scrollToNewest}>
         {/* Absolute overlays must use the unpadded list viewport, not the IME inset box. */}
-        <View style={styles.viewport} testID="transcript-viewport">
+        <View ref={viewportRef} style={styles.viewport} testID="transcript-viewport">
         <BlurTargetView ref={blurTarget} style={styles.body}><FlashList
           ref={listRef}
           data={visibleMessages}
@@ -628,13 +673,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onScrollBeginDrag={() => { dragging.current = true; }}
           onScroll={event => {
             const { contentSize, layoutMeasurement, contentOffset } = event.nativeEvent;
+            scrollMax.current = Math.max(0, contentSize.height - layoutMeasurement.height);
             const moved = Math.abs(contentOffset.y - previousOffset.current) > 1;
             const direction: QuickScrollDirection = !moved ? "none" : contentOffset.y < previousOffset.current ? "up" : "down";
             scrollMetrics.current = { contentHeight: contentSize.height, viewportHeight: layoutMeasurement.height, offset: contentOffset.y };
             previousOffset.current = contentOffset.y;
-            // Web wheel scrolling has no onScrollBeginDrag. A content resize alone
-            // must not detach following before onContentSizeChange can scroll.
-            if (moved && (dragging.current || Platform.OS === "web")) {
+            // Only the owner's own scroll changes following. A content resize, or the list's own
+            // measuring scroll, must not detach it before onContentSizeChange can scroll.
+            const byOwner = dragging.current || (Platform.OS === "web" && Date.now() - userScrollAt.current < USER_SCROLL_MS);
+            if (moved && byOwner) {
               const next = followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y);
               if (next !== followRef.current) setFollow(next);
               else updateQuickScroll(next, direction);

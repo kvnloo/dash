@@ -14,10 +14,15 @@ export function activityHttp(read: (profile: string, session: string) => History
     if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
     const profile = url.searchParams.get("profile"); const session = url.searchParams.get("session");
     if (!profile || !session || profile.length > 1024 || session.length > 256) return new Response("invalid identity", { status: 400 });
-    const key = `${profile}\0${session}`;
+    // `limit`: only the newest messages, the phone's open window (old apps omit it and get the whole read).
+    const rawLimit = url.searchParams.get("limit");
+    if (rawLimit !== null && !/^[1-9]\d{0,3}$/.test(rawLimit)) return new Response("invalid limit", { status: 400 });
+    const limit = rawLimit === null ? undefined : Number(rawLimit);
+    const key = `${profile}\0${session}\0${limit ?? ""}`;
     let entry = cache.get(key);
     if (!entry || now() - entry.at >= 1000) {
-      const body = JSON.stringify(read(profile, session).map(cut));
+      const messages = read(profile, session);
+      const body = JSON.stringify((limit === undefined ? messages : messages.slice(-limit)).map(cut));
       entry = { at: now(), body, etag: `"${Bun.hash(body).toString(16)}"` };
       cache.delete(key); cache.set(key, entry);
       if (cache.size > 32) { const first = cache.keys().next().value; if (first) cache.delete(first); }

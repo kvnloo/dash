@@ -89,6 +89,14 @@ async function reloads(page: Page): Promise<number> {
   });
 }
 
+/**
+ * A cold app on a loaded host can take ~20 s to load its lazy App chunk (army traces at load 25), and the
+ * chip only exists once App renders. Wait for the app to boot before timing anything the chip shows.
+ */
+async function booted(page: Page): Promise<void> {
+  await expect(page.getByTestId('turbo-served-build')).toBeVisible({ timeout: 45_000 });
+}
+
 async function paired(page: Page, bridge: Bridge, metro: MetroStub, idleMs = 60_000): Promise<void> {
   await pair(page, bridge, appUrl(metro, idleMs));
   await expect(page.getByTestId('turbo-served-build')).toBeVisible();
@@ -126,12 +134,62 @@ test('live-preview-chip: auto-reload waits for the idle gate', async ({ page, br
   metro.setBuild(B);
   try {
     const url = appUrl(metro, 5_000);
+    // The idle clock starts when the app starts, and a loaded host can take longer than the 5 s gate to show
+    // the chip. So the owner keeps touching the app from its first frame (a page-side loop, as a busy owner
+    // would, through the app's real root touch observer), and the page times each reload and the last touch.
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('army.idleTouchesDone') === '1') return;
+      let count = 0;
+      const reloadAt: number[] = [];
+      let lastTouch = 0;
+      Object.defineProperty(window, '__dashReloads', {
+        configurable: true,
+        get: () => count,
+        set: (next: unknown) => {
+          if (typeof next !== 'number') return;
+          if (next > count) reloadAt.push(Date.now());
+          count = next;
+        },
+      });
+      const touch = window.setInterval(() => {
+        const target = document.querySelector('[role="heading"]');
+        if (!target) return;
+        target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, buttons: 1 }));
+        target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, buttons: 0 }));
+        lastTouch = Date.now();
+      }, 200);
+      Object.defineProperty(window, '__armyIdle', {
+        configurable: true,
+        value: {
+          stop: () => { window.clearInterval(touch); sessionStorage.setItem('army.idleTouchesDone', '1'); return lastTouch; },
+          reloadAt: () => reloadAt.slice(),
+          lastTouch: () => lastTouch,
+        },
+      });
+    });
     await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await booted(page);
     await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
+    await expect.poll(() => page.evaluate(() => {
+      const idle: unknown = Reflect.get(window, '__armyIdle');
+      return typeof idle === 'object' && idle !== null && 'lastTouch' in idle && typeof idle.lastTouch === 'function' ? Number(idle.lastTouch()) : 0;
+    }), { message: 'the owner is touching the app' }).toBeGreaterThan(0);
+    // An update is ready, but the owner is busy: past the 5 s gate, still no reload.
+    await page.waitForTimeout(6_000);
     expect(await reloads(page)).toBe(0);
-    await page.waitForTimeout(1_000);
-    expect(await reloads(page)).toBe(0);
+    // The owner stops touching: the reload comes once the gate has passed since the last touch, not before.
+    const lastTouch = await page.evaluate(() => {
+      const idle: unknown = Reflect.get(window, '__armyIdle');
+      return typeof idle === 'object' && idle !== null && 'stop' in idle && typeof idle.stop === 'function' ? Number(idle.stop()) : 0;
+    });
+    expect(lastTouch).toBeGreaterThan(0);
     await expect.poll(() => reloads(page), { timeout: 15_000 }).toBe(1);
+    const reloadAt = await page.evaluate(() => {
+      const idle: unknown = Reflect.get(window, '__armyIdle');
+      return typeof idle === 'object' && idle !== null && 'reloadAt' in idle && typeof idle.reloadAt === 'function' ? Array.from(idle.reloadAt(), Number) : [];
+    });
+    expect(reloadAt).toHaveLength(1);
+    expect(Number(reloadAt[0]) - lastTouch, 'the auto-reload waited for 5 s without a touch').toBeGreaterThanOrEqual(5_000);
     await pair(page, bridge, url);
   } finally { await metro.close(); }
 });
@@ -152,6 +210,7 @@ test('live-preview-chip: auto-reload waits for a closed keyboard', async ({ page
       }, 40);
       Object.defineProperty(window, '__armyKeepKeyboard', { value: keep, configurable: true });
     });
+    await booted(page);
     await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
     await page.waitForTimeout(4_500);
     expect(await reloads(page)).toBe(0);
@@ -171,11 +230,13 @@ test('live-preview-chip: same served SHA never triggers a reload loop', async ({
   try {
     const url = appUrl(metro, 1_500);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await booted(page);
     await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
     await expect.poll(() => reloads(page), { timeout: 12_000 }).toBe(1);
     // Navigation may rewrite the current URL, stripping web-only URL seams. Relaunch
     // the same app document with the original build/Metro params and persisted storage.
     await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await booted(page);
     await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
     await page.waitForTimeout(21_000); // includes a fresh 20 s manifest poll and the retry timeout
     expect(await reloads(page)).toBe(0);
@@ -214,6 +275,7 @@ test('live-preview-health: an HTTP 500 bundle cannot reload until the same SHA b
   try {
     const url = appUrl(metro, 1_000, 250);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await booted(page);
     const chip = page.getByTestId('turbo-served-build');
     await expect(chip).toContainText('bbbbbbb failed to build (HTTP 500)', { timeout: 10_000 });
     expect(metro.bundleRequests()).toBeGreaterThan(0);
@@ -242,6 +304,7 @@ test('live-preview-health: rollback to the old SHA preserves the attempted SHA r
   try {
     const url = appUrl(metro, 1_000, 250);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await booted(page);
     const chip = page.getByTestId('turbo-served-build');
     await expect(chip).toContainText('aaaaaaa → bbbbbbb');
     await expect.poll(() => reloads(page), { timeout: 12_000 }).toBe(1);
