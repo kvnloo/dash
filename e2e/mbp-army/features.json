@@ -94,7 +94,11 @@
                "two windows sending into one chat at the same moment: the second waits and is answered after the first"]},
     {"id": "provider-failures", "title": "A provider that is out of usage (402) or rate limiting (429) is named in the chat, never as a host authentication problem (#501)",
      "tests": ["a provider 402 says the agent's account is out of usage, and the chat stays usable",
-               "a provider 429 says the host is being rate limited, and the chat stays usable"]}
+               "a provider 429 says the host is being rate limited, and the chat stays usable"]},
+    {"id": "turn-timeout", "title": "ACP stall deadlines reset on progress, and absolute deadlines stop local turns",
+     "tests": ["local ACP absolute ceiling shows timeout and keeps composer usable",
+               "ACP progress frames keep the local turn alive until completion",
+               "silent ACP turn stalls promptly and restores the composer"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
