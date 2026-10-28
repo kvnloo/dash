@@ -56,7 +56,7 @@ test('annotation-receipt: offline Send then reconnect and Send again creates jus
   await page.context().setOffline(true);
   await expect(page.getByTestId('connection-banner')).toBeVisible({ timeout: 20000 });
   await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
-  await expect(page.getByRole('alert').filter({ hasText: /Offline|Network|fetch failed|Failed to fetch/i })).toBeVisible({ timeout: 20000 });
+  await expect(page.getByRole('alert').filter({ hasText: /Offline|Network|fetch failed|Failed to fetch|Could not reach the bridge/i })).toBeVisible({ timeout: 20000 });
   await expect(page.getByTestId('chat-window').getByText(/Annotated .* \(1 stroke\)/)).toHaveCount(0);
   expect(await startedTurns(bridge.dir)).toBe(0);
 
