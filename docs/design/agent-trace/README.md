@@ -98,7 +98,7 @@ measured; reference only, nothing copied):
 ```sh
 python3 tools/export_trace.py data/trace-20261020.json <copy-of-omp-stats.db>   # on the host with the logs
 python3 tools/build.py                                                          # writes out/*.html
-python3 -P tools/shot.py captures out/a-trace.html both                         # needs a CDP browser on :9333
+python3 -P tools/shot.py captures out/a-trace.html both                         # needs a CDP browser; set TRACE_CDP_URL
 ```
 
 Fonts: Hanken Grotesk, IBM Plex Mono, Cormorant Garamond (OFL-1.1, @fontsource 5.3.0); licences

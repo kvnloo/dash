@@ -81,9 +81,11 @@ Main screenshots: `captures/r2/{a-trace,b-lanes,c-stats,d-pocket}-{phone-top,pho
 
 ## Open
 
-- http://100.113.138.100:4186/a-trace.html
-- http://100.113.138.100:4186/b-lanes.html
-- http://100.113.138.100:4186/c-stats.html
-- http://100.113.138.100:4186/d-pocket.html
+- `out/a-trace.html`
+- `out/b-lanes.html`
+- `out/c-stats.html`
+- `out/d-pocket.html`
+
+Open them from a checkout, or serve `out/` with any static server (the preview address used during the round is omitted here).
 
 Comparison: replace `.html` with `-r1.html`. No app code, production service endpoint or phone state changes.

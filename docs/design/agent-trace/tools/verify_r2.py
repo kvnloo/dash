@@ -35,7 +35,7 @@ def main():
         context=browser.new_context(viewport={'width':412,'height':915},color_scheme='dark',reduced_motion='reduce',accept_downloads=True)
         page=context.new_page();page.on('pageerror',lambda e:result['console_errors'].append(str(e)))
         for slug in PAGES:
-            response=page.goto(f'http://100.113.138.100:4186/{slug}.html');assert response is not None and response.status==200
+            response=page.goto(f'{local}/{slug}.html');assert response is not None and response.status==200
             page.evaluate('document.fonts.ready');page.wait_for_timeout(150)
             assert page.evaluate('document.documentElement.scrollWidth===innerWidth'),slug+' overflow'
             assert 'Run 01' not in page.locator('body').inner_text()
@@ -49,7 +49,7 @@ def main():
             too_small=page.locator('button, summary, input, select, a').evaluate_all("ns=>ns.filter(n=>n.getClientRects().length&&n.getBoundingClientRect().height<43.9).map(n=>({text:n.textContent.slice(0,40),height:n.getBoundingClientRect().height}))")
             assert not too_small,(slug,too_small)
             result['checks'].append(slug+': 200; no phone overflow; controls >=44px; human labels')
-            page.set_viewport_size({'width':1440,'height':900});page.goto(f'http://100.113.138.100:4186/{slug}.html');page.evaluate('document.fonts.ready');shot('desktop')
+            page.set_viewport_size({'width':1440,'height':900});page.goto(f'{local}/{slug}.html');page.evaluate('document.fonts.ready');shot('desktop')
             assert page.evaluate('document.documentElement.scrollWidth===innerWidth')
             page.emulate_media(color_scheme='light');page.screenshot(path=str(args.captures/f'{slug}-desktop-light.png'));page.emulate_media(color_scheme='dark')
             page.set_viewport_size({'width':412,'height':915})

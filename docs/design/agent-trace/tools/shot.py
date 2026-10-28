@@ -1,4 +1,4 @@
-"""Render a prototype in the isolated Sway Chromium (CDP :9333): console errors, overflow, screenshots.
+"""Render a prototype in the isolated Sway Chromium (CDP URL from TRACE_CDP_URL): console errors, overflow, screenshots.
 
 usage: python3 -P shot.py OUT_DIR PAGE.html [phone|desktop|both] [js-actions...]
 Each extra arg is a JS snippet run before an additional screenshot (named step1, step2...).
@@ -14,7 +14,7 @@ name = os.path.splitext(os.path.basename(page_path))[0]
 sizes = {"desktop": (1440, 900), "phone": (412, 915)}
 report = {}
 with sync_playwright() as p:
-    b = p.chromium.connect_over_cdp("http://127.0.0.1:9333")
+    b = p.chromium.connect_over_cdp(os.environ["TRACE_CDP_URL"])
     ctx = b.contexts[0]
     for tag in (["desktop", "phone"] if which == "both" else [which]):
         pg = ctx.new_page()
