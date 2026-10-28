@@ -38,7 +38,7 @@ test("every catalog kind has a stable, unique path and a spoken label", () => {
     "Active runs: 42",
     "Complete, 50 percent",
     "List, 2 items",
-    "Table, 2 columns, 1 rows",
+    "Table, 2 columns, 1 row",
     "warning callout: Review needed",
     "Roadmap",
   ]);
