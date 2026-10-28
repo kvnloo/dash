@@ -486,7 +486,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           placeholder={feedbackOn ? "Feedback for Dash" : "Search or message Dash"}
           onVoice={() => {
             // Voice keeps the explicitly attached chat; never retarget via a new feedback chat.
-            navigation.navigate("Voice");
+            navigation.navigate("Voice", { autostart: true });
           }}
           onSend={(text) => {
             if (feedbackOn) {
