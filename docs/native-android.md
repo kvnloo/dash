@@ -49,6 +49,48 @@ The output is `.native-receipts/dash-native-arm64.apk`. It is a debug-signed dev
 
 `@kvnloo/aodl-views` remains pinned to the existing Git revision. A worker without private repository credentials can use a local mirror bundle containing that exact revision. Put the bundle at `.native-build-inputs/aodl.bundle` for the fleet transfer, but never commit it. The build script uses a job-scoped Git URL rewrite, not a global credential change.
 
+## Is my dev client current?
+
+Metro serves new JavaScript to old Android dev clients, but cannot install native code.
+`react-native-webrtc` was added on 2026-10-22. A dev client installed
+before that change can show `WebRTC could not load` on every live call.
+
+On the connected S25/S22+, inspect **the installed APK**, not the Metro source.
+Run from the Dash repository root (the first `pm path` entry is `base.apk`):
+
+```sh
+adb shell pm path app.dash.mobile
+apk_on_phone=$(adb shell pm path app.dash.mobile | sed -n '1s/^package://p' | tr -d '\r')
+apk_copy="$(mktemp -d)/dash-installed.apk"
+adb pull "$apk_on_phone" "$apk_copy" &&
+  bash scripts/build-native-android.sh --check-apk "$apk_copy"
+```
+
+`--check-apk` checks the existing dex for `WebRTCModule` and
+`PeerConnectionFactory`, and checks for the **exact**
+`lib/arm64-v8a/libjingle_peerconnection_so.so` path. It also checks the existing
+required Dash classes; when the local `dash-audio-route` or `dash-stylus` Expo
+module directory exists, their native class is required too. Any missing
+component exits non-zero and names it. This is for Dash's single-APK arm64
+dev build; an Android split-APK installation requires separate inspection.
+Inspect-only mode runs no build, O15 release gate, dependency install or signing.
+
+If it fails, obtain an O15-approved native rebuild and reinstall the dev
+client; a Metro reload cannot repair an old APK. A pass proves packaged classes
+and the native library, **not** live voice readiness or device operation.
+
+Device smoke (requires the approved install, configured bridge, broker and
+voice scope): run `adb logcat -c`, then in a separate terminal run:
+
+```sh
+adb logcat -s ReactNativeJS
+```
+
+In Dash on the phone, open an attached Hermes chat, tap Live voice, grant mic
+permission, speak, confirm speaker playback, and stop the call. Inspect the
+`[voice]` log lines for setup, teardown and errors, especially
+`WebRTC could not load`. Do not treat this manual check as O15 army evidence.
+
 ## Keep turbo and QA live
 
 After integrating in a separate worktree, install its app dependencies and serve that integrated source. Preserve the preview service's existing private environment; do not copy tokens into commands or URLs. The relevant native start command, from `app/`, is:
