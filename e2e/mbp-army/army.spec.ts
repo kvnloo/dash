@@ -90,6 +90,83 @@ test('context gauge opens a readable card inside the viewport',async({page,bridg
  await closeContextCard(page,gauge);
 });
 
+// Hold the gauge long enough for onLongPress (350 ms) and let go. The mouse stays where it went down.
+async function holdGauge(page:any,gauge:any){
+ const box=await gauge.boundingBox();if(!box)throw Error('Context gauge has no box');
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.waitForTimeout(650);await page.mouse.up();
+ return box as {x:number;y:number;width:number;height:number};
+}
+
+test('context gauge long-press opens a small grid peek just above the gauge',async({page,bridge},info)=>{
+ await page.setViewportSize({width:390,height:780});
+ await openChat(page,bridge);await send(page,'context grid peek journey');
+ await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+ const gauge=page.getByRole('button',{name:/^Context window,/});
+ const g=await holdGauge(page,gauge);
+ const peek=page.getByLabel('Context grid peek',{exact:true});
+ await expect(peek).toBeVisible();await expect(peek).toBeInViewport({ratio:1});
+ // A long press is not a tap: the card did not open.
+ await expect(page.getByLabel('Context window details',{exact:true})).toHaveCount(0);
+ // Anchored: its bottom edge is a few pixels over the gauge's top edge and the gauge sits under it.
+ const p=await peek.boundingBox();if(!p)throw Error('Context grid peek has no box');
+ const gap=g.y-(p.y+p.height);
+ expect(gap,'peek bottom edge to gauge top edge').toBeGreaterThanOrEqual(0);expect(gap).toBeLessThanOrEqual(24);
+ expect(g.x+g.width/2).toBeGreaterThan(p.x);expect(g.x+g.width/2).toBeLessThan(p.x+p.width);
+ // Small: 20 columns of 7 px cells, well under half the screen.
+ expect(p.width).toBeLessThan(220);expect(p.height).toBeLessThan(170);
+ // The fixture harness has no native snapshot: nothing is claimed, every cell is free.
+ await expect(peek.getByText('Context unknown',{exact:true})).toBeVisible();
+ const cells=peek.getByLabel('Context grid cells',{exact:true});
+ await expect(cells.locator('rect')).toHaveCount(200);await expect(cells.locator('rect[fill="none"]')).toHaveCount(200);
+ const cell=await cells.boundingBox();if(!cell)throw Error('grid has no box');
+ expect(cell.width).toBeCloseTo(20*7+19,0);expect(cell.height).toBeCloseTo(10*7+9,0);
+ await page.screenshot({path:info.outputPath('context-grid-peek-390.png')});
+ // Tapping outside dismisses it and opens nothing.
+ await page.getByRole('button',{name:'Dismiss context preview',exact:true}).click({noWaitAfter:true,position:{x:8,y:8}});
+ await expect(peek).toHaveCount(0);await expect(page.getByLabel('Context window details',{exact:true})).toHaveCount(0);
+ // Tapping the peek opens the full card.
+ await holdGauge(page,gauge);await expect(peek).toBeVisible();
+ await peek.click({noWaitAfter:true});
+ const card=page.getByLabel('Context window details',{exact:true});
+ await expect(card).toBeVisible();await expect(card).toBeInViewport({ratio:1});await expect(peek).toHaveCount(0);
+ await closeContextCard(page,gauge);
+ // A plain tap on the gauge is unchanged: the card, no peek.
+ await gauge.click({noWaitAfter:true});await expect(card).toBeVisible();await expect(peek).toHaveCount(0);
+ await closeContextCard(page,gauge);
+});
+
+test('context card shows the grid instead of the bar',async({page,bridge},info)=>{
+ await page.setViewportSize({width:390,height:780});
+ await openChat(page,bridge);await send(page,'context grid card journey');
+ await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+ const gauge=page.getByRole('button',{name:/^Context window,/});
+ await gauge.click({noWaitAfter:true});
+ const card=page.getByLabel('Context window details',{exact:true});
+ await expect(card).toBeVisible();await expect(card).toBeInViewport({ratio:1});
+ const grid=card.getByLabel('Context grid',{exact:true});
+ await expect(grid).toBeVisible();
+ // 20 x 10 cells, all free without a snapshot, as tall as a grid and not the old 8 px bar.
+ await expect(grid.locator('rect')).toHaveCount(200);await expect(grid.locator('rect[fill="none"]')).toHaveCount(200);
+ const c=await card.boundingBox();const b=await grid.boundingBox();if(!c||!b)throw Error('card or grid has no box');
+ expect(b.width,'grid spans the card').toBeGreaterThan(c.width-40);expect(b.height).toBeGreaterThan(100);
+ await expect(card.getByText(/This harness has no native context snapshot/)).toBeVisible();
+ await page.screenshot({path:info.outputPath('context-card-grid-390.png')});
+ await closeContextCard(page,gauge);
+});
+
+// RC3 defect: the card's "Dismiss usage details" backdrop covered the gauge, so the gauge could not be pressed again.
+test('context gauge stays pressable while its card is open: pressing it closes the card',async({page,bridge})=>{
+ await openChat(page,bridge);await send(page,'context gauge pressable journey');
+ await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+ const gauge=page.getByRole('button',{name:/^Context window,/});
+ const card=page.getByLabel('Context window details',{exact:true});
+ for(let i=0;i<2;i++){
+  await gauge.click({noWaitAfter:true});await expect(card).toBeVisible();
+  // The card is open and the gauge is still the thing under the pointer, not the backdrop.
+  await gauge.click({noWaitAfter:true});await expect(card).toHaveCount(0);
+ }
+});
+
 test('prompt rail mouse scrub, Jump and Latest on real transcript',async({page,bridge})=>{
  await openChat(page,bridge);
  for(let i=0;i<4;i++) {await send(page,'prompt '+i+' '+('transcript text '.repeat(24)));await expect(page.getByText(/ARMY_REPLY:/).nth(i)).toBeVisible();}
