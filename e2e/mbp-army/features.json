@@ -144,7 +144,7 @@
     "live model behaviour", "Orchestra / orchestration screens", "handedness",
     "Hermes session history", "notifications and deep links",
     "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)",
-    "live preview chip: old -> new build marker, auto-reload and Metro switch (dev client only: needs a Metro serving a build manifest; none exists in the web export)",
+    "live preview chip on the dev client: the web army drives the chip, guards and bundle-health gate against a real manifest endpoint, but SourceCode.scriptURL, DevSettings.reload and the Metro-switch deep link run only on a device",
     "Android RECORD_AUDIO first-run dialog during dictation and live voice (native, device only)",
     "live voice reload guard: fake peer needs TURBO-C08 integration; native S25 call proof remains outstanding"
   ]
