@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, DevSettings, Keyboard, Linking, NativeModules } from "react-native";
+import { AppState, DevSettings, Keyboard, Linking, NativeModules, Platform } from "react-native";
 import {
   POLL_MS,
   RUNNING_BUILD,
@@ -17,9 +17,20 @@ import {
   type ReloadDecision,
 } from "./live-update";
 import { idleMs } from "./touch-idle";
+import { installReloadGuards } from "./reload-guards";
+import { flushDrafts } from "../store/composer-drafts";
 
 const AUTO_KEY = "dash.liveUpdate.auto";
 const TRIED_KEY = "dash.liveUpdate.autoFor";
+
+/** Native dev clients reload through Expo; the web army reloads the served page. */
+function reloadApp(): void {
+  if (Platform.OS === "web") {
+    if (typeof window !== "undefined") window.location.reload();
+    return;
+  }
+  DevSettings.reload();
+}
 
 async function readPref(key: string): Promise<string | null> {
   try {
@@ -65,6 +76,7 @@ export interface LiveUpdate {
   autoReload: boolean;
   setAutoReload(on: boolean): void;
   reloadNow(): void;
+  blockedBy: string | null;
   switchTo(endpoint: MetroEndpoint): void;
 }
 
@@ -77,14 +89,25 @@ export function useLiveUpdate(): LiveUpdate {
   const [served, setServed] = useState<LiveBuild | null>(null);
   const [autoReload, setAutoState] = useState(true);
   const [lastAutoFor, setLastAutoFor] = useState<string | null>(null);
+  const [prefsReady, setPrefsReady] = useState(false);
   const [, setTick] = useState(0);
   const foregroundAt = useRef(Date.now());
+  const heldFor = useRef<string | null>(null);
   const reloading = useRef(false);
 
   useEffect(() => {
-    void readPref(AUTO_KEY).then((value) => setAutoState(value !== "0"));
-    void readPref(TRIED_KEY).then(setLastAutoFor);
+    let alive = true;
+    void Promise.all([readPref(AUTO_KEY), readPref(TRIED_KEY)]).then(([auto, attempted]) => {
+      if (!alive) return;
+      setAutoState(auto !== "0");
+      setLastAutoFor(attempted);
+      setPrefsReady(true);
+    });
+    return () => { alive = false; };
   }, []);
+
+  // Register once for the mounted poller, and re-evaluate immediately when active work changes.
+  useEffect(() => installReloadGuards(() => setTick(n => n + 1)), []);
 
   useEffect(() => {
     if (origin === null) return;
@@ -120,34 +143,59 @@ export function useLiveUpdate(): LiveUpdate {
     }
   }, [served, lastAutoFor]);
 
+  const blockedBy = reloadBlockedBy();
   const decision = decideReload({
     running: RUNNING_BUILD,
     served,
-    autoReload,
+    autoReload: autoReload && prefsReady,
     sinceForegroundMs: Date.now() - foregroundAt.current,
     idleMs: idleMs(),
     keyboardVisible: Keyboard.isVisible(),
-    blockedBy: reloadBlockedBy(),
+    blockedBy,
+    heldFor: heldFor.current,
     lastAutoFor,
   });
+  const blocked = decision.kind === "ready" && decision.why === "blocked";
+  useEffect(() => {
+    if (blocked && served !== null && autoReload) heldFor.current = served.sha;
+  }, [blocked, served?.sha, autoReload]);
 
-  const reloadNow = useCallback(() => {
-    if (reloading.current) return;
+  const requestReload = useCallback((automatic: boolean) => {
+    if (reloading.current || (automatic && reloadBlockedBy() !== null)) return;
     reloading.current = true;
-    DevSettings.reload();
-    setTimeout(() => {
-      reloading.current = false;
-    }, 10_000);
-  }, []);
+    void (async () => {
+      let invoked = false;
+      try {
+        // The 250ms draft debounce is too late if Metro reloads immediately.
+        await flushDrafts();
+        // A voice call or stream may have begun during the asynchronous storage write.
+        if (automatic && reloadBlockedBy() !== null) return;
+        if (automatic && served !== null) {
+          await writePref(TRIED_KEY, served.sha);
+          setLastAutoFor(served.sha);
+        }
+        invoked = true;
+        reloadApp();
+      } catch (error) {
+        console.warn("[live-update] reload cancelled: drafts could not be persisted", error);
+      } finally {
+        if (invoked) setTimeout(() => { reloading.current = false; }, 10_000);
+        else {
+          reloading.current = false;
+          setTick(n => n + 1);
+        }
+      }
+    })();
+  }, [served]);
+  const reloadNow = useCallback(() => requestReload(false), [requestReload]);
 
   useEffect(() => {
-    if (decision.kind !== "reload" || served === null || reloading.current) return;
-    setLastAutoFor(served.sha);
-    void writePref(TRIED_KEY, served.sha).then(reloadNow);
-  }, [decision.kind, served, reloadNow]);
+    if (decision.kind === "reload" && served !== null && !reloading.current) requestReload(true);
+  }, [decision.kind, served?.sha, requestReload]);
 
   const setAutoReload = useCallback((on: boolean) => {
     setAutoState(on);
+    if (!on) heldFor.current = null;
     void writePref(AUTO_KEY, on ? null : "0");
   }, []);
 
@@ -159,5 +207,5 @@ export function useLiveUpdate(): LiveUpdate {
     [origin],
   );
 
-  return { running: RUNNING_BUILD, served, origin, decision, autoReload, setAutoReload, reloadNow, switchTo };
+  return { running: RUNNING_BUILD, served, origin, decision, autoReload, setAutoReload, reloadNow, blockedBy, switchTo };
 }

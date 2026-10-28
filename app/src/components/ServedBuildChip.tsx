@@ -35,7 +35,8 @@ export function ServedBuildChip() {
 
   if (!visible || hidden) return null;
   const update = live.decision.kind !== "current";
-  const label =
+  const heldBy = live.decision.kind === "ready" && live.decision.why === "blocked" ? live.blockedBy : null;
+  const label = heldBy !== null ? "update ready - held: " + heldBy :
     RUNNING_BUILD === null
       ? servedBuildLabel(SERVED_BUILD, now)
       : liveChipLabel(RUNNING_BUILD, live.served, now, servedAgeLabel);
@@ -79,7 +80,7 @@ export function ServedBuildChip() {
         accessibilityLabel={
           "Served bundle " + (RUNNING_BUILD?.sha ?? SERVED_BUILD.sha ?? "unknown SHA") + ", " +
           servedAgeLabel(RUNNING_BUILD?.builtAtMs ?? SERVED_BUILD.servedAtMs, now) + "." +
-          (update ? " Newer build " + shortSha(live.served) + " is served. Tap to reload." : " Tap to hide.")
+          (update ? " Newer build " + shortSha(live.served) + " is served." + (heldBy ? " Held: " + heldBy + "." : "") + " Tap to reload." : " Tap to hide.")
         }
         accessibilityHint="Long press for reload and server options"
         onPress={() => (update ? live.reloadNow() : setHiddenFor(key))}

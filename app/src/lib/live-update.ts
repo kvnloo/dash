@@ -145,6 +145,8 @@ export interface ReloadInput {
   idleMs: number;
   keyboardVisible: boolean;
   blockedBy: string | null;
+  /** A build previously held by a guard reloads as soon as all work is idle. */
+  heldFor?: string | null;
   /** The served sha an automatic reload was already attempted for (never loop on one build). */
   lastAutoFor: string | null;
 }
@@ -157,9 +159,10 @@ export type ReloadDecision =
 export function decideReload(input: ReloadInput): ReloadDecision {
   const { running, served } = input;
   if (running === null || served === null || sameBuild(running, served)) return { kind: "current" };
+  if (input.blockedBy !== null) return { kind: "ready", why: "blocked" };
   if (!input.autoReload) return { kind: "ready", why: "manual" };
   if (input.lastAutoFor === served.sha) return { kind: "ready", why: "retried" };
-  if (input.blockedBy !== null) return { kind: "ready", why: "blocked" };
+  if (input.heldFor === served.sha) return { kind: "reload" };
   if (input.sinceForegroundMs <= FOREGROUND_GRACE_MS) return { kind: "reload" };
   if (input.keyboardVisible) return { kind: "ready", why: "keyboard" };
   if (input.idleMs >= IDLE_RELOAD_MS) return { kind: "reload" };
