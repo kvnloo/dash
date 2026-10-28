@@ -93,6 +93,8 @@ test('annotation-voice-target: OMP chat beats a voice call bound to Hermes', asy
   await sendMarkedInk(page, 'C22_OMP_DESTINATION_PROOF');
   await expect(page.getByTestId('chat-window').getByText(/C22_OMP_DESTINATION_PROOF/).first()).toBeVisible({ timeout: 30000 });
   await page.getByRole('button', { name: 'Close chat window', exact: true }).click({ noWaitAfter: true });
+  // End the call before reopening Hermes: the live orb is centred over the chat list.
+  await page.getByRole('button', { name: 'End voice', exact: true }).click({ noWaitAfter: true });
   await hermes(page).click({ noWaitAfter: true });
   await expect(page.getByTestId('chat-window').getByText(/C22_OMP_DESTINATION_PROOF/)).toHaveCount(0);
   // OMP ink never generated a Hermes voice ask.
