@@ -45,7 +45,16 @@ export function acpRequestFailure(error: unknown, phase: string): string {
   const code = record(error) && typeof error.code === "number" && Number.isFinite(error.code) ? error.code : "unknown";
   const detail = record(error) && record(error.data) && typeof error.data.details === "string" ? error.data.details : "";
   const model = /^Could not restore model ([\w./:-]{1,80})$/.exec(detail)?.[1];
-  const hint = model ? `could not restore model ${model}; the host may have lost provider login` : "check host authentication and agent diagnostics";
+  const data = record(error) && record(error.data) ? error.data : {};
+  const status = typeof data.http_status === "number" ? data.http_status : undefined;
+  const text = [detail, typeof data.message === "string" ? data.message : "", record(error) && typeof error.message === "string" ? error.message : ""].join(" ");
+  // Only the fixed sentences below reach the phone, never the provider's own text.
+  const outOfUsage = status === 402 || /payment required|balance exhausted|out of (usage|credits)|usage limit|quota exceeded|insufficient (credit|balance|quota)/i.test(text);
+  const rateLimited = status === 429 || /rate.?limit|too many requests/i.test(text);
+  const hint = model ? `could not restore model ${model}; the host may have lost provider login`
+    : outOfUsage ? "the agent's provider account is out of usage or credits on this host"
+    : rateLimited ? "the agent's provider is rate limiting this host; try again shortly"
+    : "check host authentication and agent diagnostics";
   return `ACP request failed during ${phase} (code ${code}); ${hint}`;
 }
 
