@@ -42,10 +42,11 @@ test('main input names the selected agent with default feedback enabled and afte
   await expect(composer(page)).toBeInViewport();
   await page.screenshot({path:info.outputPath(`main-input-hermes-${viewport.width}.png`)});
  }
- await page.getByRole('button',{name:/^(Create new chat|New chat)$/}).first().click({noWaitAfter:true});
- await expect(composer(page)).toBeVisible();
+ // Reopen the owned chat in its window (a brand-new chat opens full screen, with a different header).
+ await chatRow(page).click({noWaitAfter:true});
+ await expect(page.getByTestId('chat-window')).toBeVisible();
  await chooseHarness(page,'OMP');
- await page.getByRole('button',{name:'Back',exact:true}).click({noWaitAfter:true});
+ await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});
  await expect(composer(page)).toHaveAttribute('placeholder','Message OMP');
  await page.reload({waitUntil:'domcontentloaded'});
  await expect(composer(page)).toHaveAttribute('placeholder','Message OMP',{timeout:25000});

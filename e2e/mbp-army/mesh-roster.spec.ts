@@ -9,7 +9,7 @@ test('Chats paired with groot lists mbp live and native finished chats and retai
   try {
    await pair(page,local);
    // Both computers deliberately use identical session IDs: neither row may overwrite the other.
-   for (const id of ['live:omp:army-fixture-session','live:mbp:omp:army-fixture-session']) {
+   for (const id of ['live:omp:army-fixture-session','mbp:omp:army-fixture-session']) {
     const row=page.getByTestId('chat-row-'+id);
     await row.scrollIntoViewIfNeeded({timeout:20000});
     await expect(row).toBeVisible();
@@ -53,8 +53,8 @@ test('Chats paired with groot lists mbp live and native finished chats and retai
    await page.getByRole('tab',{name:'Chats',exact:true}).click({noWaitAfter:true});
    await page.getByTestId('chat-row-mbp:codex:army-finished-codex').scrollIntoViewIfNeeded({timeout:20000});
    await expect(page.getByTestId('chat-row-mbp:codex:army-finished-codex')).toBeVisible();
-   await page.getByTestId('chat-row-live:mbp:omp:army-fixture-session').scrollIntoViewIfNeeded();
-   await expect(page.getByTestId('chat-row-live:mbp:omp:army-fixture-session')).toBeVisible();
+   await page.getByTestId('chat-row-mbp:omp:army-fixture-session').scrollIntoViewIfNeeded();
+   await expect(page.getByTestId('chat-row-mbp:omp:army-fixture-session')).toBeVisible();
    expect(local.logs()).toContain('pair.claim');
    await writeFile(info.outputPath('mesh-roster.json'),JSON.stringify(snapshot,null,2));
    await page.screenshot({path:info.outputPath('mesh-chats-last-good.png')});
