@@ -7,7 +7,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { withAndroidManifest } = require("expo/config-plugins");
 
-// Live preview: the follower (scripts/turbo/dash-channel) writes {sha, builtAtMs} into
+// Live preview: the follower (scripts/channels/dash-channel) writes {sha, builtAtMs} into
 // src/lib/build-info.json of an immutable release. Republish it in the manifest so a running app
 // can compare the build it runs (baked into its bundle) with the build its Metro serves now.
 function withBuildInfo(config) {

@@ -6,7 +6,7 @@
 #   scripts/turbo/install-groot.sh --uninstall     back to serving the dash-turbo worktree
 #
 # What it changes (all under the invoking user's home, nothing outside it except the shared release store):
-#   ~/.local/lib/dash/channels/bin/dash-channel     patched copy of this repo's scripts/turbo/dash-channel
+#   ~/.local/lib/dash/channels/bin/dash-channel     this repo's scripts/channels/dash-channel
 #                                                   (original kept once as dash-channel.orig-20261028)
 #   ~/.local/lib/dash/turbo-live/                   second dash-channel instance: its own mirror + `active` link
 #   ~/.config/dash-turbo-live/channels.env          instance config (kept if it exists)
@@ -35,7 +35,7 @@ fi
 
 [[ -x "$BIN" ]] || { echo "no $BIN: the channel tool is not installed on this host" >&2; exit 1; }
 [[ -e "$BIN.orig-20261028" ]] || cp -p "$BIN" "$BIN.orig-20261028"
-install -m 0755 "$here/dash-channel" "$BIN"
+install -m 0755 "$here/../channels/dash-channel" "$BIN"
 
 mkdir -p "$H" "$CONF" "$UNITS/dash-metro-turbo.service.d" "$HOME/.cache/dash-turbo-metro"
 CH="$HOME/.local/lib/dash/channels"

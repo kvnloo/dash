@@ -12,6 +12,16 @@
 #
 # No host data lives here. Ports, URLs and paths come from
 # ${XDG_CONFIG_HOME:-$HOME/.config}/dash-channels/channels.env on the host.
+#
+# Live preview additions (kvnloo/dash#107, #565, #566; see scripts/turbo/install-groot.sh):
+#   - every release carries app/src/lib/build-info.json {sha, builtAtMs}: the bundle bakes in what
+#     the app RUNS and app.config.js republishes it in the manifest as what Metro SERVES;
+#   - `follow` is the cheap 30-second tick: one ls-remote per tracked ref, a full rebuild only when
+#     a head moved, and a bundle probe of the live Metro otherwise (restarts it once if it 500s);
+#   - a head whose switch failed health is not retried until the head moves (no restart loop);
+#   - DASH_CHANNEL_POST_SWITCH runs after every healthy switch (best effort);
+#   - DASH_CHANNEL_REQUIRE_RECEIPT=1 holds a head back until laws/release/check.py allows it (O15).
+#   One instance per Metro: DASH_CHANNEL_CONF_DIR / DASH_CHANNELS_HOME / DASH_CHANNEL_METRO_UNIT.
 set -Eeuo pipefail
 shopt -s inherit_errexit
 
@@ -61,6 +71,7 @@ usage: dash-channel <command> [args]
   status [--json]              active channel, commit and Metro health
   open <adb-serial>            point the dev client on a device at the channel Metro
   nightly                      rebuild every track channel; re-serve the active one if it moved
+  follow                       cheap tick: ls-remote, rebuild/re-serve only when a head moved, probe Metro otherwise
   gc [--keep N]                delete channel-built releases that nothing references
 EOF
 }
@@ -69,6 +80,12 @@ lock() {
   mkdir -p "$H"
   exec 8>"$H/.lock"
   flock -w 900 8 || die "another dash-channel command holds the lock"
+}
+
+lock_try() { # non-blocking: another command (nightly, switch) owns the tick
+  mkdir -p "$H"
+  exec 8>"$H/.lock"
+  flock -n 8
 }
 
 # ---------- repo + table ----------
@@ -181,8 +198,22 @@ materialize() { # sha -> release dir (created if missing)
   fi
   printf '%s\n' "$key" >"$tmp/.dash-deps-key"
   printf 'sha=%s\nbuilt=%s\n' "$sha" "$(now)" >"$tmp/.dash-channel-ready"
+  if [[ -d "$tmp/app/src/lib" ]]; then
+    printf '{"sha":"%s","builtAtMs":%s}\n' "$sha" "$(now_ms)" >"$tmp/app/src/lib/build-info.json"
+  fi
   mv "$tmp" "$dst" || { rm -rf "$tmp"; die "cannot place release $dst"; }
   echo "$dst"
+}
+
+now_ms() { python3 -c 'import time; print(int(time.time()*1000))'; }
+
+ensure_build_info() { # sha -> make src/lib/build-info.json of the release name its own commit
+  local dir="$REL/$1" f="$REL/$1/app/src/lib/build-info.json"
+  [[ -d "$dir/app/src/lib" ]] || return 0
+  grep -q "\"sha\": *\"$1\"" "$f" 2>/dev/null && return 0
+  local built; built="$(sed -n 's/^built=//p' "$dir/.dash-channel-ready" 2>/dev/null | head -1)"
+  local at; at="$(date -u -d "${built:-now}" +%s%3N 2>/dev/null || now_ms)"
+  printf '{"sha":"%s","builtAtMs":%s}\n' "$1" "$at" >"$f.tmp.$$" && mv "$f.tmp.$$" "$f"
 }
 
 build_one() { # name -> sha
@@ -220,7 +251,13 @@ health() { # 0 when Metro serves and compiles the Android bundle of the active r
   # Fetch through loopback whatever host the manifest advertises.
   bundle="$base/${bundle#*://*/}"
   local left=$(( deadline - $(date +%s) )); (( left > 30 )) || left=30
-  curl -fsS -m "$left" -o /dev/null "$bundle" || { log "android bundle failed to compile"; return 1; }
+  local out; out="$(mktemp)"
+  curl -fsS -m "$left" -o "$out" "$bundle" || { rm -f "$out"; log "android bundle failed to compile"; return 1; }
+  local want; want="$(link_sha "$H/active")"
+  if [[ -n "$want" && -f "$H/active/app/src/lib/live-update.ts" ]] && ! grep -qE "\"sha\": *\"$want\"" "$out"; then
+    log "WARN: bundle does not bake in build-info.json for ${want:0:12} (the app cannot tell which build it runs)"
+  fi
+  rm -f "$out"
 }
 
 restart_metro() { $SYSTEMCTL restart "$UNIT"; }
@@ -243,13 +280,22 @@ do_switch() { # name [--force]
   fi
   cur_sha="$(link_sha "$H/active")"; cur_ch="$(cat "$H/active.channel" 2>/dev/null || true)"
   if [[ -n "$cur_sha" ]]; then printf '%s\t%s\n' "$cur_sha" "$cur_ch" >"$H/previous"; fi
+  ensure_build_info "$sha"
   point_active "$sha" "$name"
   restart_metro
   if health; then
     history "switch $name $sha (from ${cur_ch:-none} ${cur_sha:-none})"
     log "serving $name at ${sha:0:12}"
+    printf '{"channel":"%s","sha":"%s","previous":"%s","servedAt":"%s","metroPort":%s}\n' \
+      "$name" "$sha" "${cur_sha:-}" "$(now)" "${DASH_CHANNEL_METRO_PORT:-0}" >"$H/served.json.tmp" && mv "$H/served.json.tmp" "$H/served.json"
+    rm -f "$H/failed.sha"
+    if [[ -n "${DASH_CHANNEL_POST_SWITCH:-}" ]]; then
+      DASH_SWITCH_CHANNEL="$name" DASH_SWITCH_SHA="$sha" DASH_SWITCH_PREVIOUS="${cur_sha:-}" \
+        timeout 60 bash -c "$DASH_CHANNEL_POST_SWITCH" >&2 || log "post-switch hook failed (ignored)"
+    fi
     return 0
   fi
+  printf '%s\n' "$sha" >"$H/failed.sha"
   log "health failed for $name (${sha:0:12}); rolling back"
   if [[ -n "$cur_sha" ]]; then
     point_active "$cur_sha" "$cur_ch"
@@ -378,8 +424,10 @@ cmd_open() {
   log "dev client opened on the channel Metro"
 }
 
-cmd_nightly() {
-  lock; fetch
+cmd_nightly() { lock; nightly_run; }
+
+nightly_run() {
+  fetch
   local n k before after active report="$H/nightly-last.tsv" changed=0 failed=0
   active="$(cat "$H/active.channel" 2>/dev/null || true)"
   : >"$report.tmp"
@@ -394,7 +442,12 @@ cmd_nightly() {
     fi
   done < <(cat "$TABLE")
   if [[ -n "$active" && "$(ch_kind "$active")" == track && "$(link_sha "$H/ch/$active")" != "$(link_sha "$H/active")" ]]; then
-    if ( do_switch "$active" ) 2>>"$H/nightly.log"; then
+    local want; want="$(link_sha "$H/ch/$active")"
+    if [[ "$(cat "$H/failed.sha" 2>/dev/null)" == "$want" ]]; then
+      printf '%s\tskipped-known-bad\n' "$active" >>"$report.tmp"   # do not bounce Metro on a head that failed health
+    elif ! receipt_allows "$want"; then
+      printf '%s\theld-no-green-army-receipt\n' "$active" >>"$report.tmp"
+    elif ( do_switch "$active" ) 2>>"$H/nightly.log"; then
       printf '%s\tre-served\n' "$active" >>"$report.tmp"
     else
       failed=$((failed+1)); printf '%s\tre-serve-failed-rolled-back\n' "$active" >>"$report.tmp"
@@ -410,6 +463,47 @@ cmd_nightly() {
   fi
   cat "$report"
   (( failed == 0 ))
+}
+
+receipt_allows() { # sha -> 0 unless DASH_CHANNEL_REQUIRE_RECEIPT=1 and the O15 gate denies it
+  [[ "${DASH_CHANNEL_REQUIRE_RECEIPT:-0}" == 1 ]] || return 0
+  local dir="$REL/$1"
+  python3 "$dir/laws/release/check.py" --action ota --sha "$1" --root "$dir" >&2
+}
+
+# Cheap tick: one ls-remote per distinct tracked ref. A moved head runs the full nightly pass;
+# otherwise the live Metro's bundle is probed and Metro restarted once when it is unhealthy.
+cmd_follow() {
+  lock_try || { log "follow: another dash-channel command is running; next tick"; return 0; }
+  ensure_repo
+  local n r k remote built moved=0 active
+  while IFS=$'\t' read -r n r k; do
+    [[ "$k" == track ]] || continue
+    remote="$(git ls-remote "$REPO_URL" "refs/heads/$r" 2>/dev/null | cut -f1 | head -1)"
+    built="$(link_sha "$H/ch/$n")"
+    if [[ -n "$remote" && "$remote" != "$built" ]]; then moved=1; break; fi
+  done <"$TABLE"
+  active="$(cat "$H/active.channel" 2>/dev/null || true)"
+  if [[ -n "$active" && "$(link_sha "$H/ch/$active")" != "$(link_sha "$H/active")" ]]; then moved=1; fi
+  local rc=0
+  (( moved )) && { nightly_run || rc=$?; }
+  # A head that failed health keeps `moved` true; the live Metro still has to be alive and compiling.
+  [[ -n "$active" ]] || return "$rc"
+  probe_live && return "$rc"
+  log "follow: live Metro failed its bundle probe; restarting it once"
+  history "probe-failed $active $(link_sha "$H/active"); restarting Metro"
+  restart_metro
+  health || { history "probe still failing after restart $active"; log "follow: still unhealthy after restart"; return 1; }
+  history "probe recovered $active $(link_sha "$H/active")"
+  return "$rc"
+}
+
+probe_live() { # 0 when the live Metro serves its manifest and compiles the Android bundle
+  local base manifest bundle
+  base="$(metro_url)"
+  manifest="$(curl -fsS -m 20 -H 'expo-platform: android' -H 'accept: application/expo+json,application/json' "$base/" 2>/dev/null)" || return 1
+  bundle="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["launchAsset"]["url"])' <<<"$manifest" 2>/dev/null)" || return 1
+  curl -fsS -m 120 -o /dev/null "$base/${bundle#*://*/}"
 }
 
 cmd_gc() {
@@ -438,7 +532,7 @@ main() {
     init) cmd_init "$@";; add) cmd_add "$@";; remove|rm) cmd_remove "$@";; list|ls) cmd_list;;
     build) cmd_build "$@";; switch) cmd_switch "$@";; rollback) cmd_rollback;;
     promote) cmd_promote "$@";; baseline) cmd_baseline "$@";; status) cmd_status "$@";;
-    open) cmd_open "$@";; nightly) cmd_nightly;; gc) cmd_gc "$@";;
+    open) cmd_open "$@";; nightly) cmd_nightly;; follow) cmd_follow;; gc) cmd_gc "$@";;
     -h|--help|help|"") usage;; *) usage; exit 2;;
   esac
 }
