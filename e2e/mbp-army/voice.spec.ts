@@ -107,8 +107,8 @@ async function enterScriptedVoice(
       value: { dash: settings.dash, z0live: settings.z0live, identity: { credentialId: 'cred_armyvoice0021' } },
       configurable: true,
     });
-    window.__dashVoiceNoTranscript = settings.noTranscript;
-    window.__dashVoiceNeverReady = settings.neverReady;
+    Object.defineProperty(window, '__dashVoiceNoTranscript', { value: settings.noTranscript, configurable: true });
+    Object.defineProperty(window, '__dashVoiceNeverReady', { value: settings.neverReady, configurable: true });
   }, { dash, z0live, noTranscript: options.noTranscript === true, neverReady: options.neverReady === true });
 
   await pair(page, bridge);
@@ -152,11 +152,11 @@ test('live voice reports no transcript within nine seconds and stays connected',
   page.on('console', message => { if (message.type() === 'info') info.push(message.text()); });
   await enterScriptedVoice(page, bridge, voiceBroker, { noTranscript: true });
   await page.getByRole('button', { name: 'Start voice in Dash', exact: true }).click({ noWaitAfter: true });
-  await expect.poll(() => page.evaluate(() => window.__dashVoiceSpeechStoppedAt ?? 0),
+  await expect.poll(() => page.evaluate(() => performance.getEntriesByName('dash-voice-speech-stopped')[0]?.startTime ?? 0),
     { timeout: 8000, message: 'scripted peer emitted speech_stopped' }).toBeGreaterThan(0);
   await expect(page.getByTestId('voice-caption'))
     .toHaveText('Speech heard but no transcript - voice setup issue', { timeout: 9000 });
-  const elapsed = await page.evaluate(() => performance.now() - (window.__dashVoiceSpeechStoppedAt ?? 0));
+  const elapsed = await page.evaluate(() => performance.now() - (performance.getEntriesByName('dash-voice-speech-stopped')[0]?.startTime ?? 0));
   expect(elapsed, 'warning must be visible within 9 s of speech_stopped').toBeLessThan(9000);
   await expect(page.getByTestId('voice-phase'))
     .toHaveAttribute('aria-label', 'Voice status: listening');
