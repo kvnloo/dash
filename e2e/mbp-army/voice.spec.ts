@@ -175,7 +175,7 @@ test('live voice connection times out from Start when peer never becomes ready',
   await expect(page.getByTestId('voice-caption'))
     .toContainText('Voice connection timed out', { timeout: 21000 });
   expect(Date.now() - started, '20 s timeout must start before the SDP answer').toBeLessThan(21000);
-  await expect(page.getByTestId('voice-phase'))
-    .toHaveAttribute('aria-label', 'Voice status: error');
+  await expect(page.getByTestId('voice-error'))
+    .toContainText('Voice connection timed out');
   expect(voiceBroker.calls().filter(call => call.path === '/v1/tools/ask_z0')).toHaveLength(0);
 });
