@@ -16,6 +16,7 @@ const calls = (method: string, params: unknown) => {if(!isRecord(params))return;
 // Evidence for concurrency specs: when each prompt started and finished, in which fixture process.
 const turnLog = (event: string, text: string) => {try{appendFileSync(join(process.env.HOME || '.', 'army-acp-turns.jsonl'),JSON.stringify({agent,pid:process.pid,event,at:Date.now(),text:text.slice(0,80)})+'\n');}catch{/* evidence only */}};
 let timer: ReturnType<typeof setTimeout> | undefined;
+let ticker: ReturnType<typeof setInterval> | undefined;
 const think = (text: string) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'agent_thought_chunk',content:{type:'text',text}}}});
 const tool = (toolCallId: string, title: string, rawInput: unknown) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'tool_call',toolCallId,title,kind:'other',status:'in_progress',rawInput}}});
 const toolDone = (toolCallId: string, rawOutput: string) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'tool_call_update',toolCallId,status:'completed',rawOutput}}});
@@ -70,12 +71,20 @@ createInterface({input:process.stdin}).on('line', line => {
   if (text.includes('ARMY_USAGE')) send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'usage_update',used:85000,size:200000}}});
   update('ARMY_STREAM_BEGIN ');
   if (text.includes('ARMY_HANG')) return;
-  const answer = () => { turnLog('end', text); update(replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); };
+  const answer = () => { clearInterval(ticker); ticker = undefined; turnLog('end', text); update(replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); };
   // ARMY_HOLD: no answer until the spec creates $HOME/army-release, so overlap never races a clock.
   const hold = () => { if (existsSync(join(process.env.HOME || '.', 'army-release'))) answer(); else timer = setTimeout(hold, 100); };
-  const finish = () => { if (text.includes('ARMY_HOLD')) hold(); else timer = setTimeout(answer, text.includes('ARMY_SLOW') ? 9000 : 350); };
+  // ARMY_MS=<n> delays completion; ARMY_TICK=<n> emits progress frames during the wait.
+  const markerMs = Number(/\bARMY_MS=(\d+)\b/.exec(text)?.[1]);
+  const markerTick = Number(/\bARMY_TICK=(\d+)\b/.exec(text)?.[1]);
+  const waitMs = Number.isSafeInteger(markerMs) && markerMs >= 0 ? markerMs : text.includes('ARMY_SLOW') ? 9000 : 350;
+  const tickMs = Number.isSafeInteger(markerTick) && markerTick > 0 ? markerTick : 0;
+  const finish = () => {
+   if (tickMs > 0) ticker = setInterval(() => think('ARMY_TICK progress'), tickMs);
+   if (text.includes('ARMY_HOLD')) hold(); else timer = setTimeout(answer, waitMs);
+  };
   if (text.includes('ARMY_TOOLS')) toolTurn(finish, text.includes('ARMY_TOOLS_MANY')); else finish();
  } else if (r.method === 'session/cancel') {
-  clearTimeout(timer); send({jsonrpc:'2.0',id:active,result:{stopReason:'cancelled'}});
+  clearTimeout(timer); clearInterval(ticker); ticker = undefined; send({jsonrpc:'2.0',id:active,result:{stopReason:'cancelled'}});
  }
 });
