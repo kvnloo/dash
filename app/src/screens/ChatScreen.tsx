@@ -392,9 +392,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     if (conversation) rows.push({ id: "summaries", label: "Thinking summaries", value: conversation.summariesEnabled ? "On · next turn" : "Off", run: () => setThinkingSummaries(conversation.id, !conversation.summariesEnabled) });
     rows.push({ id: "annotate", label: "Annotate", value: "S Pen or finger", run: () => enterAnnotation() });
     if (approvalCount > 0) rows.push({ id: "approvals", label: "Approvals", value: `${approvalCount} pending${approvalDryRun ? " · preview" : ""} ›`, run: () => navigation.navigate("Approvals") });
-    rows.push({ id: "harness", label: "Harness", value: `${harnessName} · Change…`, run: () => setPickerVisible(true) });
+    rows.push({
+      id: "harness", label: "Harness", value: `${harnessName} · Change…`, run: () => setPickerVisible(true),
+      // Holding the row lists the harnesses this bridge can run; tapping it still opens the full picker.
+      options: connection.harnesses.filter(h => h.available).map(h => ({ id: h.id, label: h.name, selected: h.id === harnessId, run: () => onSelectHarness(h.id) })),
+    });
     return rows;
-  }, [harnessId, conversation, liveOn, toggleLive, detailMode, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible]);
+  }, [harnessId, conversation, liveOn, toggleLive, detailMode, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible, connection.harnesses, onSelectHarness]);
 
   const dockBody = <>
     <WorkersStrip workers={workers} />

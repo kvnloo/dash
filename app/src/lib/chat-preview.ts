@@ -151,6 +151,8 @@ function fallback(c: PreviewConversation): string {
  * A pure Chats-list preview. Reads at most the last six message slots:
  * unresolved requests and failed delivery outrank work, which outranks
  * the latest meaningful reply or user turn. No transcript-wide scan.
+ * A failure or request older than a finished reply, and an assistant failure
+ * followed by a newer assistant turn (a retry), is resolved and never shown.
  */
 export function chatPreview(c: PreviewConversation): ChatPreviewResult {
   let needsYou: ChatPreviewResult | undefined;
@@ -158,11 +160,13 @@ export function chatPreview(c: PreviewConversation): ChatPreviewResult {
   let working: ChatPreviewResult | undefined;
   let content: ChatPreviewResult | undefined;
   const first = Math.max(0, c.messages.length - 6);
+  let settled = false;
+  let newerTurn = false;
   for (let i = c.messages.length - 1; i >= first; i -= 1) {
     const message = c.messages[i];
     if (!message) continue;
     if (message.role === "user") {
-      if (message.delivery === "failed" && !failed) {
+      if (message.delivery === "failed" && !failed && !settled) {
         const reason = readable(message.deliveryNote ?? "", false) || "Delivery failed";
         failed = { text: short("Not sent · " + reason), kind: "failed" };
       }
@@ -172,6 +176,9 @@ export function chatPreview(c: PreviewConversation): ChatPreviewResult {
       }
       continue;
     }
+    if (settled) continue;
+    const retried = newerTurn;
+    newerTurn = true;
     if (message.state === "pending" || message.state === "streaming") {
       if (!needsYou) {
         const notice = permissionNotice(message);
@@ -179,14 +186,17 @@ export function chatPreview(c: PreviewConversation): ChatPreviewResult {
       }
       if (!working) working = { text: short(workingNotice(message)), kind: "working" };
     } else if (message.state === "error" || message.state === "interrupted") {
-      if (!failed) {
+      if (!failed && !retried) {
         const reason = readable(message.error || message.status || "", false);
         const label = message.state === "interrupted" ? "Interrupted" : "Failed";
         failed = { text: short(label + (reason ? " · " + reason : " · Reply failed")), kind: "failed" };
       }
-    } else if (!content) {
-      const reply = firstSentence(readable(message.text, true));
-      if (reply) content = { text: reply, kind: "reply" };
+    } else {
+      settled = true;
+      if (!content) {
+        const reply = firstSentence(readable(message.text, true));
+        if (reply) content = { text: reply, kind: "reply" };
+      }
     }
   }
   return needsYou ?? failed ?? working ?? content ?? { text: fallback(c), kind: "empty" };

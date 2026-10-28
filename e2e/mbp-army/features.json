@@ -121,7 +121,11 @@
                "voice status follows fixture STT availability",
                "voice status accepts either principal and reports disabled native voice"]},
     {"id": "stt-does-not-block-bridge", "title": "Worker speech-to-text cannot stall authenticated bridge requests",
-     "tests": ["STT fixture returns text while authenticated bridge GETs stay responsive"]}
+     "tests": ["STT fixture returns text while authenticated bridge GETs stay responsive"]},
+    {"id": "chat-row-preview", "title": "Chats list rows preview an empty chat, an agent failure, a reply in flight and the last reply (#437, PR #483)",
+     "tests": ["Chats list rows preview an empty chat, an agent failure, a reply in flight, and the last reply"]},
+    {"id": "harness-hold-menu", "title": "Holding the Harness row in the chat options lists the harnesses; choosing one switches without sending (#277, PR #210)",
+     "tests": ["holding the Harness row in the chat options lists the harnesses and choosing one switches without sending"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
