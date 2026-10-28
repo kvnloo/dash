@@ -1,4 +1,5 @@
 import Constants, { ExecutionEnvironment } from "expo-constants";
+import { requireOptionalNativeModule } from "expo-modules-core";
 // Namespace import: names resolve at call time, so linking never needs a static PermissionsAndroid export.
 import * as ReactNative from "react-native";
 import type { VoicePeer } from "./continuous-voice";
@@ -6,6 +7,7 @@ import type { VoicePeer } from "./continuous-voice";
 /** Native media only. Import lazily after rejecting Expo Go, which has no WebRTC module. */
 /** The react-native surface this module needs; tests pass their own (bun module mocks are process-wide). */
 export type VoicePeerHost = Pick<typeof ReactNative, "PermissionsAndroid" | "Platform">;
+type DashAudioRoute = { setCallRoute(route: "speaker" | "default"): Promise<void> };
 
 export async function createVoicePeer(event: (raw: string) => void, ready: () => void, lost: () => void, host: VoicePeerHost = ReactNative): Promise<VoicePeer> {
   const { PermissionsAndroid, Platform } = host;
@@ -17,6 +19,12 @@ export async function createVoicePeer(event: (raw: string) => void, ready: () =>
   let closed = false;
   let notified = false;
   const stream = await mediaDevices.getUserMedia({ audio: true, video: false }).catch(error => { peer.close(); throw error; });
+  // Older native APKs have no routing module; voice still uses WebRTC's original audio route.
+  const audioRoute = requireOptionalNativeModule<DashAudioRoute>("DashAudioRoute");
+  if (audioRoute) {
+    try { await audioRoute.setCallRoute("speaker"); }
+    catch (error) { console.warn("[voice] Android loudspeaker route unavailable", error); }
+  }
   // Muted until ICE AND the data channel are ready; native remote audio renders automatically.
   for (const track of stream.getAudioTracks()) { track.enabled = false; peer.addTrack(track, stream); }
   const channel = peer.createDataChannel("oai-events");
@@ -45,7 +53,10 @@ export async function createVoicePeer(event: (raw: string) => void, ready: () =>
       if (closed) return;
       closed = true;
       for (const track of stream.getTracks()) { track.enabled = false; track.stop(); }
-      channel.close(); peer.close(); stream.release();
+      try { channel.close(); peer.close(); stream.release(); }
+      finally {
+        if (audioRoute) void audioRoute.setCallRoute("default").catch(error => console.warn("[voice] Android audio route reset failed", error));
+      }
     },
   };
 }

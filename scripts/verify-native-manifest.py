@@ -14,6 +14,8 @@ scheme = "dash-e2e" if e2e else "dash"
 assert manifest.attrib["package"] == package, manifest.attrib["package"]
 permissions = {node.attrib.get(android + "name") for node in manifest.findall("uses-permission")}
 assert "android.permission.POST_NOTIFICATIONS" in permissions
+for permission in ("android.permission.RECORD_AUDIO", "android.permission.MODIFY_AUDIO_SETTINGS"):
+    assert permission in permissions, permission
 activities = manifest.findall("application/activity")
 main = next(node for node in activities if node.attrib[android + "name"].endswith("MainActivity"))
 assert main.attrib[android + "exported"] == "true"
@@ -48,5 +50,5 @@ if release:
     assert application.attrib.get(android + "usesCleartextTraffic") == "true"
 else:
     assert application.attrib.get(android + "debuggable") == "true"
-result = {"package": package, "variant": "release" if release else "debug", "debuggable": not release, "cleartext": application.attrib.get(android + "usesCleartextTraffic"), "share_actions": ["SEND", "SEND_MULTIPLE"], "mime": "*/*", "schemes": sorted(s for s in schemes if s), "post_notifications_permission": True}
+result = {"package": package, "variant": "release" if release else "debug", "debuggable": not release, "cleartext": application.attrib.get(android + "usesCleartextTraffic"), "share_actions": ["SEND", "SEND_MULTIPLE"], "mime": "*/*", "schemes": sorted(s for s in schemes if s), "post_notifications_permission": True, "record_audio_permission": True, "modify_audio_settings_permission": True}
 print(json.dumps(result, indent=2))

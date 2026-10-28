@@ -153,6 +153,38 @@ acknowledgement. Only a started/final receipt clears the draft. The final reply 
 queued into the same realtime peer at a silent turn boundary. Process-kill recovery
 of the annotation drawing is not implemented by this change.
 
+### Android live voice loudspeaker routing (native, device only)
+
+The optional local Expo module `DashAudioRoute` sets Android
+`MODE_IN_COMMUNICATION` after WebRTC microphone capture and selects the
+built-in loudspeaker when no wired, USB, Bluetooth or BLE headset is connected.
+Android 12+ uses `setCommunicationDevice`; older Android versions use
+`setSpeakerphoneOn`. An audio-device callback releases the speaker override
+when a headset connects and reapplies it when the headset disconnects. End
+closes the peer and clears the route, restoring `MODE_NORMAL`.
+
+`app/app.json` declares `RECORD_AUDIO` and `MODIFY_AUDIO_SETTINGS`; the
+merged-manifest checker requires both. `requireOptionalNativeModule` allows an
+older APK without this module to keep WebRTC's previous routing behavior.
+Expo Go cannot run the native WebRTC voice peer, and the optional module does
+not change that restriction.
+
+**A new APK is required.** Metro only updates JavaScript, not Kotlin modules,
+permissions or native autolinking. The turbo follower's native fingerprint
+does **not** hash `app/modules/*`, so a successful turbo reload does not mean
+this module has reached the installed APK. Follow O15: install only after the
+exact-head tester-army release gate is green.
+
+S25 Ultra owner checklist with a rebuilt, reviewed APK and a live voice grant:
+1. Without a headset, start a live call and hear a spoken reply clearly from
+   the **loudspeaker**, not the earpiece.
+2. Connect a wired or Bluetooth headset during the call; playback moves to it.
+   Disconnect it; playback returns to the loudspeaker.
+3. Tap **End**; ordinary media audio and its normal volume behavior return.
+4. Inspect `adb shell dumpsys audio | grep -i -A3 communication` during the
+   call, with a headset, and after End. This is device-only verification;
+   the web tester army cannot prove Android audio routing.
+
 Rollout order: review/grant voice scope; deploy the tested isolated broker change and
 its introspection config with an idle-checked restart; enable/deploy bridge bootstrap;
 prepare the owned Metro dependency overlay; install the verified fresh APK under the
