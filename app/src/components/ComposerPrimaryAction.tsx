@@ -24,6 +24,7 @@ export function ComposerPrimaryAction({
   steerBusy,
   canSend,
   sendMode,
+  capture,
   onSubmit,
   onStop,
 }: Props) {
@@ -33,6 +34,7 @@ export function ComposerPrimaryAction({
     steerBusy,
     canSend,
     sendMode,
+    capture,
   });
 
   return (

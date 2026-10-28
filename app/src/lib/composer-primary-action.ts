@@ -11,6 +11,8 @@ export interface ComposerPrimaryInput {
     readonly label: string;
     readonly action: string;
   };
+  /** Bedtime capture gate (#374): "Save for tomorrow" or the one-time "Send anyway". */
+  readonly capture?: { readonly label: string; readonly hint?: string; readonly capture: boolean };
 }
 
 export type ComposerPrimaryActionState =
@@ -31,7 +33,7 @@ export type ComposerPrimaryActionState =
       readonly label: string;
       readonly hint: string;
       readonly disabled: boolean;
-      readonly glyph: "arrow-up" | "corner-up-right";
+      readonly glyph: "arrow-up" | "corner-up-right" | "moon";
     };
 
 /**
@@ -54,6 +56,15 @@ export function selectComposerPrimaryAction(input: ComposerPrimaryInput): Compos
       label: "Stop",
       hint: "Stop the running turn",
       disabled: false,
+    };
+  }
+  if (input.capture) {
+    return {
+      kind: "submit",
+      label: input.capture.label,
+      hint: input.capture.hint ?? input.sendMode.label,
+      disabled: !input.canSend,
+      glyph: input.capture.capture ? "moon" : "arrow-up",
     };
   }
   return {

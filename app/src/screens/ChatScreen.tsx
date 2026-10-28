@@ -84,6 +84,9 @@ import { followsLatest, promptOffset } from "../lib/prompt-navigation";
 import { railTurns, type RailTurn } from "../lib/rail-turns";
 import { enterAnnotation, registerSink } from "../store/annotate";
 import { sharedDrafts, consumeSharedDraft } from "../store/shared-drafts";
+import { useBedtime } from "../lib/bedtime-capture";
+import { captureForTomorrow, capturesFor, dismissCapture, overnightCaptures, planCapture } from "../store/overnight-captures";
+import type { ComposerBedtime } from "../components/Composer";
 
 const EMPTY: Message[] = [];
 
@@ -343,6 +346,19 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     }
   }, [conversation?.id, conversation?.queueWaitForIdle, observed?.observed, observed?.phase, flushQueue]);
 
+  // Bedtime capture (#374/#417): the gate reads the phone's clock; captures stay on this phone.
+  const bedtime = useBedtime();
+  const bedtimeEnforced = settings?.bedtimeCapture === true;
+  const conversationKey = conversation?.id;
+  const captures = overnightCaptures.use(queue => queue);
+  const morning = useMemo(() => bedtimeEnforced ? capturesFor(captures, conversationKey, Date.now()) : [], [captures, conversationKey, bedtimeEnforced, bedtime]);
+  const bedtimeProps = useMemo((): ComposerBedtime => ({
+    active: bedtime, enforced: bedtimeEnforced, morning,
+    onCapture: (text, attachments) => captureForTomorrow(text, conversationKey, attachments),
+    onUseCapture: id => { void planCapture(id); },
+    onDismissCapture: id => { void dismissCapture(id); },
+  }), [bedtime, bedtimeEnforced, morning, conversationKey]);
+
   const onStop = useCallback(() => {
     if (conversation) stopConversation(conversation.id, (id) => { bridge.send({ type: "cancel", id }); });
   }, [conversation]);
@@ -538,6 +554,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       onStop={onStop}
       onVoice={onVoice}
       voiceCall={voiceCall}
+      bedtime={bedtimeProps}
     />
   </>;
 

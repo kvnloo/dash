@@ -403,14 +403,69 @@ test('04 RC3 #396/#416 tok/s chip in the reserved rate slot while streaming (exp
  await expect(page.getByTestId('composer-stat-rate')).toHaveText(/^≈?\d+(\.\d+)? tok\/s$/,{timeout:15000});
 });
 
-test('04 RC3 #417/#413 bedtime capture mode gates Send into the overnight queue (expect FAIL at 2c948dc: capture-gate has no importer)',async({page,bridge})=>{
- const bedtime=new Date();bedtime.setHours(1,30,0,0);
- await page.clock.install({time:bedtime});await page.clock.resume();
- await openChat(page,bridge);
+// Spec fix (opt-in): enforced capture is an owner choice. shared/interaction-policy.ts sets
+// `captureEnforced: false // R2b: shadow until the owner opts in`, and capture-gate.ts (#417) sends with a
+// warning hint while not enforced. So the journey turns Bedtime capture on in Settings first; the shadow
+// default (no opt-in: Send still sends) is its own journey below.
+async function bedtimeCaptureOn(page:Page,b:Bridge){
+ await pair(page,b);
+ await page.getByRole('button',{name:'Open settings',exact:true}).first().click({noWaitAfter:true});
+ const sw=page.getByRole('switch',{name:'Bedtime capture',exact:true});
+ await sw.scrollIntoViewIfNeeded();
+ await expect(sw).toContainText('Off');
+ await sw.click({noWaitAfter:true});
+ await expect(sw).toContainText('On');
+ await page.getByRole('button',{name:'Back',exact:true}).first().click({noWaitAfter:true});
+ await expect(page.getByTestId('chats-pane')).toBeVisible();
+ await page.getByRole('button',{name:/^(Create new chat|New chat)$/}).first().click({noWaitAfter:true});
+ await expect(composer(page)).toBeVisible();
+}
+const at=(h:number,m:number)=>{const d=new Date();d.setHours(h,m,0,0);return d;};
+
+test('04 RC3 #417/#413 bedtime capture mode gates Send into the overnight queue',async({page,bridge})=>{
+ await page.clock.install({time:at(1,30)});await page.clock.resume();
+ await bedtimeCaptureOn(page,bridge);
  await composer(page).fill('bedtime capture journey');
  await expect(primary(page,'Save for tomorrow')).toBeVisible();
  await primary(page,'Save for tomorrow').click({noWaitAfter:true});
  await expect(page.getByText(/Capture-only mode|Saved for tomorrow|overnight|Capture a thought for tomorrow/i).filter({visible:true}).first()).toBeVisible();
+ await expect(composer(page)).toHaveValue('');
  await page.waitForTimeout(1500);
  expect(await promptsSent(bridge)).not.toEqual(expect.arrayContaining([expect.stringContaining('bedtime capture journey')]));
+ // Morning: the window is over, Send is Send again and the chat offers last night's thought.
+ await page.clock.setSystemTime(at(9,0));await page.clock.runFor(31_000);
+ await expect(page.getByText('Saved last night: bedtime capture journey',{exact:true})).toBeVisible();
+ expect(await promptsSent(bridge)).not.toEqual(expect.arrayContaining([expect.stringContaining('bedtime capture journey')]));
+ await page.getByRole('button',{name:'Use saved thought: bedtime capture journey',exact:true}).click({noWaitAfter:true});
+ await expect(composer(page)).toHaveValue('bedtime capture journey');
+ await expect(page.getByTestId('bedtime-morning')).toHaveCount(0);
+ await primary(page,'Send').click({noWaitAfter:true});
+ await expect.poll(()=>promptsSent(bridge),{timeout:15000}).toEqual(expect.arrayContaining([expect.stringContaining('bedtime capture journey')]));
+});
+
+test('04 bedtime capture: Send anyway sends one message now, then Send saves for tomorrow again',async({page,bridge})=>{
+ await page.clock.install({time:at(23,15)});await page.clock.resume();
+ await bedtimeCaptureOn(page,bridge);
+ await composer(page).fill('bedtime urgent send');
+ await expect(primary(page,'Save for tomorrow')).toBeVisible();
+ await page.getByRole('button',{name:'Send anyway',exact:true}).click({noWaitAfter:true});
+ await expect(primary(page,'Send anyway')).toBeVisible();
+ await primary(page,'Send anyway').click({noWaitAfter:true});
+ await expect.poll(()=>promptsSent(bridge),{timeout:15000}).toEqual(expect.arrayContaining([expect.stringContaining('bedtime urgent send')]));
+ await composer(page).fill('bedtime second thought');
+ await expect(primary(page,'Save for tomorrow')).toBeVisible();
+ await primary(page,'Save for tomorrow').click({noWaitAfter:true});
+ await expect(page.getByText('Saved for tomorrow. Nothing was sent.',{exact:true})).toBeVisible();
+ await page.waitForTimeout(1500);
+ expect(await promptsSent(bridge)).not.toEqual(expect.arrayContaining([expect.stringContaining('bedtime second thought')]));
+});
+
+test('04 bedtime capture is off until the owner opts in: at bedtime Send still sends',async({page,bridge})=>{
+ await page.clock.install({time:at(1,30)});await page.clock.resume();
+ await openChat(page,bridge);
+ await composer(page).fill('bedtime shadow send');
+ await expect(primary(page,'Save for tomorrow')).toHaveCount(0);
+ await expect(page.getByTestId('bedtime-capture')).toHaveCount(0);
+ await primary(page,'Send').click({noWaitAfter:true});
+ await expect.poll(()=>promptsSent(bridge),{timeout:15000}).toEqual(expect.arrayContaining([expect.stringContaining('bedtime shadow send')]));
 });

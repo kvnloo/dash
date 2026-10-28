@@ -22,6 +22,8 @@ export interface Settings {
   cwd?: string;
   /** Product feedback from Main composer, Voice, and row long-press. Default on in beta. */
   inAppFeedback: boolean;
+  /** Bedtime capture (#374): in the bedtime window Send saves for tomorrow. Off = shadow (R2b). */
+  bedtimeCapture?: boolean;
   /**
    * Paired bridges in failover order (first = primary). `address`/`token`/`identity`
    * above are the one in use. Absent = the single bridge above.
@@ -168,6 +170,7 @@ export function parseSettings(raw: unknown): Settings | null {
     harness: raw.harness,
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
     inAppFeedback: raw.inAppFeedback !== false,
+    ...(raw.bedtimeCapture === true ? { bedtimeCapture: true } : {}),
     handedness: parseHandedness(raw.handedness),
     ...(endpoints ? { endpoints } : {}),
   };

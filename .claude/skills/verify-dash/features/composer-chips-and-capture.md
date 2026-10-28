@@ -10,7 +10,7 @@ Draft spec (uncommitted, does not count): `e2e/mbp-army/rc3-03-04-composer-contr
 - `primary-action-testid` button has `data-testid=composer-primary-action`, `aria-label=Send` [UNCOVERED] (expected FAIL at 2c948dc)
 - `rate-chip` `composer-stat-rate-slot` then `composer-stat-rate` reads `NN tok/s` while streaming [UNCOVERED] (expected FAIL at 2c948dc)
 - `model-chip` `composer-stat-model` shows the host model [UNCOVERED] (expected FAIL at 2c948dc)
-- `bedtime-gate` between late hours Send reads `Save for tomorrow` and does not reach the agent [UNCOVERED] (expected FAIL at 2c948dc)
+- `bedtime-gate` with Bedtime capture turned on in Settings, between 9:30 pm and 7:30 am (phone clock) Send reads `Save for tomorrow`, saves the text on the phone and does not reach the agent; `Send anyway` sends one message; the morning composer offers `Saved last night: …` with Use/Dismiss; off by default (shadow: Send still sends). Covered by "04 RC3 #417/#413 bedtime capture mode gates Send into the overnight queue", "04 bedtime capture: Send anyway sends one message now, then Send saves for tomorrow again", "04 bedtime capture is off until the owner opts in: at bedtime Send still sends" in `rc3-03-04-composer-controls-chips-and-send-gate.spec.ts`
 
 ## How to get to it (user POV)
 
@@ -27,7 +27,7 @@ Preconditions:
 - **Primary action.** `composer(page).fill('primary action testID')`; `page.getByTestId('composer-primary-action')` visible with `aria-label` `Send`.
 - **Rate chip.** `send(page,'ARMY_SLOW ARMY_TOKENS rate chip journey')`; `getByTestId('composer-stat-rate-slot')` visible, then `getByTestId('composer-stat-rate')` matches `/^≈?\d+(\.\d+)? tok\/s$/`.
 - **Model chip.** `getByTestId('composer-stat-chips')`, `getByTestId('composer-stat-model')` contains the model name.
-- **Bedtime.** `composer.fill('bedtime capture journey')`; `getByRole('button',{name:'Save for tomorrow',exact:true})` visible; click; text like `Capture-only mode` or `Saved for tomorrow`; no prompt reaches the fixture.
+- **Bedtime.** Settings › `Bedtime capture` On, then `composer.fill('bedtime capture journey')`; `getByRole('button',{name:'Save for tomorrow',exact:true})` visible; click; text like `Capture-only mode` or `Saved for tomorrow`; no prompt reaches the fixture.
 - **Run.** No committed spec. Add the journey above as a test in `e2e/mbp-army/army.spec.ts` (or a new `e2e/mbp-army/composer-chips.spec.ts`), then `army-stack.sh drive <run> 1 e2e/mbp-army/<file> -g "<title>"`.
 - **Proof.** `$ARMY_BASE/<run>/<test-dir>/final.png`, `video.webm`, `trace.zip`, `bridge.log`. A failing run must show the element absent at this commit; a passing run shows the chip or the gate and no turn for the captured text in `bridge.log`.
 
