@@ -7,7 +7,7 @@ Draft spec (uncommitted, does not count): `e2e/mbp-army/rc3-02-03-chat-screen-ch
 
 ## Sub-features
 
-- `badge-host` the badge contains the host (`mbp`). [covered: "pairing, Chats tab, open and close real chat window"]
+- `badge-host` the badge contains the bridge host (`hostname()`, this machine). [covered: "pairing, Chats tab, open and close real chat window"]
 - `badge-harness` the badge follows a harness switch to `Hermes`. [covered: "harness picker switches OMP to Hermes without sending"]
 - `panel-open-close` the badge toggles `chat-window-identity`. [covered: "safe exploratory controls and context hit target at 390"; "safe exploratory controls and context hit target at 800"]
 - `panel-fields` host, harness, profile, session, model-source and Lineage text. [UNCOVERED]
@@ -24,7 +24,7 @@ Preconditions:
 - The stack is up and `army-stack.sh doctor <run>` passes.
 - `openChat(page, bridge)`; for the wide case call `page.setViewportSize({width:800,height:780})` before it.
 
-- **Read the badge.** `await expect(page.getByTestId('chat-window-badge')).toContainText('mbp')`.
+- **Read the badge.** `await expect(page.getByTestId('chat-window-badge')).toContainText(hostname())`.
 - **Open the panel.** `await page.getByTestId('chat-window-badge').click({noWaitAfter:true})`. `await expect(page.getByTestId('chat-window-identity')).toBeVisible()`.
 - **Close it.** Click the badge again. `chat-window-identity` has count 0.
 - **Harness switch.** `await chooseHarness(page,'Hermes')`; the badge now contains `Hermes`.

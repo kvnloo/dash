@@ -5,7 +5,7 @@ Pairing lets the phone trust this laptop. The user taps **Pair over Tailscale** 
 ## Sub-features
 
 - `pair-session` publishes a 6-character unbound code on `GET /pair`.
-- `pair-address` names the laptop Tailscale IPv4 on port 4747, not MagicDNS `mbp`.
+- `pair-address` names the laptop Tailscale IPv4 on port 4747, not MagicDNS `host-a`.
 - `pair-claim` (phone only) exchanges the code for `~/.dash/token`. Do not run this from verify by default.
 - `pair-ws` is the phone opening `/ws?token=`. Logged on the bridge as `ws.open`.
 
@@ -30,5 +30,5 @@ Preconditions:
 ## Gotchas
 
 - `GET /pair` is enough to mint or refresh an unbound session. That is expected.
-- Hostname `mbp` resolves to `127.0.1.1` on this laptop. Always use the Tailscale IP.
+- Hostname `host-a` resolves to `127.0.1.1` on this laptop. Always use the Tailscale IP.
 - Port `7331` is leftover `dash-bridge`. Pair HTTP there is the wrong process.

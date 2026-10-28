@@ -16,6 +16,6 @@ Chat replies do not render their thinking and tool calls through `Tree`. `ReplyB
 
 ## Bots
 
-BotsPane renders the roster as host -> deployed bots / harness groups -> sessions -> cwd. Bot sessions are matched to their profile; remaining sessions belong to their harness group, not a duplicated bot. Only reported bots are counted; absent bot inventories are not converted to fictitious counts. The OS hostname is the display label, while the MagicDNS ID remains unchanged for routing (e.g. id `0`, label `groot`). Hosts without children still disclose an explicit offline/empty note. Offline hosts and their children are dimmed.
+BotsPane renders the roster as host -> deployed bots / harness groups -> sessions -> cwd. Bot sessions are matched to their profile; remaining sessions belong to their harness group, not a duplicated bot. Only reported bots are counted; absent bot inventories are not converted to fictitious counts. The OS hostname is the display label, while the MagicDNS ID remains unchanged for routing (e.g. id `0`, label `host-b`). Hosts without children still disclose an explicit offline/empty note. Offline hosts and their children are dimmed.
 
 Sessions open via the existing `profileFromAgent` / `openAgentConversation` path. An installed harness with no persisted session offers New chat. Hosts/bots expose their information and existing feedback action on long-press. Opening hosts/bots never navigates away.

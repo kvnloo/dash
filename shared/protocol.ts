@@ -163,7 +163,7 @@ export interface BotInfo {
   detail?: string;
 }
 
-/** A machine on the tailnet (this laptop, groot/0, …). */
+/** A machine on the tailnet (this laptop, host-b/0, …). */
 export interface HostInfo {
   id: string;
   name: string;

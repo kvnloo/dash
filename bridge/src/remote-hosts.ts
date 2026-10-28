@@ -3,7 +3,7 @@
 // that computer's own ACP adapter (`dash-acp`, bridge/bin) through stdio, exactly like a local
 // adapter: the session, its files and its credentials never leave the computer that owns them.
 //
-//   DASH_REMOTE_HOSTS="mbp" | "mbp=ssh-alias,other"   AgentsView machine names this bridge may
+//   DASH_REMOTE_HOSTS="host-a" | "host-a=ssh-alias,other"   AgentsView machine names this bridge may
 //                                                      route turns to (=ssh destination, default
 //                                                      the same name). Unset: no remote routing.
 //   DASH_REMOTE_SHELL="ssh -T -o BatchMode=yes"        the transport; it gets `<dest> <command>`.

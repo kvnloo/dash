@@ -14,7 +14,7 @@ device / session fabric          <- Dash bridge  (this repo)
         |
         v
 agent fabric                     <- Hermes (not this repo)
-  memory, skills, profiles, kanban, peer run mbp <-> groot
+  memory, skills, profiles, kanban, peer run host-a <-> host-b
         |
         v
 governance                       <- stay off the phone
@@ -112,7 +112,7 @@ Merge each into `integrate/device-layer`. Integration owner runs Expo + `dash-pa
 - Skip formatters, `tsc`, and Metro in feature worktrees. Integration owner runs them once.
 - Protocol change: keep `hosts?` and old `hello` working.
 - Native Expo Go cannot run CSS `oklch` / `color-mix` 1:1. Nav web copy is `AppNav.web.tsx`; native stays WebView/CSS or StyleSheet.
-- MagicDNS `mbp` is broken on this laptop. Phone and docs use `100.64.0.1`.
+- MagicDNS `host-a` is broken on this laptop. Phone and docs use `100.64.0.1`.
 
 ## Checkpoint that made this split legal
 

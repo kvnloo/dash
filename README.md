@@ -34,7 +34,7 @@ bunx expo start
 
 1. Install **Expo Go** and join the same Tailscale tailnet.
 2. Open Dash → **Pair with your laptop** (first launch) or **Chats → ⚙ Settings → Pair nearby (sonic)**.
-3. Set **Computer name** to your laptop's Tailscale name (e.g. `mbp`), tap **Listen for pairing sound**.
+3. Set **Computer name** to your laptop's Tailscale name (e.g. `host-a`), tap **Listen for pairing sound**.
 4. Or enter **Address** + **Token** manually (Settings): `<tailscale-ip>:4747` and `~/.dash/token`.
 
 **UI mock (no bridge):** `cd app && EXPO_PUBLIC_DEMO=1 bunx expo start`

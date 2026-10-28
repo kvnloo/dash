@@ -6,7 +6,7 @@ Paste this file into every Dash nano-service spawn and resume.
 2. Integration checkout (`/home/you/workspace/dash` on `integrate/device-layer`) is the only process that runs Metro 8097 and `dash-pair` on `100.64.0.1:4747`.
 3. Feature worktrees never start a second bridge or Metro.
 4. Do not `POST /pair/claim` from a worker unless the brief names a disposable session.
-5. MagicDNS `mbp` is wrong on this laptop. Use `100.64.0.1`.
+5. MagicDNS `host-a` is wrong on this laptop. Use `100.64.0.1`.
 6. `shared/protocol.ts` lands first if the wire changes. Keep `hosts?` and old `hello` working.
 7. `bridge/index.ts` is wiring. Put logic in `pair-decode.ts`, `src/roster.ts`, later `src/hermes-session.ts`.
 8. Skip formatters, `tsc`, and Metro in feature worktrees. Integration owner runs them once.

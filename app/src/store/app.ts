@@ -275,7 +275,7 @@ export function setLiveHistoryRequester(fn: LiveHistoryRequest | undefined): voi
 
 /**
  * The roster id for a host id a bridge reported. An older bridge names itself by OS hostname
- * ("groot") while the roster keys the same computer by its MagicDNS label ("0").
+ * ("host-b") while the roster keys the same computer by its MagicDNS label ("0").
  */
 export function rosterHostId(hostId: string | undefined, connection: Pick<Connection, "hosts" | "host">): string | undefined {
   if (!hostId || connection.hosts.some(h => h.id === hostId)) return hostId;

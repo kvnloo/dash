@@ -1,6 +1,6 @@
 # Issue Priority Rubric
 
-> **Current backlog snapshot (2026-09-15, dash-issue-reprio)** — ranked by impact × effort toward the personalized compute mesh (phone + Tailscale + edge as compute; Expo↔mbp Tailscale `:4747`; hermes mesh bus; nvidia PAIR + Tailscale as first-class libs; keel production HOLD). NVIDIA PAIR ≠ dash phone pair.
+> **Current backlog snapshot (2026-09-15, dash-issue-reprio)** — ranked by impact × effort toward the personalized compute mesh (phone + Tailscale + edge as compute; Expo↔host-a Tailscale `:4747`; hermes mesh bus; nvidia PAIR + Tailscale as first-class libs; keel production HOLD). NVIDIA PAIR ≠ dash phone pair.
 >
 > **Closed this cycle (shipped):** [#3](https://github.com/kvnloo/dash/issues/3) (PR #42), [#4](https://github.com/kvnloo/dash/issues/4) (PR #34), [#6](https://github.com/kvnloo/dash/issues/6) (PR #36), [#44](https://github.com/kvnloo/dash/issues/44) (PR #45). Earlier: #17, #43.
 >
