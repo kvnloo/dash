@@ -846,7 +846,7 @@ const server = Bun.serve<SocketData>({
       }
       if (url.pathname === "/voice/bootstrap") {
         const principal = await bridgeAuth.authenticate(request, false, true);
-        const voice = await voiceBootstrap(request, principal?.kind === "identity", (profile, session) => !!hermesSessions.target(profile, session));
+        const voice = await voiceBootstrap(request, principal?.kind === "identity", (profile, session) => hermesSessions.target(profile.startsWith("hermes:") && !profile.startsWith("hermes:session:") ? profile.slice("hermes:".length) : profile, session));
         if (voice) return cors(voice);
       }
       if (url.pathname === "/chat/context/compact" && request.method === "POST" && contextCompaction) server.timeout(request, 255);
