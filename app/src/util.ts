@@ -1,15 +1,10 @@
-import { Alert, Platform } from "react-native";
+import { confirmDialog } from "./lib/dash-dialog";
 
 export { dateGroupLabel, timeAgo } from "./lib/time-labels";
 
-/** Destructive confirmation that also works on web, where `Alert` is a no-op. */
+/** Queue a Dash-owned confirmation on every platform; only explicit consent runs the action. */
 export function confirmDestructive(title: string, message: string, action: string, onConfirm: () => void): void {
-  if (Platform.OS === "web") {
-    if (globalThis.confirm(`${title}\n\n${message}`)) onConfirm();
-    return;
-  }
-  Alert.alert(title, message, [
-    { text: "Cancel", style: "cancel" },
-    { text: action, style: "destructive", onPress: onConfirm },
-  ]);
+  void confirmDialog(title, message, action, { destructive: true }).then(confirmed => {
+    if (confirmed) onConfirm();
+  });
 }
