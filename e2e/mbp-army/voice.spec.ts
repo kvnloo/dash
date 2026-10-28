@@ -74,6 +74,7 @@ test('live voice moves connecting listening hearing thinking speaking listening 
 
   await page.getByRole('button', { name: 'Stop voice in Dash', exact: true }).click({ noWaitAfter: true });
   await expect(page.getByRole('button', { name: 'Start voice in Dash', exact: true })).toBeVisible();
+  await expect(pill).toHaveAttribute('aria-label', 'Voice status: idle');
   await expect(caption).toContainText('Realtime voice inside Dash');
   const calls = () => voiceBroker.calls();
   await expect.poll(() => calls().filter(call => call.path === '/v1/tools/cancel_work' && call.method === 'POST').length)
