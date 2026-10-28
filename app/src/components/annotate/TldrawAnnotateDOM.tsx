@@ -27,6 +27,7 @@ interface Props {
   penMode: boolean;
   mode: "screen" | "dex";
   onReady(ms: number): Promise<void>;
+  onStylusObserved(): Promise<void>;
   onDrawing(strokes: Stroke[]): Promise<void>;
   onExportDone(uri: string): Promise<void>;
   dom?: DOMProps;
@@ -135,6 +136,7 @@ export default function TldrawAnnotateDOM(props: Props) {
   return <div data-testid="annotate-tldraw" data-ready={editor ? "true" : "false"}
     style={{ position: "absolute", inset: 0, visibility: props.active ? "visible" : "hidden", pointerEvents: props.active ? "auto" : "none" }}
     onPointerDownCapture={event => {
+      if (props.active && event.pointerType === "pen") void latest.current.onStylusObserved();
       if (!editor || !props.active || event.button !== 0 || (props.penMode && event.pointerType !== "pen")) return;
       const kind = event.pointerType === "pen" ? "stylus" : event.pointerType === "touch" ? "touch" : "mouse";
       capture.current = { pointerId: event.pointerId, kind, flat: [], before: new Set(editor.getCurrentPageShapeIds()) };
