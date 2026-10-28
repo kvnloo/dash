@@ -108,7 +108,7 @@ export function useLiveUpdate(): LiveUpdate {
   const [autoReload, setAutoState] = useState(true);
   const [lastAutoFor, setLastAutoFor] = useState<string | null>(null);
   const [, setTick] = useState(0);
-  const foregroundAt = useRef<number | null>(null);
+  const foregroundAt = useRef<number | null>(Platform.OS === "web" ? null : Date.now());
   const reloading = useRef(false);
 
   useEffect(() => {
