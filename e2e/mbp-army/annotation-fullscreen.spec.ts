@@ -60,6 +60,15 @@ for (const engine of ENGINES) {
       await page.mouse.up();
       await expect(page.getByRole('button', { name: 'Send annotation', exact: true })).toBeEnabled();
 
+      // C19 requires captured words before direct Send. Use its real, visible note
+      // editor when integrated; the pre-C19 base sends the same ink without a note.
+      const noteButton = page.getByRole('button', { name: 'Type a note', exact: true });
+      if (await noteButton.count() === 1) {
+        await noteButton.click();
+        await page.getByRole('textbox', { name: 'Type a note', exact: true })
+          .fill('Please check the bottom-screen annotation.');
+      }
+
       const imageUpload = page.waitForRequest(request =>
         request.method() === 'POST' && request.url().includes('/attachments?') &&
         request.headers()['content-type'] === 'image/png');
