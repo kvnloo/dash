@@ -13,8 +13,22 @@ import { haptic } from "../haptics";
 import { readableReplyText, replyToSelection, selectedReplyText, type SelectionRange } from "./selection-quote";
 import { prepareGenerativeMarkdown } from "../lib/generative-stream";
 import { flowMode } from "../lib/flow-trace";
+import { linkifyMarkdown } from "../lib/linkify-paths";
+import { classifyLink, linkAccessibilityHint } from "../lib/link-target";
+import type { AppRoute } from "../lib/app-route-link";
+import { debugNavigate } from "../debug/nav";
+import { FileLinkPreview, type FileLinkTarget } from "./FileLinkPreview";
+
+/** Same destinations as App's deep-link router, dispatched without an external URL. */
+function navigateAppRoute(route: AppRoute): void {
+  if (route === "Orchestra") debugNavigate("Main", { tab: 2 });
+  else if (route === "Bots" || route === "Hosts") debugNavigate("Main", { tab: 0 });
+  else if (route === "Chats") debugNavigate("Main", { tab: 1 });
+  else debugNavigate(route);
+}
 
 class TranscriptRenderer extends Renderer {
+  onFileLink?: (target: FileLinkTarget) => void;
   onIntent?: (intent: LiveIntent) => boolean;
   streaming = false;
   override code(code: string, language = ""): ReactNode {
@@ -22,9 +36,20 @@ class TranscriptRenderer extends Renderer {
   }
   override link(children: string | ReactNode[], href: string, style?: TextStyle): ReactNode {
     if (isImageRef(href)) return <InlineImage key={this.getKey()} href={href} label="Image" />;
-    return <Text key={this.getKey()} selectable={Platform.OS !== "android"} accessibilityRole="link" style={style} onPress={() => {
-      if (/^https?:\/\//i.test(href)) void Linking.openURL(href);
-    }}>{children}</Text>;
+    const target = classifyLink(href);
+    return <Text
+      key={this.getKey()}
+      selectable={Platform.OS !== "android"}
+      accessibilityRole="link"
+      accessibilityHint={target.kind === "mailto" ? "Email link navigation disabled" : linkAccessibilityHint(target)}
+      style={style}
+      onPress={() => {
+        if (target.kind === "web") void Linking.openURL(target.url);
+        else if (target.kind === "app-route") navigateAppRoute(target.route);
+        else if (target.kind === "file") this.onFileLink?.(target);
+        // Mailto and blocked links are never navigated.
+      }}
+    >{children}</Text>;
   }
   override image(uri: string, alt?: string): ReactNode {
     return /^https?:\/\//i.test(uri) || isImageRef(uri) ? <InlineImage key={this.getKey()} href={uri} label={alt || "Image"} /> : null;
@@ -88,10 +113,20 @@ function ReplySelectionSheet({ source, selection, onSelection, onCancel, onReply
 export const Markdown = memo(function Markdown({ text, onIntent, streaming = false }: { text: string; onIntent?: (intent: LiveIntent) => boolean; streaming?: boolean }) {
   const [pendingSelection, setPendingSelection] = useState<PendingReplySelection | null>(null);
   const [range, setRange] = useState<SelectionRange | null>(null);
+  const [filePreview, setFilePreview] = useState<FileLinkTarget | null>(null);
   // Unfinished UI fences are buffered before Markdown can expose model source.
-  const prepared = useMemo(() => prepareGenerativeMarkdown(text, flowMode), [text]);
+  const prepared = useMemo(
+    () => linkifyMarkdown(prepareGenerativeMarkdown(text, flowMode), !streaming),
+    [text, streaming],
+  );
   // Android routes the long press to Dash's selection sheet; other platforms retain OS selection.
-  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: Platform.OS !== "android" }); renderer.onIntent = onIntent; renderer.streaming = streaming; return renderer; }, [prepared, onIntent, streaming]);
+  const renderer = useMemo(() => {
+    const instance = new TranscriptRenderer({ selectable: Platform.OS !== "android" });
+    instance.onIntent = onIntent;
+    instance.onFileLink = setFilePreview;
+    instance.streaming = streaming;
+    return instance;
+  }, [prepared, onIntent, streaming]);
   const nodes = useMarkdown(prepared, { renderer, styles, colorScheme: "dark" });
   const onLongPress = () => {
     if (Platform.OS !== "android" || annotate.get().active) return;
@@ -118,6 +153,7 @@ export const Markdown = memo(function Markdown({ text, onIntent, streaming = fal
   return <View>
     <Pressable accessible={false} delayLongPress={350} onLongPress={onLongPress}><View>{nodes}</View></Pressable>
     {pendingSelection ? <ReplySelectionSheet source={pendingSelection.source} selection={range} onSelection={setRange} onCancel={cancelSelection} onReply={onReply} /> : null}
+    {filePreview ? <FileLinkPreview target={filePreview} onClose={() => setFilePreview(null)} /> : null}
   </View>;
 });
 
