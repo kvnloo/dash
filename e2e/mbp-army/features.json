@@ -98,8 +98,8 @@
     {"id": "live-preview-chip", "title": "Live-preview chip, manual and guarded auto-reload, and Metro menu",
      "tests": ["live-preview-chip: current build shows short SHA and age","live-preview-chip: changed manifest shows the real arrow and tap reloads exactly once","live-preview-chip: auto-reload waits for the idle gate","live-preview-chip: auto-reload waits for a closed keyboard","live-preview-chip: same served SHA never triggers a reload loop","live-preview-chip: long-press offers reload, Metro switch and auto-reload toggle"]},
     {"id": "live-reload-guards", "title": "Defer auto-reload during streaming, annotation, and drafts; flush a draft before manual reload",
-     "tests": ["live-reload-guards: a streaming agent reply holds the update until done","live-reload-guards: annotation holds an update until Exit","live-reload-guards: a nonempty unsent draft holds an update","live-reload-guards: manual Reload now flushes a sub-debounce draft before reload"]}
-    ,{"id": "live-preview-health", "title": "Never reload a served SHA until its launch bundle responds HTTP 200",
+     "tests": ["live-reload-guards: a streaming agent reply holds the update until done","live-reload-guards: annotation holds an update until Exit","live-reload-guards: a nonempty unsent draft holds an update","live-reload-guards: manual Reload now flushes a sub-debounce draft before reload"]},
+    {"id": "live-preview-health", "title": "Never reload a served SHA until its launch bundle responds HTTP 200",
      "tests": ["live-preview-health: an HTTP 500 bundle cannot reload until the same SHA builds"]}
   ],
   "not_yet_in_army": [
