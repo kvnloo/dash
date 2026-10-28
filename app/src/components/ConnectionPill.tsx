@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, FadeIn, FadeOut, ReduceMotion } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { PRESS_SCALE } from "../motion";
+import { statusIn as enter, statusOut as exit } from "./motion-enter";
 import { bridge } from "../net/bridge";
 import { store } from "../store/app";
 import { colors, controlMin, glass, radius, space, type } from "../theme";
@@ -8,8 +9,6 @@ import { connectionBannerFor, createConnectionRetry } from "./connection-banner"
 import { GlassSurface } from "./GlassSurface";
 import { PressScale } from "./PressScale";
 
-const enter = FadeIn.duration(110).easing(Easing.out(Easing.cubic)).reduceMotion(ReduceMotion.System);
-const exit = FadeOut.duration(110).easing(Easing.out(Easing.cubic)).reduceMotion(ReduceMotion.System);
 
 /** One non-blocking connection banner. The bridge owns reconnects and the queued drafts. */
 export function ConnectionPill() {
