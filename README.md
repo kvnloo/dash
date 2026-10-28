@@ -68,6 +68,9 @@ Orchestra stops graph requests, Triage requests, and Triage age ticks when its
 pane is hidden or the app leaves the foreground. Returning to the pane refreshes
 the selected view. This preserves view selection across tab switches.
 
+Chat code blocks highlight JSX and TSX fences alongside the existing languages.
+Source text and the existing syntax palette are preserved.
+
 ## Contributing / AI Agents
 
 - **Contributing guide:** See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute (unattended compute donation vs copilot paired PR workflow).
