@@ -95,12 +95,17 @@
     {"id": "provider-failures", "title": "A provider that is out of usage (402) or rate limiting (429) is named in the chat, never as a host authentication problem (#501)",
      "tests": ["a provider 402 says the agent's account is out of usage, and the chat stays usable",
                "a provider 429 says the host is being rate limited, and the chat stays usable"]}
+    ,{"id": "live-voice-resilience", "title": "A live call detects missing transcripts, survives transcript telemetry outages, and times out during connection",
+     "tests": ["live voice survives assistant transcript broker 500 and returns to listening",
+               "live voice reports no transcript within nine seconds and stays connected",
+               "live voice connection times out from Start when peer never becomes ready"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
     "live model behaviour", "Orchestra / orchestration screens", "handedness",
     "Hermes session history", "notifications and deep links",
     "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)",
-    "live preview chip: old -> new build marker, auto-reload and Metro switch (dev client only: needs a Metro serving a build manifest; none exists in the web export)"
+    "live preview chip: old -> new build marker, auto-reload and Metro switch (dev client only: needs a Metro serving a build manifest; none exists in the web export)",
+    "live voice five-second WebRTC disconnected grace (native Android ICE state; device only, not simulated in the web army)"
   ]
 }
