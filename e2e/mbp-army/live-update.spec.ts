@@ -160,7 +160,8 @@ test('live-preview-chip: auto-reload waits for the idle gate', async ({ page, br
       });
     });
     await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
+    // A cold app on a loaded host can take ~20 s to load its App chunk and poll Metro (army trace, load 25).
+    await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb', { timeout: 45_000 });
     await expect.poll(() => page.evaluate(() => {
       const idle: unknown = Reflect.get(window, '__armyIdle');
       return typeof idle === 'object' && idle !== null && 'lastTouch' in idle && typeof idle.lastTouch === 'function' ? Number(idle.lastTouch()) : 0;
