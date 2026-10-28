@@ -15,6 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { microphone } from "../lib/recorded-speech";
 import { ensureMicPermission, permissionRequestInFlight } from "../lib/mic-permission";
 import { createStore } from "../store/createStore";
+import { VoiceOrbOverlay } from "./VoiceOrbOverlay";
 import { debugUi } from "../debug/ui-store";
 import { voiceTarget } from "../lib/voice-target";
 import { voicePhase } from "../lib/voice-phase";
@@ -288,6 +289,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     <DeviceInsets.Provider value={insets}>
       <SafeAreaInsetsContext.Provider value={appInsets(insets, visible, barRow)}>{children}</SafeAreaInsetsContext.Provider>
     </DeviceInsets.Provider>
+    {active ? <VoiceOrbOverlay state={shown} onMute={mute} /> : null}
     {home === "bar" ? <View testID="voice-mic-bar" style={[styles.bar, { paddingTop: insets.top }]}>
       <View style={styles.row} onLayout={e => setBarRow(e.nativeEvent.layout.height)}>
         <View accessible={false} style={[styles.dot, { backgroundColor: pill.phase === "error" ? colors.danger : pill.phase === "connecting" || pill.phase === "muted" ? colors.warn : pill.phase === "live" ? colors.ok : colors.textFaint }]} />

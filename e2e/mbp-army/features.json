@@ -8,6 +8,8 @@
                "OpenUI reply rejects components outside the static catalog without exposing source",
                "GenUI JSON reply still renders a native card",
                "OpenUI JSON reply still renders a native card"]},
+    {"id": "voice-orb-overlay", "title": "A live call shows an interactive, pass-through hero orb outside Voice and annotation",
+     "tests": ["live hero orb follows each voice phase, mutes, passes through and hides for annotation"]},
     {"id": "host-stats", "title": "Local host hardware usage in the host info sheet, separate from roster updates",
      "tests": ["host info sheet shows local CPU, RAM, disk and load from the authenticated bridge",
                "chat host info sheet shows resources without replacing session identity"]},
