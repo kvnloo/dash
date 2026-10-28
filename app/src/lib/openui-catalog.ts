@@ -119,7 +119,7 @@ function staticProgram(source: string): boolean {
   let statements = 0;
   const ids = new Set<string>();
   const skipSpace = () => {
-    while (at < source.length && /\s/.test(source[at])) at++;
+    while (at < source.length && /\s/.test(source.charAt(at))) at++;
   };
   const skipInlineSpace = () => {
     while (at < source.length && (source[at] === " " || source[at] === "\t")) at++;
@@ -128,7 +128,7 @@ function staticProgram(source: string): boolean {
     const start = at;
     if (!/[A-Za-z_]/.test(source[at] ?? "")) return null;
     at++;
-    while (at < source.length && /[A-Za-z0-9_]/.test(source[at])) at++;
+    while (at < source.length && /[A-Za-z0-9_]/.test(source.charAt(at))) at++;
     return source.slice(start, at);
   };
   const stringLiteral = (): boolean => {
@@ -201,7 +201,7 @@ function staticProgram(source: string): boolean {
     at++;
     if (!value(0)) return false;
     let separated = false;
-    while (at < source.length && /\s/.test(source[at])) {
+    while (at < source.length && /\s/.test(source.charAt(at))) {
       if (source[at] === "\n" || source[at] === "\r") separated = true;
       at++;
     }
@@ -265,19 +265,31 @@ function decode(value: unknown, depth: number, budget: DecodeBudget, source: str
       return children ? { type: "Card", title: p.title, children } : null;
     }
     case "Text": {
-      if (!propsOf(value, ["value"], ["tone"]) || !short(p.value)
-        || (p.tone !== undefined && !short(p.tone))) return fail("Invalid Text props");
-      return { type: "Text", value: p.value, ...(p.tone === undefined ? {} : { tone: p.tone }) };
+      const textValue = p.value;
+      const tone = p.tone;
+      if (!propsOf(value, ["value"], ["tone"]) || !short(textValue)
+        || (tone !== undefined && !short(tone))) return fail("Invalid Text props");
+      return tone === undefined
+        ? { type: "Text", value: textValue }
+        : { type: "Text", value: textValue, tone };
     }
-    case "Stat":
-      if (!propsOf(value, ["label", "value"]) || !short(p.label)
-        || !(short(p.value) || (typeof p.value === "number" && Number.isFinite(p.value)))) return fail("Invalid Stat props");
-      return { type: "Stat", label: p.label, value: p.value };
-    case "Progress":
-      if (!propsOf(value, ["label", "value"]) || !short(p.label)
-        || typeof p.value !== "number" || !Number.isFinite(p.value)
-        || p.value < 0 || p.value > 1) return fail("Progress must be between 0 and 1");
-      return { type: "Progress", label: p.label, value: p.value };
+    case "Stat": {
+      const label = p.label;
+      const metric = p.value;
+      if (!propsOf(value, ["label", "value"]) || !short(label)) return fail("Invalid Stat props");
+      if (short(metric)) return { type: "Stat", label, value: metric };
+      if (typeof metric === "number" && Number.isFinite(metric))
+        return { type: "Stat", label, value: metric };
+      return fail("Invalid Stat value");
+    }
+    case "Progress": {
+      const label = p.label;
+      const progress = p.value;
+      if (!propsOf(value, ["label", "value"]) || !short(label)
+        || typeof progress !== "number" || !Number.isFinite(progress)
+        || progress < 0 || progress > 1) return fail("Progress must be between 0 and 1");
+      return { type: "Progress", label, value: progress };
+    }
     case "List":
       if (!propsOf(value, ["items"]) || !strings(p.items) || p.items.length > MAX_NODES) return fail("Invalid List items");
       return { type: "List", items: p.items };
