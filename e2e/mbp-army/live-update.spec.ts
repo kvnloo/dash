@@ -89,6 +89,14 @@ async function reloads(page: Page): Promise<number> {
   });
 }
 
+/**
+ * A cold app on a loaded host can take ~20 s to load its lazy App chunk (army traces at load 25), and the
+ * chip only exists once App renders. Wait for the app to boot before timing anything the chip shows.
+ */
+async function booted(page: Page): Promise<void> {
+  await expect(page.getByTestId('turbo-served-build')).toBeVisible({ timeout: 45_000 });
+}
+
 async function paired(page: Page, bridge: Bridge, metro: MetroStub, idleMs = 60_000): Promise<void> {
   await pair(page, bridge, appUrl(metro, idleMs));
   await expect(page.getByTestId('turbo-served-build')).toBeVisible();
@@ -160,8 +168,8 @@ test('live-preview-chip: auto-reload waits for the idle gate', async ({ page, br
       });
     });
     await page.goto(url, { waitUntil: 'domcontentloaded' });
-    // A cold app on a loaded host can take ~20 s to load its App chunk and poll Metro (army trace, load 25).
-    await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb', { timeout: 45_000 });
+    await booted(page);
+    await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
     await expect.poll(() => page.evaluate(() => {
       const idle: unknown = Reflect.get(window, '__armyIdle');
       return typeof idle === 'object' && idle !== null && 'lastTouch' in idle && typeof idle.lastTouch === 'function' ? Number(idle.lastTouch()) : 0;
@@ -202,6 +210,7 @@ test('live-preview-chip: auto-reload waits for a closed keyboard', async ({ page
       }, 40);
       Object.defineProperty(window, '__armyKeepKeyboard', { value: keep, configurable: true });
     });
+    await booted(page);
     await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
     await page.waitForTimeout(4_500);
     expect(await reloads(page)).toBe(0);
@@ -221,11 +230,13 @@ test('live-preview-chip: same served SHA never triggers a reload loop', async ({
   try {
     const url = appUrl(metro, 1_500);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await booted(page);
     await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
     await expect.poll(() => reloads(page), { timeout: 12_000 }).toBe(1);
     // Navigation may rewrite the current URL, stripping web-only URL seams. Relaunch
     // the same app document with the original build/Metro params and persisted storage.
     await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await booted(page);
     await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
     await page.waitForTimeout(21_000); // includes a fresh 20 s manifest poll and the retry timeout
     expect(await reloads(page)).toBe(0);
@@ -264,6 +275,7 @@ test('live-preview-health: an HTTP 500 bundle cannot reload until the same SHA b
   try {
     const url = appUrl(metro, 1_000, 250);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await booted(page);
     const chip = page.getByTestId('turbo-served-build');
     await expect(chip).toContainText('bbbbbbb failed to build (HTTP 500)', { timeout: 10_000 });
     expect(metro.bundleRequests()).toBeGreaterThan(0);
@@ -292,6 +304,7 @@ test('live-preview-health: rollback to the old SHA preserves the attempted SHA r
   try {
     const url = appUrl(metro, 1_000, 250);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await booted(page);
     const chip = page.getByTestId('turbo-served-build');
     await expect(chip).toContainText('aaaaaaa → bbbbbbb');
     await expect.poll(() => reloads(page), { timeout: 12_000 }).toBe(1);
