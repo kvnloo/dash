@@ -254,8 +254,8 @@ health() { # 0 when Metro serves and compiles the Android bundle of the active r
   local out; out="$(mktemp)"
   curl -fsS -m "$left" -o "$out" "$bundle" || { rm -f "$out"; log "android bundle failed to compile"; return 1; }
   local want; want="$(link_sha "$H/active")"
-  if [[ -n "$want" && -f "$H/active/app/src/lib/live-update.ts" ]] && ! grep -qF "$want" "$out"; then
-    log "WARN: bundle does not contain the release sha ${want:0:12} (the app cannot tell which build it runs)"
+  if [[ -n "$want" && -f "$H/active/app/src/lib/live-update.ts" ]] && ! grep -qE "\"sha\": *\"$want\"" "$out"; then
+    log "WARN: bundle does not bake in build-info.json for ${want:0:12} (the app cannot tell which build it runs)"
   fi
   rm -f "$out"
 }

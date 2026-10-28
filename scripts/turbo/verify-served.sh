@@ -57,7 +57,8 @@ read -r http size secs <<<"$code"
 say "bundle    HTTP $http, $size bytes, ${secs}s  $BUNDLE"
 code="$http"
 [[ "$code" == 200 ]] || bad "bundle did not return 200"
-if grep -qF "$WANT" "$tmp"; then say "OK        bundle contains the commit sha (the app knows which build it runs)"; else say "NOTE      bundle does not contain the sha (release predates build-info.json)"; fi
+# The sha also appears in every module path, so look for the baked build-info.json object itself.
+if grep -qE "\"sha\": *\"$WANT\"" "$tmp"; then say "OK        bundle bakes in build-info.json for this commit (the app knows which build it runs)"; else say "NOTE      bundle has no build-info.json for this commit (release predates the live-update app code)"; fi
 
 # Async chunks: fetch each embedded URL as written and after dot-segment normalisation.
 mapfile -t chunks < <(grep -o '"[^"]*modulesOnly=true[^"]*"' "$tmp" | tr -d '"' | sort -u)
