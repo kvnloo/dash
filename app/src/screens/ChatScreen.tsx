@@ -568,6 +568,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           identity={identity}
           title={conversation?.title || harnessName}
           options={optionsTrigger}
+          onAnnotate={enterAnnotation}
           treeOpen={treeOpen}
           onTree={setTreeOpen}
           onClose={closeWindow}

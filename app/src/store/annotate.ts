@@ -4,9 +4,8 @@ import { Platform } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
 import type { Segment } from "../lib/annotate/align";
 import { EMPTY_DRAWING, addStroke, clear, eraseAlong, undo, type Drawing, type InkColor, type Stroke, type Tool } from "../lib/annotate/strokes";
-import { penButton, toggleMode } from "../lib/stylus-mode";
+import { penButton } from "../lib/stylus-mode";
 import { createStore } from "./createStore";
-import { flowMode } from "../lib/flow-trace";
 
 export interface AnnotationPreview {
   /** data: URI of the composited PNG, shown before upload finishes. */
@@ -70,6 +69,10 @@ export interface AnnotationSink {
 
 const sinks: AnnotationSink[] = [];
 
+/** Physical stylus detection is volatile: a reload forgets it along with the overlay. */
+let stylusObserved = false;
+export function observeStylusPointer(): void { stylusObserved = true; }
+
 /** The newest registration wins; the returned function unregisters it. */
 export function registerSink(sink: AnnotationSink): () => void {
   sinks.push(sink);
@@ -85,26 +88,33 @@ export function currentSink(): AnnotationSink | undefined {
   return sinks.findLast(sink => sink.live) ?? sinks.at(-1);
 }
 
+/** All entry points reset transient feedback; palm rejection needs observed hardware. */
 export function enterAnnotation(): void {
-  annotate.set(s => (s.active ? s : { ...s, active: true, status: "idle", error: undefined, voiceNote: undefined, preview: undefined }));
+  annotate.set(s => (s.active ? s : {
+    ...s, active: true, penMode: stylusObserved,
+    status: "idle", error: undefined, voiceNote: undefined, preview: undefined,
+  }));
 }
 
-/** Flow exits close the mode, not the draft. Clear remains the explicit discard. */
+/** Exit closes the overlay, not the draft. Clear is the explicit ink discard. */
 export function exitAnnotation(): void {
-  annotate.set(s => ({ ...s, active: false, drawing: flowMode ? s.drawing : EMPTY_DRAWING, segments: flowMode ? s.segments : [], typed: "", recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined, voiceNote: undefined }));
+  annotate.set(s => ({ ...s, active: false, recording: false, status: "idle", preview: undefined, error: undefined, voiceNote: undefined }));
 }
 
-/** Switch modes without discarding ink, voice or queued drafts. */
+/** The nav pill and hardware button use exactly the same lifecycle as chat entry. */
 export function toggleAnnotation(): void {
-  annotate.set(s => ({ ...s, ...toggleMode(s) }));
+  if (annotate.get().active) exitAnnotation();
+  else enterAnnotation();
 }
 
-/** Hardware presses enter S Pen drawing; release and repeats never switch modes. */
+/** The native S Pen side-button counts as detection; only its rising edge toggles. */
 export function stylusButton(pressed: boolean): void {
-  annotate.set(s => {
-    const next = penButton(s, pressed);
-    return next === s ? s : { ...s, ...next, penMode: pressed ? true : s.penMode };
-  });
+  if (pressed) stylusObserved = true;
+  const current = annotate.get();
+  const next = penButton(current, pressed);
+  if (next === current) return;
+  annotate.set(s => ({ ...s, buttonDown: next.buttonDown }));
+  if (pressed) toggleAnnotation();
 }
 
 export function setPenMode(on: boolean): void { annotate.set(s => ({ ...s, penMode: on })); }

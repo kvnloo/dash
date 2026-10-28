@@ -142,6 +142,7 @@ const SHEET_FONT = 12;
 const SHEET_ICON = 14;
 /** Options trigger: sliders glyph + surface word, ≥ 44 hit. */
 const OPTIONS_RESERVE = 84;
+const ANNOTATE_RESERVE = 94;
 
 type FeatherName = ComponentProps<typeof Feather>["name"];
 
@@ -189,10 +190,11 @@ function IdRow({ icon, child, caption, id, chars, what, testID }: {
  * rows, provenance footer inside it) + whatever the screen already docks (workers, queue, composer).
  * One surface; nothing is repeated up top.
  */
-export function WindowDock({ identity, title, options, treeOpen, onTree, onClose, notice, children }: {
+export function WindowDock({ identity, title, options, onAnnotate, treeOpen, onTree, onClose, notice, children }: {
   identity: IdentityInput;
   title: string;
   options: ReactNode;
+  onAnnotate(): void;
   treeOpen: boolean;
   onTree(open: boolean): void;
   onClose(): void;
@@ -203,7 +205,7 @@ export function WindowDock({ identity, title, options, treeOpen, onTree, onClose
   const { width } = useWindowDimensions();
   // Monospace advance ≈ 0.6em; the system font scale grows it. Reserve the Options trigger, the X,
   // the chevron and paddings. Text also ellipsizes as a backstop.
-  const budget = Math.max(10, Math.floor((width - OPTIONS_RESERVE - CLOSE_HIT - 2 * space.sm - 40) / (BADGE_FONT * 0.6 * PixelRatio.getFontScale())));
+  const budget = Math.max(10, Math.floor((width - OPTIONS_RESERVE - ANNOTATE_RESERVE - CLOSE_HIT - 2 * space.sm - 40) / (BADGE_FONT * 0.6 * PixelRatio.getFontScale())));
   const lines = identityLines(identity, budget);
   // Same estimate for the sheet's mono rows: icon column, side paddings and gaps, plus the copy button on id rows.
   const sheetChars = Math.max(10, Math.floor((width - 2 * space.md - SHEET_ICON - space.sm) / (SHEET_FONT * 0.6 * PixelRatio.getFontScale())));
@@ -238,6 +240,16 @@ export function WindowDock({ identity, title, options, treeOpen, onTree, onClose
     </View> : null}
     <View testID="chat-window-badge-row" style={[styles.badgeRow, thumb.row]}>
       {options}
+      <Pressable
+        testID="chat-annotate"
+        accessibilityRole="button"
+        accessibilityLabel="Annotate this screen"
+        onPress={() => { haptic.select(); onAnnotate(); }}
+        style={styles.annotate}
+      >
+        <Feather name="edit-3" size={14} color={colors.textMuted} />
+        <Text style={styles.annotateText} numberOfLines={1}>Annotate</Text>
+      </Pressable>
       <Pressable
         testID="chat-window-badge"
         accessibilityRole="button"
@@ -290,6 +302,8 @@ const styles = StyleSheet.create({
   provenance: { marginTop: space.xs, paddingTop: space.sm, gap: 2, borderTopWidth: StyleSheet.hairlineWidth, borderColor: glass.hair },
   provenanceLine: { ...type.mono, fontSize: 11, lineHeight: 15, color: colors.textTertiary },
   badgeRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.sm, minHeight: CLOSE_HIT },
+  annotate: { minHeight: 44, minWidth: ANNOTATE_RESERVE, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: radius.sm },
+  annotateText: { ...type.label, color: colors.textMuted, fontSize: 11, letterSpacing: 0 },
   badge: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: space.sm, borderRadius: radius.md },
   badgeLines: { flexShrink: 1, minWidth: 0 },
   badgeWho: { ...type.mono, fontSize: BADGE_FONT, lineHeight: 15, color: colors.textMuted },
