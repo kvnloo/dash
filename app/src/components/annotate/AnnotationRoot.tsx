@@ -6,7 +6,7 @@
 // and preview are siblings outside it so a thumb on the mic never cancels the pen.
 
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { BackHandler, Image, PixelRatio, Platform, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { BackHandler, Image, PixelRatio, Platform, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -23,7 +23,7 @@ import { recognizeShape, type InkColor, type PointerKind, type StrokePoint, type
 import { useHandedness } from "../../lib/useHandedness";
 import {
   addSegment, annotate, clearStrokes, commitStroke, currentSink, enterAnnotation, eraseStrokes, exitAnnotation, finishSend,
-  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, undoStroke, stylusButton,
+  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, setTypedNote, undoStroke, stylusButton,
 } from "../../store/annotate";
 import { store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
@@ -57,6 +57,12 @@ function composerAvoidance(keyboardLift: number): number {
   return COMPOSER_CLEARANCE + Math.max(0, keyboardLift);
 }
 
+/** Keep the note tray over the IME and the message dock rather than clipping it away. */
+function trayAvoidance(keyboardLift: number): number {
+  "worklet";
+  return Math.max(COMPOSER_CLEARANCE, Math.max(0, keyboardLift) + 88);
+}
+
 type InkModule = typeof import("./InkCanvas");
 let inkModule: Promise<InkModule> | undefined;
 function loadInk(): Promise<InkModule> {
@@ -82,6 +88,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const tool = annotate.use(s => s.tool);
   const color = annotate.use(s => s.color);
   const strokes = annotate.use(s => s.drawing.strokes);
+  const [pendingEmptySend, setPendingEmptySend] = useState<boolean | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const [ink, setInk] = useState<InkModule | null>(null);
@@ -224,7 +231,22 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     haptic.select();
   }, [size]);
 
-  const send = useCallback((keep: boolean) => { void sendAnnotation(keep, captureTarget, size); }, [size]);
+  const send = useCallback((keep: boolean) => {
+    const draft = annotate.get();
+    if (draft.status === "capturing" || draft.status === "sending") return;
+    if (draft.drawing.strokes.length > 0 && !draft.typed.trim() && !draft.segments.some(segment => segment.text.trim())) {
+      setPendingEmptySend(keep);
+      return;
+    }
+    setPendingEmptySend(null);
+    void sendAnnotation(keep, captureTarget, size);
+  }, [size]);
+  const sendAnyway = useCallback(() => {
+    if (pendingEmptySend === null) return;
+    setPendingEmptySend(null);
+    void sendAnnotation(pendingEmptySend, captureTarget, size);
+  }, [pendingEmptySend, size]);
+  useEffect(() => { if (!active) setPendingEmptySend(null); }, [active]);
   const tracePointer = useCallback((pointerType: number, touches: number) => {
     if (flowMode) {
       inkTraceId.current = flowTrace.begin();
@@ -307,7 +329,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         </View>
       </GestureDetector>
       {active ? <Animated.View pointerEvents="none" style={[styles.frame, frameStyle]} accessibilityLabel="Annotation mode on" {...overlayProps} /> : null}
-      {active ? <Tray onSend={send} screenHeight={size.height} tldraw={engine === "tldraw" ? tldraw : undefined} /> : <Toast screenHeight={size.height} />}
+      {active ? <Tray onSend={send} onSendAnyway={sendAnyway} onDismissEmpty={() => setPendingEmptySend(null)} pendingEmptySend={pendingEmptySend} screenHeight={size.height} tldraw={engine === "tldraw" ? tldraw : undefined} /> : <Toast screenHeight={size.height} />}
       {active && inkError ? <View style={styles.inkError}>
         <Text accessibilityRole="alert" style={styles.error}>{inkError}</Text>
         <View style={styles.row}>
@@ -355,17 +377,17 @@ async function sendAnnotation(keep: boolean, target: React.RefObject<View | null
     if (flowMode) flowTrace.mark("turn.commit", flowTrace.begin());
     const { composite } = await loadInk();
     const { bytes, dataUri } = await composite(target, strokes, screen, INK, colors.bg);
-    const text = composeMessage({ strokes, segments: s.segments, screen });
+    const text = composeMessage({ strokes, segments: s.segments, screen, typed: s.typed });
     setAnnotationStatus("sending", { preview: { image: dataUri, text, strokes: strokes.length } });
     const names = attachmentNames(createdAt);
-    const doc = annotationDoc({ strokes, segments: s.segments, screen, createdAt });
+    const doc = annotationDoc({ strokes, segments: s.segments, screen, createdAt, typed: s.typed });
     const [image, json] = await Promise.all([
       uploadBytes(settings, names.image, "image/png", bytes),
       uploadBytes(settings, names.json, "application/json", new TextEncoder().encode(JSON.stringify(doc, null, 1))),
     ]);
     await sink.send(text, [image, json], annotationSendMode(sink.steerable()));
     haptic.success();
-    finishSend(keep, { strokes, segments: s.segments });
+    finishSend(keep, { strokes, segments: s.segments, typed: s.typed });
   } catch (error) {
     setAnnotationStatus("error", { error: error instanceof Error ? error.message : "Could not send the annotation." });
   }
@@ -397,10 +419,10 @@ function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; 
   // A tall IME may leave no room at all: show zero tray height rather than
   // growing underneath the composer or the floating header controls.
   const clearDock = useAnimatedStyle(() => ({
-    height: Math.max(0, screenHeight - topInset - composerAvoidance(-keyboardHeight.value)),
+    height: Math.max(0, screenHeight - topInset - trayAvoidance(-keyboardHeight.value)),
   }));
   const placement = useAnimatedStyle(() => {
-    const room = Math.max(0, screenHeight - topInset - composerAvoidance(-keyboardHeight.value));
+    const room = Math.max(0, screenHeight - topInset - trayAvoidance(-keyboardHeight.value));
     return { transform: [{ translateY: Math.max(0, room - trayHeight.value) * progress.value }] };
   });
   return (
@@ -414,11 +436,26 @@ function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; 
   );
 }
 
-function Tray({ onSend, screenHeight, tldraw }: { onSend(keep: boolean): void; screenHeight: number; tldraw?: React.RefObject<TldrawAnnotateHandle | null> }): React.JSX.Element {
+function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, screenHeight, tldraw }: {
+  onSend(keep: boolean): void;
+  onSendAnyway(): void;
+  onDismissEmpty(): void;
+  pendingEmptySend: boolean | null;
+  screenHeight: number;
+  tldraw?: React.RefObject<TldrawAnnotateHandle | null>;
+}): React.JSX.Element {
   const thumb = useHandedness();
   const s = annotate.use(x => x);
   const busy = s.status === "capturing" || s.status === "sending";
   const count = s.drawing.strokes.length;
+  const [noteOpen, setNoteOpen] = useState(false);
+  const noteInput = useRef<TextInput>(null);
+  useEffect(() => { if (noteOpen) noteInput.current?.focus(); }, [noteOpen]);
+  const addNote = () => {
+    onDismissEmpty();
+    setNoteOpen(true);
+    noteInput.current?.focus();
+  };
   // The tray can hop to the top so it never hides the part of the screen being marked.
   const [top, setTop] = useState(true);
   return (
@@ -437,11 +474,31 @@ function Tray({ onSend, screenHeight, tldraw }: { onSend(keep: boolean): void; s
         <Chip label="Clear" a11y="Clear" disabled={count === 0} onPress={() => tldraw ? tldraw.current?.clear() : clearStrokes()} />
         <Chip label={s.penMode ? "S Pen ✓" : "S Pen"} a11y="Pen mode: only the S Pen draws, fingers scroll" selected={s.penMode} onPress={() => setPenMode(!s.penMode)} />
         <HoldToTalk />
+        <Chip label="Aa" a11y="Type a note" selected={noteOpen || !!s.typed} onPress={() => {
+          if (noteOpen) { noteInput.current?.blur(); setNoteOpen(false); }
+          else addNote();
+        }} />
         <Chip label="⇅" a11y={top ? "Move tray to the bottom" : "Move tray to the top"} onPress={() => setTop(!top)} />
         <Chip label="Keep" a11y="Send and keep drawing" disabled={busy || count === 0} onPress={() => onSend(true)} />
         <Chip label={busy ? "…" : "Send"} a11y="Send annotation" primary disabled={busy || count === 0} onPress={() => onSend(false)} />
       </View>
-      <Text style={styles.hint} numberOfLines={1}>{s.sink ? `→ ${s.sink}` : "Open a chat to send"} · {s.segments.length ? `${s.segments.length} spoken` : "hold Talk to speak"}{s.penMode ? " · fingers scroll" : ""}</Text>
+      {noteOpen ? <TextInput
+        ref={noteInput} testID="annotation-note" accessibilityLabel="Type a note"
+        multiline maxLength={2000} value={s.typed} onChangeText={text => {
+          setTypedNote(text);
+          if (text.trim()) onDismissEmpty();
+        }}
+        placeholder="What should change?" placeholderTextColor={colors.textMuted}
+        selectionColor={colors.gold} textAlignVertical="top" style={styles.noteInput}
+      /> : null}
+      {pendingEmptySend !== null ? <View style={styles.confirm}>
+        <Text accessibilityRole="alert" style={styles.error}>No words captured. Send the marks only?</Text>
+        <View style={[styles.row, thumb.row]}>
+          <Chip label="Send anyway" a11y="Send anyway" onPress={onSendAnyway} />
+          <Chip label="Add note" a11y="Add note" onPress={addNote} />
+        </View>
+      </View> : null}
+      <Text style={styles.hint} numberOfLines={1}>{s.sink ? `→ ${s.sink}` : "Open a chat to send"} · {s.segments.length ? `${s.segments.length} spoken` : s.typed.trim() ? "typed note ready" : "hold Talk or type a note"}{s.penMode ? " · fingers scroll" : ""}</Text>
     </TrayViewport>
   );
 }
@@ -524,6 +581,8 @@ const styles = StyleSheet.create({
   swatchOn: { borderWidth: 2, borderColor: colors.text },
   hint: { ...type.mono, fontSize: 10, color: colors.textTertiary, paddingHorizontal: space.sm },
   error: { ...type.small, color: colors.danger, paddingHorizontal: space.sm },
+  noteInput: { minHeight: 48, maxHeight: 120, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.hair2, backgroundColor: colors.surface, color: colors.text, fontSize: 16 },
+  confirm: { gap: space.xs, paddingVertical: space.xs, borderTopWidth: 1, borderTopColor: colors.hair },
   preview: { flexDirection: "row", gap: space.sm, padding: space.xs, marginBottom: space.xs, borderRadius: radius.sm, backgroundColor: colors.surfaceRaised },
   thumb: { width: 72, height: 160, borderRadius: radius.sm, backgroundColor: colors.bg },
   previewBody: { flex: 1, gap: 2 },
