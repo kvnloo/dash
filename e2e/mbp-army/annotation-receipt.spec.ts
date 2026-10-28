@@ -54,7 +54,8 @@ test('annotation-receipt: offline Send then reconnect and Send again creates jus
   await noteAndStroke(page, 'ARMY receipt offline reconnect');
 
   await page.context().setOffline(true);
-  await expect(page.getByTestId('connection-banner')).toBeVisible({ timeout: 20000 });
+  // Network emulation rejects the real bridge upload even if the existing
+  // WebSocket has not emitted its close event yet.
   await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: /Offline|Network|fetch failed|Failed to fetch|Could not reach the bridge/i })).toBeVisible({ timeout: 20000 });
   await expect(page.getByTestId('chat-window').getByText(/Annotated .* \(1 stroke\)/)).toHaveCount(0);
