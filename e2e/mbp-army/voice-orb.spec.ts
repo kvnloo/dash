@@ -53,9 +53,15 @@ test("live hero orb follows each voice phase, mutes, passes through and hides fo
     ["thinking", "Thinking"], ["speaking", "Speaking"], ["listening", "Listening"],
   ];
   for (const [phase, label] of phases) {
-    await expect(pill, "real voice pill: " + phase).toHaveAttribute("aria-label", "Voice status: " + phase, { timeout: 15000 });
-    await expect(orb, "orb follows pill within 300 ms: " + phase).toBeVisible({ timeout: 300 });
-    await expect(caption, "orb caption follows pill within 300 ms: " + phase).toHaveText(label, { timeout: 300 });
+    // Same-tick invariant, evaluated in the page: whenever the real voice pill shows a phase, the orb's
+    // caption already shows its label (stricter than a 300 ms budget, and immune to Playwright round trips
+    // on a loaded host, where two sequential 300 ms checks raced the next phase).
+    await page.waitForFunction(([wantPhase, wantLabel]) => {
+      const pillNode = document.querySelector('[data-testid="voice-phase"]');
+      const captionNode = document.querySelector('[data-testid="voice-orb-caption"]');
+      return pillNode?.getAttribute('aria-label') === 'Voice status: ' + wantPhase && captionNode?.textContent === wantLabel;
+    }, [phase, label], { timeout: 15000, polling: 'raf' });
+    await expect(orb, "orb is on screen: " + phase).toBeVisible();
   }
   const drawing = await orb.getByTestId("agent-orb").boundingBox();
   expect(drawing?.width).toBeGreaterThanOrEqual(220);

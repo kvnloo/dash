@@ -19,15 +19,23 @@ async function newestAnnotation(bridgeDir: string): Promise<unknown | null> {
   }
   const files = paths.filter(path => /^annotation-.*\.json$/.test(basename(path)));
   if (files.length === 0) return null;
-  const dated = await Promise.all(files.map(async path => {
+  // The bridge moves an upload out of staging while we list it: a vanished file is "not yet", never an error.
+  const missing = (error: unknown): boolean => error instanceof Error && 'code' in error && error.code === 'ENOENT';
+  const dated = (await Promise.all(files.map(async path => {
     const absolute = join(root, path);
-    return { path: absolute, mtimeMs: (await stat(absolute)).mtimeMs };
-  }));
+    try { return { path: absolute, mtimeMs: (await stat(absolute)).mtimeMs }; }
+    catch (error) { if (missing(error)) return null; throw error; }
+  }))).filter((entry): entry is { path: string; mtimeMs: number } => entry !== null);
   dated.sort((a, b) => b.mtimeMs - a.mtimeMs);
   const newest = dated[0];
   if (!newest) return null;
-  const doc: unknown = JSON.parse(await readFile(newest.path, 'utf8'));
-  return doc;
+  try {
+    const doc: unknown = JSON.parse(await readFile(newest.path, 'utf8'));
+    return doc;
+  } catch (error) {
+    if (missing(error)) return null;
+    throw error;
+  }
 }
 
 function containsBottomInk(doc: unknown): boolean {
