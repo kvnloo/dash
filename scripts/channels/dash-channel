@@ -22,7 +22,7 @@
 #   - DASH_CHANNEL_POST_SWITCH runs after every healthy switch (best effort);
 #   - the native gate covers native packages, local Expo modules and config plugins ('v3:');
 #     v2 and legacy baselines keep their original comparison until `baseline` is run again;
-#   - DASH_CHANNEL_REQUIRE_RECEIPT=1 holds a head back until laws/release/check.py allows it (O15).
+#   - every public switch, promotion and rollback requires an exact-commit green O15 army receipt.
 #   One instance per Metro: DASH_CHANNEL_CONF_DIR / DASH_CHANNELS_HOME / DASH_CHANNEL_METRO_UNIT.
 set -Eeuo pipefail
 shopt -s inherit_errexit
@@ -351,6 +351,7 @@ do_switch() { # name [--force]
   need_channel "$name"
   [[ -L "$H/ch/$name" ]] || build_one "$name" >/dev/null
   sha="$(link_sha "$H/ch/$name")"
+  receipt_allows "$sha" || die "switch held: no green tester-army receipt for $sha"
   if [[ -f "$H/native-baseline" ]]; then
     base="$(cat "$H/native-baseline")"
     case "$base" in
@@ -401,6 +402,7 @@ do_rollback() {
   IFS=$'\t' read -r prev_sha prev_ch <"$H/previous"
   cur_sha="$(link_sha "$H/active")"; cur_ch="$(cat "$H/active.channel" 2>/dev/null || true)"
   [[ -d "$REL/$prev_sha" ]] || die "previous release $prev_sha is gone"
+  receipt_allows "$prev_sha" || die "rollback held: no green tester-army receipt for $prev_sha"
   point_active "$prev_sha" "$prev_ch"
   [[ -n "$cur_sha" ]] && printf '%s\t%s\n' "$cur_sha" "$cur_ch" >"$H/previous"
   restart_metro
@@ -467,6 +469,7 @@ cmd_promote() {
   local from="${1:-}" to="${2:-}"; [[ -n "$from" && -n "$to" ]] || die "usage: promote <from> <to>"
   valid_name "$to"; need_channel "$from"; lock
   local sha; sha="$(link_sha "$H/ch/$from")"; [[ -n "$sha" ]] || die "$from is not built"
+  receipt_allows "$sha" promote || die "promotion held: no green tester-army receipt for $sha"
   set_row "$to" "$sha" pin
   ln -sfn "$REL/$sha" "$H/ch/$to"
   history "promote $from $sha -> $to"
@@ -549,10 +552,9 @@ nightly_run() {
   (( failed == 0 ))
 }
 
-receipt_allows() { # sha -> 0 unless DASH_CHANNEL_REQUIRE_RECEIPT=1 and the O15 gate denies it
-  [[ "${DASH_CHANNEL_REQUIRE_RECEIPT:-0}" == 1 ]] || return 0
-  local dir="$REL/$1"
-  python3 "$dir/laws/release/check.py" --action ota --sha "$1" --root "$dir" >&2
+receipt_allows() { # sha [action] -> the mandatory exact-commit O15 gate
+  local dir="$REL/$1" action="${2:-ota}"
+  python3 "$dir/laws/release/check.py" --action "$action" --sha "$1" --root "$dir" >&2
 }
 
 # Cheap tick: one ls-remote per distinct tracked ref. A moved head runs the full nightly pass;

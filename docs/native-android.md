@@ -129,6 +129,12 @@ Before loading a newer build, the app checks its launch asset again after persis
 drafts. A build that stops serving HTTP 200 while an update waits is not reloaded.
 Its failure is shown until a later probe succeeds; the draft remains intact.
 
+Channel switches, promotions, explicit rollbacks and automatic re-serving require
+a green, complete O15 army receipt for the target commit before release state
+changes. `--force` only bypasses the native fingerprint check, never O15 approval.
+The former receipt opt-out is no longer used. A missing receipt holds the update;
+copy the genuine army receipt and report into the configured receipt store.
+
 ## Notifications
 
 Settings has an explicit Enable notifications action. It creates a silent, private-lockscreen channel before asking Android for permission. Denied permissions offer the Android settings route; Dash does not repeatedly prompt on launch. Disabling clears existing Dash notifications.
