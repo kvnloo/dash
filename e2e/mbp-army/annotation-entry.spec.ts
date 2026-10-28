@@ -51,12 +51,12 @@ test('annotation-entry: pill exit and re-entry clear failed Send and cold reload
 
   // In the window, the camera pill expands the same AppNav that owns S Pen mode.
   await page.getByTestId('chat-window-pill').click({ noWaitAfter: true });
-  const pill = page.getByTestId('spen-mode-pill');
+  const pill = page.getByTestId('spen-mode-pill').last();
   await expect(pill).toBeVisible();
-  await expect(page.getByTestId('spen-mode-label')).toHaveText('Normal');
+  await expect(page.getByTestId('spen-mode-label').last()).toHaveText('Normal');
   await pill.click({ noWaitAfter: true });
   await expect(page.getByLabel('Annotation mode on', { exact: true })).toBeVisible();
-  await expect(page.getByTestId('spen-mode-label')).toHaveText('Annotate');
+  await expect(page.getByTestId('spen-mode-label').last()).toHaveText('Annotate');
   await expect(page.getByRole('button', { name: 'Pen mode: only the S Pen draws, fingers scroll' })).toHaveText('S Pen');
 
   await page.mouse.move(80, 400);
@@ -74,9 +74,11 @@ test('annotation-entry: pill exit and re-entry clear failed Send and cold reload
   } finally {
     await page.context().setOffline(false);
   }
-  await pill.click({ noWaitAfter: true });
+  // Annotation covers the whole screen (C23), so the nav pill is under the overlay while it is on:
+  // leave through the tray's Exit; the pill (which shares the same lifecycle) re-enters below.
+  await page.getByRole('button', { name: 'Exit annotation', exact: true }).click({ noWaitAfter: true });
   await expect(page.getByLabel('Annotation mode on', { exact: true })).toHaveCount(0);
-  await expect(page.getByTestId('spen-mode-label')).toHaveText('Normal');
+  await expect(page.getByTestId('spen-mode-label').last()).toHaveText('Normal');
 
   await pill.click({ noWaitAfter: true });
   await expect(page.getByLabel('Annotation mode on', { exact: true })).toBeVisible();

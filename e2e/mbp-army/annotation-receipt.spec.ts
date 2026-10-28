@@ -39,7 +39,7 @@ test('annotation-receipt: OMP streamed delta confirms one annotation before its 
   await page.waitForTimeout(35_200);
   await expect(stop).toBeVisible();
   await expect(page.getByRole('alert').filter({ hasText: /Delivery unconfirmed/ })).toHaveCount(0);
-  await expect(page.getByTestId('transcript-viewport').getByText(/Annotated .* \(1 stroke\)/)).toHaveCount(1);
+  await expect(page.getByTestId('transcript-viewport').getByText(/^Annotated .* \(1 stroke\)/)).toHaveCount(1);
   expect(await startedTurns(bridge.dir)).toBe(1);
   expect(bridge.logs().match(/ws\.chat /g)).toHaveLength(1);
 
@@ -58,14 +58,14 @@ test('annotation-receipt: offline Send then reconnect and Send again creates jus
   // WebSocket has not emitted its close event yet.
   await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: /Offline|Network|fetch failed|Failed to fetch|Could not reach the bridge/i })).toBeVisible({ timeout: 20000 });
-  await expect(page.getByTestId('transcript-viewport').getByText(/Annotated .* \(1 stroke\)/)).toHaveCount(0);
+  await expect(page.getByTestId('transcript-viewport').getByText(/^Annotated .* \(1 stroke\)/)).toHaveCount(0);
   expect(await startedTurns(bridge.dir)).toBe(0);
 
   await page.context().setOffline(false);
   await expect(page.getByTestId('connection-banner')).toHaveCount(0, { timeout: 30000 });
   await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
   await expect(page.getByText(/Sent to .* chat · 1 strokes/)).toBeVisible({ timeout: 20000 });
-  await expect(page.getByTestId('transcript-viewport').getByText(/Annotated .* \(1 stroke\)/)).toHaveCount(1);
+  await expect(page.getByTestId('transcript-viewport').getByText(/^Annotated .* \(1 stroke\)/)).toHaveCount(1);
   await expect(page.getByText(/ARMY_REPLY:/).filter({ visible: true }).first()).toBeVisible({ timeout: 30000 });
   expect(await startedTurns(bridge.dir)).toBe(1);
   expect(bridge.logs().match(/ws\.chat /g)).toHaveLength(1);
