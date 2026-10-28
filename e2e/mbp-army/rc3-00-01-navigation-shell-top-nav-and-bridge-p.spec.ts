@@ -11,7 +11,7 @@ import {basename,join} from 'node:path';
 
 test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({path:info.outputPath('final.png')});});
 
-const tab=(page:Page,name:'Bots'|'Chats'|'Orchestra')=>page.getByRole('tab',{name,exact:true});
+const tab=(page:Page,name:'Hosts'|'Chats'|'Orchestra')=>page.getByRole('tab',{name,exact:true});
 const btn=(page:Page,name:string|RegExp)=>page.getByRole('button',typeof name==='string'?{name,exact:true}:{name});
 const heading=(page:Page,name:string)=>page.getByRole('heading',{name,exact:true});
 const search=(page:Page)=>page.getByRole('textbox',{name:'Message',exact:true});
@@ -34,7 +34,7 @@ async function toChats(page:Page){
 }
 /** Gold pill offset in slots: GelNav pillStyle translates the pill track by progress*NAV_SLOT_WIDTH. */
 async function pillSlots(page:Page){
- const slot=(await tab(page,'Bots').boundingBox())?.width;if(!slot)throw Error('nav tab has no box');
+ const slot=(await tab(page,'Hosts').boundingBox())?.width;if(!slot)throw Error('nav tab has no box');
  const x=await page.getByLabel('Primary mobile workspace',{exact:true}).first().evaluate(el=>{const pill=el.firstElementChild;if(!pill)throw Error('gold pill missing');const t=getComputedStyle(pill).transform;return t&&t!=='none'?new DOMMatrix(t).m41:0;});
  return x/slot;
 }
@@ -83,7 +83,7 @@ test.describe('rc3 01 top nav and pager',()=>{
   await pairCold(page,bridge);
   await expect(tab(page,'Orchestra')).toHaveAttribute('aria-selected','true');
   await expect(tab(page,'Chats')).toHaveAttribute('aria-selected','false');
-  await expect(tab(page,'Bots')).toHaveAttribute('aria-selected','false');
+  await expect(tab(page,'Hosts')).toHaveAttribute('aria-selected','false');
   await expect(page.getByTestId('orchestra-graph')).toBeVisible();
   await expect.poll(()=>pillSlots(page)).toBeCloseTo(2,1);
  });
@@ -95,11 +95,11 @@ test.describe('rc3 01 top nav and pager',()=>{
   await expect(heading(page,'Chats workspace')).toBeVisible();
  });
 
- test('tap Bots then Orchestra switches panes and selection',async({page,bridge})=>{
+ test('tap Hosts then Orchestra switches panes and selection',async({page,bridge})=>{
   await pairCold(page,bridge);
-  await tab(page,'Bots').click({noWaitAfter:true});
-  await expect(tab(page,'Bots')).toHaveAttribute('aria-selected','true');
-  await expect(heading(page,'Bots workspace')).toBeVisible();
+  await tab(page,'Hosts').click({noWaitAfter:true});
+  await expect(tab(page,'Hosts')).toHaveAttribute('aria-selected','true');
+  await expect(heading(page,'Hosts workspace')).toBeVisible();
   await expect.poll(()=>pillSlots(page)).toBeCloseTo(0,1);
   await expect.poll(()=>pagerProgress(page)).toBeCloseTo(0,1);
   await tab(page,'Orchestra').click({noWaitAfter:true});
