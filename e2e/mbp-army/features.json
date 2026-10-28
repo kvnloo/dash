@@ -166,7 +166,11 @@
      "tests": ["holding the Harness row in the chat options lists the harnesses and choosing one switches without sending"]},
     {"id": "device-self-check", "title": "Settings reports local device, voice, bridge and annotation readiness",
      "tests": ["device self-check reports Skia, missing native modules and bridge model reason without external hosts",
-               "device self-check follows bridge nativeVoice disabled environment"]}
+               "device self-check follows bridge nativeVoice disabled environment"]},
+    {"id": "main-bar-mic", "title": "The main bar mic dictates into the cursor or hold-slides to autostart Live without breaking the composer mic",
+     "tests": ["main mic tap then tap inserts the real bridge STT fixture transcript",
+               "main mic hold and slide up opens Voice and attempts Live autostart",
+               "chat composer mic still dictates through the real bridge fixture"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
