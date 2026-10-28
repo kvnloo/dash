@@ -20,8 +20,8 @@
 #     a head moved, and a bundle probe of the live Metro otherwise (restarts it once if it 500s);
 #   - a head whose switch failed health is not retried until the head moves (no restart loop);
 #   - DASH_CHANNEL_POST_SWITCH runs after every healthy switch (best effort);
-#   - the native gate covers native packages, local Expo modules and config plugins ('v3:');
-#     v2 and legacy baselines keep their original comparison until `baseline` is run again;
+#   - native compatibility covers native packages, local modules, plugins and dynamic Expo config ('v4:');
+#     older baselines must be replaced after rebuilding and verifying the installed dev client;
 #   - every public switch, promotion and rollback requires an exact-commit green O15 army receipt.
 #   One instance per Metro: DASH_CHANNEL_CONF_DIR / DASH_CHANNELS_HOME / DASH_CHANNEL_METRO_UNIT.
 set -Eeuo pipefail
@@ -142,72 +142,41 @@ deps_key() { # dir -> key of app dependencies
   cat "$1/app/package.json" "$1/app/bun.lock" 2>/dev/null | sha1sum | cut -c1-16
 }
 
-native_fp_legacy() { # release dir -> fingerprint over EVERY dependency in package.json (JS-only ones included)
-  python3 - "$1" <<'PY'
-import hashlib, json, sys
-root = sys.argv[1]
-pkg = json.load(open(f"{root}/app/package.json"))
-app = json.load(open(f"{root}/app/app.json")).get("expo", {})
-native = {
-  "dependencies": pkg.get("dependencies", {}),
-  "plugins": app.get("plugins", []),
-  "android": {k: v for k, v in app.get("android", {}).items() if k in ("package", "permissions")},
-  "newArch": app.get("newArchEnabled"),
-}
-print(hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
-PY
-}
-
-native_fp_v2() { # release dir -> v2:<hash> of the native code the dev client must contain
-  # Only installed packages that ship native code count (android/, ios/, an Expo module config,
-  # react-native.config.js or a codegenConfig), by their installed version, plus plugins, Android
-  # package/permissions and newArch. A JS-only dependency (tldraw) no longer demands a new APK.
+native_fp() { # release dir -> v4:<hash> of native source/config inputs
   python3 - "$1" <<'PY'
 import hashlib, json, os, sys
-root = sys.argv[1]
-app = json.load(open(f"{root}/app/app.json")).get("expo", {})
-nm = f"{root}/app/node_modules"
+from pathlib import Path
+root = Path(sys.argv[1]) / "app"
+app = json.loads((root / "app.json").read_text()).get("expo", {})
+nm = root / "node_modules"
 MARKERS = ("android", "ios", "expo-module.config.json", "react-native.config.js")
 
 def package_names():
     for entry in sorted(os.listdir(nm)):
         if entry.startswith("."):
             continue
-        path = os.path.join(nm, entry)
-        if entry.startswith("@") and os.path.isdir(path):
+        path = nm / entry
+        if entry.startswith("@") and path.is_dir():
             for sub in sorted(os.listdir(path)):
                 yield f"{entry}/{sub}"
         else:
             yield entry
 
-modules = {}
+packages = {}
 for name in package_names():
-    directory = os.path.join(nm, name)
+    directory = nm / name
     try:
-        meta = json.load(open(os.path.join(directory, "package.json")))
+        meta = json.loads((directory / "package.json").read_text())
     except (OSError, ValueError):
         continue
-    if any(os.path.exists(os.path.join(directory, m)) for m in MARKERS) or meta.get("codegenConfig"):
-        modules[name] = meta.get("version", "?")
+    if any((directory / m).exists() for m in MARKERS) or meta.get("codegenConfig"):
+        packages[name] = meta.get("version", "?")
 native = {
-  "modules": modules,
-  "plugins": app.get("plugins", []),
-  "android": {k: v for k, v in app.get("android", {}).items() if k in ("package", "permissions")},
-  "newArch": app.get("newArchEnabled"),
+    "modules": packages,
+    "plugins": app.get("plugins", []),
+    "android": {k: v for k, v in app.get("android", {}).items() if k in ("package", "permissions")},
+    "newArch": app.get("newArchEnabled"),
 }
-print("v2:" + hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
-PY
-}
-
-native_fp() { # release dir -> v3:<hash>, including local native sources and config plugins
-  local v2
-  v2="$(native_fp_v2 "$1")" || return
-  python3 - "$1" "$v2" <<'PY'
-import hashlib, json, os, sys
-from pathlib import Path
-root = Path(sys.argv[1]) / "app"
-# Retain every v2 input without changing the algorithm used by existing baselines.
-native = {"v2": sys.argv[2]}
 
 def source_hash(directory, paths):
     digest = hashlib.sha1()
@@ -218,9 +187,9 @@ def source_hash(directory, paths):
         digest.update(name + b"\0" + str(len(data)).encode() + b"\0" + data)
     return digest.hexdigest()
 
-modules = root / "modules"
-if modules.is_dir():
-    for directory in sorted(modules.iterdir()):
+local_modules = root / "modules"
+if local_modules.is_dir():
+    for directory in sorted(local_modules.iterdir()):
         config = directory / "expo-module.config.json"
         if not directory.is_dir() or not config.is_file():
             continue
@@ -230,8 +199,9 @@ if modules.is_dir():
                 dirs[:] = [d for d in dirs if d not in ("build", ".gradle")]
                 paths.extend(Path(current) / f for f in files if not f.endswith(".md"))
         native["local:" + directory.name] = source_hash(directory, paths)
-native["plugins"] = source_hash(root, (root / "plugins").glob("*.js"))
-print("v3:" + hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
+native["configPlugins"] = source_hash(root, (root / "plugins").glob("*.js"))
+native["dynamicConfig"] = source_hash(root, (root / name for name in ("app.config.js", "app.config.ts") if (root / name).is_file()))
+print("v4:" + hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
 PY
 }
 
@@ -354,11 +324,7 @@ do_switch() { # name [--force]
   receipt_allows "$sha" || die "switch held: no green tester-army receipt for $sha"
   if [[ -f "$H/native-baseline" ]]; then
     base="$(cat "$H/native-baseline")"
-    case "$base" in
-      v3:*) fp="$(native_fp "$REL/$sha")";;
-      v2:*) fp="$(native_fp_v2 "$REL/$sha")";;
-      *) fp="$(native_fp_legacy "$REL/$sha")";;
-    esac
+    fp="$(native_fp "$REL/$sha")"
     if [[ "$fp" != "$base" && "$force" != "--force" ]]; then
       die "$name (${sha:0:12}) needs different native code than the installed dev client (fingerprint $fp, client $base). Build and install a new dev client, then run: dash-channel baseline $name. Or pass --force to try anyway."
     fi

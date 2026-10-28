@@ -1,6 +1,9 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "native-fingerprint-inputs", "title": "Native compatibility includes dynamic Expo config and native sources without rebuilding for chat-only edits",
+     "tests": ["native compatibility: dynamic Expo config that changes the Android package changes the fingerprint",
+               "native compatibility: source, registration and plugin changes invalidate while JS and generated files do not"]},
     {"id": "channel-release-approval", "title": "Public channel transitions require exact-commit O15 approval before changing release state",
      "tests": ["channel approval: switch cannot activate or pin an unreceipted build",
                "channel approval: promote cannot activate or pin an unreceipted build",

@@ -135,6 +135,14 @@ changes. `--force` only bypasses the native fingerprint check, never O15 approva
 The former receipt opt-out is no longer used. A missing receipt holds the update;
 copy the genuine army receipt and report into the configured receipt store.
 
+Native baselines use `v4:` and include `app.config.js`/`app.config.ts`, installed
+native package versions, local native sources and config plugins. Older baseline
+versions do not establish this compatibility. After a verified native build and
+installation, record the baseline for that installed release with
+`dash-channel baseline <channel>`. Do not reset a baseline merely to clear a
+mismatch. Chat-only JavaScript, module documentation and generated native caches
+do not require a new native baseline.
+
 ## Notifications
 
 Settings has an explicit Enable notifications action. It creates a silent, private-lockscreen channel before asking Android for permission. Denied permissions offer the Android settings route; Dash does not repeatedly prompt on launch. Disabling clears existing Dash notifications.
