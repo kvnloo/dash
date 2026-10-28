@@ -48,6 +48,10 @@ export function useRecordedSpeech(owner: CaptureOwner, onText: (text: string, st
       await controller.current?.begin();
       return;
     }
+    if (!store.get().settings) {
+      if (mounted.current) setState({ phase: "error", note: "Pair the bridge to transcribe. Your draft is kept." });
+      return;
+    }
     permissionPending.current = true;
     try {
       if (!await ensureMicPermission()) {
