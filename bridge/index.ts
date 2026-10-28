@@ -91,6 +91,7 @@ import { TurnSummaries } from "./src/turn-summaries";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
 import { createPostureHttpHandler } from "./src/posture-http";
 import { createOrchestraHttpHandler } from "./src/orchestra-http";
+import { createHostsHttpHandler } from "./src/hosts-http";
 import { createRoadmapHttpHandler } from "./src/roadmap-http";
 import { createPmHttpHandler } from "./src/pm-http";
 import { createTraceRoute } from "./src/trace-route";
@@ -797,6 +798,7 @@ const handleChats = createChatsHttpHandler({
 const contextCompaction = compactionEnabled();
 const handleContext = contextHttp({ sessions: hermesSessions, compaction: contextCompaction });
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
+const handleHosts = createHostsHttpHandler({ authorize, hostId: () => SELF.id() });
 const handleRoadmap = createRoadmapHttpHandler({ authorize });
 const handlePm = createPmHttpHandler({ authorize });
 const handleTrace = createTraceRoute({ authorize, roster: () => selfRoster(harnessList(), HOST) });
@@ -854,6 +856,8 @@ const server = Bun.serve<SocketData>({
       if (context) return cors(context);
       const trace = await handleTrace(request); if (trace) return cors(trace);
       const triage = await handleTriage(request); if (triage) return cors(triage);
+      const hosts = await handleHosts(request);
+      if (hosts) return cors(hosts);
       const orchestra = await handleOrchestra(request);
       if (orchestra) return cors(orchestra);
       const roadmap = await handleRoadmap(request);

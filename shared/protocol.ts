@@ -163,6 +163,41 @@ export interface BotInfo {
   detail?: string;
 }
 
+/** Live local-host evidence, served separately from the ETag-hashed roster. */
+export interface HostStats {
+  hostId: string;
+  sampledAt: number;
+  cpuCount: number;
+  /** Missing until two CPU counter readings exist; never a load-based estimate. */
+  cpuPct?: number;
+  memory?: { usedBytes: number; totalBytes: number };
+  disk?: { path: string; usedBytes: number; totalBytes: number };
+  load?: { one: number; five: number; fifteen: number };
+  gpus?: { name: string; usagePct?: number; usedBytes?: number; totalBytes?: number; temperatureC?: number }[];
+  temperatureC?: number;
+  battery?: { percent: number; status: string; temperatureC?: number };
+}
+
+function statsNumber(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
+function statsPercent(value: unknown): value is number { return statsNumber(value) && value <= 100; }
+function statsBytes(value: unknown): boolean {
+  return isRecord(value) && statsNumber(value.usedBytes) && statsNumber(value.totalBytes) && value.totalBytes > 0 && value.usedBytes <= value.totalBytes;
+}
+function isHostStats(value: unknown): value is HostStats {
+  if (!isRecord(value) || !str(value.hostId) || !statsNumber(value.sampledAt) || !statsNumber(value.cpuCount) || !Number.isInteger(value.cpuCount) || value.cpuCount < 1) return false;
+  if (value.cpuPct !== undefined && !statsPercent(value.cpuPct)) return false;
+  if (value.memory !== undefined && !statsBytes(value.memory)) return false;
+  if (value.disk !== undefined && (!statsBytes(value.disk) || !isRecord(value.disk) || !str(value.disk.path))) return false;
+  if (value.load !== undefined && (!isRecord(value.load) || !statsNumber(value.load.one) || !statsNumber(value.load.five) || !statsNumber(value.load.fifteen))) return false;
+  if (value.temperatureC !== undefined && !statsNumber(value.temperatureC)) return false;
+  if (value.battery !== undefined && (!isRecord(value.battery) || !statsPercent(value.battery.percent) || !str(value.battery.status) || (value.battery.temperatureC !== undefined && !statsNumber(value.battery.temperatureC)))) return false;
+  if (value.gpus !== undefined && (!Array.isArray(value.gpus) || !value.gpus.every((gpu: unknown) => isRecord(gpu) && str(gpu.name)
+    && (gpu.usagePct === undefined || statsPercent(gpu.usagePct)) && (gpu.usedBytes === undefined || statsNumber(gpu.usedBytes))
+    && (gpu.totalBytes === undefined || statsNumber(gpu.totalBytes)) && (gpu.temperatureC === undefined || statsNumber(gpu.temperatureC))))) return false;
+  return true;
+}
+export function parseHostStats(value: unknown): HostStats | null { return isHostStats(value) ? value : null; }
+
 /** A machine on the tailnet (this laptop, host-b/0, …). */
 export interface HostInfo {
   id: string;

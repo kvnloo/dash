@@ -409,7 +409,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   // three panes; each pane subscribes to the store slices it needs on its own.
   const pages = useMemo(() => [
     <View key="hosts" style={{ width, flex: 1 }}>
-      <LazyPane focused={index === 0}><HostsPane navigation={navigation} /></LazyPane>
+      <LazyPane focused={index === 0}><HostsPane navigation={navigation} focused={index === 0} /></LazyPane>
     </View>,
     <View key="chats" style={{ width, flex: 1 }}>
       <ChatsPane navigation={navigation} focused={index === 1 && !searchActive} />

@@ -1,6 +1,9 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "host-stats", "title": "Local host hardware usage in the host info sheet, separate from roster updates",
+     "tests": ["host info sheet shows local CPU, RAM, disk and load from the authenticated bridge",
+               "chat host info sheet shows resources without replacing session identity"]},
     {"id": "phone-hosts", "title": "Hosts lists online and recently offline phones, retaining fleet phones and hiding stale ghosts",
      "tests": ["Hosts lists phones without offering harnesses and hides stale unregistered phones"]},
     {"id": "annotate-tldraw-send", "title": "Send confirmation retains newer ink without restoring submitted marks",
