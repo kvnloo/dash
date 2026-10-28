@@ -142,9 +142,11 @@ test('live-preview-chip: auto-reload waits for a closed keyboard', async ({ page
   try {
     const url = appUrl(metro, 3_000);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
+    // Focus first: on a loaded host the page can sit idle past the 3 s gate before the chip shows,
+    // and the update would reload before the keyboard opened. The keyboard must hold it from the start.
     const address = page.getByPlaceholder('100.64.0.1', { exact: true });
     await address.focus();
+    await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
     await page.waitForTimeout(4_500);
     expect(await reloads(page)).toBe(0);
     await address.evaluate((element) => { if (element instanceof HTMLElement) element.blur(); });
