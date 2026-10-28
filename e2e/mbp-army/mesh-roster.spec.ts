@@ -52,6 +52,9 @@ test('Chats paired with groot lists mbp live and native finished chats and retai
    // A real failed peer request must preserve the validated rows, not silently replace them with [].
    expect(peerHost(await roster())).toEqual(peerHost(snapshot));
    await page.reload({waitUntil:'domcontentloaded'});
+   // A reload is a cold boot of the web app (same budget as pair()'s first load): wait for the nav to mount
+   // before tapping it, or a loaded host spends the 12 s click timeout on JS startup.
+   await expect(page.getByRole('tab',{name:'Chats',exact:true})).toBeVisible({timeout:120000});
    await page.getByRole('tab',{name:'Chats',exact:true}).click({noWaitAfter:true});
    await page.getByTestId('chat-row-mbp:codex:army-finished-codex').scrollIntoViewIfNeeded({timeout:20000});
    await expect(page.getByTestId('chat-row-mbp:codex:army-finished-codex')).toBeVisible();
