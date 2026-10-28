@@ -42,6 +42,26 @@ test.describe('Claude Code chat recorded on another computer',()=>{
   expect(calls.map(c=>c.method)).toEqual(['session/resume','session/resume']);
   for(const c of calls){expect(c.sessionId).toBe(REMOTE_SESSION);expect(c.cwd).toBe(join(bridge.dir,'remote-home','project'));expect(c.pwd).toBe(join(bridge.dir,'remote-home','project'));}
  });
+ // Owner's S25: a chat once marked ended (before the bridge's routes were known) stayed
+ // "This chat has ended on the host" forever, although the bridge still continues it.
+ test('a chat saved as ended comes back sendable once the bridge routes to its computer',async({page,bridge})=>{
+  await pair(page,bridge);
+  await expect(remoteRow(page)).toHaveCount(1,{timeout:30000});
+  await remoteRow(page).click({noWaitAfter:true});
+  await expect(composer(page)).toBeEditable();
+  await expect.poll(()=>page.evaluate(()=>(localStorage.getItem('dash.conversations.index.v3')??'').includes('av:claude:'))).toBe(true);
+  await page.evaluate(()=>{const key='dash.conversations.index.v3';const rows=JSON.parse(localStorage.getItem(key)||'[]');for(const c of rows)if(String(c.profileId).startsWith('av:claude:'))c.stale=true;localStorage.setItem(key,JSON.stringify(rows));});
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.getByRole('tab').nth(1).waitFor({timeout:60000});await page.getByRole('tab').nth(1).click({noWaitAfter:true});
+  await expect(remoteRow(page)).toHaveCount(1,{timeout:30000});
+  await remoteRow(page).click({noWaitAfter:true});
+  await expect(page.getByTestId('chat-window')).toBeVisible();
+  await expect(page.getByText(/has ended on the host/)).toHaveCount(0,{timeout:15000});
+  await expect(composer(page)).toBeEditable();
+  await send(page,'after ended flag');
+  await expect(visible(page,/ARMY_CLAUDE_REPLY: after ended flag/)).toBeVisible({timeout:20000});
+  expect(bridge.logs()).not.toMatch(/turn\.rejected/);
+ });
 });
 
 test.describe('the same chat without a route to its computer',()=>{

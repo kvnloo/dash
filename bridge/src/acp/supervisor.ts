@@ -22,20 +22,34 @@ export function acpCommand(id: string, which: (bin: string) => string | null = B
 
 export type AcpHandle = { done: Promise<string>; cancel(): Promise<void> };
 
-/** Admission is shared across sockets and released only after process cleanup. */
+/** Turns in different chats run side by side; turns in the same chat wait for the one ahead. */
 export class AcpSupervisor {
-  private active?: AcpClient;
+  private readonly active = new Set<AcpClient>();
+  private readonly lanes = new Map<string, Promise<unknown>>();
 
-  async close(): Promise<void> { await this.active?.cancel(); }
+  constructor(private readonly limit = Number(process.env.DASH_ACP_MAX_TURNS ?? 8)) {}
+
+  async close(): Promise<void> { await Promise.all([...this.active].map(c => c.cancel())); }
 
   start(options: { id: string; command: string[]; input: TurnInput; sink: Sink; timeoutMs?: number; spawnCwd?: string; env?: Record<string, string>; permissions?: AcpOptions["permissions"] }): AcpHandle {
-    if (this.active) throw new Error("ACP supervisor busy; concurrency is limited to one turn");
+    if (this.active.size >= this.limit) throw new Error(`The host is already running ${this.active.size} agent turns; try again when one finishes.`);
     const client = new AcpClient({ command: options.command, cwd: options.input.cwd, spawnCwd: options.spawnCwd, sink: options.sink, timeoutMs: options.timeoutMs, env: options.env, permissions: options.permissions, onUsage: (session, update) => acpContextReadings.observe(options.id, session, update) });
-    this.active = client;
-    const done = client.turn(options.input).finally(async () => {
+    this.active.add(client);
+    // A new chat has no session yet, so it never waits on another turn.
+    const lane = options.input.sessionId ? `${options.id}:${options.input.sessionId}` : undefined;
+    const ahead = lane ? this.lanes.get(lane) : undefined;
+    let cancelled = false;
+    const run = async (): Promise<string> => {
+      if (ahead) await ahead.catch(() => undefined);
+      if (cancelled) throw new Error("ACP turn cancelled");
+      return client.turn(options.input);
+    };
+    const done = run().finally(async () => {
       await client.close();
-      this.active = undefined;
+      this.active.delete(client);
+      if (lane && this.lanes.get(lane) === done) this.lanes.delete(lane);
     });
-    return { done, cancel: () => client.cancel() };
+    if (lane) this.lanes.set(lane, done);
+    return { done, cancel: async () => { cancelled = true; await client.cancel(); } };
   }
 }
