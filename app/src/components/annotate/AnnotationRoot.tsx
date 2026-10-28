@@ -38,6 +38,9 @@ import { syncTldrawStrokes } from "../../store/annotate";
 import { flowMode, flowTrace } from "../../lib/flow-trace";
 import { executionToken } from "../../lib/bridge-auth";
 import { liveOf, nextGeneration } from "../../store/live";
+import { connectAnnotationDraft } from "../../store/annotation-draft";
+import { attachClosedPenLoop } from "../../lib/annotate/io-core";
+import { updateComposerDraft } from "../../store/composer-drafts";
 
 export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
 /** Strokes whose extent is under this many points are taps (e.g. a pen double-tap). */
@@ -88,6 +91,11 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const inkRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const captureTarget = useRef<View>(null);
   const inkTraceId = useRef("");
+
+  useEffect(() => {
+    if (!flowMode) return;
+    return connectAnnotationDraft().dispose;
+  }, []);
 
   useEffect(() => {
     if (!flowMode || Platform.OS !== "android") return;
@@ -194,7 +202,25 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     const shaped = shape && first && last ? [{ ...first, ...shape.from }, { ...last, ...shape.to }] : points;
     commitStroke({ tool: shape?.tool ?? s.tool, color: s.color, pointer, points: shaped, targets: targetsAt(screenPoints) });
     if (__DEV__) console.log("[dash-ink] committed", { pointer, points: shaped.length, width, height });
-    if (flowMode) flowTrace.mark("ink.submit", inkTraceId.current);
+    if (flowMode) {
+      flowTrace.mark("ink.submit", inkTraceId.current);
+      const state = store.get();
+      const conversationId = state.activeId;
+      const settings = state.settings;
+      const stroke = annotate.get().drawing.strokes.at(-1);
+      const snapshot = annotate.get().drawing.strokes;
+      const route = debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute() : undefined;
+      const screen = { id: route?.key ?? "unknown", route: route?.name ?? "unknown", width, height };
+      if (stroke && conversationId && settings) void attachClosedPenLoop({
+        stroke, screen, createdAt: Date.now(),
+        updateDraft: change => updateComposerDraft(conversationId, { text: "", attachments: [] }, change),
+        markedPng: async () => {
+          const { composite } = await loadInk();
+          return (await composite(captureTarget, snapshot, screen, INK, colors.bg)).bytes;
+        },
+        uploadPng: (name, bytes) => uploadBytes(settings, name, "image/png", bytes),
+      });
+    }
     haptic.select();
   }, [size]);
 
