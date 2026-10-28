@@ -73,6 +73,16 @@ The APK includes `expo-dev-client`, plus turbo's SDK `expo-intent-launcher` and 
 
 JavaScript/TypeScript and styling changes use Metro Fast Refresh. Native module, native dependency, app config/plugin, permission or manifest changes require another prebuild/APK installation. A Metro bundle resolving successfully does not prove native launch or Fast Refresh on the phone. The rollout owner must install, open the URL, verify a real edit appears, and inspect device/Metro errors before calling it live. Workers must not restart the protected stable/preview services or drive the daily phone.
 
+### Live follow (what keeps the phone current)
+
+Three Metro servers run on the dev host, each behind a tailnet-only relay: `:8212` the installed dev client's JavaScript, `:8213` **turbo** and `:8214` the release channel (`dash-channel`, currently `rc3-roadmap`).
+
+- `:8213` follows `integ/rc3-roadmap-resume-20261027` (`TURBO_FOLLOW_REF`). `dash-turbo-follow.timer` runs `dash-channel follow` every 30 s: one `git ls-remote`, and only when the head moved it builds an immutable release, restarts Metro on it, compiles the Android bundle as a health gate and rolls back if that fails. A head that failed is not retried until the head moves. Install or remove with `scripts/turbo/install-groot.sh [--uninstall]`.
+- `:8214` is rebuilt by `dash-channel nightly` (timer override: every 10 min) and re-served when the tracked branch moved.
+- Every release writes `app/src/lib/build-info.json`; the bundle bakes it in (what the app runs) and `app.config.js` republishes it in the manifest (what Metro serves). The chip in the top-right shows `abc1234 · 3m old`, or `abc1234 → def5678` when the server moved on. Tap reloads (or hides when current); long-press offers Reload now, Switch Metro (turbo :8213 / channel :8214) and the auto-reload toggle. Auto-reload fires when you return to the app, or after 30 s without a touch with the keyboard closed, once per served build.
+- Latency from a push to the new bundle on `:8213` is the 30 s tick plus a few seconds to build, restart and compile. Check what a Metro serves the way the phone fetches it: `scripts/turbo/verify-served.sh [--port 8213|8214]`.
+- A phone that predates the chip needs one reload (or `DASH_CHANNEL_CONF_DIR=~/.config/dash-turbo-live dash-channel open <adb-serial>` while the phone is idle) to start auto-updating. `scripts/adb-tailscale.sh` explains why Wireless debugging needs `ADB_PORT`.
+
 ## Notifications
 
 Settings has an explicit Enable notifications action. It creates a silent, private-lockscreen channel before asking Android for permission. Denied permissions offer the Android settings route; Dash does not repeatedly prompt on launch. Disabling clears existing Dash notifications.
