@@ -246,7 +246,11 @@ export const TraceTimeline = memo(function TraceTimeline({
       tx.value = withTiming(Math.min(hi, Math.max(lo, target)), settle);
     });
 
+  // Scrub is a one-finger long press. Two resting fingers are the start of a pinch: their averaged
+  // point does not move, so without this a slow pinch (or a busy frame) turned into a scrub at 320 ms
+  // and the Race cancelled the zoom.
   const scrubG = Gesture.Pan()
+    .maxPointers(1)
     .activateAfterLongPress(320)
     .onStart((e) => {
       const r = rowAtY(e.y);
