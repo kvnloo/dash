@@ -25,6 +25,7 @@ export function releaseBatch(items: readonly HeldNotice[], now: number, posture:
 /** Private, atomic, bounded history. Stable ids make replay safe for old/new sockets. */
 export class NoticeService {
   private items: NoticeMessage[] = [];
+  private releasedIds = new Set<string>();
   private readonly listeners = new Set<(notice: NoticeMessage) => void>();
   private readonly path: string;
   /** Set when a corrupt history file was moved aside at startup. */
@@ -58,9 +59,17 @@ export class NoticeService {
     }
     try {
       const raw: unknown = JSON.parse(readFileSync(this.path, "utf8"));
-      if (!Array.isArray(raw)) throw new Error("Invalid notice history");
+      const history = Array.isArray(raw) ? raw : record(raw) ? raw.items : null;
+      if (!Array.isArray(history)) throw new Error("Invalid notice history");
+      if (!Array.isArray(raw)) {
+        if (!record(raw) || raw.schema !== "dash.notice_history/v1" || !Array.isArray(raw.releasedIds) ||
+          raw.releasedIds.length > 200 || !raw.releasedIds.every((id: unknown) => typeof id === "string")) throw new Error("Invalid release receipts");
+        for (const id of raw.releasedIds) {
+          if (typeof id === "string") this.releasedIds.add(id);
+        }
+      }
       const ids = new Set<string>();
-      for (const item of raw.slice(-50)) {
+      for (const item of history.slice(-50)) {
         const parsed = parseServerMessage(item);
         if (parsed?.type !== "notice") throw new Error("Invalid notice history entry");
         if (!ids.has(parsed.id)) { ids.add(parsed.id); this.items.push(parsed); }
@@ -84,16 +93,14 @@ export class NoticeService {
     atomic(this.deferredPath, next); this.held = next;
   }
   release(now: number, posture: Decision, tz: string): NoticeMessage | null {
-    const ready = releaseBatch(this.held.items, now, posture, tz);
-    if (!ready.length) return null;
-    // Stable batch identity prevents a second publish after a crash between the two renames.
-    const id = `held:${new Bun.CryptoHasher("sha256").update(ready.map(item => item.id).join(":")).digest("hex")}`;
-    const existing = this.items.find(item => item.id === id);
-    const notice = existing ?? this.publish({ title: `Held overnight: ${ready.length} updates`,
-      body: ready.map(item => item.input.title).join("\n").slice(0, NOTICE_BODY_MAX), class: "digest", url: "dash://notices" }, id);
-    const ids = new Set(ready.map(item => item.id));
-    const next = { ...this.held, items: this.held.items.filter(item => !ids.has(item.id)) };
-    atomic(this.deferredPath, next); this.held = next;
+    const ready = releaseBatch(this.held.items, now, posture, tz).filter(item => !this.releasedIds.has(item.id));
+    const notice = ready.length ? this.persistNotice({ title: `Held overnight: ${ready.length} updates`,
+      body: ready.map(item => item.input.title).join("\n").slice(0, NOTICE_BODY_MAX), class: "digest", url: "dash://notices" },
+      crypto.randomUUID(), ready.map(item => item.id)) : null;
+    const next = { ...this.held, items: this.held.items.filter(item => !this.releasedIds.has(item.id)) };
+    if (next.items.length !== this.held.items.length) {
+      atomic(this.deferredPath, next); this.held = next;
+    }
     return notice;
   }
   list(): readonly NoticeMessage[] { return this.items; }
@@ -103,18 +110,24 @@ export class NoticeService {
     catch (error) { this.listeners.delete(send); throw error; }
     return () => { this.listeners.delete(send); };
   }
-  private write(next: NoticeMessage[]): void {
-    const temp = `${this.path}.tmp`;
-    writeFileSync(temp, JSON.stringify(next), { mode: 0o600 });
-    chmodSync(temp, 0o600);
-    renameSync(temp, this.path);
+  private write(next: NoticeMessage[], releasedIds: ReadonlySet<string> = this.releasedIds): void {
+    atomic(this.path, { schema: "dash.notice_history/v1", items: next, releasedIds: [...releasedIds] });
     this.items = next;
   }
   /** Phone "forget everything": drop the replay ring so a re-paired phone starts clean. */
   clear(): void { this.write([]); }
   publish(input: NoticeInput, id: string = crypto.randomUUID()): NoticeMessage {
+    return this.persistNotice(input, id, []);
+  }
+  private persistNotice(input: NoticeInput, id: string, released: readonly string[]): NoticeMessage {
     const notice: NoticeMessage = { ...input, type: "notice", id };
-    this.write([...this.items, notice].slice(-50));
+    const next = [...this.items, notice].slice(-50);
+    const pendingIds = new Set(this.held.items.map(item => item.id));
+    const releasedIds = new Set([...this.releasedIds, ...released].filter(item => pendingIds.has(item)));
+    // Receipts and the digest commit together, before broadcast. Keep receipts until
+    // queue cleanup succeeds, even if the digest leaves the bounded replay history.
+    this.write(next, releasedIds);
+    this.releasedIds = releasedIds;
     let delivered = 0;
     for (const send of this.listeners) {
       try { send(notice); delivered++; } catch { this.listeners.delete(send); }
