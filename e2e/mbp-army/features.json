@@ -89,6 +89,10 @@
      "tests": ["the Dash repository's own pm ledger parses cleanly and tracks the Hermes tasks"]},
     {"id": "stt-does-not-block-bridge", "title": "Worker speech-to-text cannot stall authenticated bridge requests",
      "tests": ["STT fixture returns text while authenticated bridge GETs stay responsive"]}
+    ,{"id": "stt-load-recovers", "title": "Recover from STT model failures, report host reasons, and isolate temp filenames",
+     "tests": ["STT real-host checks missing model returns 503 with model directory reason",
+               "STT fixture load failure returns 503 then retries to 200 without restart",
+               "STT real-host checks malicious voice id does not touch HOME or TMPDIR files"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
