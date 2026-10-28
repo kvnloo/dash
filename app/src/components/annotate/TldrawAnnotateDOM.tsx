@@ -25,6 +25,8 @@ interface Props {
   tool: Tool;
   color: InkColor;
   penMode: boolean;
+  /** Screen-mode ink takes no input above this many px, so the top nav stays tappable. */
+  inputTop?: number;
   mode: "screen" | "dex";
   onReady(ms: number): Promise<void>;
   onStylusObserved(): Promise<void>;
@@ -134,7 +136,8 @@ export default function TldrawAnnotateDOM(props: Props) {
     }
   }
   return <div data-testid="annotate-tldraw" data-ready={editor ? "true" : "false"}
-    style={{ position: "absolute", inset: 0, visibility: props.active ? "visible" : "hidden", pointerEvents: props.active ? "auto" : "none" }}
+    style={{ position: "absolute", inset: 0, visibility: props.active ? "visible" : "hidden", pointerEvents: props.active ? "auto" : "none",
+      clipPath: props.inputTop ? `inset(${props.inputTop}px 0 0 0)` : undefined }}
     onPointerDownCapture={event => {
       if (props.active && event.pointerType === "pen") void latest.current.onStylusObserved();
       if (!editor || !props.active || event.button !== 0 || (props.penMode && event.pointerType !== "pen")) return;

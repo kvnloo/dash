@@ -115,6 +115,9 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const penSendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const captureTarget = useRef<View>(null);
   const inkTraceId = useRef("");
+  // The top nav (S Pen mode pill, tabs, bridge chevron) stays tappable while annotating:
+  // its pill reads "Switch to Normal", so ink input starts below the nav chrome band.
+  const navBand = useSafeAreaInsets().top + NAV_CHROME_HEIGHT;
 
   useEffect(() => {
     if (!flowMode) return;
@@ -294,7 +297,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       .onTouchesDown((e, manager) => {
         const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
         // KeyboardDock moves with the IME; only its live rectangle blocks ink.
-        if (!point || point.y >= size.height - Math.max(0, -keyboardHeight.value)) { manager.fail(); return; }
+        if (!point || point.y < navBand || point.y >= size.height - Math.max(0, -keyboardHeight.value)) { manager.fail(); return; }
         const kind = pointerKind(e.pointerType);
         if (!activeSv.value || routePointer(kind, penSv.value, e.numberOfTouches) === "pass") { manager.fail(); return; }
         kindSv.value = e.pointerType; pointerSv.value = point.id;
@@ -323,7 +326,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(engine === "skia" && active)
       .onEnd((e, success) => { if (success && e.y < size.height - Math.max(0, -keyboardHeight.value) && pointerKind(e.pointerType) === "stylus") runOnJS(queuePenSend)(); });
     return Gesture.Simultaneous(draw, penDoubleTap);
-  }, [engine, active, penMode, ink, inkError, finish, queuePenSend, live, activeSv, penSv, kindSv, pointerSv, tracePointer, size.height, keyboardHeight]);
+  }, [engine, active, penMode, ink, inkError, finish, queuePenSend, live, activeSv, penSv, kindSv, pointerSv, tracePointer, size.height, keyboardHeight, navBand]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -347,10 +350,10 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         <View style={styles.root} collapsable={false} onLayout={onLayout}>
           <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
           {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
-          {engine === "skia" && active && !penMode && !inkError ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
+          {engine === "skia" && active && !penMode && !inkError ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle, { top: navBand }]} {...overlayProps} /> : null}
           {engine === "skia" && active && Ink ? <InkBoundary key={inkAttempt} onError={error => inkFailed(error, "ink-render")}><Animated.View style={[StyleSheet.absoluteFill, frameStyle, { overflow: "hidden" }]} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></Animated.View></InkBoundary> : null}
-          {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active ? "auto" : "none"} {...overlayProps}>
-            <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} tool={tool} color={color} penMode={penMode} mode="screen"
+          {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active ? "box-none" : "none"} {...overlayProps}>
+            <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} inputTop={navBand} tool={tool} color={color} penMode={penMode} mode="screen"
               onStylusObserved={async () => { observeStylusPointer(); }}
               onReady={async ms => { console.info("[annotate-tldraw] host-ready", { ms }); }}
               onDrawing={async drawing => { syncTldrawStrokes(drawing.map(stroke => ({ ...stroke, targets: targetsAt(stroke.points.map(point => ({ x: point.x * size.width, y: point.y * size.height }))) }))); }}
