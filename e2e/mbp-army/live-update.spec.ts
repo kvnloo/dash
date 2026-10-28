@@ -142,14 +142,24 @@ test('live-preview-chip: auto-reload waits for a closed keyboard', async ({ page
   try {
     const url = appUrl(metro, 3_000);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
-    // Focus first: on a loaded host the page can sit idle past the 3 s gate before the chip shows,
-    // and the update would reload before the keyboard opened. The keyboard must hold it from the start.
-    const address = page.getByPlaceholder('100.64.0.1', { exact: true });
-    await address.focus();
+    // Hold the keyboard open from the first frame: on a loaded host the page can sit idle past the 3 s gate
+    // before the chip shows, and the pair screen can re-mount the field while it hydrates, dropping a one-off
+    // focus(). A page-side loop re-focuses the field whenever it loses focus, so the keyboard is open the whole time.
+    await page.evaluate(() => {
+      const keep = window.setInterval(() => {
+        const field = document.querySelector<HTMLInputElement>('input[placeholder="100.64.0.1"]');
+        if (field && document.activeElement !== field) field.focus();
+      }, 40);
+      Object.defineProperty(window, '__armyKeepKeyboard', { value: keep, configurable: true });
+    });
     await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
     await page.waitForTimeout(4_500);
     expect(await reloads(page)).toBe(0);
-    await address.evaluate((element) => { if (element instanceof HTMLElement) element.blur(); });
+    await page.evaluate(() => {
+      const keep: unknown = Reflect.get(window, '__armyKeepKeyboard');
+      if (typeof keep === 'number') window.clearInterval(keep);
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    });
     await expect.poll(() => reloads(page), { timeout: 10_000 }).toBe(1);
     await pair(page, bridge, url);
   } finally { await metro.close(); }
