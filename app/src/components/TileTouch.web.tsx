@@ -12,7 +12,10 @@ export function TileTouch({ holding, children, onOpen, onPrimary, onSecondary }:
     return () => node.removeEventListener("touchmove", move);
   }, [holding]);
   return <div ref={ref} style={{ display: "contents" }} onKeyDown={event => {
-    if (event.target !== ref.current?.firstElementChild || event.ctrlKey || event.altKey || event.metaKey) return;
+    // GestureDetector inserts display:contents wrappers between this node and the focusable tile.
+    let tile = ref.current?.firstElementChild;
+    while (tile && getComputedStyle(tile).display === "contents") tile = tile.firstElementChild;
+    if (event.target !== tile || event.ctrlKey || event.altKey || event.metaKey) return;
     const action = event.key === "Enter" || event.key === " " ? onOpen : event.key.toLowerCase() === "p" ? onPrimary : event.key.toLowerCase() === "c" ? onSecondary : null;
     if (action) { event.preventDefault(); event.stopPropagation(); action(); }
   }}>{children}</div>;

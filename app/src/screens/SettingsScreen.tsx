@@ -116,8 +116,12 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
 
   const forget = () => {
     confirmDestructive("Forget this bridge?", "Removes the saved address, token, and every chat on this phone.", "Forget", () => {
-      bridge.stop();
-      void forgetEverything().then(() => navigation.replace("Settings"));
+      void forgetEverything(message => {
+        const sent = bridge.send(message);
+        // The notice queue calls this later; stop after send, before credentials are cleared.
+        bridge.stop();
+        return sent;
+      }).then(() => navigation.replace("Settings"));
     });
   };
 

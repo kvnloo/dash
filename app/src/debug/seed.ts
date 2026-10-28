@@ -48,7 +48,7 @@ const DEBUG_HOSTS = [
     hostname: "host-b",
     online: true,
     self: false,
-    address: "100.64.0.2",
+    address: "192.0.2.10",
     agents: [{ id: "hermes", name: "Hermes", kind: "hermes", status: "running" as const, detail: "Mesh node" }],
     bots: [
       { id: "grok-bot", name: "GrokBot", runtime: "grok", status: "running" as const, channels: [{ platform: "discord", state: "connected" as const }], detail: "Desktop app" },
