@@ -43,6 +43,8 @@ import { colors } from "./src/theme";
 import { NativeEvents } from "./src/components/NativeEvents";
 import { ContinuousVoiceRoot } from "./src/components/ContinuousVoiceRoot";
 import { ServedBuildChip } from "./src/components/ServedBuildChip";
+import { DashDialogHost } from "./src/components/DashDialogHost";
+import { dialogStore, resolveCurrent } from "./src/lib/dash-dialog";
 import { observeTouch } from "./src/lib/touch-idle";
 import { flushNotificationTarget, handleChatLink } from "./src/lib/notification-routing";
 
@@ -94,6 +96,7 @@ export default function App() {
   if (fontError) throw fontError;
   const hydrated = store.use((s) => s.hydrated);
   const hasSettings = store.use((s) => s.settings !== null);
+  const dialogRequest = dialogStore.use((s) => s.current);
 
   useEffect(() => {
     void hydrate().then(async () => {
@@ -163,6 +166,7 @@ export default function App() {
             </AnnotationRoot></ContinuousVoiceRoot>
             </NavigationContainer>
           </BridgePullProvider>
+          <DashDialogHost request={dialogRequest} onResolve={resolveCurrent} />
           <DebugHost />
           <ServedBuildChip />
           <StatusBar style="light" hidden />
