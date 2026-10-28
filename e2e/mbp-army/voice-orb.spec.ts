@@ -64,7 +64,7 @@ test("live hero orb follows each voice phase, mutes, passes through and hides fo
   await page.getByRole("button", { name: /^(Create new chat|New chat)$/ }).first().click({ noWaitAfter: true });
   await expect(page.getByRole("button", { name: "Chat options" })).toBeVisible();
   await page.getByRole("button", { name: /^Live call, .*\. Show voice orb$/ }).click({ noWaitAfter: true });
-  await expect(orb).toHaveCSS("border-color", "rgb(242, 242, 242)", { timeout: 300 });
+  await expect(orb).toHaveCSS("border-color", "rgb(236, 232, 223)", { timeout: 300 });
 
   await orb.click({ noWaitAfter: true });
   await expect(orb).toHaveAttribute("aria-label", /Unmute voice/, { timeout: 300 });
