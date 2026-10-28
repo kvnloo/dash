@@ -32,6 +32,8 @@ export interface AnnotateState {
   color: InkColor;
   drawing: Drawing;
   segments: Segment[];
+  /** The typed annotation intent, also included in the sent transcript. */
+  typed: string;
   /** Hold-to-talk mic in the tray is recording. */
   recording: boolean;
   status: "idle" | "capturing" | "sending" | "sent" | "error";
@@ -49,7 +51,7 @@ function initialAnnotationState(): AnnotateState {
   return {
     annotateEngine: defaultEngine(),
     active: false, buttonDown: false, penMode: false, tool: "pen", color: "accent",
-    drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle",
+    drawing: EMPTY_DRAWING, segments: [], typed: "", recording: false, status: "idle",
   };
 }
 
@@ -87,7 +89,7 @@ export function enterAnnotation(): void {
 
 /** Flow exits close the mode, not the draft. Clear remains the explicit discard. */
 export function exitAnnotation(): void {
-  annotate.set(s => ({ ...s, active: false, drawing: flowMode ? s.drawing : EMPTY_DRAWING, segments: flowMode ? s.segments : [], recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined }));
+  annotate.set(s => ({ ...s, active: false, drawing: flowMode ? s.drawing : EMPTY_DRAWING, segments: flowMode ? s.segments : [], typed: "", recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined }));
 }
 
 /** Switch modes without discarding ink, voice or queued drafts. */
@@ -127,6 +129,7 @@ export function eraseStrokes(path: { x: number; y: number }[]): void { annotate.
 export function undoStroke(): void { annotate.set(s => ({ ...s, drawing: undo(s.drawing) })); }
 export function clearStrokes(): void { annotate.set(s => ({ ...s, drawing: clear(s.drawing) })); }
 export function setRecording(recording: boolean): void { annotate.set(s => ({ ...s, recording })); }
+export function setTypedNote(typed: string): void { annotate.set(s => ({ ...s, typed: typed.slice(0, 2000) })); }
 
 /** Voice sessions and the tray mic both feed timed transcript segments. Old voice segments age out. */
 export function addSegment(segment: Segment): void {
@@ -139,12 +142,14 @@ export function setAnnotationStatus(status: AnnotateState["status"], extra: Part
 }
 
 /** Clear only the confirmed snapshot; ink/words added during upload remain a new draft. */
-export function finishSend(keep: boolean, submitted?: { strokes: readonly Stroke[]; segments: readonly Segment[] }): void {
+export function finishSend(keep: boolean, submitted?: { strokes: readonly Stroke[]; segments: readonly Segment[]; typed: string }): void {
   annotate.set(s => {
     const strokes = submitted ? s.drawing.strokes.filter(stroke => !submitted.strokes.includes(stroke)) : [];
     const segments = submitted ? s.segments.filter(segment => !submitted.segments.includes(segment)) : [];
-    const remaining = strokes.length > 0 || segments.length > 0;
+    // Do not discard a note edited while an earlier snapshot was uploading.
+    const typed = submitted && s.typed !== submitted.typed ? s.typed : "";
+    const remaining = strokes.length > 0 || segments.length > 0 || typed.trim().length > 0;
     return { ...s, active: keep || remaining, drawing: remaining ? { strokes, nextId: s.drawing.nextId, past: [] } : EMPTY_DRAWING,
-      segments, recording: submitted ? s.recording : false, pendingTurn: undefined, status: "sent" };
+      segments, typed, recording: submitted ? s.recording : false, pendingTurn: undefined, status: "sent" };
   });
 }
