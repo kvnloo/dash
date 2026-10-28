@@ -68,3 +68,37 @@ test('Orchestra polls only while visible and resumes the selected Triage view', 
     await writeFile(info.outputPath('orchestra-request-starts.json'), JSON.stringify({ requests, checkpoints }, null, 2));
   }
 });
+
+test('Returning to Orchestra waits for fresh evidence before claiming current priorities', async ({ page, bridge }, info) => {
+  await pair(page, bridge);
+  const graphResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/orchestra/graph' && response.ok());
+  await page.getByRole('tab').nth(2).click();
+  await graphResponse;
+  await page.getByRole('button', { name: 'Triage', exact: true }).click();
+  const emptyFeed = page.getByText('No running work, blockers or owner-needed items reported. Missing sources are listed above.', { exact: true });
+  await expect(emptyFeed).toBeVisible();
+  await page.getByRole('tab').nth(1).click();
+  // Let the previously accepted snapshot exceed Triage's 30-second freshness bound.
+  await page.waitForTimeout(31000);
+  const network = await page.context().newCDPSession(page);
+  await network.send('Network.enable');
+  await network.send('Network.emulateNetworkConditions', { offline: false, latency: 10000, downloadThroughput: -1, uploadThroughput: -1 });
+  try {
+    const refresh = page.waitForRequest(request => new URL(request.url()).pathname === '/triage');
+    await page.getByRole('tab').nth(2).click();
+    await refresh;
+    await expect.soft(page.getByText('Loading current priorities…', { exact: true })).toBeVisible({ timeout: 2000 });
+    await expect.soft(emptyFeed).toHaveCount(0, { timeout: 1000 });
+    await page.getByRole('button', { name: 'Fleet', exact: true }).click();
+    await expect.soft(page.getByRole('alert').filter({ hasText: 'Loading graph evidence; roster only.' })).toBeVisible({ timeout: 2000 });
+    await page.screenshot({ path: info.outputPath('refresh-pending.png') });
+    await network.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    await expect(page.getByRole('alert').filter({ hasText: 'Loading graph evidence; roster only.' })).toHaveCount(0, { timeout: 20000 });
+    await page.getByRole('button', { name: 'Triage', exact: true }).click();
+    await expect(emptyFeed).toBeVisible({ timeout: 20000 });
+    await page.screenshot({ path: info.outputPath('refresh-completed.png') });
+  } finally {
+    await network.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    await network.detach();
+  }
+});

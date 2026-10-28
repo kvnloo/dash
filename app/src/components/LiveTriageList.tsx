@@ -19,8 +19,6 @@ export function LiveTriageList() {
   useEffect(() => {
     setSelected(null);
     setResult({ source: settings, feed: { phase: 'loading' } });
-  }, [settings?.address, settings?.token, settings?.identity]);
-  useEffect(() => {
     if (!settings || !active) return;
     let disposed = false, pending = false;
     let controller: AbortController | undefined;

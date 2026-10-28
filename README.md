@@ -67,6 +67,8 @@ stale labels remain visible; resumed work does not reuse an old blocker reason.
 Orchestra stops graph requests, Triage requests, and Triage age ticks when its
 pane is hidden or the app leaves the foreground. Returning to the pane refreshes
 the selected view. This preserves view selection across tab switches.
+Leaving the pane invalidates its snapshots. On return, Triage waits for fresh
+priorities and the graph labels its roster-only view until new evidence arrives.
 
 Chat code blocks highlight JSX and TSX fences alongside the existing languages.
 Source text and the existing syntax palette are preserved.

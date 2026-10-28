@@ -7,8 +7,8 @@ type Evidence = { source: Source; snapshot: OrchestraSnapshot | null; error: str
 
 export function useOrchestraEvidence(settings: Source | null, focused: boolean) {
   const [evidence, setEvidence] = useState<Evidence | null>(null);
-  useEffect(() => { setEvidence(null); }, [settings?.address, settings?.token, settings?.identity]);
   useEffect(() => {
+    setEvidence(null);
     if (!settings || !focused) return;
     let disposed = false;
     let pending = false;
@@ -37,7 +37,7 @@ export function useOrchestraEvidence(settings: Source | null, focused: boolean) 
     return () => { disposed = true; controller.abort(); clearInterval(timer); };
   }, [settings?.address, settings?.token, settings?.identity, focused]);
   const current = settings && evidence && sameSource(settings, evidence.source) ? evidence : null;
-  return { snapshot: current?.snapshot ?? null, error: settings ? current?.error ?? "" : "Pair with a bridge to load host evidence." };
+  return { snapshot: current?.snapshot ?? null, error: settings ? current?.error ?? "Loading graph evidence; roster only." : "Pair with a bridge to load host evidence." };
 }
 
 function sameSource(a: Source, b: Source) {
