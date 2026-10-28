@@ -48,6 +48,15 @@ const toolTurn = (done: () => void, many: boolean) => {
  const next = () => { const step = steps[i++]; if (!step) {done();return;} step(); timer = setTimeout(next, 60); };
  next();
 };
+// Fenced payloads travel over real ACP and the real bridge, never through app debug state.
+function generatedReply(prompt: string): string | null {
+ if (process.env.ARMY_GENERATED_UI !== '1') return null;
+ if (prompt.includes('ARMY_OPENUI_INVALID')) return '```openui-lang\nroot = Button("ARMY forbidden action");\n```';
+ if (prompt.includes('ARMY_OPENUI_CATALOG')) return '```openui-lang\nroot = Stack([Card("ARMY native overview", [Text("ARMY selectable summary"), Stat("Completed", 7), Progress("Delivery", 0.75), List(["Review evidence"]), Table(["Task", "State"], [["Catalog wiring", "Ready"]]), Callout("success", "ARMY bounded catalog")])]);\n```';
+ if (prompt.includes('ARMY_GENUI')) return '```genui\n{"version":1,"components":[{"type":"card","title":"ARMY legacy GenUI","text":"ARMY JSON cards still render"}]}\n```';
+ if (prompt.includes('ARMY_OPENUI_JSON')) return '```openui\n{"version":1,"components":[{"type":"card","title":"ARMY legacy OpenUI","text":"ARMY JSON alias still renders"}]}\n```';
+ return null;
+}
 let active: unknown;
 createInterface({input:process.stdin}).on('line', line => {
  const value:unknown = JSON.parse(line);
@@ -68,9 +77,12 @@ createInterface({input:process.stdin}).on('line', line => {
   if (text.includes('ARMY_ERROR')) { send({jsonrpc:'2.0',id:r.id,error:{code:-32000,message:'ARMY_EXPECTED_AGENT_ERROR'}}); return; }
   // What a real agent reports for context occupancy: the bridge turns this ACP usage_update into the gauge's snapshot.
   if (text.includes('ARMY_USAGE')) send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'usage_update',used:85000,size:200000}}});
-  update('ARMY_STREAM_BEGIN ');
+  const generated = generatedReply(text);
+  const split = generated?.indexOf('\n');
+  const prefix = generated && split !== undefined ? generated.slice(0, split + 1) : 'ARMY_STREAM_BEGIN ';
+  update(prefix);
   if (text.includes('ARMY_HANG')) return;
-  const answer = () => { turnLog('end', text); update(replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); };
+  const answer = () => { turnLog('end', text); update(generated ? generated.slice(prefix.length) : replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); };
   // ARMY_HOLD: no answer until the spec creates $HOME/army-release, so overlap never races a clock.
   const hold = () => { if (existsSync(join(process.env.HOME || '.', 'army-release'))) answer(); else timer = setTimeout(hold, 100); };
   const finish = () => { if (text.includes('ARMY_HOLD')) hold(); else timer = setTimeout(answer, text.includes('ARMY_SLOW') ? 9000 : 350); };
