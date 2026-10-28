@@ -12,7 +12,7 @@ export type OpenUINode =
   | { type: "List"; items: string[] }
   | { type: "Table"; columns: string[]; rows: string[][] }
   | { type: "Callout"; tone: string; text: string }
-  | { type: "Roadmap"; handle: string };
+  | { type: "Roadmap"; handle: "dash-roadmap" };
 
 type RowBase = {
   /** Stable positional identity; content changes do not change row keys. */
