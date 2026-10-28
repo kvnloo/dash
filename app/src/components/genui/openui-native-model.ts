@@ -88,7 +88,8 @@ export function layoutModel(root: OpenUINode): OpenUILayoutRow[] {
 
     if (node.type === "Stack" || node.type === "Card") {
       for (let i = node.children.length - 1; i >= 0; i--) {
-        pending.push({ node: node.children[i], key: `${key}/${i}`, parentKey: key, depth: depth + 1 });
+        const child = node.children[i];
+        if (child) pending.push({ node: child, key: `${key}/${i}`, parentKey: key, depth: depth + 1 });
       }
     }
   }
