@@ -979,8 +979,7 @@ const server = Bun.serve<SocketData>({
             if (problem || !harness) return rejectTurn(ws, message.id, problem ?? `Unknown agent "${message.harness}".`);
             if (turns.has(message.id)) return;
             if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
-            if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
-          const turn = new Turn(message.id, harness);
+            const turn = new Turn(message.id, harness);
             turn.listeners.add(ws);
             ws.data.turns.add(message.id);
             turns.set(message.id, turn);
@@ -1015,6 +1014,7 @@ const server = Bun.serve<SocketData>({
             log("turn.attachments", { id: message.id, count: files.length, bytes: files.reduce((n, f) => n + f.size, 0) });
           }
 
+          if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
           const turn = new Turn(message.id, harness);
           turn.listeners.add(ws);
           ws.data.turns.add(message.id);
