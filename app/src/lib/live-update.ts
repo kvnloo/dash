@@ -40,9 +40,7 @@ export function manifestBuild(manifest: unknown): LiveBuild | null {
 }
 
 export function sameBuild(a: LiveBuild | null, b: LiveBuild | null): boolean {
-  void a;
-  void b;
-  return true; // TURBO-C13 mutation sanity: intentional CI-red, restore before review
+  return a !== null && b !== null && a.sha === b.sha;
 }
 
 /** `host:port` (manifest hostUri) or a full http(s) URL to an origin; anything else is rejected. */
