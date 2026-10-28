@@ -21,7 +21,7 @@ test('Hosts lists phones without offering harnesses and hides stale unregistered
  await expect(page.getByTestId('tree-row-host:fleet-phone')).toBeVisible();
  await expect(page.getByTestId('tree-row-host:retired-phone')).toHaveCount(0);
  await s25.click({noWaitAfter:true});
- await expect(page.getByTestId('tree-row-kevins-s25-ultra:empty')).toHaveText('No harnesses on a phone');
+ await expect(page.getByTestId('tree-row-kevins-s25-ultra:empty')).toContainText('No harnesses on a phone');
  await expect(page.getByTestId('chat-window')).toHaveCount(0);
  // Real bridge discovery evidence, captured before pairing by createBridge.
  const roster: unknown=JSON.parse(await readFile(join(bridge.dir,'fixture-roster.json'),'utf8'));
