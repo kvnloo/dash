@@ -380,7 +380,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const detailMode = conversation?.detailMode ?? "Compact";
   const menuRows = useMemo((): ComposerMenuRow[] => {
     const rows: ComposerMenuRow[] = [];
-    if (harnessId === "hermes" && conversation) rows.push({
+    if (harnessId === "hermes") rows.push({
       id: "surface", label: "Surface", value: surfaceValue(liveOn), values: ["Chat", "Live surface"], index: liveOn ? 1 : 0,
       run: toggleLive, inspect: index => { if ((index === 1) !== liveOn) toggleLive(); },
     });
