@@ -178,7 +178,12 @@
     {"id": "live-voice-resilience", "title": "A live call detects missing transcripts, survives transcript telemetry outages, and times out during connection",
      "tests": ["live voice survives assistant transcript broker 500 and returns to listening",
                "live voice reports no transcript within nine seconds and stays connected",
-               "live voice connection times out from Start when peer never becomes ready"]}
+               "live voice connection times out from Start when peer never becomes ready"]},
+    {"id": "annotation-launch", "title": "Skia entry diagnostics, retry after failed load and cancellable stylus double-tap",
+     "tests": ["annotation-launch: Skia entry has no ink alert in the first three seconds",
+               "annotation-launch: failed CanvasKit load reports skia-load and Retry permits a stroke",
+               "annotation-launch: empty pen double-tap does not send or report an error",
+               "annotation-launch: pen double-tap offers three-second Undo and retains unsent ink"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",
