@@ -18,6 +18,9 @@ import { GateStore } from "./src/gate/store";
 import type { GateServerMessage } from "../shared/protocol";
 import { statSync } from "node:fs";
 import { homedir, hostname } from "node:os";
+import type { ClientMessage } from "../shared/protocol";
+import { DeliveryLedger } from "./src/delivery-ledger";
+import { DeliveryRuntime } from "./src/delivery-runtime";
 import { basename, join } from "node:path";
 import {
   CHATS_FEATURE,
@@ -182,6 +185,8 @@ class Turn implements Sink {
   private hermesProfile?: string;
   private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
 
+  deliveryStarted?: () => void;
+
   start(input: TurnInput, remote?: RemoteHost): void {
     if (input.mode === "steer" && (this.harness.id !== "hermes" || !input.sessionId)) { this.endWithout("Steer requires a gateway-hosted Hermes session."); return; }
     // A spoken turn is transcribed before it starts, so a cancel can arrive
@@ -287,6 +292,7 @@ class Turn implements Sink {
           log("hermes.path", { path: "gateway" });
           const result = await sendGatewayMessage({ argv: route.argv, home: route.home, sessionId, text: input.text, mode: input.mode, sink: this, cwd: input.cwd, signal: abort.signal, delivery: (delivery, text) => {
             this.flush();
+            if (delivery === "started" || delivery === "steered") this.deliveryStarted?.();
             this.emit({ type: "status", id: this.id, seq: 0, text, delivery, deliveryAt: Date.now() });
           } });
           if (this.cancelled) { if (!this.finished) this.finish(CANCELLED_EXIT_CODE); return; }
@@ -484,6 +490,7 @@ class Turn implements Sink {
 
   delta(text: string): void {
     if (!text) return;
+    this.deliveryStarted?.();
     this.summaries?.endBlock();
     if (this.breakPending) {
       // Prose resumed after a tool call. Models rarely emit the separator themselves.
@@ -734,6 +741,28 @@ const handleHttp = createPairingHttpHandler({
 });
 
 const CREDENTIAL_DIR = process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash");
+const deliveryLedger = new DeliveryLedger({ root: CREDENTIAL_DIR });
+await deliveryLedger.load();
+const deliveryRuntime = new DeliveryRuntime(deliveryLedger);
+async function admitChat(ws: Socket, message: Extract<ClientMessage, { type: "chat" }>, start: (started: () => void) => void): Promise<void> {
+  try {
+    const created = await deliveryRuntime.admit(ws.data.principal, message, receipt => {
+      sendTo(ws, receipt);
+      for (const listener of turns.get(message.id)?.listeners ?? []) {
+        if (listener !== ws) sendTo(listener, receipt);
+      }
+    }, started => {
+      if (turns.has(message.id)) throw new Error("Turn identity is already in use.");
+      start(started);
+    });
+    if (!created) {
+      const turn = turns.get(message.id);
+      if (turn) { ws.data.turns.add(message.id); turn.attach(ws, 0); }
+    }
+  } catch (error) {
+    rejectTurn(ws, message.id, error instanceof Error ? error.message : "Delivery admission unavailable.");
+  }
+}
 const notices = new NoticeService(CREDENTIAL_DIR, (notice, delivered) => log("notice.published", { id: notice.id, delivered }));
 const noticePort = Number(process.env.DASH_NOTICE_PORT ?? (PORT === 0 ? 0 : PORT + 1));
 if (!Number.isInteger(noticePort) || noticePort < 0 || noticePort > 65535) throw new Error("Invalid DASH_NOTICE_PORT");
@@ -907,6 +936,7 @@ const server = Bun.serve<SocketData>({
       const voice = voiceStatus();
       sendTo(ws, {
         type: "hello",
+        capabilities: { deliveryReceipts: true },
         version: PROTOCOL_VERSION,
         host: HOST_NAME,
         cwd: DEFAULT_CWD,
@@ -967,13 +997,15 @@ const server = Bun.serve<SocketData>({
             const problem = remoteTurnProblem(remote, { harness: message.harness, profileId: message.profileId, sessionId: message.sessionId, cwd: message.cwd, attachments: message.attachments?.length ?? 0 });
             const harness = HARNESSES.find((h) => h.id === message.harness);
             if (problem || !harness) return rejectTurn(ws, message.id, problem ?? `Unknown agent "${message.harness}".`);
-            if (turns.has(message.id)) return;
-            const turn = new Turn(message.id, harness);
-            turn.listeners.add(ws);
-            ws.data.turns.add(message.id);
-            turns.set(message.id, turn);
-            if (message.summariesEnabled) turn.enableSummaries();
-            turn.start({ text: message.text, cwd: message.cwd ?? "", sessionId: message.sessionId, profileId: message.profileId }, remote);
+            await admitChat(ws, message, started => {
+              const turn = new Turn(message.id, harness);
+              turn.deliveryStarted = started;
+              turn.listeners.add(ws);
+              ws.data.turns.add(message.id);
+              turns.set(message.id, turn);
+              if (message.summariesEnabled) turn.enableSummaries();
+              turn.start({ text: message.text, mode: message.mode, cwd: message.cwd ?? "", sessionId: message.sessionId, profileId: message.profileId }, remote);
+            });
             break;
           }
           if (!(await isSelfHost(message.hostId))) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
@@ -983,7 +1015,6 @@ const server = Bun.serve<SocketData>({
             const hosts = await selfRoster(harnessList(), HOST);
             if (!hosts.some(h => h.self && h.agents.some(a => a.id === message.profileId && a.sessionId === message.sessionId && a.status === "running"))) return rejectTurn(ws, message.id, "This OMP session has ended on the host.");
           } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !isSelfArchiveProfile(message.profileId, message.harness, message.sessionId) && !(message.harness === "hermes" && message.profileId === "hermes:default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
-          if (turns.has(message.id)) return;
           const harness = HARNESSES.find((h) => h.id === message.harness);
           if (!harness) return rejectTurn(ws, message.id, `Unknown agent "${message.harness}".`);
           if (!harnessList().find(h => h.id === harness.id)?.available) {
@@ -996,6 +1027,7 @@ const server = Bun.serve<SocketData>({
           const cwd = message.cwd?.trim() || DEFAULT_CWD;
           if (!isDirectory(cwd)) return rejectTurn(ws, message.id, `Not a directory on ${HOST_NAME}: ${cwd}`);
 
+          await admitChat(ws, message, started => {
           let files: StoredAttachment[] = [];
           if (message.attachments?.length) {
             try { files = attachments.claim(message.id, message.attachments); }
@@ -1008,7 +1040,9 @@ const server = Bun.serve<SocketData>({
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
           if (message.summariesEnabled) turn.enableSummaries();
+          turn.deliveryStarted = started;
           turn.start({ text: promptWithAttachments(message.text, files), mode: message.mode, cwd, sessionId: message.sessionId, profileId: message.profileId, ...(files.length ? { attachments: files } : {}) });
+          });
           break;
         }
         case "voice_begin": {

@@ -5,6 +5,7 @@
 import { isGateItem, parseGateDecision, type GateItem, type GateDecision } from "./gate";
 import { parsePermissionDecision, parsePermissionRequest, parsePermissionResolution, type PermissionDecision, type PermissionRequest, type PermissionResolution } from "./permission";
 import { parseLiveClientMessage, parseLiveServerMessage, type LiveClientMessage, type LiveServerMessage } from "./live";
+import { parseDeliveryChatExtension, parseDeliveryReceipt, type DeliveryReceipt } from "./delivery";
 import { parseReplyPart, parseReplyParts, type ReplyPart } from "./reply-parts";
 export type { ReplyPart } from "./reply-parts";
 import { parseSummary, type SummaryInfo } from "./thinking-summary";
@@ -250,6 +251,7 @@ export type ClientMessage =
   | { type: "notices_clear" }
   | {
       type: "chat";
+      clientId?: string;
       /** Omitted by older clients: queue for the next turn. */
       mode?: "steer" | "queue";
       summariesEnabled?: boolean;
@@ -336,6 +338,7 @@ export type TurnEvent =
   | { type: "error"; id: string; seq: number; message: string };
 
 export type ServerMessage =
+  | DeliveryReceipt
   | NoticeMessage
   | GateServerMessage
   | LiveServerMessage
@@ -343,6 +346,7 @@ export type ServerMessage =
   | PermissionResolution
   | {
       type: "hello";
+      capabilities?: { deliveryReceipts?: boolean };
       version: number;
       host: string;
       cwd: string;
@@ -433,6 +437,8 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
     case "live_receipts": return parseLiveClientMessage(raw);
     case "permission_decision": return parsePermissionDecision(raw);
     case "chat": {
+      const delivery = parseDeliveryChatExtension(raw);
+      if (!delivery) return null;
       const attachments = parseChatAttachments(raw.attachments);
       if (raw.mode !== undefined && raw.mode !== "steer" && raw.mode !== "queue") return null;
       if (
@@ -447,6 +453,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
       ) {
         return {
           type: "chat",
+          ...delivery,
           ...(raw.mode === "steer" || raw.mode === "queue" ? { mode: raw.mode } : {}),
           ...(typeof raw.summariesEnabled === "boolean" ? { summariesEnabled: raw.summariesEnabled } : {}),
           id: raw.id,
@@ -587,6 +594,7 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     case "live_error": return parseLiveServerMessage(raw);
     case "permission_request": return parsePermissionRequest(raw);
     case "permission_resolved": return parsePermissionResolution(raw);
+    case "delivery_receipt": return parseDeliveryReceipt(raw);
     case "gate_snapshot": return Array.isArray(raw.items) && raw.items.every(isGateItem) && typeof raw.dry_run === "boolean" ? { type: "gate_snapshot", items: raw.items, dry_run: raw.dry_run, owner_decisions: raw.owner_decisions === true } : null;
     case "gate_status": return str(raw.id) && str(raw.message) ? { type: "gate_status", id: raw.id, message: raw.message } : null;
     case "gate_error": return str(raw.message) ? { type: "gate_error", message: raw.message } : null;
@@ -602,6 +610,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
       ) {
         return {
           type: "hello",
+          capabilities: isRecord(raw.capabilities) && typeof raw.capabilities.deliveryReceipts === "boolean"
+            ? { deliveryReceipts: raw.capabilities.deliveryReceipts } : undefined,
           version: raw.version,
           host: raw.host,
           cwd: raw.cwd,

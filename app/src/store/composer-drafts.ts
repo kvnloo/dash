@@ -1,9 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState } from "react-native";
+import { fitRecord, ROW_BYTE_LIMIT, truncateUtf8 } from "../lib/storage-row-budget";
 import type { DraftAttachment } from "../lib/attachments";
 import { createStore, type Store } from "./createStore";
 
 export interface ComposerDraft { text: string; attachments: DraftAttachment[] }
+export const draftSaveNotes = createStore<Record<string, string>>({});
 
 type DraftStore = Store<Record<string, ComposerDraft>>;
 interface DraftRuntime { store: DraftStore; restored: Promise<void> }
@@ -24,7 +26,7 @@ declare global {
 const KEY = "dash.composerDrafts.v1";
 const WRITE_DELAY_MS = 250;
 const MAX_AGE_MS = 14 * 24 * 3600 * 1000;
-type Saved = Record<string, { text: string; at: number }>;
+type Saved = Record<string, { text: string; at: number; shortened?: boolean }>;
 
 function parseSaved(raw: string): Saved {
   const parsed: unknown = JSON.parse(raw);
@@ -37,7 +39,7 @@ function parseSaved(raw: string): Saved {
     const text: unknown = Reflect.get(candidate, "text");
     const at: unknown = Reflect.get(candidate, "at");
     if (typeof text === "string" && typeof at === "number" && Number.isFinite(at) && at > cutoff) {
-      next[id] = { text, at };
+      next[id] = { text, at, ...(Reflect.get(candidate, "shortened") === true ? { shortened: true } : {}) };
     }
   }
   return next;
@@ -67,6 +69,13 @@ function createDraftRuntime(): DraftRuntime {
       writing = false;
       if (rewrite) { rewrite = false; persist(); }
     };
+    const fit = fitRecord(saved, row => JSON.stringify(row), ROW_BYTE_LIMIT,
+      (entry, budget) => ({ ...entry, text: truncateUtf8(entry.text, budget), shortened: true }));
+    const shortened = Object.keys(saved).filter(id => fit.entries[id]?.text !== saved[id]?.text);
+    if (shortened.length) draftSaveNotes.set(notes => ({ ...notes,
+      ...Object.fromEntries(shortened.map(id => [id, "Draft too large to save in full, it was shortened"])),
+    }));
+    saved = fit.entries;
     AsyncStorage.setItem(KEY, JSON.stringify(saved)).then(done, done);
   }
 
@@ -78,7 +87,12 @@ function createDraftRuntime(): DraftRuntime {
 
   const restored: Promise<void> = AsyncStorage.getItem(KEY).then(raw => {
     if (!raw) return;
-    saved = parseSaved(raw);
+    const original = parseSaved(raw);
+    saved = fitRecord(original, row => JSON.stringify(row), ROW_BYTE_LIMIT,
+      (entry, budget) => ({ ...entry, text: truncateUtf8(entry.text, budget), shortened: true })).entries;
+    for (const id of Object.keys(original)) {
+      if (saved[id]?.shortened || original[id]?.text !== saved[id]?.text) draftSaveNotes.set(notes => ({ ...notes, [id]: "Draft too large to save in full, it was shortened" }));
+    }
     // A storage read must not overwrite text typed before it completed.
     store.set(all => {
       const next = { ...all };
