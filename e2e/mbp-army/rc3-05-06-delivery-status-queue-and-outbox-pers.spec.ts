@@ -187,7 +187,7 @@ test.describe('RC3 06 outbox persistence across restart',()=>{
   await expect(item(page,1),'queued message still queued after restart').toHaveValue(text);
   await bridge.start();
   await expect(page.getByText(new RegExp('ARMY_REPLY: '+esc(text))).first()).toBeVisible({timeout:30000});
-  await expect(page.getByText(new RegExp('ARMY_REPLY: '+esc(text)))).toHaveCount(1);
+  await expect(page.getByTestId('transcript-viewport').getByText(new RegExp('ARMY_REPLY: '+esc(text)))).toHaveCount(1);
   await expect.poll(()=>promptCount(bridge,text)).toBe(1);
   await page.waitForTimeout(3000);
   expect(await promptCount(bridge,text),'queued send delivered exactly once (not lost, not duplicated)').toBe(1);

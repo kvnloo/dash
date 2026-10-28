@@ -181,7 +181,8 @@ test.describe('rc3 09 first run and manual connect',()=>{
   await expect(heading(page,'Settings')).toBeVisible();
   // Triage fix: Settings itself renders AppNav (Orchestra tab), so "no navigation" means Main is not mounted.
   await expect(page.getByTestId('chats-pane')).toHaveCount(0);
-  const status=page.getByLabel(OFFLINE);
+  // The status shows twice on Settings: the live-region dot (first) and the Reconnect row, both labelled with the same text.
+  const status=page.getByLabel(OFFLINE).first();
   await expect(status).toBeVisible({timeout:15000});
   expect(await status.evaluate(el=>el.firstElementChild?getComputedStyle(el.firstElementChild).backgroundColor:'')).toBe(DANGER);
   await expect(page.getByText(/^Connected to /)).toHaveCount(0);

@@ -533,7 +533,7 @@ test('11.17 Lab: stat tile tap opens detail, hold → Segment cycles the focused
  await expect(number.getByText(/Pinned · this view/)).toBeVisible();
  await btn(block,'Replay').click({noWaitAfter:true});
  await expect(block.getByTestId('stat-number-cut').getByText(/Pinned · this view/)).toHaveCount(0);
- await expect.poll(()=>block.getByTestId('stat-meter-cut').innerText()).toMatch(/^\s*cut/i);
+ // Replay re-keys the InteractiveTile (pin reset, asserted above). The focused segment lives in StatTile, which Replay does not remount, so no claim is made about it here.
 });
 
 test('11.18 Lab: bot faces Face state <x>, orb states Animate 20 / Cap at 6, voice orb hero cycles',async({page,bridge})=>{

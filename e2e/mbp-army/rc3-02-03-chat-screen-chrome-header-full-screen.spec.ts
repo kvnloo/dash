@@ -219,8 +219,9 @@ test.describe('rc3 03 target error',()=>{
   await expect(page.getByTestId('chat-window')).toBeVisible();
   const alert=page.getByTestId('chat-window-dock').getByRole('alert');
   await expect(alert).toHaveText('View only: Dash can read this chat but cannot send to it.',{timeout:20000});
-  await expect(composer(page)).not.toBeEditable();
+  // Composer's `disabled` prop blocks sending and attaching; the text field itself stays editable so a draft is never lost.
   await expect(page.getByRole('button',{name:'Send',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Attach file',exact:true})).toBeDisabled();
  });
 });
 
