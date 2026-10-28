@@ -68,6 +68,16 @@ describe("log-watch signature fixtures", () => {
   }
 });
 
+describe("log-watch red-box variants", () => {
+  test("detects literal React Native red box wording", () => {
+    const watcher = createLogWatch({ now: () => 1 });
+    expect(watcher.push(
+      "React Native red box: component failed at render (/app/Screen.tsx:9:1)",
+      "app",
+    )?.signature).toBe("react-native-redbox");
+  });
+});
+
 describe("log-watch deduplication and time windows", () => {
   test("increments counts without re-emitting, and resets exactly at window boundary", () => {
     let clock = 0;
