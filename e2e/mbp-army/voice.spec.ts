@@ -143,7 +143,7 @@ test('live voice survives assistant transcript broker 500 and returns to listeni
   await expect.poll(() => info.some(line => line.includes('[voice] assistant_transcript observation failed')))
     .toBe(true);
   await expect(page.getByRole('button', { name: 'Stop voice in Dash', exact: true })).toBeVisible();
-  expect(voiceBroker.calls().filter(call => call.path === '/v1/tools/ask_z0')).toHaveLength(1);
+  expect(voiceBroker.calls().filter(call => call.method === 'POST' && call.path === '/v1/tools/ask_z0')).toHaveLength(1);
   await page.getByRole('button', { name: 'Stop voice in Dash', exact: true }).click({ noWaitAfter: true });
 });
 
