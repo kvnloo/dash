@@ -13,6 +13,12 @@ import { Feather } from "@expo/vector-icons";
 import { ComposerActionMenu, type ComposerMenuRow } from "../components/ComposerActionMenu";
 import { OrbActivity } from "../components/OrbMotion";
 import { WindowDock, WindowPill, useDisplayCutout, useWindowMorph } from "../components/ChatWindow";
+import { TargetSwitcherBadge } from "../components/TargetSwitcherBadge";
+import { QuickScrollButton } from "../components/QuickScrollButton";
+import { ReconnectNotice } from "../components/ReconnectNotice";
+import { quickScroll, type QuickScrollDirection, type QuickScrollState } from "../lib/quick-scroll";
+import { chatKind, profileFromAgent } from "../lib/roster";
+import type { TargetSwitchIntent, TargetSwitchResult, TargetSwitcherInventory } from "../lib/target-switcher";
 import { backTarget, hostIdentity, pillGeometry, pillPrimary, pillReserve, pillStatus, surfaceValue, type IdentityInput } from "../lib/chat-window";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
@@ -43,6 +49,7 @@ import {
   beginTurn,
   conversationBusy,
   conversationTargetError,
+  openAgentConversation,
   createConversation,
   flushPendingSends,
   releaseViewOnly,
@@ -98,8 +105,31 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const followRef = useRef(true);
   const dragging = useRef(false);
   const previousOffset = useRef(0);
+  const scrollMetrics = useRef({ contentHeight: 0, viewportHeight: 0, offset: 0 });
+  const quickRef = useRef<QuickScrollState>({ down: { visible: false, bottom: 8 }, up: { visible: false, top: 8 } });
+  const [quickState, setQuickState] = useState<QuickScrollState>(quickRef.current);
+  const unseenMessages = useRef(0);
+  const seenMessages = useRef<{ conversationId: string | undefined; count: number }>({ conversationId: undefined, count: 0 });
+  const updateQuickScroll = useCallback((follow: boolean, direction: QuickScrollDirection = "none") => {
+    // The measured viewport already excludes KeyboardDock and KeyboardInsetView's IME padding.
+    // Passing the excluded composer/IME a second time would raise the button into the transcript.
+    const next = quickScroll({
+      ...scrollMetrics.current, keyboardHeight: 0, composerHeight: 0, bottomInset: 0,
+      following: follow, unseen: unseenMessages.current, direction, previous: quickRef.current,
+    });
+    quickRef.current = next;
+    setQuickState(previous =>
+      previous.down.visible === next.down.visible && previous.down.bottom === next.down.bottom &&
+      previous.down.badge === next.down.badge && previous.up.visible === next.up.visible &&
+      previous.up.top === next.up.top ? previous : next);
+  }, []);
   const [following, setFollowing] = useState(true);
-  const setFollow = useCallback((next: boolean) => { followRef.current = next; setFollowing(next); }, []);
+  const setFollow = useCallback((next: boolean) => {
+    followRef.current = next;
+    setFollowing(next);
+    if (next) unseenMessages.current = 0;
+    updateQuickScroll(next);
+  }, [updateQuickScroll]);
   const scrollToNewest = useCallback(() => {
     if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
   }, []);
@@ -122,6 +152,19 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Older pages (scrolled up) live in memory beside the conversation's own newest window.
   const history = useHistoryPages(conversation);
   const older = history.older;
+  useEffect(() => {
+    if (seenMessages.current.conversationId !== conversation?.id) {
+      seenMessages.current = { conversationId: conversation?.id, count: messages.length };
+      unseenMessages.current = 0;
+      updateQuickScroll(true);
+      return;
+    }
+    if (!followRef.current && messages.length > seenMessages.current.count) {
+      unseenMessages.current += messages.slice(seenMessages.current.count).filter(message => message.role === "assistant").length;
+      updateQuickScroll(false);
+    }
+    seenMessages.current.count = messages.length;
+  }, [conversation?.id, messages, updateQuickScroll]);
   const visibleMessages = useMemo(() => {
     const queued = new Set(conversation ? queuedParts(conversation).flatMap(part => [part.user.id, part.assistant.id]) : []);
     const current = messages.filter(message => !queued.has(message.id));
@@ -373,6 +416,35 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     // Never a default name: unknown unless the host reported it for this exact session.
     ...hostIdentity(hostReading ?? undefined, conversation?.sessionId, observedAt),
   }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, connection.hosts, connection.host, selfHost?.id, selfHost?.name, harnessName, hostReading, observedAt]);
+  const targetHostId = conversation?.targetHostId ?? selfHost?.id;
+  const targetInventory = useMemo((): TargetSwitcherInventory => ({
+    hosts: connection.hosts,
+    harnesses: connection.harnesses,
+    // No authenticated exact-session model mutation endpoint exists in this bridge yet.
+    models: [],
+    ...(targetHostId && conversation?.profileId ? {
+      current: {
+        hostId: targetHostId, harness: harnessId, profileId: conversation.profileId,
+        ...(conversation.sessionId ? { sessionId: conversation.sessionId } : {}),
+        ...(conversation.cwd ? { cwd: conversation.cwd } : {}),
+      },
+    } : {}),
+  }), [connection.hosts, connection.harnesses, targetHostId, harnessId, conversation?.profileId, conversation?.sessionId, conversation?.cwd]);
+  const onTargetSwitch = useCallback((intent: TargetSwitchIntent): TargetSwitchResult => {
+    if (intent.kind === "model") return { ok: false, reason: "Model change unavailable: no exact-session model route in this build." };
+    const route = intent.route;
+    const host = store.get().connection.hosts.find(item => item.id === route.hostId && item.self && item.online);
+    const matches = host?.agents.filter(agent => agent.id === route.profileId &&
+      chatKind(agent) === route.harness &&
+      agent.sessionId === route.sessionId && agent.cwd === route.cwd) ?? [];
+    if (!host || matches.length !== 1 || !matches[0]) {
+      return { ok: false, reason: "Target changed on the host. Refresh the roster." };
+    }
+    const result = openAgentConversation(profileFromAgent(host, matches[0]));
+    if ("error" in result) return { ok: false, reason: result.error };
+    haptic.select();
+    return { ok: true };
+  }, []);
   const queuedCount = conversation ? queuedParts(conversation).length : 0;
   const detailMode = conversation?.detailMode ?? "Compact";
   const menuRows = useMemo((): ComposerMenuRow[] => {
@@ -496,6 +568,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: chatOptions }} accessibilityLabel="Chat options" onPress={() => setChatOptions(v => !v)} style={styles.optionsToggle}><Text style={styles.optionsToggleText}>{chatOptions ? "Hide options" : "Options"}</Text></Pressable>
       </>}
       <ConnectionPill />
+      <ReconnectNotice onRetry={() => bridge.retry()} onPair={() => navigation.navigate("Settings")} />
       {chatOptions && !windowed ? <View>
       {conversation ? <PressScale accessibilityRole="switch" accessibilityLabel="Thinking summaries" accessibilityState={{ checked: conversation.summariesEnabled === true }} onPress={() => setThinkingSummaries(conversation.id, !conversation.summariesEnabled)} style={styles.liveRow}><Text style={styles.liveNote}>Thinking summaries · {conversation.summariesEnabled ? "on" : "off"} · next turn</Text></PressScale> : null}
       {targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text> : null}
@@ -535,14 +608,23 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onScroll={event => {
             const { contentSize, layoutMeasurement, contentOffset } = event.nativeEvent;
             const moved = Math.abs(contentOffset.y - previousOffset.current) > 1;
+            const direction: QuickScrollDirection = !moved ? "none" : contentOffset.y < previousOffset.current ? "up" : "down";
+            scrollMetrics.current = { contentHeight: contentSize.height, viewportHeight: layoutMeasurement.height, offset: contentOffset.y };
             previousOffset.current = contentOffset.y;
             // Web wheel scrolling has no onScrollBeginDrag. A content resize alone
             // must not detach following before onContentSizeChange can scroll.
-            if (!moved || (!dragging.current && Platform.OS !== "web")) return;
-            setFollow(followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y));
+            if (moved && (dragging.current || Platform.OS === "web")) {
+              const next = followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y);
+              if (next !== followRef.current) setFollow(next);
+              else updateQuickScroll(next, direction);
+            } else updateQuickScroll(followRef.current, direction);
           }}
           scrollEventThrottle={16}
-          onContentSizeChange={scrollToNewest}
+          onContentSizeChange={(_width, height) => {
+            scrollMetrics.current = { ...scrollMetrics.current, contentHeight: height };
+            updateQuickScroll(followRef.current);
+            scrollToNewest();
+          }}
           contentContainerStyle={[styles.listContent, thumb.railPadding(44)]}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
@@ -559,6 +641,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         <PromptRail anchors={anchors} following={following} live={Boolean(streamingMessage)} onJump={jumpPrompt}
           onContinue={prompt => { const anchor = anchors[prompt]; if (anchor) navigation.setParams({ draft: `Continue from prompt ${prompt + 1}: ${anchor.text.split("\n")[0]}\nResult: ${anchor.summary}\n\n` }); }}
           onLatest={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
+        <QuickScrollButton direction="down" visible={quickState.down.visible} offset={quickState.down.bottom}
+          badge={quickState.down.badge} side={thumb.side}
+          onPress={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
         </View>
       </KeyboardInsetView>}
       <KeyboardDock style={windowed ? styles.windowDock : undefined}>
@@ -566,6 +651,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           identity={identity}
           title={conversation?.title || harnessName}
           options={optionsTrigger}
+          targetSwitcher={<TargetSwitcherBadge inventory={targetInventory} onSwitch={onTargetSwitch} />}
           treeOpen={treeOpen}
           onTree={setTreeOpen}
           onClose={closeWindow}

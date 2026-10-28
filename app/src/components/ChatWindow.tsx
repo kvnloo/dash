@@ -190,7 +190,7 @@ function IdRow({ icon, child, caption, id, chars, what, testID }: {
  * rows, provenance footer inside it) + whatever the screen already docks (workers, queue, composer).
  * One surface; nothing is repeated up top.
  */
-export function WindowDock({ identity, title, options, treeOpen, onTree, onClose, notice, children }: {
+export function WindowDock({ identity, title, options, treeOpen, onTree, onClose, notice, targetSwitcher, children }: {
   identity: IdentityInput;
   title: string;
   options: ReactNode;
@@ -198,6 +198,8 @@ export function WindowDock({ identity, title, options, treeOpen, onTree, onClose
   onTree(open: boolean): void;
   onClose(): void;
   notice?: ReactNode;
+  /** Optional standalone routing control; never displaces the identity/Options/X row. */
+  targetSwitcher?: ReactNode;
   children: ReactNode;
 }) {
   const thumb = useHandedness();
@@ -258,6 +260,7 @@ export function WindowDock({ identity, title, options, treeOpen, onTree, onClose
       </Pressable>
     </View>
     {notice}
+    {targetSwitcher ? <View style={styles.targetSwitcherRow}>{targetSwitcher}</View> : null}
     {children}
   </View>;
 }
@@ -291,6 +294,7 @@ const styles = StyleSheet.create({
   provenance: { marginTop: space.xs, paddingTop: space.sm, gap: 2, borderTopWidth: StyleSheet.hairlineWidth, borderColor: glass.hair },
   provenanceLine: { ...type.mono, fontSize: 11, lineHeight: 15, color: colors.textTertiary },
   badgeRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.sm, minHeight: CLOSE_HIT },
+  targetSwitcherRow: { paddingHorizontal: space.sm, paddingBottom: space.xs },
   badge: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: space.sm, borderRadius: radius.md },
   badgeLines: { flexShrink: 1, minWidth: 0 },
   badgeWho: { ...type.mono, fontSize: BADGE_FONT, lineHeight: 15, color: colors.textMuted },

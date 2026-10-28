@@ -1,6 +1,10 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "cov-g08-notices-scroll-badge", "title": "COV-G08 wired target switcher, quick scroll and authenticated PC reconnect notice",
+     "tests": ["G08 window dock target switcher opens and closes without moving original actions",
+               "G08 transcript scroll reveals jump control then resumes latest-follow",
+               "G08 reconnect notice appears on real bridge loss and clears after authenticated hello"]},
     {"id": "host-stats", "title": "Local host hardware usage in the host info sheet, separate from roster updates",
      "tests": ["host info sheet shows local CPU, RAM, disk and load from the authenticated bridge",
                "chat host info sheet shows resources without replacing session identity"]},

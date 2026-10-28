@@ -9,6 +9,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
+import { ReconnectNotice } from "../components/ReconnectNotice";
+import { bridge } from "../net/bridge";
 import { KeyboardDock } from "../components/KeyboardDock";
 import { AppNav, type AppNavHandle } from "../components/AppNav";
 import { SearchResultRow } from "../components/SearchResultRow";
@@ -432,6 +434,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       />
       <WorkspaceHeader navigation={navigation} tab={index} titleOnly={index === 2} />
       <ConnectionPill />
+      <ReconnectNotice onRetry={() => bridge.retry()} onPair={() => navigation.navigate("Settings")} />
       <BlurTargetView ref={blurTarget} style={styles.body}>
         {searchActive ? (
           <>
