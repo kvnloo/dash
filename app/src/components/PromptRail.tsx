@@ -7,7 +7,7 @@ import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanima
 import { scheduleOnRN } from "react-native-worklets";
 import { haptic } from "../haptics";
 import { railLayout, railTargetAt } from "../lib/prompt-navigation";
-import { railColors, railWidth, type RailTurn } from "../lib/rail-turns";
+import { railBins, railColors, type RailTurn } from "../lib/rail-turns";
 import { colors, type } from "../theme";
 
 type RailSelection = { kind: "turn"; id: string } | { kind: "latest" };
@@ -123,10 +123,11 @@ function Action({ label, onPress }: { label: string; onPress(): void }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.action}><Text style={styles.actionText}>{label}</Text></Pressable>;
 }
 const RailTicks = memo(function RailTicks({ anchors, positions }: { anchors: readonly RailTurn[]; positions: readonly number[] }) {
-  return <View pointerEvents="none" style={styles.tickLayer}>{anchors.map((anchor, index) => <View key={anchor.id} style={[styles.slot, { top: positions[index] ?? 0 }]}>
-    <View style={[styles.tick, { width: railWidth(anchor.characters), backgroundColor: railColors[anchor.state] }]} />
-    {anchor.code || anchor.pr ? <View style={styles.change} /> : null}
-    {anchor.question ? <View style={styles.question} /> : null}
+  const bins = useMemo(() => railBins(anchors, positions), [anchors, positions]);
+  return <View pointerEvents="none" style={styles.tickLayer}>{bins.map(bin => <View key={bin.key} style={[styles.slot, { top: bin.top }]}>
+    <View testID="rail-tick" style={[styles.tick, { width: bin.width, backgroundColor: railColors[bin.state] }]} />
+    {bin.change ? <View style={styles.change} /> : null}
+    {bin.question ? <View style={styles.question} /> : null}
   </View>)}</View>;
 });
 const styles = StyleSheet.create({

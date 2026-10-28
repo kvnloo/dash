@@ -17,7 +17,7 @@ import {
   type Settings,
 } from "../model";
 import { adoptSummary, hydrateLiveConversation, mergeHistoryWindow, mergeLiveConversations, resumableWithoutRoster, shouldRequestHistory } from "../lib/live-sessions";
-import { historyState, setHistoryCursor } from "./history-pages";
+import { historyState, olderLoaded, setHistoryCursor } from "./history-pages";
 import { conversationKey } from "../lib/chat-index";
 import { pruneArchive } from "./prune-archive";
 import { createStore } from "./createStore";
@@ -302,7 +302,7 @@ export function applyLiveHistoryTo(conversationId: string, messages: HistoryMess
  * refreshed window merges instead of replacing: messages that slid out of the newest window stay.
  */
 export function applyHistoryReply(conversationId: string, messages: HistoryMessage[], before: string | null | undefined): void {
-  if (historyState(conversationId).older.length > 0) updateConversation(conversationId, c => mergeHistoryWindow(c, messages));
+  if (olderLoaded(historyState(conversationId)) > 0) updateConversation(conversationId, c => mergeHistoryWindow(c, messages));
   else applyLiveHistoryTo(conversationId, messages);
   // An old bridge never sends `before`: older pages stay unavailable.
   setHistoryCursor(conversationId, before);

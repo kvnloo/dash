@@ -25,7 +25,7 @@ import { AppNav } from "../components/AppNav";
 import { MessageRow } from "../components/MessageRow";
 import { SkeletonRow } from "../components/SkeletonRow";
 import { useHistoryPages } from "../hooks/useHistoryPages";
-import { fetchFullText } from "../store/history-pages";
+import { fetchFullText, listUnlisted } from "../store/history-pages";
 import { LiveSurface } from "../components/LiveSurface";
 import { PressScale } from "../components/PressScale";
 import { isDebugActive } from "../debug/expose";
@@ -73,7 +73,7 @@ import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
 import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptOffset } from "../lib/prompt-navigation";
-import { railTurns } from "../lib/rail-turns";
+import { railTurns, type RailTurn } from "../lib/rail-turns";
 import { enterAnnotation, registerSink } from "../store/annotate";
 import { sharedDrafts, consumeSharedDraft } from "../store/shared-drafts";
 
@@ -137,17 +137,51 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     const target = conversation;
     void fetchFullText(target, messageId).then(text => { if (text !== undefined) replaceMessageText(target.id, messageId, text); });
   }, [conversation]);
-  const anchors = useMemo(() => railTurns(visibleMessages), [visibleMessages]);
+  // The prompt rail stands for the whole chat: its prompts come from the rows the list shows and from the
+  // older rows paged in behind them for the rail alone (`unlisted`). Those are not list rows (rows added above
+  // a reader who has scrolled up move what they are reading); they join the list when the reader scrolls to
+  // the top, or when they jump to one of their prompts.
+  const railOnly = useMemo(() => {
+    if (!history.unlisted.length) return history.unlisted;
+    // The chat's own window can grow over rows that were paged in meanwhile: a row is on the rail once.
+    const listed = new Set(visibleMessages.map(message => message.id));
+    return history.unlisted.filter(message => !listed.has(message.id));
+  }, [history.unlisted, visibleMessages]);
+  const railMessages = useMemo(() => railOnly.length ? [...railOnly, ...visibleMessages] : visibleMessages, [railOnly, visibleMessages]);
+  const anchors = useMemo(() => railTurns(railMessages), [railMessages]);
   useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
+  const jumpedTo = useRef<string | null>(null);
+  const scrollToPrompt = useCallback((anchor: RailTurn, railOnlyRows: number) => {
+    // `anchor.index` counts the rail's rows; the list's own rows start after the rail-only ones.
+    const at = { ...anchor, index: anchor.index - railOnlyRows };
+    const offset = promptOffset([at], 0, index => listRef.current?.getLayout(index));
+    if (offset !== null) listRef.current?.scrollToOffset({ offset, animated: false });
+    else void listRef.current?.scrollToIndex({ index: at.index, animated: false, viewPosition: 0 });
+  }, []);
   const jumpPrompt = useCallback((prompt: number) => {
     const anchor = anchors[prompt];
-    if (!anchor) return;
+    if (!anchor || !conversation) return;
     dragging.current = false;
     setFollow(false);
-    const offset = promptOffset(anchors, prompt, index => listRef.current?.getLayout(index));
-    if (offset !== null) listRef.current?.scrollToOffset({ offset, animated: false });
-    else void listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
-  }, [anchors, setFollow]);
+    if (anchor.index >= railOnly.length) { scrollToPrompt(anchor, railOnly.length); return; }
+    // The prompt is above what the list holds: list it (and everything between), then scroll to it.
+    jumpedTo.current = anchor.id;
+    listUnlisted(conversation.id, anchor.id);
+  }, [anchors, conversation, railOnly.length, scrollToPrompt, setFollow]);
+  useEffect(() => {
+    const id = jumpedTo.current;
+    if (!id) return;
+    const anchor = anchors.find(a => a.id === id);
+    if (!anchor) { jumpedTo.current = null; return; }
+    if (anchor.index < railOnly.length) return;
+    // The rows just listed are laid out on the next frame.
+    const timer = setTimeout(() => {
+      if (jumpedTo.current !== id) return;
+      jumpedTo.current = null;
+      scrollToPrompt(anchor, railOnly.length);
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [anchors, railOnly.length, scrollToPrompt]);
   const harnessId = conversation?.harness ?? settings?.harness ?? "omp";
   const harness = connection.harnesses.find((h) => h.id === harnessId);
   const harnessName = harness?.name ?? harnessId;

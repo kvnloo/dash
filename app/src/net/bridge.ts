@@ -471,7 +471,7 @@ setLiveHistoryRequester((input) => {
 });
 
 configureChatIndex({ settings: () => store.get().settings, storage: AsyncStorage });
-configureHistoryPages({ settings: () => store.get().settings });
+configureHistoryPages({ settings: () => store.get().settings, conversation: id => store.get().conversations.find(c => c.id === id) });
 
 function targetForTurn(turnId: string): { hostId?: string; profileId?: string } {
   const where = locateTurn(turnId);
