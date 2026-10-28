@@ -36,6 +36,8 @@ export interface AnnotateState {
   recording: boolean;
   status: "idle" | "capturing" | "sending" | "sent" | "error";
   error?: string;
+  /** Quiet reason an annotation-triggered live voice call could not start. */
+  voiceNote?: string;
   preview?: AnnotationPreview;
   /** Which sink a Send will reach, for the tray label. */
   sink?: string;
@@ -49,7 +51,7 @@ function initialAnnotationState(): AnnotateState {
   return {
     annotateEngine: defaultEngine(),
     active: false, buttonDown: false, penMode: false, tool: "pen", color: "accent",
-    drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle",
+    drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle", voiceNote: undefined,
   };
 }
 
@@ -82,12 +84,12 @@ export function currentSink(): AnnotationSink | undefined {
 }
 
 export function enterAnnotation(): void {
-  annotate.set(s => (s.active ? s : { ...s, active: true, status: "idle", error: undefined, preview: undefined }));
+  annotate.set(s => (s.active ? s : { ...s, active: true, status: "idle", error: undefined, voiceNote: undefined, preview: undefined }));
 }
 
 /** Flow exits close the mode, not the draft. Clear remains the explicit discard. */
 export function exitAnnotation(): void {
-  annotate.set(s => ({ ...s, active: false, drawing: flowMode ? s.drawing : EMPTY_DRAWING, segments: flowMode ? s.segments : [], recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined }));
+  annotate.set(s => ({ ...s, active: false, drawing: flowMode ? s.drawing : EMPTY_DRAWING, segments: flowMode ? s.segments : [], recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined, voiceNote: undefined }));
 }
 
 /** Switch modes without discarding ink, voice or queued drafts. */
