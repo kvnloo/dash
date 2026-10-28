@@ -122,6 +122,7 @@
     "live model behaviour", "Orchestra / orchestration screens", "handedness",
     "Hermes session history", "notifications and deep links",
     "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)",
-    "live preview chip: old -> new build marker, auto-reload and Metro switch (dev client only: needs a Metro serving a build manifest; none exists in the web export)"
+    "live preview chip: old -> new build marker, auto-reload and Metro switch (dev client only: needs a Metro serving a build manifest; none exists in the web export)",
+    "Android RECORD_AUDIO first-run dialog during dictation and live voice (native, device only)"
   ]
 }

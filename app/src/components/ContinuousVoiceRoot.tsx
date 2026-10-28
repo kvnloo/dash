@@ -13,6 +13,7 @@ import { store } from "../store/app";
 import { colors, glass, radius } from "../theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { microphone } from "../lib/recorded-speech";
+import { ensureMicPermission, permissionRequestInFlight } from "../lib/mic-permission";
 import { createStore } from "../store/createStore";
 import { debugUi } from "../debug/ui-store";
 import { voiceTarget } from "../lib/voice-target";
@@ -111,6 +112,18 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       return;
     }
     const target = { profile: conversation.profileId, session: conversation.sessionId };
+    // Android's first RECORD_AUDIO dialog pauses MainActivity. Request before the mic lease
+    // or native peer starts, while AppState explicitly treats the dialog as transient.
+    const permitted = await ensureMicPermission().catch(() => false);
+    if (beforeWait !== epoch.current) {
+      starting.current = false;
+      return;
+    }
+    if (!permitted) {
+      reportFailure("permission", voiceConnectionError("permission"));
+      starting.current = false;
+      return;
+    }
     const release = microphone.acquire("live");
     if (!release) {
       reportFailure("mic-lease", `Microphone in use by ${microphone.owner}`);
@@ -222,7 +235,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     else setState(previous => previous.phase === "connecting" ? { ...previous, muted: next } : previous);
   };
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", next => { if (next === "background") {
+    const subscription = AppState.addEventListener("change", next => { if (next === "background" && !permissionRequestInFlight()) {
       epoch.current++; starting.current = false;
       const controller = call.current;
       void controller?.stop("Mic stopped because Dash left the foreground. Tap Start to resume.");
