@@ -6,10 +6,10 @@
 // and preview are siblings outside it so a thumb on the mic never cancels the pen.
 
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { BackHandler, Image, PixelRatio, Platform, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { BackHandler, Image, PixelRatio, Platform, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { requireOptionalNativeModule } from "expo-modules-core";
-import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withTiming } from "react-native-reanimated";
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { debugNavigationRef } from "../../debug/nav";
@@ -23,7 +23,7 @@ import { recognizeShape, type InkColor, type PointerKind, type StrokePoint, type
 import { useHandedness } from "../../lib/useHandedness";
 import {
   addSegment, annotate, clearStrokes, commitStroke, currentSink, enterAnnotation, eraseStrokes, exitAnnotation, finishSend,
-  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, undoStroke, stylusButton,
+  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, setTypedNote, undoStroke, stylusButton, observeStylusPointer,
 } from "../../store/annotate";
 import { store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
@@ -45,23 +45,46 @@ import { updateComposerDraft } from "../../store/composer-drafts";
 export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
 /** Strokes whose extent is under this many points are taps (e.g. a pen double-tap). */
 const MIN_EXTENT = 6;
-// Queue preview can reach 192dp, plus 44dp controls, 8dp wrapper and 24dp
-// closed keyboard pad. Leave another 12dp clear of the input, including on IME.
-const COMPOSER_CLEARANCE = 280;
 // The 60dp nav and 52dp settings/perf action row sit above annotation controls.
 // Keep the tray (including the sent toast) one 8dp gap below both.
 const TRAY_TOP_CLEARANCE = NAV_CHROME_HEIGHT + WORKSPACE_HEADER_HEIGHT + space.sm;
 
-function composerAvoidance(keyboardLift: number): number {
-  "worklet";
-  return COMPOSER_CLEARANCE + Math.max(0, keyboardLift);
+type InkModule = typeof import("./InkCanvas");
+type InkStage = "skia-load" | "ink-render" | "capture";
+type InkFailure = { stage: InkStage; detail: string };
+
+class SkiaLoadFailure extends Error {
+  constructor(readonly original: unknown) {
+    super("Skia initialization failed");
+  }
 }
 
-type InkModule = typeof import("./InkCanvas");
+/** Never expose URLs, credentials or more than 160 characters in a phone banner/log. */
+function inkCause(error: unknown): string {
+  const name = error instanceof Error ? error.name || "Error" : "Error";
+  const message = error instanceof Error ? error.message : String(error);
+  return (name + ": " + message)
+    .replace(/(?:https?|wss?|file):\/\/[^\s<>"']+/gi, "[URL]")
+    .replace(/([?&](?:token|access_token|api_key|auth|signature|secret|key)=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .slice(0, 160);
+}
+
 let inkModule: Promise<InkModule> | undefined;
 function loadInk(): Promise<InkModule> {
-  // Synchronous require keeps InkCanvas in the main bundle: Metro's lazy split-chunk URL 404s behind the turbo relay.
-  inkModule ??= loadSkia().then(() => require("./InkCanvas") as InkModule).catch(error => { inkModule = undefined; throw error; });
+  // Synchronous require avoids a split-chunk URL behind the turbo relay.
+  inkModule ??= (async () => {
+    try {
+      await loadSkia();
+    } catch (error) {
+      throw new SkiaLoadFailure(error);
+    }
+    const module: InkModule = require("./InkCanvas");
+    return module;
+  })().catch(error => {
+    inkModule = undefined;
+    throw error;
+  });
   return inkModule;
 }
 
@@ -82,13 +105,14 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const tool = annotate.use(s => s.tool);
   const color = annotate.use(s => s.color);
   const strokes = annotate.use(s => s.drawing.strokes);
+  const [pendingEmptySend, setPendingEmptySend] = useState<boolean | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const [ink, setInk] = useState<InkModule | null>(null);
-  const [inkError, setInkError] = useState<string>();
-  const [inkRetryPending, setInkRetryPending] = useState(false);
-  const inkRetryUsed = useRef(false);
-  const inkRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [inkError, setInkError] = useState<InkFailure>();
+  const [inkAttempt, setInkAttempt] = useState(0);
+  const [penSendPending, setPenSendPending] = useState(false);
+  const penSendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const captureTarget = useRef<View>(null);
   const inkTraceId = useRef("");
 
@@ -132,53 +156,42 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const pointerSv = useSharedValue(-1);
   useEffect(() => { activeSv.value = active; }, [active, activeSv]);
   useEffect(() => { penSv.value = penMode; }, [penMode, penSv]);
-  const inkFailed = useCallback((error: unknown) => {
+  const inkFailed = useCallback((error: unknown, fallbackStage: InkStage) => {
+    const stage = error instanceof SkiaLoadFailure ? "skia-load" : fallbackStage;
+    const detail = inkCause(error instanceof SkiaLoadFailure ? error.original : error);
+    console.info("[dash-ink] " + stage + " " + detail);
+    // Render exceptions must invalidate the fulfilled module, not just the boundary.
+    inkModule = undefined;
     setInk(null);
-    // A pen-mode preload can fail after Exit; only a visible session gets a retry/banner.
-    if (!annotate.get().active) return;
-    if (!inkRetryUsed.current) {
-      inkRetryUsed.current = true;
-      setInkRetryPending(true);
-      inkRetryTimer.current = setTimeout(() => {
-        inkRetryTimer.current = null;
-        setInkRetryPending(false);
-      }, 2000);
-    } else {
-      if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
-      inkRetryTimer.current = null;
-      setInkRetryPending(false);
-      setInkError("Ink couldn't load. Annotation is paused; your drawing is kept.");
-    }
-    if (__DEV__) console.warn("[dash-ink] unavailable", error instanceof Error ? error.message : "renderer failed");
+    // Pen-mode preloading can fail after Exit; avoid a stale banner on next entry.
+    if (annotate.get().active) setInkError({ stage, detail });
   }, []);
   useEffect(() => {
     if (active) return;
-    if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
-    inkRetryTimer.current = null;
-    inkRetryUsed.current = false;
-    setInkRetryPending(false);
+    if (penSendTimer.current !== null) clearTimeout(penSendTimer.current);
+    penSendTimer.current = null;
+    setPenSendPending(false);
     setInkError(undefined);
   }, [active]);
   useEffect(() => () => {
-    if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
+    if (penSendTimer.current !== null) clearTimeout(penSendTimer.current);
   }, []);
   useEffect(() => {
-    if (engine !== "skia" || (!active && !penMode) || ink || inkError || inkRetryPending) return;
+    if (engine !== "skia" || (!active && !penMode) || ink || inkError) return;
     let cancelled = false;
     void loadInk().then(module => {
       if (!cancelled) setInk(module);
     }).catch(error => {
-      if (!cancelled) inkFailed(error);
+      if (!cancelled) inkFailed(error, "ink-render");
     });
     return () => { cancelled = true; };
-  }, [engine, active, penMode, ink, inkError, inkRetryPending, inkFailed]);
+  }, [engine, active, penMode, ink, inkError, inkAttempt, inkFailed]);
   const retryInk = useCallback(() => {
-    if (inkRetryTimer.current !== null) clearTimeout(inkRetryTimer.current);
-    inkRetryTimer.current = null;
-    inkRetryUsed.current = false;
+    inkModule = undefined;
     setInk(null);
-    setInkRetryPending(false);
     setInkError(undefined);
+    // A fresh boundary is required even when require returns the same export.
+    setInkAttempt(attempt => attempt + 1);
   }, []);
 
   const finish = useCallback((flat: number[], pointerType: number) => {
@@ -224,15 +237,54 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     haptic.select();
   }, [size]);
 
-  const send = useCallback((keep: boolean) => { void sendAnnotation(keep, captureTarget, size); }, [size]);
+  const send = useCallback((keep: boolean) => {
+    const draft = annotate.get();
+    if (draft.status === "capturing" || draft.status === "sending") return;
+    if (draft.drawing.strokes.length > 0 && !draft.typed.trim() && !draft.segments.some(segment => segment.text.trim())) {
+      setPendingEmptySend(keep);
+      return;
+    }
+    setPendingEmptySend(null);
+    if (penSendTimer.current !== null) clearTimeout(penSendTimer.current);
+    penSendTimer.current = null;
+    setPenSendPending(false);
+    void sendAnnotation(keep, captureTarget, size, error => inkFailed(error, "capture"));
+  }, [size, inkFailed]);
+  const sendAnyway = useCallback(() => {
+    if (pendingEmptySend === null) return;
+    setPendingEmptySend(null);
+    void sendAnnotation(pendingEmptySend, captureTarget, size, error => inkFailed(error, "capture"));
+  }, [pendingEmptySend, size, inkFailed]);
+  useEffect(() => { if (!active) setPendingEmptySend(null); }, [active]);
+  const sendRef = useRef(send);
+  useEffect(() => { sendRef.current = send; }, [send]);
+  const queuePenSend = useCallback(() => {
+    const state = annotate.get();
+    if (!state.active || state.drawing.strokes.length === 0 || state.status === "capturing" ||
+        state.status === "sending" || penSendTimer.current !== null) return;
+    setPenSendPending(true);
+    penSendTimer.current = setTimeout(() => {
+      penSendTimer.current = null;
+      setPenSendPending(false);
+      // Undo/Clear/Exit during the grace period never sends an empty annotation.
+      if (annotate.get().active && annotate.get().drawing.strokes.length > 0) sendRef.current(false);
+    }, 3000);
+  }, []);
+  const undoPendingSend = useCallback(() => {
+    if (penSendTimer.current !== null) clearTimeout(penSendTimer.current);
+    penSendTimer.current = null;
+    setPenSendPending(false);
+  }, []);
   const tracePointer = useCallback((pointerType: number, touches: number) => {
+    const kind = pointerKind(pointerType);
+    if (kind === "stylus") observeStylusPointer();
     if (flowMode) {
       inkTraceId.current = flowTrace.begin();
       flowTrace.mark("input.pen", inkTraceId.current);
       const conversationId = store.get().activeId;
       if (conversationId && liveOf(conversationId).open) nextGeneration(conversationId);
     }
-    if (__DEV__) console.log("[dash-ink] raw-down", { pointer: pointerKind(pointerType), touches });
+    if (__DEV__) console.log("[dash-ink] raw-down", { pointer: kind, touches });
   }, []);
 
   const gesture = useMemo(() => {
@@ -241,8 +293,8 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       .enabled(engine === "skia" && active && !!ink && !inkError)
       .onTouchesDown((e, manager) => {
         const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
-        // The dock rides the IME without resizing Expo Go: never swallow input touches.
-        if (!point || point.y >= size.height - composerAvoidance(-keyboardHeight.value)) { manager.fail(); return; }
+        // KeyboardDock moves with the IME; only its live rectangle blocks ink.
+        if (!point || point.y >= size.height - Math.max(0, -keyboardHeight.value)) { manager.fail(); return; }
         const kind = pointerKind(e.pointerType);
         if (!activeSv.value || routePointer(kind, penSv.value, e.numberOfTouches) === "pass") { manager.fail(); return; }
         kindSv.value = e.pointerType; pointerSv.value = point.id;
@@ -269,9 +321,9 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       })
       .onFinalize(() => { live.value = []; pointerSv.value = -1; });
     const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(engine === "skia" && active)
-      .onEnd((e, success) => { if (success && e.y < size.height - composerAvoidance(-keyboardHeight.value) && pointerKind(e.pointerType) === "stylus") runOnJS(send)(false); });
+      .onEnd((e, success) => { if (success && e.y < size.height - Math.max(0, -keyboardHeight.value) && pointerKind(e.pointerType) === "stylus") runOnJS(queuePenSend)(); });
     return Gesture.Simultaneous(draw, penDoubleTap);
-  }, [engine, active, penMode, ink, inkError, finish, send, live, activeSv, penSv, kindSv, pointerSv, tracePointer, size.height, keyboardHeight]);
+  }, [engine, active, penMode, ink, inkError, finish, queuePenSend, live, activeSv, penSv, kindSv, pointerSv, tracePointer, size.height, keyboardHeight]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -279,8 +331,8 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     if (__DEV__) console.log("[dash-ink] bounds", { width, height, fontScale: PixelRatio.getFontScale() });
   }, []);
 
-  // Use the same moving boundary for the frame and the finger-blocking overlay.
-  const frameStyle = useAnimatedStyle(() => ({ bottom: composerAvoidance(-keyboardHeight.value) }));
+  // Frame, ink and input cover the entire screen, except the visible keyboard.
+  const frameStyle = useAnimatedStyle(() => ({ bottom: Math.max(0, -keyboardHeight.value) }));
   const Ink = ink?.InkCanvas;
   useEffect(() => {
     const confirmed = annotationStatus === "sent" && previousAnnotationStatus.current !== "sent";
@@ -296,9 +348,10 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
           <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
           {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
           {engine === "skia" && active && !penMode && !inkError ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
-          {engine === "skia" && active && Ink ? <InkBoundary onError={inkFailed}><View style={StyleSheet.absoluteFill} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></View></InkBoundary> : null}
+          {engine === "skia" && active && Ink ? <InkBoundary key={inkAttempt} onError={error => inkFailed(error, "ink-render")}><Animated.View style={[StyleSheet.absoluteFill, frameStyle, { overflow: "hidden" }]} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></Animated.View></InkBoundary> : null}
           {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active ? "auto" : "none"} {...overlayProps}>
             <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} tool={tool} color={color} penMode={penMode} mode="screen"
+              onStylusObserved={async () => { observeStylusPointer(); }}
               onReady={async ms => { console.info("[annotate-tldraw] host-ready", { ms }); }}
               onDrawing={async drawing => { syncTldrawStrokes(drawing.map(stroke => ({ ...stroke, targets: targetsAt(stroke.points.map(point => ({ x: point.x * size.width, y: point.y * size.height }))) }))); }}
               onExportDone={async () => { /* WP3 connects the ink export to compositing. */ }}
@@ -307,9 +360,9 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         </View>
       </GestureDetector>
       {active ? <Animated.View pointerEvents="none" style={[styles.frame, frameStyle]} accessibilityLabel="Annotation mode on" {...overlayProps} /> : null}
-      {active ? <Tray onSend={send} screenHeight={size.height} tldraw={engine === "tldraw" ? tldraw : undefined} /> : <Toast screenHeight={size.height} />}
+      {active ? <Tray onSend={send} onSendAnyway={sendAnyway} onDismissEmpty={() => setPendingEmptySend(null)} pendingEmptySend={pendingEmptySend} onUndoPenSend={undoPendingSend} penSendPending={penSendPending} screenHeight={size.height} tldraw={engine === "tldraw" ? tldraw : undefined} /> : <Toast screenHeight={size.height} />}
       {active && inkError ? <View style={styles.inkError}>
-        <Text accessibilityRole="alert" style={styles.error}>{inkError}</Text>
+        <Text accessibilityRole="alert" style={styles.error}>{"Ink paused (" + inkError.stage + "): " + inkError.detail}</Text>
         <View style={styles.row}>
           <Chip label="Retry ink" a11y="Retry ink renderer" onPress={retryInk} />
           <Chip label="Exit" a11y="Exit annotation" onPress={exitAnnotation} />
@@ -338,7 +391,7 @@ if (__DEV__ && flowMode) Reflect.set(globalThis, "__dashFlowTrace", {
   },
 });
 
-async function sendAnnotation(keep: boolean, target: React.RefObject<View | null>, size: { width: number; height: number }): Promise<void> {
+async function sendAnnotation(keep: boolean, target: React.RefObject<View | null>, size: { width: number; height: number }, onCaptureFailure: (error: unknown) => void): Promise<void> {
   const s = annotate.get();
   if (s.status === "capturing" || s.status === "sending") return;
   const strokes = s.drawing.strokes;
@@ -353,19 +406,27 @@ async function sendAnnotation(keep: boolean, target: React.RefObject<View | null
     const screen = { id: route?.key ?? "unknown", route: route?.name ?? "unknown", width: Math.round(size.width), height: Math.round(size.height) };
     const createdAt = Date.now();
     if (flowMode) flowTrace.mark("turn.commit", flowTrace.begin());
-    const { composite } = await loadInk();
-    const { bytes, dataUri } = await composite(target, strokes, screen, INK, colors.bg);
-    const text = composeMessage({ strokes, segments: s.segments, screen });
+    let captured: Awaited<ReturnType<InkModule["composite"]>>;
+    try {
+      const { composite } = await loadInk();
+      captured = await composite(target, strokes, screen, INK, colors.bg);
+    } catch (error) {
+      onCaptureFailure(error);
+      setAnnotationStatus("idle");
+      return;
+    }
+    const { bytes, dataUri } = captured;
+    const text = composeMessage({ strokes, segments: s.segments, screen, typed: s.typed });
     setAnnotationStatus("sending", { preview: { image: dataUri, text, strokes: strokes.length } });
     const names = attachmentNames(createdAt);
-    const doc = annotationDoc({ strokes, segments: s.segments, screen, createdAt });
+    const doc = annotationDoc({ strokes, segments: s.segments, screen, createdAt, typed: s.typed });
     const [image, json] = await Promise.all([
       uploadBytes(settings, names.image, "image/png", bytes),
       uploadBytes(settings, names.json, "application/json", new TextEncoder().encode(JSON.stringify(doc, null, 1))),
     ]);
     await sink.send(text, [image, json], annotationSendMode(sink.steerable()));
     haptic.success();
-    finishSend(keep, { strokes, segments: s.segments });
+    finishSend(keep, { strokes, segments: s.segments, typed: s.typed });
   } catch (error) {
     setAnnotationStatus("error", { error: error instanceof Error ? error.message : "Could not send the annotation." });
   }
@@ -380,8 +441,8 @@ const TOOLS: { id: Tool; label: string; a11y: string }[] = [
   { id: "eraser", label: "Erase", a11y: "Eraser" },
 ];
 
-/** Clip every annotation surface to the area above the lifted composer.
- * The pane scrolls when 390/412dp wrapping or a preview exceeds that space.
+/** Keep the tray in the visible, keyboard-free screen without clipping ink.
+ * Top is the default; the hop control moves it below any strokes at the top.
  */
 function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; atTop: boolean; screenHeight: number }): React.JSX.Element {
   const insets = useSafeAreaInsets();
@@ -394,15 +455,12 @@ function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; 
       duration: 110, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System,
     });
   }, [atTop, progress]);
-  // A tall IME may leave no room at all: show zero tray height rather than
-  // growing underneath the composer or the floating header controls.
-  const clearDock = useAnimatedStyle(() => ({
-    height: Math.max(0, screenHeight - topInset - composerAvoidance(-keyboardHeight.value)),
+  // A tall IME can leave no tray room. Ink remains full-screen when it is closed.
+  const room = useDerivedValue(() => Math.max(0, screenHeight - topInset - Math.max(0, -keyboardHeight.value) - space.xs));
+  const clearDock = useAnimatedStyle(() => ({ height: room.value }));
+  const placement = useAnimatedStyle(() => ({
+    transform: [{ translateY: Math.max(0, room.value - trayHeight.value) * progress.value }],
   }));
-  const placement = useAnimatedStyle(() => {
-    const room = Math.max(0, screenHeight - topInset - composerAvoidance(-keyboardHeight.value));
-    return { transform: [{ translateY: Math.max(0, room - trayHeight.value) * progress.value }] };
-  });
   return (
     <Animated.View pointerEvents="box-none" style={[styles.trayViewport, { top: topInset, left: insets.left + space.xs, right: insets.right + space.xs }, clearDock]} {...overlayProps}>
       <Animated.ScrollView testID="annotation-tray" bounces={false} showsVerticalScrollIndicator={false}
@@ -414,22 +472,47 @@ function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; 
   );
 }
 
-function Tray({ onSend, screenHeight, tldraw }: { onSend(keep: boolean): void; screenHeight: number; tldraw?: React.RefObject<TldrawAnnotateHandle | null> }): React.JSX.Element {
+function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, onUndoPenSend, penSendPending, screenHeight, tldraw }: {
+  onSend(keep: boolean): void;
+  onSendAnyway(): void;
+  onDismissEmpty(): void;
+  pendingEmptySend: boolean | null;
+  onUndoPenSend(): void;
+  penSendPending: boolean;
+  screenHeight: number;
+  tldraw?: React.RefObject<TldrawAnnotateHandle | null>;
+}): React.JSX.Element {
   const thumb = useHandedness();
   const s = annotate.use(x => x);
   const busy = s.status === "capturing" || s.status === "sending";
   const count = s.drawing.strokes.length;
+  const [noteOpen, setNoteOpen] = useState(false);
+  const noteInput = useRef<TextInput>(null);
+  useEffect(() => { if (noteOpen) noteInput.current?.focus(); }, [noteOpen]);
+  const addNote = () => {
+    onDismissEmpty();
+    setNoteOpen(true);
+    noteInput.current?.focus();
+  };
   // The tray can hop to the top so it never hides the part of the screen being marked.
   const [top, setTop] = useState(true);
   return (
     <TrayViewport atTop={top} screenHeight={screenHeight}>
-      {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `Sending to ${s.sink ?? "chat"}…`} /> : null}
+      {penSendPending ? <View style={styles.penSendToast}>
+        <Text style={styles.penSendLabel}>Sending…</Text>
+        <Chip label="Undo" a11y="Undo sending" onPress={onUndoPenSend} />
+      </View> : null}
+      {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `${s.sink ?? "Sending to chat"}…`} /> : null}
       {s.status === "error" && s.error ? <Text accessibilityRole="alert" style={styles.error}>{s.error}</Text> : null}
       {s.voiceNote ? <Text testID="annotation-voice-note" style={[styles.hint, { fontSize: 12, color: colors.textMuted }]}>Live voice unavailable: {s.voiceNote.replace(/[.!?]+$/, "")}. Hold Talk or type a note.</Text> : null}
       <View style={[styles.row, thumb.row]}>
         {TOOLS.map(t => <Chip key={t.id} label={t.label} a11y={t.a11y} selected={s.tool === t.id} onPress={() => setTool(t.id)} />)}
         <Swatch color="accent" selected={s.color === "accent"} />
         <Swatch color="red" selected={s.color === "red"} />
+        <Chip label="Aa" a11y="Type a note" selected={noteOpen || !!s.typed} onPress={() => {
+          if (noteOpen) { noteInput.current?.blur(); setNoteOpen(false); }
+          else addNote();
+        }} />
       </View>
       <View style={[styles.row, thumb.row]}>
         <Chip label="Exit" a11y="Exit annotation" onPress={exitAnnotation} />
@@ -442,7 +525,23 @@ function Tray({ onSend, screenHeight, tldraw }: { onSend(keep: boolean): void; s
         <Chip label="Keep" a11y="Send and keep drawing" disabled={busy || count === 0} onPress={() => onSend(true)} />
         <Chip label={busy ? "…" : "Send"} a11y="Send annotation" primary disabled={busy || count === 0} onPress={() => onSend(false)} />
       </View>
-      <Text style={styles.hint} numberOfLines={1}>{s.sink ? `→ ${s.sink}` : "Open a chat to send"} · {s.segments.length ? `${s.segments.length} spoken` : "hold Talk to speak"}{s.penMode ? " · fingers scroll" : ""}</Text>
+      {noteOpen ? <TextInput
+        ref={noteInput} testID="annotation-note" accessibilityLabel="Type a note"
+        multiline maxLength={2000} value={s.typed} onChangeText={text => {
+          setTypedNote(text);
+          if (text.trim()) onDismissEmpty();
+        }}
+        placeholder="What should change?" placeholderTextColor={colors.textMuted}
+        selectionColor={colors.gold} textAlignVertical="top" style={styles.noteInput}
+      /> : null}
+      {pendingEmptySend !== null ? <View style={styles.confirm}>
+        <Text accessibilityRole="alert" style={styles.error}>No words captured. Send the marks only?</Text>
+        <View style={[styles.row, thumb.row]}>
+          <Chip label="Send anyway" a11y="Send anyway" onPress={onSendAnyway} />
+          <Chip label="Add note" a11y="Add note" onPress={addNote} />
+        </View>
+      </View> : null}
+      <Text style={styles.hint} numberOfLines={1}>{s.sink ? `→ ${s.sink}` : "Open a chat to send"} · {s.segments.length ? `${s.segments.length} spoken` : s.typed.trim() ? "typed note ready" : "hold Talk or type a note"}{s.penMode ? " · fingers scroll" : ""}</Text>
     </TrayViewport>
   );
 }
@@ -455,7 +554,7 @@ function Toast({ screenHeight }: { screenHeight: number }): React.JSX.Element | 
     return () => clearTimeout(id);
   }, [s.status]);
   if (s.status !== "sent" || !s.preview) return null;
-  return <TrayViewport atTop screenHeight={screenHeight}><Preview image={s.preview.image} text={s.preview.text} label={`Sent to ${s.sink ?? "chat"} · ${s.preview.strokes} strokes`} /></TrayViewport>;
+  return <TrayViewport atTop screenHeight={screenHeight}><Preview image={s.preview.image} text={s.preview.text} label={`${(s.sink ?? "Sending to chat").replace(/^Sending to /, "Sent to ")} · ${s.preview.strokes} strokes`} /></TrayViewport>;
 }
 
 function Preview({ image, text, label }: { image: string; text: string; label: string }): React.JSX.Element {
@@ -509,6 +608,8 @@ function HoldToTalk(): React.JSX.Element {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   inkError: { position: "absolute", top: 80, left: 12, right: 12, padding: 8, backgroundColor: colors.surfaceRaised, borderRadius: radius.sm },
+  penSendToast: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 44, paddingHorizontal: space.sm, borderRadius: radius.sm, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.hair },
+  penSendLabel: { ...type.mono, color: colors.text },
   frame: { position: "absolute", top: 0, left: 0, right: 0, borderWidth: 2, borderColor: colors.accent, borderRadius: 2 },
   trayViewport: { position: "absolute", overflow: "hidden" },
   tray: { flexGrow: 0, flexShrink: 1, maxHeight: "100%", borderRadius: radius.md, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.hair },
@@ -525,6 +626,8 @@ const styles = StyleSheet.create({
   swatchOn: { borderWidth: 2, borderColor: colors.text },
   hint: { ...type.mono, fontSize: 10, color: colors.textTertiary, paddingHorizontal: space.sm },
   error: { ...type.small, color: colors.danger, paddingHorizontal: space.sm },
+  noteInput: { minHeight: 48, maxHeight: 120, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.hair2, backgroundColor: colors.surface, color: colors.text, fontSize: 16 },
+  confirm: { gap: space.xs, paddingVertical: space.xs, borderTopWidth: 1, borderTopColor: colors.hair },
   preview: { flexDirection: "row", gap: space.sm, padding: space.xs, marginBottom: space.xs, borderRadius: radius.sm, backgroundColor: colors.surfaceRaised },
   thumb: { width: 72, height: 160, borderRadius: radius.sm, backgroundColor: colors.bg },
   previewBody: { flex: 1, gap: 2 },

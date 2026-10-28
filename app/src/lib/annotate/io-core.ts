@@ -32,7 +32,10 @@ export async function transcribeRecording(settings: BridgeSettings, audio: Array
   const text = typeof body === "object" && body !== null ? Reflect.get(body, "text") : undefined;
   if (!res.ok || typeof text !== "string") {
     const error = typeof body === "object" && body !== null ? Reflect.get(body, "error") : undefined;
-    throw new Error(typeof error === "string" ? error : `Transcription failed (${res.status}).`);
+    const reason = typeof body === "object" && body !== null ? Reflect.get(body, "reason") : undefined;
+    const detail = typeof body === "object" && body !== null ? Reflect.get(body, "detail") : undefined;
+    const bridgeReason = [reason, detail, error].find(value => typeof value === "string" && value.trim());
+    throw new Error(typeof bridgeReason === "string" ? bridgeReason : `Transcription failed (${res.status}).`);
   }
   return text;
 }

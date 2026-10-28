@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { isCatalogHarness } from "../../shared/catalog";
 import { hermesSessions } from "./hermes-sessions";
+import { listFinishedSessions, nodeFsPort } from "./finished-sessions";
 import { grokDesktopBot, hermesBots, hostBotSources, serviceBots } from "./bots";
 import { z0bridgeHermes } from "./z0bridge-hermes";
 import { agentsviewSessions } from "./agentsview-sessions";
@@ -704,10 +705,10 @@ function fleetHostNames(): string[] {
   } catch { return []; }
 }
 
-export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }): Promise<HostInfo[]> {
+export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }, remoteAgents?: Record<string, AgentInfo[]>): Promise<HostInfo[]> {
   const key = `${self.hostname}:${self.address ?? ""}:${harnesses.map((h) => `${h.id}:${h.available}`).join(",")}`;
   const now = Date.now();
-  if (rosterCache && rosterCache.key === key && now - rosterCache.at < ROSTER_TTL_MS) return rosterCache.hosts;
+  if (remoteAgents === undefined && rosterCache && rosterCache.key === key && now - rosterCache.at < ROSTER_TTL_MS) return rosterCache.hosts;
   refreshHermesList();
   const nodes = parseTailscaleStatus(readTailscaleStatus());
   const home = homedir();
@@ -727,6 +728,7 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
       hermesProfiles,
       hermesA2A: { ok: probeAgentCard(a2aUrl), url: a2aUrl },
       grokBot: grokBotAlive(),
+      remoteAgents,
     },
   });
   // z0bridge when it is running; Dash's own read-only SessionDB/native API listing otherwise.
@@ -737,8 +739,15 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
     // Every other harness's persisted chats; live rows for the same session win.
     const listed = new Set(local.agents.filter(a => a.sessionId).map(a => `${a.kind}:${a.sessionId}`));
     local.agents.push(...agentsviewSessions(listed));
+    for (const agent of local.agents) if (agent.sessionId) listed.add(`${agent.kind}:${agent.sessionId}`);
+    for (const agent of await listFinishedSessions({ fs: nodeFsPort(), homeDir: home, now })) {
+      const key = `${agent.kind}:${agent.sessionId}`;
+      if (listed.has(key)) continue;
+      listed.add(key);
+      local.agents.push(agent);
+    }
     local.bots = localBots();
   }
-  rosterCache = { at: now, key, hosts };
+  if (remoteAgents === undefined) rosterCache = { at: now, key, hosts };
   return hosts;
 }

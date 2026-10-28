@@ -4,6 +4,23 @@ import {hostname} from 'node:os';
 
 test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({path:info.outputPath('final.png')});});
 
+test.describe('Claude Code session model identity',()=>{
+ test.use({bridgeOptions:{archiveClaude:true}});
+ test('fixture Claude session model shows in the chat header',async({page,bridge})=>{
+  await pair(page,bridge);
+  const row=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({hasText:'ARMY archived Claude Code chat'});
+  await expect(row).toHaveCount(1,{timeout:30000});
+  await row.click({noWaitAfter:true});
+  const badge=page.getByTestId('chat-window-badge');
+  await expect(badge).toBeVisible();
+  await expect(badge).toContainText('claude-opus-5-5');
+  await expect(badge).toHaveAttribute('aria-label',/session 11111111-2222-4333-8444-555555555555, model claude-opus-5-5, reported by host/);
+  await expect(badge).not.toContainText('model unknown');
+  await expect(badge).not.toContainText('not-an-assistant-model');
+  await expect(badge).not.toContainText('claude-older-model');
+ });
+});
+
 test('pairing, Chats tab, open and close real chat window',async({page,bridge})=>{
  await openChat(page,bridge);
  await expect(page.getByTestId('chat-window-badge')).toContainText(hostname()); // the bridge host, on any machine
@@ -12,6 +29,30 @@ test('pairing, Chats tab, open and close real chat window',async({page,bridge})=
  await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected','true');
  await chatRow(page).click({noWaitAfter:true});
  await expect(composer(page)).toBeInViewport();
+});
+
+test('main input names the selected agent with default feedback enabled and after reload',async({page,bridge},info)=>{
+ await openChat(page,bridge);
+ await chooseHarness(page,'Hermes');
+ await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});
+ // Logical viewports at 3x scale for the reported 1080x2340 and 1440x3120 phones.
+ for (const viewport of [{width:360,height:780},{width:480,height:1040}]) {
+  await page.setViewportSize(viewport);
+  await expect(composer(page)).toHaveAttribute('placeholder','Message Hermes');
+  await expect(composer(page)).toBeInViewport();
+  await page.screenshot({path:info.outputPath(`main-input-hermes-${viewport.width}.png`)});
+ }
+ // Reopen the owned chat in its window (a brand-new chat opens full screen, with a different header).
+ await chatRow(page).click({noWaitAfter:true});
+ await expect(page.getByTestId('chat-window')).toBeVisible();
+ await chooseHarness(page,'OMP');
+ await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});
+ await expect(composer(page)).toHaveAttribute('placeholder','Message OMP');
+ await page.reload({waitUntil:'domcontentloaded'});
+ await expect(composer(page)).toHaveAttribute('placeholder','Message OMP',{timeout:25000});
+ // Selecting an agent and editing placeholder copy must not submit feedback or start a turn.
+ await expect(page.getByText('Dash feedback',{exact:true})).toHaveCount(0);
+ expect(bridge.logs()).not.toContain('turn.start');
 });
 
 test('composer typing, Send and streamed ACP reply',async({page,bridge,metrics})=>{

@@ -76,6 +76,7 @@ import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
+import { focusVoiceOrbOverlay } from "../components/VoiceOrbOverlay";
 import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
 import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
@@ -262,8 +263,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Broker liveness/another client's call is not evidence that Dash's mic is live.
   const voiceCall: OrbState | undefined = voiceActive ? { phase: voice.state.phase === "hearing" ? "listening" : voice.state.phase === "error" ? "idle" : voice.state.phase } : undefined;
   const onVoice = () => {
-    // A live call already shows its one Mute/End home (window dock row, else the app-wide bar).
-    if (voiceActive) return;
+    // A running call stays put: focus its hero orb instead of doing nothing.
+    if (voiceActive) { focusVoiceOrbOverlay(); return; }
     void voice.start();
   };
 
@@ -314,7 +315,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   steerableRef.current = canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn);
   useEffect(() => {
     if (!conversation) return;
-    return registerSink({ label: `${harnessName} chat`, steerable: () => steerableRef.current, send: (text, attachments, mode) => {
+    return registerSink({ label: `Sending to ${conversation.title || harnessName}`, conversationId: conversation.id, steerable: () => steerableRef.current, send: (text, attachments, mode) => {
       if (liveOn) setLiveOpen(conversation.id, false);
       return sendVoiceAnnotation(conversation, text, attachments, () => {}, mode);
     } });
@@ -413,9 +414,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     harnessName,
     profile: conversation?.profileName ?? conversation?.profileId,
     sessionId: conversation?.sessionId,
+    // Summary/roster model is exact-session metadata; a fresh context reading takes precedence.
+    ...(conversation?.sessionModel?.sessionId === conversation?.sessionId && conversation?.sessionModel
+      ? { model: conversation.sessionModel.model } : {}),
     // Never a default name: unknown unless the host reported it for this exact session.
     ...hostIdentity(hostReading ?? undefined, conversation?.sessionId, observedAt),
-  }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, connection.hosts, connection.host, selfHost?.id, selfHost?.name, harnessName, hostReading, observedAt]);
+  }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, conversation?.sessionModel, connection.hosts, connection.host, selfHost?.id, selfHost?.name, harnessName, hostReading, observedAt]);
   const targetHostId = conversation?.targetHostId ?? selfHost?.id;
   const targetInventory = useMemo((): TargetSwitcherInventory => ({
     hosts: connection.hosts,
@@ -557,7 +561,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     <OrbActivity active={false}>
     <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
       {windowed ? <>
-        <WindowPill geometry={pill} title={conversation?.title || harnessName} thinking={thinking}
+        <WindowPill geometry={pill} title={conversation?.title || harnessName}
           status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
           primary={pillPrimary({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
           open={navOpen} onToggle={() => setNavOpen(value => !value)} />
@@ -652,6 +656,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           title={conversation?.title || harnessName}
           options={optionsTrigger}
           targetSwitcher={<TargetSwitcherBadge inventory={targetInventory} onSwitch={onTargetSwitch} />}
+          onAnnotate={enterAnnotation}
           treeOpen={treeOpen}
           onTree={setTreeOpen}
           onClose={closeWindow}

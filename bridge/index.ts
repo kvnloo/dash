@@ -43,6 +43,7 @@ import { createPairingHttpHandler } from "./src/pairing-http";
 import { playPairCode } from "./pair-audio";
 import { decodePairAudio } from "./pair-decode";
 import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
+import { peerRosterCollector } from "./src/peer-roster";
 import { AGENTSVIEW_PREFIX, agentsviewMachineId, agentsviewPath, isSelfArchiveProfile, rosterArchiveHead } from "./src/agentsview-sessions";
 import { ChatIndexClient } from "./src/chat-index/client";
 import { createChatsHttpHandler } from "./src/chat-index/http";
@@ -70,6 +71,7 @@ import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnes
 import { acpCommand, AcpSupervisor, type AcpHandle } from "./src/acp/supervisor";
 import { AcpPermissionRouter } from "./src/acp/permission-port";
 import { PermissionBroker, type PermissionNotice } from "./src/permission-broker";
+import { remoteClaudeHistory } from "./src/remote-history";
 import { remoteAcpCommand, remoteHostFor, remoteHosts, remoteRouteIds, remoteTurnProblem, type RemoteHost } from "./src/remote-hosts";
 import {
   CANCELLED_EXIT_CODE,
@@ -99,6 +101,7 @@ import { createOrchestraHttpHandler } from "./src/orchestra-http";
 import { createHostsHttpHandler } from "./src/hosts-http";
 import { createRoadmapHttpHandler } from "./src/roadmap-http";
 import { createPmHttpHandler } from "./src/pm-http";
+import { createBridgeHealthHttpHandler, DRAIN_MESSAGE } from "./src/health";
 import { createTraceRoute } from "./src/trace-route";
 import { createTriageHttpHandler } from "./src/triage-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
@@ -146,6 +149,8 @@ class Turn implements Sink {
   readonly events: TurnEvent[] = [];
   readonly listeners = new Set<Socket>();
   finished = false;
+  /** True only after the final done frame has been emitted to listeners. */
+  settled = false;
 
   readonly details = new ToolDetails();
   part(part: ReplyPart): void {
@@ -180,6 +185,7 @@ class Turn implements Sink {
   constructor(
     readonly id: string,
     readonly harness: Harness,
+    readonly voice = false,
   ) {}
 
   /** Host profile that owns this Hermes turn's session, once known. */
@@ -215,7 +221,7 @@ class Turn implements Sink {
         this.hermesProfile = hermesSessions.profileForHome(process.env.HERMES_HOME?.trim() || join(homedir(), ".hermes"));
         this.hermesTransport = "acp";
       }
-      this.runAcp(command, input);
+      this.runAcp(command, input, undefined, undefined, { timeoutMs: turnTimeoutMs() });
       return;
     }
     if (this.harness.id === "hermes") {
@@ -225,10 +231,10 @@ class Turn implements Sink {
     this.spawnCli(input);
   }
 
-  private runAcp(command: string[], input: TurnInput, env?: Record<string, string>, release?: () => void, remote?: { spawnCwd: string; timeoutMs: number }): void {
+  private runAcp(command: string[], input: TurnInput, env?: Record<string, string>, release?: () => void, connection?: { spawnCwd?: string; timeoutMs: number }): void {
     try {
       // The id keys the agent's usage_update readings; /chat/context looks them up by harness, not by turn.
-      this.acp = (remote ? remoteAcpSupervisor : acpSupervisor).start({ id: this.harness.id, command, input, sink: this, env, ...remote, permissions: { principalId: PERMISSION_PRINCIPAL, turnId: this.id, broker: permissions.port } });
+      this.acp = (connection?.spawnCwd ? remoteAcpSupervisor : acpSupervisor).start({ id: this.harness.id, command, input, sink: this, env, ...connection, permissions: { principalId: PERMISSION_PRINCIPAL, turnId: this.id, broker: permissions.port } });
       void this.acp.done.then(
         () => { release?.(); this.finish(0); },
         error => {
@@ -324,7 +330,7 @@ class Turn implements Sink {
           this.hermesTransport = "acp";
           log("hermes.path", { path: "acp" });
           handedOff = true;
-          this.runAcp(route.command, input, { HERMES_HOME: route.home }, release);
+          this.runAcp(route.command, input, { HERMES_HOME: route.home }, release, { timeoutMs: turnTimeoutMs() });
           return;
         }
         this.hermesTransport = "api";
@@ -519,7 +525,11 @@ class Turn implements Sink {
     if (this.finished) return;
     this.flush();
     this.finished = true;
-    const done = () => this.emit({ type: "done", id: this.id, seq: 0, exitCode });
+    const done = () => {
+      this.emit({ type: "done", id: this.id, seq: 0, exitCode });
+      this.settled = true;
+      maybeFinishDrain();
+    };
     if (this.summaries) void this.summaries.finish().then(done, done);
     else done();
     setTimeout(() => turns.delete(this.id), RETAIN_MS);
@@ -546,6 +556,17 @@ class Turn implements Sink {
 }
 
 const turns = new Map<string, Turn>();
+/** Retained finished turns are replayable but never count as running agents. */
+function runningTurns(): number {
+  let running = 0;
+  for (const turn of turns.values()) if (!turn.settled) running++;
+  return running;
+}
+function activeVoiceSessions(): number {
+  let voice = 0;
+  for (const turn of turns.values()) if (!turn.settled && turn.voice) voice++;
+  return voice;
+}
 
 function pruneTurns(): void {
   if (turns.size <= MAX_RETAINED) return;
@@ -587,9 +608,11 @@ const HOST_NAME = hostname();
 const SELF = new SelfHost(HOST_NAME);
 /** Last assembled roster: the live overlay for GET /chats reads it without waiting. */
 let lastHosts: HostInfo[] = [];
+const collectPeers = peerRosterCollector();
 /** Roster for this bridge, remembering the id the phone uses for this computer. */
 async function selfRoster(harnesses: HarnessInfo[], address?: string): Promise<HostInfo[]> {
-  const hosts = await collectRoster(harnesses, { hostname: HOST_NAME, address });
+  const remote = await collectPeers();
+  const hosts = await collectRoster(harnesses, { hostname: HOST_NAME, address }, remote.remoteAgents);
   SELF.remember(hosts);
   lastHosts = hosts;
   return hosts;
@@ -697,7 +720,8 @@ async function runVoiceTurn(turn: Turn, utterance: Utterance): Promise<void> {
     turn.start({ text: heard.text, cwd: utterance.cwd, sessionId: utterance.sessionId, profileId: utterance.profileId });
   } catch (error) {
     log("voice.failed", { id: turn.id, error: String(error) });
-    turn.endWithout(error instanceof Error ? error.message : String(error));
+    const ready = speechAvailable();
+    turn.endWithout(!ready.ok ? ready.reason ?? "Speech-to-text is not available on this host." : error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -732,7 +756,9 @@ const handleHttp = createPairingHttpHandler({
   get address() { return bridgeAddress; },
   cwd: DEFAULT_CWD,
   harnesses: harnessList,
-  roster: () => selfRoster(harnessList(), HOST),
+  roster: localOnly => localOnly
+    ? collectRoster(harnessList(), { hostname: HOST_NAME, address: HOST })
+    : selfRoster(harnessList(), HOST),
   pairing: { currentOrCreateSession, startBoundSession, claimSession },
   playCode: queuePairPlayback,
   decodeAudio: decodePairAudio,
@@ -779,7 +805,8 @@ const handleFiles = createFilesHttpHandler({
   device: process.env.DASH_KDECONNECT_DEVICE,
   run: bunRun,
   onEvent: log,
-  ...(speechAvailable().ok ? { transcribe } : {}),
+  transcribe,
+  speechAvailable,
 });
 
 // Chat index: every archived/native chat, paged and searchable. All SQLite reads run in
@@ -796,22 +823,24 @@ const chatIndex = new ChatIndexClient({
   },
 });
 const liveSince = new Map<string, number>();
-/** Running and host-held chats on this computer, keyed like the index. */
+/** Roster-only chats across hosts, including native-store fallbacks, keyed like the index. */
 function liveChats(): ChatSummary[] {
   const self = lastHosts.find(h => h.self);
   if (!self) { void selfRoster(harnessList(), HOST).catch(() => undefined); return []; }
   const now = Date.now();
   const out: ChatSummary[] = [];
-  for (const agent of self.agents) {
-    if (!agent.sessionId || (agent.status !== "running" && !agent.openIn)) continue;
+  for (const host of lastHosts) for (const agent of host.agents) {
+    if (!host.online || agent.status === "offline" || !agent.sessionId || !isCatalogHarness(agent.kind)) continue;
+    if (host.self && agent.status !== "running" && !agent.openIn && agent.source !== "local-store") continue;
     const profileId = agent.kind === "hermes" ? agent.profileId : undefined;
-    const key = chatKey({ hostId: SELF.id(), kind: agent.kind, sessionId: agent.sessionId, ...(profileId ? { profileId } : {}) });
+    const key = chatKey({ hostId: host.id, kind: agent.kind, sessionId: agent.sessionId, ...(profileId ? { profileId } : {}) });
     if (!liveSince.has(key)) liveSince.set(key, now);
     const since = liveSince.get(key) ?? now;
     out.push({
-      key, kind: agent.kind, sessionId: agent.sessionId, hostId: SELF.id(), hostName: self.name, ...(profileId ? { profileId } : {}), agentId: agent.id,
+      key, kind: agent.kind, sessionId: agent.sessionId, hostId: host.id, hostName: host.name, ...(profileId ? { profileId } : {}), agentId: agent.id,
       title: agent.name, ...(agent.cwd ? { cwd: agent.cwd } : {}), startedAt: since, lastActivityAt: agent.lastActivityAt ?? since,
-      messageCount: agent.messageCount ?? 0, origin: "live", chatable: isCatalogHarness(agent.kind),
+      ...(agent.model ? { model: agent.model } : {}),
+      messageCount: agent.messageCount ?? 0, origin: "live", chatable: host.self && isCatalogHarness(agent.kind),
       ...(agent.status === "running" ? { running: true } : {}), ...(agent.openIn ? { openIn: agent.openIn } : {}),
     });
   }
@@ -834,6 +863,7 @@ const handleHosts = createHostsHttpHandler({ authorize, hostId: () => SELF.id() 
 const handleRoadmap = createRoadmapHttpHandler({ authorize });
 const handlePm = createPmHttpHandler({ authorize });
 const handleVoiceStatus = createVoiceStatusHttpHandler({ authorize });
+const handleHealth = createBridgeHealthHttpHandler({ authorize, running: runningTurns, voiceSessions: activeVoiceSessions, onDrain: beginDrain });
 const handleTrace = createTraceRoute({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleTriage = createTriageHttpHandler({ authorize });
 const handleModels = createModelsHttpHandler({ authorize });
@@ -899,6 +929,8 @@ const server = Bun.serve<SocketData>({
       if (roadmap) return cors(roadmap);
       const pm = await handlePm(request);
       if (pm) return cors(pm);
+      const health = await handleHealth.handle(request);
+      if (health) return cors(health);
       const models = await handleModels(request);
       if (models) return cors(models);
       const supervision = await handleSupervision(request);
@@ -991,6 +1023,7 @@ const server = Bun.serve<SocketData>({
           break;
         }
         case "chat": {
+          if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
           log("ws.chat", { id: message.id, harness: message.harness, hostId: message.hostId ?? "-", profileId: message.profileId ?? "-", session: message.sessionId ? "resume" : "new", mode: message.mode ?? "-" });
           const remote = SELF.matches(message.hostId) ? undefined : remoteHostFor(message.hostId);
           if (remote) {
@@ -1037,6 +1070,7 @@ const server = Bun.serve<SocketData>({
             log("turn.attachments", { id: message.id, count: files.length, bytes: files.reduce((n, f) => n + f.size, 0) });
           }
 
+          if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
           const turn = new Turn(message.id, harness);
           turn.listeners.add(ws);
           ws.data.turns.add(message.id);
@@ -1048,6 +1082,7 @@ const server = Bun.serve<SocketData>({
           break;
         }
         case "voice_begin": {
+          if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
           if (!(await isSelfHost(message.hostId))) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
           if (message.harness === "hermes" && message.sessionId) {
             if (!hermesSessions.target(message.profileId, message.sessionId)) return rejectTurn(ws, message.id, "Unknown or ambiguous Hermes profile/session.");
@@ -1072,7 +1107,8 @@ const server = Bun.serve<SocketData>({
           const cwd = message.cwd?.trim() || DEFAULT_CWD;
           if (!isDirectory(cwd)) return rejectTurn(ws, message.id, `Not a directory on ${HOST_NAME}: ${cwd}`);
 
-          const turn = new Turn(message.id, harness);
+          if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
+          const turn = new Turn(message.id, harness, true);
           turn.listeners.add(ws);
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
@@ -1164,8 +1200,10 @@ const server = Bun.serve<SocketData>({
           }
           const routed = SELF.matches(message.hostId) ? undefined : remoteHostFor(message.hostId);
           if (routed) {
-            // A chat recorded on a routed computer: its history is the copy AgentsView synced here.
-            const page = await chatIndex.history({ kind: message.harness, sessionId: message.sessionId, host: routed.hostId, limit: limit ?? 400, self: { id: SELF.id(), name: HOST_NAME } }).catch(() => ({ messages: [], before: null }));
+            // Read the recording computer first; an unreachable host keeps its archive readable.
+            const live = message.harness === "claude" && isSelfArchiveProfile(message.profileId, "claude", message.sessionId)
+              ? await remoteClaudeHistory(routed, message.sessionId, limit ?? 200) : undefined;
+            const page = live ?? await chatIndex.history({ kind: message.harness, sessionId: message.sessionId, host: routed.hostId, limit: limit ?? 400, self: { id: SELF.id(), name: HOST_NAME } }).catch(() => ({ messages: [], before: null }));
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, messages: page.messages, ...paging(page.before) });
             break;
           }
@@ -1207,9 +1245,38 @@ const server = Bun.serve<SocketData>({
 bridgeAddress = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${server.port}`;
 
 let stopping = false;
+let drainDeadline: ReturnType<typeof setTimeout> | null = null;
+let drainIdle: ReturnType<typeof setTimeout> | null = null;
+
+/** Let the terminal reply frame flush before shutting down the socket. */
+function maybeFinishDrain(): void {
+  if (stopping || !handleHealth.draining || runningTurns() !== 0 || drainIdle !== null) return;
+  drainIdle = setTimeout(() => {
+    drainIdle = null;
+    if (!stopping && handleHealth.draining && runningTurns() === 0) {
+      log("bridge.drain_idle");
+      shutdown();
+    }
+  }, 200);
+}
+
+function beginDrain(): void {
+  if (stopping) return;
+  const requested = Number(process.env.DASH_DRAIN_MAX_MS ?? "600000");
+  const maxMs = Number.isSafeInteger(requested) && requested >= 0 ? requested : 600000;
+  log("bridge.draining", { running: runningTurns(), maxMs });
+  drainDeadline = setTimeout(() => {
+    log("bridge.drain_deadline", { running: runningTurns() });
+    shutdown();
+  }, maxMs);
+  maybeFinishDrain();
+}
+
 function shutdown(): void {
   if (stopping) return;
   stopping = true;
+  if (drainDeadline !== null) clearTimeout(drainDeadline);
+  if (drainIdle !== null) clearTimeout(drainIdle);
   if (gatePoll) clearInterval(gatePoll);
   // Stop admission before awaiting cleanup; sockets must not launch new work.
   server.stop(true);
@@ -1223,6 +1290,7 @@ function shutdown(): void {
 }
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+process.on("SIGUSR2", () => handleHealth.drain());
 
 const agents = harnessList()
   .map((h) => `${h.id} ${h.available ? "✓" : "✗"}`)
@@ -1233,7 +1301,7 @@ if (speech.ok) {
   // Loading the model costs ~13s. Pay it now so the first spoken turn isn't the slow one.
   void warmup().then(
     () => log("speech.ready", {}),
-    (error: unknown) => log("speech.load_failed", { error: String(error) }),
+    (error: unknown) => log("speech.warmup_failed", { error: String(error), rssBytes: process.memoryUsage().rss }),
   );
 }
 

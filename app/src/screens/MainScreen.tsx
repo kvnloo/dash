@@ -311,6 +311,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   );
 
   const feedbackOn = inAppFeedbackEnabled(settings);
+  const harnessId = settings?.harness ?? harnesses[0]?.id ?? "omp";
+  const harnessName = harnesses.find((h) => h.id === harnessId)?.name ?? harnessId;
 
   const onFeedbackResult = useCallback(
     (item: SearchResult) => {
@@ -486,10 +488,10 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           onChange={setQuery}
           onScope={onScope}
           dock="bottom"
-          placeholder={feedbackOn ? "Feedback for Dash" : "Search or message Dash"}
+          placeholder={`Message ${harnessName}`}
           onVoice={() => {
             // Voice keeps the explicitly attached chat; never retarget via a new feedback chat.
-            navigation.navigate("Voice");
+            navigation.navigate("Voice", { autostart: true });
           }}
           onSend={(text) => {
             if (feedbackOn) {

@@ -26,7 +26,6 @@ import {
 } from "../lib/chat-window";
 import { readCutout } from "../lib/display-cutout";
 import { debugUi } from "../debug/ui-store";
-import type { OrbState } from "../lib/orb-phase";
 import { useHandedness } from "../lib/useHandedness";
 import { crossfade, fade, morphDuration, snappy } from "../motion";
 import { colors, glass, radius, space, type } from "../theme";
@@ -84,10 +83,9 @@ export function useDisplayCutout(width: number, height: number, insetTop: number
 }
 
 /** The app-wide nav collapsed into a slim status pill around (or below) the camera cut-out. */
-export function WindowPill({ geometry, title, thinking, status, primary, open, onToggle }: {
+export function WindowPill({ geometry, title, status, primary, open, onToggle }: {
   geometry: PillGeometry;
   title: string;
-  thinking: OrbState;
   /** Every observed status, for the accessibility label. */
   status: string[];
   /** The one status with a reserved, unclipped slot. */
@@ -98,7 +96,8 @@ export function WindowPill({ geometry, title, thinking, status, primary, open, o
   const statusText = status.join(" · ");
   const label = `Navigation, collapsed. ${title}${statusText ? `, ${statusText}` : ""}. Double-tap to ${open ? "hide" : "show"} navigation.`;
   const hitPad = Math.max(0, (PILL_HIT - geometry.height) / 2);
-  const left = <><AgentOrb size={14} thinking={thinking} label={`${title} ${thinking.phase}`} />
+  // Identity only: the transcript owns the live working indicator.
+  const left = <><AgentOrb size={14} thinking={{ phase: "idle" }} label={title} animated={false} />
     <Text testID="chat-window-pill-title" style={styles.pillTitle} numberOfLines={1} maxFontSizeMultiplier={1.15}>{title}</Text></>;
   // Reserved slot: never shrinks, so the title is what truncates.
   const right = primary ? <View testID="chat-window-pill-status" style={styles.pillStatusSlot}>
@@ -143,6 +142,7 @@ const SHEET_FONT = 12;
 const SHEET_ICON = 14;
 /** Options trigger: sliders glyph + surface word, ≥ 44 hit. */
 const OPTIONS_RESERVE = 84;
+const ANNOTATE_RESERVE = 94;
 
 type FeatherName = ComponentProps<typeof Feather>["name"];
 
@@ -190,10 +190,11 @@ function IdRow({ icon, child, caption, id, chars, what, testID }: {
  * rows, provenance footer inside it) + whatever the screen already docks (workers, queue, composer).
  * One surface; nothing is repeated up top.
  */
-export function WindowDock({ identity, title, options, treeOpen, onTree, onClose, notice, targetSwitcher, children }: {
+export function WindowDock({ identity, title, options, onAnnotate, treeOpen, onTree, onClose, notice, targetSwitcher, children }: {
   identity: IdentityInput;
   title: string;
   options: ReactNode;
+  onAnnotate(): void;
   treeOpen: boolean;
   onTree(open: boolean): void;
   onClose(): void;
@@ -206,7 +207,7 @@ export function WindowDock({ identity, title, options, treeOpen, onTree, onClose
   const { width } = useWindowDimensions();
   // Monospace advance ≈ 0.6em; the system font scale grows it. Reserve the Options trigger, the X,
   // the chevron and paddings. Text also ellipsizes as a backstop.
-  const budget = Math.max(10, Math.floor((width - OPTIONS_RESERVE - CLOSE_HIT - 2 * space.sm - 40) / (BADGE_FONT * 0.6 * PixelRatio.getFontScale())));
+  const budget = Math.max(10, Math.floor((width - OPTIONS_RESERVE - ANNOTATE_RESERVE - CLOSE_HIT - 2 * space.sm - 40) / (BADGE_FONT * 0.6 * PixelRatio.getFontScale())));
   const lines = identityLines(identity, budget);
   // Same estimate for the sheet's mono rows: icon column, side paddings and gaps, plus the copy button on id rows.
   const sheetChars = Math.max(10, Math.floor((width - 2 * space.md - SHEET_ICON - space.sm) / (SHEET_FONT * 0.6 * PixelRatio.getFontScale())));
@@ -241,6 +242,16 @@ export function WindowDock({ identity, title, options, treeOpen, onTree, onClose
     </View> : null}
     <View testID="chat-window-badge-row" style={[styles.badgeRow, thumb.row]}>
       {options}
+      <Pressable
+        testID="chat-annotate"
+        accessibilityRole="button"
+        accessibilityLabel="Annotate this screen"
+        onPress={() => { haptic.select(); onAnnotate(); }}
+        style={styles.annotate}
+      >
+        <Feather name="edit-3" size={14} color={colors.textMuted} />
+        <Text style={styles.annotateText} numberOfLines={1}>Annotate</Text>
+      </Pressable>
       <Pressable
         testID="chat-window-badge"
         accessibilityRole="button"
@@ -295,6 +306,8 @@ const styles = StyleSheet.create({
   provenanceLine: { ...type.mono, fontSize: 11, lineHeight: 15, color: colors.textTertiary },
   badgeRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.sm, minHeight: CLOSE_HIT },
   targetSwitcherRow: { paddingHorizontal: space.sm, paddingBottom: space.xs },
+  annotate: { minHeight: 44, minWidth: ANNOTATE_RESERVE, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: radius.sm },
+  annotateText: { ...type.label, color: colors.textMuted, fontSize: 11, letterSpacing: 0 },
   badge: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: space.sm, borderRadius: radius.md },
   badgeLines: { flexShrink: 1, minWidth: 0 },
   badgeWho: { ...type.mono, fontSize: BADGE_FONT, lineHeight: 15, color: colors.textMuted },

@@ -310,7 +310,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, of
         <ComposerPrimaryAction editingQueue={editingQueue} streaming={streaming} steerBusy={steerBusy} canSend={canSend} sendMode={sendMode} onSubmit={submit} onStop={onStop} />
         {context ? <ContextGauge control={context} /> : null}
         <View ref={attachRef} collapsable={false}><PressScale accessibilityRole="button" accessibilityLabel="Attach file" accessibilityState={{ expanded: attachAnchor !== null }} onPress={onAttach} disabled={disabled || editingQueue} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale></View>
-        <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onHold={toggleHandedness} onTap={speechBusy ? onDictate : voiceCall ? onVoice : undefined} accessibilityLabel={speechBusy ? "Stop dictation" : voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
+        <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onHold={toggleHandedness} onTap={speechBusy ? onDictate : voiceCall ? onVoice : undefined} accessibilityLabel={speechBusy ? "Stop dictation" : voiceCall ? `Live call, ${voiceCall.phase}. Show voice orb` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
 
       </View>
     </View>

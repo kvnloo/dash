@@ -2,7 +2,7 @@
 // Real Expo web UI -> isolated real bridge -> ssh stand-in -> the real bridge/bin/dash-acp of this
 // checkout -> Claude-shaped ACP fixture, resumed by session id without a history replay.
 import {test,expect,composer,send,pair,REMOTE_SESSION} from './fixtures';
-import {readFile} from 'node:fs/promises';
+import {appendFile,mkdir,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 
 test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({path:info.outputPath('final.png')});});
@@ -13,6 +13,24 @@ const lines=async(path:string)=>(await readFile(path,'utf8').catch(()=>'')).spli
 
 test.describe('Claude Code chat recorded on another computer',()=>{
  test.use({bridgeOptions:{remoteClaude:'route'}});
+ test('follows live remote JSONL in the open chat without reopening',async({page,bridge},info)=>{
+  const project=join(bridge.dir,'remote-home','.claude','projects','army-project');
+  await mkdir(project,{recursive:true});
+  const path=join(project,REMOTE_SESSION+'.jsonl');
+  const record=(text:string)=>JSON.stringify({type:'assistant',uuid:text,timestamp:new Date().toISOString(),message:{role:'assistant',content:[{type:'text',text}]}})+'\n';
+  await writeFile(path,record('ARMY live remote initial answer'));
+  await pair(page,bridge);
+  await expect(remoteRow(page)).toHaveCount(1,{timeout:30000});
+  await remoteRow(page).click({noWaitAfter:true});
+  await expect(visible(page,/ARMY live remote initial answer/)).toBeVisible({timeout:15000});
+  await appendFile(path,record('ARMY live remote appended answer'));
+  await expect(visible(page,/ARMY live remote appended answer/)).toBeVisible({timeout:30000});
+  await expect(visible(page,/ARMY live remote initial answer/)).toBeVisible();
+  await page.screenshot({path:info.outputPath('remote-live-history.png')});
+  const hops=await lines(join(bridge.dir,'army-ssh.log'));
+  expect(hops.filter(hop=>hop.startsWith('army-remote\tpython3 ')).length).toBeGreaterThanOrEqual(2);
+  expect(bridge.logs()).not.toMatch(/ws\.chat |turn\.remote/);
+ });
  test('resumes on that computer and streams the reply, turn after turn',async({page,bridge},info)=>{
   await pair(page,bridge);
   await expect(remoteRow(page)).toHaveCount(1,{timeout:30000});
@@ -34,7 +52,7 @@ test.describe('Claude Code chat recorded on another computer',()=>{
   expect(log.match(/turn\.remote id=\S+ harness=claude machine=army-remote/g)?.length).toBe(2);
   expect(log).not.toMatch(/turn\.rejected/);
   // The hop: the ssh stand-in got the machine and the launcher command for the session's directory.
-  const hops=await lines(join(bridge.dir,'army-ssh.log'));
+  const hops=(await lines(join(bridge.dir,'army-ssh.log'))).filter(hop=>hop.includes('\tdash-acp '));
   expect(hops.length).toBe(2);
   for(const hop of hops) expect(hop).toBe(`army-remote\tdash-acp claude --cwd '${join(bridge.dir,'remote-home','project')}'`);
   // The other computer: session/resume (no history replay) of the native id, in the session's directory.

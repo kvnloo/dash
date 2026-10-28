@@ -60,7 +60,7 @@ async function seedAgentsview(row:{id:string;machine:string;title:string;cwd:str
   parent_session_id text, deleted_at text, is_automated integer not null default 0, cwd text not null default '');
   create index if not exists idx_sessions_ended on sessions(ended_at desc, id);
   create table if not exists messages (id integer primary key, session_id text not null, ordinal integer not null, role text not null, content text not null,
-  timestamp text, content_length integer not null default 0, is_system integer not null default 0, unique(session_id, ordinal));
+  timestamp text, content_length integer not null default 0, is_system integer not null default 0, model text, unique(session_id, ordinal));
   create virtual table if not exists messages_fts using fts5(content, content='messages', content_rowid='id', tokenize='porter unicode61');
   create trigger if not exists messages_ai after insert on messages begin insert into messages_fts(rowid, content) values (new.id, new.content); end;`);
  const now=Date.now();const at=(m:number)=>new Date(now-m*60000).toISOString();
@@ -70,11 +70,15 @@ async function seedAgentsview(row:{id:string;machine:string;title:string;cwd:str
  // A seeded transcript is one minute per row, ending a minute ago; the default pair keeps its spacing.
  const stamp=(i:number)=>row.transcript?at(msgs.length-i):at(20-i);
  db.transaction(()=>msgs.forEach(([role,content],i)=>db.query('insert into messages (session_id, ordinal, role, content, timestamp, content_length) values (?,?,?,?,?,?)').run(row.id,i,role,content,stamp(i),content.length)))();
+ // Real AgentsView model metadata: latest assistant wins, not a later user row.
+ db.query("update messages set model = ? where session_id = ? and role = 'assistant'").run('claude-opus-5-5',row.id);
+ db.query("update messages set model = ? where session_id = ? and role = 'assistant' and ordinal < (select max(ordinal) from messages where session_id = ? and role = 'assistant')").run('claude-older-model',row.id,row.id);
+ db.query("update messages set model = ? where session_id = ? and role = 'user'").run('not-an-assistant-model',row.id);
  db.close();
 }
 if(process.env.ARMY_ARCHIVE_CLAUDE==='1'){
  const installId='a1b2c3d4e5f60718293a4b5c6d7e8f90';
- await seedAgentsview({id:'11111111-2222-4333-8444-555555555555',machine:installId,installId,title:'ARMY archived Claude Code chat',cwd:process.env.DASH_CWD||''});
+ await seedAgentsview({id:'11111111-2222-4333-8444-555555555555',machine:installId,installId,title:'ARMY archived Claude Code chat',cwd:process.env.DASH_CWD||'',transcript:[['user','ARMY archived Claude Code chat'],['assistant','ARMY older model answer'],['user','ARMY next question'],['assistant','ARMY earlier answer from '+installId],['user','ARMY pending follow-up']]});
 }
 if(process.env.ARMY_LONG_CLAUDE){
  // A long chat as Hermes and Claude Code write them: every prompt is followed by several tool-step

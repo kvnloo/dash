@@ -26,7 +26,8 @@ export function voiceControlHome(visible: boolean, windowOpen: boolean): "none" 
 }
 
 /** Stable native accessibility labels for coordinate-free Android voice journeys. */
-export function voiceStatusAccessibilityLabel(state: Pick<VoiceState, "phase" | "muted">): string {
+export function voiceStatusAccessibilityLabel(state: Pick<VoiceState, "phase" | "muted" | "note">): string {
+  if (state.note && state.phase !== "idle" && state.phase !== "error") return `Voice status: ${state.phase}. ${state.note}`;
   if (state.muted && state.phase !== "idle" && state.phase !== "error" && state.phase !== "connecting") {
     return "Voice status: muted";
   }
@@ -93,7 +94,7 @@ export function voiceBarPresentation(state: Pick<VoiceState, "phase" | "muted" |
   if (state.muted) {
     return {
       phase: "muted",
-      label: "Voice live · mic muted",
+      label: state.note ?? "Voice live · mic muted",
       action: "end",
       primaryText: "End",
       primaryLabel: "End voice",
@@ -102,7 +103,7 @@ export function voiceBarPresentation(state: Pick<VoiceState, "phase" | "muted" |
   }
   return {
     phase: "live",
-    label: "Voice live · " + state.phase,
+    label: state.note ?? "Voice live · " + state.phase,
     action: "end",
     primaryText: "End",
     primaryLabel: "End voice",

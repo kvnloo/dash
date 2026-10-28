@@ -35,6 +35,9 @@ async function checkOrRequest(): Promise<boolean> {
 
 /** Share one OS request across dictation and live voice; recheck after a settings change. */
 export function ensureMicPermission(): Promise<boolean> {
+  // The web tester-army's scripted voice peer (EXPO_PUBLIC_DASH_VOICE_FAKE) never opens a microphone, and
+  // a headed browser would wait forever on a permission prompt nobody can answer.
+  if (Platform.OS === "web" && process.env.EXPO_PUBLIC_DASH_VOICE_FAKE === "1") return Promise.resolve(true);
   if (pending) return pending;
   pending = (async () => {
     try { return await checkOrRequest(); }

@@ -13,8 +13,9 @@ export const bridgeRoot = process.env.ARMY_BRIDGE_ROOT || root;
 export const bun = process.env.ARMY_BUN || execFileSync('sh',['-c','command -v bun'],{encoding:'utf8'}).trim();
 const bunDir = dirname(bun);
 const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
-export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Promise<void>; start(): Promise<void>; dispose(): Promise<void>; identityToken(options?: IdentityTokenOptions): string; logs(): string };
+export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Promise<void>; start(): Promise<void>; dispose(): Promise<void>; identityToken(options?: IdentityTokenOptions): string; logs(): string; exitCode(): number | null };
 /**
+ * generatedUI: enable deterministic fenced OpenUI/GenUI replies in the ACP peer.
  * archiveClaude: a Claude Code chat AgentsView recorded on this computer.
  * remoteClaude: a Claude Code chat AgentsView synced from another computer, `army-remote`;
  *   `route` lets this bridge carry its turns there (DASH_REMOTE_HOSTS) through a local ssh
@@ -27,7 +28,7 @@ export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Pro
  * longHermes: a 1000-message native Hermes chat (LONG_HERMES_PROMPTS prompts, each with one answer):
  *   Hermes pages by (timestamp, id) keyset over user and assistant rows, not by AgentsView ordinal.
  */
-export type BridgeOptions = { archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; env?: Record<string,string>; identity?: boolean };
+export type BridgeOptions = { generatedUI?: boolean; archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; rosterHost?: string; rosterPeer?: Bridge; finishedSessions?: boolean; env?: Record<string,string>; identity?: boolean };
 export const LONG_CHAT_TITLE = 'ARMY long Claude Code chat';
 export const LONG_CHAT_PROMPTS = 125;
 export const LONG_HERMES_TITLE = 'ARMY long Hermes chat';
@@ -39,7 +40,26 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
  for (const name of ['hermes','omp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+'\n', {mode:0o700});
  // Claude Code: the bridge drives it through `claude-agent-acp` (ACP over stdio).
  for (const name of ['claude','claude-agent-acp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' claude\n', {mode:0o700});
- if (options.phoneHosts) {
+ if (options.finishedSessions) {
+  const codex = join(dir,'.codex','sessions','2026','10','28');
+  const claude = join(dir,'.claude','projects','army');
+  await mkdir(codex,{recursive:true}); await mkdir(claude,{recursive:true});
+  await writeFile(join(codex,'rollout-2026-10-28T00-00-00-army-finished-codex.jsonl'),[
+   {type:'session_meta',payload:{cwd:join(dir,'finished-codex')}},
+   {type:'event_msg',payload:{type:'user_message',message:'ARMY finished Codex native chat'}},
+  ].map(row=>JSON.stringify(row)).join('\n')+'\n');
+  await writeFile(join(claude,'army-finished-claude.jsonl'),JSON.stringify({type:'user',cwd:join(dir,'finished-claude'),message:{role:'user',content:'ARMY finished Claude native chat'}})+'\n');
+ }
+ if (options.rosterHost) {
+  const node = (name:string) => ({HostName:name,DNSName:name+'.army.ts.net.',Online:true,OS:'linux',TailscaleIPs:['127.0.0.1']});
+  await writeFile(join(dir,'tailscale.json'),JSON.stringify({Self:node(options.rosterHost),Peer:options.rosterPeer?{mbp:node('mbp')}: {}}));
+  await writeFile(join(bin,'tailscale'),'#!/bin/sh\ncat '+quote(join(dir,'tailscale.json'))+'\n',{mode:0o700});
+  if (options.rosterPeer) {
+   await mkdir(join(dir,'.dash'),{recursive:true});
+   const token=(await readFile(join(options.rosterPeer.dir,'.dash','token'),'utf8')).trim();
+   await writeFile(join(dir,'.dash','peer-roster-tokens.json'),JSON.stringify({mbp:{token,port:options.rosterPeer.port}}),{mode:0o600});
+  }
+ } else if (options.phoneHosts) {
   // Seed the external discovery command, not an app store or HTTP route.
   const recent = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const stale = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
@@ -57,7 +77,7 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
  if (options.remoteClaude) {
   await mkdir(remoteCwd,{recursive:true});
   // ssh stand-in: `army-ssh <dest> <command>` logs the hop and runs <command> in a shell, as sshd would.
-  await writeFile(join(bin,'army-ssh'),'#!/bin/sh\nprintf \'%s\\t%s\\n\' "$1" "$2" >> "$HOME/army-ssh.log"\ncd "$HOME/remote-home" && exec /bin/sh -c "$2"\n',{mode:0o700});
+  await writeFile(join(bin,'army-ssh'),'#!/bin/sh\nprintf \'%s\\t%s\\n\' "$1" "$2" >> "$HOME/army-ssh.log"\ncd "$HOME/remote-home" || exit 1\ncase "$2" in python3*) export HOME="$PWD";; esac\nexec /bin/sh -c "$2"\n',{mode:0o700});
   // The other computer's launcher: the real bridge/bin/dash-acp of this checkout.
   await writeFile(join(bin,'dash-acp'),'#!/bin/sh\nexec '+quote(bun)+' '+quote(join(bridgeRoot,'bridge','bin','dash-acp'))+' "$@"\n',{mode:0o700});
  }
@@ -67,12 +87,12 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
   pmEnv.DASH_PM_ROOTS='army='+join(dir,'pm-repo'); pmEnv.DASH_PM_KANBAN=join(bin,'army-kanban'); pmEnv.DASH_ROADMAP_FILE=join(dir,'roadmap.json');
  }
  const identity = options.identity ? await startFixtureZ0bridge(dir) : undefined;
- const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', ARMY_ARCHIVE_CLAUDE:options.archiveClaude?'1':'0', ARMY_REMOTE_CLAUDE:options.remoteClaude?remoteCwd:'', ARMY_PM:options.pm?'1':'0', ARMY_LONG_CLAUDE:options.longClaude?String(LONG_CHAT_PROMPTS):'', ARMY_LONG_HERMES:options.longHermes?String(LONG_HERMES_PROMPTS):'', ARMY_SUBAGENTS:options.subagents?'1':'', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot, DASH_KANBAN_DB:join(dir,'work.db'), DASH_SUPERVISION_DIR:join(dir,'.local/state/dash/supervision'), DASH_ORCHESTRA_PROFILES:join(dir,'.hermes'),
+ const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', ARMY_ARCHIVE_CLAUDE:options.archiveClaude?'1':'0', ARMY_REMOTE_CLAUDE:options.remoteClaude?remoteCwd:'', ARMY_PM:options.pm?'1':'0', ARMY_LONG_CLAUDE:options.longClaude?String(LONG_CHAT_PROMPTS):'', ARMY_LONG_HERMES:options.longHermes?String(LONG_HERMES_PROMPTS):'', ARMY_SUBAGENTS:options.subagents?'1':'', ARMY_GENERATED_UI:options.generatedUI?'1':'', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot, DASH_KANBAN_DB:join(dir,'work.db'), DASH_SUPERVISION_DIR:join(dir,'.local/state/dash/supervision'), DASH_ORCHESTRA_PROFILES:join(dir,'.hermes'),
   DASH_FLEET_REGISTRY:join(dir,'fleet.yaml'), ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv, ...(identity?.env ?? {}), ...(options.env ?? {})};
  const seed = spawn(bun,[join(__dirname,'seed-gate.ts')],{env,stdio:['ignore','pipe','pipe']});
  let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) { await identity?.stop(); throw Error('gate seed: '+seedLog); }
  let child: ChildProcess; let log=''; let port=0;
- const f: Bridge = {dir,port:0,bootstrap:'',logs:()=>log,
+ const f: Bridge = {dir,port:0,bootstrap:'',logs:()=>log,exitCode:()=>child?.exitCode ?? null,
   identityToken: options => { if (!identity) throw Error('Bridge identity fixture is not enabled'); return identity.identityToken(options); },
   async dispose() { await f.stop(); await identity?.stop(); },
   async start() {

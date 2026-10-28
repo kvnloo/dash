@@ -4,9 +4,8 @@ import { Platform } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
 import type { Segment } from "../lib/annotate/align";
 import { EMPTY_DRAWING, addStroke, clear, eraseAlong, undo, type Drawing, type InkColor, type Stroke, type Tool } from "../lib/annotate/strokes";
-import { penButton, toggleMode } from "../lib/stylus-mode";
+import { penButton } from "../lib/stylus-mode";
 import { createStore } from "./createStore";
-import { flowMode } from "../lib/flow-trace";
 
 export interface AnnotationPreview {
   /** data: URI of the composited PNG, shown before upload finishes. */
@@ -32,6 +31,8 @@ export interface AnnotateState {
   color: InkColor;
   drawing: Drawing;
   segments: Segment[];
+  /** The typed annotation intent, also included in the sent transcript. */
+  typed: string;
   /** Hold-to-talk mic in the tray is recording. */
   recording: boolean;
   status: "idle" | "capturing" | "sending" | "sent" | "error";
@@ -51,7 +52,7 @@ function initialAnnotationState(): AnnotateState {
   return {
     annotateEngine: defaultEngine(),
     active: false, buttonDown: false, penMode: false, tool: "pen", color: "accent",
-    drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle", voiceNote: undefined,
+    drawing: EMPTY_DRAWING, segments: [], typed: "", recording: false, status: "idle", voiceNote: undefined,
   };
 }
 
@@ -59,6 +60,8 @@ export const annotate = createStore<AnnotateState>(initialAnnotationState());
 
 export interface AnnotationSink {
   label: string;
+  /** Conversation owning this sink; used to prevent cross-chat annotation routing. */
+  conversationId?: string;
   /** True when a Hermes turn is running and can be steered. */
   steerable(): boolean;
   send(text: string, attachments: ChatAttachment[], mode: "steer" | "queue"): void | Promise<void>;
@@ -67,6 +70,10 @@ export interface AnnotationSink {
 }
 
 const sinks: AnnotationSink[] = [];
+
+/** Physical stylus detection is volatile: a reload forgets it along with the overlay. */
+let stylusObserved = false;
+export function observeStylusPointer(): void { stylusObserved = true; }
 
 /** The newest registration wins; the returned function unregisters it. */
 export function registerSink(sink: AnnotationSink): () => void {
@@ -80,29 +87,41 @@ export function registerSink(sink: AnnotationSink): () => void {
 }
 
 export function currentSink(): AnnotationSink | undefined {
-  return sinks.findLast(sink => sink.live) ?? sinks.at(-1);
+  const chat = sinks.findLast(sink => !sink.live);
+  const voice = sinks.findLast(sink => sink.live);
+  // A voice call can stay bound to Hermes while a different harness chat is open.
+  // Never let that call steal ink from the open chat.
+  if (chat) return voice?.conversationId === chat.conversationId && !!chat.conversationId ? voice : chat;
+  return voice;
 }
 
+/** All entry points reset transient feedback; palm rejection needs observed hardware. */
 export function enterAnnotation(): void {
-  annotate.set(s => (s.active ? s : { ...s, active: true, status: "idle", error: undefined, voiceNote: undefined, preview: undefined }));
+  annotate.set(s => (s.active ? s : {
+    ...s, active: true, penMode: stylusObserved,
+    status: "idle", error: undefined, voiceNote: undefined, preview: undefined,
+  }));
 }
 
-/** Flow exits close the mode, not the draft. Clear remains the explicit discard. */
+/** Exit closes the overlay, not the draft. Clear is the explicit ink discard. */
 export function exitAnnotation(): void {
-  annotate.set(s => ({ ...s, active: false, drawing: flowMode ? s.drawing : EMPTY_DRAWING, segments: flowMode ? s.segments : [], recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined, voiceNote: undefined }));
+  annotate.set(s => ({ ...s, active: false, recording: false, status: "idle", preview: undefined, error: undefined, voiceNote: undefined }));
 }
 
-/** Switch modes without discarding ink, voice or queued drafts. */
+/** The nav pill and hardware button use exactly the same lifecycle as chat entry. */
 export function toggleAnnotation(): void {
-  annotate.set(s => ({ ...s, ...toggleMode(s) }));
+  if (annotate.get().active) exitAnnotation();
+  else enterAnnotation();
 }
 
-/** Hardware presses enter S Pen drawing; release and repeats never switch modes. */
+/** The native S Pen side-button counts as detection; only its rising edge toggles. */
 export function stylusButton(pressed: boolean): void {
-  annotate.set(s => {
-    const next = penButton(s, pressed);
-    return next === s ? s : { ...s, ...next, penMode: pressed ? true : s.penMode };
-  });
+  if (pressed) stylusObserved = true;
+  const current = annotate.get();
+  const next = penButton(current, pressed);
+  if (next === current) return;
+  annotate.set(s => ({ ...s, buttonDown: next.buttonDown }));
+  if (pressed) toggleAnnotation();
 }
 
 export function setPenMode(on: boolean): void { annotate.set(s => ({ ...s, penMode: on })); }
@@ -129,6 +148,7 @@ export function eraseStrokes(path: { x: number; y: number }[]): void { annotate.
 export function undoStroke(): void { annotate.set(s => ({ ...s, drawing: undo(s.drawing) })); }
 export function clearStrokes(): void { annotate.set(s => ({ ...s, drawing: clear(s.drawing) })); }
 export function setRecording(recording: boolean): void { annotate.set(s => ({ ...s, recording })); }
+export function setTypedNote(typed: string): void { annotate.set(s => ({ ...s, typed: typed.slice(0, 2000) })); }
 
 /** Voice sessions and the tray mic both feed timed transcript segments. Old voice segments age out. */
 export function addSegment(segment: Segment): void {
@@ -141,12 +161,14 @@ export function setAnnotationStatus(status: AnnotateState["status"], extra: Part
 }
 
 /** Clear only the confirmed snapshot; ink/words added during upload remain a new draft. */
-export function finishSend(keep: boolean, submitted?: { strokes: readonly Stroke[]; segments: readonly Segment[] }): void {
+export function finishSend(keep: boolean, submitted?: { strokes: readonly Stroke[]; segments: readonly Segment[]; typed: string }): void {
   annotate.set(s => {
     const strokes = submitted ? s.drawing.strokes.filter(stroke => !submitted.strokes.includes(stroke)) : [];
     const segments = submitted ? s.segments.filter(segment => !submitted.segments.includes(segment)) : [];
-    const remaining = strokes.length > 0 || segments.length > 0;
+    // Do not discard a note edited while an earlier snapshot was uploading.
+    const typed = submitted && s.typed !== submitted.typed ? s.typed : "";
+    const remaining = strokes.length > 0 || segments.length > 0 || typed.trim().length > 0;
     return { ...s, active: keep || remaining, drawing: remaining ? { strokes, nextId: s.drawing.nextId, past: [] } : EMPTY_DRAWING,
-      segments, recording: submitted ? s.recording : false, pendingTurn: undefined, status: "sent" };
+      segments, typed, recording: submitted ? s.recording : false, pendingTurn: undefined, status: "sent" };
   });
 }

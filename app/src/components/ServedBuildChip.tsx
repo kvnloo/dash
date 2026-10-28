@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, controlMin, glass, radius, space, type } from "../theme";
-import { METRO_ENDPOINTS, RUNNING_BUILD, liveChipLabel, originPort, shortSha } from "../lib/live-update";
+import { METRO_ENDPOINTS, liveChipLabel, originPort, shortSha } from "../lib/live-update";
 import { useLiveUpdate } from "../lib/use-live-update";
 import {
   SERVED_BUILD,
@@ -22,9 +22,15 @@ export function ServedBuildChip() {
   const insets = useSafeAreaInsets();
   const live = useLiveUpdate();
   const [hiddenFor, setHiddenFor] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [serversOpen, setServersOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const key = servedBuildKey(SERVED_BUILD) + ":" + (live.served?.sha ?? "?");
-  const visible = RUNNING_BUILD !== null || shouldShowServedChip(TURBO, hiddenFor, SERVED_BUILD);
+  const key = (live.running?.sha ?? servedBuildKey(SERVED_BUILD)) + ":" + (live.served?.sha ?? "?");
+  const visible = live.running !== null || shouldShowServedChip(TURBO, hiddenFor, SERVED_BUILD);
+  // Checkout/web bundles have no baked timestamp: the matching served manifest
+  // supplies the current build age without changing tracked build-info.json.
+  const runningWithAge = live.running !== null && live.running.builtAtMs === null &&
+    live.served !== null && live.served.sha === live.running.sha ? live.served : live.running;
   const hidden = hiddenFor === key && live.decision.kind === "current";
 
   useEffect(() => {
@@ -34,17 +40,28 @@ export function ServedBuildChip() {
   }, [visible]);
 
   if (!visible || hidden) return null;
-  const update = live.decision.kind !== "current";
-  const label =
-    RUNNING_BUILD === null
+  const update = live.decision.kind === "ready" || live.decision.kind === "reload";
+  const failureReason = live.decision.kind === "failed" ? live.decision.reason : null;
+  const failed = failureReason !== null;
+  const heldBy = live.decision.kind === "ready" && live.decision.why === "blocked" ? live.blockedBy : null;
+  // Don't advertise an unverified SHA while the launch bundle probe is pending.
+  const displayedServed = live.decision.kind === "checking" ? runningWithAge : live.served;
+  const label = failed ? shortSha(live.served) + " failed to build (" + failureReason + ")" :
+    heldBy !== null ? "update ready - held: " + heldBy :
+    live.running === null
       ? servedBuildLabel(SERVED_BUILD, now)
-      : liveChipLabel(RUNNING_BUILD, live.served, now, servedAgeLabel);
+      : liveChipLabel(runningWithAge, displayedServed, now, servedAgeLabel);
 
   const openMenu = () => {
+    if (Platform.OS === "web") {
+      setServersOpen(false);
+      setMenuOpen(true);
+      return;
+    }
     const port = live.origin === null ? null : originPort(live.origin);
     Alert.alert(
       "Live build",
-      "Running " + shortSha(RUNNING_BUILD) + ", " + (live.origin ?? "no Metro") + " serves " + shortSha(live.served) + ".",
+      "Running " + shortSha(live.running) + ", " + (live.origin ?? "no Metro") + " serves " + shortSha(live.served) + ".",
       [
         { text: "Reload now", onPress: live.reloadNow },
         {
@@ -77,19 +94,46 @@ export function ServedBuildChip() {
         testID="turbo-served-build"
         accessibilityRole="button"
         accessibilityLabel={
-          "Served bundle " + (RUNNING_BUILD?.sha ?? SERVED_BUILD.sha ?? "unknown SHA") + ", " +
-          servedAgeLabel(RUNNING_BUILD?.builtAtMs ?? SERVED_BUILD.servedAtMs, now) + "." +
-          (update ? " Newer build " + shortSha(live.served) + " is served. Tap to reload." : " Tap to hide.")
+          "Served bundle " + (live.running?.sha ?? SERVED_BUILD.sha ?? "unknown SHA") + ", " +
+          servedAgeLabel(runningWithAge?.builtAtMs ?? SERVED_BUILD.servedAtMs, now) + "." +
+          (failed ? " " + shortSha(live.served) + " failed to build (" + failureReason + "). Reload disabled." :
+            update ? " Newer build " + shortSha(live.served) + " is served." + (heldBy ? " Held: " + heldBy + "." : "") + " Tap to reload." : " Tap to hide.")
         }
         accessibilityHint="Long press for reload and server options"
-        onPress={() => (update ? live.reloadNow() : setHiddenFor(key))}
+        onPress={() => {
+          if (failed) return;
+          if (update) live.reloadNow();
+          else setHiddenFor(key);
+        }}
         onLongPress={openMenu}
         style={styles.touchTarget}
       >
-        <View pointerEvents="none" style={[styles.chip, update && styles.chipUpdate]}>
-          <Text style={[styles.label, update && styles.labelUpdate]} numberOfLines={1}>{label}</Text>
+        <View pointerEvents="none" style={[styles.chip, update && styles.chipUpdate, failed && styles.chipFailed]}>
+          <Text style={[styles.label, update && styles.labelUpdate, failed && styles.labelFailed]} numberOfLines={1}>{label}</Text>
         </View>
       </Pressable>
+      {Platform.OS === "web" && menuOpen && (
+        <View testID="live-build-menu" style={styles.webMenu}>
+          <Text style={styles.menuHeading}>Live build</Text>
+          <Pressable accessibilityRole="button" onPress={() => { setMenuOpen(false); live.reloadNow(); }} style={styles.menuAction}>
+            <Text style={styles.menuText}>Reload now</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => setServersOpen((open) => !open)} style={styles.menuAction}>
+            <Text style={styles.menuText}>Switch Metro</Text>
+          </Pressable>
+          {serversOpen && METRO_ENDPOINTS.map((endpoint) => (
+            <Pressable key={endpoint.id} accessibilityRole="button" onPress={() => { setMenuOpen(false); live.switchTo(endpoint); }} style={styles.menuAction}>
+              <Text style={styles.menuText}>{endpoint.label} :{endpoint.port}</Text>
+            </Pressable>
+          ))}
+          <Pressable accessibilityRole="button" onPress={() => { live.setAutoReload(!live.autoReload); setMenuOpen(false); }} style={styles.menuAction}>
+            <Text style={styles.menuText}>{live.autoReload ? "Turn auto-reload off" : "Turn auto-reload on"}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => setMenuOpen(false)} style={styles.menuAction}>
+            <Text style={styles.menuText}>Close</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -106,6 +150,12 @@ const styles = StyleSheet.create({
     paddingVertical: space.xs,
   },
   chipUpdate: { borderColor: colors.accent },
+  chipFailed: { borderColor: colors.danger },
   label: { ...type.mono, color: colors.textMuted, fontSize: 11, lineHeight: 16 },
   labelUpdate: { color: colors.accent },
+  labelFailed: { color: colors.danger },
+  webMenu: { alignSelf: "flex-end", backgroundColor: colors.surfaceRaised, borderColor: glass.hair2, borderWidth: 1, borderRadius: radius.md, padding: space.xs, minWidth: 220 },
+  menuHeading: { color: colors.textMuted, fontSize: 12, paddingHorizontal: space.md, paddingVertical: space.sm },
+  menuAction: { minHeight: controlMin, justifyContent: "center", paddingHorizontal: space.md },
+  menuText: { color: colors.text, fontSize: 14 },
 });

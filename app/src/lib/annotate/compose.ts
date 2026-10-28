@@ -34,8 +34,9 @@ export interface AnnotationDoc {
 
 const round = (n: number, places = 4) => Math.round(n * 10 ** places) / 10 ** places;
 
-export function annotationDoc(input: { strokes: readonly Stroke[]; segments: readonly Segment[]; screen: ScreenInfo; createdAt: number }): AnnotationDoc {
-  const { text } = annotateTranscript(input.strokes, input.segments);
+export function annotationDoc(input: { strokes: readonly Stroke[]; segments: readonly Segment[]; screen: ScreenInfo; createdAt: number; typed?: string }): AnnotationDoc {
+  const spoken = annotateTranscript(input.strokes, input.segments);
+  const text = [input.typed?.trim(), spoken.text].filter(Boolean).join("\n");
   return {
     schema: ANNOTATION_SCHEMA,
     createdAt: input.createdAt,

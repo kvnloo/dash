@@ -51,6 +51,9 @@ function NativeRow({ row, childrenByParent }: { row: OpenUILayoutRow; childrenBy
         accessibilityRole="progressbar"
         accessibilityLabel={row.accessibilityLabel}
         accessibilityValue={{ min: 0, max: 100, now: percent }}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
         style={styles.card}
       >
         <View style={styles.progressHeader}>

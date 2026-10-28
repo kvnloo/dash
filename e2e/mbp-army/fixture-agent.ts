@@ -16,6 +16,7 @@ const calls = (method: string, params: unknown) => {if(!isRecord(params))return;
 // Evidence for concurrency specs: when each prompt started and finished, in which fixture process.
 const turnLog = (event: string, text: string) => {try{appendFileSync(join(process.env.HOME || '.', 'army-acp-turns.jsonl'),JSON.stringify({agent,pid:process.pid,event,at:Date.now(),text:text.slice(0,80)})+'\n');}catch{/* evidence only */}};
 let timer: ReturnType<typeof setTimeout> | undefined;
+let ticker: ReturnType<typeof setInterval> | undefined;
 const think = (text: string) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'agent_thought_chunk',content:{type:'text',text}}}});
 const tool = (toolCallId: string, title: string, rawInput: unknown) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'tool_call',toolCallId,title,kind:'other',status:'in_progress',rawInput}}});
 const toolDone = (toolCallId: string, rawOutput: string) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'tool_call_update',toolCallId,status:'completed',rawOutput}}});
@@ -48,6 +49,15 @@ const toolTurn = (done: () => void, many: boolean) => {
  const next = () => { const step = steps[i++]; if (!step) {done();return;} step(); timer = setTimeout(next, 60); };
  next();
 };
+// Fenced payloads travel over real ACP and the real bridge, never through app debug state.
+function generatedReply(prompt: string): string | null {
+ if (process.env.ARMY_GENERATED_UI !== '1') return null;
+ if (prompt.includes('ARMY_OPENUI_INVALID')) return '```openui-lang\nroot = Button("ARMY forbidden action");\n```';
+ if (prompt.includes('ARMY_OPENUI_CATALOG')) return '```openui-lang\nroot = Stack([Card("ARMY native overview", [Text("ARMY selectable summary"), Stat("Completed", 7), Progress("Delivery", 0.75), List(["Review evidence"]), Table(["Task", "State"], [["Catalog wiring", "Ready"]]), Callout("success", "ARMY bounded catalog")])]);\n```';
+ if (prompt.includes('ARMY_GENUI')) return '```genui\n{"version":1,"components":[{"type":"card","title":"ARMY legacy GenUI","text":"ARMY JSON cards still render"}]}\n```';
+ if (prompt.includes('ARMY_OPENUI_JSON')) return '```openui\n{"version":1,"components":[{"type":"card","title":"ARMY legacy OpenUI","text":"ARMY JSON alias still renders"}]}\n```';
+ return null;
+}
 let active: unknown;
 createInterface({input:process.stdin}).on('line', line => {
  const value:unknown = JSON.parse(line);
@@ -72,15 +82,32 @@ createInterface({input:process.stdin}).on('line', line => {
   if (text.includes('ARMY_THINK')) { timer = setTimeout(() => { update('<think>ARMY_THOUGHT_DETAIL line one\nARMY_THOUGHT_DETAIL line two</think>\nARMY_REPLY_AFTER_THINK'); reply({stopReason:'end_turn'}); }, 350); return; }
   // rc3-02-03 (chat chrome): a running tool phase that never completes, for the window pill status slot.
   if (text.includes('ARMY_TOOLHANG')) { send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'tool_call',toolCallId:'army-tool',title:'armytool',kind:'execute',status:'in_progress'}}}); return; }
-  update('ARMY_STREAM_BEGIN ');
+  const generated = generatedReply(text);
+  const split = generated?.indexOf('\n');
+  const prefix = generated && split !== undefined ? generated.slice(0, split + 1) : 'ARMY_STREAM_BEGIN ';
+  update(prefix);
   if (text.includes('ARMY_HANG')) return;
-  const answer = () => { turnLog('end', text); update(replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); };
+  const answer = () => { clearInterval(ticker); ticker = undefined; turnLog('end', text); update(generated ? generated.slice(prefix.length) : replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); };
   // ARMY_HOLD: no answer until the spec creates $HOME/army-release, so overlap never races a clock.
   const hold = () => { if (existsSync(join(process.env.HOME || '.', 'army-release'))) answer(); else timer = setTimeout(hold, 100); };
-  const finish = () => { if (text.includes('ARMY_HOLD')) hold(); else timer = setTimeout(answer, text.includes('ARMY_SLOW') ? 9000 : 350); };
-  if (text.includes('ARMY_TOOLS')) toolTurn(finish, text.includes('ARMY_TOOLS_MANY')); else finish();
+  // ARMY_MS=<n> delays completion; ARMY_TICK=<n> emits progress frames during the wait.
+  const markerMs = Number(/\bARMY_MS=(\d+)\b/.exec(text)?.[1]);
+  const markerTick = Number(/\bARMY_TICK=(\d+)\b/.exec(text)?.[1]);
+  const waitMs = Number.isSafeInteger(markerMs) && markerMs >= 0 ? markerMs : text.includes('ARMY_SLOW') ? 9000 : 350;
+  const tickMs = Number.isSafeInteger(markerTick) && markerTick > 0 ? markerTick : 0;
+  const finish = () => {
+   if (tickMs > 0) ticker = setInterval(() => think('ARMY_TICK progress'), tickMs);
+   if (text.includes('ARMY_HOLD')) hold(); else timer = setTimeout(answer, waitMs);
+  };
+  if (text.includes('ARMY_TOOL_DETAIL')) {
+   // A real write payload can exceed the bridge's 8 KiB preview before its path.
+   // The bridge still formats the action summary from the complete input.
+   tool('army-detail','write_file',{content:'army detail line\n'.repeat(700)+'ARMY_CONTENT_END',path:'/project/release-notes.md'});
+   toolDone('army-detail','ARMY_WRITE_RESULT: release notes saved');
+   finish();
+  } else if (text.includes('ARMY_TOOLS')) toolTurn(finish, text.includes('ARMY_TOOLS_MANY')); else finish();
  } else if (r.method === 'session/cancel') {
-  clearTimeout(timer); send({jsonrpc:'2.0',id:active,result:{stopReason:'cancelled'}});
+  clearTimeout(timer); clearInterval(ticker); ticker = undefined; send({jsonrpc:'2.0',id:active,result:{stopReason:'cancelled'}});
  }
 });
 
