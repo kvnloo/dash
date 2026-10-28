@@ -121,7 +121,11 @@
                "voice status follows fixture STT availability",
                "voice status accepts either principal and reports disabled native voice"]},
     {"id": "stt-does-not-block-bridge", "title": "Worker speech-to-text cannot stall authenticated bridge requests",
-     "tests": ["STT fixture returns text while authenticated bridge GETs stay responsive"]}
+     "tests": ["STT fixture returns text while authenticated bridge GETs stay responsive"]},
+    {"id": "turn-timeout", "title": "ACP stall deadlines reset on progress, and absolute deadlines stop local turns",
+     "tests": ["local ACP absolute ceiling shows timeout and keeps composer usable",
+               "ACP progress frames keep the local turn alive until completion",
+               "silent ACP turn stalls promptly and restores the composer"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",

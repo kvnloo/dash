@@ -209,7 +209,7 @@ class Turn implements Sink {
         this.hermesProfile = hermesSessions.profileForHome(process.env.HERMES_HOME?.trim() || join(homedir(), ".hermes"));
         this.hermesTransport = "acp";
       }
-      this.runAcp(command, input);
+      this.runAcp(command, input, undefined, undefined, { timeoutMs: turnTimeoutMs() });
       return;
     }
     if (this.harness.id === "hermes") {
@@ -219,10 +219,10 @@ class Turn implements Sink {
     this.spawnCli(input);
   }
 
-  private runAcp(command: string[], input: TurnInput, env?: Record<string, string>, release?: () => void, remote?: { spawnCwd: string; timeoutMs: number }): void {
+  private runAcp(command: string[], input: TurnInput, env?: Record<string, string>, release?: () => void, connection?: { spawnCwd?: string; timeoutMs: number }): void {
     try {
       // The id keys the agent's usage_update readings; /chat/context looks them up by harness, not by turn.
-      this.acp = (remote ? remoteAcpSupervisor : acpSupervisor).start({ id: this.harness.id, command, input, sink: this, env, ...remote, permissions: { principalId: PERMISSION_PRINCIPAL, turnId: this.id, broker: permissions.port } });
+      this.acp = (connection?.spawnCwd ? remoteAcpSupervisor : acpSupervisor).start({ id: this.harness.id, command, input, sink: this, env, ...connection, permissions: { principalId: PERMISSION_PRINCIPAL, turnId: this.id, broker: permissions.port } });
       void this.acp.done.then(
         () => { release?.(); this.finish(0); },
         error => {
@@ -317,7 +317,7 @@ class Turn implements Sink {
           this.hermesTransport = "acp";
           log("hermes.path", { path: "acp" });
           handedOff = true;
-          this.runAcp(route.command, input, { HERMES_HOME: route.home }, release);
+          this.runAcp(route.command, input, { HERMES_HOME: route.home }, release, { timeoutMs: turnTimeoutMs() });
           return;
         }
         this.hermesTransport = "api";
