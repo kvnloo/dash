@@ -124,6 +124,7 @@ function tagEnd(html: string, start: number): number {
 /** Scan opening tags while skipping comments and script/style text. */
 function* openingTags(html: string): Generator<HtmlTag> {
   const lower = html.toLowerCase();
+  const namePattern = /[a-z][a-z0-9:-]*/iy;
   let cursor = 0;
   while (cursor < html.length) {
     const start = html.indexOf("<", cursor);
@@ -133,7 +134,8 @@ function* openingTags(html: string): Generator<HtmlTag> {
       cursor = close < 0 ? html.length : close + 3;
       continue;
     }
-    const match = /^[a-z][a-z0-9:-]*/i.exec(html.slice(start + 1));
+    namePattern.lastIndex = start + 1;
+    const match = namePattern.exec(html);
     if (!match) {
       cursor = start + 1;
       continue;
