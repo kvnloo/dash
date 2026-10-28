@@ -52,8 +52,8 @@ const transcript = (call: VoiceBrokerCall) =>
     entry.type === 'assistant_transcript' && 'text' in entry && entry.text === 'ARMY voice reply');
 
 async function annotateHere(page: import('playwright/test').Page) {
-  await page.getByRole('button', { name: 'Options. Current surface: Chat', exact: true }).click({ noWaitAfter: true });
-  await page.getByRole('button', { name: 'Annotate, S Pen or finger', exact: true }).click({ noWaitAfter: true });
+  // The window's own Annotate action: with a live call the centred voice orb sits over the Options menu rows.
+  await page.getByTestId('chat-annotate').click({ noWaitAfter: true });
   await expect(page.getByLabel('Annotation mode on', { exact: true })).toBeVisible();
   await expect(page.getByTestId('annotate-tldraw')).toHaveAttribute('data-ready', 'true');
 }
