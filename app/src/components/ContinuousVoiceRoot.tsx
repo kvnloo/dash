@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaInsetsContext, useSafeAreaInsets, type EdgeInsets } from "react-native-safe-area-context";
 import { appInsets, VOICE_BAR_ROW, voiceBarPresentation, voiceBarVisible, voiceControlHome, voiceMuteAccessibilityLabel, voiceStatusAccessibilityLabel } from "../lib/voice-bar";
 import { executionToken, voiceAccessToken } from "../lib/bridge-auth";
@@ -19,6 +19,22 @@ import { voiceTarget } from "../lib/voice-target";
 
 /** One logcat line per failed voice stage (phone-watch turns these into incidents). Notes never carry secrets. */
 function voiceTrace(stage: string, note: string | undefined): void { console.warn(`[voice] ${stage} failed: ${note ?? "unknown"}`); }
+
+/** A bootstrap broker is never an arbitrary URL; validate before any /v1 request. */
+function trustedVoiceBroker(raw: unknown): { origin: string; fake: boolean } {
+  if (typeof raw !== "string") throw new Error("Voice broker not trusted");
+  try {
+    const url = new URL(raw);
+    const fake = Platform.OS === "web" && process.env.EXPO_PUBLIC_DASH_VOICE_FAKE === "1" &&
+      url.protocol === "http:" && url.hostname === "127.0.0.1";
+    const tailnet = url.protocol === "https:" && url.hostname.endsWith(".ts.net");
+    if ((!tailnet && !fake) || !url.port || url.username || url.password || url.pathname !== "/" ||
+        url.search || url.hash || (raw !== url.origin && raw !== `${url.origin}/`)) {
+      throw new Error("Voice broker not trusted");
+    }
+    return { origin: url.origin, fake };
+  } catch { throw new Error("Voice broker not trusted"); }
+}
 
 const initial: VoiceState = { phase: "idle", muted: false, lines: [] };
 /** True while a full-screen chat window is open: its dock row is then the single home of voice Mute/End. */
@@ -88,14 +104,16 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const generation = ++epoch.current;
     setBindingGeneration(generation);
     // Frozen for the call: navigating/switching chats never retargets spoken requests.
+    let broker: ReturnType<typeof trustedVoiceBroker> | undefined;
     const request = async (path: string, body?: unknown): Promise<unknown> => {
+      if (!broker) throw new Error("Voice broker not trusted");
       if (path === "provider:answer") {
         if (!object(body) || typeof body.sdp !== "string" || typeof body.secret !== "string") {
           throw new VoiceAccessDenied(voiceConnectionError("sdp"));
         }
         let response: Response;
         try {
-          response = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", headers: { authorization: `Bearer ${body.secret}`, "content-type": "application/sdp" }, body: body.sdp, signal: AbortSignal.timeout(20_000), redirect: "error" });
+          response = await fetch(broker.fake ? `${broker.origin}/v1/fake/answer` : "https://api.openai.com/v1/realtime/calls", { method: "POST", headers: { authorization: `Bearer ${body.secret}`, "content-type": "application/sdp" }, body: body.sdp, signal: AbortSignal.timeout(20_000), redirect: "error" });
         } catch { throw new VoiceAccessDenied(voiceConnectionError("sdp")); }
         if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(voiceConnectionError("token"));
         if (!response.ok) throw new VoiceAccessDenied(voiceConnectionError("sdp"));
@@ -104,10 +122,11 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
         if (!sdp.startsWith("v=0")) throw new VoiceAccessDenied(voiceConnectionError("sdp"));
         return sdp;
       }
+      if (!path.startsWith("/v1/")) throw new Error("Voice broker not trusted");
       let token: string;
       try { token = await voiceAccessToken(settings); }
       catch { throw new VoiceAccessDenied(voiceConnectionError("token")); }
-      const response = await fetch(`https://0.taila30dc.ts.net:8791${path}`, { method: body === undefined ? "GET" : "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000), redirect: "error" });
+      const response = await fetch(`${broker.origin}${path}`, { method: body === undefined ? "GET" : "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000), redirect: "error" });
       if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(voiceConnectionError("token"));
       if (!response.ok) throw new Error("Voice broker request refused"); return response.json();
     };
@@ -124,7 +143,8 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
           response.status === 503 ? "Native voice disabled on bridge" : "Voice bootstrap failed");
       }
       const bootstrap: unknown = await response.json();
-      if (!object(bootstrap) || bootstrap.profile !== target.profile || bootstrap.session !== target.session || bootstrap.ready !== true) throw new Error("Voice target not confirmed");
+      if (!object(bootstrap) || bootstrap.profile !== target.profile || bootstrap.session !== target.session || bootstrap.ready !== true || typeof bootstrap.canonicalProfile !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(bootstrap.canonicalProfile)) throw new Error("Voice target not confirmed");
+      broker = trustedVoiceBroker(bootstrap.broker);
       if (generation !== epoch.current) return;
       if (AppState.currentState !== "active") throw new Error("Dash is backgrounded");
       const cursorKey = `dash.voice.inbox.${settings.identity.credentialId}`;
@@ -146,7 +166,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
         transcript: (id, text, start, end) => { if (annotate.get().active) addSegment({ id, text, start, end, source: "voice" }); } });
       call.current = controller;
       // A Mute tap during authenticated bootstrap must also apply when the native peer arrives.
-      const connecting = controller.start(target);
+      const connecting = controller.start({ ...target, brokerProfile: bootstrap.canonicalProfile });
       if (desiredMute.current) controller.mute(true);
       await connecting;
     } catch (error) {
