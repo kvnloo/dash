@@ -67,7 +67,9 @@ class Bridge {
     },
     publish: snapshot => {
       reconnectStore.set(snapshot);
-      if (snapshot.phase === "waiting" || snapshot.phase === "paused" || snapshot.phase === "blocked") {
+      // start() passes through "waiting" with no reason before the first dial. That is not a failure:
+      // publishing offline there makes connectSettings() reject a pairing that has not been tried yet.
+      if ((snapshot.phase === "waiting" || snapshot.phase === "paused" || snapshot.phase === "blocked") && snapshot.reason !== undefined) {
         setConnection({ status: "offline", error: snapshot.reason });
       }
     },
