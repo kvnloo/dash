@@ -981,7 +981,6 @@ const server = Bun.serve<SocketData>({
             const harness = HARNESSES.find((h) => h.id === message.harness);
             if (problem || !harness) return rejectTurn(ws, message.id, problem ?? `Unknown agent "${message.harness}".`);
             if (turns.has(message.id)) return;
-            if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
             const turn = new Turn(message.id, harness);
             turn.listeners.add(ws);
             ws.data.turns.add(message.id);
