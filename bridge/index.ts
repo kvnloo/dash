@@ -85,6 +85,7 @@ import { ThinkingSummarizer } from "./src/thinking-summary";
 import { TurnSummaries } from "./src/turn-summaries";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
 import { createOrchestraHttpHandler } from "./src/orchestra-http";
+import { createRoadmapHttpHandler } from "./src/roadmap-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 import { acknowledgeSocketPing, BRIDGE_WS_IDLE_TIMEOUT_SECONDS } from "./src/ws-keepalive";
 
@@ -764,6 +765,7 @@ const handleChats = createChatsHttpHandler({
 const contextCompaction = compactionEnabled();
 const handleContext = contextHttp({ sessions: hermesSessions, compaction: contextCompaction });
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
+const handleRoadmap = createRoadmapHttpHandler({ authorize });
 const handleModels = createModelsHttpHandler({ authorize });
 const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
 
@@ -812,6 +814,8 @@ const server = Bun.serve<SocketData>({
       if (context) return cors(context);
       const orchestra = await handleOrchestra(request);
       if (orchestra) return cors(orchestra);
+      const roadmap = await handleRoadmap(request);
+      if (roadmap) return cors(roadmap);
       const models = await handleModels(request);
       if (models) return cors(models);
       const supervision = await handleSupervision(request);
