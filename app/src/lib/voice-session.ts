@@ -31,9 +31,8 @@ export function voiceConnectionError(kind: VoiceConnectionFailure): string {
 /** Normalize longer controller failure notes for the one-line error in the voice pill. */
 export function voiceConnectionErrorLine(note: string | undefined): string {
   if (!note?.trim()) return "Voice unavailable";
-  if (note.startsWith("Voice disconnected.") || note.startsWith("Voice connection timed out.")) {
-    return voiceConnectionError("ice");
-  }
+  if (note.startsWith("Voice connection timed out.")) return "Voice connection timed out";
+  if (note.startsWith("Voice disconnected.")) return voiceConnectionError("ice");
   if (note.startsWith("Voice authorization/network unavailable.")) return voiceConnectionError("token");
   if (note.startsWith("Realtime reported an error.")) return "Realtime session failed";
   if (note.startsWith("Voice unavailable.")) return "Voice connection failed";
