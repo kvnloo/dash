@@ -74,7 +74,7 @@ test('annotation-voice-target: OMP chat beats a voice call bound to Hermes', asy
 
   // Start an explicit call while Hermes is the last attached conversation.
   await page.getByRole('tab').nth(0).click({ noWaitAfter: true });
-  await page.getByRole('button', { name: 'Voice input', exact: true }).click({ noWaitAfter: true });
+  await page.getByRole('button', { name: 'Expand', exact: true }).click({ noWaitAfter: true });
   await page.getByRole('button', { name: 'Start voice in Dash', exact: true }).click({ noWaitAfter: true });
   await expect.poll(() => requests(voiceBroker, '/v1/realtime/session').length).toBe(1);
 

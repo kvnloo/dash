@@ -32,7 +32,7 @@ test('annotation-receipt: OMP streamed delta confirms one annotation before its 
   const stop = page.getByRole('button', { name: 'Stop', exact: true });
   await expect(stop).toBeVisible();
   // The app must acknowledge the streamed event, not wait for end_turn.
-  await expect(page.getByText(/Sent to .* chat · 1 strokes/)).toBeVisible({ timeout: 20000 });
+  await expect(page.getByText(/Sent to .+ · 1 strokes/)).toBeVisible({ timeout: 20000 });
   await expect(stop).toBeVisible();
   await expect(page.getByRole('alert').filter({ hasText: /Delivery unconfirmed/ })).toHaveCount(0);
 
@@ -64,7 +64,7 @@ test('annotation-receipt: offline Send then reconnect and Send again creates jus
   await page.context().setOffline(false);
   await expect(page.getByTestId('connection-banner')).toHaveCount(0, { timeout: 30000 });
   await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
-  await expect(page.getByText(/Sent to .* chat · 1 strokes/)).toBeVisible({ timeout: 20000 });
+  await expect(page.getByText(/Sent to .+ · 1 strokes/)).toBeVisible({ timeout: 20000 });
   await expect(page.getByTestId('transcript-viewport').getByText(/^Annotated .* \(1 stroke\)/)).toHaveCount(1);
   await expect(page.getByText(/ARMY_REPLY:/).filter({ visible: true }).first()).toBeVisible({ timeout: 30000 });
   expect(await startedTurns(bridge.dir)).toBe(1);
