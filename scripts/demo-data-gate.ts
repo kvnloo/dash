@@ -47,7 +47,8 @@ export function isScannable(file: string): boolean {
   if (!file.startsWith("app/src/") || !/\.tsx?$/.test(file) || /\.d\.ts$/.test(file)) return false;
   const parts = file.slice("app/src/".length).split("/");
   if (parts.some(part => part === "" || part === "." || part === ".."
-    || part === "mock" || part === "debug" || part === "__tests__")) return false;
+    || part === "mock" || part === "debug" || part === "__tests__"
+    || part === "test" || part === "tests")) return false;
   return !/\.(?:test|spec)\.tsx?$/.test(file);
 }
 
@@ -242,7 +243,7 @@ export function scanTree(root: string): RuntimeImport[] {
     for (const item of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const path = join(dir, item.name);
       if (item.isDirectory()) {
-        if (!["mock", "debug", "__tests__"].includes(item.name)) visit(path);
+        if (!["mock", "debug", "__tests__", "test", "tests"].includes(item.name)) visit(path);
       } else if (item.isFile() && /\.tsx?$/.test(item.name)) {
         const name = relative(root, path).split(sep).join("/");
         if (isScannable(name)) files.push(path);
