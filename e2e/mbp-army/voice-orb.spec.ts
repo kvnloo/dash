@@ -76,7 +76,7 @@ test("live hero orb follows each voice phase, mutes, passes through and hides fo
   await page.getByRole("button", { name: "Chat options" }).click({ noWaitAfter: true });
   await expect(page.getByRole("button", { name: "Annotate this screen" })).toBeVisible();
   await page.getByRole("button", { name: "Annotate this screen" }).click({ noWaitAfter: true });
-  await expect(page.getByTestId("annotation-overlay")).toBeVisible();
+  await expect(page.getByLabel("Annotation mode on", { exact: true })).toBeVisible();
   await expect(orb).toHaveCount(0);
   await page.getByRole("button", { name: "Exit annotation" }).click({ noWaitAfter: true });
   await expect(orb).toBeVisible();
