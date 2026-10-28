@@ -1,6 +1,8 @@
 import type { LiveArtifact, LiveControl, LiveEvent, LiveIntent, LiveReceipt, LiveServerMessage } from "../../../shared/live";
 import { newId } from "../lib/id";
 import { createStore } from "./createStore";
+import { flowMode, flowTrace } from "../lib/flow-trace";
+import { acceptsGeneration } from "../lib/generative-stream";
 
 /**
  * Live surface state, per Dash conversation. The fast lane belongs to the Hermes chat it was
@@ -13,6 +15,7 @@ export interface LiveLine {
   state: "streaming" | "done" | "error";
   /** A tool ran since the last text: the next text starts a new paragraph. */
   broken?: boolean;
+  generation?: number;
 }
 
 export interface LiveTiming {
@@ -23,6 +26,7 @@ export interface LiveTiming {
 }
 
 export interface LiveState {
+  generation?: number;
   open: boolean;
   status: "idle" | "opening" | "ready" | "error";
   error?: string;
@@ -55,6 +59,7 @@ interface LiveRequest {
   lineId?: string;
   workerId?: string;
   seq: number;
+  generation?: number;
 }
 const requests = new Map<string, LiveRequest>();
 /** Conversation id → its newest open request; an older open's reply must not swap identity. */
@@ -63,7 +68,8 @@ const latestOpen = new Map<string, string>();
 /** Whether another turn/intent request for this conversation is still in flight. */
 function otherTurnPending(conversationId: string, exceptId: string): boolean {
   for (const [id, request] of requests) {
-    if (id !== exceptId && request.kind === "turn" && request.conversationId === conversationId) return true;
+    if (id !== exceptId && request.kind === "turn" && request.conversationId === conversationId &&
+        (!flowMode || request.generation === liveOf(conversationId).generation)) return true;
   }
   return false;
 }
@@ -98,14 +104,24 @@ export function beginOpen(conversationId: string): string {
   return id;
 }
 
+export function nextGeneration(conversationId: string): number | undefined {
+  if (!flowMode) return undefined;
+  const generation = (liveOf(conversationId).generation ?? 0) + 1;
+  flowTrace.mark("gen.bump", conversationId, generation);
+  flowTrace.mark("turn.commit", conversationId, generation);
+  update(conversationId, state => ({ ...state, generation, artifacts: [], shownVersion: undefined, controls: [] }));
+  return generation;
+}
+
 export function beginLiveTurn(conversationId: string, text: string, askHermes: boolean): string {
   const id = newId();
   const lineId = `w_${id}`;
-  requests.set(id, { conversationId, kind: "turn", lineId, workerId: liveOf(conversationId).workerId, seq: 0 });
+  const generation = nextGeneration(conversationId);
+  requests.set(id, { conversationId, kind: "turn", lineId, workerId: liveOf(conversationId).workerId, seq: 0, generation });
   update(conversationId, state => ({
     ...state, busy: true, askHermes: false,
     timing: { sentAt: now() },
-    lines: [...state.lines, { id: `o_${id}`, role: "owner", text: askHermes ? `Ask Hermes: ${text}` : text, state: "done" }, { id: lineId, role: "worker", text: "", state: "streaming" }],
+    lines: [...state.lines, { id: `o_${id}`, role: "owner", text: askHermes ? `Ask Hermes: ${text}` : text, state: "done" }, { id: lineId, role: "worker", text: "", state: "streaming", generation }],
   }));
   return id;
 }
@@ -113,11 +129,12 @@ export function beginLiveTurn(conversationId: string, text: string, askHermes: b
 export function beginIntent(conversationId: string, intent: LiveIntent): string {
   const id = newId();
   const lineId = `w_${id}`;
-  requests.set(id, { conversationId, kind: "turn", lineId, workerId: liveOf(conversationId).workerId, seq: 0 });
+  const generation = nextGeneration(conversationId);
+  requests.set(id, { conversationId, kind: "turn", lineId, workerId: liveOf(conversationId).workerId, seq: 0, generation });
   update(conversationId, state => ({
     ...state, busy: true,
     timing: { sentAt: now() },
-    lines: [...state.lines, { id: `o_${id}`, role: "owner", text: `Picked ${intent.label ?? String(intent.value)}`, state: "done" }, { id: lineId, role: "worker", text: "", state: "streaming" }],
+    lines: [...state.lines, { id: `o_${id}`, role: "owner", text: `Picked ${intent.label ?? String(intent.value)}`, state: "done" }, { id: lineId, role: "worker", text: "", state: "streaming", generation }],
   }));
   return id;
 }
@@ -184,6 +201,10 @@ export function applyLiveMessage(message: LiveServerMessage): void {
       request.seq = message.seq;
       const terminal = message.event.type === "done" || message.event.type === "error";
       if (terminal) requests.delete(message.id);
+      if (flowMode && request.generation !== undefined && !acceptsGeneration(liveOf(conversationId).generation ?? 0, request.generation)) {
+        flowTrace.mark("genui.discard", conversationId, request.generation);
+        return;
+      }
       const othersBusy = terminal && otherTurnPending(conversationId, message.id);
       update(conversationId, state => applyEvent(state, lineId, message.event, othersBusy));
       return;
@@ -195,6 +216,10 @@ export function applyLiveMessage(message: LiveServerMessage): void {
       return;
     case "live_error": {
       requests.delete(message.id);
+      if (flowMode && request.generation !== undefined && !acceptsGeneration(liveOf(conversationId).generation ?? 0, request.generation)) {
+        flowTrace.mark("genui.discard", conversationId, request.generation);
+        return;
+      }
       if (request.kind === "open") {
         if (latestOpen.get(conversationId) !== message.id) return;
         latestOpen.delete(conversationId);

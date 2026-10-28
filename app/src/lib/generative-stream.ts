@@ -9,20 +9,24 @@
  *
  * Closed fences and every unrelated code/prose span remain byte-for-byte intact.
  */
+export function acceptsGeneration(current: number, incoming: number): boolean {
+  return Number.isSafeInteger(incoming) && incoming >= 0 && incoming === current;
+}
+
 const openingFence = /^( {0,3})(`{3,}|~{3,})([^\r\n]*)$/;
 const closingFence = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
 
 const placeholder = '{"__dash_pending_generated_ui__":true}';
 
-function uiLanguage(info: string): string | null {
+function uiLanguage(info: string, flow: boolean): string | null {
   const normalized = info.trim().toLowerCase();
   const token = normalized.split(/\s+/)[0] ?? "";
-  if (token === "genui" || token === "openui" || token === "openui-lang") return token;
+  if (token === "genui" || token === "openui" || token === "openui-lang" || (flow && token === "html")) return token;
 
   // Language labels themselves arrive token-by-token. A prefix is only
   // provisional when it is the *whole* info string, not an unknown language.
   if (!token || normalized !== token) return null;
-  for (const candidate of ["genui", "openui-lang", "openui"]) {
+  for (const candidate of flow ? ["genui", "openui-lang", "openui", "html"] : ["genui", "openui-lang", "openui"]) {
     if (candidate.startsWith(token)) return candidate;
   }
   return null;
@@ -37,7 +41,7 @@ interface Fence {
 }
 
 /** Keep a partial UI payload invisible until its matching Markdown fence ends. */
-export function prepareGenerativeMarkdown(markdown: string): string {
+export function prepareGenerativeMarkdown(markdown: string, flow = false): string {
   let open: Fence | null = null;
   let offset = 0;
 
@@ -57,7 +61,7 @@ export function prepareGenerativeMarkdown(markdown: string): string {
           indent: opening[1] ?? "",
           marker: marker.charAt(0),
           width: marker.length,
-          language: uiLanguage(opening[3] ?? ""),
+          language: uiLanguage(opening[3] ?? "", flow),
         };
       }
     }
