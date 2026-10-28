@@ -86,7 +86,12 @@
     {"id": "subagent-strip", "title": "A Hermes chat with delegated workers shows the subagent strip above the composer: live count, newest first, opens to a tree",
      "tests": ["a Hermes chat with delegated workers shows the subagent strip, newest first, and opens to a tree"]},
     {"id": "pm-ledger", "title": "The repository's pm ledger (pm/events.jsonl) parses cleanly and tracks the Hermes tasks",
-     "tests": ["the Dash repository's own pm ledger parses cleanly and tracks the Hermes tasks"]}
+     "tests": ["the Dash repository's own pm ledger parses cleanly and tracks the Hermes tasks"]},
+    {"id": "voice-bootstrap-targets", "title": "Native Hermes voice bootstrap resolves attached IDs, requires identity, and returns its broker",
+     "tests": ["voice bootstrap resolves the real fixture Hermes chat IDs",
+               "voice bootstrap rejects unknown sessions and legacy credentials",
+               "voice bootstrap reports disabled native voice",
+               "voice bootstrap echoes configured broker origin"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
