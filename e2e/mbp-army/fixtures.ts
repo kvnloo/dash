@@ -6,13 +6,14 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { dirname } from 'node:path';
 import { once } from 'node:events';
+import { startFixtureZ0bridge, type IdentityTokenOptions } from './fixture-z0bridge';
 export const web = process.env.ARMY_WEB || 'http://127.0.0.1:18400';
 const root = resolve(__dirname, '../..');
 const bridgeRoot = process.env.ARMY_BRIDGE_ROOT || root;
 const bun = process.env.ARMY_BUN || execFileSync('sh',['-c','command -v bun'],{encoding:'utf8'}).trim();
 const bunDir = dirname(bun);
 const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
-export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Promise<void>; start(): Promise<void>; logs(): string };
+export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Promise<void>; start(): Promise<void>; dispose(): Promise<void>; identityToken(options?: IdentityTokenOptions): string; logs(): string };
 /**
  * archiveClaude: a Claude Code chat AgentsView recorded on this computer.
  * remoteClaude: a Claude Code chat AgentsView synced from another computer, `army-remote`;
@@ -25,7 +26,7 @@ export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Pro
  * longHermes: a 1000-message native Hermes chat (LONG_HERMES_PROMPTS prompts, each with one answer):
  *   Hermes pages by (timestamp, id) keyset over user and assistant rows, not by AgentsView ordinal.
  */
-export type BridgeOptions = { archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean };
+export type BridgeOptions = { archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; env?: Record<string,string>; identity?: boolean };
 export const LONG_CHAT_TITLE = 'ARMY long Claude Code chat';
 export const LONG_CHAT_PROMPTS = 125;
 export const LONG_HERMES_TITLE = 'ARMY long Hermes chat';
@@ -51,12 +52,15 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
   await writeFile(join(bin,'army-kanban'),'#!/bin/sh\ncat '+quote(join(dir,'kanban.json'))+'\n',{mode:0o700});
   pmEnv.DASH_PM_ROOTS='army='+join(dir,'pm-repo'); pmEnv.DASH_PM_KANBAN=join(bin,'army-kanban'); pmEnv.DASH_ROADMAP_FILE=join(dir,'roadmap.json');
  }
+ const identity = options.identity ? await startFixtureZ0bridge(dir) : undefined;
  const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', ARMY_ARCHIVE_CLAUDE:options.archiveClaude?'1':'0', ARMY_REMOTE_CLAUDE:options.remoteClaude?remoteCwd:'', ARMY_PM:options.pm?'1':'0', ARMY_LONG_CLAUDE:options.longClaude?String(LONG_CHAT_PROMPTS):'', ARMY_LONG_HERMES:options.longHermes?String(LONG_HERMES_PROMPTS):'', ARMY_SUBAGENTS:options.subagents?'1':'', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot, DASH_KANBAN_DB:join(dir,'work.db'), DASH_SUPERVISION_DIR:join(dir,'.local/state/dash/supervision'), DASH_ORCHESTRA_PROFILES:join(dir,'.hermes'),
-  ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv};
+  ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv, ...(identity?.env ?? {}), ...(options.env ?? {})};
  const seed = spawn(bun,[join(__dirname,'seed-gate.ts')],{env,stdio:['ignore','pipe','pipe']});
- let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) throw Error('gate seed: '+seedLog);
+ let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) { await identity?.stop(); throw Error('gate seed: '+seedLog); }
  let child: ChildProcess; let log=''; let port=0;
  const f: Bridge = {dir,port:0,bootstrap:'',logs:()=>log,
+  identityToken: options => { if (!identity) throw Error('Bridge identity fixture is not enabled'); return identity.identityToken(options); },
+  async dispose() { await f.stop(); await identity?.stop(); },
   async start() {
    const oldPort=port; if(oldPort) env.DASH_PORT=String(oldPort);
    let startup='';child=spawn('bwrap',['--bind','/','/','--unshare-pid','--proc','/proc','--dev','/dev','--die-with-parent','/bin/sh','-c','if [ "$ARMY_PERSIST_SESSION" = 1 ]; then "$1" "$2" & fi; exec "$1" "$3"','army-bridge',bun,join(__dirname,'session-holder.ts'),join(bridgeRoot,'bridge/index.ts')],{cwd:bridgeRoot,env,stdio:['ignore','pipe','pipe']});
@@ -65,7 +69,8 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
    await expect.poll(()=>port>0 && startup.includes('dash bridge'),{timeout:20000,message:'isolated real bridge startup'}).toBeTruthy();
    f.port=port; f.bootstrap=(await readFile(join(dir,'.dash/bootstrap-token'),'utf8')).trim();
   }, async stop(){if(child && child.exitCode===null && child.signalCode===null){child.kill('SIGTERM');await once(child,'exit');}}
- };await f.start();
+ };try {
+ await f.start();
  if(persistSession){
   const token=(await readFile(join(dir,'.dash/token'),'utf8')).trim();
   let lastRoster='';
@@ -78,11 +83,12 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
   },{timeout:15000,message:'fixture must expose real native OMP and Hermes session rows before UI tests'}).toBe(true).catch((e:unknown)=>{throw Error(String(e)+'\nlast roster: '+lastRoster.slice(0,1500)+'\nbridge log tail: '+f.logs().slice(-1500));});
  }
  return f;
+ } catch (error) { await f.dispose(); throw error; }
 }
 export const test=base.extend<{bridge:Bridge; persistSession:boolean; bridgeOptions:BridgeOptions; errors:string[]; metrics: {name:string;ms:number}[]}>({
  persistSession:[true,{option:true}],
  bridgeOptions:[{},{option:true}],
- bridge: async({persistSession,bridgeOptions},use,testInfo)=>{const b=await createBridge(persistSession,bridgeOptions);try{await use(b);}finally{await b.stop();await writeFile(testInfo.outputPath('bridge.log'),b.logs());}},
+ bridge: async({persistSession,bridgeOptions},use,testInfo)=>{const b=await createBridge(persistSession,bridgeOptions);try{await use(b);}finally{await b.dispose();await writeFile(testInfo.outputPath('bridge.log'),b.logs());}},
  errors: [async({page},use,testInfo)=>{const errors:string[]=[];page.on('pageerror',e=>errors.push('PAGEERROR '+e.message));page.on('console',m=>{if(m.type()==='error')errors.push('CONSOLE '+m.text());});await use(errors);await writeFile(testInfo.outputPath('console.json'),JSON.stringify(errors,null,2));}, {auto:true}],
  metrics: [async({},use,testInfo)=>{const rows:{name:string;ms:number}[]=[];await use(rows);await writeFile(testInfo.outputPath('action-metrics.json'),JSON.stringify(rows,null,2));},{auto:true}],
 });
