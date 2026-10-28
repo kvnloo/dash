@@ -58,7 +58,7 @@ export async function collectOrchestra(hosts: HostInfo[], hours = 24, now = Date
       const seenParents = new Set(rows.map(r => text(r.id)));
       for (let i = 0; i < rows.length && i < 300; i++) {
         const row = rows[i];
-        const parent = row?.source === "subagent" ? text(row.parent_session_id) : "";
+        const parent = text(row?.parent_session_id);
         if (!parent || seenParents.has(parent)) continue;
         seenParents.add(parent);
         const ancestor = db.query<Record<string, unknown>, [string]>(`SELECT ${select} FROM sessions WHERE id=?`).get(parent);
@@ -79,7 +79,8 @@ export async function collectOrchestra(hosts: HostInfo[], hours = 24, now = Date
           const messages = db.query<{ tool_calls: string }, [string, number]>("SELECT tool_calls FROM messages WHERE session_id=? AND timestamp>=? AND tool_calls IS NOT NULL AND coalesce(active,1)=1 ORDER BY timestamp DESC LIMIT 100").all(rawId, (now - hours * 3600000) / 1000);
           for (const m of messages) for (const path of toolPaths(m.tool_calls, cwd)) { const root = repoFor(path); if (root) touched.add(root); }
         } catch { warnings.push(`${profile}: tool evidence unavailable`); }
-        const delegated = row.source === "subagent";
+        // Hermes records delegate_task children with parent_session_id; older builds also used source "subagent".
+        const delegated = row.source === "subagent" || Boolean(text(row.parent_session_id));
         let title = text(row.title);
         if (!title) {
           const first = db.query<{ content: string }, [string]>("SELECT substr(content,1,500) AS content FROM messages WHERE session_id=? AND role='user' ORDER BY timestamp LIMIT 1").get(rawId);
