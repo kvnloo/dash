@@ -41,9 +41,10 @@ export function ServedBuildChip() {
 
   if (!visible || hidden) return null;
   const update = live.decision.kind === "ready" || live.decision.kind === "reload";
-  const failed = live.decision.kind === "failed";
+  const failureReason = live.decision.kind === "failed" ? live.decision.reason : null;
+  const failed = failureReason !== null;
   const heldBy = live.decision.kind === "ready" && live.decision.why === "blocked" ? live.blockedBy : null;
-  const label = failed ? shortSha(live.served) + " failed to build (" + live.decision.reason + ")" :
+  const label = failed ? shortSha(live.served) + " failed to build (" + failureReason + ")" :
     heldBy !== null ? "update ready - held: " + heldBy :
     live.running === null
       ? servedBuildLabel(SERVED_BUILD, now)
@@ -93,7 +94,7 @@ export function ServedBuildChip() {
         accessibilityLabel={
           "Served bundle " + (live.running?.sha ?? SERVED_BUILD.sha ?? "unknown SHA") + ", " +
           servedAgeLabel(runningWithAge?.builtAtMs ?? SERVED_BUILD.servedAtMs, now) + "." +
-          (failed ? " " + shortSha(live.served) + " failed to build (" + live.decision.reason + "). Reload disabled." :
+          (failed ? " " + shortSha(live.served) + " failed to build (" + failureReason + "). Reload disabled." :
             update ? " Newer build " + shortSha(live.served) + " is served." + (heldBy ? " Held: " + heldBy + "." : "") + " Tap to reload." : " Tap to hide.")
         }
         accessibilityHint="Long press for reload and server options"
