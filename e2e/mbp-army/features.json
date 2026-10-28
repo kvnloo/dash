@@ -59,6 +59,8 @@
      "tests": ["bridge process death disables Send and restart reconnects"]},
     {"id": "agent-errors", "title": "Agent errors are surfaced and the composer stays usable",
      "tests": ["real ACP error is surfaced visibly and leaves composer usable"]},
+    {"id": "cutout-pill-geometry", "title": "Camera pill and hole use the cutout rect centre, width and height",
+     "tests": ["camera pill and hole stay centred on a simulated non-square cutout rect"]},
     {"id": "chat-window-identity", "title": "Chat window identity badge at phone and tablet widths",
      "tests": ["safe exploratory controls and context hit target at 390",
                "safe exploratory controls and context hit target at 800",
