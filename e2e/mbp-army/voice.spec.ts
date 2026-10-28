@@ -50,8 +50,10 @@ test('live voice moves connecting listening hearing thinking speaking listening 
 
   await page.getByRole('button', { name: 'Start voice in Dash', exact: true }).click({ noWaitAfter: true });
   const caption = page.getByTestId('voice-caption');
+  const pill = page.getByTestId('voice-phase');
   for (const phase of ['connecting', 'listening', 'hearing', 'thinking', 'speaking', 'listening']) {
-    await expect(caption, 'actual voice phase ' + phase).toContainText(phase, { timeout: 15000 });
+    await expect(pill, 'actual voice pill phase ' + phase)
+      .toHaveAttribute('aria-label', 'Voice status: ' + phase, { timeout: 15000 });
   }
 
   const asks = () => voiceBroker.calls().filter(call =>
