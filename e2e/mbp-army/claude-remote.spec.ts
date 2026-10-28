@@ -49,8 +49,8 @@ test.describe('Claude Code chat recorded on another computer',()=>{
   await expect(remoteRow(page)).toHaveCount(1,{timeout:30000});
   await remoteRow(page).click({noWaitAfter:true});
   await expect(composer(page)).toBeEditable();
-  await expect.poll(()=>page.evaluate(()=>(localStorage.getItem('dash.conversations.v1')??'').includes('av:claude:'))).toBe(true);
-  await page.evaluate(()=>{const key='dash.conversations.v1';const rows=JSON.parse(localStorage.getItem(key)||'[]');for(const c of rows)if(String(c.profileId).startsWith('av:claude:'))c.stale=true;localStorage.setItem(key,JSON.stringify(rows));});
+  await expect.poll(()=>page.evaluate(()=>(localStorage.getItem('dash.conversations.index.v3')??'').includes('av:claude:'))).toBe(true);
+  await page.evaluate(()=>{const key='dash.conversations.index.v3';const rows=JSON.parse(localStorage.getItem(key)||'[]');for(const c of rows)if(String(c.profileId).startsWith('av:claude:'))c.stale=true;localStorage.setItem(key,JSON.stringify(rows));});
   await page.reload();
   await expect(remoteRow(page)).toHaveCount(1,{timeout:30000});
   await remoteRow(page).click({noWaitAfter:true});
