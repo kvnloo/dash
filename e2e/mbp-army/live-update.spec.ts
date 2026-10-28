@@ -155,8 +155,9 @@ test('live-preview-chip: same served SHA never triggers a reload loop', async ({
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
     await expect.poll(() => reloads(page), { timeout: 12_000 }).toBe(1);
-    // A genuine page refresh retains AsyncStorage; the web reload seam itself never navigates.
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    // Navigation may rewrite the current URL, stripping web-only URL seams. Relaunch
+    // the same app document with the original build/Metro params and persisted storage.
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('turbo-served-build')).toContainText('aaaaaaa → bbbbbbb');
     await page.waitForTimeout(21_000); // includes a fresh 20 s manifest poll and the retry timeout
     expect(await reloads(page)).toBe(0);
