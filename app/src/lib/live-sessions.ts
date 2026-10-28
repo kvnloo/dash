@@ -158,14 +158,19 @@ export function adoptSummary(summary: ChatSummary, now: number): Conversation {
     openedAt: now, ...(summary.chatable ? {} : { viewOnly: true }), messages: [],
   };
 }
+/** Routed archive rows have no live process flag; follow them while open, even between turns. */
+function isRemoteClaude(c: Conversation): boolean {
+  return c.harness === "claude" && c.targetHostId?.startsWith("machine:") === true && c.profileId === `av:claude:${c.sessionId}` && !c.viewOnly;
+}
+
 export function shouldRequestHistory(c: Conversation | undefined): boolean {
   if (!c?.sessionId?.trim() || !isCatalogHarness(c.harness) || c.stale) return false;
   if (c.messages.some(m => m.role === "assistant" && (m.state === "streaming" || m.state === "pending"))) return false;
-  return c.harness === "hermes" || c.messages.length === 0;
+  return c.harness === "hermes" || isRemoteClaude(c) || c.messages.length === 0;
 }
 export function hydrateLiveConversation(conversation: Conversation, history: HistoryMessage[]): Conversation {
   if (conversation.messages.some(m => m.role === "assistant" && (m.state === "streaming" || m.state === "pending"))) return conversation;
-  if (conversation.messages.length > 0 && conversation.harness !== "hermes") return conversation;
+  if (conversation.messages.length > 0 && conversation.harness !== "hermes" && !isRemoteClaude(conversation)) return conversation;
   const messages = historyToMessages(history, conversation.id, conversation.harness === "hermes");
   if (!messages.length) return conversation;
   return { ...conversation, messages, updatedAt: Math.max(messages.at(-1)?.at ?? 0, conversation.updatedAt) };

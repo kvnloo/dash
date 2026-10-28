@@ -6,6 +6,8 @@
                "chat host info sheet shows resources without replacing session identity"]},
     {"id": "phone-hosts", "title": "Hosts lists online and recently offline phones, retaining fleet phones and hiding stale ghosts",
      "tests": ["Hosts lists phones without offering harnesses and hides stale unregistered phones"]},
+    {"id": "claude-remote-live-history", "title": "Open routed Claude chat follows live remote JSONL over the turn SSH route",
+     "tests": ["follows live remote JSONL in the open chat without reopening"]},
     {"id": "annotate-tldraw-send", "title": "Send confirmation retains newer ink without restoring submitted marks",
      "tests": ["annotate-tldraw: confirmed send removes only submitted ink, retaining newer ink"]},
     {"id": "annotate-tldraw", "title": "Offline warm tldraw annotation and history",
