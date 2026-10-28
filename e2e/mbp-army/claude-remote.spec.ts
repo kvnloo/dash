@@ -51,7 +51,8 @@ test.describe('Claude Code chat recorded on another computer',()=>{
   await expect(composer(page)).toBeEditable();
   await expect.poll(()=>page.evaluate(()=>(localStorage.getItem('dash.conversations.index.v3')??'').includes('av:claude:'))).toBe(true);
   await page.evaluate(()=>{const key='dash.conversations.index.v3';const rows=JSON.parse(localStorage.getItem(key)||'[]');for(const c of rows)if(String(c.profileId).startsWith('av:claude:'))c.stale=true;localStorage.setItem(key,JSON.stringify(rows));});
-  await page.reload();
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.getByRole('tab').nth(1).waitFor({timeout:60000});await page.getByRole('tab').nth(1).click({noWaitAfter:true});
   await expect(remoteRow(page)).toHaveCount(1,{timeout:30000});
   await remoteRow(page).click({noWaitAfter:true});
   await expect(page.getByTestId('chat-window')).toBeVisible();
