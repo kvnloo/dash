@@ -42,6 +42,14 @@ function webIdleReloadMs(): number | undefined {
   return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
 }
 
+/** The army serves a real manifest endpoint; keep polling faster for short active turns. */
+function webPollMs(): number | undefined {
+  const value = webParams?.get("livePollMs");
+  if (value === null || value === undefined || !/^\d+$/.test(value)) return undefined;
+  const milliseconds = Number(value);
+  return Number.isSafeInteger(milliseconds) && milliseconds >= 100 ? milliseconds : undefined;
+}
+
 function keyboardVisible(): boolean {
   if (Platform.OS !== "web") return Keyboard.isVisible();
   if (typeof document === "undefined") return false;
@@ -139,7 +147,7 @@ export function useLiveUpdate(): LiveUpdate {
       });
     };
     poll();
-    const timer = setInterval(poll, POLL_MS);
+    const timer = setInterval(poll, webPollMs() ?? POLL_MS);
     // Re-evaluate the idle gate between polls while an update waits.
     const tick = setInterval(() => setTick((n) => n + 1), Platform.OS === "web" ? 250 : 5_000);
     const sub = AppState.addEventListener("change", (state) => {
