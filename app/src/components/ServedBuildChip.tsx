@@ -97,7 +97,11 @@ export function ServedBuildChip() {
             update ? " Newer build " + shortSha(live.served) + " is served." + (heldBy ? " Held: " + heldBy + "." : "") + " Tap to reload." : " Tap to hide.")
         }
         accessibilityHint="Long press for reload and server options"
-        onPress={() => { if (!failed) update ? live.reloadNow() : setHiddenFor(key); }}
+        onPress={() => {
+          if (failed) return;
+          if (update) live.reloadNow();
+          else setHiddenFor(key);
+        }}
         onLongPress={openMenu}
         style={styles.touchTarget}
       >
