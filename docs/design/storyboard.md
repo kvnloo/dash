@@ -4,11 +4,11 @@ Source refs: `docs/design/references/` (OMP session Grok screenshots + Zero Andr
 
 ## Main layout
 
-Three swipe panes, top tabs **Bots | Chats | Orchestra**, bottom `@` search dock.
+Three swipe panes, top tabs **Hosts | Chats | Orchestra**, bottom `@` search dock.
 
 | Tab | Content |
 |-----|---------|
-| Bots | Hermes profiles + harness agents |
+| Hosts | Hermes profiles + harness agents |
 | Chats | All conversations (Grok History density) |
 | Orchestra | Product/project orchestration |
 

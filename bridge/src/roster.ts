@@ -16,6 +16,10 @@ export type TailscaleNode = {
   os: string;
   ips: string[];
   self: boolean;
+  lastSeen?: string;
+  rx?: number;
+  tx?: number;
+  relay?: string;
 };
 
 export type OmpTab = {
@@ -80,6 +84,10 @@ function parseNode(raw: unknown, self: boolean): TailscaleNode | null {
     os: typeof rec.OS === "string" ? rec.OS : "",
     ips,
     self,
+    lastSeen: typeof rec.LastSeen === "string" && Number.isFinite(Date.parse(rec.LastSeen)) ? rec.LastSeen : undefined,
+    rx: typeof rec.RxBytes === "number" ? rec.RxBytes : undefined,
+    tx: typeof rec.TxBytes === "number" ? rec.TxBytes : undefined,
+    relay: typeof rec.Relay === "string" ? rec.Relay : undefined,
   };
 }
 
@@ -412,9 +420,14 @@ export function assembleRoster(input: {
   harnesses: HarnessInfo[];
   selfFallback: { hostname: string; address?: string };
   signals?: RosterSignals;
+  fleetHostNames?: readonly string[];
+  now?: number;
 }): HostInfo[] {
-  const computers = input.nodes.filter((n) => !isPhoneOs(n.os));
-  const hosts: HostInfo[] = computers.map((node) => nodeToHost(node, input));
+  const cutoff = (input.now ?? Date.now()) - 30 * 24 * 60 * 60 * 1000;
+  const nodes = input.nodes.filter(node => !isPhoneOs(node.os) || node.self || node.online ||
+    (node.lastSeen !== undefined && Date.parse(node.lastSeen) >= cutoff) ||
+    input.fleetHostNames?.some(name => name === node.hostName || name === dnsLabel(node.dnsName, node.hostName)));
+  const hosts: HostInfo[] = nodes.map((node) => nodeToHost(node, input));
   if (!hosts.some((h) => h.self)) {
     hosts.unshift(
       selfHost(input.selfFallback.hostname, input.selfFallback.address, input.ompTabs, input.harnesses, input.signals),
@@ -427,7 +440,7 @@ export function assembleRoster(input: {
 function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster>[0]): HostInfo {
   const name = dnsLabel(node.dnsName, node.hostName);
   const v4 = firstV4(node.ips);
-  const agents = node.self
+  const agents = isPhoneOs(node.os) ? [] : node.self
     ? selfAgents(input.ompTabs, input.harnesses, input.signals)
     : (input.signals?.remoteAgents?.[name] ?? []).map((agent) => ({
       ...agent,
@@ -436,6 +449,8 @@ function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster
     }));
   return {
     id: name,
+    kind: isPhoneOs(node.os) ? "phone" : "computer",
+    lastSeen: node.lastSeen,
     // MagicDNS labels can be numeric ("0"); keep that routing id but show the OS hostname.
     name: node.hostName.trim() || name,
     hostname: node.hostName,
@@ -455,6 +470,7 @@ function selfHost(
 ): HostInfo {
   return {
     id: hostname,
+    kind: "computer",
     name: hostname,
     hostname,
     online: true,
@@ -680,6 +696,14 @@ function listedHermesProfiles(profiles: HermesProfileInfo[]): HermesProfileInfo[
 
 refreshHermesList();
 
+/** Registry membership keeps intentionally retained phones visible while offline. */
+function fleetHostNames(): string[] {
+  try {
+    const registry: unknown = Bun.YAML.parse(readFileSync(process.env.DASH_FLEET_REGISTRY ?? "/workspace/.files-k3s/config/fleet/nodes.yaml", "utf8"));
+    return isRecord(registry) && isRecord(registry.nodes) ? Object.keys(registry.nodes) : [];
+  } catch { return []; }
+}
+
 export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }): Promise<HostInfo[]> {
   const key = `${self.hostname}:${self.address ?? ""}:${harnesses.map((h) => `${h.id}:${h.available}`).join(",")}`;
   const now = Date.now();
@@ -694,6 +718,8 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
   const a2aUrl = hermesA2AUrl(process.env, selfAddress);
   const hosts = assembleRoster({
     nodes,
+    fleetHostNames: fleetHostNames(),
+    now,
     ompTabs,
     harnesses,
     selfFallback: { hostname: self.hostname, address: selfAddress },

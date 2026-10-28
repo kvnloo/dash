@@ -103,7 +103,7 @@ export async function collectOrchestra(hosts: HostInfo[], hours = 24, now = Date
     }
   }
   // Preserve non-Hermes sessions as plain chats unless their own store proves parentage.
-  for (const h of hosts) for (const a of h.agents) if (a.sessionId && !(h.self && a.kind === "hermes")) {
+  for (const h of hosts.filter(host => host.kind !== "phone")) for (const a of h.agents) if (a.sessionId && !(h.self && a.kind === "hermes")) {
     const repo = h.self && a.cwd ? repoFor(a.cwd) : a.cwd;
     sessions.push({ id: `roster:${h.id}:${a.id}`, sessionId: a.sessionId, title: a.name, hostId: h.id, harness: a.kind, state: a.status === "running" ? "live" : "idle", reason: `Bridge roster: ${a.status}`, cwd: a.cwd, repo, updatedAt: a.lastActivityAt ?? now, touched: [], provenance: ["bridge roster"] });
   }

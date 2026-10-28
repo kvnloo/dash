@@ -36,7 +36,7 @@ import type { ScreenProps } from "../navigation";
 import { createConversation, openAgentConversation, openChat, openListedConversation, saveSettings, setActive, store } from "../store/app";
 import type { Conversation } from "../model";
 import { colors, space, type } from "../theme";
-import { BotsPane } from "./panes/BotsPane";
+import { HostsPane } from "./panes/HostsPane";
 import { ChatsPane } from "./panes/ChatsPane";
 import { OrchestraPane } from "./panes/OrchestraPane";
 
@@ -408,8 +408,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   // Stable pager children: a MainScreen render (typing, search state) must not cascade into the
   // three panes; each pane subscribes to the store slices it needs on its own.
   const pages = useMemo(() => [
-    <View key="bots" style={{ width, flex: 1 }}>
-      <LazyPane focused={index === 0}><BotsPane navigation={navigation} /></LazyPane>
+    <View key="hosts" style={{ width, flex: 1 }}>
+      <LazyPane focused={index === 0}><HostsPane navigation={navigation} /></LazyPane>
     </View>,
     <View key="chats" style={{ width, flex: 1 }}>
       <ChatsPane navigation={navigation} focused={index === 1 && !searchActive} />

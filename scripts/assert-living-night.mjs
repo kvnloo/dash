@@ -9,7 +9,7 @@ export async function assertLivingNight(page, scenario) {
     const expand = await page.getByRole("button", { name: "Expand", exact: true }).boundingBox();
     const bridge = await page.getByRole("button", { name: "Bridge details", exact: true }).boundingBox();
     const tabs = [];
-    for (const label of ["Bots", "Chats", "Orchestra"]) tabs.push(await page.getByRole("tab", { name: label, exact: true }).boundingBox());
+    for (const label of ["Hosts", "Chats", "Orchestra"]) tabs.push(await page.getByRole("tab", { name: label, exact: true }).boundingBox());
     for (const b of [expand, bridge, ...tabs]) assert.ok(b.y >= 0 && b.y + b.height <= 60, "nav controls sit in the 60px bar");
     assert.ok(expand.x < tabs[0].x && tabs[0].x < tabs[1].x && tabs[1].x < tabs[2].x && tabs[2].x < bridge.x, "Expand, pager, Bridge details in order");
     assert.ok(Math.abs((tabs[1].x + tabs[1].width / 2) - 195) <= 2, "pager is centred on the phone");
@@ -39,8 +39,8 @@ export async function assertLivingNight(page, scenario) {
       result.chips = await list.boundingBox();
       assert.ok(result.chips.y < box.y, "scope chips open above dock");
     }
-    if (scenario === "main-bots") {
-      assert.equal(await page.getByRole("img", { name: /identity orb$/ }).count(), 0, "Bots never shows identity orbs");
+    if (scenario === "main-hosts") {
+      assert.equal(await page.getByRole("img", { name: /identity orb$/ }).count(), 0, "Hosts never shows identity orbs");
       for (const name of [/^Codex/, /^Claude Code/, /^OMP 1/]) assert.equal(await page.getByRole("button", { name }).count(), 0, "harnesses and sessions are not bots");
       const host = page.getByRole("button", { name: /^mbp, 3 bots, online$/ });
       await host.waitFor();
@@ -102,12 +102,12 @@ export async function assertLivingNight(page, scenario) {
 export async function exerciseLivingNight(page, scenario) {
   const steps = [];
   if (scenario === "main-chats") {
-    for (const label of ["Bots", "Chats", "Orchestra", "Chats"]) {
+    for (const label of ["Hosts", "Chats", "Orchestra", "Chats"]) {
       await page.getByRole("tab", { name: label, exact: true }).click();
       await page.getByRole("tab", { name: label, selected: true, exact: true }).waitFor();
       await page.getByRole("heading", { name: label, exact: true }).waitFor();
     }
-    steps.push("switch Bots / Chats / Orchestra / Chats with the dot pager; the header names the pane");
+    steps.push("switch Hosts / Chats / Orchestra / Chats with the dot pager; the header names the pane");
     await page.getByRole("button", { name: "Bridge details", exact: true }).click();
     await page.getByRole("button", { name: "Edit bridge", exact: true }).waitFor();
     const dismiss = page.getByRole("button", { name: "Dismiss bridge details", exact: true });
@@ -121,7 +121,7 @@ export async function exerciseLivingNight(page, scenario) {
     await page.getByRole("tab", { name: "Chats", selected: true, exact: true }).waitFor();
     steps.push("compose opens chat; Back returns to Chats");
   }
-  if (scenario === "main-bots") {
+  if (scenario === "main-hosts") {
     const host = page.getByRole("button", { name: /^mbp, 3 bots, online$/ });
     await host.click();
     await page.getByRole("button", { name: /^clean, / }).waitFor({ state: "hidden" });

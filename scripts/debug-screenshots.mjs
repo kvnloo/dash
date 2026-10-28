@@ -19,7 +19,7 @@ const port = Number(args.find((a, i) => args[i - 1] === "--port") ?? "8099");
 const outDir = path.resolve(root, args.find((a, i) => args[i - 1] === "--out") ?? "screenshots/debug");
 
 const SCENARIOS = [
-  "main-chats", "main-chats-search", "main-bots", "main-orchestra",
+  "main-chats", "main-chats-search", "main-hosts", "main-orchestra",
   "chat", "chat-streaming", "pair", "settings", "voice", "approvals",
   "chat-picker", "orchestra-dash", "main", "main-products", "chat-omp", "chat-attachments",
 ];

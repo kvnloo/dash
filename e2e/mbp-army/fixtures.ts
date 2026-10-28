@@ -25,7 +25,7 @@ export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Pro
  * longHermes: a 1000-message native Hermes chat (LONG_HERMES_PROMPTS prompts, each with one answer):
  *   Hermes pages by (timestamp, id) keyset over user and assistant rows, not by AgentsView ordinal.
  */
-export type BridgeOptions = { archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean };
+export type BridgeOptions = { archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean };
 export const LONG_CHAT_TITLE = 'ARMY long Claude Code chat';
 export const LONG_CHAT_PROMPTS = 125;
 export const LONG_HERMES_TITLE = 'ARMY long Hermes chat';
@@ -37,7 +37,20 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
  for (const name of ['hermes','omp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+'\n', {mode:0o700});
  // Claude Code: the bridge drives it through `claude-agent-acp` (ACP over stdio).
  for (const name of ['claude','claude-agent-acp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' claude\n', {mode:0o700});
- await writeFile(join(bin,'tailscale'),'#!/bin/sh\nexit 1\n',{mode:0o700});
+ if (options.phoneHosts) {
+  // Seed the external discovery command, not an app store or HTTP route.
+  const recent = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const stale = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+  const phone = (HostName: string, DNSName: string, Online: boolean, LastSeen: string) => ({HostName, DNSName, Online, LastSeen, OS:'android', TailscaleIPs:['100.64.0.25']});
+  await writeFile(join(dir,'tailscale.json'), JSON.stringify({Peer:{
+   s25:phone("Kevin's S25 Ultra",'kevins-s25-ultra.army.ts.net.',true,stale),
+   s22:phone('Galaxy S22+','galaxy-s22.army.ts.net.',false,recent),
+   ghost:phone('Retired phone','retired-phone.army.ts.net.',false,stale),
+   retained:phone('Fleet phone','fleet-phone.army.ts.net.',false,stale),
+  }}));
+  await writeFile(join(dir,'fleet.yaml'),'nodes:\n  fleet-phone: {}\n');
+  await writeFile(join(bin,'tailscale'),'#!/bin/sh\ncat '+quote(join(dir,'tailscale.json'))+'\n',{mode:0o700});
+ } else await writeFile(join(bin,'tailscale'),'#!/bin/sh\nexit 1\n',{mode:0o700});
  const remoteCwd = join(dir,'remote-home','project');
  if (options.remoteClaude) {
   await mkdir(remoteCwd,{recursive:true});
@@ -52,7 +65,7 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
   pmEnv.DASH_PM_ROOTS='army='+join(dir,'pm-repo'); pmEnv.DASH_PM_KANBAN=join(bin,'army-kanban'); pmEnv.DASH_ROADMAP_FILE=join(dir,'roadmap.json');
  }
  const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', ARMY_ARCHIVE_CLAUDE:options.archiveClaude?'1':'0', ARMY_REMOTE_CLAUDE:options.remoteClaude?remoteCwd:'', ARMY_PM:options.pm?'1':'0', ARMY_LONG_CLAUDE:options.longClaude?String(LONG_CHAT_PROMPTS):'', ARMY_LONG_HERMES:options.longHermes?String(LONG_HERMES_PROMPTS):'', ARMY_SUBAGENTS:options.subagents?'1':'', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot,
-  ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv};
+  DASH_FLEET_REGISTRY:join(dir,'fleet.yaml'), ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv};
  const seed = spawn(bun,[join(__dirname,'seed-gate.ts')],{env,stdio:['ignore','pipe','pipe']});
  let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) throw Error('gate seed: '+seedLog);
  let child: ChildProcess; let log=''; let port=0;

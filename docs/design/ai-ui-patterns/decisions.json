@@ -148,7 +148,7 @@
       "target": "harness-host",
       "wiring": [
         "app/src/components/HarnessPicker.tsx",
-        "app/src/screens/panes/BotsPane.tsx"
+        "app/src/screens/panes/HostsPane.tsx"
       ],
       "pattern": "byo-harness"
     },
@@ -709,7 +709,7 @@
       "target": "none",
       "wiring": [
         "app/src/screens/panes/ChatsPane.tsx",
-        "app/src/screens/panes/BotsPane.tsx",
+        "app/src/screens/panes/HostsPane.tsx",
         "app/src/screens/ChatScreen.tsx"
       ],
       "pattern": "no-list-entering"
@@ -1003,7 +1003,7 @@
       "adopted": "dot-and-one-line",
       "target": "dot-and-one-line",
       "wiring": [
-        "app/src/screens/panes/BotsPane.tsx"
+        "app/src/screens/panes/HostsPane.tsx"
       ],
       "pattern": "status-dot-not-pill"
     },
@@ -1174,7 +1174,7 @@
         },
         {
           "id": "fleet-marks",
-          "label": "AODL runtimeState marks on Bots/Orchestra while one thread is open",
+          "label": "AODL runtimeState marks on Hosts/Orchestra while one thread is open",
           "seenIn": [],
           "verdict": "target",
           "because": "Encode which agents are running without opening them. visual.json runtimeStates."
@@ -1417,7 +1417,7 @@
     {
       "id": "search.status-copy",
       "question": "How does a search row say a bot is live?",
-      "attention": "Bots pane uses a dot. Search writes Online/Offline. That is a second vocabulary for the same bit.",
+      "attention": "Hosts pane uses a dot. Search writes Online/Offline. That is a second vocabulary for the same bit.",
       "options": [
         {
           "id": "online-text",
@@ -1430,7 +1430,7 @@
         },
         {
           "id": "dot-only",
-          "label": "Dot, same as BotsPane",
+          "label": "Dot, same as HostsPane",
           "seenIn": [
             "dash"
           ],
@@ -1441,7 +1441,7 @@
       "target": "dot-only",
       "wiring": [
         "app/src/components/SearchResultRow.tsx",
-        "app/src/screens/panes/BotsPane.tsx"
+        "app/src/screens/panes/HostsPane.tsx"
       ],
       "pattern": "status-dot-not-pill"
     },
@@ -1678,11 +1678,11 @@
             "dash"
           ],
           "verdict": "reject",
-          "because": "BotsPane has no RefreshControl."
+          "because": "HostsPane has no RefreshControl."
         },
         {
           "id": "ptr-bots",
-          "label": "PTR on Bots plus existing pill retry",
+          "label": "PTR on Hosts plus existing pill retry",
           "seenIn": [],
           "verdict": "target"
         }
@@ -1690,7 +1690,7 @@
       "adopted": "none",
       "target": "ptr-bots",
       "wiring": [
-        "app/src/screens/panes/BotsPane.tsx",
+        "app/src/screens/panes/HostsPane.tsx",
         "app/src/components/ConnectionPill.tsx"
       ],
       "pattern": "pull-to-refresh-roster"
@@ -1787,7 +1787,7 @@
     {
       "id": "gesture.bridge-vs-list",
       "question": "Can a vertical list scroll steal the bridge pull?",
-      "attention": "One vertical axis. Pull is owned by nav chrome (failOffsetX, activeOffsetY). Pulling from the top of Bots/Chats is the residual fight.",
+      "attention": "One vertical axis. Pull is owned by nav chrome (failOffsetX, activeOffsetY). Pulling from the top of Hosts/Chats is the residual fight.",
       "options": [
         {
           "id": "list-also-pulls",
@@ -1858,7 +1858,7 @@
     },
     {
       "id": "fleet-attention-marks",
-      "title": "Bots/Orchestra: AODL runtimeState marks for agents streaming while another thread is open",
+      "title": "Hosts/Orchestra: AODL runtimeState marks for agents streaming while another thread is open",
       "fromNode": "attention.multi-stream",
       "priority": "P1",
       "area": "app",
@@ -1910,7 +1910,7 @@
       "fromNode": "search.status-copy",
       "priority": "P2",
       "area": "app",
-      "why": "Bots pane already compressed this. Search undoes it."
+      "why": "Hosts pane already compressed this. Search undoes it."
     },
     {
       "id": "send-haptic-weight",
@@ -1938,7 +1938,7 @@
     },
     {
       "id": "bots-pull-refresh",
-      "title": "Bots pane: pull-to-refresh roster, keep pill retry when broken",
+      "title": "Hosts pane: pull-to-refresh roster, keep pill retry when broken",
       "fromNode": "list.pull-refresh",
       "priority": "P2",
       "area": "app",

@@ -13,7 +13,7 @@ Legend for **works?** — `yes` = handler wired to real behavior; `dead` = visib
 | Control | Does | Gesture | Works? | A11y |
 |---------|------|---------|--------|------|
 | Expand circle (left) | Navigates to **Voice** (label says Expand) | tap · `PressScale` nav 0.9 · `haptic.tap` | yes (mislabeled) | `accessibilityLabel="Expand"` |
-| Tab Bots / Chats / Orchestra | Switches Main pager page | tap · raw `Pressable` (no PressScale) · `haptic.tap` via `goTab` | yes | `role=tab`, label = tab name, `selected` |
+| Tab Hosts / Chats / Orchestra | Switches Main pager page | tap · raw `Pressable` (no PressScale) · `haptic.tap` via `goTab` | yes | `role=tab`, label = tab name, `selected` |
 | Gold gel pill | Follows pager progress (display) | none | display | inside pager `accessibilityLabel="Primary mobile workspace"` |
 | Bridge chevron (right) | Toggles BridgePull; else Settings | tap · `PressScale` nav · `haptic.tap`; pan on chrome | yes | `accessibilityLabel="Bridge details"` |
 | Nav chrome pan | Opens/closes BridgePull sheet | pan Y · `activeOffsetY([-22,10])` · `failOffsetX([-24,24])` | yes | dismiss/sheet labeled; hit strip hidden |
@@ -35,7 +35,7 @@ Legend for **works?** — `yes` = handler wired to real behavior; `dead` = visib
 | Search results | Open bot/chat/product/harness or draft skill/tool/file into Chat | tap via `SearchResultRow` | yes | row `role=button`; no per-kind label |
 | Search empty | Explains unknown `@`/`/` or no matches | — | display | title/sub text only |
 | Hint line | Scope guidance while searching | — | display | `accessibilityRole="text"` |
-| Bots / Chats / Orchestra panes | See panes | horizontal pager swipe | yes | — |
+| Hosts / Chats / Orchestra panes | See panes | horizontal pager swipe | yes | — |
 | `GlobalSearchBar` dock | See below | IME via `KeyboardDock` | yes | — |
 
 ### GlobalSearchBar — `components/GlobalSearchBar.tsx`
@@ -67,7 +67,7 @@ Legend for **works?** — `yes` = handler wired to real behavior; `dead` = visib
 
 ### Panes
 
-**BotsPane** — host sections + profile rows (`PressScale`, disabled when offline/not chattable). Empty: “No hosts yet”. Online = 8px dot (not Online pill). A11y: `role=button` + disabled state; no name label.
+**HostsPane** — host sections + profile rows (`PressScale`, disabled when offline/not chattable). Empty: “No hosts yet”. Online = 8px dot (not Online pill). A11y: `role=button` + disabled state; no name label.
 
 **ChatsPane** — date groups, 1-line preview, streaming 8px dot, long-press 350ms → confirm delete. Empty: “No chats yet”. **No long-press hint.**
 
@@ -199,7 +199,7 @@ User bubble · pending “Queued…” · streaming markdown + `PulseDot` + 1-li
 |--------|----------|-------|
 | Destination | 4px dots + gold gel pill | AppNav |
 | Bridge health | ConnectionPill when broken; BridgePull status | chrome |
-| Host/agent presence | 8px green/faint dot | BotsPane, BridgePull, Settings |
+| Host/agent presence | 8px green/faint dot | HostsPane, BridgePull, Settings |
 | Orchestra status | 8px ok/warn/faint | OrchestraPane / Detail |
 | Other live turns | 8px static dot | ChatsPane, Conversations, SearchResultRow |
 | This turn thinking | PulseDot + 1-line status | MessageRow |
@@ -208,7 +208,7 @@ User bubble · pending “Queued…” · streaming markdown + `PulseDot` + 1-li
 | Search mode | Hint + chips on focus | Main |
 | Tokens | `store/text.ts` rAF keyed store | Chat |
 
-Multi-stream: row dots only — no fleet marks on Bots/Orchestra while another thread is open.
+Multi-stream: row dots only — no fleet marks on Hosts/Orchestra while another thread is open.
 
 ---
 
@@ -449,9 +449,9 @@ These splits are now in `decisions.json` `walk` (kind `gap` unless noted). Ticke
 
 - **Q:** How to refresh hosts/roster?
 - **Adopted:** None (pill retry only).
-- **Target:** PTR on Bots + existing pill retry.
+- **Target:** PTR on Hosts + existing pill retry.
 - **Reject:** Invisible staleness.
-- **Wiring:** `BotsPane.tsx`, `ConnectionPill.tsx`
+- **Wiring:** `HostsPane.tsx`, `ConnectionPill.tsx`
 
 ### `orchestra.agent-row`
 
@@ -481,7 +481,7 @@ These splits are now in `decisions.json` `walk` (kind `gap` unless noted). Ticke
 
 - **Q:** Search row liveness copy?
 - **Adopted:** Meta “Online”/“Offline”.
-- **Target:** Dot only (match BotsPane).
+- **Target:** Dot only (match HostsPane).
 - **Reject:** Online chips.
 - **Wiring:** `SearchResultRow.tsx`
 

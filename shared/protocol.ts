@@ -154,6 +154,10 @@ export interface BotInfo {
 /** A machine on the tailnet (this laptop, groot/0, …). */
 export interface HostInfo {
   id: string;
+  /** Optional for compatibility with older bridges. */
+  kind?: "computer" | "phone";
+  /** Tailscale last-seen timestamp (ISO 8601). */
+  lastSeen?: string;
   name: string;
   hostname: string;
   online: boolean;
@@ -510,6 +514,8 @@ function isHostInfo(value: unknown): value is HostInfo {
     str(value.id) &&
     str(value.name) &&
     str(value.hostname) &&
+    (value.kind === undefined || value.kind === "computer" || value.kind === "phone") &&
+    (value.lastSeen === undefined || (str(value.lastSeen) && Number.isFinite(Date.parse(value.lastSeen)))) &&
     typeof value.online === "boolean" &&
     typeof value.self === "boolean" &&
     (value.address === undefined || str(value.address)) &&

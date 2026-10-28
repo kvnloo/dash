@@ -96,7 +96,7 @@
               "id": "mc-tabs",
               "type": "text",
               "name": "mc-tabs",
-              "content": "Bots   Chats   Orchestra",
+              "content": "Hosts   Chats   Orchestra",
               "fontSize": 15,
               "fontWeight": 600,
               "fill": "$color.text"
@@ -255,7 +255,7 @@
           "id": "mb-tabs",
           "type": "text",
           "name": "mb-tabs",
-          "content": "Bots   Chats   Orchestra",
+          "content": "Hosts   Chats   Orchestra",
           "fontSize": 15,
           "fontWeight": 600,
           "fill": "$color.text"
@@ -373,7 +373,7 @@
           "id": "mo-tabs",
           "type": "text",
           "name": "mo-tabs",
-          "content": "Bots   Chats   Orchestra",
+          "content": "Hosts   Chats   Orchestra",
           "fontSize": 15,
           "fontWeight": 600,
           "fill": "$color.text"
