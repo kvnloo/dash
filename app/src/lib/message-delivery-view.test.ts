@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { UserMessage } from "../model";
 import type { OutboxRecord, OutboxStage } from "../store/outbox";
-import type { DeliveryStage } from "./delivery-status";
+import { describeDeliveryStatus, type DeliveryStage } from "./delivery-status";
 import { messageDeliveryProps, retryKey } from "./message-delivery-view";
 
 const message: UserMessage = {
@@ -69,6 +69,20 @@ describe("message delivery props", () => {
     expect(messageDeliveryProps(message, {
       ...record, stage: "started", retryNeeded: true,
     }, options)?.stage).toBe("started");
+  });
+
+  test("an unconfirmed persisted send reaches the accessible Not sent / Retry view", () => {
+    const props = messageDeliveryProps(message, {
+      ...record, stage: "sent", retryNeeded: true, error: "Connection dropped",
+    }, { now: 2_000, retryBusy: false });
+    expect(props).not.toBeNull();
+    if (!props) throw new Error("Expected delivery status props.");
+    const view = describeDeliveryStatus(props);
+    expect(view.label).toBe("Not sent · Retry");
+    expect(view.retryVisible).toBe(true);
+    expect(view.retryDisabled).toBe(false);
+    expect(view.accessibilityLabel).toContain("same client and turn IDs");
+    expect(view.note).toBe("Connection dropped");
   });
 
   test("outbox error notes are trimmed, capped at 120 characters, and nullable", () => {
