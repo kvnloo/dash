@@ -313,6 +313,31 @@ for(const width of [390,800])test('safe exploratory controls and context hit tar
 
 test.describe('ephemeral ACP regression',()=>{
  test.use({persistSession:false});
+ test('conditional roster polls finish while an ephemeral turn stays queueable and stoppable',async({page,bridge})=>{
+  const failedPolls:string[]=[];
+  page.on('requestfailed',request=>{
+   if(new URL(request.url()).pathname==='/roster') failedPolls.push(request.failure()?.errorText??'unknown failure');
+  });
+  await openChat(page,bridge);await send(page,'ARMY_HANG conditional roster lifecycle');
+  await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
+  for(let poll=0;poll<2;poll++){
+   const response=await page.waitForResponse(response=>new URL(response.url()).pathname==='/roster'&&response.status()===304,{timeout:25000});
+   // A received header is not a completed poll: the browser must deliver its empty body too.
+   let completed=false;
+   void response.finished().then(error=>{completed=error===null;});
+   await expect.poll(()=>completed,{timeout:5000,message:'conditional roster response must finish without an aborted cache load'}).toBe(true);
+   await composer(page).fill('queued draft survives conditional roster '+poll);
+   await expect(page.getByRole('button',{name:'Queue',exact:true})).toBeEnabled();
+   await expect(page.getByText('This chat has ended on the host. Its saved history is still on this phone.',{exact:true})).toHaveCount(0);
+  }
+  expect(failedPolls).toEqual([]);
+  // With a sendable draft the primary action is Queue; Stop is the running-and-empty action.
+  await composer(page).fill('');
+  await page.getByRole('button',{name:'Stop',exact:true}).click({noWaitAfter:true});
+  // Stopped: a fresh draft is Send again, not Queue.
+  await composer(page).fill('after stop');
+  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled();
+ });
  test('a missing roster row must not terminate a bridge-owned running turn',async({page,bridge})=>{
   await openChat(page,bridge);await send(page,'ARMY_HANG ephemeral ACP regression');
   await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();

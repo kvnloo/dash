@@ -51,7 +51,7 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
   await writeFile(join(bin,'army-kanban'),'#!/bin/sh\ncat '+quote(join(dir,'kanban.json'))+'\n',{mode:0o700});
   pmEnv.DASH_PM_ROOTS='army='+join(dir,'pm-repo'); pmEnv.DASH_PM_KANBAN=join(bin,'army-kanban'); pmEnv.DASH_ROADMAP_FILE=join(dir,'roadmap.json');
  }
- const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', ARMY_ARCHIVE_CLAUDE:options.archiveClaude?'1':'0', ARMY_REMOTE_CLAUDE:options.remoteClaude?remoteCwd:'', ARMY_PM:options.pm?'1':'0', ARMY_LONG_CLAUDE:options.longClaude?String(LONG_CHAT_PROMPTS):'', ARMY_LONG_HERMES:options.longHermes?String(LONG_HERMES_PROMPTS):'', ARMY_SUBAGENTS:options.subagents?'1':'', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot,
+ const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', ARMY_ARCHIVE_CLAUDE:options.archiveClaude?'1':'0', ARMY_REMOTE_CLAUDE:options.remoteClaude?remoteCwd:'', ARMY_PM:options.pm?'1':'0', ARMY_LONG_CLAUDE:options.longClaude?String(LONG_CHAT_PROMPTS):'', ARMY_LONG_HERMES:options.longHermes?String(LONG_HERMES_PROMPTS):'', ARMY_SUBAGENTS:options.subagents?'1':'', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot, DASH_KANBAN_DB:join(dir,'work.db'), DASH_SUPERVISION_DIR:join(dir,'.local/state/dash/supervision'), DASH_ORCHESTRA_PROFILES:join(dir,'.hermes'),
   ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv};
  const seed = spawn(bun,[join(__dirname,'seed-gate.ts')],{env,stdio:['ignore','pipe','pipe']});
  let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) throw Error('gate seed: '+seedLog);
@@ -64,7 +64,7 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
    child.stdout?.on('data',collect);child.stderr?.on('data',collect);
    await expect.poll(()=>port>0 && startup.includes('dash bridge'),{timeout:20000,message:'isolated real bridge startup'}).toBeTruthy();
    f.port=port; f.bootstrap=(await readFile(join(dir,'.dash/bootstrap-token'),'utf8')).trim();
-  }, async stop(){if(child && child.exitCode===null){child.kill('SIGTERM');await once(child,'exit');}}
+  }, async stop(){if(child && child.exitCode===null && child.signalCode===null){child.kill('SIGTERM');await once(child,'exit');}}
  };await f.start();
  if(persistSession){
   const token=(await readFile(join(dir,'.dash/token'),'utf8')).trim();
@@ -88,8 +88,8 @@ export const test=base.extend<{bridge:Bridge; persistSession:boolean; bridgeOpti
 });
 export {expect};
 export async function act(metrics:{name:string;ms:number}[],name:string,fn:()=>Promise<unknown>) {const t=performance.now();await fn();metrics.push({name,ms:performance.now()-t});}
-export async function pair(page:Page,b:Bridge) {
- await page.goto(web,{waitUntil:'domcontentloaded'});
+export async function pair(page:Page,b:Bridge,url=web) {
+ await page.goto(url,{waitUntil:'domcontentloaded'});
  await page.getByPlaceholder('100.64.0.1',{exact:true}).waitFor({timeout:120000});
  await page.getByPlaceholder('100.64.0.1',{exact:true}).fill('127.0.0.1:'+b.port);
  await page.getByLabel('Bootstrap token',{exact:true}).fill(b.bootstrap);
@@ -101,7 +101,7 @@ export async function pair(page:Page,b:Bridge) {
 }
 const rows = new WeakMap<Page,string>();
 export function chatRow(page:Page){const id=rows.get(page);if(!id)throw Error('No owned chat row recorded');return page.getByTestId(id);}
-export async function openChat(page:Page,b:Bridge) {await pair(page,b);await page.getByRole('button',{name:/^(Create new chat|New chat)$/}).first().click({noWaitAfter:true});await expect(composer(page)).toBeVisible();await page.getByRole('button',{name:'Back',exact:true}).click({noWaitAfter:true});const row=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({has:page.getByText('New chat',{exact:true})});await expect(row).toHaveCount(1);const id=await row.getAttribute('data-testid');if(!id)throw Error('New chat row id missing');rows.set(page,id);await row.click({noWaitAfter:true});await expect(page.getByTestId('chat-window')).toBeVisible();}
+export async function openChat(page:Page,b:Bridge,url=web) {await pair(page,b,url);await page.getByRole('button',{name:/^(Create new chat|New chat)$/}).first().click({noWaitAfter:true});await expect(composer(page)).toBeVisible();await page.getByRole('button',{name:'Back',exact:true}).click({noWaitAfter:true});const row=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({has:page.getByText('New chat',{exact:true})});await expect(row).toHaveCount(1);const id=await row.getAttribute('data-testid');if(!id)throw Error('New chat row id missing');rows.set(page,id);await row.click({noWaitAfter:true});await expect(page.getByTestId('chat-window')).toBeVisible();}
 export const composer=(page:Page)=>page.getByRole('textbox',{name:'Message',exact:true});
 export async function chooseHarness(page:Page,name='OMP') {
  await page.getByRole('button',{name:'Options. Current surface: Chat',exact:true}).click({noWaitAfter:true});

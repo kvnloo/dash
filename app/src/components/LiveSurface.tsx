@@ -10,6 +10,8 @@ import { colors, controlMin, glass, radius, space, type } from "../theme";
 import { LiveArtifactFrame } from "./LiveArtifactFrame";
 import { Markdown } from "./Markdown";
 import { PressScale } from "./PressScale";
+import { flowMode } from "../lib/flow-trace";
+import { acceptsGeneration } from "../lib/generative-stream";
 
 /**
  * The live surface of a Hermes chat: a fast libfx worker streams the quick conversation and renders
@@ -59,7 +61,7 @@ export const LiveSurface = memo(function LiveSurface({ conversationId }: { conve
           </View>
         ) : null}
         {live.controls.map(control => <NativeControl key={control.id} control={control} onIntent={onIntent} />)}
-        {live.lines.map(line => <Line key={line.id} line={line} conversationId={conversationId} />)}
+        {live.lines.filter(line => !flowMode || line.generation === undefined || acceptsGeneration(live.generation ?? 0, line.generation)).map(line => <Line key={line.id} line={line} conversationId={conversationId} />)}
       </ScrollView>
       <PressScale accessibilityRole="button" accessibilityLabel={`Receipts in Hermes: ${live.receipts.length}`} onPress={() => setReceiptsOpen(o => !o)} style={styles.receipts}>
         <Text style={styles.label}>In Hermes · {live.receipts.length} receipt{live.receipts.length === 1 ? "" : "s"}</Text>

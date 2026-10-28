@@ -29,7 +29,7 @@ export const OrchestraPane = memo(function OrchestraPane({ navigation }: Pick<Sc
     nodes: snapshot.nodes.map(n => ({ ...n, thinking: n.state === "live" ? { phase: "thinking" as const } : { phase: "idle" as const } })),
     edges: snapshot.edges,
   } : orchestraMap(hosts, conversations), [hosts, conversations, fixtureOn, snapshot]);
-  return <OrchestraGraph graph={graph} width={width} fixture={fixtureOn} error={fixtureOn ? undefined : error} warnings={snapshot?.warnings} canOpen={node => Boolean(node.sessionId && (conversations.some(c => c.sessionId === node.sessionId) || hosts.some(h => `host:${h.id}` === node.hostId && h.self && h.online && h.agents.some(a => a.sessionId === node.sessionId))))} onFeedback={inAppFeedbackEnabled(settings) ? node => {
+  return <OrchestraGraph triageHeader={<TraceEntryCard onOpen={() => navigation.navigate("Trace")} />} graph={graph} width={width} fixture={fixtureOn} error={fixtureOn ? undefined : error} warnings={snapshot?.warnings} canOpen={node => Boolean(node.sessionId && (conversations.some(c => c.sessionId === node.sessionId) || hosts.some(h => `host:${h.id}` === node.hostId && h.self && h.online && h.agents.some(a => a.sessionId === node.sessionId))))} onFeedback={inAppFeedbackEnabled(settings) ? node => {
     submitInAppFeedback({ kind: "select", text: `Selected orchestra ${node.label}`, selection: { kind: "orchestra", id: node.id, label: node.label } });
     navigation.navigate("Chat");
   } : undefined} onOpen={node => {

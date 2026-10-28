@@ -1,10 +1,12 @@
 // Annotation mode state. One overlay for the whole app; screens register where a
 // finished annotation goes (the open chat, or the live voice session).
+import { Platform } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
 import type { Segment } from "../lib/annotate/align";
 import { EMPTY_DRAWING, addStroke, clear, eraseAlong, undo, type Drawing, type InkColor, type Stroke, type Tool } from "../lib/annotate/strokes";
 import { penButton, toggleMode } from "../lib/stylus-mode";
 import { createStore } from "./createStore";
+import { flowMode } from "../lib/flow-trace";
 
 export interface AnnotationPreview {
   /** data: URI of the composited PNG, shown before upload finishes. */
@@ -13,7 +15,14 @@ export interface AnnotationPreview {
   strokes: number;
 }
 
+export type AnnotateEngine = "skia" | "tldraw";
+function defaultEngine(): AnnotateEngine {
+  const flag = Platform.OS === "web" && typeof location !== "undefined" ? new URLSearchParams(location.search).get("annotateEngine") : process.env.EXPO_PUBLIC_ANNOTATE_ENGINE;
+  return flag === "skia" || flag === "tldraw" ? flag : Platform.OS === "web" ? "tldraw" : "skia";
+}
+
 export interface AnnotateState {
+  annotateEngine: AnnotateEngine;
   active: boolean;
   /** Current S Pen side-button latch, to ignore repeats until release. */
   buttonDown: boolean;
@@ -38,6 +47,7 @@ export interface AnnotateState {
  * Never seed active or penMode from stored settings or a prior module instance. */
 function initialAnnotationState(): AnnotateState {
   return {
+    annotateEngine: defaultEngine(),
     active: false, buttonDown: false, penMode: false, tool: "pen", color: "accent",
     drawing: EMPTY_DRAWING, segments: [], recording: false, status: "idle",
   };
@@ -75,9 +85,9 @@ export function enterAnnotation(): void {
   annotate.set(s => (s.active ? s : { ...s, active: true, status: "idle", error: undefined, preview: undefined }));
 }
 
-/** Discard: leave the mode and throw the drawing away. */
+/** Flow exits close the mode, not the draft. Clear remains the explicit discard. */
 export function exitAnnotation(): void {
-  annotate.set(s => ({ ...s, active: false, drawing: EMPTY_DRAWING, segments: [], recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined }));
+  annotate.set(s => ({ ...s, active: false, drawing: flowMode ? s.drawing : EMPTY_DRAWING, segments: flowMode ? s.segments : [], recording: false, pendingTurn: undefined, status: "idle", preview: undefined, error: undefined }));
 }
 
 /** Switch modes without discarding ink, voice or queued drafts. */
@@ -97,6 +107,22 @@ export function setPenMode(on: boolean): void { annotate.set(s => ({ ...s, penMo
 export function setTool(tool: Tool): void { annotate.set(s => ({ ...s, tool })); }
 export function setColor(color: InkColor): void { annotate.set(s => ({ ...s, color })); }
 export function commitStroke(input: Omit<Stroke, "id" | "startedAt" | "endedAt">): void { annotate.set(s => ({ ...s, drawing: addStroke(s.drawing, input) })); }
+/** DOM commits use the same addStroke path as Skia; edits retain stable marker IDs. */
+export function syncTldrawStrokes(strokes: Stroke[]): void {
+  if (!annotate.get().active) return;
+  const previous = annotate.get().drawing.strokes;
+  // finishSend excludes its immutable snapshot by reference. A DOM document
+  // notification must not replace unchanged marks while another is uploaded.
+  const stable = strokes.map(stroke => {
+    const saved = previous.find(saved => saved.id === stroke.id);
+    return saved && JSON.stringify(saved) === JSON.stringify(stroke) ? saved : stroke;
+  });
+  for (const stroke of stable) {
+    if (!previous.some(saved => saved.id === stroke.id)) commitStroke(stroke);
+  }
+  annotate.set(s => ({ ...s, drawing: { ...s.drawing, strokes: stable, nextId: Math.max(s.drawing.nextId, ...stable.map(stroke => stroke.id + 1)) } }));
+}
+
 export function eraseStrokes(path: { x: number; y: number }[]): void { annotate.set(s => ({ ...s, drawing: eraseAlong(s.drawing, path) })); }
 export function undoStroke(): void { annotate.set(s => ({ ...s, drawing: undo(s.drawing) })); }
 export function clearStrokes(): void { annotate.set(s => ({ ...s, drawing: clear(s.drawing) })); }

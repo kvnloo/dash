@@ -97,7 +97,7 @@ Rows and sheets use `{rounded.md}` or `{rounded.lg}`. The pager is a stadium. Ic
 
 ## Components
 
-The gold pill is the only moving brand object. It follows the selected tab on the UI thread with gel springs (mass 0.4, stiffness 240, damping 13). Press scale is `0.985` on rows, `0.92` on controls, `0.9` on nav circles. Enters are 240ms; exits are 140ms. Honor reduced motion with a crossfade.
+The gold pill is the only moving brand object. It follows the selected tab on the UI thread with the critically damped pager timing (no overshoot). Press scale is `0.985` on rows, `0.92` on controls, `0.9` on nav circles. Enters are 150ms; exits are 120ms; nothing runs past 180ms. Honor reduced motion with a crossfade: no travel, opacity only. [MOTION.md](MOTION.md) is the motion contract and holds the tokens.
 
 Composer and search are the same dock family: one field, gold send when there is text, chips for `/` and `@` only when those tokens are in play.
 

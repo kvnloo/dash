@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { PixelRatio, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import Animated, { ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { ReduceMotion, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 import { haptic } from "../haptics";
 import {
@@ -13,6 +13,7 @@ import {
   identityLabel,
   identityLines,
   middleTruncate,
+  morphFrame,
   morphFrom,
   sessionIdLabel,
   topCutout,
@@ -26,7 +27,7 @@ import { readCutout } from "../lib/display-cutout";
 import { debugUi } from "../debug/ui-store";
 import type { OrbState } from "../lib/orb-phase";
 import { useHandedness } from "../lib/useHandedness";
-import { fade, snappy } from "../motion";
+import { crossfade, fade, morphDuration, snappy } from "../motion";
 import { colors, glass, radius, space, type } from "../theme";
 import { AgentOrb } from "./AgentOrb";
 
@@ -37,23 +38,21 @@ import { AgentOrb } from "./AgentOrb";
 export function useWindowMorph(origin: WindowOrigin | undefined, enabled: boolean) {
   const { height } = useWindowDimensions();
   const from = useMemo(() => morphFrom(origin, height), [origin, height]);
+  const reduced = useReducedMotion();
   const progress = useSharedValue(enabled ? 0 : 1);
   const [settling, setSettling] = useState(enabled);
   useEffect(() => {
     if (!enabled) return;
-    progress.value = withTiming(1, { ...snappy, reduceMotion: ReduceMotion.System }, done => { if (done) runOnJS(setSettling)(false); });
-  }, [enabled, progress]);
-  const style = useAnimatedStyle(() => enabled ? {
-    opacity: progress.value,
-    transform: [
-      { translateY: from.translateY * (1 - progress.value) },
-      { scale: from.scale + (1 - from.scale) * progress.value },
-    ],
-  } : {});
+    // Distance-based: a row far from the centre travels further, so it gets more (bounded) time.
+    // Reduce motion: no travel or scale, only the opacity crossfade, which still runs.
+    const open = reduced ? crossfade : { ...snappy, duration: morphDuration(from.translateY, height) };
+    progress.value = withTiming(1, { ...open, reduceMotion: ReduceMotion.Never }, done => { if (done) runOnJS(setSettling)(false); });
+  }, [enabled, progress, reduced, from, height]);
+  const style = useAnimatedStyle(() => enabled ? morphFrame(progress.value, from, reduced) : {});
   const close = useCallback((done: () => void) => {
     if (!enabled) { done(); return; }
     setSettling(true);
-    progress.value = withTiming(0, { ...fade, reduceMotion: ReduceMotion.System }, () => { runOnJS(done)(); });
+    progress.value = withTiming(0, { ...fade, reduceMotion: ReduceMotion.Never }, () => { runOnJS(done)(); });
   }, [enabled, progress]);
   return { style, close, settling };
 }

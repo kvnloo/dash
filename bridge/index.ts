@@ -53,6 +53,8 @@ import { sessionPhaseHttp } from "./src/hermes-phase";
 import { sessionWorkersHttp } from "./src/hermes-workers";
 import { z0liveStateHttp } from "./src/z0live-state";
 import { voiceBootstrap } from "./src/voice-bootstrap";
+import { flowTraceHttp } from "./src/flow-trace-http";
+const handleFlowTrace = flowTraceHttp(process.env.DASH_DEBUG_FLOW_TRACE === "1");
 import { activityHttp } from "./src/hermes-activity";
 const nativeActivityHttp = activityHttp((profile, session) => hermesSessions.nativeActivity(profile, session));
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
@@ -87,9 +89,12 @@ import { loadRoles } from "./src/model-roles";
 import { ThinkingSummarizer } from "./src/thinking-summary";
 import { TurnSummaries } from "./src/turn-summaries";
 import { createSupervisionHttpHandler } from "./src/supervision-http";
+import { createPostureHttpHandler } from "./src/posture-http";
 import { createOrchestraHttpHandler } from "./src/orchestra-http";
 import { createRoadmapHttpHandler } from "./src/roadmap-http";
 import { createPmHttpHandler } from "./src/pm-http";
+import { createTraceRoute } from "./src/trace-route";
+import { createTriageHttpHandler } from "./src/triage-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 import { acknowledgeSocketPing, BRIDGE_WS_IDLE_TIMEOUT_SECONDS } from "./src/ws-keepalive";
 
@@ -731,7 +736,7 @@ const notices = new NoticeService(CREDENTIAL_DIR, (notice, delivered) => log("no
 const noticePort = Number(process.env.DASH_NOTICE_PORT ?? (PORT === 0 ? 0 : PORT + 1));
 if (!Number.isInteger(noticePort) || noticePort < 0 || noticePort > 65535) throw new Error("Invalid DASH_NOTICE_PORT");
 if (notices.quarantined) log("notices.quarantined", { file: basename(notices.quarantined) });
-const noticeServer = tryStartNoticeServer({ token: TOKEN, notices, port: noticePort }, reason => log("notices.disabled", { reason }));
+const noticeServer = tryStartNoticeServer({ token: TOKEN, notices, port: noticePort, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG }, reason => log("notices.disabled", { reason }));
 const attachments = new AttachmentStore(process.env.DASH_ATTACHMENT_DIR?.trim() || join(CREDENTIAL_DIR, "attachments"));
 const handleFiles = createFilesHttpHandler({
   token: TOKEN,
@@ -794,12 +799,15 @@ const handleContext = contextHttp({ sessions: hermesSessions, compaction: contex
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleRoadmap = createRoadmapHttpHandler({ authorize });
 const handlePm = createPmHttpHandler({ authorize });
+const handleTrace = createTraceRoute({ authorize, roster: () => selfRoster(harnessList(), HOST) });
+const handleTriage = createTriageHttpHandler({ authorize });
 const handleModels = createModelsHttpHandler({ authorize });
 const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFAULT_CWD });
 
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
 const liveSurface = new LiveSurface({ log });
 const handleSupervision = createSupervisionHttpHandler({ token: TOKEN, directory: process.env.DASH_SUPERVISION_DIR });
+const handlePosture = createPostureHttpHandler({ token: TOKEN, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG });
 const gatePoll = gate ? setInterval(() => { try { gate.refresh(); } catch { /* Explicit next request returns corruption error. */ } }, 2000) : null;
 
 const server = Bun.serve<SocketData>({
@@ -832,6 +840,10 @@ const server = Bun.serve<SocketData>({
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      if (url.pathname === "/debug/trace") {
+        const trace = await handleFlowTrace(request, await authorize(request));
+        if (trace) return cors(trace);
+      }
       if (url.pathname === "/voice/bootstrap") {
         const principal = await bridgeAuth.authenticate(request, false, true);
         const voice = await voiceBootstrap(request, principal?.kind === "identity", (profile, session) => !!hermesSessions.target(profile, session));
@@ -840,6 +852,8 @@ const server = Bun.serve<SocketData>({
       if (url.pathname === "/chat/context/compact" && request.method === "POST" && contextCompaction) server.timeout(request, 255);
       const context = await handleContext(request, await authorize(request));
       if (context) return cors(context);
+      const trace = await handleTrace(request); if (trace) return cors(trace);
+      const triage = await handleTriage(request); if (triage) return cors(triage);
       const orchestra = await handleOrchestra(request);
       if (orchestra) return cors(orchestra);
       const roadmap = await handleRoadmap(request);
@@ -850,6 +864,8 @@ const server = Bun.serve<SocketData>({
       if (models) return cors(models);
       const supervision = await handleSupervision(request);
       if (supervision) return cors(supervision);
+      const posture = await handlePosture(request);
+      if (posture) return cors(posture);
       const activity = nativeActivityHttp(request, await authorize(request));
       if (activity) return cors(activity);
       const phase = sessionPhaseHttp(request, await authorize(request), (profile, session) => hermesSessions.phase(profile, session));

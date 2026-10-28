@@ -10,6 +10,7 @@ import { PressScale } from "./PressScale";
 import { useAmbientRunning, useOrbMotion } from "./OrbMotion";
 import { InteractiveTile } from "./InteractiveTile";
 import { Tree } from "./Tree";
+import { LiveTriageList } from "./LiveTriageList";
 import type { TreeNode } from "../lib/tree";
 
 const kindColor = { chat: colors.gold, subagent: colors.orchestraSubagent, repo: colors.gold, host: colors.textMuted };
@@ -66,7 +67,7 @@ function useLatest<T>(value: T) {
   return ref;
 }
 
-export function OrchestraGraph({ graph, width: _width, children, actions, fixture = false, error, warnings = [], onOpen, onFeedback, canOpen }: { graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode; fixture?: boolean; error?: string; warnings?: string[]; onOpen?(node: MapNode): void; onFeedback?(node: MapNode): void; canOpen?(node: MapNode): boolean }) {
+export function OrchestraGraph({ graph, width: _width, children, actions, fixture = false, error, warnings = [], onOpen, onFeedback, canOpen, triageHeader }: { triageHeader?: ReactNode; graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode; fixture?: boolean; error?: string; warnings?: string[]; onOpen?(node: MapNode): void; onFeedback?(node: MapNode): void; canOpen?(node: MapNode): boolean }) {
   const [view, setView] = useState<OrchestraView>(() => defaultView(graph.nodes));
   const [chosen, setChosen] = useState(false);
   const [filter, setFilter] = useState<MapFilter | null>(null);
@@ -179,15 +180,15 @@ export function OrchestraGraph({ graph, width: _width, children, actions, fixtur
   </>;
 
   return <View style={styles.root} testID="orchestra-graph">
-    <Text style={styles.summary}>{summary}</Text>
+    {view !== "triage" ? <Text style={styles.summary}>{summary}</Text> : null}
     <View style={styles.tabs}>{ORCHESTRA_VIEWS.map(mode => <PressScale key={mode.id} accessibilityRole="button" accessibilityLabel={mode.title} accessibilityState={{ selected: view === mode.id }} onPress={() => switchView(mode.id)} style={[styles.tab, view === mode.id && styles.tabOn]}><Text style={[styles.tabTitle, view === mode.id && { color: colors.gold }]}>{mode.title}</Text><Text style={styles.subtitle}>{mode.subtitle}</Text></PressScale>)}</View>
-    <Text style={styles.hint}>{fixture ? "Fixture · not live" : "Read-only host evidence · last 24h"} · Tap a label to inspect</Text>
-    {error ? <Text accessibilityRole="alert" style={styles.warning}>{error}</Text> : null}
-    {warnings.length ? <Text style={styles.warning}>{warnings.join(" · ")}</Text> : null}
+    <Text style={styles.hint}>{fixture ? "Fixture · not live" : view === "triage" ? "Live priority sources · source ages shown" : "Read-only host evidence · last 24h"} · Tap a label to inspect</Text>
+    {view !== "triage" && error ? <Text accessibilityRole="alert" style={styles.warning}>{error}</Text> : null}
+    {view !== "triage" && warnings.length ? <Text style={styles.warning}>{warnings.join(" · ")}</Text> : null}
     {view === "work" ? <Text style={styles.hint}>{current.nodes.filter(n => n.collision).length} W1 collisions · {current.nodes.filter(n => n.kind !== "repo" && n.state === "live").length} live sessions changing worktrees</Text> : null}
-    {view === "triage" ? <Text style={styles.hint}>{TRIAGE_LANES.map(l => `${l.title} ${current.nodes.filter(n => n.state === l.state).length}`).join(" → ")}</Text> : null}
+    {view === "triage" ? <Text style={styles.hint}>Tap a priority to open its evidence and next action.</Text> : null}
     <Animated.View style={[styles.body, transition]}>
-      <FlatList
+      {view === "triage" ? <>{triageHeader}<LiveTriageList /></> : <FlatList
         testID="orchestra-list"
         data={rows}
         keyExtractor={row => row.key}
@@ -199,10 +200,10 @@ export function OrchestraGraph({ graph, width: _width, children, actions, fixtur
         maxToRenderPerBatch={8}
         windowSize={7}
         removeClippedSubviews={Platform.OS === "android"}
-      />
+      />}
     </Animated.View>
-    <View style={styles.legend} accessibilityLabel="Graph legend. Tap to highlight, hold to show only.">{legendItems.map(({ kind, count, live }) => <PressScale key={kind} accessibilityRole="button" accessibilityLabel={`Legend ${kind}`} accessibilityHint="Tap to highlight; long press to show only" onPress={() => setFilter(filter?.kind === kind ? null : { kind, only: false })} onLongPress={() => { setFilter({ kind, only: true }); setFocusOnly(false); }} style={[styles.legendItem, filter?.kind === kind && styles.tabOn]}><Glyph kind={kind} /><Text style={styles.meta}>{kind} {count} · {live} live</Text></PressScale>)}</View>
-    <View style={styles.footer}><PressScale onPress={() => { setFocusOnly(!focusOnly); }} style={styles.button}><Text style={styles.meta}>{focusOnly ? "All" : "Focus"}</Text></PressScale><PressScale onPress={() => { setFilter(null); setFocusOnly(false); setFocusId(null); }} style={styles.button}><Text style={styles.meta}>Reset</Text></PressScale>{actions}</View>
+    {view !== "triage" ? <View style={styles.legend} accessibilityLabel="Graph legend. Tap to highlight, hold to show only.">{legendItems.map(({ kind, count, live }) => <PressScale key={kind} accessibilityRole="button" accessibilityLabel={`Legend ${kind}`} accessibilityHint="Tap to highlight; long press to show only" onPress={() => setFilter(filter?.kind === kind ? null : { kind, only: false })} onLongPress={() => { setFilter({ kind, only: true }); setFocusOnly(false); }} style={[styles.legendItem, filter?.kind === kind && styles.tabOn]}><Glyph kind={kind} /><Text style={styles.meta}>{kind} {count} · {live} live</Text></PressScale>)}</View> : null}
+    <View style={styles.footer}>{view !== "triage" ? <><PressScale onPress={() => { setFocusOnly(!focusOnly); }} style={styles.button}><Text style={styles.meta}>{focusOnly ? "All" : "Focus"}</Text></PressScale><PressScale onPress={() => { setFilter(null); setFocusOnly(false); setFocusId(null); }} style={styles.button}><Text style={styles.meta}>Reset</Text></PressScale></> : null}{actions}</View>
     {selected ? <View style={styles.sheet} accessibilityLabel="Node details"><ScrollView><Text style={styles.heading}>{selected.label}</Text><Text style={styles.meta}>{selected.kind} · {selected.state} · {selected.harness}{selected.model ? ` · ${selected.model}` : ""}</Text><Text style={styles.label}>{selected.reason || "No live state reported"}</Text><Text style={styles.action}>→ {selected.action || TRIAGE_LANES.find(l => l.state === selected.state)?.action}</Text><Text selectable style={styles.meta}>{selected.path}{selected.branch ? ` · ${selected.branch}` : ""}</Text><Text style={styles.meta}>Parent: {(selected.parentId ? graphAdj.byId.get(selected.parentId)?.label : undefined) || "None recorded"}</Text><Text style={styles.meta}>Children: {edgesOf(graphAdj, selected.id).filter(e => e.from === selected.id && e.relation === "delegated").map(e => graphAdj.byId.get(e.to)?.label).join(", ") || "None recorded"}</Text><Text selectable style={styles.meta}>{selected.provenance?.join("\n")}</Text><View style={styles.row}>{onOpen && selected.sessionId && (!canOpen || canOpen(selected)) ? <PressScale onPress={() => onOpen(selected)} style={styles.button}><Text style={styles.action}>Open chat</Text></PressScale> : null}{selected.path?.startsWith("https://github.com/") ? <PressScale onPress={() => void Linking.openURL(selected.path!)} style={styles.button}><Text style={styles.action}>Open PR</Text></PressScale> : null}<PressScale onPress={() => setFocusId(null)} style={styles.button}><Text style={styles.action}>Close</Text></PressScale></View></ScrollView></View> : null}
   </View>;
 }
