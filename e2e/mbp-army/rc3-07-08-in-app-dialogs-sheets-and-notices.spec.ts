@@ -13,6 +13,7 @@
 // - ReconnectNotice has no importer and nothing publishes reconnectStore.
 // The web window.confirm path and InteractiveTile (Lab "Gesture playground") are mounted and expected to pass.
 import {test,expect,pair,openChat,composer,chatRow,web,type Bridge} from './fixtures';
+import {answerNextDialog} from './themed-confirm';
 import type {Page,Locator} from 'playwright/test';
 import {readdir,readFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -62,10 +63,6 @@ function guardNativeDialogs(page:Page):string[]{
  const seen:string[]=[];
  page.on('dialog',d=>{seen.push(d.message());void d.dismiss().catch(()=>{});});
  return seen;
-}
-/** confirmDestructive on web is window.confirm(`${title}\n\n${message}`). */
-function answerNextDialog(page:Page,accept:boolean):Promise<string>{
- return new Promise(resolve=>page.once('dialog',async d=>{const m=d.message();if(accept)await d.accept();else await d.dismiss();resolve(m);}));
 }
 /** The themed Dash dialog: RN-web Modal (role=dialog) holding a DashDialogHost card titled `title`. */
 const dashDialog=(page:Page,title:string)=>page.getByRole('dialog').filter({has:page.getByRole('heading',{name:title,exact:true})});
@@ -242,9 +239,9 @@ test.describe('RC3 08 themed in-app dialogs',()=>{
 });
 
 // ======================================================================
-// Web confirm path today (confirmDestructive -> window.confirm). Expected to PASS at 2c948dc.
+// Confirm flows answered through the real UI. confirmDestructive is the themed dialog on every platform since #389.
 // ======================================================================
-test.describe('RC3 08 web confirm path (window.confirm)',()=>{
+test.describe('RC3 08 web confirm path (themed dialog, never window.confirm)',()=>{
  test('Forget this bridge: dismiss cancels, accept forgets the bridge',async({page,bridge})=>{
   await pair(page,bridge);await openSettings(page);
   let dialog=answerNextDialog(page,false);
@@ -263,13 +260,15 @@ test.describe('RC3 08 web confirm path (window.confirm)',()=>{
   const native=guardNativeDialogs(page);
   const {endedId,clear}=await endedAndLocal(page,bridge);
   const row=chatRow(page);
-  // Triage fix: long-press opens the row sheet (it no longer asks "Delete chat?" itself); Clear ended, then the sheet's Delete row.
+  // Long-press opens the row sheet (it no longer asks "Delete chat?" itself); Clear ended, then the sheet's Delete row.
   const {del}=await openRowSheet(page,row);
   await clear.evaluate(el=>(el as HTMLElement).click());
   await del.evaluate(el=>(el as HTMLElement).click());
-  await expect.poll(()=>native.length,{timeout:10000}).toBe(2);
-  expect(native).toEqual([CLEAR_MSG,DELETE_MSG]);
-  // Both dismissed: nothing destructive ran.
+  // Since #389 both are the themed dialog, one at a time, in request order: Clear ended first, Delete only after it is answered.
+  expect(await answerNextDialog(page,false)).toBe(CLEAR_MSG);
+  expect(await answerNextDialog(page,false)).toBe(DELETE_MSG);
+  expect(native,'no system popup on web').toEqual([]);
+  // Both cancelled: nothing destructive ran.
   await expect(page.getByTestId(endedId)).toHaveCount(1);
   await expect(row).toHaveCount(1);
  });

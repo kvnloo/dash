@@ -19,6 +19,7 @@
 //   dictation posts the recording to HTTP /transcribe instead.
 // - steer: the bridge accepts mode "steer" only into a gateway-hosted Hermes session.
 // - hygiene: ContinuousVoiceRoot.tsx hardcodes a ts.net host URL in fetch (literal never printed here).
+import {answerNextDialog} from './themed-confirm';
 import {test as base,expect,pair,openChat,composer,chooseHarness,send,createBridge,web,type Bridge,bun,bridgeRoot} from './fixtures';
 import type {Page,TestInfo} from 'playwright/test';
 import {spawn,execFileSync} from 'node:child_process';
@@ -464,8 +465,9 @@ test.describe('RC3 12 notices',()=>{
   await expect(page.getByText('ARMY_P12_NOTICE_BODY from the fixture reporter',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Back',exact:true}).first().click({noWaitAfter:true});
   await expect(page.getByRole('heading',{name:'Settings',exact:true})).toBeVisible();
-  page.once('dialog',d=>{void d.accept();});
+  const confirmed=answerNextDialog(page,true);
   await page.getByRole('button',{name:'Forget this bridge',exact:true}).click({noWaitAfter:true});
+  await confirmed;
   await expect.poll(()=>wire.sent('notices_clear').length,{timeout:10000,message:'Forget sends notices_clear to the bridge (RC3: forgetEverything() is called without a send)'}).toBe(1);
   await expect.poll(async()=>{try{return await readFile(join(bridge.dir,'.dash','notices.json'),'utf8');}catch{return '';}},{message:'bridge notice ring no longer holds the notice'}).not.toContain('ARMY p12 notice');
  });

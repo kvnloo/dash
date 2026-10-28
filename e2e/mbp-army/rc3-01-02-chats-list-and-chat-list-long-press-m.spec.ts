@@ -4,6 +4,7 @@
 // fixture-native Hermes state.db / AgentsView sessions.db written into the isolated HOME
 // (rc3-chat-index-seed.ts) and indexed by the real bridge on boot. No route mocks.
 import {test,expect,pair,openChat,composer,chatRow,web,type Bridge,bun} from './fixtures';
+import {answerNextDialog} from './themed-confirm';
 import type {Page,Locator,CDPSession} from 'playwright/test';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
@@ -73,10 +74,6 @@ async function longPress(page:Page,target:Locator){
  const box=await target.boundingBox();if(!box)throw Error('long-press target has no box');
  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
  await page.mouse.down();await page.waitForTimeout(900);await page.mouse.up();
-}
-/** confirmDestructive on web is window.confirm(`${title}\n\n${message}`). */
-function answerNextDialog(page:Page,accept:boolean):Promise<string>{
- return new Promise(resolve=>page.once('dialog',async d=>{const m=d.message();if(accept)await d.accept();else await d.dismiss();resolve(m);}));
 }
 async function setInAppFeedback(page:Page,on:boolean){
  await page.getByRole('button',{name:'Open settings',exact:true}).first().click({noWaitAfter:true});

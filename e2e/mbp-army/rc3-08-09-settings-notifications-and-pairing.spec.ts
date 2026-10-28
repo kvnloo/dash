@@ -5,6 +5,7 @@
 // a11y-pair-screen.ts, GelNav.tsx, chat-row-actions.ts, util.ts confirmDestructive).
 // Web notes: confirmDestructive is window.confirm(`${title}\n\n${message}`); AsyncStorage is localStorage.
 import {test,expect,web,pair,createBridge,type Bridge} from './fixtures';
+import {answerNextDialog} from './themed-confirm';
 import type {Locator,Page} from 'playwright/test';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -63,9 +64,6 @@ async function savedSettings(page:Page):Promise<Record<string,unknown>|null>{
  if(raw===null)return null;
  const v:unknown=JSON.parse(raw);
  return typeof v==='object'&&v!==null&&!Array.isArray(v)?Object.fromEntries(Object.entries(v)):null;
-}
-function answerNextDialog(page:Page,accept:boolean):Promise<string>{
- return new Promise(resolve=>page.once('dialog',async d=>{const m=d.message();if(accept)await d.accept();else await d.dismiss();resolve(m);}));
 }
 async function longPress(page:Page,target:Locator){
  await target.scrollIntoViewIfNeeded();
