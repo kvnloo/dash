@@ -1,6 +1,8 @@
 import { useHandedness } from "../lib/useHandedness";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { followAnchor, measureAnchor, type AnchorRect } from "../lib/anchor";
 import * as Clipboard from "expo-clipboard";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
@@ -70,9 +72,39 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
       .onFinalize((_event, success) => { last.set(-1); if (!success) scheduleOnRN(clear); });
   }, [choose, clear, commit, tickPositions, height, last]);
   const turn = selected === null ? undefined : anchors[selected];
+  const rail = useRef<View>(null);
+  const [frame, setFrame] = useState<AnchorRect | null>(null);
+  const [previewHeight, setPreviewHeight] = useState(0);
+  const window = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const open = selected !== null;
+  useEffect(() => {
+    if (!open) { setFrame(null); return; }
+    let live = true;
+    let stop: (() => void) | undefined;
+    void measureAnchor(rail.current).then(rect => {
+      if (!live || !rect) return;
+      setFrame(rect);
+      stop = followAnchor(() => rail.current, rect, setFrame);
+    });
+    return () => { live = false; stop?.(); };
+  }, [open, railHeight, thumb.side, window.width, window.height]);
+  const width = Math.min(276, window.width - insets.left - insets.right - 24);
+  const maxHeight = Math.max(44, window.height - insets.top - insets.bottom - 24);
+  // Both the rail and popup use the same screen origin; convert the clamped screen
+  // position back to rail-local coordinates. Never use physical screen pixels.
+  const x = frame?.x ?? 0;
+  const y = frame?.y ?? 0;
+  const targetY = y + (selected === anchors.length ? railHeight + 22 : positions[selected ?? 0] ?? 0);
+  const left = Math.max(insets.left + 12, Math.min(window.width - insets.right - width - 12,
+    thumb.side === "left" ? x + 48 : x - width - 4)) - x;
+  const top = Math.max(insets.top + 12, Math.min(window.height - insets.bottom - previewHeight - 12,
+    targetY - previewHeight / 2)) - y;
   if (!anchors.length) return null;
-  return <View style={[styles.rail, thumb.edge(0)]} pointerEvents="box-none">
-    {selected !== null ? <View style={[styles.preview, thumb.edge(48)]} accessibilityLabel="Turn preview">
+  return <View ref={rail} collapsable={false} style={[styles.rail, thumb.edge(0)]} pointerEvents="box-none">
+    {selected !== null ? <ScrollView style={[styles.preview, { left, top, width, maxHeight, opacity: frame && previewHeight ? 1 : 0 }]}
+      contentContainerStyle={styles.previewContent} keyboardShouldPersistTaps="handled"
+      onLayout={event => setPreviewHeight(event.nativeEvent.layout.height)} accessibilityLabel="Turn preview">
       <View style={styles.heading}>
         <Text style={styles.previewLabel}>{turn ? `Prompt ${selected + 1}/${anchors.length} · ${turn.state}${turn.question ? " · question" : ""}` : "Latest reply"}</Text>
         <Pressable accessibilityLabel="Close turn preview" accessibilityRole="button" onPress={clear} style={styles.close}><Text style={styles.previewLabel}>×</Text></Pressable>
@@ -92,7 +124,7 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
           {turn.files[0] ? <Action label="Copy file path" onPress={() => { void Clipboard.setStringAsync(turn.files[0] ?? "").then(() => setCopyState("Path copied"), () => setCopyState("Copy failed")); }} /> : null}
         </View>
       </> : <Action label="Jump to latest" onPress={() => { onLatest(); clear(); }} />}
-    </View> : null}
+    </ScrollView> : null}
     <GestureDetector gesture={pan}>
       <View onLayout={e => { height.set(e.nativeEvent.layout.height); setRailHeight(e.nativeEvent.layout.height); }}
         onPointerMove={e => {
@@ -143,7 +175,8 @@ const styles = StyleSheet.create({
   arrow: { color: colors.text, fontSize: 22, lineHeight: 24 },
   following: { color: colors.gold },
   latestLabel: { color: colors.textMuted, fontSize: 9, lineHeight: 12 },
-  preview: { position: "absolute", top: "10%", width: 276, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.hair, backgroundColor: colors.surfaceRaised },
+  preview: { position: "absolute", borderRadius: 12, borderWidth: 1, borderColor: colors.hair, backgroundColor: colors.surfaceRaised },
+  previewContent: { padding: 12 },
   heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   close: { minWidth: 44, minHeight: 44, justifyContent: "center", alignItems: "center" },
   previewLabel: { ...type.small, color: colors.textMuted, flexShrink: 1 },
