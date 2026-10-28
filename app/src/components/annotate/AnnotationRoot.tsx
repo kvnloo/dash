@@ -23,7 +23,7 @@ import { recognizeShape, type InkColor, type PointerKind, type StrokePoint, type
 import { useHandedness } from "../../lib/useHandedness";
 import {
   addSegment, annotate, clearStrokes, commitStroke, currentSink, enterAnnotation, eraseStrokes, exitAnnotation, finishSend,
-  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, undoStroke, stylusButton,
+  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, undoStroke, stylusButton, observeStylusPointer,
 } from "../../store/annotate";
 import { store } from "../../store/app";
 import { colors, radius, space, type } from "../../theme";
@@ -226,13 +226,15 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
 
   const send = useCallback((keep: boolean) => { void sendAnnotation(keep, captureTarget, size); }, [size]);
   const tracePointer = useCallback((pointerType: number, touches: number) => {
+    const kind = pointerKind(pointerType);
+    if (kind === "stylus") observeStylusPointer();
     if (flowMode) {
       inkTraceId.current = flowTrace.begin();
       flowTrace.mark("input.pen", inkTraceId.current);
       const conversationId = store.get().activeId;
       if (conversationId && liveOf(conversationId).open) nextGeneration(conversationId);
     }
-    if (__DEV__) console.log("[dash-ink] raw-down", { pointer: pointerKind(pointerType), touches });
+    if (__DEV__) console.log("[dash-ink] raw-down", { pointer: kind, touches });
   }, []);
 
   const gesture = useMemo(() => {
@@ -299,6 +301,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
           {engine === "skia" && active && Ink ? <InkBoundary onError={inkFailed}><View style={StyleSheet.absoluteFill} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></View></InkBoundary> : null}
           {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active ? "auto" : "none"} {...overlayProps}>
             <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} tool={tool} color={color} penMode={penMode} mode="screen"
+              onStylusObserved={async () => { observeStylusPointer(); }}
               onReady={async ms => { console.info("[annotate-tldraw] host-ready", { ms }); }}
               onDrawing={async drawing => { syncTldrawStrokes(drawing.map(stroke => ({ ...stroke, targets: targetsAt(stroke.points.map(point => ({ x: point.x * size.width, y: point.y * size.height }))) }))); }}
               onExportDone={async () => { /* WP3 connects the ink export to compositing. */ }}
