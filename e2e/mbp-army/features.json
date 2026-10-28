@@ -34,7 +34,21 @@
      "tests": ["safe exploratory controls and context hit target at 390",
                "safe exploratory controls and context hit target at 800"]},
     {"id": "running-turn-survives-roster", "title": "A running turn survives a missing roster row",
-     "tests": ["a missing roster row must not terminate a bridge-owned running turn"]}
+     "tests": ["a missing roster row must not terminate a bridge-owned running turn"]},
+    {"id": "long-press-menu", "title": "Long-press on a chat row opens the row menu and sends nothing",
+     "tests": ["long-press on a chat row opens the row menu and sends nothing"]},
+    {"id": "claude-code-send", "title": "Claude Code chats send: a new chat and an archived chat recorded on this host",
+     "tests": ["send to a new Claude Code chat gets a streamed reply",
+               "opens sendable (not view-only) from Chats and gets a streamed reply"]},
+    {"id": "socket-keepalive", "title": "The app's socket keepalive is answered with a pong",
+     "tests": ["the app socket keepalive is answered, never logged as ws.bad_message"]},
+    {"id": "claude-remote-resume", "title": "Continue a Claude Code chat recorded on another computer: resumed there, reply streamed; unrouted stays view only",
+     "tests": ["resumes on that computer and streams the reply, turn after turn",
+               "opens view only and sends nothing"]},
+    {"id": "roadmap", "title": "Roadmap screen: projects, feature filter, task detail with live Hermes and roadmap status",
+     "tests": ["Roadmap -> project -> feature filter -> task detail with live Hermes and roadmap status"]},
+    {"id": "pm-ledger", "title": "The repository's pm ledger (pm/events.jsonl) parses cleanly and tracks the Hermes tasks",
+     "tests": ["the Dash repository's own pm ledger parses cleanly and tracks the Hermes tasks"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",

@@ -13,12 +13,37 @@ const bun = process.env.ARMY_BUN || execFileSync('sh',['-c','command -v bun'],{e
 const bunDir = dirname(bun);
 const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
 export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Promise<void>; start(): Promise<void>; logs(): string };
-export async function createBridge(persistSession=true): Promise<Bridge> {
+/**
+ * archiveClaude: a Claude Code chat AgentsView recorded on this computer.
+ * remoteClaude: a Claude Code chat AgentsView synced from another computer, `army-remote`;
+ *   `route` lets this bridge carry its turns there (DASH_REMOTE_HOSTS) through a local ssh
+ *   stand-in that runs the "remote" command in a separate directory; `off` leaves it unrouted.
+ * pm: a fixture repository ledger (pm/events.jsonl), Hermes board and roadmap file for /pm.
+ */
+export type BridgeOptions = { archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean };
+export const REMOTE_SESSION = '22222222-3333-4444-8555-666666666666';
+export async function createBridge(persistSession=true, options: BridgeOptions = {}): Promise<Bridge> {
  const dir = await mkdtemp(join(process.env.ARMY_TMP || tmpdir(), 'dash-army-'));
  const bin = join(dir,'bin'); await mkdir(bin); await mkdir(join(dir,'tmp'));await mkdir(join(dir,'.hermes'));await mkdir(join(dir,'.omp','agent'),{recursive:true});
  for (const name of ['hermes','omp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+'\n', {mode:0o700});
+ // Claude Code: the bridge drives it through `claude-agent-acp` (ACP over stdio).
+ for (const name of ['claude','claude-agent-acp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' claude\n', {mode:0o700});
  await writeFile(join(bin,'tailscale'),'#!/bin/sh\nexit 1\n',{mode:0o700});
- const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot};
+ const remoteCwd = join(dir,'remote-home','project');
+ if (options.remoteClaude) {
+  await mkdir(remoteCwd,{recursive:true});
+  // ssh stand-in: `army-ssh <dest> <command>` logs the hop and runs <command> in a shell, as sshd would.
+  await writeFile(join(bin,'army-ssh'),'#!/bin/sh\nprintf \'%s\\t%s\\n\' "$1" "$2" >> "$HOME/army-ssh.log"\ncd "$HOME/remote-home" && exec /bin/sh -c "$2"\n',{mode:0o700});
+  // The other computer's launcher: the real bridge/bin/dash-acp of this checkout.
+  await writeFile(join(bin,'dash-acp'),'#!/bin/sh\nexec '+quote(bun)+' '+quote(join(bridgeRoot,'bridge','bin','dash-acp'))+' "$@"\n',{mode:0o700});
+ }
+ const pmEnv: Record<string,string> = {};
+ if (options.pm) {
+  await writeFile(join(bin,'army-kanban'),'#!/bin/sh\ncat '+quote(join(dir,'kanban.json'))+'\n',{mode:0o700});
+  pmEnv.DASH_PM_ROOTS='army='+join(dir,'pm-repo'); pmEnv.DASH_PM_KANBAN=join(bin,'army-kanban'); pmEnv.DASH_ROADMAP_FILE=join(dir,'roadmap.json');
+ }
+ const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', ARMY_ARCHIVE_CLAUDE:options.archiveClaude?'1':'0', ARMY_REMOTE_CLAUDE:options.remoteClaude?remoteCwd:'', ARMY_PM:options.pm?'1':'0', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot,
+  ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv};
  const seed = spawn(bun,[join(__dirname,'seed-gate.ts')],{env,stdio:['ignore','pipe','pipe']});
  let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) throw Error('gate seed: '+seedLog);
  let child: ChildProcess; let log=''; let port=0;
@@ -45,9 +70,10 @@ export async function createBridge(persistSession=true): Promise<Bridge> {
  }
  return f;
 }
-export const test=base.extend<{bridge:Bridge; persistSession:boolean; errors:string[]; metrics: {name:string;ms:number}[]}>({
+export const test=base.extend<{bridge:Bridge; persistSession:boolean; bridgeOptions:BridgeOptions; errors:string[]; metrics: {name:string;ms:number}[]}>({
  persistSession:[true,{option:true}],
- bridge: async({persistSession},use,testInfo)=>{const b=await createBridge(persistSession);try{await use(b);}finally{await b.stop();await writeFile(testInfo.outputPath('bridge.log'),b.logs());}},
+ bridgeOptions:[{},{option:true}],
+ bridge: async({persistSession,bridgeOptions},use,testInfo)=>{const b=await createBridge(persistSession,bridgeOptions);try{await use(b);}finally{await b.stop();await writeFile(testInfo.outputPath('bridge.log'),b.logs());}},
  errors: [async({page},use,testInfo)=>{const errors:string[]=[];page.on('pageerror',e=>errors.push('PAGEERROR '+e.message));page.on('console',m=>{if(m.type()==='error')errors.push('CONSOLE '+m.text());});await use(errors);await writeFile(testInfo.outputPath('console.json'),JSON.stringify(errors,null,2));}, {auto:true}],
  metrics: [async({},use,testInfo)=>{const rows:{name:string;ms:number}[]=[];await use(rows);await writeFile(testInfo.outputPath('action-metrics.json'),JSON.stringify(rows,null,2));},{auto:true}],
 });
