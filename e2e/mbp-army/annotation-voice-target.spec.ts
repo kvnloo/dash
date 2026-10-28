@@ -77,6 +77,8 @@ test('annotation-voice-target: OMP chat beats a voice call bound to Hermes', asy
   await page.getByRole('button', { name: 'Expand', exact: true }).click({ noWaitAfter: true });
   await page.getByRole('button', { name: 'Start voice in Dash', exact: true }).click({ noWaitAfter: true });
   await expect.poll(() => requests(voiceBroker, '/v1/realtime/session').length).toBe(1);
+  // The full-screen Voice view stays up while the call runs; step back to the app, call still live.
+  await page.getByRole('button', { name: 'Back to chat · call keeps going' }).click({ noWaitAfter: true });
 
   await page.getByRole('tab').nth(1).click({ noWaitAfter: true });
   await expect(omp(page)).toHaveCount(1);
