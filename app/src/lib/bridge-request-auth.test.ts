@@ -126,7 +126,11 @@ describe("DF-105 bridge HTTP authorization", () => {
     const sentHeaders = new Headers(requests[0]?.init?.headers);
     expect(sentHeaders.get("x-request-id")).toBe("trace-123");
     expect(sentHeaders.get("authorization")).toBe("Bearer fresh-identity-token");
-    expect([...sentHeaders.keys()].filter(key => key.toLowerCase() === "authorization")).toHaveLength(1);
+    let authorizationFields = 0;
+    sentHeaders.forEach((_value, name) => {
+      if (name.toLowerCase() === "authorization") authorizationFields += 1;
+    });
+    expect(authorizationFields).toBe(1);
     expect(originalHeaders.get("Authorization")).toBe("Bearer old-one, Bearer old-two");
   });
 
