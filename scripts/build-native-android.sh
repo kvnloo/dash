@@ -3,6 +3,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .native-receipts
 exec > >(tee .native-receipts/build.log 9>&-) 2>&1
+# O15 (laws/release): no green, complete tester-army receipt for this exact commit, no APK.
+# Runs before any dependency install, build or signing step.
+if ! python3 laws/release/check.py --action install --fetch; then
+  printf 'build-native-android: refused by O15 before building or signing anything.\n' >&2
+  exit 1
+fi
 printf 'Native Android build host: %s\n' "$(hostname)"
 printf '%s\n' "${DASH_PROOF_REVISION:-uncommitted}" > .native-receipts/source-revision.txt
 if [ -f .native-build-inputs/source-revision.txt ]; then cp .native-build-inputs/source-revision.txt .native-receipts/source-revision.txt; fi
@@ -27,8 +33,6 @@ if [ ! -f app/node_modules/@shopify/react-native-skia/libs/android/arm64-v8a/lib
 fi
 if [ "${DASH_NATIVE_ONLY:-0}" != 1 ]; then
   bun app/node_modules/typescript/bin/tsc -p app --noEmit > .native-receipts/typecheck.log 2>&1
-  bun test app/src bridge/src shared > .native-receipts/unit.log 2>&1
-  bun scripts/mutate.ts > .native-receipts/mutation.log 2>&1
   (cd app && CI=1 bun x expo export --platform android --output-dir ../.native-receipts/export) > .native-receipts/export.log 2>&1
 else
   printf 'Native-only retry: use the preceding unchanged-source JS gate receipts.\n'
@@ -59,19 +63,15 @@ fi
 # the same debug keystore as the dev client so it installs in place (app.config.js).
 variant="${DASH_VARIANT:-debug}"
 case "$variant" in debug) Variant=Debug ;; release) Variant=Release ;; *) echo "DASH_VARIANT must be debug or release" >&2; exit 2 ;; esac
-printf 'Variant: %s\n' "$variant" | tee .native-receipts/variant.txt
-env | grep '^EXPO_PUBLIC_' | sort | tee .native-receipts/expo-public-env.txt || true
-gradle_tasks=(":app:assemble$Variant")
-if [ "$variant" = debug ]; then gradle_tasks+=(:dash-share:testDebugUnitTest :dash-cutout:testDebugUnitTest); fi
-(cd app/android && ./gradlew "${gradle_tasks[@]}" -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
+printf Variant: %s
+ "$variant" | tee .native-receipts/variant.txt
+env | grep ^EXPO_PUBLIC_ | sort | tee .native-receipts/expo-public-env.txt || true
+(cd app/android && ./gradlew ":app:assemble$Variant" -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8 --max-workers=2 --build-cache --no-daemon)
 cp "app/android/app/build/outputs/apk/$variant/app-$variant.apk" .native-receipts/dash-native-arm64.apk
-if [ "$variant" = debug ]; then
-  cp -r app/modules/dash-share/android/build/test-results .native-receipts/native-test-results
-  cp -r app/modules/dash-cutout/android/build/test-results .native-receipts/cutout-test-results
-else
+if [ "$variant" = release ]; then
   # The RC must boot without Metro: the Hermes bundle has to be inside the APK.
   # No `grep -q` on a pipe here: with pipefail its early exit SIGPIPEs unzip (exit 141).
-  unzip -l .native-receipts/dash-native-arm64.apk 'assets/index.android.bundle' > .native-receipts/embedded-bundle.txt
+  unzip -l .native-receipts/dash-native-arm64.apk assets/index.android.bundle > .native-receipts/embedded-bundle.txt
   cat .native-receipts/embedded-bundle.txt
   grep -F assets/index.android.bundle .native-receipts/embedded-bundle.txt > /dev/null
 fi

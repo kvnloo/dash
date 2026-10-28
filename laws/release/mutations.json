@@ -1,0 +1,134 @@
+{
+  "verdict_mode": true,
+  "rows": [
+    {
+      "law": "-",
+      "mutation": "reference (unmodified)",
+      "proofs_check": true,
+      "where": ""
+    },
+    {
+      "law": "L1 o15_no_receipt_denies",
+      "mutation": "no receipt allows release",
+      "proofs_check": false,
+      "where": "Laws.o15_no_receipt_denies"
+    },
+    {
+      "law": "L2 o15_red_denies",
+      "mutation": "red army allowed (failed count ignored)",
+      "proofs_check": false,
+      "where": "ok_sha"
+    },
+    {
+      "law": "L2 o15_red_denies",
+      "mutation": "one failing test tolerated",
+      "proofs_check": false,
+      "where": "ok_sha"
+    },
+    {
+      "law": "L3 o15_other_sha_denies",
+      "mutation": "receipt for any commit counts",
+      "proofs_check": false,
+      "where": "ok_sha"
+    },
+    {
+      "law": "L3 o15_other_sha_denies",
+      "mutation": "receipt for an older commit counts",
+      "proofs_check": false,
+      "where": "ok_sha"
+    },
+    {
+      "law": "L4 o15_incomplete_denies",
+      "mutation": "coverage not required",
+      "proofs_check": false,
+      "where": "ok_sha"
+    },
+    {
+      "law": "L4a o15_empty_inventory_incomplete",
+      "mutation": "empty feature inventory counts as complete",
+      "proofs_check": false,
+      "where": "Laws.o15_empty_inventory_incomplete"
+    },
+    {
+      "law": "L4b o15_unexplained_skip_incomplete",
+      "mutation": "skips without a reason ignored",
+      "proofs_check": false,
+      "where": "Laws.o15_unexplained_skip_incomplete"
+    },
+    {
+      "law": "L4b o15_unexplained_skip_incomplete",
+      "mutation": "one unexplained skip tolerated",
+      "proofs_check": false,
+      "where": "Laws.o15_unexplained_skip_incomplete"
+    },
+    {
+      "law": "L4c o15_uncovered_feature_incomplete",
+      "mutation": "first feature need not pass",
+      "proofs_check": false,
+      "where": "Laws.o15_uncovered_feature_incomplete"
+    },
+    {
+      "law": "L4c o15_uncovered_feature_incomplete",
+      "mutation": "only the first feature is checked",
+      "proofs_check": false,
+      "where": "Laws.o15_uncovered_feature_incomplete"
+    },
+    {
+      "law": "L4c o15_uncovered_feature_incomplete",
+      "mutation": "later features need not pass",
+      "proofs_check": false,
+      "where": "ap_nz"
+    },
+    {
+      "law": "L4c o15_uncovered_feature_incomplete",
+      "mutation": "inventory scan stops after the second feature",
+      "proofs_check": false,
+      "where": "ap_nz"
+    },
+    {
+      "law": "L5 o15_adhoc_denies",
+      "mutation": "ad-hoc harness results count",
+      "proofs_check": false,
+      "where": "ok_sha"
+    },
+    {
+      "law": "L6 o15_one_gate",
+      "mutation": "phone install bypasses the gate",
+      "proofs_check": false,
+      "where": "Laws.o15_no_receipt_denies"
+    },
+    {
+      "law": "L6 o15_one_gate",
+      "mutation": "promotion bypasses the gate",
+      "proofs_check": false,
+      "where": "Laws.o15_no_receipt_denies"
+    },
+    {
+      "law": "L6 o15_one_gate",
+      "mutation": "channel/OTA bypasses the gate",
+      "proofs_check": false,
+      "where": "Laws.o15_no_receipt_denies"
+    },
+    {
+      "law": "L6 o15_one_gate",
+      "mutation": "merge bypasses the gate",
+      "proofs_check": false,
+      "where": "Laws.o15_no_receipt_denies"
+    },
+    {
+      "law": "L7 o15_green_allows",
+      "mutation": "gate denies everything (vacuous)",
+      "proofs_check": false,
+      "where": "Laws.o15_red_denies"
+    },
+    {
+      "law": "L7 o15_green_allows",
+      "mutation": "install path denies everything",
+      "proofs_check": false,
+      "where": "Laws.o15_red_denies"
+    }
+  ],
+  "rejected": 20,
+  "total": 20,
+  "reference_restored": true
+}
