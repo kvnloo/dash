@@ -75,11 +75,19 @@ export function OrchestraGraph({ graph, width: _width, children, actions, fixtur
   const [focusOnly, setFocusOnly] = useState(false);
   const [expandedHubs, setExpandedHubs] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => { if (!chosen) setView(defaultView(graph.nodes)); }, [graph, chosen]);
-  const current = useMemo(() => viewGraph(graph, view), [graph, view]);
+  // Retain completed-worker evidence for historical counts, but never mount its title
+  // in a card, tree or detail sheet (even in an offscreen retained pager pane).
+  const displayGraph = useMemo((): OrchestraMap => {
+    const nodes = graph.nodes.filter(node => node.kind !== "subagent" || node.state !== "done");
+    const ids = new Set(nodes.map(node => node.id));
+    return { nodes, edges: graph.edges.filter(edge => ids.has(edge.from) && ids.has(edge.to)) };
+  }, [graph]);
+  const current = useMemo(() => viewGraph(displayGraph, view), [displayGraph, view]);
+  const recordedCurrent = useMemo(() => viewGraph(graph, view), [graph, view]);
   const projected = useMemo(() => projectMap(current, filter, focusId, focusOnly), [current, filter, focusId, focusOnly]);
   const adj = useMemo(() => adjacency(projected), [projected]);
   const currentAdj = useMemo(() => adjacency(current), [current]);
-  const graphAdj = useMemo(() => adjacency(graph), [graph]);
+  const graphAdj = useMemo(() => adjacency(displayGraph), [displayGraph]);
   const selected = focusId ? graphAdj.byId.get(focusId) : undefined;
   const latestFeedback = useLatest(onFeedback);
   const feedback = useCallback((node: MapNode) => latestFeedback.current?.(node), [latestFeedback]);
@@ -166,10 +174,10 @@ export function OrchestraGraph({ graph, width: _width, children, actions, fixtur
     return `${live} live · ${needs} need you · ${hosts} hosts`;
   }, [graph]);
   const legendItems = useMemo(() => legend.map(kind => {
-    const items = isKind(kind) ? current.nodes.filter(n => n.kind === kind) : current.edges.filter(e => e.relation === kind);
-    const live = isKind(kind) ? current.nodes.filter(n => n.kind === kind && n.state === "live").length : current.edges.filter(e => e.relation === kind && e.active).length;
+    const items = isKind(kind) ? recordedCurrent.nodes.filter(n => n.kind === kind) : recordedCurrent.edges.filter(e => e.relation === kind);
+    const live = isKind(kind) ? recordedCurrent.nodes.filter(n => n.kind === kind && n.state === "live").length : recordedCurrent.edges.filter(e => e.relation === kind && e.active).length;
     return { kind, count: items.length, live };
-  }).filter(item => item.count > 0), [current]);
+  }).filter(item => item.count > 0), [recordedCurrent]);
   const telemetry = useMemo(() => view !== "fleet" ? [] : current.nodes.filter(n => n.kind === "host").map(host => ({
     host, live: (currentAdj.outEdges.get(host.id) ?? []).filter(e => currentAdj.byId.get(e.to)?.state === "live").length,
   })), [view, current, currentAdj]);

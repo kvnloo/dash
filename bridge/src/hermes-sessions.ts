@@ -25,7 +25,7 @@ export function rosterHermesHead(env: Record<string, string | undefined> = proce
   const n = Number(env.DASH_ROSTER_HERMES_HEAD);
   return Number.isInteger(n) && n > 0 ? Math.min(n, 500) : 50;
 }
-const SESSION_FIELDS = "id,source,title,started_at,last_activity_at,message_count,cwd,archived,hidden,parent_session_id,end_reason,model_config";
+const SESSION_FIELDS = "id,source,title,started_at,last_activity_at,message_count,cwd,archived,hidden,parent_session_id,end_reason,model_config, (SELECT parent.end_reason FROM sessions AS parent WHERE parent.id=sessions.parent_session_id) AS parent_end_reason";
 const PROFILE_OK = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 export type HermesApi = { url: string; key: string };
 export type Profile = { id: string; home: string; api?: HermesApi };
@@ -43,6 +43,9 @@ function stamp(value: unknown): number {
 }
 export function visible(row: Row): boolean {
   if (typeof row.source !== "string" || !SOURCES.has(row.source) || row.archived || row.hidden || row.is_internal_child) return false;
+  // A delegated child may be source=acp and hidden=0. Only compression continuations
+  // belong to the chat index; the parent session owns every other child.
+  if (typeof row.parent_session_id === "string" && row.parent_session_id && row.parent_end_reason !== "compression") return false;
   try {
     const config: unknown = typeof row.model_config === "string" ? JSON.parse(row.model_config) : undefined;
     if (record(config) && config._delegate_from !== undefined) return false;
@@ -107,6 +110,7 @@ export function withDb<T>(profile: Profile, fn: (db: Database) => T): T | undefi
 }
 function localRows(profile: Profile, limit = rosterHermesHead()): Row[] {
   return withDb(profile, db => db.query<Row, [number]>(`SELECT ${SESSION_FIELDS} FROM sessions WHERE coalesce(archived,0)=0 AND coalesce(hidden,0)=0
+    AND (parent_session_id IS NULL OR parent_session_id='' OR EXISTS (SELECT 1 FROM sessions AS parent WHERE parent.id=sessions.parent_session_id AND parent.end_reason='compression'))
     AND source IN (${HERMES_CHAT_SOURCES.map(s => `'${s}'`).join(",")})
     ORDER BY coalesce(last_activity_at,started_at) DESC LIMIT ?`).all(limit)) ?? [];
 }
