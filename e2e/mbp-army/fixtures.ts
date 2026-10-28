@@ -13,7 +13,7 @@ const bridgeRoot = process.env.ARMY_BRIDGE_ROOT || root;
 const bun = process.env.ARMY_BUN || execFileSync('sh',['-c','command -v bun'],{encoding:'utf8'}).trim();
 const bunDir = dirname(bun);
 const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
-export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Promise<void>; start(): Promise<void>; dispose(): Promise<void>; identityToken(options?: IdentityTokenOptions): string; logs(): string };
+export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Promise<void>; start(): Promise<void>; dispose(): Promise<void>; identityToken(options?: IdentityTokenOptions): string; logs(): string; exitCode(): number | null };
 /**
  * archiveClaude: a Claude Code chat AgentsView recorded on this computer.
  * remoteClaude: a Claude Code chat AgentsView synced from another computer, `army-remote`;
@@ -71,7 +71,7 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
  const seed = spawn(bun,[join(__dirname,'seed-gate.ts')],{env,stdio:['ignore','pipe','pipe']});
  let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) { await identity?.stop(); throw Error('gate seed: '+seedLog); }
  let child: ChildProcess; let log=''; let port=0;
- const f: Bridge = {dir,port:0,bootstrap:'',logs:()=>log,
+ const f: Bridge = {dir,port:0,bootstrap:'',logs:()=>log,exitCode:()=>child?.exitCode ?? null,
   identityToken: options => { if (!identity) throw Error('Bridge identity fixture is not enabled'); return identity.identityToken(options); },
   async dispose() { await f.stop(); await identity?.stop(); },
   async start() {

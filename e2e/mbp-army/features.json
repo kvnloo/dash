@@ -125,7 +125,9 @@
     {"id": "turn-timeout", "title": "ACP stall deadlines reset on progress, and absolute deadlines stop local turns",
      "tests": ["local ACP absolute ceiling shows timeout and keeps composer usable",
                "ACP progress frames keep the local turn alive until completion",
-               "silent ACP turn stalls promptly and restores the composer"]}
+               "silent ACP turn stalls promptly and restores the composer"]},
+    {"id": "bridge-drain", "title": "Bridge health and drain let running agents finish while new chat and voice turns are refused",
+     "tests": ["bridge drain preserves the running reply, refuses new chat and voice, and exits cleanly"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",

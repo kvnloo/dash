@@ -95,6 +95,7 @@ import { createOrchestraHttpHandler } from "./src/orchestra-http";
 import { createHostsHttpHandler } from "./src/hosts-http";
 import { createRoadmapHttpHandler } from "./src/roadmap-http";
 import { createPmHttpHandler } from "./src/pm-http";
+import { createBridgeHealthHttpHandler, DRAIN_MESSAGE } from "./src/health";
 import { createTraceRoute } from "./src/trace-route";
 import { createTriageHttpHandler } from "./src/triage-http";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
@@ -142,6 +143,8 @@ class Turn implements Sink {
   readonly events: TurnEvent[] = [];
   readonly listeners = new Set<Socket>();
   finished = false;
+  /** True only after the final done frame has been emitted to listeners. */
+  settled = false;
 
   readonly details = new ToolDetails();
   part(part: ReplyPart): void {
@@ -176,6 +179,7 @@ class Turn implements Sink {
   constructor(
     readonly id: string,
     readonly harness: Harness,
+    readonly voice = false,
   ) {}
 
   /** Host profile that owns this Hermes turn's session, once known. */
@@ -511,7 +515,11 @@ class Turn implements Sink {
     if (this.finished) return;
     this.flush();
     this.finished = true;
-    const done = () => this.emit({ type: "done", id: this.id, seq: 0, exitCode });
+    const done = () => {
+      this.emit({ type: "done", id: this.id, seq: 0, exitCode });
+      this.settled = true;
+      maybeFinishDrain();
+    };
     if (this.summaries) void this.summaries.finish().then(done, done);
     else done();
     setTimeout(() => turns.delete(this.id), RETAIN_MS);
@@ -538,6 +546,17 @@ class Turn implements Sink {
 }
 
 const turns = new Map<string, Turn>();
+/** Retained finished turns are replayable but never count as running agents. */
+function runningTurns(): number {
+  let running = 0;
+  for (const turn of turns.values()) if (!turn.settled) running++;
+  return running;
+}
+function activeVoiceSessions(): number {
+  let voice = 0;
+  for (const turn of turns.values()) if (!turn.settled && turn.voice) voice++;
+  return voice;
+}
 
 function pruneTurns(): void {
   if (turns.size <= MAX_RETAINED) return;
@@ -803,6 +822,7 @@ const handleHosts = createHostsHttpHandler({ authorize, hostId: () => SELF.id() 
 const handleRoadmap = createRoadmapHttpHandler({ authorize });
 const handlePm = createPmHttpHandler({ authorize });
 const handleVoiceStatus = createVoiceStatusHttpHandler({ authorize });
+const handleHealth = createBridgeHealthHttpHandler({ authorize, running: runningTurns, voiceSessions: activeVoiceSessions, onDrain: beginDrain });
 const handleTrace = createTraceRoute({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleTriage = createTriageHttpHandler({ authorize });
 const handleModels = createModelsHttpHandler({ authorize });
@@ -868,6 +888,8 @@ const server = Bun.serve<SocketData>({
       if (roadmap) return cors(roadmap);
       const pm = await handlePm(request);
       if (pm) return cors(pm);
+      const health = await handleHealth.handle(request);
+      if (health) return cors(health);
       const models = await handleModels(request);
       if (models) return cors(models);
       const supervision = await handleSupervision(request);
@@ -959,6 +981,7 @@ const server = Bun.serve<SocketData>({
           break;
         }
         case "chat": {
+          if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
           log("ws.chat", { id: message.id, harness: message.harness, hostId: message.hostId ?? "-", profileId: message.profileId ?? "-", session: message.sessionId ? "resume" : "new", mode: message.mode ?? "-" });
           const remote = SELF.matches(message.hostId) ? undefined : remoteHostFor(message.hostId);
           if (remote) {
@@ -1003,6 +1026,7 @@ const server = Bun.serve<SocketData>({
             log("turn.attachments", { id: message.id, count: files.length, bytes: files.reduce((n, f) => n + f.size, 0) });
           }
 
+          if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
           const turn = new Turn(message.id, harness);
           turn.listeners.add(ws);
           ws.data.turns.add(message.id);
@@ -1012,6 +1036,7 @@ const server = Bun.serve<SocketData>({
           break;
         }
         case "voice_begin": {
+          if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
           if (!(await isSelfHost(message.hostId))) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
           if (message.harness === "hermes" && message.sessionId) {
             if (!hermesSessions.target(message.profileId, message.sessionId)) return rejectTurn(ws, message.id, "Unknown or ambiguous Hermes profile/session.");
@@ -1036,7 +1061,8 @@ const server = Bun.serve<SocketData>({
           const cwd = message.cwd?.trim() || DEFAULT_CWD;
           if (!isDirectory(cwd)) return rejectTurn(ws, message.id, `Not a directory on ${HOST_NAME}: ${cwd}`);
 
-          const turn = new Turn(message.id, harness);
+          if (handleHealth.draining) return rejectTurn(ws, message.id, DRAIN_MESSAGE);
+          const turn = new Turn(message.id, harness, true);
           turn.listeners.add(ws);
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
@@ -1170,9 +1196,38 @@ const server = Bun.serve<SocketData>({
 bridgeAddress = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${server.port}`;
 
 let stopping = false;
+let drainDeadline: ReturnType<typeof setTimeout> | null = null;
+let drainIdle: ReturnType<typeof setTimeout> | null = null;
+
+/** Let the terminal reply frame flush before shutting down the socket. */
+function maybeFinishDrain(): void {
+  if (stopping || !handleHealth.draining || runningTurns() !== 0 || drainIdle !== null) return;
+  drainIdle = setTimeout(() => {
+    drainIdle = null;
+    if (!stopping && handleHealth.draining && runningTurns() === 0) {
+      log("bridge.drain_idle");
+      shutdown();
+    }
+  }, 200);
+}
+
+function beginDrain(): void {
+  if (stopping) return;
+  const requested = Number(process.env.DASH_DRAIN_MAX_MS ?? "600000");
+  const maxMs = Number.isSafeInteger(requested) && requested >= 0 ? requested : 600000;
+  log("bridge.draining", { running: runningTurns(), maxMs });
+  drainDeadline = setTimeout(() => {
+    log("bridge.drain_deadline", { running: runningTurns() });
+    shutdown();
+  }, maxMs);
+  maybeFinishDrain();
+}
+
 function shutdown(): void {
   if (stopping) return;
   stopping = true;
+  if (drainDeadline !== null) clearTimeout(drainDeadline);
+  if (drainIdle !== null) clearTimeout(drainIdle);
   if (gatePoll) clearInterval(gatePoll);
   // Stop admission before awaiting cleanup; sockets must not launch new work.
   server.stop(true);
@@ -1186,6 +1241,7 @@ function shutdown(): void {
 }
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+process.on("SIGUSR2", () => handleHealth.drain());
 
 const agents = harnessList()
   .map((h) => `${h.id} ${h.available ? "✓" : "✗"}`)
