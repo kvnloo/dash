@@ -20,8 +20,8 @@
 #     a head moved, and a bundle probe of the live Metro otherwise (restarts it once if it 500s);
 #   - a head whose switch failed health is not retried until the head moves (no restart loop);
 #   - DASH_CHANNEL_POST_SWITCH runs after every healthy switch (best effort);
-#   - the native gate compares only packages that ship native code (a baseline starting 'v2:');
-#     older baselines keep the all-dependencies comparison until `baseline` is run again;
+#   - the native gate covers native packages, local Expo modules and config plugins ('v3:');
+#     v2 and legacy baselines keep their original comparison until `baseline` is run again;
 #   - DASH_CHANNEL_REQUIRE_RECEIPT=1 holds a head back until laws/release/check.py allows it (O15).
 #   One instance per Metro: DASH_CHANNEL_CONF_DIR / DASH_CHANNELS_HOME / DASH_CHANNEL_METRO_UNIT.
 set -Eeuo pipefail
@@ -158,7 +158,7 @@ print(hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16]
 PY
 }
 
-native_fp() { # release dir -> v2:<hash> of the native code the dev client must contain
+native_fp_v2() { # release dir -> v2:<hash> of the native code the dev client must contain
   # Only installed packages that ship native code count (android/, ios/, an Expo module config,
   # react-native.config.js or a codegenConfig), by their installed version, plus plugins, Android
   # package/permissions and newArch. A JS-only dependency (tldraw) no longer demands a new APK.
@@ -196,6 +196,42 @@ native = {
   "newArch": app.get("newArchEnabled"),
 }
 print("v2:" + hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
+PY
+}
+
+native_fp() { # release dir -> v3:<hash>, including local native sources and config plugins
+  local v2
+  v2="$(native_fp_v2 "$1")" || return
+  python3 - "$1" "$v2" <<'PY'
+import hashlib, json, os, sys
+from pathlib import Path
+root = Path(sys.argv[1]) / "app"
+# Retain every v2 input without changing the algorithm used by existing baselines.
+native = {"v2": sys.argv[2]}
+
+def source_hash(directory, paths):
+    digest = hashlib.sha1()
+    for path in sorted(paths, key=lambda p: p.relative_to(directory).as_posix()):
+        name = path.relative_to(directory).as_posix().encode()
+        data = path.read_bytes()
+        # Frame both fields so path/content boundaries cannot alias another file list.
+        digest.update(name + b"\0" + str(len(data)).encode() + b"\0" + data)
+    return digest.hexdigest()
+
+modules = root / "modules"
+if modules.is_dir():
+    for directory in sorted(modules.iterdir()):
+        config = directory / "expo-module.config.json"
+        if not directory.is_dir() or not config.is_file():
+            continue
+        paths = [config]
+        for platform in ("android", "ios"):
+            for current, dirs, files in os.walk(directory / platform):
+                dirs[:] = [d for d in dirs if d not in ("build", ".gradle")]
+                paths.extend(Path(current) / f for f in files if not f.endswith(".md"))
+        native["local:" + directory.name] = source_hash(directory, paths)
+native["plugins"] = source_hash(root, (root / "plugins").glob("*.js"))
+print("v3:" + hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
 PY
 }
 
@@ -317,7 +353,11 @@ do_switch() { # name [--force]
   sha="$(link_sha "$H/ch/$name")"
   if [[ -f "$H/native-baseline" ]]; then
     base="$(cat "$H/native-baseline")"
-    if [[ "$base" == v2:* ]]; then fp="$(native_fp "$REL/$sha")"; else fp="$(native_fp_legacy "$REL/$sha")"; fi
+    case "$base" in
+      v3:*) fp="$(native_fp "$REL/$sha")";;
+      v2:*) fp="$(native_fp_v2 "$REL/$sha")";;
+      *) fp="$(native_fp_legacy "$REL/$sha")";;
+    esac
     if [[ "$fp" != "$base" && "$force" != "--force" ]]; then
       die "$name (${sha:0:12}) needs different native code than the installed dev client (fingerprint $fp, client $base). Build and install a new dev client, then run: dash-channel baseline $name. Or pass --force to try anyway."
     fi
