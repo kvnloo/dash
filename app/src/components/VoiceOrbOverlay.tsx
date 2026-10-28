@@ -61,7 +61,7 @@ export function VoiceOrbOverlay({ state, onMute }: { state: VoiceState; onMute()
 }
 
 const styles = StyleSheet.create({
-  layer: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", zIndex: 950 },
+  layer: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center", zIndex: 950 },
   hit: {
     width: 256, minHeight: 270, justifyContent: "center", alignItems: "center", gap: 8,
     borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth,
