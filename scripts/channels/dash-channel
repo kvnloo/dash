@@ -1,0 +1,445 @@
+#!/usr/bin/env bash
+# dash-channel — release channels for the Dash dev client.
+#
+# A channel is a name that points at a git ref of kvnloo/dash:
+#   track channels follow a branch (main, dev, nightly, preview-*) and are
+#   rebuilt by `dash-channel nightly`; pin channels (stable) stay on one commit
+#   until `dash-channel promote` moves them.
+# Each build is an immutable release directory named by commit SHA. One
+# switchable Metro (dash-channel-metro.service) serves the release that the
+# `active` link points to. `switch` is health-gated: if Metro does not come up
+# and compile the Android bundle, the previous release is restored.
+#
+# No host data lives here. Ports, URLs and paths come from
+# ${XDG_CONFIG_HOME:-$HOME/.config}/dash-channels/channels.env on the host.
+set -Eeuo pipefail
+shopt -s inherit_errexit
+
+CONF_DIR="${DASH_CHANNEL_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/dash-channels}"
+if [[ -f "$CONF_DIR/channels.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$CONF_DIR/channels.env"
+  set +a
+fi
+
+H="${DASH_CHANNELS_HOME:-$HOME/.local/lib/dash/channels}"
+REL="${DASH_RELEASES_DIR:-$H/releases}"
+REPO_URL="${DASH_CHANNEL_REPO_URL:-https://github.com/kvnloo/dash.git}"
+REPO="$H/repo.git"
+TABLE="$H/channels.tsv"
+UNIT="${DASH_CHANNEL_METRO_UNIT:-dash-channel-metro.service}"
+SYSTEMCTL="${DASH_CHANNEL_SYSTEMCTL:-systemctl --user}"
+# Pinned bun (same as turbo CI). main/dev/nightly bun.lock is lockfileVersion 2, which
+# the host bun 1.3.x cannot parse ("Unknown lockfile version"); 1.4.x reads v1 and v2.
+BUN_VERSION="${DASH_CHANNEL_BUN_VERSION:-1.4.3}"
+BUN="${DASH_CHANNEL_BUN:-$H/toolchain/bun-$BUN_VERSION/bun}"
+INSTALL_CMD="${DASH_CHANNEL_INSTALL_CMD:-$BUN install --frozen-lockfile}"
+HEALTH_TIMEOUT="${DASH_CHANNEL_HEALTH_TIMEOUT:-420}"
+ADB="${DASH_CHANNEL_ADB:-adb}"
+APP_SCHEME="${DASH_CHANNEL_APP_SCHEME:-dash}"
+APP_PACKAGE="${DASH_CHANNEL_APP_PACKAGE:-app.dash.mobile}"
+
+die() { echo "dash-channel: $*" >&2; exit 1; }
+log() { echo "dash-channel: $*" >&2; }
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+history() { mkdir -p "$H"; printf '%s\t%s\n' "$(now)" "$*" >>"$H/history.log"; }
+
+usage() {
+  cat <<'EOF'
+usage: dash-channel <command> [args]
+
+  init                         create state dirs and the bare repo mirror
+  add <name> <ref> [--pin]     define a channel (branch to track, or a pinned commit)
+  remove <name>                forget a channel (its release stays until gc)
+  list                         channels, their refs and built commits
+  build <name>|--all           fetch and materialize the channel's release
+  switch <name> [--force]      serve <name> on the channel Metro (health-gated, auto-rollback)
+  rollback                     return to the release that was active before the last switch
+  promote <from> <to>          pin channel <to> at the commit <from> is built at
+  baseline <name>              record <name>'s native fingerprint as the installed dev client's
+  status [--json]              active channel, commit and Metro health
+  open <adb-serial>            point the dev client on a device at the channel Metro
+  nightly                      rebuild every track channel; re-serve the active one if it moved
+  gc [--keep N]                delete channel-built releases that nothing references
+EOF
+}
+
+lock() {
+  mkdir -p "$H"
+  exec 8>"$H/.lock"
+  flock -w 900 8 || die "another dash-channel command holds the lock"
+}
+
+# ---------- repo + table ----------
+
+ensure_repo() {
+  if [[ ! -d "$REPO" ]]; then
+    git init -q --bare "$REPO"
+    git -C "$REPO" remote add origin "$REPO_URL"
+  fi
+  git -C "$REPO" remote set-url origin "$REPO_URL"
+}
+
+fetch() {
+  ensure_repo
+  git -C "$REPO" fetch -q --prune origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
+}
+
+valid_name() { [[ "$1" =~ ^[a-z0-9][a-z0-9._-]{0,62}$ ]] || die "bad channel name '$1' (use a-z 0-9 . _ -)"; }
+
+row() { # name -> "name ref kind" or empty
+  [[ -f "$TABLE" ]] || return 0
+  awk -F'\t' -v n="$1" '$1==n {print; exit}' "$TABLE"
+}
+
+ch_ref() { row "$1" | cut -f2; }
+ch_kind() { row "$1" | cut -f3; }
+need_channel() { [[ -n "$(row "$1")" ]] || die "no channel '$1' (see: dash-channel list)"; }
+
+set_row() { # name ref kind
+  mkdir -p "$H"
+  local tmp="$TABLE.tmp.$$"
+  { [[ -f "$TABLE" ]] && awk -F'\t' -v n="$1" '$1!=n' "$TABLE"; printf '%s\t%s\t%s\n' "$1" "$2" "$3"; } >"$tmp"
+  sort -o "$tmp" "$tmp"
+  mv "$tmp" "$TABLE"
+}
+
+resolve() { # ref -> sha
+  local ref="$1"
+  git -C "$REPO" rev-parse -q --verify "refs/heads/$ref^{commit}" 2>/dev/null \
+    || git -C "$REPO" rev-parse -q --verify "$ref^{commit}" 2>/dev/null \
+    || die "cannot resolve '$ref' in $REPO_URL"
+}
+
+link_sha() { # path of a link into releases -> sha (or empty)
+  [[ -L "$1" ]] || return 0
+  basename "$(readlink "$1")"
+}
+
+# ---------- releases ----------
+
+deps_key() { # dir -> key of app dependencies
+  cat "$1/app/package.json" "$1/app/bun.lock" 2>/dev/null | sha1sum | cut -c1-16
+}
+
+native_fp() { # release dir -> fingerprint of what the native dev client must contain
+  python3 - "$1" <<'PY'
+import hashlib, json, sys
+root = sys.argv[1]
+pkg = json.load(open(f"{root}/app/package.json"))
+app = json.load(open(f"{root}/app/app.json")).get("expo", {})
+native = {
+  "dependencies": pkg.get("dependencies", {}),
+  "plugins": app.get("plugins", []),
+  "android": {k: v for k, v in app.get("android", {}).items() if k in ("package", "permissions")},
+  "newArch": app.get("newArchEnabled"),
+}
+print(hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
+PY
+}
+
+find_node_modules() { # deps key -> real node_modules dir of an existing release, if any
+  local key="$1" d nm
+  for d in "$REL"/*/; do
+    d="${d%/}"
+    [[ -f "$d/app/package.json" ]] || continue
+    nm="$d/app/node_modules"
+    [[ -e "$nm" ]] || continue
+    [[ -e "$nm/expo/bin/cli" ]] || continue
+    [[ "$(deps_key "$d")" == "$key" ]] || continue
+    readlink -f "$nm"
+    return 0
+  done
+}
+
+materialize() { # sha -> release dir (created if missing)
+  local sha="$1" dst="$REL/$sha"
+  if [[ -e "$dst/app/node_modules/expo/bin/cli" && -f "$dst/app/package.json" ]]; then
+    echo "$dst"; return 0
+  fi
+  [[ -e "$dst" ]] && die "release $dst exists but is incomplete; move it aside and rebuild"
+  mkdir -p "$REL"
+  local tmp="$REL/.tmp-$sha-$$"
+  rm -rf "$tmp"; mkdir -p "$tmp"
+  # Callers may run this where errexit is off (`build_one || ...`), so every
+  # step checks its own result and removes the partial release.
+  git -C "$REPO" archive "$sha" | tar -x -C "$tmp" || { rm -rf "$tmp"; die "cannot unpack $sha"; }
+  [[ -f "$tmp/app/package.json" ]] || { rm -rf "$tmp"; die "$sha has no app/package.json"; }
+  local key nm
+  key="$(deps_key "$tmp")"
+  nm="$(find_node_modules "$key" || true)"
+  if [[ -n "$nm" ]]; then
+    ln -s "$nm" "$tmp/app/node_modules"
+    log "reusing node_modules ($key) from $(dirname "$(dirname "$nm")")"
+  else
+    log "installing app dependencies for $sha ($key)"
+    if ! (cd "$tmp/app" && nice -n 10 bash -c "$INSTALL_CMD") >&2 || [[ ! -e "$tmp/app/node_modules/expo/bin/cli" ]]; then
+      rm -rf "$tmp"
+      die "dependency install failed for $sha (see the install output above)"
+    fi
+  fi
+  printf '%s\n' "$key" >"$tmp/.dash-deps-key"
+  printf 'sha=%s\nbuilt=%s\n' "$sha" "$(now)" >"$tmp/.dash-channel-ready"
+  mv "$tmp" "$dst" || { rm -rf "$tmp"; die "cannot place release $dst"; }
+  echo "$dst"
+}
+
+build_one() { # name -> sha
+  local name="$1" ref kind sha dir
+  need_channel "$name"
+  ref="$(ch_ref "$name")"; kind="$(ch_kind "$name")"
+  sha="$(resolve "$ref")"
+  dir="$(materialize "$sha")" || exit 1
+  mkdir -p "$H/ch"
+  ln -sfn "$dir" "$H/ch/$name.new" && mv -T "$H/ch/$name.new" "$H/ch/$name"
+  history "build $name $ref $sha"
+  log "$name ($kind $ref) -> ${sha:0:12}"
+  echo "$sha"
+}
+
+# ---------- metro ----------
+
+metro_url() { echo "http://localhost:${DASH_CHANNEL_METRO_PORT:?set DASH_CHANNEL_METRO_PORT in channels.env}"; }
+
+health() { # 0 when Metro serves and compiles the Android bundle of the active release
+  if [[ -n "${DASH_CHANNEL_HEALTH_CMD:-}" ]]; then
+    bash -c "$DASH_CHANNEL_HEALTH_CMD"; return
+  fi
+  local base deadline manifest bundle
+  base="$(metro_url)"
+  deadline=$(( $(date +%s) + HEALTH_TIMEOUT ))
+  until curl -fsS -m 5 "$base/status" 2>/dev/null | grep -q 'packager-status:running'; do
+    (( $(date +%s) < deadline )) || { log "metro did not report running"; return 1; }
+    sleep 3
+  done
+  manifest="$(curl -fsS -m 30 -H 'expo-platform: android' -H 'accept: application/expo+json,application/json' "$base/" 2>/dev/null)" \
+    || { log "metro served no manifest"; return 1; }
+  bundle="$(python3 -c 'import json,sys; m=json.loads(sys.stdin.read()); print(m["launchAsset"]["url"])' <<<"$manifest" 2>/dev/null)" \
+    || { log "manifest has no launchAsset"; return 1; }
+  # Fetch through loopback whatever host the manifest advertises.
+  bundle="$base/${bundle#*://*/}"
+  local left=$(( deadline - $(date +%s) )); (( left > 30 )) || left=30
+  curl -fsS -m "$left" -o /dev/null "$bundle" || { log "android bundle failed to compile"; return 1; }
+}
+
+restart_metro() { $SYSTEMCTL restart "$UNIT"; }
+
+point_active() { # sha channel
+  ln -sfn "$REL/$1" "$H/active.new" && mv -T "$H/active.new" "$H/active"
+  printf '%s\n' "$2" >"$H/active.channel"
+}
+
+do_switch() { # name [--force]
+  local name="$1" force="${2:-}" sha cur_sha cur_ch fp base
+  need_channel "$name"
+  [[ -L "$H/ch/$name" ]] || build_one "$name" >/dev/null
+  sha="$(link_sha "$H/ch/$name")"
+  if [[ -f "$H/native-baseline" ]]; then
+    fp="$(native_fp "$REL/$sha")"; base="$(cat "$H/native-baseline")"
+    if [[ "$fp" != "$base" && "$force" != "--force" ]]; then
+      die "$name (${sha:0:12}) needs different native code than the installed dev client (fingerprint $fp, client $base). Build and install a new dev client, then run: dash-channel baseline $name. Or pass --force to try anyway."
+    fi
+  fi
+  cur_sha="$(link_sha "$H/active")"; cur_ch="$(cat "$H/active.channel" 2>/dev/null || true)"
+  if [[ -n "$cur_sha" ]]; then printf '%s\t%s\n' "$cur_sha" "$cur_ch" >"$H/previous"; fi
+  point_active "$sha" "$name"
+  restart_metro
+  if health; then
+    history "switch $name $sha (from ${cur_ch:-none} ${cur_sha:-none})"
+    log "serving $name at ${sha:0:12}"
+    return 0
+  fi
+  log "health failed for $name (${sha:0:12}); rolling back"
+  if [[ -n "$cur_sha" ]]; then
+    point_active "$cur_sha" "$cur_ch"
+    restart_metro
+    if health; then
+      history "switch-failed $name $sha; rolled back to $cur_ch $cur_sha"
+      die "switch to $name failed; rolled back to $cur_ch (${cur_sha:0:12})"
+    fi
+    history "switch-failed $name $sha; rollback to $cur_ch $cur_sha ALSO unhealthy"
+    die "switch to $name failed and rollback to $cur_ch is unhealthy too"
+  fi
+  history "switch-failed $name $sha; nothing to roll back to"
+  die "switch to $name failed and there was no previous release"
+}
+
+do_rollback() {
+  [[ -f "$H/previous" ]] || die "no previous release recorded"
+  local prev_sha prev_ch cur_sha cur_ch
+  IFS=$'\t' read -r prev_sha prev_ch <"$H/previous"
+  cur_sha="$(link_sha "$H/active")"; cur_ch="$(cat "$H/active.channel" 2>/dev/null || true)"
+  [[ -d "$REL/$prev_sha" ]] || die "previous release $prev_sha is gone"
+  point_active "$prev_sha" "$prev_ch"
+  [[ -n "$cur_sha" ]] && printf '%s\t%s\n' "$cur_sha" "$cur_ch" >"$H/previous"
+  restart_metro
+  health || { history "rollback to $prev_ch $prev_sha UNHEALTHY"; die "rolled back to $prev_ch but Metro is unhealthy"; }
+  history "rollback to $prev_ch $prev_sha (from $cur_ch $cur_sha)"
+  log "serving $prev_ch at ${prev_sha:0:12}"
+}
+
+# ---------- commands ----------
+
+cmd_init() {
+  lock
+  mkdir -p "$H/ch" "$REL"
+  fetch
+  [[ -f "$TABLE" ]] || : >"$TABLE"
+  log "state in $H, releases in $REL"
+}
+
+cmd_add() {
+  local name="${1:-}" ref="${2:-}" kind=track
+  [[ -n "$name" && -n "$ref" ]] || die "usage: add <name> <ref> [--pin]"
+  [[ "${3:-}" == "--pin" ]] && kind=pin
+  valid_name "$name"
+  lock; fetch
+  local sha; sha="$(resolve "$ref")"
+  [[ "$kind" == pin ]] && ref="$sha"
+  set_row "$name" "$ref" "$kind"
+  history "add $name $ref $kind"
+  log "channel $name = $kind $ref (${sha:0:12})"
+}
+
+cmd_remove() {
+  local name="${1:-}"; need_channel "$name"; lock
+  [[ "$(cat "$H/active.channel" 2>/dev/null)" == "$name" ]] && die "$name is being served; switch away first"
+  awk -F'\t' -v n="$name" '$1!=n' "$TABLE" >"$TABLE.tmp.$$" && mv "$TABLE.tmp.$$" "$TABLE"
+  rm -f "$H/ch/$name"
+  history "remove $name"
+}
+
+cmd_list() {
+  [[ -f "$TABLE" ]] || die "not initialised (run: dash-channel init)"
+  local active; active="$(cat "$H/active.channel" 2>/dev/null || true)"
+  printf '%-2s %-24s %-6s %-14s %s\n' "" CHANNEL KIND BUILT REF
+  while IFS=$'\t' read -r n r k; do
+    local s; s="$(link_sha "$H/ch/$n")"
+    printf '%-2s %-24s %-6s %-14s %s\n' "$([[ $n == "$active" ]] && echo '*')" "$n" "$k" "${s:0:12}" "$r"
+  done <"$TABLE"
+}
+
+cmd_build() {
+  [[ -n "${1:-}" ]] || die "usage: build <name>|--all"
+  lock; fetch
+  if [[ "$1" == "--all" ]]; then
+    local n; rc=0; for n in $(cut -f1 "$TABLE"); do ( build_one "$n" ) >/dev/null || { log "build $n failed"; rc=1; }; done; return $rc
+  else
+    build_one "$1"
+  fi
+}
+
+cmd_switch() { [[ -n "${1:-}" ]] || die "usage: switch <name> [--force]"; lock; fetch; build_one "$1" >/dev/null; do_switch "$1" "${2:-}"; }
+cmd_rollback() { lock; do_rollback; }
+
+cmd_promote() {
+  local from="${1:-}" to="${2:-}"; [[ -n "$from" && -n "$to" ]] || die "usage: promote <from> <to>"
+  valid_name "$to"; need_channel "$from"; lock
+  local sha; sha="$(link_sha "$H/ch/$from")"; [[ -n "$sha" ]] || die "$from is not built"
+  set_row "$to" "$sha" pin
+  ln -sfn "$REL/$sha" "$H/ch/$to"
+  history "promote $from $sha -> $to"
+  log "$to pinned at ${sha:0:12} (from $from)"
+}
+
+cmd_baseline() {
+  local name="${1:-}"; need_channel "$name"
+  local sha; sha="$(link_sha "$H/ch/$name")"; [[ -n "$sha" ]] || die "$name is not built"
+  native_fp "$REL/$sha" >"$H/native-baseline"
+  history "baseline $name $sha $(cat "$H/native-baseline")"
+  log "native baseline = $(cat "$H/native-baseline") ($name ${sha:0:12})"
+}
+
+cmd_status() {
+  local sha ch ok=false prev=""
+  sha="$(link_sha "$H/active")"; ch="$(cat "$H/active.channel" 2>/dev/null || true)"
+  [[ -f "$H/previous" ]] && prev="$(cut -f2 "$H/previous")@$(cut -c1-12 "$H/previous")"
+  if [[ -n "${DASH_CHANNEL_METRO_PORT:-}" ]] && curl -fsS -m 3 "$(metro_url)/status" 2>/dev/null | grep -q running; then ok=true; fi
+  if [[ "${1:-}" == "--json" ]]; then
+    printf '{"channel":"%s","sha":"%s","metro_running":%s,"previous":"%s","unit":"%s"}\n' "$ch" "$sha" "$ok" "$prev" "$UNIT"
+  else
+    echo "channel: ${ch:-none}"; echo "commit:  ${sha:-none}"; echo "metro:   $([[ $ok == true ]] && echo running || echo down) ($UNIT)"; echo "previous: ${prev:-none}"
+  fi
+}
+
+cmd_open() {
+  local serial="${1:-}"; [[ -n "$serial" ]] || die "usage: open <adb-serial>"
+  local url="${DASH_CHANNEL_PUBLIC_URL:-}"
+  if [[ -z "$url" || "${DASH_CHANNEL_USB:-0}" == 1 ]]; then
+    "$ADB" -s "$serial" reverse "tcp:${DASH_CHANNEL_METRO_PORT}" "tcp:${DASH_CHANNEL_METRO_PORT}" >/dev/null
+    url="http://localhost:${DASH_CHANNEL_METRO_PORT}"
+  fi
+  local enc; enc="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$url")"
+  "$ADB" -s "$serial" shell am force-stop "$APP_PACKAGE"
+  "$ADB" -s "$serial" shell am start -a android.intent.action.VIEW \
+    -d "'$APP_SCHEME://expo-development-client/?url=$enc'" "$APP_PACKAGE" >/dev/null
+  history "open $serial $(cat "$H/active.channel" 2>/dev/null || true)"
+  log "dev client opened on the channel Metro"
+}
+
+cmd_nightly() {
+  lock; fetch
+  local n k before after active report="$H/nightly-last.tsv" changed=0 failed=0
+  active="$(cat "$H/active.channel" 2>/dev/null || true)"
+  : >"$report.tmp"
+  while IFS=$'\t' read -r n _ k; do
+    [[ "$k" == track ]] || continue
+    before="$(link_sha "$H/ch/$n")"
+    if after="$(build_one "$n" 2>>"$H/nightly.log")"; then
+      [[ "$before" != "$after" ]] && changed=$((changed+1))
+      printf '%s\t%s\t%s\tok\n' "$n" "${before:0:12}" "${after:0:12}" >>"$report.tmp"
+    else
+      failed=$((failed+1)); printf '%s\t%s\t-\tbuild-failed\n' "$n" "${before:0:12}" >>"$report.tmp"
+    fi
+  done < <(cat "$TABLE")
+  if [[ -n "$active" && "$(ch_kind "$active")" == track && "$(link_sha "$H/ch/$active")" != "$(link_sha "$H/active")" ]]; then
+    if ( do_switch "$active" ) 2>>"$H/nightly.log"; then
+      printf '%s\tre-served\n' "$active" >>"$report.tmp"
+    else
+      failed=$((failed+1)); printf '%s\tre-serve-failed-rolled-back\n' "$active" >>"$report.tmp"
+    fi
+  fi
+  # Notify only when the outcome differs from last night's, so a branch that
+  # stays broken does not page the owner every night.
+  local same=0; cmp -s "$report.tmp" "$report" 2>/dev/null && same=1
+  mv "$report.tmp" "$report"
+  history "nightly changed=$changed failed=$failed"
+  if [[ -n "${DASH_CHANNEL_NOTIFY:-}" && $((changed+failed)) -gt 0 && $same -eq 0 ]]; then
+    $DASH_CHANNEL_NOTIFY dash-channels "Dash nightly channels" "$changed rebuilt, $failed failed; serving ${active:-none}" || true
+  fi
+  cat "$report"
+  (( failed == 0 ))
+}
+
+cmd_gc() {
+  local keep=3; [[ "${1:-}" == "--keep" ]] && keep="${2:-3}"
+  lock
+  local -A used=()
+  local l; for l in "$H"/ch/* "$H/active"; do [[ -L "$l" ]] && used["$(link_sha "$l")"]=1; done
+  [[ -f "$H/previous" ]] && used["$(cut -f1 "$H/previous")"]=1
+  # Never delete a release whose node_modules another release links to.
+  local d; for d in "$REL"/*/; do
+    [[ -L "${d}app/node_modules" ]] && used["$(basename "$(dirname "$(dirname "$(readlink -f "${d}app/node_modules")")")")"]=1
+  done
+  local i=0
+  while read -r d; do
+    local s; s="$(basename "$d")"
+    [[ -f "$d/.dash-channel-ready" ]] || continue   # only releases this tool built
+    [[ -n "${used[$s]:-}" ]] && continue
+    i=$((i+1)); (( i <= keep )) && continue
+    rm -rf "$d"; history "gc $s"; log "removed $s"
+  done < <(ls -1dt "$REL"/*/ 2>/dev/null | sed 's:/$::')
+}
+
+main() {
+  local c="${1:-}"; shift || true
+  case "$c" in
+    init) cmd_init "$@";; add) cmd_add "$@";; remove|rm) cmd_remove "$@";; list|ls) cmd_list;;
+    build) cmd_build "$@";; switch) cmd_switch "$@";; rollback) cmd_rollback;;
+    promote) cmd_promote "$@";; baseline) cmd_baseline "$@";; status) cmd_status "$@";;
+    open) cmd_open "$@";; nightly) cmd_nightly;; gc) cmd_gc "$@";;
+    -h|--help|help|"") usage;; *) usage; exit 2;;
+  esac
+}
+main "$@"
