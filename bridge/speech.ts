@@ -1,31 +1,36 @@
-// Speech-to-text for spoken turns. Runs entirely on this machine: sherpa-onnx
-// with the NeMo Parakeet model omp caches, no network and no API key.
-//
-// The model takes ~13s to load but transcribes at roughly 0.65x real time, so
-// it is loaded once and held for the life of the process. Recognition is
-// CPU-bound and single-threaded here, so calls are serialised: two phones
-// talking at once would otherwise thrash the cores and make both slower.
-
+// Speech-to-text for spoken turns. Model load and decode run on a dedicated
+// Bun Worker, not the bridge event loop. One request runs at a time so phones
+// do not compete for the host's recognition cores.
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { OfflineRecognizer, readWave } from "sherpa-onnx-node";
+import type { SpeechResult, SpeechWorkerRequest } from "./src/speech-worker";
 
 const DEFAULT_MODEL_DIR = join(
   homedir(),
   ".omp/agent/cache/tiny-models/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8",
 );
 const MODEL_DIR = process.env.DASH_STT_MODEL ?? DEFAULT_MODEL_DIR;
-
-// Measured on a 4-core/8-thread Haswell: 4 threads gives rtf 0.66, 8 gives 1.29.
-// The extra "cores" are hyperthread siblings and only add contention.
-const NUM_THREADS = Number(process.env.DASH_STT_THREADS ?? "4");
-
-/** Parakeet, like most ASR models, expects 16 kHz mono. */
+const FIXTURE = process.env.DASH_STT_ENGINE === "fixture";
 const SAMPLE_RATE = 16_000;
-
 const WORK_DIR = join(tmpdir(), "dash-voice");
+const retrySetting = Number(process.env.DASH_STT_RETRY_MS ?? "30000");
+const RETRY_MS = Number.isFinite(retrySetting) && retrySetting >= 0 ? retrySetting : 30_000;
+let lastFailure: { lastError: string; at: number } | null = null;
+
+export class SpeechUnavailableError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "SpeechUnavailableError";
+  }
+}
+
+function recordLoadFailure(reason: string): SpeechUnavailableError {
+  lastFailure = { lastError: reason, at: Date.now() };
+  process.stderr.write(`${new Date().toISOString().slice(11, 19)} speech.load_failed reason=${JSON.stringify(reason)} rssBytes=${process.memoryUsage().rss}\n`);
+  return new SpeechUnavailableError(`Speech model failed to load: ${reason}`);
+}
 
 export interface Transcription {
   text: string;
@@ -37,142 +42,155 @@ export interface Transcription {
 }
 
 function modelReadable(): boolean {
-  return ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"].every((f) =>
-    Bun.file(join(MODEL_DIR, f)).size > 0,
+  return ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"].every(
+    file => Bun.file(join(MODEL_DIR, file)).size > 0,
   );
 }
 
-const configuredRetry = Number(process.env.DASH_STT_RETRY_MS ?? "30000");
-const RETRY_MS = Number.isFinite(configuredRetry) && configuredRetry >= 0 ? configuredRetry : 30_000;
-let lastFailure: { lastError: string; at: number } | null = null;
-
-export class SpeechUnavailableError extends Error {
-  constructor(reason: string) {
-    super(reason);
-    this.name = "SpeechUnavailableError";
-  }
-}
-
-/** Checked on every request, including when a dependency is installed after startup. */
+/** Re-check dependencies per request, including a bounded cooldown after failed worker loads. */
 export function speechAvailable(): { ok: boolean; reason?: string } {
-  if (Bun.which("ffmpeg") === null) {
-    return { ok: false, reason: "ffmpeg is not on PATH; it is needed to decode phone audio." };
-  }
-  if (!modelReadable()) {
-    return { ok: false, reason: `No speech model at ${MODEL_DIR}. Run \`omp setup speech\`.` };
-  }
   if (lastFailure && Date.now() - lastFailure.at < RETRY_MS) {
     const remaining = Math.max(0, Math.ceil(RETRY_MS - (Date.now() - lastFailure.at)));
     return { ok: false, reason: `Speech model failed to load: ${lastFailure.lastError}. Retry in ${remaining} ms.` };
   }
+  if (FIXTURE) return { ok: true };
+  if (Bun.which("ffmpeg") === null) {
+    return { ok: false, reason: "ffmpeg is not on PATH; it is needed to decode phone audio." };
+  }
+  if (!modelReadable()) {
+    return { ok: false, reason: "No speech model at " + MODEL_DIR + ". Run `omp setup speech`." };
+  }
   return { ok: true };
 }
 
-let recognizer: OfflineRecognizer | null = null;
-let loading: Promise<OfflineRecognizer> | null = null;
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const isSpeechResult = (value: unknown): value is SpeechResult =>
+  isObject(value) && typeof value.text === "string" &&
+  typeof value.sttMs === "number" && Number.isFinite(value.sttMs) &&
+  typeof value.audioSeconds === "number" && Number.isFinite(value.audioSeconds);
 
-function load(): Promise<OfflineRecognizer> {
-  if (recognizer) return Promise.resolve(recognizer);
-  if (loading) return loading;
-  const ready = speechAvailable();
-  if (!ready.ok) return Promise.reject(new SpeechUnavailableError(ready.reason ?? "Speech model unavailable."));
-  let pending: Promise<OfflineRecognizer>;
-  pending = Promise.resolve().then(() => {
-    const built = new OfflineRecognizer({
-      featConfig: { sampleRate: SAMPLE_RATE, featureDim: 80 },
-      modelConfig: {
-        transducer: {
-          encoder: join(MODEL_DIR, "encoder.int8.onnx"),
-          decoder: join(MODEL_DIR, "decoder.int8.onnx"),
-          joiner: join(MODEL_DIR, "joiner.int8.onnx"),
-        },
-        tokens: join(MODEL_DIR, "tokens.txt"),
-        numThreads: NUM_THREADS,
-        provider: "cpu",
-        debug: 0,
-        modelType: "nemo_transducer",
-      },
-      decodingMethod: "greedy_search",
-    });
-    recognizer = built;
-    lastFailure = null;
-    return built;
-  }).catch((error: unknown) => {
-    const reason = error instanceof Error ? error.message : String(error);
-    lastFailure = { lastError: reason, at: Date.now() };
-    process.stderr.write(`${new Date().toISOString().slice(11, 19)} speech.load_failed reason=${JSON.stringify(reason)} rssBytes=${process.memoryUsage().rss}\n`);
-    throw new SpeechUnavailableError(`Speech model failed to load: ${reason}`);
-  }).finally(() => {
-    // A failed load must not pin a rejected promise for the process lifetime.
-    if (loading === pending) loading = null;
+type Pending = { id: number; op: SpeechWorkerRequest["op"]; resolve(value: SpeechResult): void; reject(error: Error): void };
+let worker: Worker | undefined;
+let pending: Pending | undefined;
+let nextId = 0;
+
+/** An uncaught worker error/exit fails the current request; the next call starts fresh. */
+function workerDied(instance: Worker, why: string): void {
+  if (worker !== instance) return;
+  worker = undefined;
+  const job = pending;
+  pending = undefined;
+  if (job) job.reject(recordLoadFailure("Speech worker " + why + "; the next request will restart it."));
+}
+
+function getWorker(): Worker {
+  if (worker) return worker;
+  const instance = new Worker(new URL("./src/speech-worker.ts", import.meta.url).href);
+  instance.unref();
+  worker = instance;
+  instance.addEventListener("error", () => workerDied(instance, "crashed"));
+  instance.addEventListener("close", () => workerDied(instance, "exited unexpectedly"));
+  instance.onmessage = (event: MessageEvent<unknown>) => {
+    if (worker !== instance || !pending) return;
+    const job = pending;
+    const reply: unknown = event.data;
+    if (!isObject(reply) || reply.id !== job.id) {
+      workerDied(instance, "sent an invalid response");
+      return;
+    }
+    pending = undefined;
+    if (reply.ok === true && isSpeechResult(reply.result)) {
+      lastFailure = null;
+      job.resolve(reply.result);
+    } else if (reply.ok === false && typeof reply.error === "string") {
+      if (reply.kind === "load" || job.op === "warmup") job.reject(recordLoadFailure(reply.error));
+      else job.reject(new Error("Speech recognition failed: " + reply.error));
+    } else {
+      worker = undefined;
+      job.reject(recordLoadFailure("Speech worker returned an invalid result; the next request will restart it."));
+    }
+  };
+  return instance;
+}
+
+/** Only called inside the serial queue: at most one in-flight worker RPC. */
+function callWorker(request: SpeechWorkerRequest): Promise<SpeechResult> {
+  return new Promise((resolve, reject) => {
+    let instance: Worker;
+    try {
+      instance = getWorker();
+    } catch (error) {
+      reject(recordLoadFailure("Speech worker could not start: " + String(error)));
+      return;
+    }
+    pending = { id: request.id, op: request.op, resolve, reject };
+    try {
+      instance.postMessage(request);
+    } catch (error) {
+      workerDied(instance, "could not accept the request (" + String(error) + ")");
+    }
   });
-  loading = pending;
-  return pending;
 }
 
-/** Pay the model load up front so the first spoken turn isn't the slow one. */
-export function warmup(): Promise<void> {
-  return load().then(() => undefined);
-}
-
-/** Serialises recognition; see the note at the top of the file. */
+/** Serialise both model warmup and decoding, including requests from other phones. */
 let queue: Promise<unknown> = Promise.resolve();
-
 function enqueue<T>(work: () => Promise<T>): Promise<T> {
   const next = queue.then(work, work);
   queue = next.catch(() => undefined);
   return next;
 }
 
+/** Load the model once in the worker so the first recording has no cold-start. */
+export function warmup(): Promise<void> {
+  return enqueue(async () => {
+    await callWorker({ id: ++nextId, op: "warmup" });
+  });
+}
+
 async function transcode(input: string, output: string): Promise<void> {
   const proc = Bun.spawn(
     ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", input,
-     "-ar", String(SAMPLE_RATE), "-ac", "1", "-c:a", "pcm_s16le", output],
+      "-ar", String(SAMPLE_RATE), "-ac", "1", "-c:a", "pcm_s16le", output],
     { stdin: "ignore", stdout: "ignore", stderr: "pipe" },
   );
   const stderr = await new Response(proc.stderr).text();
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
-    throw new Error(`ffmpeg could not decode the recording: ${stderr.trim().slice(-400) || `exit ${exitCode}`}`);
+    throw new Error("ffmpeg could not decode the recording: " + (stderr.trim().slice(-400) || "exit " + exitCode));
   }
 }
 
-/**
- * Decode one recorded utterance to text. `audio` is whatever container the
- * phone recorded; ffmpeg normalises it before recognition.
- */
+/** Convert the phone's audio asynchronously, then decode it off the bridge thread. */
 export function transcribe(audio: Uint8Array, id: string): Promise<Transcription> {
   return enqueue(async () => {
-    mkdirSync(WORK_DIR, { recursive: true });
-    // The phone's container is whatever the OS recorder produced; ffmpeg sniffs
-    // it, so the extension here is only for debugging.
-    // A client controls the turn id; it must never influence a filesystem path.
-    const tempId = randomUUID();
-    const raw = join(WORK_DIR, `${tempId}.input`);
-    const wav = join(WORK_DIR, `${tempId}.wav`);
+    const ready = speechAvailable();
+    if (!ready.ok) throw new SpeechUnavailableError(ready.reason ?? "Speech-to-text is not available on this host.");
     try {
-      await Bun.write(raw, audio);
-
-      const t0 = Date.now();
-      await transcode(raw, wav);
-      const transcodeMs = Date.now() - t0;
-
-      const recogniser = await load();
-      const wave = readWave(wav);
-      const t1 = Date.now();
-      const stream = recogniser.createStream();
-      stream.acceptWaveform({ sampleRate: wave.sampleRate, samples: wave.samples });
-      recogniser.decode(stream);
-      const text = recogniser.getResult(stream).text.trim();
-      const sttMs = Date.now() - t1;
-
-      return { text, transcodeMs, sttMs, audioSeconds: wave.samples.length / wave.sampleRate };
+      if (FIXTURE) {
+        // Exercise the same worker RPC with genuine request bytes; never open ffmpeg or the model.
+        const heard = await callWorker({ id: ++nextId, op: "transcribe", audio });
+        return { ...heard, transcodeMs: 0 };
+      }
+      mkdirSync(WORK_DIR, { recursive: true });
+      // Client-selected ids are log identifiers, never filenames.
+      const tempId = randomUUID();
+      const raw = join(WORK_DIR, tempId + ".input");
+      const wav = join(WORK_DIR, tempId + ".wav");
+      try {
+        await Bun.write(raw, audio);
+        const t0 = Date.now();
+        await transcode(raw, wav);
+        const transcodeMs = Date.now() - t0;
+        const heard = await callWorker({ id: ++nextId, op: "transcribe", wav });
+        return { ...heard, transcodeMs };
+      } finally {
+        rmSync(raw, { force: true });
+        rmSync(wav, { force: true });
+      }
     } catch (error) {
       process.stderr.write(`${new Date().toISOString().slice(11, 19)} speech.transcribe_failed id=${JSON.stringify(id)} error=${JSON.stringify(String(error))}\n`);
       throw error;
-    } finally {
-      rmSync(raw, { force: true });
-      rmSync(wav, { force: true });
     }
   });
 }
