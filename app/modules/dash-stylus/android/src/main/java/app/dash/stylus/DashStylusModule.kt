@@ -3,6 +3,7 @@ package app.dash.stylus
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.view.MotionEvent
 import android.view.Window
 import expo.modules.kotlin.modules.Module
@@ -23,7 +24,7 @@ class DashStylusModule : Module() {
     OnStartObserving("button") { onMain { observing = true; install() } }
     OnStopObserving("button") { onMain { observing = false; restore() } }
     OnActivityEntersForeground { onMain { if (observing) install() } }
-    OnActivityEntersBackground { onMain { release() } }
+    OnActivityEntersBackground { onMain { restore() } }
     OnActivityDestroys { onMain { restore() } }
     OnDestroy { onMain { observing = false; restore() } }
     AsyncFunction("getUptimeMillis") { SystemClock.uptimeMillis().toDouble() }
@@ -53,11 +54,15 @@ class DashStylusModule : Module() {
     val delegate = next.callback ?: return
     val wrapper = object : Window.Callback by delegate {
       override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        sample(event)
+        try { sample(event) } catch (error: Exception) {
+          Log.w("DashStylus", "Could not observe stylus touch; forwarding event", error)
+        }
         return delegate.dispatchTouchEvent(event)
       }
       override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        sample(event)
+        try { sample(event) } catch (error: Exception) {
+          Log.w("DashStylus", "Could not observe stylus hover; forwarding event", error)
+        }
         return delegate.dispatchGenericMotionEvent(event)
       }
     }
@@ -69,7 +74,7 @@ class DashStylusModule : Module() {
   }
 
   private fun restore() {
-    release()
+    if (observing) release() else edges = ButtonEdges()
     if (window?.callback === observer && original != null) window?.callback = original
     window = null
     original = null
