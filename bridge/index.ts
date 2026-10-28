@@ -687,7 +687,8 @@ async function runVoiceTurn(turn: Turn, utterance: Utterance): Promise<void> {
     turn.start({ text: heard.text, cwd: utterance.cwd, sessionId: utterance.sessionId, profileId: utterance.profileId });
   } catch (error) {
     log("voice.failed", { id: turn.id, error: String(error) });
-    turn.endWithout(error instanceof Error ? error.message : String(error));
+    const ready = speechAvailable();
+    turn.endWithout(!ready.ok ? ready.reason ?? "Speech-to-text is not available on this host." : error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -746,7 +747,8 @@ const handleFiles = createFilesHttpHandler({
   device: process.env.DASH_KDECONNECT_DEVICE,
   run: bunRun,
   onEvent: log,
-  ...(speechAvailable().ok ? { transcribe } : {}),
+  transcribe,
+  speechAvailable,
 });
 
 // Chat index: every archived/native chat, paged and searchable. All SQLite reads run in
@@ -1186,7 +1188,7 @@ if (speech.ok) {
   // Loading the model costs ~13s. Pay it now so the first spoken turn isn't the slow one.
   void warmup().then(
     () => log("speech.ready", {}),
-    (error: unknown) => log("speech.load_failed", { error: String(error) }),
+    (error: unknown) => log("speech.warmup_failed", { error: String(error), rssBytes: process.memoryUsage().rss }),
   );
 }
 

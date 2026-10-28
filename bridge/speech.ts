@@ -6,6 +6,7 @@
 // CPU-bound and single-threaded here, so calls are serialised: two phones
 // talking at once would otherwise thrash the cores and make both slower.
 
+import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,13 +42,28 @@ function modelReadable(): boolean {
   );
 }
 
-/** Whether a spoken turn can be served at all. Checked before accepting audio. */
+const configuredRetry = Number(process.env.DASH_STT_RETRY_MS ?? "30000");
+const RETRY_MS = Number.isFinite(configuredRetry) && configuredRetry >= 0 ? configuredRetry : 30_000;
+let lastFailure: { lastError: string; at: number } | null = null;
+
+export class SpeechUnavailableError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "SpeechUnavailableError";
+  }
+}
+
+/** Checked on every request, including when a dependency is installed after startup. */
 export function speechAvailable(): { ok: boolean; reason?: string } {
   if (Bun.which("ffmpeg") === null) {
     return { ok: false, reason: "ffmpeg is not on PATH; it is needed to decode phone audio." };
   }
   if (!modelReadable()) {
     return { ok: false, reason: `No speech model at ${MODEL_DIR}. Run \`omp setup speech\`.` };
+  }
+  if (lastFailure && Date.now() - lastFailure.at < RETRY_MS) {
+    const remaining = Math.max(0, Math.ceil(RETRY_MS - (Date.now() - lastFailure.at)));
+    return { ok: false, reason: `Speech model failed to load: ${lastFailure.lastError}. Retry in ${remaining} ms.` };
   }
   return { ok: true };
 }
@@ -58,7 +74,10 @@ let loading: Promise<OfflineRecognizer> | null = null;
 function load(): Promise<OfflineRecognizer> {
   if (recognizer) return Promise.resolve(recognizer);
   if (loading) return loading;
-  loading = (async () => {
+  const ready = speechAvailable();
+  if (!ready.ok) return Promise.reject(new SpeechUnavailableError(ready.reason ?? "Speech model unavailable."));
+  let pending: Promise<OfflineRecognizer>;
+  pending = Promise.resolve().then(() => {
     const built = new OfflineRecognizer({
       featConfig: { sampleRate: SAMPLE_RATE, featureDim: 80 },
       modelConfig: {
@@ -76,9 +95,19 @@ function load(): Promise<OfflineRecognizer> {
       decodingMethod: "greedy_search",
     });
     recognizer = built;
+    lastFailure = null;
     return built;
-  })();
-  return loading;
+  }).catch((error: unknown) => {
+    const reason = error instanceof Error ? error.message : String(error);
+    lastFailure = { lastError: reason, at: Date.now() };
+    process.stderr.write(`${new Date().toISOString().slice(11, 19)} speech.load_failed reason=${JSON.stringify(reason)} rssBytes=${process.memoryUsage().rss}\n`);
+    throw new SpeechUnavailableError(`Speech model failed to load: ${reason}`);
+  }).finally(() => {
+    // A failed load must not pin a rejected promise for the process lifetime.
+    if (loading === pending) loading = null;
+  });
+  loading = pending;
+  return pending;
 }
 
 /** Pay the model load up front so the first spoken turn isn't the slow one. */
@@ -117,8 +146,10 @@ export function transcribe(audio: Uint8Array, id: string): Promise<Transcription
     mkdirSync(WORK_DIR, { recursive: true });
     // The phone's container is whatever the OS recorder produced; ffmpeg sniffs
     // it, so the extension here is only for debugging.
-    const raw = join(WORK_DIR, `${id}.input`);
-    const wav = join(WORK_DIR, `${id}.wav`);
+    // A client controls the turn id; it must never influence a filesystem path.
+    const tempId = randomUUID();
+    const raw = join(WORK_DIR, `${tempId}.input`);
+    const wav = join(WORK_DIR, `${tempId}.wav`);
     try {
       await Bun.write(raw, audio);
 
@@ -136,6 +167,9 @@ export function transcribe(audio: Uint8Array, id: string): Promise<Transcription
       const sttMs = Date.now() - t1;
 
       return { text, transcodeMs, sttMs, audioSeconds: wave.samples.length / wave.sampleRate };
+    } catch (error) {
+      process.stderr.write(`${new Date().toISOString().slice(11, 19)} speech.transcribe_failed id=${JSON.stringify(id)} error=${JSON.stringify(String(error))}\n`);
+      throw error;
     } finally {
       rmSync(raw, { force: true });
       rmSync(wav, { force: true });
