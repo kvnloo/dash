@@ -29,6 +29,14 @@ const SLOT = 44;
 const TRAVEL = SLOT + 4;
 const PILL = SLOT + TRAVEL;
 
+// Main and chat remain mounted together; a mode switch must reach both immediately.
+const modeSubscribers = new Set<(value: MicChoice) => void>();
+let sharedMode: MicChoice | null = null;
+function publishMode(value: MicChoice): void {
+  sharedMode = value;
+  for (const subscriber of modeSubscribers) subscriber(value);
+}
+
 /**
  * Composer mic with a Telegram-style mode switch.
  * Tap: use the active mode (Dictate or Live voice).
@@ -37,7 +45,7 @@ const PILL = SLOT + TRAVEL;
  * Release switches the mode; the main bar may also start Live on selection.
  */
 export const MicButton = memo(function MicButton({ onDictate, onLive, onSelectLive, children, onTap, accessibilityLabel }: Props) {
-  const [mode, setMode] = useState<MicChoice>("dictate");
+  const [mode, setMode] = useState<MicChoice>(sharedMode ?? "dictate");
   const open = useSharedValue(0);
   /** Knob: 0 = bottom slot (Dictate), 1 = top slot (Live voice). */
   const knob = useSharedValue(0);
@@ -45,7 +53,13 @@ export const MicButton = memo(function MicButton({ onDictate, onLive, onSelectLi
   const lastSlot = useSharedValue(0);
   const live = useSharedValue(0);
 
-  useEffect(() => { void AsyncStorage.getItem(MIC_DEFAULT_KEY).then(v => setMode(parseMicChoice(v)), () => {}); }, []);
+  useEffect(() => {
+    const subscribe = (next: MicChoice) => setMode(next);
+    modeSubscribers.add(subscribe);
+    if (sharedMode !== null) setMode(sharedMode);
+    else void AsyncStorage.getItem(MIC_DEFAULT_KEY).then(v => publishMode(sharedMode ?? parseMicChoice(v)), () => {});
+    return () => { modeSubscribers.delete(subscribe); };
+  }, []);
   useEffect(() => { const v = mode === "live" ? 1 : 0; knob.value = v; live.value = withTiming(v, spatial(snappy)); }, [knob, live, mode]);
 
   const tapNow = useCallback(() => {
@@ -59,7 +73,7 @@ export const MicButton = memo(function MicButton({ onDictate, onLive, onSelectLi
     const next: MicChoice = slot === 1 ? "live" : "dictate";
     if (next !== mode) {
       haptic.success();
-      setMode(next);
+      publishMode(next);
       void AsyncStorage.setItem(MIC_DEFAULT_KEY, next).catch(() => {});
     }
     if (next === "live") onSelectLive?.();
