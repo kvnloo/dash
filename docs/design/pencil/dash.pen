@@ -677,7 +677,7 @@
       "layoutPosition": "absolute",
       "x": 470,
       "y": 0,
-      "name": "main-bots",
+      "name": "main-hosts",
       "reusable": true,
       "clip": true,
       "width": 390,
