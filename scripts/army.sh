@@ -23,7 +23,7 @@ rm -rf "$out"; mkdir -p "$out/tmp"
 if [ -z "${ARMY_WEB:-}" ]; then
   if [ -z "${ARMY_WEB_EXPORT:-}" ]; then
     echo "army: exporting web build of $sha"
-    (cd app && CI=1 EXPO_PUBLIC_DEBUG=0 EXPO_PUBLIC_DEBUG_AUTONAV=0 \
+    (cd app && CI=1 EXPO_PUBLIC_DEBUG=0 EXPO_PUBLIC_DEBUG_AUTONAV=0 EXPO_PUBLIC_DASH_VOICE_FAKE=1 \
       bun node_modules/expo/bin/cli export --platform web --output-dir "$out/web-export") >"$out/web-export.log" 2>&1 \
       || { tail -40 "$out/web-export.log"; echo "army: web export failed" >&2; exit 1; }
     ARMY_WEB_EXPORT=$out/web-export
