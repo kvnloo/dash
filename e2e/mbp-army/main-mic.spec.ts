@@ -21,6 +21,15 @@ test("main mic tap then tap inserts the real bridge STT fixture transcript", asy
   await expect(page.getByText("Listening · tap Stop when finished", { exact: true })).toBeVisible({ timeout: 20000 });
   await page.getByRole("button", { name: "Stop dictation", exact: true }).click({ noWaitAfter: true });
   await expect(field).toHaveValue("ARMY heard you", { timeout: 20000 });
+
+  // Keep the main mic available alongside Send, and respect the caret in existing words.
+  await field.fill("before after");
+  await field.press("Home");
+  for (let i = 0; i < 6; i++) await field.press("ArrowRight");
+  await page.getByRole("button", { name: "Dictate", exact: true }).click({ noWaitAfter: true });
+  await expect(page.getByText("Listening · tap Stop when finished", { exact: true })).toBeVisible({ timeout: 20000 });
+  await page.getByRole("button", { name: "Stop dictation", exact: true }).click({ noWaitAfter: true });
+  await expect(field).toHaveValue("before ARMY heard you after", { timeout: 20000 });
   expect(errors.filter(error => error.startsWith("PAGEERROR"))).toEqual([]);
 });
 
@@ -46,6 +55,8 @@ test("main mic hold and slide up opens Voice and attempts Live autostart", async
     /Pair Dash with z0bridge identity|Open a Hermes chat once|Microphone in use|Bridge lacks native voice|Voice bootstrap failed|Native voice disabled|Voice target not confirmed/i,
     { timeout: 20000 },
   );
+  await page.getByRole("button", { name: "Back", exact: true }).click({ noWaitAfter: true });
+  await expect(page.getByRole("button", { name: "Live voice", exact: true })).toBeVisible();
   expect(errors.filter(error => error.startsWith("PAGEERROR"))).toEqual([]);
 });
 
