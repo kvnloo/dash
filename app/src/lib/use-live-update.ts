@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, DevSettings, Keyboard, Linking, NativeModules, Platform } from "react-native";
+import { AppState, Keyboard, Linking, NativeModules, Platform } from "react-native";
 import {
   POLL_MS,
   RUNNING_BUILD,
@@ -17,19 +17,36 @@ import {
   type ReloadDecision,
 } from "./live-update";
 import { idleMs } from "./touch-idle";
+import { reloadApp } from "./reload-app";
 import { installReloadGuards } from "./reload-guards";
 import { flushDrafts } from "../store/composer-drafts";
 
 const AUTO_KEY = "dash.liveUpdate.auto";
 const TRIED_KEY = "dash.liveUpdate.autoFor";
 
-/** Native dev clients reload through Expo; the web army reloads the served page. */
-function reloadApp(): void {
-  if (Platform.OS === "web") {
-    if (typeof window !== "undefined") window.location.reload();
-    return;
+// Web-only URL seams mirror store/annotate.ts. Native keeps immutable build-info.json.
+const webParams = Platform.OS === "web" && typeof location !== "undefined" ? new URLSearchParams(location.search) : null;
+
+function runningBuild(): LiveBuild | null {
+  const sha = webParams?.get("liveRunning");
+  if (sha !== null && sha !== undefined && /^[0-9a-f]{40}$/i.test(sha)) {
+    return { sha: sha.toLowerCase(), builtAtMs: RUNNING_BUILD?.builtAtMs ?? null };
   }
-  DevSettings.reload();
+  return RUNNING_BUILD;
+}
+
+function webIdleReloadMs(): number | undefined {
+  const value = webParams?.get("liveIdleMs");
+  if (value === null || value === undefined || !/^\d+$/.test(value)) return undefined;
+  const milliseconds = Number(value);
+  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
+}
+
+function keyboardVisible(): boolean {
+  if (Platform.OS !== "web") return Keyboard.isVisible();
+  if (typeof document === "undefined") return false;
+  const focused = document.activeElement;
+  return focused !== null && focused.matches('input, textarea, [contenteditable="true"], [role="textbox"]');
 }
 
 async function readPref(key: string): Promise<string | null> {
@@ -85,13 +102,17 @@ export interface LiveUpdate {
  * (when the owner returns to it, or after 30 s without a touch), unless a guard says busy.
  */
 export function useLiveUpdate(): LiveUpdate {
-  const origin = RUNNING_BUILD === null ? null : bundleOrigin() ?? metroOrigin(Constants.expoConfig?.hostUri);
+  const running = runningBuild();
+  const requestedOrigin = webParams?.get("liveOrigin");
+  const origin = requestedOrigin !== null && requestedOrigin !== undefined
+    ? metroOrigin(requestedOrigin)
+    : running === null ? null : bundleOrigin() ?? metroOrigin(Constants.expoConfig?.hostUri);
   const [served, setServed] = useState<LiveBuild | null>(null);
   const [autoReload, setAutoState] = useState(true);
   const [lastAutoFor, setLastAutoFor] = useState<string | null>(null);
   const [prefsReady, setPrefsReady] = useState(false);
   const [, setTick] = useState(0);
-  const foregroundAt = useRef(Date.now());
+  const foregroundAt = useRef<number | null>(null);
   const heldFor = useRef<string | null>(null);
   const reloading = useRef(false);
 
@@ -106,7 +127,6 @@ export function useLiveUpdate(): LiveUpdate {
     return () => { alive = false; };
   }, []);
 
-  // Register once for the mounted poller, and re-evaluate immediately when active work changes.
   useEffect(() => installReloadGuards(() => setTick(n => n + 1)), []);
 
   useEffect(() => {
@@ -121,10 +141,10 @@ export function useLiveUpdate(): LiveUpdate {
     poll();
     const timer = setInterval(poll, POLL_MS);
     // Re-evaluate the idle gate between polls while an update waits.
-    const tick = setInterval(() => setTick((n) => n + 1), 5_000);
+    const tick = setInterval(() => setTick((n) => n + 1), Platform.OS === "web" ? 250 : 5_000);
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active") return;
-      foregroundAt.current = Date.now();
+      if (Platform.OS !== "web") foregroundAt.current = Date.now();
       poll();
     });
     return () => {
@@ -137,7 +157,7 @@ export function useLiveUpdate(): LiveUpdate {
 
   // A reload that landed on the served build clears the retry guard.
   useEffect(() => {
-    if (served !== null && RUNNING_BUILD !== null && served.sha === RUNNING_BUILD.sha && lastAutoFor !== null) {
+    if (served !== null && running !== null && served.sha === running.sha && lastAutoFor !== null) {
       setLastAutoFor(null);
       void writePref(TRIED_KEY, null);
     }
@@ -145,12 +165,13 @@ export function useLiveUpdate(): LiveUpdate {
 
   const blockedBy = reloadBlockedBy();
   const decision = decideReload({
-    running: RUNNING_BUILD,
+    running,
     served,
     autoReload: autoReload && prefsReady,
-    sinceForegroundMs: Date.now() - foregroundAt.current,
+    sinceForegroundMs: foregroundAt.current === null ? Number.POSITIVE_INFINITY : Date.now() - foregroundAt.current,
     idleMs: idleMs(),
-    keyboardVisible: Keyboard.isVisible(),
+    idleReloadMs: webIdleReloadMs(),
+    keyboardVisible: keyboardVisible(),
     blockedBy,
     heldFor: heldFor.current,
     lastAutoFor,
@@ -166,9 +187,9 @@ export function useLiveUpdate(): LiveUpdate {
     void (async () => {
       let invoked = false;
       try {
-        // The 250ms draft debounce is too late if Metro reloads immediately.
+        // Don't trust the 250ms debounce to finish before a full JS reload.
         await flushDrafts();
-        // A voice call or stream may have begun during the asynchronous storage write.
+        // New work may have started during the storage write.
         if (automatic && reloadBlockedBy() !== null) return;
         if (automatic && served !== null) {
           await writePref(TRIED_KEY, served.sha);
@@ -207,5 +228,5 @@ export function useLiveUpdate(): LiveUpdate {
     [origin],
   );
 
-  return { running: RUNNING_BUILD, served, origin, decision, autoReload, setAutoReload, reloadNow, blockedBy, switchTo };
+  return { running, served, origin, decision, autoReload, setAutoReload, reloadNow, blockedBy, switchTo };
 }

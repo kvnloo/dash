@@ -143,9 +143,11 @@ export interface ReloadInput {
   sinceForegroundMs: number;
   /** Milliseconds since the last touch. */
   idleMs: number;
+  /** Optional web-army idle threshold; native always uses IDLE_RELOAD_MS. */
+  idleReloadMs?: number;
   keyboardVisible: boolean;
   blockedBy: string | null;
-  /** A build previously held by a guard reloads as soon as all work is idle. */
+  /** A build held by a guard reloads once every guard releases. */
   heldFor?: string | null;
   /** The served sha an automatic reload was already attempted for (never loop on one build). */
   lastAutoFor: string | null;
@@ -163,9 +165,9 @@ export function decideReload(input: ReloadInput): ReloadDecision {
   if (!input.autoReload) return { kind: "ready", why: "manual" };
   if (input.lastAutoFor === served.sha) return { kind: "ready", why: "retried" };
   if (input.heldFor === served.sha) return { kind: "reload" };
-  if (input.sinceForegroundMs <= FOREGROUND_GRACE_MS) return { kind: "reload" };
   if (input.keyboardVisible) return { kind: "ready", why: "keyboard" };
-  if (input.idleMs >= IDLE_RELOAD_MS) return { kind: "reload" };
+  if (input.sinceForegroundMs <= FOREGROUND_GRACE_MS) return { kind: "reload" };
+  if (input.idleMs >= (input.idleReloadMs ?? IDLE_RELOAD_MS)) return { kind: "reload" };
   return { kind: "ready", why: "busy" };
 }
 
