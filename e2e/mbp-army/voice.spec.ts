@@ -159,7 +159,9 @@ test('live voice reports no transcript within nine seconds and stays connected',
   const elapsed = await page.evaluate(() => performance.now() - (performance.getEntriesByName('dash-voice-speech-stopped')[0]?.startTime ?? 0));
   expect(elapsed, 'warning must be visible within 9 s of speech_stopped').toBeLessThan(9000);
   await expect(page.getByTestId('voice-phase'))
-    .toHaveAttribute('aria-label', 'Voice status: listening');
+    .toHaveAttribute('aria-label', 'Voice status: listening. Speech heard but no transcript - voice setup issue');
+  await expect(page.getByTestId('voice-phase'))
+    .toContainText('Speech heard but no transcript - voice setup issue');
   await expect.poll(() => info.some(line => line.includes('[voice] no-transcript'))).toBe(true);
   expect(voiceBroker.calls().filter(call => call.path === '/v1/tools/ask_z0')).toHaveLength(0);
   await expect(page.getByRole('button', { name: 'Stop voice in Dash', exact: true })).toBeVisible();
