@@ -4,6 +4,9 @@ import {
   parseChatListQuery, parseChatSearchQuery, parseHistoryQuery, type ChatPage, type ChatSearchHit, type ChatSearchPage, type ChatSummary,
   type HistoryPage,
 } from "../../../shared/protocol";
+import { decodeCursor } from "../../../shared/protocol";
+import { remoteHostFor } from "../remote-hosts";
+import { remoteClaudeHistory } from "../remote-history";
 import { AbortedError, BusyError, RpcError, type ChatIndexClient } from "./client";
 import { filterHash, hash, normalizeQuery, queryHash, SELF_HOST } from "./query";
 import { msgCursor, readSearchCursor, titleCursor, withEmitted, type MsgPositions } from "./worker";
@@ -150,7 +153,13 @@ export function createChatsHttpHandler(options: ChatsHttpOptions) {
       if (!self.matches(host) && !host.startsWith("machine:")) return fail(404, "not_found");
       target = { kind: query.kind ?? "", sessionId: query.sessionId ?? "", host: internalHost(self, host), ...(query.profile ? { profile: query.profile } : {}) };
     }
-    const value = await client.history({ ...target, limit: query.limit, ...(query.before ? { before: query.before } : {}), self: { id: self.id, name: self.name } }, request.signal);
+    const keyed = query.key ? /^(machine:[^:]+):claude:([A-Za-z0-9_-]+)$/.exec(query.key) : undefined;
+    const host = remoteHostFor(keyed?.[1] ?? (query.kind === "claude" ? query.host : undefined));
+    const session = keyed?.[2] ?? query.sessionId;
+    const live = host && session ? await remoteClaudeHistory(host, session, query.limit, query.before) : undefined;
+    // Native byte cursors cannot be interpreted as archive ordinals after a failed SSH read.
+    const archiveBefore = query.before && !decodeCursor(query.before)?.remote ? query.before : undefined;
+    const value = live ?? await client.history({ ...target, limit: query.limit, ...(archiveBefore ? { before: archiveBefore } : {}), self: { id: self.id, name: self.name } }, request.signal);
     const page: HistoryPage = { messages: value.messages, before: value.before };
     return json(page, 200, query.before ? { "Cache-Control": "private, max-age=300" } : {});
   }

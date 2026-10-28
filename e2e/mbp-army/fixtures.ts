@@ -42,7 +42,7 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
  if (options.remoteClaude) {
   await mkdir(remoteCwd,{recursive:true});
   // ssh stand-in: `army-ssh <dest> <command>` logs the hop and runs <command> in a shell, as sshd would.
-  await writeFile(join(bin,'army-ssh'),'#!/bin/sh\nprintf \'%s\\t%s\\n\' "$1" "$2" >> "$HOME/army-ssh.log"\ncd "$HOME/remote-home" && exec /bin/sh -c "$2"\n',{mode:0o700});
+  await writeFile(join(bin,'army-ssh'),'#!/bin/sh\nprintf \'%s\\t%s\\n\' "$1" "$2" >> "$HOME/army-ssh.log"\ncd "$HOME/remote-home" || exit 1\ncase "$2" in python3*) export HOME="$PWD";; esac\nexec /bin/sh -c "$2"\n',{mode:0o700});
   // The other computer's launcher: the real bridge/bin/dash-acp of this checkout.
   await writeFile(join(bin,'dash-acp'),'#!/bin/sh\nexec '+quote(bun)+' '+quote(join(bridgeRoot,'bridge','bin','dash-acp'))+' "$@"\n',{mode:0o700});
  }

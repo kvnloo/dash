@@ -66,7 +66,12 @@ const quote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
  * command is one quoted string, so it means the same in sh, bash, zsh and fish.
  */
 export function remoteAcpCommand(host: RemoteHost, harness: string, cwd: string, env: Record<string, string | undefined> = process.env): string[] {
-  const shell = (env.DASH_REMOTE_SHELL?.trim() || "ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30").split(/\s+/);
   const launcher = env.DASH_REMOTE_ACP?.trim() || "dash-acp";
-  return [...shell, host.dest, [launcher, harness, "--cwd", quote(cwd)].join(" ")];
+  return remoteShellCommand(host, [launcher, harness, "--cwd", quote(cwd)].join(" "), env);
+}
+
+/** Shared SSH destination and transport for turns and read-only history. */
+export function remoteShellCommand(host: RemoteHost, command: string, env: Record<string, string | undefined> = process.env): string[] {
+  const shell = (env.DASH_REMOTE_SHELL?.trim() || "ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30").split(/\s+/);
+  return [...shell, host.dest, command];
 }

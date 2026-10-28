@@ -65,6 +65,7 @@ import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnes
 import { acpCommand, AcpSupervisor, type AcpHandle } from "./src/acp/supervisor";
 import { AcpPermissionRouter } from "./src/acp/permission-port";
 import { PermissionBroker, type PermissionNotice } from "./src/permission-broker";
+import { remoteClaudeHistory } from "./src/remote-history";
 import { remoteAcpCommand, remoteHostFor, remoteHosts, remoteRouteIds, remoteTurnProblem, type RemoteHost } from "./src/remote-hosts";
 import {
   CANCELLED_EXIT_CODE,
@@ -1117,8 +1118,10 @@ const server = Bun.serve<SocketData>({
           }
           const routed = SELF.matches(message.hostId) ? undefined : remoteHostFor(message.hostId);
           if (routed) {
-            // A chat recorded on a routed computer: its history is the copy AgentsView synced here.
-            const page = await chatIndex.history({ kind: message.harness, sessionId: message.sessionId, host: routed.hostId, limit: limit ?? 400, self: { id: SELF.id(), name: HOST_NAME } }).catch(() => ({ messages: [], before: null }));
+            // Read the recording computer first; an unreachable host keeps its archive readable.
+            const live = message.harness === "claude" && isSelfArchiveProfile(message.profileId, "claude", message.sessionId)
+              ? await remoteClaudeHistory(routed, message.sessionId, limit ?? 200) : undefined;
+            const page = live ?? await chatIndex.history({ kind: message.harness, sessionId: message.sessionId, host: routed.hostId, limit: limit ?? 400, self: { id: SELF.id(), name: HOST_NAME } }).catch(() => ({ messages: [], before: null }));
             sendTo(ws, { type: "history", harness: message.harness, sessionId: message.sessionId, messages: page.messages, ...paging(page.before) });
             break;
           }
