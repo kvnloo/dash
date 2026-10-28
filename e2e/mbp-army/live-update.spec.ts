@@ -290,11 +290,32 @@ test('live-preview-health: an HTTP 500 bundle cannot reload until the same SHA b
     metro.setBundleStatus(200);
     await expect(chip).toContainText('aaaaaaa → bbbbbbb', { timeout: 10_000 });
     await expect.poll(() => reloads(page), { timeout: 10_000 }).toBe(1);
-    const requestsWhenHealthy = metro.bundleRequests();
     await page.waitForTimeout(1_200);
     expect(await reloads(page)).toBe(1);
-    expect(metro.bundleRequests()).toBe(requestsWhenHealthy); // One successful probe per SHA.
     await pair(page, bridge, url);
+  } finally { await metro.close(); }
+});
+
+test('live-preview-health: an update that breaks while waiting cannot reload until it recovers', async ({ page, bridge }, info) => {
+  const metro = await startMetro();
+  try {
+    await openChat(page, bridge, appUrl(metro, 1_000, 250));
+    const draft = 'Keep this draft while the update waits';
+    await composer(page).fill(draft);
+    metro.setBuild(B);
+    const chip = page.getByTestId('turbo-served-build');
+    await expect(chip).toContainText('update ready - held: unsent draft');
+    metro.setBundleStatus(500);
+    await chip.click({ noWaitAfter: true });
+    await expect.soft(chip).toContainText('bbbbbbb failed to build (HTTP 500)', { timeout: 10_000 });
+    expect(await reloads(page)).toBe(0);
+    await expect(composer(page)).toHaveValue(draft);
+    await page.screenshot({ path: info.outputPath('broken-update-held.png') });
+    metro.setBundleStatus(200);
+    await expect(chip).toContainText('update ready - held: unsent draft', { timeout: 10_000 });
+    await chip.click({ noWaitAfter: true });
+    await expect.poll(() => reloads(page)).toBe(1);
+    await page.screenshot({ path: info.outputPath('recovered-update-reloaded.png') });
   } finally { await metro.close(); }
 });
 
