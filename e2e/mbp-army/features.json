@@ -1,308 +1,110 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
-    {
-      "id": "annotate-tldraw-send",
-      "title": "Send confirmation retains newer ink without restoring submitted marks",
-      "tests": [
-        "annotate-tldraw: confirmed send removes only submitted ink, retaining newer ink"
-      ]
-    },
-    {
-      "id": "annotate-tldraw",
-      "title": "Offline warm tldraw annotation and history",
-      "tests": [
-        "annotate-tldraw: warm open, visible stroke, local assets and history"
-      ]
-    },
-    {
-      "id": "annotate-tldraw-contract",
-      "title": "Unchanged sent annotation JSON and markers",
-      "tests": [
-        "annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Skia"
-      ]
-    },
-    {
-      "id": "annotate-tldraw-zoom",
-      "title": "Capture-normalized strokes after camera zoom",
-      "tests": [
-        "annotate-tldraw: zoomed ink is normalized in capture page coordinates"
-      ]
-    },
-    {
-      "id": "dex-simulation",
-      "title": "Explicit web DeX TV and Pad simulation",
-      "tests": [
-        "DeX simulation shows TV and Pad and Touchpad returns to TV"
-      ]
-    },
-    {
-      "id": "pairing",
-      "title": "Pair with a bridge, Chats tab, open and close a chat window",
-      "tests": [
-        "pairing, Chats tab, open and close real chat window"
-      ]
-    },
-    {
-      "id": "send-stream",
-      "title": "Composer send and streamed agent reply",
-      "tests": [
-        "composer typing, Send and streamed ACP reply"
-      ]
-    },
-    {
-      "id": "stop",
-      "title": "Stop cancels a running turn",
-      "tests": [
-        "Stop cancels an active ACP turn and restores composer"
-      ]
-    },
-    {
-      "id": "queue",
-      "title": "Queue the next prompt behind a running turn",
-      "tests": [
-        "Queue preserves next prompt and sends after running turn"
-      ]
-    },
-    {
-      "id": "steer",
-      "title": "Steer a running turn (honest unsupported delivery)",
-      "tests": [
-        "Steer running Hermes turn surfaces unsupported ACP delivery honestly"
-      ]
-    },
-    {
-      "id": "attachments",
-      "title": "File attachments upload to the bridge",
-      "tests": [
-        "file chooser uploads real bytes to isolated bridge",
-        "Attach sheet opens on the paperclip with the dock at rest",
-        "Attach sheet follows the paperclip when the dock moves after it opens",
-        "Attach while the dock is still animating down never shows the sheet away from the paperclip"
-      ]
-    },
-    {
-      "id": "context-gauge",
-      "title": "Context gauge card",
-      "tests": [
-        "context gauge opens a readable card inside the viewport",
-        "context gauge stays pressable while its card is open: pressing it closes the card",
-        "safe exploratory controls and context hit target at 390",
-        "safe exploratory controls and context hit target at 800"
-      ]
-    },
-    {
-      "id": "context-grid-peek",
-      "title": "Long-press the context gauge: a small 20x10 grid peek anchored above it; tap opens the card, tap outside dismisses",
-      "tests": [
-        "context gauge long-press opens a small grid peek just above the gauge",
-        "an agent-reported context reading fills the grid in the peek and the card"
-      ]
-    },
-    {
-      "id": "context-grid-card",
-      "title": "Context card draws the 20x10 grid instead of the bar, with Free space and Autocompact buffer rows",
-      "tests": [
-        "context card shows the grid instead of the bar",
-        "an agent-reported context reading fills the grid in the peek and the card"
-      ]
-    },
-    {
-      "id": "acp-context-reading",
-      "title": "An ACP agent's usage_update reaches the gauge",
-      "tests": [
-        "an agent-reported context reading fills the grid in the peek and the card"
-      ]
-    },
-    {
-      "id": "prompt-rail",
-      "title": "Prompt rail scrub, Jump and Latest, one bar per prompt of a 1000-message chat",
-      "tests": [
-        "prompt rail mouse scrub, Jump and Latest on real transcript",
-        "prompt rail keeps the selected turn preview when a live reply completes",
-        "every prompt is on the rail, on the right edge clear of the text, and tap and drag jump to the prompt shown",
-        "scrolling up while the rest of the chat is still paging in: the view holds, the rail still ends up whole, and the top of the list goes on",
-        "a failed older page is retried, so a network blip does not leave the rail partial",
-        "the rail is on the left edge and the message text starts clear of it",
-        "every Hermes prompt is on the rail, on the right edge clear of the text, and tap and drag jump to the prompt shown"
-      ]
-    },
-    {
-      "id": "harness-picker",
-      "title": "Harness picker (OMP / Hermes)",
-      "tests": [
-        "harness picker switches OMP to Hermes without sending"
-      ]
-    },
-    {
-      "id": "approvals",
-      "title": "Upstream approvals: dry-run outbox, reject, history",
-      "tests": [
-        "approvals screen reads real dry-run outbox and persists rejection"
-      ]
-    },
-    {
-      "id": "drafts",
-      "title": "Draft text survives close, reopen and reload",
-      "tests": [
-        "draft text survives close, reopen and real browser reload"
-      ]
-    },
-    {
-      "id": "tool-cards",
-      "title": "Tool, thinking and activity cards are compact and un-nested at phone width",
-      "tests": [
-        "tool and thinking cards stay compact and un-nested at phone width",
-        "a long tool stack folds to its header and opens to every row"
-      ]
-    },
-    {
-      "id": "reconnect",
-      "title": "Bridge death disables Send; restart reconnects",
-      "tests": [
-        "bridge process death disables Send and restart reconnects"
-      ]
-    },
-    {
-      "id": "agent-errors",
-      "title": "Agent errors are surfaced and the composer stays usable",
-      "tests": [
-        "real ACP error is surfaced visibly and leaves composer usable"
-      ]
-    },
-    {
-      "id": "chat-window-identity",
-      "title": "Chat window identity badge at phone and tablet widths",
-      "tests": [
-        "safe exploratory controls and context hit target at 390",
-        "safe exploratory controls and context hit target at 800",
-        "host info sheet is compact: provenance inside the sheet, one indent level, session id whole and copyable"
-      ]
-    },
-    {
-      "id": "conditional-roster-lifecycle",
-      "title": "Conditional roster polls complete without aborting a bridge-owned turn",
-      "tests": [
-        "conditional roster polls finish while an ephemeral turn stays queueable and stoppable"
-      ]
-    },
-    {
-      "id": "live-triage",
-      "title": "Live prioritized blockers and roadmap asks, age and details",
-      "tests": [
-        "Triage lists live blockers and roadmap priorities, opens an item and labels stale evidence"
-      ]
-    },
-    {
-      "id": "live-agent-trace",
-      "title": "Authenticated live bridge sessions and explicit unavailable state",
-      "tests": [
-        "Agent Trace loads the bridge live session and clears it on unavailable",
-        "Agent Trace reports unavailable when the live bridge has no source observations"
-      ]
-    },
-    {
-      "id": "running-turn-survives-roster",
-      "title": "A running turn survives a missing roster row",
-      "tests": [
-        "a missing roster row must not terminate a bridge-owned running turn"
-      ]
-    },
-    {
-      "id": "long-press-menu",
-      "title": "Long-press on a chat row opens the row menu and sends nothing",
-      "tests": [
-        "long-press on a chat row opens the row menu and sends nothing"
-      ]
-    },
-    {
-      "id": "claude-code-send",
-      "title": "Claude Code chats send: a new chat and an archived chat recorded on this host",
-      "tests": [
-        "send to a new Claude Code chat gets a streamed reply",
-        "opens sendable (not view-only) from Chats and gets a streamed reply"
-      ]
-    },
-    {
-      "id": "socket-keepalive",
-      "title": "The app's socket keepalive is answered with a pong",
-      "tests": [
-        "the app socket keepalive is answered, never logged as ws.bad_message"
-      ]
-    },
-    {
-      "id": "claude-remote-resume",
-      "title": "Continue a Claude Code chat recorded on another computer: resumed there, reply streamed; unrouted stays view only",
-      "tests": [
-        "resumes on that computer and streams the reply, turn after turn",
-        "a chat saved as ended comes back sendable once the bridge routes to its computer",
-        "opens view only and sends nothing"
-      ]
-    },
-    {
-      "id": "roadmap",
-      "title": "Roadmap screen: projects, feature filter, task detail with live Hermes and roadmap status",
-      "tests": [
-        "Roadmap -> project -> feature filter -> task detail with live Hermes and roadmap status"
-      ]
-    },
-    {
-      "id": "subagent-strip",
-      "title": "A Hermes chat with delegated workers shows the subagent strip above the composer: live count, newest first, opens to a tree",
-      "tests": [
-        "a Hermes chat with delegated workers shows the subagent strip, newest first, and opens to a tree"
-      ]
-    },
-    {
-      "id": "pm-ledger",
-      "title": "The repository's pm ledger (pm/events.jsonl) parses cleanly and tracks the Hermes tasks",
-      "tests": [
-        "the Dash repository's own pm ledger parses cleanly and tracks the Hermes tasks"
-      ]
-    },
-    {
-      "id": "concurrent-chats",
-      "title": "Chats reply side by side: a message in a second chat is answered while the first chat's agent is still replying (#498)",
-      "tests": [
-        "a message in a second chat is answered while the first chat is still replying"
-      ]
-    },
-    {
-      "id": "same-chat-order",
-      "title": "Two messages to one chat, back to back, are both answered, the first one first",
-      "tests": [
-        "two messages to one chat, back to back, are both answered in order",
-        "two windows sending into one chat at the same moment: the second waits and is answered after the first"
-      ]
-    },
-    {
-      "id": "provider-failures",
-      "title": "A provider that is out of usage (402) or rate limiting (429) is named in the chat, never as a host authentication problem (#501)",
-      "tests": [
-        "a provider 402 says the agent's account is out of usage, and the chat stays usable",
-        "a provider 429 says the host is being rate limited, and the chat stays usable"
-      ]
-    },
-    {
-      "id": "annotation-launch",
-      "title": "Skia entry diagnostics, retry after failed load and cancellable stylus double-tap",
-      "tests": [
-        "annotation-launch: Skia entry has no ink alert in the first three seconds",
-        "annotation-launch: failed CanvasKit load reports skia-load and Retry permits a stroke",
-        "annotation-launch: empty pen double-tap does not send or report an error",
-        "annotation-launch: pen double-tap offers three-second Undo and retains unsent ink"
-      ]
-    }
+    {"id": "annotate-tldraw-send", "title": "Send confirmation retains newer ink without restoring submitted marks",
+     "tests": ["annotate-tldraw: confirmed send removes only submitted ink, retaining newer ink"]},
+    {"id": "annotate-tldraw", "title": "Offline warm tldraw annotation and history",
+     "tests": ["annotate-tldraw: warm open, visible stroke, local assets and history"]},
+    {"id": "annotate-tldraw-contract", "title": "Unchanged sent annotation JSON and markers",
+     "tests": ["annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Skia"]},
+    {"id": "annotate-tldraw-zoom", "title": "Capture-normalized strokes after camera zoom",
+     "tests": ["annotate-tldraw: zoomed ink is normalized in capture page coordinates"]},
+    {"id": "dex-simulation", "title": "Explicit web DeX TV and Pad simulation",
+     "tests": ["DeX simulation shows TV and Pad and Touchpad returns to TV"]},
+    {"id": "pairing", "title": "Pair with a bridge, Chats tab, open and close a chat window",
+     "tests": ["pairing, Chats tab, open and close real chat window"]},
+    {"id": "send-stream", "title": "Composer send and streamed agent reply",
+     "tests": ["composer typing, Send and streamed ACP reply"]},
+    {"id": "stop", "title": "Stop cancels a running turn",
+     "tests": ["Stop cancels an active ACP turn and restores composer"]},
+    {"id": "queue", "title": "Queue the next prompt behind a running turn",
+     "tests": ["Queue preserves next prompt and sends after running turn"]},
+    {"id": "steer", "title": "Steer a running turn (honest unsupported delivery)",
+     "tests": ["Steer running Hermes turn surfaces unsupported ACP delivery honestly"]},
+    {"id": "attachments", "title": "File attachments upload to the bridge",
+     "tests": ["file chooser uploads real bytes to isolated bridge",
+               "Attach sheet opens on the paperclip with the dock at rest",
+               "Attach sheet follows the paperclip when the dock moves after it opens",
+               "Attach while the dock is still animating down never shows the sheet away from the paperclip"]},
+    {"id": "context-gauge", "title": "Context gauge card",
+     "tests": ["context gauge opens a readable card inside the viewport",
+               "context gauge stays pressable while its card is open: pressing it closes the card",
+               "safe exploratory controls and context hit target at 390",
+               "safe exploratory controls and context hit target at 800"]},
+    {"id": "context-grid-peek", "title": "Long-press the context gauge: a small 20x10 grid peek anchored above it; tap opens the card, tap outside dismisses",
+     "tests": ["context gauge long-press opens a small grid peek just above the gauge",
+               "an agent-reported context reading fills the grid in the peek and the card"]},
+    {"id": "context-grid-card", "title": "Context card draws the 20x10 grid instead of the bar, with Free space and Autocompact buffer rows",
+     "tests": ["context card shows the grid instead of the bar",
+               "an agent-reported context reading fills the grid in the peek and the card"]},
+    {"id": "acp-context-reading", "title": "An ACP agent's usage_update reaches the gauge",
+     "tests": ["an agent-reported context reading fills the grid in the peek and the card"]},
+    {"id": "prompt-rail", "title": "Prompt rail scrub, Jump and Latest, one bar per prompt of a 1000-message chat",
+     "tests": ["prompt rail mouse scrub, Jump and Latest on real transcript",
+               "prompt rail keeps the selected turn preview when a live reply completes",
+               "every prompt is on the rail, on the right edge clear of the text, and tap and drag jump to the prompt shown",
+               "scrolling up while the rest of the chat is still paging in: the view holds, the rail still ends up whole, and the top of the list goes on",
+               "a failed older page is retried, so a network blip does not leave the rail partial",
+               "the rail is on the left edge and the message text starts clear of it",
+               "every Hermes prompt is on the rail, on the right edge clear of the text, and tap and drag jump to the prompt shown"]},
+    {"id": "harness-picker", "title": "Harness picker (OMP / Hermes)",
+     "tests": ["harness picker switches OMP to Hermes without sending"]},
+    {"id": "approvals", "title": "Upstream approvals: dry-run outbox, reject, history",
+     "tests": ["approvals screen reads real dry-run outbox and persists rejection"]},
+    {"id": "drafts", "title": "Draft text survives close, reopen and reload",
+     "tests": ["draft text survives close, reopen and real browser reload"]},
+    {"id": "tool-cards", "title": "Tool, thinking and activity cards are compact and un-nested at phone width",
+     "tests": ["tool and thinking cards stay compact and un-nested at phone width", "a long tool stack folds to its header and opens to every row"]},
+    {"id": "reconnect", "title": "Bridge death disables Send; restart reconnects",
+     "tests": ["bridge process death disables Send and restart reconnects"]},
+    {"id": "agent-errors", "title": "Agent errors are surfaced and the composer stays usable",
+     "tests": ["real ACP error is surfaced visibly and leaves composer usable"]},
+    {"id": "chat-window-identity", "title": "Chat window identity badge at phone and tablet widths",
+     "tests": ["safe exploratory controls and context hit target at 390",
+               "safe exploratory controls and context hit target at 800",
+               "host info sheet is compact: provenance inside the sheet, one indent level, session id whole and copyable"]},
+    {"id": "conditional-roster-lifecycle", "title": "Conditional roster polls complete without aborting a bridge-owned turn",
+     "tests": ["conditional roster polls finish while an ephemeral turn stays queueable and stoppable"]},
+    {"id": "live-triage", "title": "Live prioritized blockers and roadmap asks, age and details",
+     "tests": ["Triage lists live blockers and roadmap priorities, opens an item and labels stale evidence"]},
+    {"id": "live-agent-trace", "title": "Authenticated live bridge sessions and explicit unavailable state",
+     "tests": ["Agent Trace loads the bridge live session and clears it on unavailable", "Agent Trace reports unavailable when the live bridge has no source observations"]},
+    {"id": "running-turn-survives-roster", "title": "A running turn survives a missing roster row",
+     "tests": ["a missing roster row must not terminate a bridge-owned running turn"]},
+    {"id": "long-press-menu", "title": "Long-press on a chat row opens the row menu and sends nothing",
+     "tests": ["long-press on a chat row opens the row menu and sends nothing"]},
+    {"id": "claude-code-send", "title": "Claude Code chats send: a new chat and an archived chat recorded on this host",
+     "tests": ["send to a new Claude Code chat gets a streamed reply",
+               "opens sendable (not view-only) from Chats and gets a streamed reply"]},
+    {"id": "socket-keepalive", "title": "The app's socket keepalive is answered with a pong",
+     "tests": ["the app socket keepalive is answered, never logged as ws.bad_message"]},
+    {"id": "claude-remote-resume", "title": "Continue a Claude Code chat recorded on another computer: resumed there, reply streamed; unrouted stays view only",
+     "tests": ["resumes on that computer and streams the reply, turn after turn", "a chat saved as ended comes back sendable once the bridge routes to its computer",
+               "opens view only and sends nothing"]},
+    {"id": "roadmap", "title": "Roadmap screen: projects, feature filter, task detail with live Hermes and roadmap status",
+     "tests": ["Roadmap -> project -> feature filter -> task detail with live Hermes and roadmap status"]},
+    {"id": "subagent-strip", "title": "A Hermes chat with delegated workers shows the subagent strip above the composer: live count, newest first, opens to a tree",
+     "tests": ["a Hermes chat with delegated workers shows the subagent strip, newest first, and opens to a tree"]},
+    {"id": "pm-ledger", "title": "The repository's pm ledger (pm/events.jsonl) parses cleanly and tracks the Hermes tasks",
+     "tests": ["the Dash repository's own pm ledger parses cleanly and tracks the Hermes tasks"]},
+    {"id": "concurrent-chats", "title": "Chats reply side by side: a message in a second chat is answered while the first chat's agent is still replying (#498)",
+     "tests": ["a message in a second chat is answered while the first chat is still replying"]},
+    {"id": "same-chat-order", "title": "Two messages to one chat, back to back, are both answered, the first one first",
+     "tests": ["two messages to one chat, back to back, are both answered in order",
+               "two windows sending into one chat at the same moment: the second waits and is answered after the first"]},
+    {"id": "provider-failures", "title": "A provider that is out of usage (402) or rate limiting (429) is named in the chat, never as a host authentication problem (#501)",
+     "tests": ["a provider 402 says the agent's account is out of usage, and the chat stays usable",
+               "a provider 429 says the host is being rate limited, and the chat stays usable"]},
+    {"id": "annotation-launch", "title": "Skia entry diagnostics, retry after failed load and cancellable stylus double-tap",
+     "tests": ["annotation-launch: Skia entry has no ink alert in the first three seconds",
+               "annotation-launch: failed CanvasKit load reports skia-load and Retry permits a stroke",
+               "annotation-launch: empty pen double-tap does not send or report an error",
+               "annotation-launch: pen double-tap offers three-second Undo and retains unsent ink"]}
   ],
   "not_yet_in_army": [
-    "native IME and keyboard attach",
-    "voice / speech-to-text",
-    "Android attachment permissions and share sheet",
-    "live model behaviour",
-    "Orchestra / orchestration screens",
-    "handedness",
-    "Hermes session history",
-    "notifications and deep links",
+    "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
+    "live model behaviour", "Orchestra / orchestration screens", "handedness",
+    "Hermes session history", "notifications and deep links",
     "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)",
     "live preview chip: old -> new build marker, auto-reload and Metro switch (dev client only: needs a Metro serving a build manifest; none exists in the web export)"
   ]
