@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, DevSettings, Keyboard, Linking, NativeModules } from "react-native";
+import { AppState, Keyboard, Linking, NativeModules, Platform } from "react-native";
 import {
   POLL_MS,
   RUNNING_BUILD,
@@ -17,9 +17,35 @@ import {
   type ReloadDecision,
 } from "./live-update";
 import { idleMs } from "./touch-idle";
+import { reloadApp } from "./reload-app";
 
 const AUTO_KEY = "dash.liveUpdate.auto";
 const TRIED_KEY = "dash.liveUpdate.autoFor";
+
+// Web-only URL seams mirror store/annotate.ts. Native keeps immutable build-info.json.
+const webParams = Platform.OS === "web" && typeof location !== "undefined" ? new URLSearchParams(location.search) : null;
+
+function runningBuild(): LiveBuild | null {
+  const sha = webParams?.get("liveRunning");
+  if (sha !== null && sha !== undefined && /^[0-9a-f]{40}$/i.test(sha)) {
+    return { sha: sha.toLowerCase(), builtAtMs: RUNNING_BUILD?.builtAtMs ?? null };
+  }
+  return RUNNING_BUILD;
+}
+
+function webIdleReloadMs(): number | undefined {
+  const value = webParams?.get("liveIdleMs");
+  if (value === null || value === undefined || !/^\d+$/.test(value)) return undefined;
+  const milliseconds = Number(value);
+  return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
+}
+
+function keyboardVisible(): boolean {
+  if (Platform.OS !== "web") return Keyboard.isVisible();
+  if (typeof document === "undefined") return false;
+  const focused = document.activeElement;
+  return focused !== null && focused.matches('input, textarea, [contenteditable="true"], [role="textbox"]');
+}
 
 async function readPref(key: string): Promise<string | null> {
   try {
@@ -73,17 +99,21 @@ export interface LiveUpdate {
  * (when the owner returns to it, or after 30 s without a touch), unless a guard says busy.
  */
 export function useLiveUpdate(): LiveUpdate {
-  const origin = RUNNING_BUILD === null ? null : bundleOrigin() ?? metroOrigin(Constants.expoConfig?.hostUri);
+  const running = runningBuild();
+  const requestedOrigin = webParams?.get("liveOrigin");
+  const origin = requestedOrigin !== null && requestedOrigin !== undefined
+    ? metroOrigin(requestedOrigin)
+    : running === null ? null : bundleOrigin() ?? metroOrigin(Constants.expoConfig?.hostUri);
   const [served, setServed] = useState<LiveBuild | null>(null);
   const [autoReload, setAutoState] = useState(true);
   const [lastAutoFor, setLastAutoFor] = useState<string | null>(null);
   const [, setTick] = useState(0);
-  const foregroundAt = useRef(Date.now());
+  const foregroundAt = useRef<number | null>(null);
   const reloading = useRef(false);
 
   useEffect(() => {
     void readPref(AUTO_KEY).then((value) => setAutoState(value !== "0"));
-    void readPref(TRIED_KEY).then(setLastAutoFor);
+    void readPref(TRIED_KEY).then((value) => setLastAutoFor((current) => current ?? value));
   }, []);
 
   useEffect(() => {
@@ -98,10 +128,10 @@ export function useLiveUpdate(): LiveUpdate {
     poll();
     const timer = setInterval(poll, POLL_MS);
     // Re-evaluate the idle gate between polls while an update waits.
-    const tick = setInterval(() => setTick((n) => n + 1), 5_000);
+    const tick = setInterval(() => setTick((n) => n + 1), Platform.OS === "web" ? 250 : 5_000);
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active") return;
-      foregroundAt.current = Date.now();
+      if (Platform.OS !== "web") foregroundAt.current = Date.now();
       poll();
     });
     return () => {
@@ -114,19 +144,20 @@ export function useLiveUpdate(): LiveUpdate {
 
   // A reload that landed on the served build clears the retry guard.
   useEffect(() => {
-    if (served !== null && RUNNING_BUILD !== null && served.sha === RUNNING_BUILD.sha && lastAutoFor !== null) {
+    if (served !== null && running !== null && served.sha === running.sha && lastAutoFor !== null) {
       setLastAutoFor(null);
       void writePref(TRIED_KEY, null);
     }
   }, [served, lastAutoFor]);
 
   const decision = decideReload({
-    running: RUNNING_BUILD,
+    running,
     served,
     autoReload,
-    sinceForegroundMs: Date.now() - foregroundAt.current,
+    sinceForegroundMs: foregroundAt.current === null ? Number.POSITIVE_INFINITY : Date.now() - foregroundAt.current,
     idleMs: idleMs(),
-    keyboardVisible: Keyboard.isVisible(),
+    idleReloadMs: webIdleReloadMs(),
+    keyboardVisible: keyboardVisible(),
     blockedBy: reloadBlockedBy(),
     lastAutoFor,
   });
@@ -134,7 +165,7 @@ export function useLiveUpdate(): LiveUpdate {
   const reloadNow = useCallback(() => {
     if (reloading.current) return;
     reloading.current = true;
-    DevSettings.reload();
+    reloadApp();
     setTimeout(() => {
       reloading.current = false;
     }, 10_000);
@@ -159,5 +190,5 @@ export function useLiveUpdate(): LiveUpdate {
     [origin],
   );
 
-  return { running: RUNNING_BUILD, served, origin, decision, autoReload, setAutoReload, reloadNow, switchTo };
+  return { running, served, origin, decision, autoReload, setAutoReload, reloadNow, switchTo };
 }

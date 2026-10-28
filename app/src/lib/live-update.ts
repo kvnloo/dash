@@ -143,6 +143,8 @@ export interface ReloadInput {
   sinceForegroundMs: number;
   /** Milliseconds since the last touch. */
   idleMs: number;
+  /** Optional web-army idle threshold; native always uses IDLE_RELOAD_MS. */
+  idleReloadMs?: number;
   keyboardVisible: boolean;
   blockedBy: string | null;
   /** The served sha an automatic reload was already attempted for (never loop on one build). */
@@ -160,9 +162,9 @@ export function decideReload(input: ReloadInput): ReloadDecision {
   if (!input.autoReload) return { kind: "ready", why: "manual" };
   if (input.lastAutoFor === served.sha) return { kind: "ready", why: "retried" };
   if (input.blockedBy !== null) return { kind: "ready", why: "blocked" };
-  if (input.sinceForegroundMs <= FOREGROUND_GRACE_MS) return { kind: "reload" };
   if (input.keyboardVisible) return { kind: "ready", why: "keyboard" };
-  if (input.idleMs >= IDLE_RELOAD_MS) return { kind: "reload" };
+  if (input.sinceForegroundMs <= FOREGROUND_GRACE_MS) return { kind: "reload" };
+  if (input.idleMs >= (input.idleReloadMs ?? IDLE_RELOAD_MS)) return { kind: "reload" };
   return { kind: "ready", why: "busy" };
 }
 
