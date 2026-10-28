@@ -107,7 +107,12 @@
                "identity token with one flipped signature byte gets 401",
                "identity token with wrong kid gets 401",
                "identity token with aud z0live gets 401",
-               "identity token missing dash:chat scope gets 401"]}
+               "identity token missing dash:chat scope gets 401"]},
+    {"id": "voice-bootstrap-targets", "title": "Native Hermes voice bootstrap resolves attached IDs, requires identity, and returns its broker",
+     "tests": ["voice bootstrap resolves the real fixture Hermes chat IDs",
+               "voice bootstrap rejects unknown sessions and legacy credentials",
+               "voice bootstrap reports disabled native voice",
+               "voice bootstrap echoes configured broker origin"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",

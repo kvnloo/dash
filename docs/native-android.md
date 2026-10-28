@@ -125,14 +125,35 @@ Stop closes tracks/peer before best-effort broker cancellation/end. Leaving Dash
 the Android background stops the mic. There is no microphone foreground service,
 background-capture promise, platform-TTS fallback, or Expo Go/web implementation.
 
-The bridge's `/voice/bootstrap` is online identity-authenticated, native-only metadata
-for an exact known attached Hermes profile/session, enabled with `DASH_NATIVE_VOICE=1`.
-It does not mint a bearer and does not turn `dash:chat` into voice permission. The app
-separately mints an in-memory access token with `aud=z0live`, exactly `z0live:voice`,
-from its existing device-bound SecureStore enrollment. An absent grant fails closed.
+The bridge's `/voice/bootstrap` is online identity-authenticated metadata for an
+exact known attached Hermes profile/session. Voice is enabled unless
+`DASH_NATIVE_VOICE=0`; the endpoint rejects browser Origin headers and legacy
+bearers. It accepts raw profile IDs, `hermes:<profile>`, or the roster ID
+`hermes:session:<profile>:<session>`, echoes the submitted `profile`, and
+returns `canonicalProfile` for the broker's Hermes target.
+It does not mint a bearer or turn `dash:chat` into voice permission. The app
+separately mints an in-memory access token with `aud=z0live`, exactly
+`z0live:voice`, from its existing device-bound SecureStore enrollment.
+An absent grant fails closed.
 The parent must review an explicit additional voice grant for the S25's native Dash
 credential; it is independently removable with `z0bridge revoke CRED --scope z0live:voice`.
 No Lawnchair token or owner bearer belongs in Dash. No grants are applied by builds.
+
+The bootstrap returns `broker` (override with `DASH_Z0LIVE_BROKER`; default
+`https://0.taila30dc.ts.net:8791`). The app validates it with `new URL()` and
+permits only an HTTPS `.ts.net` hostname with an explicit port and no credentials,
+path, query or fragment. All `/v1/*` calls use that origin. Only web tester-army
+builds with `EXPO_PUBLIC_DASH_VOICE_FAKE=1` also allow
+`http://127.0.0.1:<port>` and route `provider:answer` to
+`<broker>/v1/fake/answer`; normal builds use OpenAI's fixed SDP endpoint.
+The broker receives the resolved `canonicalProfile`; typed-turn comparison
+keeps the original conversation agent ID.
+
+**Still blocked outside Dash:** the deployed broker rejects Dash identity tokens
+and the S25 Dash credential lacks `z0live:voice`. The host must deploy the
+reviewed broker identity/introspection change and the owner must grant the
+scope before physical calls can work. Bootstrap army evidence is not broker
+deployment or native mic/playback acceptance.
 
 The matching isolated z0live change requires `Z0LIVE_IDENTITY=1`, loopback identity
 URL `http://127.0.0.1:4789`, and `Z0LIVE_IDENTITY_CREDENTIAL_FILE` pointing to a 0600

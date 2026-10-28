@@ -6,7 +6,7 @@ export interface VoicePeer {
   send(event: object): void;
   close(): void;
 }
-export interface VoiceTarget { profile: string; session: string }
+export interface VoiceTarget { profile: string; session: string; brokerProfile?: string }
 /** Live typed turns in the app's attached chat; historical rows never become voice. */
 export interface VoiceTurnSource {
   get(): {
@@ -122,7 +122,7 @@ export class ContinuousVoice {
       const typedTurns = this.io.typedTurns ?? lazyAppStore();
       if (!this.live(generation)) return;
       this.watchTyped(typedTurns, target, generation);
-      const mint = await this.io.request("/v1/realtime/session", { client: "dash", transports: ["realtime"], model: REALTIME_VOICE_MODEL.preferred, fallback_model: REALTIME_VOICE_MODEL.fallback, context: { app: "app.dash.mobile", hermes_target: target }, tools: [] });
+      const mint = await this.io.request("/v1/realtime/session", { client: "dash", transports: ["realtime"], model: REALTIME_VOICE_MODEL.preferred, fallback_model: REALTIME_VOICE_MODEL.fallback, context: { app: "app.dash.mobile", hermes_target: { profile: target.brokerProfile ?? target.profile, session: target.session } }, tools: [] });
       if (!object(mint) || typeof mint.session_id !== "string" || typeof mint.value !== "string" || mint.transport !== "realtime") throw new Error("Unsupported voice session; no transport/model fallback was attempted.");
       const sid = mint.session_id;
       if (!this.live(generation)) { await this.io.request(`/v1/sessions/${encodeURIComponent(sid)}/end`, {}); return; }
