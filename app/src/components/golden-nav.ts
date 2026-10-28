@@ -142,7 +142,7 @@ const EXPAND_D =
   "M9 3H3v6M15 3h6v6M9 21H3v-6M21 15v6h-6M3 3l7 7M21 3l-7 7M3 21l7-7M21 21l-7-7";
 export const EXPAND_PATH = EXPAND_D;
 
-export const TAB_LABELS = ["Bots", "Chats", "Orchestra"] as const;
+export const TAB_LABELS = ["Hosts", "Chats", "Orchestra"] as const;
 
 export function clampTab(tab: number): 0 | 1 | 2 {
   const n = Math.round(tab);

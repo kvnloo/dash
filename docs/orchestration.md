@@ -45,8 +45,8 @@ Feature checkouts live under `.worktrees/` (gitignored). Each has its own branch
 | Worktree | Branch | Owns | Must not touch |
 |---------|--------|------|----------------|
 | `.worktrees/pair` | `svc/pair` | `PairScreen`, `pair-api`, `pair-crypto`, `sonic-pair`, `bridge/pair-audio.ts`, `bridge/pair-decode.ts`, `/pair/*` | chat UI, AppNav, roster |
-| `.worktrees/bridge-core` | `svc/bridge-core` | `bridge/index.ts` WS, harness spawn, token, reconnect, STT | pairing audio, Bots pane, AppNav |
-| `.worktrees/roster` | `svc/roster` | `bridge/src/roster.ts`, `app/src/lib/roster.ts`, `BotsPane`, `hello.hosts` | pairing, nav pixels |
+| `.worktrees/bridge-core` | `svc/bridge-core` | `bridge/index.ts` WS, harness spawn, token, reconnect, STT | pairing audio, Hosts pane, AppNav |
+| `.worktrees/roster` | `svc/roster` | `bridge/src/roster.ts`, `app/src/lib/roster.ts`, `HostsPane`, `hello.hosts` | pairing, nav pixels |
 | `.worktrees/voice` | `svc/voice` | `VoiceScreen`, `vad`, `speak`, `voice-session`, `voice_*` events | pairing, AppNav |
 | `.worktrees/nav` | `svc/nav` | `AppNav*`, `golden-nav.ts`, nav assets, `docs/design/nav-probe.html` | pairing, bridge |
 | `.worktrees/chat-core` | `svc/chat-core` | Chat, Composer, `store/app.ts` turn pipeline | pairing, roster |

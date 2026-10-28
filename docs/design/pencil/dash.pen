@@ -147,7 +147,7 @@
                     {
                       "type": "frame",
                       "id": "BpBBL",
-                      "name": "tab-Bots",
+                      "name": "tab-Hosts",
                       "width": 72,
                       "layout": "vertical",
                       "gap": 6,
@@ -156,9 +156,9 @@
                         {
                           "type": "text",
                           "id": "MYNnu",
-                          "name": "tab-Bots",
+                          "name": "tab-Hosts",
                           "fill": "$muted",
-                          "content": "Bots",
+                          "content": "Hosts",
                           "fontFamily": "Inter",
                           "fontSize": 15,
                           "fontWeight": "600"
@@ -677,7 +677,7 @@
       "layoutPosition": "absolute",
       "x": 470,
       "y": 0,
-      "name": "main-bots",
+      "name": "main-hosts",
       "reusable": true,
       "clip": true,
       "width": 390,
@@ -804,7 +804,7 @@
                     {
                       "type": "frame",
                       "id": "R8dK0o",
-                      "name": "tab-Bots",
+                      "name": "tab-Hosts",
                       "width": 72,
                       "layout": "vertical",
                       "gap": 6,
@@ -813,9 +813,9 @@
                         {
                           "type": "text",
                           "id": "iWt0q",
-                          "name": "tab-Bots",
+                          "name": "tab-Hosts",
                           "fill": "$text",
-                          "content": "Bots",
+                          "content": "Hosts",
                           "fontFamily": "Inter",
                           "fontSize": 15,
                           "fontWeight": "600"
@@ -1540,7 +1540,7 @@
                     {
                       "type": "frame",
                       "id": "fdugL",
-                      "name": "tab-Bots",
+                      "name": "tab-Hosts",
                       "width": 72,
                       "layout": "vertical",
                       "gap": 6,
@@ -1549,9 +1549,9 @@
                         {
                           "type": "text",
                           "id": "lUAPS",
-                          "name": "tab-Bots",
+                          "name": "tab-Hosts",
                           "fill": "$muted",
-                          "content": "Bots",
+                          "content": "Hosts",
                           "fontFamily": "Inter",
                           "fontSize": 15,
                           "fontWeight": "600"

@@ -106,6 +106,7 @@ export function targetSwitchProblem(inventory: TargetSwitcherInventory, intent: 
   if (hosts.length !== 1) return "Host is missing or ambiguous. Refresh the roster.";
   const host = hosts[0];
   if (!host) return "Host unavailable.";
+  if (host.kind === "phone") return "No harnesses on a phone.";
   if (!host.self) return "Pair directly with this computer before switching hosts.";
   if (!host.online) return "This host is offline. Reconnect before switching.";
 
@@ -238,7 +239,7 @@ export function targetSwitcherTree(
   choose: (intent: TargetSwitchIntent) => void,
 ): TargetTree {
   const initialExpanded: string[] = [];
-  const nodes: TreeNode[] = inventory.hosts.map((host, hostIndex): TreeNode => {
+  const nodes: TreeNode[] = inventory.hosts.filter(host => host.kind !== "phone").map((host, hostIndex): TreeNode => {
     const hostKey = targetTreeKey("host", host.id, String(hostIndex));
     const onHost = inventory.current?.hostId === host.id;
     if (onHost) initialExpanded.push(hostKey);

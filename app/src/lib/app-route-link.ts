@@ -5,9 +5,9 @@
  * Also orchestra, settings, bots and chats (the preview hand-off opens the screen to test).
  * They open screens only and carry no parameters.
  */
-export type AppRoute = "Lab" | "Trace" | "Orchestra" | "Settings" | "Bots" | "Chats";
+export type AppRoute = "Lab" | "Trace" | "Orchestra" | "Settings" | "Bots" | "Hosts" | "Chats";
 
-const ROUTES: Record<string, AppRoute> = { lab: "Lab", trace: "Trace", orchestra: "Orchestra", settings: "Settings", bots: "Bots", chats: "Chats" };
+const ROUTES: Record<string, AppRoute> = { lab: "Lab", trace: "Trace", orchestra: "Orchestra", settings: "Settings", bots: "Hosts", hosts: "Hosts", chats: "Chats" };
 
 export function parseAppRouteLink(raw: string | null | undefined): AppRoute | null {
   if (!raw) return null;

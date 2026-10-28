@@ -18,7 +18,7 @@ Use these words exactly, in UI strings, accessibility labels, code and tests. If
 
 Where each lives in the app:
 
-- **Bots** tab groups deployed bots by host and nests their sessions alongside installed harness targets. A host header keeps its plain host glyph, address, actual counts and online dot. Bot rows retain their name and muted channel-state summary; their identity face is the original synergy.ai Moodie companion, not a dotted-orb recreation.
+- **Hosts** tab groups deployed bots by host and nests their sessions alongside installed harness targets. A host header keeps its plain host glyph, address, actual counts and online dot. Bot rows retain their name and muted channel-state summary; their identity face is the original synergy.ai Moodie companion, not a dotted-orb recreation.
 - **Harnesses** are in the bridge sheet (the chevron in the top bar): "Harnesses on <host>". Tapping one starts a chat with it. The harness picker in Chat chooses the harness for new chats.
 - **Sessions** are rows in **Chats**.
 - Identity orbs remain the live agent/voice vocabulary in chat and Voice. Bots and known Hermes profile/session rows in the host tree use **Moodie faces** (`BotFace`, `vendor/moodie.ts`): stable profile-key resting expressions, with thinking → thinking, work → focused, done → happy, error → worried and approval → alert. A running gateway alone is not evidence of work. Unknown profile metadata stays unknown; host identity never gets a face. The Component lab has explicitly labelled synthetic profile/expression samples. The port preserves Moodie and bloub's MIT notices in code.
@@ -28,9 +28,9 @@ Where each lives in the app:
 
 Phone app for coding agents on the laptop (OMP, Codex, Grok, Hermes, Claude).
 
-Main: three full-screen swipe panes under the **top navigation bar** (Expand → Voice · three-dot gel pager for **Bots | Chats | Orchestra** · Bridge details chevron), **bottom** `@` search dock. Under the bar, the workspace header names the current pane and holds Approvals, compose (pencil) and Settings. Default tab: **Orchestra**. Compose lives in the **header** (pencil), not a FAB. The bar also sits at the top of Chat and Settings.
+Main: three full-screen swipe panes under the **top navigation bar** (Expand → Voice · three-dot gel pager for **Hosts | Chats | Orchestra** · Bridge details chevron), **bottom** `@` search dock. Under the bar, the workspace header names the current pane and holds Approvals, compose (pencil) and Settings. Default tab: **Orchestra**. Compose lives in the **header** (pencil), not a FAB. The bar also sits at the top of Chat and Settings.
 
-- **Bots** — deployed bots per host (see Glossary), collapsible host sections. Status **dot**, never “Online” pills.
+- **Hosts** — deployed bots per host (see Glossary), collapsible host sections. Status **dot**, never “Online” pills.
 - **Chats** — all conversations, Grok History density: date groups, circular avatars, 1-line preview.
 - **Orchestra** — product / project mesh (Zero tile density, Dash cards).
 
@@ -69,7 +69,7 @@ Typography: system sans. Display 22/700. Heading 17/600. Body 16/24. Small 13/18
 - User: solid `#1f1f1f` bubble, ~22px radius, tighter bottom-right.
 - Tabs: text + **white dot**, not underline dash, not pill fill, not cyan.
 - Search: compact `@` bar at the **bottom**. Scope chips **only when focused**.
-- Bots: status **dot** (`--ok` / `--faint`).
+- Hosts: status **dot** (`--ok` / `--faint`).
 - Lists: **Today / Yesterday** sections + hairline rows (Grok History).
 - Voice: large silver/white orb, “Say something…” (Grok Voice).
 - Orchestra: product cards, agent avatars, active/idle dots. Zero grid density, not cartoon tiles.
@@ -79,7 +79,7 @@ Typography: system sans. Display 22/700. Heading 17/600. Body 16/24. Small 13/18
 
 1. `main-chats` — date-grouped conversations, compose in header, `@` dock
 2. `main-chats-search` — same, search focused, chips `@bot @chat @file`
-3. `main-bots` — host sections (collapsible, count), bots only, 1-line channel summary, status dots
+3. `main-hosts` — host sections (collapsible, count), phones, bots, harnesses and sessions, status dots
 4. `main-orchestra` — product cards, agent avatars, active/idle
 5. `chat` — user bubble, assistant plain, attach + mic composer
 5a. `chat-attachments` — composer chips (uploaded, uploading, refused), sent files in the bubble, Send to phone

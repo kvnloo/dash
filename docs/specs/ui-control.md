@@ -36,7 +36,7 @@ The command is a discriminated union by its inner "type" field. The outer "type"
 
 A "point.target" is **either** {"testID":"visible-id"} **or** {"x":0.5,"y":0.5}. Mixing testID with x/y, or providing only one coordinate, is ambiguous and rejected. Unrecognized fields (including in nested targets, strokes and the envelope) are ignored, not executed or passed through.
 
-Only the following exact-case navigation routes are allowed: "Lab", "Trace", "Orchestra", "Settings", "Bots" (the current AppRoute names from app/src/lib/app-route-link.ts), plus "Chat". No relative paths, HTTP links, deep-link parameters or arbitrary screens. "conversationId" is meaningful only for Chat; the receiver must never reuse it for another route. An absent conversationId navigates to the generic Chat screen.
+Only the following exact-case navigation routes are allowed: "Lab", "Trace", "Orchestra", "Settings", "Hosts", "Bots" (legacy alias; the current AppRoute names from app/src/lib/app-route-link.ts), plus "Chat". No relative paths, HTTP links, deep-link parameters or arbitrary screens. "conversationId" is meaningful only for Chat; the receiver must never reuse it for another route. An absent conversationId navigates to the generic Chat screen.
 
 ## Coordinate space, drawing and visuals
 

@@ -15,9 +15,9 @@ Shipped on `main` and pinned by tests:
 | `assistant-plain-text` | Chat thread | `language.md` |
 | `user-bubble` | `#1f1f1f` | `theme.ts` |
 | `history-date-groups` | Chats pane | Grok History density |
-| `top-tabs-not-bottom` | Bots / Chats / Orchestra | `golden-nav.ts` 60px chrome |
+| `top-tabs-not-bottom` | Hosts / Chats / Orchestra | `golden-nav.ts` 60px chrome |
 | `voice-orb` | Voice screen, "Say something…" | Grok Voice ref |
-| `status-dot-not-pill` | Bots / Orchestra | `--ok` / `--faint` |
+| `status-dot-not-pill` | Hosts / Orchestra | `--ok` / `--faint` |
 | `bottom-search-dock` | `@` bar | chips only when focused |
 | `rAF-stream` | `store/text.ts` | never per-token in chats store |
 
@@ -74,7 +74,7 @@ Do not argue chrome in a PR without walking [`decisions.json`](ai-ui-patterns/de
 | Frontier node | Dash use |
 |---------------|----------|
 | `harnesses/omp` | Primary executor. Live tabs become Chats. TUI has no phone chrome; Dash supplies it |
-| `harnesses/hermes` | Kanban + gateway. Orchestra and Bots, not `hermes chat -q` as the long-term path (#9) |
+| `harnesses/hermes` | Kanban + gateway. Orchestra and Hosts, not `hermes chat -q` as the long-term path (#9) |
 | `harnesses/o8` | Desktop control room. Do not spawn. Study its board only as a desktop pattern |
 | `harnesses/fx`, `harnesses/pi` | Catalog executors. Adapters on main via #18 |
 | `domains/tool-use` | Status line vs tool accordion |

@@ -16,8 +16,14 @@ function activity(at: number | undefined, now: number): string | undefined {
   return minutes < 1 ? "now" : minutes < 60 ? `${minutes}m` : minutes < 1440 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 1440)}d`;
 }
 
-export function botsTree(hosts: readonly HostInfo[], open: (host: HostInfo, agent: AgentInfo) => void, actions: (host: HostInfo, bot?: BotInfo) => void, now = Date.now(), conversations: readonly Conversation[] = []): TreeNode[] {
+export function hostsTree(hosts: readonly HostInfo[], open: (host: HostInfo, agent: AgentInfo) => void, actions: (host: HostInfo, bot?: BotInfo) => void, now = Date.now(), conversations: readonly Conversation[] = []): TreeNode[] {
   return hosts.map(host => {
+    if (host.kind === "phone") return {
+      id: `host:${host.id}`, kind: "host", label: hostLabel(host), detail: host.address,
+      meta: "Phone", status: host.online ? "running" : "offline", dimmed: !host.online,
+      onLongPress: () => actions(host),
+      children: () => [{ id: `${host.id}:empty`, kind: "note", label: "No harnesses on a phone" }],
+    } satisfies TreeNode;
     const sessions = host.agents.filter(agent => agent.sessionId);
     const agentFace = (agent: AgentInfo): TreeNode["botFace"] => {
       const profile = hermesProfileKey(agent);
@@ -75,7 +81,7 @@ export function botsTree(hosts: readonly HostInfo[], open: (host: HostInfo, agen
             children: () => [...chats.map(sessionNode), ...installed.map(agent => ({ id: `${host.id}:new:${agent.id}`, kind: "session", label: installed.length === 1 ? "New chat" : agent.name, detail: agent.detail, botFace: agentFace(agent), onPress: () => open(host, agent) } satisfies TreeNode))],
           };
         }),
-        ...(!bots?.length && !kinds.length ? [{ id: `${host.id}:empty`, kind: "note", label: host.online ? "No bots or sessions reported" : "Host offline" } satisfies TreeNode] : []),
+        ...(!bots?.length && !kinds.length ? [{ id: `${host.id}:empty`, kind: "note", label: host.online ? "No harnesses or sessions reported" : "Host offline" } satisfies TreeNode] : []),
       ],
     };
   });

@@ -5,7 +5,7 @@ import type { Z0LiveState } from "../../../shared/z0live-state";
 
 export type DebugScenarioId =
   | "main"
-  | "main-bots"
+  | "main-hosts"
   | "main-chats"
   | "main-products"
   | "main-chats-search"
@@ -61,9 +61,9 @@ export const DEBUG_SCENARIOS: Record<DebugScenarioId, DebugScenario> = {
     route: { name: "Main" },
     ui: { mainSearchQuery: "", mainTabIndex: 2 },
   },
-  "main-bots": {
-    id: "main-bots",
-    label: "Main — Bots tab",
+  "main-hosts": {
+    id: "main-hosts",
+    label: "Main — Hosts tab",
     seed: "paired",
     route: { name: "Main" },
     ui: { mainSearchQuery: "", mainTabIndex: 0 },
