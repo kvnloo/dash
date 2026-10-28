@@ -223,6 +223,28 @@ test('live-preview-health: an HTTP 500 bundle cannot reload until the same SHA b
   } finally { await metro.close(); }
 });
 
+test('live-preview-health: rollback to the old SHA preserves the attempted SHA retry guard', async ({ page, bridge }) => {
+  const metro = await startMetro();
+  metro.setBuild(B);
+  try {
+    const url = appUrl(metro, 1_000, 250);
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    const chip = page.getByTestId('turbo-served-build');
+    await expect(chip).toContainText('aaaaaaa → bbbbbbb');
+    await expect.poll(() => reloads(page), { timeout: 12_000 }).toBe(1);
+
+    // The browser seam records the reload, but intentionally keeps running A as if it failed.
+    metro.setBuild(A);
+    await expect(chip).toContainText('aaaaaaa ·', { timeout: 10_000 });
+    metro.setBuild(B);
+    await expect(chip).toContainText('aaaaaaa → bbbbbbb', { timeout: 10_000 });
+    // Wait past the retry lockout: B must not get a second automatic reload.
+    await page.waitForTimeout(10_500);
+    expect(await reloads(page)).toBe(1);
+    await pair(page, bridge, url);
+  } finally { await metro.close(); }
+});
+
 test('live-reload-guards: a streaming agent reply holds the update until done', async ({ page, bridge }) => {
   const metro = await startMetro();
   try {
