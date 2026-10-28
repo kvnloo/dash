@@ -19,7 +19,7 @@ test('long-press on a chat row opens the row menu and sends nothing',async({page
  const sheet=page.getByTestId('bottom-action-sheet');
  await expect(sheet).toBeVisible();
  await expect(sheet.getByText('Open',{exact:true})).toBeVisible();
- await expect(sheet.getByText('Send feedback about this chat',{exact:true})).toBeVisible();
+ await expect(sheet.getByText('Send feedback',{exact:true})).toBeVisible();
  await expect(sheet.getByText('Delete from this phone',{exact:true})).toBeVisible();
  await page.screenshot({path:info.outputPath('longpress-menu.png')});
  // Nothing opened, nothing sent: no chat window, no feedback chat, no turn on the bridge.

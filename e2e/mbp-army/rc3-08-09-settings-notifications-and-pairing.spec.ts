@@ -329,9 +329,9 @@ test.describe('rc3 09 paired Settings',()=>{
   await expect(row).toBeVisible();
   await longPress(page,row);
   await expect(sheet).toBeVisible();
-  await expect(sheet.getByRole('button',{name:/^Open /})).toBeVisible();
-  await expect(sheet.getByRole('button',{name:/^Delete .*from this phone/})).toBeVisible();
-  await expect(sheet.getByRole('button',{name:/^Send feedback/})).toHaveCount(0);
+  await expect(sheet.getByTestId('bottom-action-sheet-option-open')).toBeVisible();
+  await expect(sheet.getByTestId('bottom-action-sheet-option-delete-local')).toBeVisible();
+  await expect(sheet.getByTestId('bottom-action-sheet-option-send-feedback')).toHaveCount(0);
   await expect(page.getByTestId('composer-field').filter({visible:true})).toHaveCount(0);
   await close.click({noWaitAfter:true});
   await expect(sheet).toHaveCount(0);
@@ -348,7 +348,7 @@ test.describe('rc3 09 paired Settings',()=>{
   let dialogs=0;page.on('dialog',d=>{dialogs++;void d.dismiss();});
   await longPress(page,row);
   await expect(sheet).toBeVisible();
-  const feedback=sheet.getByRole('button',{name:/^Send feedback about New chat/});
+  const feedback=sheet.getByRole('button',{name:/^Send feedback about chat: New chat/});
   await expect(feedback).toBeVisible();
   await expect(page.getByTestId('composer-field').filter({visible:true})).toHaveCount(0); // long-press alone sends nothing and opens nothing
   await feedback.click({noWaitAfter:true});
