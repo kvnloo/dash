@@ -10,6 +10,17 @@ export interface VoiceStatus {
   broker: string;
 }
 
+/** Return only the broker origin, never credentials, paths, or query parameters. */
+function publicBroker(): string {
+  try {
+    const url = new URL(process.env.DASH_Z0LIVE_BROKER ?? "https://0.taila30dc.ts.net:8791");
+    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) return "";
+    return url.origin;
+  } catch {
+    return "";
+  }
+}
+
 /** Recheck speech on each request, so installing the model needs no bridge restart. */
 export function voiceStatus(): VoiceStatus {
   return {
@@ -18,7 +29,7 @@ export function voiceStatus(): VoiceStatus {
     // Match /voice/bootstrap: enabled by default, explicitly disabled by "0".
     nativeVoice: process.env.DASH_NATIVE_VOICE !== "0",
     identity: process.env.DASH_IDENTITY === "1",
-    broker: process.env.DASH_Z0LIVE_BROKER ?? "https://0.taila30dc.ts.net:8791",
+    broker: publicBroker(),
   };
 }
 
