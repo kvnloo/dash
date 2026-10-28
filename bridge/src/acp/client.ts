@@ -40,7 +40,12 @@ export function acpPromptBlocks(input: Pick<TurnInput, "text" | "attachments">, 
 }
 
 type Pending = { resolve(value: unknown): void; reject(error: Error): void };
-export type AcpOptions = { command: string[]; cwd: string; timeoutMs?: number; sink: Sink; env?: Record<string, string>; onUsage?(session: string, update: unknown): void };
+/**
+ * `cwd` is the session's working directory, sent to the agent. `spawnCwd` is where the adapter
+ * process starts when `cwd` is on another computer (the command then reaches that computer).
+ * `timeoutMs` defaults to and is normally capped at 2 minutes; a caller may pass up to an hour.
+ */
+export type AcpOptions = { command: string[]; cwd: string; spawnCwd?: string; timeoutMs?: number; sink: Sink; env?: Record<string, string>; onUsage?(session: string, update: unknown): void };
 
 /** One owned stdio connection. Client capabilities are deliberately empty. */
 export class AcpClient {
@@ -77,7 +82,7 @@ export class AcpClient {
   constructor(private options: AcpOptions) {
     if (options.command.length === 0) throw new Error("ACP executable unavailable");
     this.proc = spawn("nice", ["-n", "10", ...options.command], {
-      cwd: options.cwd,
+      cwd: options.spawnCwd ?? options.cwd,
       detached: true,
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, ...options.env, NO_COLOR: "1", FORCE_COLOR: "0" },
@@ -110,7 +115,7 @@ export class AcpClient {
         if (line.trim()) this.receive(line);
       }
     });
-    const timeoutMs = Math.min(Math.max(options.timeoutMs ?? 120_000, 1), 120_000);
+    const timeoutMs = Math.min(Math.max(options.timeoutMs ?? 120_000, 1), 60 * 60_000);
     this.timer = setTimeout(() => {
       this.fail(new Error("ACP turn timed out"));
       this.kill("SIGKILL");
@@ -224,7 +229,11 @@ export class AcpClient {
         throw new Error("ACP session loading unavailable for this agent");
       }
       this.sessionId = input.sessionId;
-      await this.request("session/load", { sessionId: input.sessionId, cwd: input.cwd, mcpServers: [] });
+      // session/resume reopens the session without streaming its whole history back (a long
+      // Claude Code session is hundreds of MB); the phone already has the history. Else load.
+      const resume = record(initialized.agentCapabilities.sessionCapabilities) && record(initialized.agentCapabilities.sessionCapabilities.resume);
+      this.phase = resume ? "session/resume" : "session/load";
+      await this.request(this.phase, { sessionId: input.sessionId, cwd: input.cwd, mcpServers: [] });
     } else {
       const session = await this.request("session/new", { cwd: input.cwd, mcpServers: [] });
       if (!record(session) || typeof session.sessionId !== "string" || !session.sessionId) {

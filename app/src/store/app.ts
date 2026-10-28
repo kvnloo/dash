@@ -225,7 +225,7 @@ export function setConnection(patch: Partial<Connection>): void {
       connection.cwd === was.cwd && connection.harnesses === was.harnesses && connection.error === was.error;
     if (patch.hosts === undefined) return unchanged ? s : { ...s, connection };
     // chats.v1: only running or host-held sessions become conversations; the paged list has the rest.
-    const conversations = mergeLiveConversations(s.conversations, connection.hosts, Date.now(), { adopt: chatsEnabled(connection) ? "live" : "all" });
+    const conversations = mergeLiveConversations(s.conversations, connection.hosts, Date.now(), { adopt: chatsEnabled(connection) ? "live" : "all", routes: connection.routes });
     conversationsChanged = conversations !== s.conversations;
     if (!conversationsChanged) return unchanged ? s : { ...s, connection };
     return { ...s, connection, conversations };
@@ -456,6 +456,8 @@ export function conversationTargetError(target: Pick<Conversation, "targetHostId
   if (target.stale) return "This chat has ended on the host. Its saved history is still on this phone.";
   if (!target.targetHostId) return undefined;
   const { connection } = store.get();
+  // A chat recorded on another computer that the paired bridge continues there (hello `routes`).
+  if (target.sessionId && connection.status === "online" && connection.routes?.includes(target.targetHostId)) return undefined;
   const host = connection.hosts.find((h) => h.id === target.targetHostId);
   if (!host || !host.online) return "This target host is unavailable. Reconnect to that computer.";
   if (!host.self) return `The paired bridge cannot route to remote host ${host.name}. Pair with that computer to chat.`;

@@ -53,9 +53,10 @@ function sessionAgents(hosts: HostInfo[]) {
  * A self-host catalog chat that resumes by session id, so it needs no roster row to be sent to.
  * OMP live sessions (`omp:` profiles) are the exception: they end when the host stops listing them.
  */
-export function resumableWithoutRoster(c: Pick<Conversation, "harness" | "sessionId" | "targetHostId" | "profileId" | "stale" | "viewOnly">, hosts: readonly HostInfo[]): boolean {
+/** `routes`: other computers the paired bridge carries chats to (hello `routes`). */
+export function resumableWithoutRoster(c: Pick<Conversation, "harness" | "sessionId" | "targetHostId" | "profileId" | "stale" | "viewOnly">, hosts: readonly HostInfo[], routes: readonly string[] = []): boolean {
   if (!c.sessionId?.trim() || !isCatalogHarness(c.harness) || c.viewOnly || c.profileId?.startsWith("omp:")) return false;
-  return hosts.some(host => host.self && host.id === c.targetHostId);
+  return hosts.some(host => host.self && host.id === c.targetHostId) || (c.targetHostId !== undefined && routes.includes(c.targetHostId));
 }
 
 export interface MergeLiveOptions {
@@ -64,6 +65,8 @@ export interface MergeLiveOptions {
    * `live` (chats.v1): only running or host-held sessions do; the paged list shows the rest.
    */
   adopt?: "all" | "live";
+  /** Hosts the paired bridge routes chats to (hello `routes`): their chats are resumable, not ended. */
+  routes?: readonly string[];
 }
 
 /** Successful roster snapshots reconcile, never delete. Missing snapshots do not enter here. O(C + R). */
@@ -113,7 +116,7 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
       if (bridgeOwnedStreaming) return c;
       // chats.v1 rosters list only running/host-held chats and a short head: a chat opened from the
       // paged list is simply not running, not ended. Only live-only sessions end with the roster row.
-      if (options.adopt === "live" && resumableWithoutRoster(c, hosts)) {
+      if (options.adopt === "live" && resumableWithoutRoster(c, hosts, options.routes)) {
         if (c.openIn === undefined) return c;
         changed = true; return { ...c, openIn: undefined };
       }

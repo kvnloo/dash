@@ -328,7 +328,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const [observedAt, setObservedAt] = useState<number>();
   useEffect(() => { setObservedAt(hostReading ? Date.now() : undefined); }, [hostReading]);
   const identity = useMemo((): IdentityInput => ({
-    hostName: conversation?.targetHostId ? connection.hosts.find(host => host.id === conversation.targetHostId)?.name ?? conversation.targetHostId : selfHost?.name ?? (connection.host || undefined),
+    // A chat-index host (`machine:<name>`) that the roster does not list: show the machine name.
+    hostName: conversation?.targetHostId ? connection.hosts.find(host => host.id === conversation.targetHostId)?.name ?? conversation.targetHostId.replace(/^machine:/, "") : selfHost?.name ?? (connection.host || undefined),
     harnessName,
     profile: conversation?.profileName ?? conversation?.profileId,
     sessionId: conversation?.sessionId,
@@ -502,7 +503,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
               <AgentOrb size={64} thinking={thinking} label={`${harnessName} ${caption}`} />
               <Text style={styles.emptyTitle}>{harnessName}</Text>
               <Text style={styles.emptySubtitle}>
-                {online && connection.host ? `on ${connection.host}` : "Ask anything"}
+                {online && (identity.hostName || connection.host) ? `on ${identity.hostName || connection.host}` : "Ask anything"}
               </Text>
             </View>
           }

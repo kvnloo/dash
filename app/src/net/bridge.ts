@@ -287,6 +287,7 @@ class Bridge {
         setChatsFeatures(message.features);
         setConnection({
           features: message.features ?? [],
+          routes: message.routes ?? [],
           status: "online",
           host: message.host,
           cwd: message.cwd,
