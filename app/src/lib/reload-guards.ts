@@ -7,11 +7,11 @@ import { conversationBusy, store } from "../store/app";
 /** Hold in-app live polling while losing the JS runtime would destroy user work. */
 export function installReloadGuards(onChange: () => void): () => void {
   const unregister = [
-    registerReloadGuard("voice call", () => !["idle", "error"].includes(voicePhase.get())),
     registerReloadGuard("annotation", () => {
       const state = annotate.get();
       return state.active || state.status === "capturing" || state.status === "sending" || state.pendingTurn !== undefined;
     }),
+    registerReloadGuard("voice call", () => !["idle", "error"].includes(voicePhase.get())),
     registerReloadGuard("streaming reply", () =>
       store.get().conversations.some(conversation => conversationBusy(conversation.id))),
     registerReloadGuard("upload", () =>
