@@ -117,6 +117,29 @@ export function applyHead(list: PagedList, page: ChatPage, counter?: OpCounter):
       list.changes.push(slot);
     }
   }
+  // Page 1 is authoritative only through its last row; older loaded pages survive.
+  const present = new Set(page.items.map(item => item.key));
+  const boundary = page.items.at(-1);
+  const missing = (row: ChatSummary) => !present.has(row.key) &&
+    (page.next === null || (boundary !== undefined && byActivity(row, boundary) <= 0));
+  const keptHead = head.filter(row => {
+    if (counter) counter.n += 1;
+    if (!missing(row)) return true;
+    list.index.delete(row.key);
+    changed = true;
+    return false;
+  });
+  if (keptHead.length !== head.length) head = keptHead;
+  for (const [key, slot] of list.index) {
+    if (slot === "head") continue;
+    if (counter) counter.n += 1;
+    const row = list.rows[slot];
+    if (!row || !missing(row)) continue;
+    list.rows[slot] = null;
+    list.index.delete(key);
+    list.changes.push(slot);
+    changed = true;
+  }
   if (!changed) return list.rev === page.rev ? list : { ...list, rev: page.rev };
   if (lifted.length) {
     const merged = [...lifted, ...head];

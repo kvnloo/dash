@@ -1,6 +1,7 @@
 import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as Clipboard from "expo-clipboard";
 import { StyleSheet, Text, View } from "react-native";
 import { chatKey, type ChatSummary, type HostInfo } from "../../../../shared/protocol";
 import type { WindowOrigin } from "../../lib/chat-window";
@@ -13,7 +14,8 @@ import { conversationThinking, type Thinking } from "../../lib/thinking";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { chatRow } from "../../lib/chat-row";
-import { chatRowActions, chatRowMenu, pressRow, runChatRowMenu } from "../../lib/chat-row-actions";
+import { chatRowActions, pressRow } from "../../lib/chat-row-actions";
+import { chatRowMenu, createRowSelection, type ChatMenuRow } from "../../lib/chat-row-menu";
 import { BottomActionSheet } from "../../components/BottomActionSheet";
 import { conversationEntries, emptyList, groupLabeler, labelList, mergeLocal, stableEntries, type ChatListRow, type ConversationEntry, type RemoteLabeled } from "../../lib/chat-index";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
@@ -271,11 +273,12 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
     (id: string) => {
       if (!inAppFeedbackEnabled(store.get().settings)) return;
       const conversation = store.get().conversations.find((c) => c.id === id);
+      const title = conversation?.title ?? summaryByKey(id)?.title ?? id;
       haptic.select();
       submitInAppFeedback({
         kind: "select",
-        text: `Selected chat ${conversation?.title ?? id}`,
-        selection: { kind: "chat", id, label: conversation?.title || id },
+        text: `Selected chat ${title}`,
+        selection: { kind: "chat", id, label: title },
       });
       navigation.navigate("Chat");
     },
@@ -284,16 +287,45 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
 
   const feedbackOn = inAppFeedbackEnabled(store.use((s) => s.settings));
   // Long-press only opens the row menu; every action (including feedback, which sends) is an explicit choice.
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-  const longPress = useCallback((id: string) => { haptic.select(); setMenuFor(id); }, []);
+  const [menuFor, setMenuFor] = useState<ChatMenuRow | null>(null);
+  const selection = useRef(createRowSelection()).current;
+  const longPress = useCallback((id: string) => {
+    const conversation = store.get().conversations.find(c => c.id === id);
+    const summary = conversation ? undefined : summaryByKey(id);
+    if (!conversation && !summary) return;
+    haptic.select();
+    selection.open(id);
+    setMenuFor({
+      id, title: conversation?.title ?? summary?.title ?? "Untitled chat",
+      live: summary?.running === true, hasSession: Boolean(conversation?.sessionId || summary?.sessionId),
+    });
+  }, [selection]);
   const closeMenu = useCallback(() => setMenuFor(null), []);
-  const menuTitle = menuFor ? store.get().conversations.find((c) => c.id === menuFor)?.title ?? summaryByKey(menuFor)?.title ?? "" : "";
-  const menu = useMemo(() => chatRowMenu(feedbackOn, menuTitle), [feedbackOn, menuTitle]);
+  // Keep the sheet's descriptors, but permanently invalidate a vanished row's identity.
+  const menuRows = useMemo(() => menuFor ? items.flatMap(row =>
+    row.type === "chat" ? [{ id: row.local?.id ?? row.key }] : []) : [], [items, menuFor]);
+  useEffect(() => { if (menuFor) selection.current(menuRows); }, [menuRows, menuFor, selection]);
+  const menu = useMemo(() => menuFor ? chatRowMenu(menuFor, { feedbackOn, canOpenWindow: true }) : [], [feedbackOn, menuFor]);
   const onMenu = useCallback((choice: string) => {
-    const id = menuFor;
+    const id = selection.current(menuRows);
+    selection.close();
     setMenuFor(null);
-    if (id) runChatRowMenu(choice, id, { open: (rowId) => open(rowId), feedback: onFeedback, remove });
-  }, [menuFor, open, onFeedback, remove]);
+    if (!id || !menu.some(option => option.id === choice)) return;
+    const conversation = store.get().conversations.find(c => c.id === id);
+    const summary = conversation ? undefined : summaryByKey(id);
+    if (!conversation && !summary) return;
+    switch (choice) {
+      case "open":
+      case "open-window": open(id); break;
+      case "copy-session-id": {
+        const sessionId = conversation?.sessionId || summary?.sessionId;
+        if (sessionId) void Clipboard.setStringAsync(sessionId).catch(() => { /* Clipboard may be unavailable. */ });
+        break;
+      }
+      case "send-feedback": onFeedback(id); break;
+      case "delete-local": remove(id); break;
+    }
+  }, [selection, menuRows, menu, open, onFeedback, remove]);
 
   const renderItem = useCallback(
     ({ item: row }: ListRenderItemInfo<ChatListRow | undefined>) => {
@@ -354,7 +386,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
           <Text style={styles.clearEndedText}>Clear ended</Text>
         </PressScale>
       )}
-      <BottomActionSheet open={menuFor !== null} title={menu.title} options={menu.options} onSelect={onMenu} onClose={closeMenu} />
+      <BottomActionSheet open={menuFor !== null} title={menuFor?.title} options={menu} onSelect={onMenu} onClose={closeMenu} />
       <FlashList
         data={items}
         renderItem={renderItem}
