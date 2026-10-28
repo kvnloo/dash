@@ -11,7 +11,7 @@ import { SELF_HOST } from "./query";
 
 export interface ChatRow {
   key: string; origin: ChatOrigin; kind: string; session_id: string; host_id: string; host_name: string;
-  profile_id: string | null; agent_id: string | null; title: string; cwd: string | null;
+  profile_id: string | null; agent_id: string | null; title: string; cwd: string | null; model?: string | null;
   started_at: number; last_activity_at: number; message_count: number; chatable: number; src_id: string; gone: number;
 }
 export type NewChatRow = Omit<ChatRow, "gone">;
@@ -44,6 +44,7 @@ export function toSummary(row: ChatRow, self: SelfInfo): ChatSummary {
     ...(row.profile_id ? { profileId: row.profile_id } : {}), ...(row.agent_id ? { agentId: row.agent_id } : {}),
     title: row.title, ...(row.cwd ? { cwd: row.cwd } : {}), startedAt: row.started_at, lastActivityAt: row.last_activity_at,
     messageCount: row.message_count, origin: row.origin, chatable: row.chatable === 1,
+    ...(row.model ? { model: row.model } : {}),
   };
 }
 
@@ -53,10 +54,11 @@ export function toAgentInfo(row: ChatRow): AgentInfo {
     id: row.agent_id ?? `av:${row.kind}:${row.session_id}`, name: row.title.slice(0, 80), kind: row.kind, status: "available",
     detail: row.cwd ?? row.kind, ...(row.cwd ? { cwd: row.cwd } : {}), sessionId: row.session_id,
     lastActivityAt: row.last_activity_at, messageCount: row.message_count, source: "agentsview",
+    ...(row.model ? { model: row.model } : {}),
   };
 }
 
-const COLUMNS = "key, origin, kind, session_id, host_id, host_name, profile_id, agent_id, title, cwd, started_at, last_activity_at, message_count, chatable, src_id";
+const COLUMNS = "key, origin, kind, session_id, host_id, host_name, profile_id, agent_id, title, cwd, started_at, last_activity_at, message_count, chatable, src_id, model";
 
 export class Sidecar {
   private constructor(readonly db: Database) {}
@@ -87,12 +89,12 @@ export class Sidecar {
   /** Insert or update; returns the number of rows that actually changed (revived rows count). */
   upsert(rows: NewChatRow[]): number {
     if (rows.length === 0) return 0;
-    const stmt = this.db.query(`insert into chats (${COLUMNS}, gone) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
+    const stmt = this.db.query(`insert into chats (${COLUMNS}, gone) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
       on conflict(key) do update set origin=excluded.origin, kind=excluded.kind, session_id=excluded.session_id, host_id=excluded.host_id,
         host_name=excluded.host_name, profile_id=excluded.profile_id, agent_id=excluded.agent_id, title=excluded.title, cwd=excluded.cwd,
         started_at=excluded.started_at, last_activity_at=excluded.last_activity_at, message_count=excluded.message_count,
-        chatable=excluded.chatable, src_id=excluded.src_id, gone=0
-      where chats.gone <> 0 or chats.title is not excluded.title or chats.cwd is not excluded.cwd
+        chatable=excluded.chatable, src_id=excluded.src_id, model=excluded.model, gone=0
+      where chats.model is not excluded.model or chats.gone <> 0 or chats.title is not excluded.title or chats.cwd is not excluded.cwd
         or chats.last_activity_at <> excluded.last_activity_at or chats.message_count <> excluded.message_count
         or chats.started_at <> excluded.started_at or chats.chatable <> excluded.chatable or chats.host_name is not excluded.host_name
         or chats.agent_id is not excluded.agent_id or chats.src_id <> excluded.src_id`);
@@ -100,7 +102,7 @@ export class Sidecar {
     this.db.transaction(() => {
       for (const r of rows) {
         changed += stmt.run(r.key, r.origin, r.kind, r.session_id, r.host_id, r.host_name, r.profile_id, r.agent_id, r.title, r.cwd,
-          r.started_at, r.last_activity_at, r.message_count, r.chatable, r.src_id).changes;
+          r.started_at, r.last_activity_at, r.message_count, r.chatable, r.src_id, r.model ?? null).changes;
       }
     })();
     return changed;

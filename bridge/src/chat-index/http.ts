@@ -32,7 +32,7 @@ export function overlayLive(items: ChatSummary[], live: ChatSummary[]): ChatSumm
     const hit = byKey.get(item.key);
     if (!hit) return item;
     byKey.delete(item.key);
-    return { ...item, ...(hit.running ? { running: true } : {}), ...(hit.openIn ? { openIn: hit.openIn } : {}), lastActivityAt: Math.max(item.lastActivityAt, hit.lastActivityAt) };
+    return { ...item, ...(hit.model ? { model: hit.model } : {}), ...(hit.running ? { running: true } : {}), ...(hit.openIn ? { openIn: hit.openIn } : {}), lastActivityAt: Math.max(item.lastActivityAt, hit.lastActivityAt) };
   });
   return [...merged, ...byKey.values()].sort((a, b) => b.lastActivityAt - a.lastActivityAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }

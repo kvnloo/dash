@@ -127,9 +127,9 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     owned.add(`${c.harness}\u0000${c.sessionId}\u0000${host.id}\u0000${agent.id}`);
     const title = c.harness === "hermes" ? agent.name : c.title;
     const updatedAt = agent.lastActivityAt ?? c.updatedAt;
-    if (c.stale === false && title === c.title && updatedAt === c.updatedAt && c.messageCount === agent.messageCount && c.targetHostId === host.id && c.profileId === agent.id && c.openIn === agent.openIn) return c;
+    if (c.stale === false && title === c.title && updatedAt === c.updatedAt && c.messageCount === agent.messageCount && c.targetHostId === host.id && c.profileId === agent.id && c.openIn === agent.openIn && (!agent.model || c.sessionModel?.model === agent.model && c.sessionModel.sessionId === agent.sessionId)) return c;
     changed = true;
-    return { ...c, stale: false, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, title, updatedAt, messageCount: agent.messageCount, cwd: agent.cwd ?? c.cwd, openIn: agent.openIn };
+    return { ...c, ...(agent.model && agent.sessionId ? { sessionModel: { sessionId: agent.sessionId, model: agent.model } } : {}), stale: false, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, title, updatedAt, messageCount: agent.messageCount, cwd: agent.cwd ?? c.cwd, openIn: agent.openIn };
   });
   const adopted: Conversation[] = [];
   for (const { host, agent } of reported) {
@@ -139,6 +139,7 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     const baseId = liveConversationId(agent.kind, sessionId);
     adopted.push({ id: agent.kind === "hermes" ? `${baseId}:${host.id}:${agent.profileId ?? agent.id}` : baseId,
       harness: agent.kind, title: liveSessionTitle(agent), createdAt: agent.lastActivityAt ?? now, updatedAt: agent.lastActivityAt ?? now,
+      ...(agent.model ? { sessionModel: { sessionId, model: agent.model } } : {}),
       sessionId, cwd: agent.cwd, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, messageCount: agent.messageCount, stale: false, ...(agent.openIn ? { openIn: agent.openIn } : {}), messages: [] });
   }
   return adopted.length ? [...adopted, ...rows] : changed ? rows : existing;
@@ -150,6 +151,7 @@ export function adoptSummary(summary: ChatSummary, now: number): Conversation {
   return {
     id: summary.kind === "hermes" ? `${baseId}:${summary.hostId}:${summary.profileId ?? summary.agentId ?? "default"}` : baseId,
     harness: summary.kind, title: summary.title || liveSessionTitle({ name: summary.kind, cwd: summary.cwd, kind: summary.kind }),
+    ...(summary.model ? { sessionModel: { sessionId: summary.sessionId, model: summary.model } } : {}),
     createdAt: summary.startedAt, updatedAt: summary.lastActivityAt, sessionId: summary.sessionId,
     ...(summary.cwd ? { cwd: summary.cwd } : {}), targetHostId: summary.hostId,
     ...(summary.agentId ? { profileId: summary.agentId } : {}), ...(summary.profileId ? { profileName: summary.profileId } : {}),
