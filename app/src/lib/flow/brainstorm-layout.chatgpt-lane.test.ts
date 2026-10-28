@@ -63,9 +63,11 @@ describe("Brainstorm layout geometry", () => {
 
   test("at the feasible minimum, transcript can be empty but pill and composer never overlap", () => {
     const layout = computeBrainstormLayout({
-      width: 360, height: 200, safeTop: 0, safeBottom: 0,
-      keyboardHeight: 100, composerHeight: 56,
+      // Portrait by spec (width <= height); the keyboard leaves 100 visible DIP.
+      width: 360, height: 400, safeTop: 0, safeBottom: 0,
+      keyboardHeight: 300, composerHeight: 56,
     });
+    expect(layout.orientation).toBe("portrait");
     expect(layout.visual).toEqual({ x: 0, y: 0, width: 360, height: 44 });
     expect(layout.transcript).toEqual({ x: 0, y: 44, width: 360, height: 0 });
     expect(layout.composer).toEqual({ x: 0, y: 44, width: 360, height: 56 });
