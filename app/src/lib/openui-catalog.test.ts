@@ -73,7 +73,7 @@ describe("bounded OpenUI static catalog", () => {
       'root = Roadmap("dash-roadmap")\nextra = Text("x")',
       'root = Stack([Roadmap("dash-roadmap")])',
       'approved = Roadmap("dash-roadmap")\nroot = approved',
-      'root = Roadmap("\u0064ash-roadmap")'.replace("dash-roadmap", "other"),
+      'root = Roadmap("\\u0064ash-roadmap")',
     ]) rejects(source);
   });
 
