@@ -38,7 +38,7 @@ export function createAgentNoticeInbox(options: {
       await options.storage?.write(JSON.stringify(next));
       items = next; options.changed?.(items);
       options.emit({ key: `notice:${notice.id}`, title: notice.title, body: notice.body,
-        target: parseNotificationTarget({ url: notice.url }) ?? { kind: "notices" }, report: true });
+        ...(notice.class ? { class: notice.class } : {}), target: parseNotificationTarget({ url: notice.url }) ?? { kind: "notices" }, report: true });
     }),
     clear: () => enqueue(clear),
     /** Forget everything: also drop the bridge ring, or the next pairing replays old reports. */

@@ -12,7 +12,15 @@ export const PROTOCOL_VERSION = 1;
 
 export const NOTICE_TITLE_MAX = 80;
 export const NOTICE_BODY_MAX = 600;
-export interface NoticeInput { title: string; body: string; url?: string }
+export interface NoticeInput { title: string; body: string; url?: string; class?: "critical" | "decision" | "report" | "digest"; not_before?: string }
+
+function isNoticeTime(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!match || !match[1] || Number(match[2]) > 23 || Number(match[3]) > 59 || Number(match[4]) > 59) return false;
+  const day = new Date(`${match[1]}T00:00:00Z`);
+  return Number.isFinite(Date.parse(value)) && Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === match[1];
+}
 export type NoticeMessage = NoticeInput & { type: "notice"; id: string };
 
 /** Reports are additive v1 events, never approvals or turn events. */
@@ -24,7 +32,11 @@ export function parseNoticeInput(raw: unknown): NoticeInput | null {
     try { const url = new URL(raw.url); if (url.protocol !== "dash:" || !url.hostname || url.username || url.password) return null; }
     catch { return null; }
   }
-  return { title: raw.title, body: raw.body, ...(str(raw.url) ? { url: raw.url } : {}) };
+  const cls = raw.class;
+  if (cls !== undefined && cls !== "critical" && cls !== "decision" && cls !== "report" && cls !== "digest") return null;
+  if (raw.not_before !== undefined && !isNoticeTime(raw.not_before)) return null;
+  return { title: raw.title, body: raw.body, ...(str(raw.url) ? { url: raw.url } : {}),
+    ...(cls !== undefined ? { class: cls } : {}), ...(isNoticeTime(raw.not_before) ? { not_before: raw.not_before } : {}) };
 }
 
 export interface HarnessInfo {
