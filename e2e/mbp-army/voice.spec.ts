@@ -46,7 +46,7 @@ test('live voice moves connecting listening hearing thinking speaking listening 
   // Keep the attached Hermes target, but enter voice through the normal Main UI.
   await page.getByRole('button', { name: 'Close chat window', exact: true }).click({ noWaitAfter: true });
   await page.getByRole('tab').nth(0).click({ noWaitAfter: true });
-  await page.getByRole('button', { name: 'Voice input', exact: true }).click({ noWaitAfter: true });
+  await page.getByRole('button', { name: 'Expand', exact: true }).click({ noWaitAfter: true });
   await expect(page.getByTestId('voice-caption')).toBeVisible();
 
   await page.getByRole('button', { name: 'Start voice in Dash', exact: true }).click({ noWaitAfter: true });
@@ -119,7 +119,7 @@ async function enterScriptedVoice(
   await expect(page.getByTestId('chat-window')).toBeVisible();
   await page.getByRole('button', { name: 'Close chat window', exact: true }).click({ noWaitAfter: true });
   await page.getByRole('tab').nth(0).click({ noWaitAfter: true });
-  await page.getByRole('button', { name: 'Voice input', exact: true }).click({ noWaitAfter: true });
+  await page.getByRole('button', { name: 'Expand', exact: true }).click({ noWaitAfter: true });
   await expect(page.getByTestId('voice-caption')).toBeVisible();
 }
 function isAssistantObservation(call: VoiceBrokerCall): boolean {
