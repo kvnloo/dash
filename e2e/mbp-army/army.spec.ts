@@ -31,6 +31,29 @@ test('pairing, Chats tab, open and close real chat window',async({page,bridge})=
  await expect(composer(page)).toBeInViewport();
 });
 
+test('main input names the selected agent with default feedback enabled and after reload',async({page,bridge},info)=>{
+ await openChat(page,bridge);
+ await chooseHarness(page,'Hermes');
+ await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});
+ // Logical viewports at 3x scale for the reported 1080x2340 and 1440x3120 phones.
+ for (const viewport of [{width:360,height:780},{width:480,height:1040}]) {
+  await page.setViewportSize(viewport);
+  await expect(composer(page)).toHaveAttribute('placeholder','Message Hermes');
+  await expect(composer(page)).toBeInViewport();
+  await page.screenshot({path:info.outputPath(`main-input-hermes-${viewport.width}.png`)});
+ }
+ await page.getByRole('button',{name:/^(Create new chat|New chat)$/}).first().click({noWaitAfter:true});
+ await expect(composer(page)).toBeVisible();
+ await chooseHarness(page,'OMP');
+ await page.getByRole('button',{name:'Back',exact:true}).click({noWaitAfter:true});
+ await expect(composer(page)).toHaveAttribute('placeholder','Message OMP');
+ await page.reload({waitUntil:'domcontentloaded'});
+ await expect(composer(page)).toHaveAttribute('placeholder','Message OMP',{timeout:25000});
+ // Selecting an agent and editing placeholder copy must not submit feedback or start a turn.
+ await expect(page.getByText('Dash feedback',{exact:true})).toHaveCount(0);
+ expect(bridge.logs()).not.toContain('turn.start');
+});
+
 test('composer typing, Send and streamed ACP reply',async({page,bridge,metrics})=>{
  await openChat(page,bridge);
  await act(metrics,'Dash composer fill',()=>composer(page).fill('ARMY_SLOW hello streamed UI'));

@@ -20,6 +20,8 @@
      "tests": ["DeX simulation shows TV and Pad and Touchpad returns to TV"]},
     {"id": "pairing", "title": "Pair with a bridge, Chats tab, open and close a chat window",
      "tests": ["pairing, Chats tab, open and close real chat window"]},
+    {"id": "main-input-agent-placeholder", "title": "Main input names the configured agent instead of Dash feedback (#506)",
+     "tests": ["main input names the selected agent with default feedback enabled and after reload"]},
     {"id": "send-stream", "title": "Composer send and streamed agent reply",
      "tests": ["composer typing, Send and streamed ACP reply"]},
     {"id": "stop", "title": "Stop cancels a running turn",
