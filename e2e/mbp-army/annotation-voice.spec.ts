@@ -5,6 +5,10 @@ const engines: ('skia' | 'tldraw')[] = ['skia', 'tldraw'];
 
 for (const engine of engines) {
   test(`annotation-voice-quiet: ${engine} entry does not surface voice UI or shift header`, async ({ page, bridge }) => {
+    const voiceWarnings: string[] = [];
+    page.on('console', message => {
+      if (message.type() === 'warning' && message.text().includes('[voice]')) voiceWarnings.push(message.text());
+    });
     await openAnnotation(page, bridge, engine);
 
     // This real bridge fixture has no z0bridge identity. Auto-start must fail
@@ -43,6 +47,7 @@ for (const engine of engines) {
     await expect(page.getByTestId('voice-error')).toHaveCount(0);
     await expect(page.getByTestId('voice-mic-bar')).toHaveCount(0);
     await expect(page.getByRole('alert')).toHaveCount(0);
+    expect(voiceWarnings).toEqual([]);
     await page.getByRole('button', { name: 'Exit annotation', exact: true }).click();
     await expect(page.getByTestId('voice-mic-bar')).toHaveCount(0);
   });
