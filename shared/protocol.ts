@@ -317,6 +317,8 @@ export type ServerMessage =
        * Claude Code / Codex chats this bridge continues on that computer. Old bridges omit this.
        */
       routes?: string[];
+      /** Optional; legacy bridges omit voice readiness. */
+      voice?: { stt: boolean; nativeVoice: boolean };
     }
   /** Reply to `attach` for a turn the bridge no longer knows about. */
   | { type: "lost"; id: string }
@@ -553,7 +555,9 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
         str(raw.host) &&
         str(raw.cwd) &&
         Array.isArray(raw.harnesses) &&
-        raw.harnesses.every(isHarnessInfo)
+        raw.harnesses.every(isHarnessInfo) &&
+        (raw.voice === undefined || (isRecord(raw.voice) &&
+          typeof raw.voice.stt === "boolean" && typeof raw.voice.nativeVoice === "boolean"))
       ) {
         return {
           type: "hello",
@@ -564,6 +568,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
           hosts: parseHosts(raw.hosts),
           features: Array.isArray(raw.features) && raw.features.length <= 32 && raw.features.every(str) ? raw.features : undefined,
           routes: Array.isArray(raw.routes) && raw.routes.length <= 32 && raw.routes.every(str) ? raw.routes : undefined,
+          voice: isRecord(raw.voice) && typeof raw.voice.stt === "boolean" && typeof raw.voice.nativeVoice === "boolean"
+            ? { stt: raw.voice.stt, nativeVoice: raw.voice.nativeVoice } : undefined,
         };
       }
       return null;
