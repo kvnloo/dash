@@ -64,6 +64,10 @@ blockers and owner-needed priorities. “Running · board status” reports the
 board's state, not independently verified process liveness. Source ages and
 stale labels remain visible; resumed work does not reuse an old blocker reason.
 
+Orchestra stops graph requests, Triage requests, and Triage age ticks when its
+pane is hidden or the app leaves the foreground. Returning to the pane refreshes
+the selected view. This preserves view selection across tab switches.
+
 ## Contributing / AI Agents
 
 - **Contributing guide:** See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute (unattended compute donation vs copilot paired PR workflow).

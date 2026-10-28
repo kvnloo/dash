@@ -1,12 +1,14 @@
 import { BlurTargetView } from "expo-blur";
+import { useIsFocused } from "@react-navigation/native";
 import { Canvas } from "../components/Canvas";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Animated, { useSharedValue } from "react-native-reanimated";
-import { Alert, InteractionManager, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Alert, AppState, InteractionManager, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
+import { OrbActivity } from "../components/OrbMotion";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { KeyboardDock } from "../components/KeyboardDock";
@@ -140,6 +142,13 @@ function chatDraftForResult(item: SearchResult): string | undefined {
 
 export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
+  const screenFocused = useIsFocused();
+  const [foreground, setForeground] = useState(AppState.currentState === "active");
+  useEffect(() => {
+    const listener = AppState.addEventListener("change", state => setForeground(state === "active"));
+    setForeground(AppState.currentState === "active");
+    return () => listener.remove();
+  }, []);
   const { width } = useWindowDimensions();
   const blurTarget = useRef<View>(null);
   const pagerRef = useRef<MainPagerRef>(null);
@@ -417,9 +426,9 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       <ChatsPane navigation={navigation} focused={index === 1 && !searchActive} />
     </View>,
     <View key="orchestra" style={{ width, flex: 1 }}>
-      <LazyPane focused={index === 2}><OrchestraPane navigation={navigation} /></LazyPane>
+      <LazyPane focused={index === 2}><OrbActivity active={index === 2 && !searchActive && screenFocused && foreground}><OrchestraPane navigation={navigation} focused={index === 2 && !searchActive && screenFocused && foreground} /></OrbActivity></LazyPane>
     </View>,
-  ], [navigation, index, searchActive, width]);
+  ], [navigation, index, searchActive, screenFocused, foreground, width]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />

@@ -1,13 +1,15 @@
-import { executionToken } from "./bridge-auth";
+import { executionToken, type AuthSettings } from "./bridge-auth";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 import { parseOrchestra, type OrchestraSnapshot } from "../../../shared/orchestra";
-export function useOrchestraEvidence(settings: { address: string; token: string } | null) {
-  const [snapshot, setSnapshot] = useState<OrchestraSnapshot | null>(null);
-  const [error, setError] = useState("");
+type Source = AuthSettings & { address: string };
+type Evidence = { source: Source; snapshot: OrchestraSnapshot | null; error: string };
+
+export function useOrchestraEvidence(settings: Source | null, focused: boolean) {
+  const [evidence, setEvidence] = useState<Evidence | null>(null);
+  useEffect(() => { setEvidence(null); }, [settings?.address, settings?.token, settings?.identity]);
   useEffect(() => {
-    setSnapshot(null);
-    if (!settings) { setError("Pair with a bridge to load host evidence."); return; }
+    if (!settings || !focused) return;
     let disposed = false;
     let pending = false;
     const controller = new AbortController();
@@ -15,18 +17,29 @@ export function useOrchestraEvidence(settings: { address: string; token: string 
       if (pending || disposed || AppState.currentState !== "active" || !settings) return;
       pending = true;
       try {
-        const response = await fetch(`http://${settings.address}/orchestra/graph`, { headers: { Authorization: `Bearer ${await executionToken(settings)}` }, signal: controller.signal });
+        const token = await executionToken(settings);
+        if (disposed || controller.signal.aborted || AppState.currentState !== "active") return;
+        const response = await fetch(`http://${settings.address}/orchestra/graph`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
         if (!response.ok) throw new Error(`Graph evidence unavailable (HTTP ${response.status}); roster only.`);
         const parsed = parseOrchestra(await response.json());
         if (!parsed) throw new Error("Invalid graph snapshot; roster only.");
-        if (!disposed) { setSnapshot(parsed); setError(""); }
-      } catch (e) { if (!disposed) setError(e instanceof Error ? e.message : "Graph unavailable"); }
-      finally { pending = false; }
+        if (!disposed && AppState.currentState === "active") setEvidence({ source: settings, snapshot: parsed, error: "" });
+      } catch (e) {
+        if (!disposed && AppState.currentState === "active") setEvidence(previous => ({
+          source: settings,
+          snapshot: previous && sameSource(previous.source, settings) ? previous.snapshot : null,
+          error: e instanceof Error ? e.message : "Graph unavailable",
+        }));
+      } finally { pending = false; }
     }
     void load();
     const timer = setInterval(() => void load(), 15000);
-    const listener = AppState.addEventListener("change", state => { if (state === "active") void load(); });
-    return () => { disposed = true; controller.abort(); clearInterval(timer); listener.remove(); };
-  }, [settings?.address, settings?.token]);
-  return { snapshot, error };
+    return () => { disposed = true; controller.abort(); clearInterval(timer); };
+  }, [settings?.address, settings?.token, settings?.identity, focused]);
+  const current = settings && evidence && sameSource(settings, evidence.source) ? evidence : null;
+  return { snapshot: current?.snapshot ?? null, error: settings ? current?.error ?? "" : "Pair with a bridge to load host evidence." };
+}
+
+function sameSource(a: Source, b: Source) {
+  return a.address === b.address && a.token === b.token && a.identity === b.identity;
 }

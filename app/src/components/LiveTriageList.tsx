@@ -1,22 +1,27 @@
 import { useEffect, useState } from 'react';
 import { AppState, Linking, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
 import { parseTriage, triageAge, triageStale, type TriageItem, type TriageSnapshot } from '../../../shared/triage';
 import { executionToken } from '../lib/bridge-auth';
 import { store } from '../store/app';
 import { colors, fonts, space } from '../theme';
 import { PressScale } from './PressScale';
+import { useOrbMotion } from './OrbMotion';
 
 type Feed = { phase: 'loading' } | { phase: 'unavailable'; reason: string } | { phase: 'live'; snapshot: TriageSnapshot };
 export function LiveTriageList() {
   const settings = store.use(s => s.settings);
-  const focused = useIsFocused();
-  const [feed, setFeed] = useState<Feed>({ phase: 'loading' });
+  const { active } = useOrbMotion();
+  const [result, setResult] = useState<{ source: typeof settings; feed: Feed }>({ source: settings, feed: { phase: 'loading' } });
   const [selected, setSelected] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now);
+  const sameSource = result.source?.address === settings?.address && result.source?.token === settings?.token && result.source?.identity === settings?.identity;
+  const feed: Feed = !settings ? { phase: 'unavailable', reason: 'Pair with a bridge to load current priorities' } : sameSource ? result.feed : { phase: 'loading' };
   useEffect(() => {
-    setFeed({ phase: 'loading' }); setSelected(null);
-    if (!settings || !focused) { setFeed({ phase: 'unavailable', reason: 'Pair with a bridge to load current priorities' }); return; }
+    setSelected(null);
+    setResult({ source: settings, feed: { phase: 'loading' } });
+  }, [settings?.address, settings?.token, settings?.identity]);
+  useEffect(() => {
+    if (!settings || !active) return;
     let disposed = false, pending = false;
     let controller: AbortController | undefined;
     async function load() {
@@ -26,21 +31,27 @@ export function LiveTriageList() {
       const timeout = setTimeout(() => controller?.abort(), 12000);
       try {
         const token = await executionToken(settings);
+        if (disposed || AppState.currentState !== 'active') return;
+        if (controller.signal.aborted) throw new Error('Bridge request timed out');
         const response = await fetch(`http://${settings.address}/triage`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
         if (!response.ok) throw new Error(`Bridge HTTP ${response.status}`);
         const snapshot = parseTriage(await response.json());
         if (!snapshot || Date.now() - snapshot.generatedAt > 30000) throw new Error('Source snapshot is stale or unreadable');
-        if (!disposed) setFeed({ phase: 'live', snapshot });
+        if (!disposed && AppState.currentState === 'active') setResult({ source: settings, feed: { phase: 'live', snapshot } });
       } catch (error) {
-        if (!disposed) { setFeed({ phase: 'unavailable', reason: error instanceof Error ? error.message : 'Bridge unreachable' }); setSelected(null); }
+        if (!disposed && AppState.currentState === 'active') { setResult({ source: settings, feed: { phase: 'unavailable', reason: error instanceof Error ? error.message : 'Bridge unreachable' } }); setSelected(null); }
       } finally { clearTimeout(timeout); pending = false; }
     }
     void load();
     const poll = setInterval(() => void load(), 5000);
-    const listener = AppState.addEventListener('change', state => { if (state === 'active') void load(); });
-    return () => { disposed = true; controller?.abort(); clearInterval(poll); listener.remove(); };
-  }, [settings?.address, settings?.token, settings?.identity, focused]);
-  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+    return () => { disposed = true; controller?.abort(); clearInterval(poll); };
+  }, [settings?.address, settings?.token, settings?.identity, active]);
+  useEffect(() => {
+    if (!active) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [active]);
   const items = feed.phase === 'live' ? [...feed.snapshot.items].sort((a, b) => Number(triageStale(a, now)) - Number(triageStale(b, now)) || a.priority - b.priority || rank(a) - rank(b) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.id.localeCompare(b.id)) : [];
   const open = items.find(i => i.id === selected);
   return <View style={s.root}>
@@ -56,7 +67,7 @@ export function LiveTriageList() {
         <Text style={s.meta}>{item.source}</Text>
       </PressScale>)}
     </ScrollView>
-    {open ? <Modal transparent visible animationType="none" onRequestClose={() => setSelected(null)}><View style={s.backdrop}><View style={s.detail} testID="triage-detail" accessibilityViewIsModal>
+    {active && open ? <Modal transparent visible animationType="none" onRequestClose={() => setSelected(null)}><View style={s.backdrop}><View style={s.detail} testID="triage-detail" accessibilityViewIsModal>
       <ScrollView><Text style={s.title}>{open.title}</Text><Text style={s.meta}>{triageStale(open, now) ? 'Stale · not current · ' : ''}{triageAge(open, now)} · {open.source}</Text><Text selectable style={s.body}>{open.reason}</Text><Text selectable style={s.body}>{open.next}</Text>
       {open.url ? <PressScale accessibilityRole="button" accessibilityLabel="Open triage source" onPress={() => { if (open.url) void Linking.openURL(open.url); }} style={s.button}><Text style={s.body}>Open source PR</Text></PressScale> : null}</ScrollView>
       <PressScale accessibilityRole="button" accessibilityLabel="Close triage item" onPress={() => setSelected(null)} style={s.button}><Text style={s.body}>Close</Text></PressScale>
