@@ -1,4 +1,5 @@
 import { ModelsPanel } from "../components/ModelsPanel";
+import { DeviceCheck } from "../components/DeviceCheck";
 import { NotificationSettings } from "../components/NotificationSettings";
 import { setHandedness, useHandedness } from "../lib/useHandedness";
 import type { Handedness } from "../lib/handedness";
@@ -34,6 +35,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const [token, setToken] = useState(settings?.token ?? "");
   const [cwd, setCwd] = useState(settings?.cwd ?? "");
   const [modelsOpen, setModelsOpen] = useState(false);
+  const [deviceCheckOpen, setDeviceCheckOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const attemptRef = useRef<AbortController | null>(null);
@@ -170,6 +172,16 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           {modelsOpen ? <ModelsPanel /> : null}
           <NotificationSettings />
           <Pressable accessibilityRole="button" onPress={() => navigation.navigate("Notices")} style={styles.secondary}><Text style={styles.secondaryText}>Notices · Agent reports</Text></Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Device self-check"
+            accessibilityState={{ expanded: deviceCheckOpen }}
+            onPress={() => setDeviceCheckOpen(open => !open)}
+            style={styles.secondary}
+          >
+            <Text style={styles.secondaryText}>Device self-check {deviceCheckOpen ? "−" : "+"}</Text>
+          </Pressable>
+          {deviceCheckOpen ? <DeviceCheck /> : null}
           <Text style={styles.label}>Display</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <View style={styles.harnessRow}><Text style={styles.harnessName}>Thumb side</Text></View>
