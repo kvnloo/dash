@@ -33,22 +33,31 @@ export function parseInkDraft(raw: string): Drawing | null {
 }
 
 /** Commit locally first; serialized device writes run in microtasks, never awaited by input. */
-export function attachInkPersistence<T extends { drawing: Drawing }>(store: Store<T>, storage: InkStorage) {
+function draftNote(raw: string): string {
+  try {
+    const value: unknown = JSON.parse(raw);
+    return record(value) && typeof value.typed === "string" ? value.typed.slice(0, 2000) : "";
+  } catch { return ""; }
+}
+
+export function attachInkPersistence<T extends { drawing: Drawing; typed: string }>(store: Store<T>, storage: InkStorage) {
   let previous = store.get().drawing;
+  let previousTyped = store.get().typed;
   let changed = false, disposed = false, restoring = false, ready = false;
   let pending = Promise.resolve();
   function flush(): Promise<void> {
     // Background/unmount can precede the initial read. Never persist the empty startup state over it.
     if (!ready) return restored.then(() => disposed && !changed ? undefined : flush());
-    const drawing = store.get().drawing;
-    const raw = JSON.stringify({ strokes: drawing.strokes, nextId: drawing.nextId });
+    const { drawing, typed } = store.get();
+    const raw = JSON.stringify({ strokes: drawing.strokes, nextId: drawing.nextId, typed });
     pending = pending.then(() => storage.write(raw)).catch(error => { storage.onError?.(error); });
     return pending;
   }
   const unsubscribe = store.subscribe(() => {
-    const next = store.get().drawing;
-    if (next === previous) return;
+    const { drawing: next, typed } = store.get();
+    if (next === previous && typed === previousTyped) return;
     previous = next;
+    previousTyped = typed;
     if (restoring) return;
     changed = true;
     void flush();
@@ -59,7 +68,7 @@ export function attachInkPersistence<T extends { drawing: Drawing }>(store: Stor
     const drawing = parseInkDraft(raw);
     if (!drawing) return;
     restoring = true;
-    store.set(s => ({ ...s, drawing }));
+    store.set(s => ({ ...s, drawing, typed: draftNote(raw) }));
     restoring = false;
   }).catch(error => { storage.onError?.(error); }).finally(() => { ready = true; });
   return {

@@ -183,7 +183,15 @@
      "tests": ["annotation-launch: Skia entry has no ink alert in the first three seconds",
                "annotation-launch: failed CanvasKit load reports skia-load and Retry permits a stroke",
                "annotation-launch: empty pen double-tap does not send or report an error",
-               "annotation-launch: pen double-tap offers three-second Undo and retains unsent ink"]}
+               "annotation-launch: pen double-tap offers three-second Undo and retains unsent ink"]},
+    {"id": "annotation-note", "title": "Typed annotation intent reaches the chat and host transcript; silent sends require confirmation for Skia and tldraw",
+     "tests": ["annotation-note: skia sends typed intent and ink to chat and host JSON",
+               "annotation-note: tldraw sends typed intent and ink to chat and host JSON",
+               "annotation-note: skia empty words confirmation cancels without uploads or a turn",
+               "annotation-note: tldraw empty words confirmation cancels without uploads or a turn"]},
+    {"id": "annotation-send-receipt", "title": "Streaming or bridge delivery acknowledgement confirms a single annotation turn without waiting for final reply",
+     "tests": ["annotation-receipt: OMP streamed delta confirms one annotation before its 35s-held reply ends",
+               "annotation-receipt: offline Send then reconnect and Send again creates just one turn"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",
