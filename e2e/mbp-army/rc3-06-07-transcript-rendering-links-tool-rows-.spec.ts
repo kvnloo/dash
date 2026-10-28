@@ -200,7 +200,7 @@ test('07.04 RC3 #419/#386 bare https URL and file:line outside code are tappable
  await send(page,scenario('LINKS','bare links journey'));
  await expect(page.getByText(/ARMY_LINKS_DONE/).filter({visible:true}).first()).toBeVisible({timeout:15000});
  const bare=page.getByRole('link',{name:'https://example.com/army-bare',exact:true});
- await expect(bare,'RC3 #419/#386: linkify-paths has no importer at 2c948dc; bare URL is plain text').toBeVisible({timeout:6000});
+ await expect(bare,'RC3 #419/#386: the completed bare URL is tappable').toBeVisible({timeout:6000});
  await bare.click({noWaitAfter:true});
  await expect.poll(()=>out.urls.some(u=>u.startsWith('https://example.com/army-bare'))).toBe(true);
  const path=page.getByRole('link',{name:/\/srv\/army\/src\/file\.ts:12/});
