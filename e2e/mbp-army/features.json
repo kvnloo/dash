@@ -79,7 +79,7 @@
     {"id": "socket-keepalive", "title": "The app's socket keepalive is answered with a pong",
      "tests": ["the app socket keepalive is answered, never logged as ws.bad_message"]},
     {"id": "claude-remote-resume", "title": "Continue a Claude Code chat recorded on another computer: resumed there, reply streamed; unrouted stays view only",
-     "tests": ["resumes on that computer and streams the reply, turn after turn",
+     "tests": ["resumes on that computer and streams the reply, turn after turn", "a chat saved as ended comes back sendable once the bridge routes to its computer",
                "opens view only and sends nothing"]},
     {"id": "roadmap", "title": "Roadmap screen: projects, feature filter, task detail with live Hermes and roadmap status",
      "tests": ["Roadmap -> project -> feature filter -> task detail with live Hermes and roadmap status"]},
