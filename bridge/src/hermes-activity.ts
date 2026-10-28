@@ -1,4 +1,8 @@
-import type { HistoryMessage } from "../../shared/protocol";
+import { MESSAGE_TEXT_MAX, type HistoryMessage } from "../../shared/protocol";
+
+/** Same cut as the ws window and GET /chats/history: the full text stays one GET /chats/message away. */
+const cut = (message: HistoryMessage): HistoryMessage => message.text.length > MESSAGE_TEXT_MAX
+  ? { ...message, text: message.text.slice(0, MESSAGE_TEXT_MAX), truncated: true } : message;
 
 /** Auth before read, one native snapshot/second/identity, bounded shared cache. */
 export function activityHttp(read: (profile: string, session: string) => HistoryMessage[], now = Date.now) {
@@ -13,7 +17,7 @@ export function activityHttp(read: (profile: string, session: string) => History
     const key = `${profile}\0${session}`;
     let entry = cache.get(key);
     if (!entry || now() - entry.at >= 1000) {
-      const body = JSON.stringify(read(profile, session));
+      const body = JSON.stringify(read(profile, session).map(cut));
       entry = { at: now(), body, etag: `"${Bun.hash(body).toString(16)}"` };
       cache.delete(key); cache.set(key, entry);
       if (cache.size > 32) { const first = cache.keys().next().value; if (first) cache.delete(first); }

@@ -279,7 +279,7 @@ test.describe('rc3 01 connection banner',()=>{
 });
 
 test.describe('rc3 01 global search bar',()=>{
- test('Mention inserts @, Voice input opens Voice, Send submits the note into a chat',async({page,bridge})=>{
+ test('Mention inserts @, the mic slid up opens Voice, Send submits the note into a chat',async({page,bridge})=>{
   await pairCold(page,bridge);
   // #506: the bar names the configured agent (default harness OMP in the fixture); feedback on/off no longer changes the placeholder.
   await expect(search(page)).toHaveAttribute('placeholder','Message OMP');
@@ -287,12 +287,18 @@ test.describe('rc3 01 global search bar',()=>{
   await expect(search(page)).toHaveValue('@');
   await expect(search(page)).toBeFocused();
   await search(page).fill('');
-  await btn(page,'Voice input').click({noWaitAfter:true});
-  await expect(page.getByRole('heading',{name:/^(Voice|Live call)$/})).toBeVisible();
+  // C26: the bar's mic is the dictate/live switch (label 'Dictate'): holding it and sliding up selects Live, which opens the Voice screen.
+  const mic=btn(page,'Dictate');
+  const box=await mic.boundingBox();if(!box)throw Error('main mic has no box');
+  const mx=box.x+box.width/2,my=box.y+box.height/2;
+  await page.mouse.move(mx,my);await page.mouse.down();
+  await page.waitForTimeout(300); // MicButton opens its picker after 220 ms
+  await page.mouse.move(mx,my-72,{steps:8});await page.mouse.up();
+  await expect(page.getByText('Dash voice',{exact:true})).toBeVisible();
   await btn(page,'Back').click({noWaitAfter:true});
   await expect(search(page)).toBeVisible();
   await search(page).fill('army global note');
-  await expect(btn(page,'Voice input')).toHaveCount(0);
+  await expect(btn(page,'Send')).toBeVisible();
   await btn(page,'Send').click({noWaitAfter:true});
   // Feedback on: Send files the note as a typed feedback turn into the Dash feedback chat and opens Chat
   // (MainScreen onSend -> submitInAppFeedback); the note is the first user message, not a composer draft.
