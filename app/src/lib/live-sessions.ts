@@ -167,8 +167,13 @@ export function hydrateLiveConversation(conversation: Conversation, history: His
   if (conversation.messages.some(m => m.role === "assistant" && (m.state === "streaming" || m.state === "pending"))) return conversation;
   if (conversation.messages.length > 0 && conversation.harness !== "hermes") return conversation;
   const messages = historyToMessages(history, conversation.id, conversation.harness === "hermes");
-  if (!messages.length) return conversation;
-  return { ...conversation, messages, updatedAt: Math.max(messages.at(-1)?.at ?? 0, conversation.updatedAt) };
+  const last = messages.at(-1);
+  if (!last) return conversation;
+  // A delayed history window must not erase a turn sent after that snapshot,
+  // even once its assistant row is done. Keep equal timestamps too (DB precision).
+  const ids = new Set(messages.map(m => m.id));
+  const newer = conversation.messages.filter(m => !ids.has(m.id) && m.at >= last.at);
+  return { ...conversation, messages: [...messages, ...newer], updatedAt: Math.max(last.at, conversation.updatedAt) };
 }
 /**
  * A refreshed newest window on top of a conversation whose older pages were already paged in:
