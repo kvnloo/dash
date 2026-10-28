@@ -9,8 +9,8 @@ import { once } from 'node:events';
 import { startFixtureZ0bridge, type IdentityTokenOptions } from './fixture-z0bridge';
 export const web = process.env.ARMY_WEB || 'http://127.0.0.1:18400';
 const root = resolve(__dirname, '../..');
-const bridgeRoot = process.env.ARMY_BRIDGE_ROOT || root;
-const bun = process.env.ARMY_BUN || execFileSync('sh',['-c','command -v bun'],{encoding:'utf8'}).trim();
+export const bridgeRoot = process.env.ARMY_BRIDGE_ROOT || root;
+export const bun = process.env.ARMY_BUN || execFileSync('sh',['-c','command -v bun'],{encoding:'utf8'}).trim();
 const bunDir = dirname(bun);
 const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
 export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Promise<void>; start(): Promise<void>; dispose(): Promise<void>; identityToken(options?: IdentityTokenOptions): string; logs(): string };
@@ -23,6 +23,7 @@ export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Pro
  * longClaude: a 1000-message Claude Code chat AgentsView recorded on this computer
  *   (LONG_CHAT_PROMPTS prompts, each followed by tool-step rows and a final answer).
  * subagents: delegated workers of the native Hermes fixture chat (state.db child rows): two live, one ended.
+ * env: extra environment for this bridge only (e.g. DASH_ENABLE_LEGACY_CLI=1 for the pi/fx lane, DASH_SUPERVISION_DIR for the Orchestra lane).
  * longHermes: a 1000-message native Hermes chat (LONG_HERMES_PROMPTS prompts, each with one answer):
  *   Hermes pages by (timestamp, id) keyset over user and assistant rows, not by AgentsView ordinal.
  */

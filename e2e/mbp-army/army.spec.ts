@@ -18,41 +18,41 @@ test('composer typing, Send and streamed ACP reply',async({page,bridge,metrics})
  await openChat(page,bridge);
  await act(metrics,'Dash composer fill',()=>composer(page).fill('ARMY_SLOW hello streamed UI'));
  await act(metrics,'Dash Send click',()=>page.getByRole('button',{name:'Send',exact:true}).click({noWaitAfter:true}));
- await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_STREAM_BEGIN/).filter({visible:true}).first()).toBeVisible();
  await expect(page.getByRole('button',{name:'Stop',exact:true})).toBeVisible();
- await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible({timeout:18000});
+ await expect(page.getByText(/ARMY_REPLY:/).filter({visible:true}).first()).toBeVisible({timeout:18000});
  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeVisible();
 });
 
 test('Stop cancels an active ACP turn and restores composer',async({page,bridge})=>{
  await openChat(page,bridge);await send(page,'ARMY_HANG cancel this');
- await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_STREAM_BEGIN/).filter({visible:true}).first()).toBeVisible();
  await page.getByRole('button',{name:'Stop',exact:true}).click({noWaitAfter:true});
  await expect(page.getByRole('button',{name:'Stop',exact:true})).toHaveCount(0);
  await composer(page).fill('after cancel');
  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled();
  await page.getByRole('button',{name:'Send',exact:true}).click({noWaitAfter:true});
- await expect(page.getByText(/ARMY_REPLY: after cancel/).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_REPLY: after cancel/).filter({visible:true}).first()).toBeVisible();
 });
 
 test('Queue preserves next prompt and sends after running turn',async({page,bridge})=>{
  await openChat(page,bridge);await send(page,'ARMY_SLOW first queued journey');
- await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_STREAM_BEGIN/).filter({visible:true}).first()).toBeVisible();
  await composer(page).fill('second queued journey');
  await page.getByRole('button',{name:'Queue',exact:true}).click({noWaitAfter:true});
- await expect(page.getByText(/second queued journey/).first()).toBeVisible();
- await expect(page.getByText(/ARMY_REPLY: second queued journey/).first()).toBeVisible({timeout:24000});
+ await expect(page.getByText(/second queued journey/).filter({visible:true}).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_REPLY: second queued journey/).filter({visible:true}).first()).toBeVisible({timeout:24000});
 });
 
 test('Steer running Hermes turn surfaces unsupported ACP delivery honestly',async({page,bridge})=>{
  await openChat(page,bridge);await chooseHarness(page,'Hermes');
  await send(page,'ARMY_HANG steer target');
- await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_STREAM_BEGIN/).filter({visible:true}).first()).toBeVisible();
  await composer(page).fill('steer instruction');
  await expect(page.getByRole('button',{name:'Steer',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Steer',exact:true}).click({noWaitAfter:true});
  // This bridge does not promise an ACP steering transport. Must visibly reject, not silently lose.
- await expect(page.getByText(/Steering is|steer.*(unavailable|unsupported|not supported)|Steer.*(unavailable|unsupported)|Delivery failed|Could not steer|No native API|No live/i).first()).toBeVisible();
+ await expect(page.getByText(/Steering is|steer.*(unavailable|unsupported|not supported)|Steer.*(unavailable|unsupported)|Delivery failed|Could not steer|No native API|No live/i).filter({visible:true}).first()).toBeVisible();
 });
 
 test('file chooser uploads real bytes to isolated bridge',async({page,bridge})=>{
@@ -68,7 +68,7 @@ test('file chooser uploads real bytes to isolated bridge',async({page,bridge})=>
  await composer(page).fill('read attachment fixture');
  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled();
  await page.getByRole('button',{name:'Send',exact:true}).click({noWaitAfter:true});
- await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_REPLY:/).filter({visible:true}).first()).toBeVisible();
 });
 
 // Turbo renders the context card as a native Modal whose backdrop covers the gauge, so the
@@ -81,7 +81,7 @@ async function closeContextCard(page:any,gauge:any){
 
 test('context gauge opens a readable card inside the viewport',async({page,bridge})=>{
  await openChat(page,bridge);await send(page,'context card journey');
- await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_REPLY:/).filter({visible:true}).first()).toBeVisible();
  const gauge=page.getByRole('button',{name:/^Context window,/});
  await gauge.click({noWaitAfter:true});
  const card=page.getByLabel('Context window details',{exact:true});
@@ -282,20 +282,20 @@ test('bridge process death disables Send and restart reconnects',async({page,bri
  await openChat(page,bridge);await composer(page).fill('draft while offline');
  await bridge.stop();
  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeDisabled({timeout:15000});
- await expect(page.getByText(/tap to retry|Connecting to bridge|Offline|Disconnected/i).first()).toBeVisible();
+ await expect(page.getByText(/tap to retry|Connecting to bridge|Offline|Disconnected/i).filter({visible:true}).first()).toBeVisible();
  await expect(composer(page)).toHaveValue('draft while offline');
  await bridge.start();
  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled({timeout:30000});
  await page.getByRole('button',{name:'Send',exact:true}).click({noWaitAfter:true});
- await expect(page.getByText(/ARMY_REPLY: draft while offline/).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_REPLY: draft while offline/).filter({visible:true}).first()).toBeVisible();
 });
 
 test('real ACP error is surfaced visibly and leaves composer usable',async({page,bridge})=>{
  await openChat(page,bridge);await send(page,'ARMY_ERROR expose expected agent failure');
- await expect(page.getByText(/ARMY_EXPECTED_AGENT_ERROR|Agent error|ACP.*error|failed/i).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_EXPECTED_AGENT_ERROR|Agent error|ACP.*error|failed/i).filter({visible:true}).first()).toBeVisible();
  await composer(page).fill('retry after error');await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled();
  await page.getByRole('button',{name:'Send',exact:true}).click({noWaitAfter:true});
- await expect(page.getByText(/ARMY_REPLY: retry after error/).first()).toBeVisible();
+ await expect(page.getByText(/ARMY_REPLY: retry after error/).filter({visible:true}).first()).toBeVisible();
 });
 
 for(const width of [390,800])test('safe exploratory controls and context hit target at '+width,async({page,bridge,errors})=>{
@@ -340,7 +340,7 @@ test.describe('ephemeral ACP regression',()=>{
  });
  test('a missing roster row must not terminate a bridge-owned running turn',async({page,bridge})=>{
   await openChat(page,bridge);await send(page,'ARMY_HANG ephemeral ACP regression');
-  await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
+  await expect(page.getByText(/ARMY_STREAM_BEGIN/).filter({visible:true}).first()).toBeVisible();
   // A fixed 5.5 s sleep missed the real 10 s roster poll and could false-green.
   // Observe an actual authenticated response, then let its React update paint.
   // 304 counts: builds with the If-None-Match roster poll get Not Modified once hosts are current.
