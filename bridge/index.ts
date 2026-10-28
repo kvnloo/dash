@@ -745,6 +745,7 @@ const deliveryLedger = new DeliveryLedger({ root: CREDENTIAL_DIR });
 await deliveryLedger.load();
 const deliveryRuntime = new DeliveryRuntime(deliveryLedger);
 async function admitChat(ws: Socket, message: Extract<ClientMessage, { type: "chat" }>, start: (started: () => void) => void): Promise<void> {
+  if (!message.clientId && turns.has(message.id)) return;
   try {
     const created = await deliveryRuntime.admit(ws.data.principal, message, receipt => {
       sendTo(ws, receipt);

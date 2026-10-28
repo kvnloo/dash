@@ -138,7 +138,7 @@ test.describe('RC3 06 delivery status',()=>{
   await bridge.start();
   await expect(status).toContainText(/Received by bridge|Started/,{timeout:30000});
   await expect(page.getByText(new RegExp('ARMY_REPLY: '+esc(text))).first()).toBeVisible();
-  await expect(page.getByText(new RegExp('ARMY_REPLY: '+esc(text)))).toHaveCount(1);
+  await expect(page.getByTestId('transcript-viewport').getByText(new RegExp('ARMY_REPLY: '+esc(text)))).toHaveCount(1);
   await expect.poll(()=>promptCount(bridge,text)).toBe(1);
  });
 
@@ -163,7 +163,7 @@ test.describe('RC3 06 delivery status',()=>{
   await expect.poll(async()=>(await deliveryLog(page)).some(row=>row.endsWith('|Retrying message delivery')),{message:'Retry label becomes Retrying message delivery'}).toBe(true);
   await expect(page.getByTestId('delivery-status').last()).toContainText(/Received by bridge|Started/,{timeout:30000});
   await expect(page.getByText(new RegExp('ARMY_REPLY: '+esc(text))).first()).toBeVisible();
-  await expect(page.getByText(new RegExp('ARMY_REPLY: '+esc(text)))).toHaveCount(1);
+  await expect(page.getByTestId('transcript-viewport').getByText(new RegExp('ARMY_REPLY: '+esc(text)))).toHaveCount(1);
   await expect.poll(()=>promptCount(bridge,text)).toBe(1);
   // A duplicate turn would land within the fixture's 350 ms reply window; observe a little longer.
   await page.waitForTimeout(3000);
