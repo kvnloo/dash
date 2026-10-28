@@ -115,6 +115,8 @@ Stop closes tracks/peer before best-effort broker cancellation/end. Leaving Dash
 the Android background stops the mic. There is no microphone foreground service,
 background-capture promise, platform-TTS fallback, or Expo Go/web implementation.
 
+On Android, dictation and live voice now check or request `RECORD_AUDIO` before acquiring the microphone or preparing the recorder. Android's permission sheet briefly pauses `MainActivity`; Dash ignores that permission-dialog background event for the request and 1.5 seconds after it settles, while ordinary Home/background events still stop an active call. Denial shows the existing microphone-permission error, and a later retry checks again. Device acceptance remains pending: run `adb shell pm revoke app.dash.mobile android.permission.RECORD_AUDIO`, confirm that a single first dictation tap requests permission then records/transcribes after Allow, that first Live start passes the microphone stage, and that pressing Home during a running call stops the mic. A web army pass cannot verify the native dialog.
+
 The bridge's `/voice/bootstrap` is online identity-authenticated, native-only metadata
 for an exact known attached Hermes profile/session, enabled with `DASH_NATIVE_VOICE=1`.
 It does not mint a bearer and does not turn `dash:chat` into voice permission. The app
