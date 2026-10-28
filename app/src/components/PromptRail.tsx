@@ -1,6 +1,6 @@
 import { useHandedness } from "../lib/useHandedness";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
@@ -72,26 +72,28 @@ export function PromptRail({ anchors, following, live, onJump, onLatest, onConti
   const turn = selected === null ? undefined : anchors[selected];
   if (!anchors.length) return null;
   return <View style={[styles.rail, thumb.edge(0)]} pointerEvents="box-none">
-    {selected !== null ? <View style={[styles.preview, thumb.edge(48)]} accessibilityLabel="Turn preview">
+    {selected !== null ? <View style={[styles.preview, thumb.edge(48), { maxHeight: railHeight }]} accessibilityLabel="Turn preview">
       <View style={styles.heading}>
         <Text style={styles.previewLabel}>{turn ? `Prompt ${selected + 1}/${anchors.length} · ${turn.state}${turn.question ? " · question" : ""}` : "Latest reply"}</Text>
         <Pressable accessibilityLabel="Close turn preview" accessibilityRole="button" onPress={clear} style={styles.close}><Text style={styles.previewLabel}>×</Text></Pressable>
       </View>
-      <Text style={styles.previewText} numberOfLines={2}>{turn?.text.split("\n")[0] ?? "Follow new output"}</Text>
-      {turn ? <>
-        <Text style={styles.resultLabel}>RESULT · answer excerpt</Text>
-        <Text style={styles.previewText} numberOfLines={3}>{turn.summary}</Text>
-        <Text style={styles.facts}>ran {Math.max(1, Math.round(turn.durationMs / 60000))} min · {turn.characters.toLocaleString()} chars · {turn.activityUpdates} activity updates{turn.code ? " · diff" : ""}{turn.files.length ? ` · ${turn.files.length} file refs` : ""}</Text>
-        <Text style={styles.facts}>Width = answer volume · colour = state · ◆ = diff/PR</Text>
-        {confirmContinue ? <Text style={styles.facts}>Replace the composer draft with this reference? Nothing is sent; this does not rewind the session.</Text> : null}
-        <View style={styles.buttons}>
-          <Action label="Jump" onPress={() => commit(selected)} />
-          <Action label={copyState || "Copy"} onPress={() => { void Clipboard.setStringAsync(`${turn.text}\n\n${turn.summary}`).then(() => setCopyState("Copied"), () => setCopyState("Copy failed")); }} />
-          <Action label={confirmContinue ? "Replace draft" : "Continue"} onPress={() => { if (!confirmContinue) { setConfirmContinue(true); return; } onContinue(selected); clear(); }} />
-          {turn.pr ? <Action label="Open PR" onPress={() => { if (turn.pr) void Linking.openURL(turn.pr).catch(() => setCopyState("Cannot open PR")); }} /> : null}
-          {turn.files[0] ? <Action label="Copy file path" onPress={() => { void Clipboard.setStringAsync(turn.files[0] ?? "").then(() => setCopyState("Path copied"), () => setCopyState("Copy failed")); }} /> : null}
-        </View>
-      </> : <Action label="Jump to latest" onPress={() => { onLatest(); clear(); }} />}
+      <ScrollView style={styles.previewBody} keyboardShouldPersistTaps="always" nestedScrollEnabled>
+        <Text style={styles.previewText} numberOfLines={2}>{turn?.text.split("\n")[0] ?? "Follow new output"}</Text>
+        {turn ? <>
+          <Text style={styles.resultLabel}>RESULT · answer excerpt</Text>
+          <Text style={styles.previewText} numberOfLines={3}>{turn.summary}</Text>
+          <Text style={styles.facts}>ran {Math.max(1, Math.round(turn.durationMs / 60000))} min · {turn.characters.toLocaleString()} chars · {turn.activityUpdates} activity updates{turn.code ? " · diff" : ""}{turn.files.length ? ` · ${turn.files.length} file refs` : ""}</Text>
+          <Text style={styles.facts}>Width = answer volume · colour = state · ◆ = diff/PR</Text>
+          {confirmContinue ? <Text style={styles.facts}>Replace the composer draft with this reference? Nothing is sent; this does not rewind the session.</Text> : null}
+        </> : null}
+      </ScrollView>
+      {turn ? <View style={styles.buttons}>
+        <Action label="Jump" onPress={() => commit(selected)} />
+        <Action label={copyState || "Copy"} onPress={() => { void Clipboard.setStringAsync(`${turn.text}\n\n${turn.summary}`).then(() => setCopyState("Copied"), () => setCopyState("Copy failed")); }} />
+        <Action label={confirmContinue ? "Replace draft" : "Continue"} onPress={() => { if (!confirmContinue) { setConfirmContinue(true); return; } onContinue(selected); clear(); }} />
+        {turn.pr ? <Action label="Open PR" onPress={() => { if (turn.pr) void Linking.openURL(turn.pr).catch(() => setCopyState("Cannot open PR")); }} /> : null}
+        {turn.files[0] ? <Action label="Copy file path" onPress={() => { void Clipboard.setStringAsync(turn.files[0] ?? "").then(() => setCopyState("Path copied"), () => setCopyState("Copy failed")); }} /> : null}
+      </View> : <Action label="Jump to latest" onPress={() => { onLatest(); clear(); }} />}
     </View> : null}
     <GestureDetector gesture={pan}>
       <View onLayout={e => { height.set(e.nativeEvent.layout.height); setRailHeight(e.nativeEvent.layout.height); }}
@@ -143,7 +145,8 @@ const styles = StyleSheet.create({
   arrow: { color: colors.text, fontSize: 22, lineHeight: 24 },
   following: { color: colors.gold },
   latestLabel: { color: colors.textMuted, fontSize: 9, lineHeight: 12 },
-  preview: { position: "absolute", top: "10%", width: 276, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.hair, backgroundColor: colors.surfaceRaised },
+  preview: { position: "absolute", bottom: 0, width: 276, padding: 12, overflow: "hidden", borderRadius: 12, borderWidth: 1, borderColor: colors.hair, backgroundColor: colors.surfaceRaised },
+  previewBody: { flexShrink: 1, minHeight: 0 },
   heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   close: { minWidth: 44, minHeight: 44, justifyContent: "center", alignItems: "center" },
   previewLabel: { ...type.small, color: colors.textMuted, flexShrink: 1 },
