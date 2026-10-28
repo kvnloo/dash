@@ -131,7 +131,13 @@
     {"id": "stt-load-recovers", "title": "Recover from STT model failures, report host reasons, and isolate temp filenames",
      "tests": ["STT real-host checks missing model returns 503 with model directory reason",
                "STT fixture load failure returns 503 then retries to 200 without restart",
-               "STT real-host checks malicious voice id does not touch HOME or TMPDIR files"]}
+               "STT real-host checks malicious voice id does not touch HOME or TMPDIR files"]},
+    {"id": "live-preview-chip", "title": "Live-preview chip, manual and guarded auto-reload, and Metro menu",
+     "tests": ["live-preview-chip: current build shows short SHA and age","live-preview-chip: changed manifest shows the real arrow and tap reloads exactly once","live-preview-chip: auto-reload waits for the idle gate","live-preview-chip: auto-reload waits for a closed keyboard","live-preview-chip: same served SHA never triggers a reload loop","live-preview-chip: long-press offers reload, Metro switch and auto-reload toggle"]},
+    {"id": "live-reload-guards", "title": "Defer auto-reload during streaming, annotation, and drafts; flush a draft before manual reload",
+     "tests": ["live-reload-guards: a streaming agent reply holds the update until done","live-reload-guards: annotation holds an update until Exit","live-reload-guards: a nonempty unsent draft holds an update","live-reload-guards: manual Reload now flushes a sub-debounce draft before reload"]},
+    {"id": "live-preview-health", "title": "Never reload a served SHA until its launch bundle responds HTTP 200",
+     "tests": ["live-preview-health: an HTTP 500 bundle cannot reload until the same SHA builds", "live-preview-health: rollback to the old SHA preserves the attempted SHA retry guard"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
@@ -139,6 +145,7 @@
     "Hermes session history", "notifications and deep links",
     "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)",
     "live preview chip: old -> new build marker, auto-reload and Metro switch (dev client only: needs a Metro serving a build manifest; none exists in the web export)",
-    "Android RECORD_AUDIO first-run dialog during dictation and live voice (native, device only)"
+    "Android RECORD_AUDIO first-run dialog during dictation and live voice (native, device only)",
+    "live voice reload guard: fake peer needs TURBO-C08 integration; native S25 call proof remains outstanding"
   ]
 }

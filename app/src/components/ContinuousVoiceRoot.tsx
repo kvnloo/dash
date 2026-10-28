@@ -17,6 +17,7 @@ import { ensureMicPermission, permissionRequestInFlight } from "../lib/mic-permi
 import { createStore } from "../store/createStore";
 import { debugUi } from "../debug/ui-store";
 import { voiceTarget } from "../lib/voice-target";
+import { voicePhase } from "../lib/voice-phase";
 
 /** One logcat line per failed voice stage (phone-watch turns these into incidents). Notes never carry secrets. */
 function voiceTrace(stage: string, note: string | undefined, quiet = false): void {
@@ -57,6 +58,7 @@ export function useContinuousVoice(): VoiceContext {
 
 export function ContinuousVoiceRoot({ children }: { children: ReactNode }): React.JSX.Element {
   const [state, setState] = useState(initial);
+  useEffect(() => { voicePhase.set(state.phase); return () => voicePhase.set("idle"); }, [state.phase]);
   const [bindingGeneration, setBindingGeneration] = useState(0);
   const call = useRef<ContinuousVoice | null>(null);
   const attached = useRef<Conversation | null>(null);

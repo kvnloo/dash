@@ -6,7 +6,7 @@ import { createStore, type Store } from "./createStore";
 export interface ComposerDraft { text: string; attachments: DraftAttachment[] }
 
 type DraftStore = Store<Record<string, ComposerDraft>>;
-interface DraftRuntime { store: DraftStore; restored: Promise<void> }
+interface DraftRuntime { store: DraftStore; restored: Promise<void>; flush(): Promise<void> }
 
 // Fast Refresh re-evaluates modules without restarting the JavaScript runtime.
 // Keep the store AND its storage lifecycle together so neither in-memory edits
@@ -47,8 +47,7 @@ function createDraftRuntime(): DraftRuntime {
   const store = createStore<Record<string, ComposerDraft>>({});
   let saved: Saved = {};
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let writing = false;
-  let rewrite = false;
+  let inFlight: Promise<void> = Promise.resolve();
 
   function snapshot(): Saved {
     const now = Date.now(), next: Saved = {};
@@ -59,21 +58,19 @@ function createDraftRuntime(): DraftRuntime {
     return next;
   }
 
-  // Serialize writes: a newer snapshot waits for an in-flight write.
-  function persist(): void {
-    if (writing) { rewrite = true; return; }
-    writing = true;
-    const done = (): void => {
-      writing = false;
-      if (rewrite) { rewrite = false; persist(); }
-    };
-    AsyncStorage.setItem(KEY, JSON.stringify(saved)).then(done, done);
+  // Serialize writes and return a promise for the exact snapshot being flushed.
+  // A rapid manual reload must await any older in-flight write AND its own latest write.
+  function persist(): Promise<void> {
+    const value = JSON.stringify(saved);
+    const task = inFlight.catch(() => undefined).then(() => AsyncStorage.setItem(KEY, value));
+    inFlight = task;
+    return task;
   }
 
-  function flush(): void {
+  function flush(): Promise<void> {
     if (timer) { clearTimeout(timer); timer = undefined; }
     saved = snapshot();
-    persist();
+    return persist();
   }
 
   const restored: Promise<void> = AsyncStorage.getItem(KEY).then(raw => {
@@ -90,12 +87,12 @@ function createDraftRuntime(): DraftRuntime {
   }).catch(() => undefined).finally(() => {
     store.subscribe(() => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(flush, WRITE_DELAY_MS);
+      timer = setTimeout(() => { void flush(); }, WRITE_DELAY_MS);
     });
-    AppState.addEventListener("change", state => { if (state !== "active") flush(); });
+    AppState.addEventListener("change", state => { if (state !== "active") void flush(); });
   });
 
-  return { store, restored };
+  return { store, restored, flush };
 }
 
 // A new JS runtime restores from AsyncStorage; Fast Refresh retains this singleton
@@ -113,4 +110,10 @@ export const draftsRestored = runtime.restored;
 
 export function updateComposerDraft(id: string, seed: ComposerDraft, update: (draft: ComposerDraft) => ComposerDraft): void {
   composerDrafts.set(all => ({ ...all, [id]: update(all[id] ?? seed) }));
+}
+
+/** Drain the debounce and all earlier writes before any deliberate full reload. */
+export async function flushDrafts(): Promise<void> {
+  await runtime.restored;
+  await runtime.flush();
 }
