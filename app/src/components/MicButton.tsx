@@ -13,6 +13,8 @@ import { colors, glass } from "../theme";
 interface Props {
   onDictate(): void;
   onLive(): void;
+  /** Only the main bar starts Live immediately when chosen with the upward gesture. */
+  onSelectLive?(): void;
   /** Kept for API compatibility; the pill always grows straight up from the mic. */
   side: "left" | "right";
   /** Optional glyph override (the live-call orb). */
@@ -32,9 +34,9 @@ const PILL = SLOT + TRAVEL;
  * Tap: use the active mode (Dictate or Live voice).
  * Press and hold: a pill grows up around the mic with the Live voice icon above it. Slide up to move the knob onto
  * Live voice (or down onto Dictate); release and the pill folds back down and that mode becomes the mic's icon.
- * Release only switches the mode; tap to use it.
+ * Release switches the mode; the main bar may also start Live on selection.
  */
-export const MicButton = memo(function MicButton({ onDictate, onLive, children, onTap, accessibilityLabel }: Props) {
+export const MicButton = memo(function MicButton({ onDictate, onLive, onSelectLive, children, onTap, accessibilityLabel }: Props) {
   const [mode, setMode] = useState<MicChoice>("dictate");
   const open = useSharedValue(0);
   /** Knob: 0 = bottom slot (Dictate), 1 = top slot (Live voice). */
@@ -55,11 +57,13 @@ export const MicButton = memo(function MicButton({ onDictate, onLive, children, 
   }, [mode, onDictate, onLive, onTap]);
   const commit = useCallback((slot: number) => {
     const next: MicChoice = slot === 1 ? "live" : "dictate";
-    if (next === mode) return;
-    haptic.success();
-    setMode(next);
-    void AsyncStorage.setItem(MIC_DEFAULT_KEY, next).catch(() => {});
-  }, [mode]);
+    if (next !== mode) {
+      haptic.success();
+      setMode(next);
+      void AsyncStorage.setItem(MIC_DEFAULT_KEY, next).catch(() => {});
+    }
+    if (next === "live") onSelectLive?.();
+  }, [mode, onSelectLive]);
   const tick = useCallback(() => haptic.select(), []);
   const opened = useCallback(() => haptic.tap(), []);
 
