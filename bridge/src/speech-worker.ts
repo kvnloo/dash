@@ -1,5 +1,6 @@
 // Dedicated Bun Worker: sherpa-onnx N-API import, model construction, WAV
 // reading and synchronous recognition never execute on the HTTP/WebSocket thread.
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -14,7 +15,7 @@ export type SpeechWorkerRequest =
   | { id: number; op: "transcribe"; audio: Uint8Array };
 export type SpeechWorkerReply =
   | { id: number; ok: true; result: SpeechResult }
-  | { id: number; ok: false; error: string };
+  | { id: number; ok: false; error: string; kind: "load" | "decode" };
 
 const FIXTURE = process.env.DASH_STT_ENGINE === "fixture";
 const DEFAULT_MODEL_DIR = join(
@@ -29,6 +30,21 @@ type Engine = {
   recognizer: import("sherpa-onnx-node").OfflineRecognizer;
   readWave: typeof import("sherpa-onnx-node").readWave;
 };
+class SpeechModelLoadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SpeechModelLoadError";
+  }
+}
+let fixtureLoaded = false;
+function loadFixture(): void {
+  if (fixtureLoaded) return;
+  const failFile = process.env.DASH_STT_FIXTURE_FAIL_FILE;
+  if (failFile && existsSync(failFile)) {
+    throw new SpeechModelLoadError(`Fixture STT model failed to load while ${failFile} exists.`);
+  }
+  fixtureLoaded = true;
+}
 let loading: Promise<Engine> | undefined;
 function load(): Promise<Engine> {
   if (!loading) {
@@ -53,8 +69,9 @@ function load(): Promise<Engine> {
       }),
       readWave: addon.readWave,
     })).catch((error: unknown) => {
+      // Do not permanently cache a rejected load. A later call may use a repaired model.
       loading = undefined;
-      throw error;
+      throw new SpeechModelLoadError(error instanceof Error ? error.message : String(error));
     });
   }
   return loading;
@@ -62,10 +79,12 @@ function load(): Promise<Engine> {
 
 async function execute(request: SpeechWorkerRequest): Promise<SpeechResult> {
   if (request.op === "warmup") {
-    if (!FIXTURE) await load();
+    if (FIXTURE) loadFixture();
+    else await load();
     return { text: "", sttMs: 0, audioSeconds: 0 };
   }
   if (FIXTURE) {
+    loadFixture();
     if (!("audio" in request)) throw new Error("Fixture STT expected recording bytes.");
     const rawBusyMs = Number(process.env.DASH_STT_FIXTURE_BUSY_MS ?? "0");
     const busyMs = Number.isFinite(rawBusyMs) ? Math.max(0, Math.floor(rawBusyMs)) : 0;
@@ -109,6 +128,7 @@ if (!Bun.isMainThread) {
     } catch (error) {
       const response: SpeechWorkerReply = {
         id: request.id, ok: false, error: error instanceof Error ? error.message : String(error),
+        kind: error instanceof SpeechModelLoadError ? "load" : "decode",
       };
       self.postMessage(response);
     }

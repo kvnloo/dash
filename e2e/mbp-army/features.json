@@ -127,7 +127,11 @@
                "ACP progress frames keep the local turn alive until completion",
                "silent ACP turn stalls promptly and restores the composer"]},
     {"id": "bridge-drain", "title": "Bridge health and drain let running agents finish while new chat and voice turns are refused",
-     "tests": ["bridge drain preserves the running reply, refuses new chat and voice, and exits cleanly"]}
+     "tests": ["bridge drain preserves the running reply, refuses new chat and voice, and exits cleanly"]},
+    {"id": "stt-load-recovers", "title": "Recover from STT model failures, report host reasons, and isolate temp filenames",
+     "tests": ["STT real-host checks missing model returns 503 with model directory reason",
+               "STT fixture load failure returns 503 then retries to 200 without restart",
+               "STT real-host checks malicious voice id does not touch HOME or TMPDIR files"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",

@@ -21,8 +21,9 @@ export interface FilesHttpOptions {
   device?: string;
   run: Run;
   onEvent?(event: string, fields: Record<string, unknown>): void;
-  /** Host STT. Absent when the bridge has no speech model. */
+  /** Host STT remains mounted even when dependencies are installed after startup. */
   transcribe?(audio: Uint8Array, id: string): Promise<{ text: string }>;
+  speechAvailable?(): { ok: boolean; reason?: string };
 }
 
 const MAX_SHARE_JSON = 8 * 1024;
@@ -30,6 +31,10 @@ export const MAX_TRANSCRIBE_BYTES = 10 * 1024 * 1024;
 
 export function createFilesHttpHandler(options: FilesHttpOptions) {
   const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
+  const sttUnavailable = (reason?: string) => json({
+    error: "Speech-to-text is not available on this host.",
+    reason: reason ?? "Speech-to-text is not configured on this host.",
+  }, 503);
   let sharing = false;
   return async (request: Request): Promise<Response | null> => {
     const url = new URL(request.url);
@@ -42,7 +47,9 @@ export function createFilesHttpHandler(options: FilesHttpOptions) {
     }
     if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
     if (url.pathname === "/transcribe") {
-      if (!options.transcribe) return json({ error: "Speech-to-text is not available on this host." }, 503);
+      const ready = options.speechAvailable?.();
+      if (ready && !ready.ok) return sttUnavailable(ready.reason);
+      if (!options.transcribe) return sttUnavailable();
       const length = Number(request.headers.get("content-length") ?? "0");
       if (length > MAX_TRANSCRIBE_BYTES) return json({ error: "recording too large" }, 413);
       const audio = new Uint8Array(await request.arrayBuffer());
@@ -52,7 +59,11 @@ export function createFilesHttpHandler(options: FilesHttpOptions) {
         const { text } = await options.transcribe(audio, `transcribe-${Date.now().toString(36)}`);
         options.onEvent?.("transcribe.done", { bytes: audio.byteLength, chars: text.length });
         return json({ text });
-      } catch {
+      } catch (error) {
+        const status = options.speechAvailable?.();
+        if (status && !status.ok) return sttUnavailable(status.reason);
+        if (error instanceof Error && error.name === "SpeechUnavailableError") return sttUnavailable(error.message);
+        options.onEvent?.("transcribe.failed", { error: String(error) });
         return json({ error: "Could not transcribe the recording." }, 500);
       }
     }

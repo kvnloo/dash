@@ -1,6 +1,7 @@
 // Speech-to-text for spoken turns. Model load and decode run on a dedicated
 // Bun Worker, not the bridge event loop. One request runs at a time so phones
 // do not compete for the host's recognition cores.
+import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +15,22 @@ const MODEL_DIR = process.env.DASH_STT_MODEL ?? DEFAULT_MODEL_DIR;
 const FIXTURE = process.env.DASH_STT_ENGINE === "fixture";
 const SAMPLE_RATE = 16_000;
 const WORK_DIR = join(tmpdir(), "dash-voice");
+const retrySetting = Number(process.env.DASH_STT_RETRY_MS ?? "30000");
+const RETRY_MS = Number.isFinite(retrySetting) && retrySetting >= 0 ? retrySetting : 30_000;
+let lastFailure: { lastError: string; at: number } | null = null;
+
+export class SpeechUnavailableError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "SpeechUnavailableError";
+  }
+}
+
+function recordLoadFailure(reason: string): SpeechUnavailableError {
+  lastFailure = { lastError: reason, at: Date.now() };
+  process.stderr.write(`${new Date().toISOString().slice(11, 19)} speech.load_failed reason=${JSON.stringify(reason)} rssBytes=${process.memoryUsage().rss}\n`);
+  return new SpeechUnavailableError(`Speech model failed to load: ${reason}`);
+}
 
 export interface Transcription {
   text: string;
@@ -30,8 +47,12 @@ function modelReadable(): boolean {
   );
 }
 
-/** Whether the bridge can accept a spoken turn. Fixture mode is model-free. */
+/** Re-check dependencies per request, including a bounded cooldown after failed worker loads. */
 export function speechAvailable(): { ok: boolean; reason?: string } {
+  if (lastFailure && Date.now() - lastFailure.at < RETRY_MS) {
+    const remaining = Math.max(0, Math.ceil(RETRY_MS - (Date.now() - lastFailure.at)));
+    return { ok: false, reason: `Speech model failed to load: ${lastFailure.lastError}. Retry in ${remaining} ms.` };
+  }
   if (FIXTURE) return { ok: true };
   if (Bun.which("ffmpeg") === null) {
     return { ok: false, reason: "ffmpeg is not on PATH; it is needed to decode phone audio." };
@@ -49,7 +70,7 @@ const isSpeechResult = (value: unknown): value is SpeechResult =>
   typeof value.sttMs === "number" && Number.isFinite(value.sttMs) &&
   typeof value.audioSeconds === "number" && Number.isFinite(value.audioSeconds);
 
-type Pending = { id: number; resolve(value: SpeechResult): void; reject(error: Error): void };
+type Pending = { id: number; op: SpeechWorkerRequest["op"]; resolve(value: SpeechResult): void; reject(error: Error): void };
 let worker: Worker | undefined;
 let pending: Pending | undefined;
 let nextId = 0;
@@ -60,7 +81,7 @@ function workerDied(instance: Worker, why: string): void {
   worker = undefined;
   const job = pending;
   pending = undefined;
-  job?.reject(new Error("Speech worker " + why + "; the next request will restart it."));
+  if (job) job.reject(recordLoadFailure("Speech worker " + why + "; the next request will restart it."));
 }
 
 function getWorker(): Worker {
@@ -79,12 +100,15 @@ function getWorker(): Worker {
       return;
     }
     pending = undefined;
-    if (reply.ok === true && isSpeechResult(reply.result)) job.resolve(reply.result);
-    else if (reply.ok === false && typeof reply.error === "string")
-      job.reject(new Error("Speech recognition failed: " + reply.error));
-    else {
+    if (reply.ok === true && isSpeechResult(reply.result)) {
+      lastFailure = null;
+      job.resolve(reply.result);
+    } else if (reply.ok === false && typeof reply.error === "string") {
+      if (reply.kind === "load" || job.op === "warmup") job.reject(recordLoadFailure(reply.error));
+      else job.reject(new Error("Speech recognition failed: " + reply.error));
+    } else {
       worker = undefined;
-      job.reject(new Error("Speech worker returned an invalid result; the next request will restart it."));
+      job.reject(recordLoadFailure("Speech worker returned an invalid result; the next request will restart it."));
     }
   };
   return instance;
@@ -97,10 +121,10 @@ function callWorker(request: SpeechWorkerRequest): Promise<SpeechResult> {
     try {
       instance = getWorker();
     } catch (error) {
-      reject(new Error("Speech worker could not start: " + String(error)));
+      reject(recordLoadFailure("Speech worker could not start: " + String(error)));
       return;
     }
-    pending = { id: request.id, resolve, reject };
+    pending = { id: request.id, op: request.op, resolve, reject };
     try {
       instance.postMessage(request);
     } catch (error) {
@@ -140,24 +164,33 @@ async function transcode(input: string, output: string): Promise<void> {
 /** Convert the phone's audio asynchronously, then decode it off the bridge thread. */
 export function transcribe(audio: Uint8Array, id: string): Promise<Transcription> {
   return enqueue(async () => {
-    if (FIXTURE) {
-      // Exercise the same worker RPC with genuine request bytes; never open ffmpeg or the model.
-      const heard = await callWorker({ id: ++nextId, op: "transcribe", audio });
-      return { ...heard, transcodeMs: 0 };
-    }
-    mkdirSync(WORK_DIR, { recursive: true });
-    const raw = join(WORK_DIR, id + ".input");
-    const wav = join(WORK_DIR, id + ".wav");
+    const ready = speechAvailable();
+    if (!ready.ok) throw new SpeechUnavailableError(ready.reason ?? "Speech-to-text is not available on this host.");
     try {
-      await Bun.write(raw, audio);
-      const t0 = Date.now();
-      await transcode(raw, wav);
-      const transcodeMs = Date.now() - t0;
-      const heard = await callWorker({ id: ++nextId, op: "transcribe", wav });
-      return { ...heard, transcodeMs };
-    } finally {
-      rmSync(raw, { force: true });
-      rmSync(wav, { force: true });
+      if (FIXTURE) {
+        // Exercise the same worker RPC with genuine request bytes; never open ffmpeg or the model.
+        const heard = await callWorker({ id: ++nextId, op: "transcribe", audio });
+        return { ...heard, transcodeMs: 0 };
+      }
+      mkdirSync(WORK_DIR, { recursive: true });
+      // Client-selected ids are log identifiers, never filenames.
+      const tempId = randomUUID();
+      const raw = join(WORK_DIR, tempId + ".input");
+      const wav = join(WORK_DIR, tempId + ".wav");
+      try {
+        await Bun.write(raw, audio);
+        const t0 = Date.now();
+        await transcode(raw, wav);
+        const transcodeMs = Date.now() - t0;
+        const heard = await callWorker({ id: ++nextId, op: "transcribe", wav });
+        return { ...heard, transcodeMs };
+      } finally {
+        rmSync(raw, { force: true });
+        rmSync(wav, { force: true });
+      }
+    } catch (error) {
+      process.stderr.write(`${new Date().toISOString().slice(11, 19)} speech.transcribe_failed id=${JSON.stringify(id)} error=${JSON.stringify(String(error))}\n`);
+      throw error;
     }
   });
 }
