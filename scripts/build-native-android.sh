@@ -63,15 +63,14 @@ fi
 # the same debug keystore as the dev client so it installs in place (app.config.js).
 variant="${DASH_VARIANT:-debug}"
 case "$variant" in debug) Variant=Debug ;; release) Variant=Release ;; *) echo "DASH_VARIANT must be debug or release" >&2; exit 2 ;; esac
-printf Variant: %s
- "$variant" | tee .native-receipts/variant.txt
-env | grep ^EXPO_PUBLIC_ | sort | tee .native-receipts/expo-public-env.txt || true
-(cd app/android && ./gradlew ":app:assemble$Variant" -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process -Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8 --max-workers=2 --build-cache --no-daemon)
+printf 'Variant: %s\n' "$variant" | tee .native-receipts/variant.txt
+env | grep '^EXPO_PUBLIC_' | sort | tee .native-receipts/expo-public-env.txt || true
+(cd app/android && ./gradlew ":app:assemble$Variant" -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
 cp "app/android/app/build/outputs/apk/$variant/app-$variant.apk" .native-receipts/dash-native-arm64.apk
 if [ "$variant" = release ]; then
   # The RC must boot without Metro: the Hermes bundle has to be inside the APK.
   # No `grep -q` on a pipe here: with pipefail its early exit SIGPIPEs unzip (exit 141).
-  unzip -l .native-receipts/dash-native-arm64.apk assets/index.android.bundle > .native-receipts/embedded-bundle.txt
+  unzip -l .native-receipts/dash-native-arm64.apk 'assets/index.android.bundle' > .native-receipts/embedded-bundle.txt
   cat .native-receipts/embedded-bundle.txt
   grep -F assets/index.android.bundle .native-receipts/embedded-bundle.txt > /dev/null
 fi
