@@ -200,7 +200,10 @@
     {"id": "annotation-entry", "title": "Consistent annotation entry from the window and nav pill, stylus-aware drawing and clean re-entry",
      "tests": ["annotation-entry: window button opens annotation at 390",
                "annotation-entry: window button opens annotation at 800",
-               "annotation-entry: pill exit and re-entry clear failed Send and cold reload closes mode"]}
+               "annotation-entry: pill exit and re-entry clear failed Send and cold reload closes mode"]},
+    {"id": "annotation-voice-target", "title": "Annotated ink reaches the open chat; a bound voice call stays alive to speak a final reply before ending",
+     "tests": ["annotation-voice-target: OMP chat beats a voice call bound to Hermes",
+               "annotation-voice-target: accepted Hermes ink stays live until spoken reply without cancel"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",

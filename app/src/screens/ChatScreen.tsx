@@ -275,7 +275,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   steerableRef.current = canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn);
   useEffect(() => {
     if (!conversation) return;
-    return registerSink({ label: `${harnessName} chat`, steerable: () => steerableRef.current, send: (text, attachments, mode) => {
+    return registerSink({ label: `Sending to ${conversation.title || harnessName}`, conversationId: conversation.id, steerable: () => steerableRef.current, send: (text, attachments, mode) => {
       if (liveOn) setLiveOpen(conversation.id, false);
       return sendVoiceAnnotation(conversation, text, attachments, () => {}, mode);
     } });

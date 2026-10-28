@@ -68,6 +68,11 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const releaseMic = useRef<(() => void) | undefined>(undefined);
   const micRelease = useRef(new VoiceMicReleaseGate());
   const desiredMute = useRef(false);
+  const autoStarted = useRef(false);
+  const pendingFinals = useRef(new Set<string>());
+  const successfulAnnotation = useRef(false);
+  const autoStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const maybeEndAutoRef = useRef<() => void>(() => {});
   const insets = useSafeAreaInsets();
   const windowOpen = voiceWindowOpen.use(open => open);
   const [barRow, setBarRow] = useState(0);
@@ -212,6 +217,11 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       },
         captureReleased: () => { releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined; },
         holdIntent: () => annotate.get().active,
+        finalDrained: turnId => {
+          if (!pendingFinals.current.delete(turnId)) return;
+          successfulAnnotation.current = true;
+          maybeEndAutoRef.current();
+        },
         cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
         transcript: (id, text, start, end) => { if (annotate.get().active) addSegment({ id, text, start, end, source: "voice" }); } });
       call.current = controller;
@@ -225,12 +235,17 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     }
     finally { if (generation === epoch.current) starting.current = false; }
   };
-  const stop = async () => {
+  const stop = async (options?: { preserveWork?: boolean }) => {
+    if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+    autoStopTimer.current = null;
+    autoStarted.current = false;
+    pendingFinals.current.clear();
+    successfulAnnotation.current = false;
     epoch.current++; starting.current = false; desiredMute.current = false; suppressAutoBar.current = false;
     const controller = call.current;
     call.current = null;
     attached.current = null;
-    const cleanup = controller?.stop();
+    const cleanup = controller?.stop(undefined, { cancelWork: options?.preserveWork !== true });
     if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
     setState(initial); await cleanup;
   };
@@ -252,24 +267,48 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       setState(previous => ["idle", "error"].includes(previous.phase) ? previous : suppressAutoBar.current ? initial : { ...previous, phase: "error", note: "Mic stopped because Dash left the foreground. Tap Start to resume." });
     } });
     return () => {
-      epoch.current++; subscription.remove(); const controller = call.current; void controller?.stop();
+      epoch.current++; subscription.remove();
+      if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+      const controller = call.current; void controller?.stop();
       if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
     };
   }, []);
-  // Annotation is a spoken mode: entering it turns conversation voice on; leaving it ends only a call it started.
+  // Annotation owns its auto-started call until the exact final was spoken or 90s passed.
+  // Receipt acceptance closes the tray but is never evidence that playback has drained.
   const annotating = annotate.use(s => s.active);
+  const pendingTurn = annotate.use(s => s.pendingTurn?.id);
   const latest = useRef({ start, stop, phase: state.phase });
   latest.current = { start, stop, phase: state.phase };
-  const autoStarted = useRef(false);
+  const maybeEndAuto = () => {
+    if (!autoStarted.current || annotate.get().active || pendingFinals.current.size > 0 || annotate.get().pendingTurn) return;
+    const preserveWork = successfulAnnotation.current || annotate.get().status === "sent";
+    if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+    autoStopTimer.current = null;
+    void latest.current.stop({ preserveWork });
+  };
+  maybeEndAutoRef.current = maybeEndAuto;
   useEffect(() => {
-    const { start: begin, stop: end, phase } = latest.current;
+    const { start: begin, phase } = latest.current;
     if (annotating) {
-      if (["idle", "error"].includes(phase) && !starting.current) { autoStarted.current = true; void begin({ auto: true }); }
+      if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+      autoStopTimer.current = null;
+      if (["idle", "error"].includes(phase) && !starting.current && !autoStarted.current) {
+        autoStarted.current = true;
+        successfulAnnotation.current = false;
+        void begin({ auto: true });
+      }
     } else if (autoStarted.current) {
-      autoStarted.current = false;
-      void end();
+      if (autoStopTimer.current === null) {
+        autoStopTimer.current = setTimeout(() => {
+          autoStopTimer.current = null;
+          // Timeout is a bounded stop, not a reason to cancel a confirmed chat turn.
+          const preserveWork = successfulAnnotation.current || annotate.get().status === "sent" || pendingFinals.current.size > 0 || !!annotate.get().pendingTurn;
+          void latest.current.stop({ preserveWork });
+        }, 90_000);
+      }
+      maybeEndAutoRef.current();
     }
-  }, [annotating]);
+  }, [annotating, pendingTurn]);
   const shown = fixture ?? state;
   const active = !["idle", "error"].includes(shown.phase);
   const visible = voiceBarVisible(shown.phase, attempted) && (fixture !== null || !suppressAutoBar.current);
@@ -278,8 +317,24 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const target = attached.current;
     if (!active || !target) return;
     const generation = epoch.current;
-    return registerSink({ label: "attached voice conversation", live: true, steerable: () => false,
-      send: (text, attachments) => sendVoiceAnnotation(target, text, attachments, (id, reply) => { if (generation === epoch.current) call.current?.deliverFinal(`annotation:${id}`, reply); }),
+    return registerSink({ label: `Sending to ${target.title || "Hermes"}`, conversationId: target.id, live: true, steerable: () => false,
+      send: async (text, attachments) => {
+        let submittedTurn: string | undefined;
+        try {
+          await sendVoiceAnnotation(target, text, attachments, (id, reply) => {
+            if (generation === epoch.current) call.current?.deliverFinal(`annotation:${id}`, reply);
+          }, "queue", id => {
+            submittedTurn = id;
+            if (generation === epoch.current) pendingFinals.current.add(id);
+          });
+          if (generation === epoch.current) successfulAnnotation.current = true;
+        } catch (error) {
+          if (submittedTurn && generation === epoch.current) pendingFinals.current.delete(submittedTurn);
+          throw error;
+        } finally {
+          maybeEndAutoRef.current();
+        }
+      },
     });
   }, [active, bindingGeneration]);
   // The bar owns a band under the status bar (screens inset below it); it never floats over AppNav or content.

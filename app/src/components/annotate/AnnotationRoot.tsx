@@ -502,7 +502,7 @@ function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, onUndoPe
         <Text style={styles.penSendLabel}>Sending…</Text>
         <Chip label="Undo" a11y="Undo sending" onPress={onUndoPenSend} />
       </View> : null}
-      {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `Sending to ${s.sink ?? "chat"}…`} /> : null}
+      {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `${s.sink ?? "Sending to chat"}…`} /> : null}
       {s.status === "error" && s.error ? <Text accessibilityRole="alert" style={styles.error}>{s.error}</Text> : null}
       {s.voiceNote ? <Text testID="annotation-voice-note" style={[styles.hint, { fontSize: 12, color: colors.textMuted }]}>Live voice unavailable: {s.voiceNote.replace(/[.!?]+$/, "")}. Hold Talk or type a note.</Text> : null}
       <View style={[styles.row, thumb.row]}>
@@ -554,7 +554,7 @@ function Toast({ screenHeight }: { screenHeight: number }): React.JSX.Element | 
     return () => clearTimeout(id);
   }, [s.status]);
   if (s.status !== "sent" || !s.preview) return null;
-  return <TrayViewport atTop screenHeight={screenHeight}><Preview image={s.preview.image} text={s.preview.text} label={`Sent to ${s.sink ?? "chat"} · ${s.preview.strokes} strokes`} /></TrayViewport>;
+  return <TrayViewport atTop screenHeight={screenHeight}><Preview image={s.preview.image} text={s.preview.text} label={`${(s.sink ?? "Sending to chat").replace(/^Sending to /, "Sent to ")} · ${s.preview.strokes} strokes`} /></TrayViewport>;
 }
 
 function Preview({ image, text, label }: { image: string; text: string; label: string }): React.JSX.Element {

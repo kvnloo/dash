@@ -60,6 +60,8 @@ export const annotate = createStore<AnnotateState>(initialAnnotationState());
 
 export interface AnnotationSink {
   label: string;
+  /** Conversation owning this sink; used to prevent cross-chat annotation routing. */
+  conversationId?: string;
   /** True when a Hermes turn is running and can be steered. */
   steerable(): boolean;
   send(text: string, attachments: ChatAttachment[], mode: "steer" | "queue"): void | Promise<void>;
@@ -85,7 +87,12 @@ export function registerSink(sink: AnnotationSink): () => void {
 }
 
 export function currentSink(): AnnotationSink | undefined {
-  return sinks.findLast(sink => sink.live) ?? sinks.at(-1);
+  const chat = sinks.findLast(sink => !sink.live);
+  const voice = sinks.findLast(sink => sink.live);
+  // A voice call can stay bound to Hermes while a different harness chat is open.
+  // Never let that call steal ink from the open chat.
+  if (chat) return voice?.conversationId === chat.conversationId && !!chat.conversationId ? voice : chat;
+  return voice;
 }
 
 /** All entry points reset transient feedback; palm rejection needs observed hardware. */

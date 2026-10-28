@@ -9,7 +9,7 @@ import { annotationReceipt } from "./voice-annotation-receipt";
 /** One exact bridge turn. A lost ack preserves the drawing and the original turn id.
  * Retrying checks that receipt; it never submits a second message.
  */
-export async function sendVoiceAnnotation(conversation: Conversation, text: string, attachments: ChatAttachment[], final: (id: string, text: string) => void, mode: "steer" | "queue" = "queue"): Promise<void> {
+export async function sendVoiceAnnotation(conversation: Conversation, text: string, attachments: ChatAttachment[], final: (id: string, text: string) => void, mode: "steer" | "queue" = "queue", submitted?: (id: string) => void): Promise<void> {
   const pending = annotate.get().pendingTurn;
   const draft = annotate.get();
   const fingerprint = JSON.stringify([draft.drawing.strokes, draft.segments]);
@@ -31,6 +31,8 @@ export async function sendVoiceAnnotation(conversation: Conversation, text: stri
     }
   }
   const exactTurn = turnId;
+  // Accepted is not final; keep the auto-started voice call bound to this exact turn.
+  submitted?.(exactTurn);
   await new Promise<void>((resolve, reject) => {
     let settled = false;
     let off = () => {};
