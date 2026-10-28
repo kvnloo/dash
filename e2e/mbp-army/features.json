@@ -99,7 +99,10 @@
      "tests": ["annotation-note: skia sends typed intent and ink to chat and host JSON",
                "annotation-note: tldraw sends typed intent and ink to chat and host JSON",
                "annotation-note: skia empty words confirmation cancels without uploads or a turn",
-               "annotation-note: tldraw empty words confirmation cancels without uploads or a turn"]}
+               "annotation-note: tldraw empty words confirmation cancels without uploads or a turn"]},
+    {"id": "annotation-send-receipt", "title": "Streaming or bridge delivery acknowledgement confirms a single annotation turn without waiting for final reply",
+     "tests": ["annotation-receipt: OMP streamed delta confirms one annotation before its 35s-held reply ends",
+               "annotation-receipt: offline Send then reconnect and Send again creates just one turn"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
