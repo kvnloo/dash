@@ -1,6 +1,8 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "host-utilization", "title": "Host rows show persisted 24h busy utilization with honest coverage and retained hourly history",
+     "tests": ["host utilization persists, prunes history and shows partial coverage on the host row"]},
     {"id": "pairing", "title": "Pair with a bridge, Chats tab, open and close a chat window",
      "tests": ["pairing, Chats tab, open and close real chat window"]},
     {"id": "send-stream", "title": "Composer send and streamed agent reply",
