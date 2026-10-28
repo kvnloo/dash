@@ -26,7 +26,6 @@ import {
 } from "../lib/chat-window";
 import { readCutout } from "../lib/display-cutout";
 import { debugUi } from "../debug/ui-store";
-import type { OrbState } from "../lib/orb-phase";
 import { useHandedness } from "../lib/useHandedness";
 import { crossfade, fade, morphDuration, snappy } from "../motion";
 import { colors, glass, radius, space, type } from "../theme";
@@ -84,10 +83,9 @@ export function useDisplayCutout(width: number, height: number, insetTop: number
 }
 
 /** The app-wide nav collapsed into a slim status pill around (or below) the camera cut-out. */
-export function WindowPill({ geometry, title, thinking, status, primary, open, onToggle }: {
+export function WindowPill({ geometry, title, status, primary, open, onToggle }: {
   geometry: PillGeometry;
   title: string;
-  thinking: OrbState;
   /** Every observed status, for the accessibility label. */
   status: string[];
   /** The one status with a reserved, unclipped slot. */
@@ -98,7 +96,8 @@ export function WindowPill({ geometry, title, thinking, status, primary, open, o
   const statusText = status.join(" · ");
   const label = `Navigation, collapsed. ${title}${statusText ? `, ${statusText}` : ""}. Double-tap to ${open ? "hide" : "show"} navigation.`;
   const hitPad = Math.max(0, (PILL_HIT - geometry.height) / 2);
-  const left = <><AgentOrb size={14} thinking={thinking} label={`${title} ${thinking.phase}`} />
+  // Identity only: the transcript owns the live working indicator.
+  const left = <><AgentOrb size={14} thinking={{ phase: "idle" }} label={title} animated={false} />
     <Text testID="chat-window-pill-title" style={styles.pillTitle} numberOfLines={1} maxFontSizeMultiplier={1.15}>{title}</Text></>;
   // Reserved slot: never shrinks, so the title is what truncates.
   const right = primary ? <View testID="chat-window-pill-status" style={styles.pillStatusSlot}>

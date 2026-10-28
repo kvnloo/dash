@@ -10,7 +10,6 @@ import {
   type FullscreenCloseSide,
 } from "../lib/a11y-fullscreen-chat-chrome";
 import { CLOSE_GLYPH, PILL_HIT, pillLensPath, type PillGeometry, type PillGlyph } from "../lib/chat-window";
-import type { OrbState } from "../lib/orb-phase";
 import { colors, glass, type } from "../theme";
 import { AgentOrb } from "./AgentOrb";
 
@@ -38,9 +37,6 @@ export function FullscreenChatChrome({
   const hole = geometry.hole;
   const r = geometry.height / 2;
   const hitPad = Math.max(0, (PILL_HIT - geometry.height) / 2);
-  const phase: OrbState["phase"] = primary?.glyph === "tool"
-    ? "tool"
-    : primary?.glyph === "activity" ? "thinking" : "idle";
 
   // The very same even-odd cutout outline and reserved status slot as WindowPill.
   // With no hardware cutout the pill becomes an ordinary safe-area glass capsule.
@@ -48,7 +44,7 @@ export function FullscreenChatChrome({
   const lens = pillLensPath(hole);
   const name = title.trim() || "Chat";
   const leading = <>
-    <AgentOrb size={14} thinking={{ phase }} label={name} animated={false} />
+    <AgentOrb size={14} thinking={{ phase: "idle" }} label={name} animated={false} />
     <Text testID="chat-fullscreen-pill-title" style={styles.pillTitle} numberOfLines={1} maxFontSizeMultiplier={1.15}>{name}</Text>
   </>;
   const trailing = primary ? <View testID="chat-fullscreen-pill-status" style={styles.statusSlot}>

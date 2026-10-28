@@ -486,7 +486,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     <OrbActivity active={false}>
     <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
       {windowed ? <>
-        <WindowPill geometry={pill} title={conversation?.title || harnessName} thinking={thinking}
+        <WindowPill geometry={pill} title={conversation?.title || harnessName}
           status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
           primary={pillPrimary({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
           open={navOpen} onToggle={() => setNavOpen(value => !value)} />
