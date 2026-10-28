@@ -466,6 +466,10 @@ function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, screenHe
         {TOOLS.map(t => <Chip key={t.id} label={t.label} a11y={t.a11y} selected={s.tool === t.id} onPress={() => setTool(t.id)} />)}
         <Swatch color="accent" selected={s.color === "accent"} />
         <Swatch color="red" selected={s.color === "red"} />
+        <Chip label="Aa" a11y="Type a note" selected={noteOpen || !!s.typed} onPress={() => {
+          if (noteOpen) { noteInput.current?.blur(); setNoteOpen(false); }
+          else addNote();
+        }} />
       </View>
       <View style={[styles.row, thumb.row]}>
         <Chip label="Exit" a11y="Exit annotation" onPress={exitAnnotation} />
@@ -474,10 +478,6 @@ function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, screenHe
         <Chip label="Clear" a11y="Clear" disabled={count === 0} onPress={() => tldraw ? tldraw.current?.clear() : clearStrokes()} />
         <Chip label={s.penMode ? "S Pen ✓" : "S Pen"} a11y="Pen mode: only the S Pen draws, fingers scroll" selected={s.penMode} onPress={() => setPenMode(!s.penMode)} />
         <HoldToTalk />
-        <Chip label="Aa" a11y="Type a note" selected={noteOpen || !!s.typed} onPress={() => {
-          if (noteOpen) { noteInput.current?.blur(); setNoteOpen(false); }
-          else addNote();
-        }} />
         <Chip label="⇅" a11y={top ? "Move tray to the bottom" : "Move tray to the top"} onPress={() => setTop(!top)} />
         <Chip label="Keep" a11y="Send and keep drawing" disabled={busy || count === 0} onPress={() => onSend(true)} />
         <Chip label={busy ? "…" : "Send"} a11y="Send annotation" primary disabled={busy || count === 0} onPress={() => onSend(false)} />
