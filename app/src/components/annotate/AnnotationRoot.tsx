@@ -9,7 +9,7 @@ import { Component, useCallback, useEffect, useMemo, useRef, useState, type Reac
 import { BackHandler, Image, PixelRatio, Platform, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { requireOptionalNativeModule } from "expo-modules-core";
-import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withTiming } from "react-native-reanimated";
 import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { debugNavigationRef } from "../../debug/nav";
@@ -45,23 +45,9 @@ import { updateComposerDraft } from "../../store/composer-drafts";
 export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
 /** Strokes whose extent is under this many points are taps (e.g. a pen double-tap). */
 const MIN_EXTENT = 6;
-// Queue preview can reach 192dp, plus 44dp controls, 8dp wrapper and 24dp
-// closed keyboard pad. Leave another 12dp clear of the input, including on IME.
-const COMPOSER_CLEARANCE = 280;
 // The 60dp nav and 52dp settings/perf action row sit above annotation controls.
 // Keep the tray (including the sent toast) one 8dp gap below both.
 const TRAY_TOP_CLEARANCE = NAV_CHROME_HEIGHT + WORKSPACE_HEADER_HEIGHT + space.sm;
-
-function composerAvoidance(keyboardLift: number): number {
-  "worklet";
-  return COMPOSER_CLEARANCE + Math.max(0, keyboardLift);
-}
-
-/** Keep the note tray over the IME and the message dock rather than clipping it away. */
-function trayAvoidance(keyboardLift: number): number {
-  "worklet";
-  return Math.max(COMPOSER_CLEARANCE, Math.max(0, keyboardLift) + 88);
-}
 
 type InkModule = typeof import("./InkCanvas");
 type InkStage = "skia-load" | "ink-render" | "capture";
@@ -305,8 +291,8 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       .enabled(engine === "skia" && active && !!ink && !inkError)
       .onTouchesDown((e, manager) => {
         const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
-        // The dock rides the IME without resizing Expo Go: never swallow input touches.
-        if (!point || point.y >= size.height - composerAvoidance(-keyboardHeight.value)) { manager.fail(); return; }
+        // KeyboardDock moves with the IME; only its live rectangle blocks ink.
+        if (!point || point.y >= size.height - Math.max(0, -keyboardHeight.value)) { manager.fail(); return; }
         const kind = pointerKind(e.pointerType);
         if (!activeSv.value || routePointer(kind, penSv.value, e.numberOfTouches) === "pass") { manager.fail(); return; }
         kindSv.value = e.pointerType; pointerSv.value = point.id;
@@ -333,7 +319,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       })
       .onFinalize(() => { live.value = []; pointerSv.value = -1; });
     const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(engine === "skia" && active)
-      .onEnd((e, success) => { if (success && e.y < size.height - composerAvoidance(-keyboardHeight.value) && pointerKind(e.pointerType) === "stylus") runOnJS(queuePenSend)(); });
+      .onEnd((e, success) => { if (success && e.y < size.height - Math.max(0, -keyboardHeight.value) && pointerKind(e.pointerType) === "stylus") runOnJS(queuePenSend)(); });
     return Gesture.Simultaneous(draw, penDoubleTap);
   }, [engine, active, penMode, ink, inkError, finish, queuePenSend, live, activeSv, penSv, kindSv, pointerSv, tracePointer, size.height, keyboardHeight]);
 
@@ -343,8 +329,8 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     if (__DEV__) console.log("[dash-ink] bounds", { width, height, fontScale: PixelRatio.getFontScale() });
   }, []);
 
-  // Use the same moving boundary for the frame and the finger-blocking overlay.
-  const frameStyle = useAnimatedStyle(() => ({ bottom: composerAvoidance(-keyboardHeight.value) }));
+  // Frame, ink and input cover the entire screen, except the visible keyboard.
+  const frameStyle = useAnimatedStyle(() => ({ bottom: Math.max(0, -keyboardHeight.value) }));
   const Ink = ink?.InkCanvas;
   useEffect(() => {
     const confirmed = annotationStatus === "sent" && previousAnnotationStatus.current !== "sent";
@@ -360,7 +346,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
           <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
           {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
           {engine === "skia" && active && !penMode && !inkError ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
-          {engine === "skia" && active && Ink ? <InkBoundary key={inkAttempt} onError={error => inkFailed(error, "ink-render")}><View style={StyleSheet.absoluteFill} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></View></InkBoundary> : null}
+          {engine === "skia" && active && Ink ? <InkBoundary key={inkAttempt} onError={error => inkFailed(error, "ink-render")}><Animated.View style={[StyleSheet.absoluteFill, frameStyle, { overflow: "hidden" }]} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></Animated.View></InkBoundary> : null}
           {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active ? "auto" : "none"} {...overlayProps}>
             <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} tool={tool} color={color} penMode={penMode} mode="screen"
               onReady={async ms => { console.info("[annotate-tldraw] host-ready", { ms }); }}
@@ -452,8 +438,8 @@ const TOOLS: { id: Tool; label: string; a11y: string }[] = [
   { id: "eraser", label: "Erase", a11y: "Eraser" },
 ];
 
-/** Clip every annotation surface to the area above the lifted composer.
- * The pane scrolls when 390/412dp wrapping or a preview exceeds that space.
+/** Keep the tray in the visible, keyboard-free screen without clipping ink.
+ * Top is the default; the hop control moves it below any strokes at the top.
  */
 function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; atTop: boolean; screenHeight: number }): React.JSX.Element {
   const insets = useSafeAreaInsets();
@@ -466,15 +452,12 @@ function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; 
       duration: 110, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System,
     });
   }, [atTop, progress]);
-  // A tall IME may leave no room at all: show zero tray height rather than
-  // growing underneath the composer or the floating header controls.
-  const clearDock = useAnimatedStyle(() => ({
-    height: Math.max(0, screenHeight - topInset - trayAvoidance(-keyboardHeight.value)),
+  // A tall IME can leave no tray room. Ink remains full-screen when it is closed.
+  const room = useDerivedValue(() => Math.max(0, screenHeight - topInset - Math.max(0, -keyboardHeight.value) - space.xs));
+  const clearDock = useAnimatedStyle(() => ({ height: room.value }));
+  const placement = useAnimatedStyle(() => ({
+    transform: [{ translateY: Math.max(0, room.value - trayHeight.value) * progress.value }],
   }));
-  const placement = useAnimatedStyle(() => {
-    const room = Math.max(0, screenHeight - topInset - trayAvoidance(-keyboardHeight.value));
-    return { transform: [{ translateY: Math.max(0, room - trayHeight.value) * progress.value }] };
-  });
   return (
     <Animated.View pointerEvents="box-none" style={[styles.trayViewport, { top: topInset, left: insets.left + space.xs, right: insets.right + space.xs }, clearDock]} {...overlayProps}>
       <Animated.ScrollView testID="annotation-tray" bounces={false} showsVerticalScrollIndicator={false}

@@ -191,7 +191,12 @@
                "annotation-note: tldraw empty words confirmation cancels without uploads or a turn"]},
     {"id": "annotation-send-receipt", "title": "Streaming or bridge delivery acknowledgement confirms a single annotation turn without waiting for final reply",
      "tests": ["annotation-receipt: OMP streamed delta confirms one annotation before its 35s-held reply ends",
-               "annotation-receipt: offline Send then reconnect and Send again creates just one turn"]}
+               "annotation-receipt: offline Send then reconnect and Send again creates just one turn"]},
+    {"id": "annotation-fullscreen", "title": "Full-screen Skia and tldraw ink including the composer region at phone and tablet widths",
+     "tests": ["annotation-fullscreen: skia 390px bottom stroke is uploaded",
+               "annotation-fullscreen: skia 800px bottom stroke is uploaded",
+               "annotation-fullscreen: tldraw 390px bottom stroke is uploaded",
+               "annotation-fullscreen: tldraw 800px bottom stroke is uploaded"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",
