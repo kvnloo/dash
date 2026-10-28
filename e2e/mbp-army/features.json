@@ -94,8 +94,8 @@
                "two windows sending into one chat at the same moment: the second waits and is answered after the first"]},
     {"id": "provider-failures", "title": "A provider that is out of usage (402) or rate limiting (429) is named in the chat, never as a host authentication problem (#501)",
      "tests": ["a provider 402 says the agent's account is out of usage, and the chat stays usable",
-               "a provider 429 says the host is being rate limited, and the chat stays usable"]}
-    ,{"id": "live-voice-resilience", "title": "A live call detects missing transcripts, survives transcript telemetry outages, and times out during connection",
+               "a provider 429 says the host is being rate limited, and the chat stays usable"]},
+    {"id": "live-voice-resilience", "title": "A live call detects missing transcripts, survives transcript telemetry outages, and times out during connection",
      "tests": ["live voice survives assistant transcript broker 500 and returns to listening",
                "live voice reports no transcript within nine seconds and stays connected",
                "live voice connection times out from Start when peer never becomes ready"]}
