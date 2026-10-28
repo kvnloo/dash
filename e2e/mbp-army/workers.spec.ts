@@ -16,7 +16,10 @@ test.describe('subagent strip',()=>{
   await expect(strip).toBeVisible({timeout:20000});
   await expect(strip).toContainText('ARMY worker verify · terminal');
   await expect(strip).toContainText('+1');
-  await expect(page.getByText('ARMY worker done')).toHaveCount(0);
+  // The ended worker is absent from the chat (strip and tree). The Orchestra page keeps recent
+  // history on purpose and must show it as a finished subagent of this chat, never as a chat.
+  const chat=page.getByTestId('chat-window');
+  await expect(chat.getByText('ARMY worker done')).toHaveCount(0);
   const box=await strip.boundingBox();
   if(!box)throw Error('strip has no box');
   expect(box.x).toBeGreaterThanOrEqual(0);
@@ -25,7 +28,10 @@ test.describe('subagent strip',()=>{
   await strip.click({noWaitAfter:true});
   await expect(page.getByRole('treeitem',{name:/ARMY worker verify/})).toBeVisible();
   await expect(page.getByRole('treeitem',{name:/ARMY worker review/})).toBeVisible();
-  await expect(page.getByText('ARMY worker done')).toHaveCount(0);
+  await expect(chat.getByText('ARMY worker done')).toHaveCount(0);
+  // Orchestra: all three workers count as subagents (one live), and only the two real chats as chats.
+  await expect(page.getByText('subagent 3 · 1 live',{exact:true})).toHaveCount(1);
+  await expect(page.getByText('chat 2 · 1 live',{exact:true})).toHaveCount(1);
   await strip.click({noWaitAfter:true});
   await expect(page.getByRole('treeitem',{name:/ARMY worker verify/})).toHaveCount(0);
  });
