@@ -64,6 +64,8 @@
      "tests": ["approvals screen reads real dry-run outbox and persists rejection"]},
     {"id": "drafts", "title": "Draft text survives close, reopen and reload",
      "tests": ["draft text survives close, reopen and real browser reload"]},
+    {"id": "tool-descriptions", "title": "Tool rows retain descriptive action summaries when argument previews are capped, with retained arguments and output on tap (#514)",
+     "tests": ["tool rows describe a write with capped arguments and open its retained details"]},
     {"id": "tool-cards", "title": "Tool, thinking and activity cards are compact and un-nested at phone width",
      "tests": ["tool and thinking cards stay compact and un-nested at phone width", "a long tool stack folds to its header and opens to every row"]},
     {"id": "reconnect", "title": "Bridge death disables Send; restart reconnects",
