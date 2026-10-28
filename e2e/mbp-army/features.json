@@ -74,6 +74,7 @@
     "native IME and keyboard attach", "voice / speech-to-text", "Android attachment permissions and share sheet",
     "live model behaviour", "Orchestra / orchestration screens", "handedness",
     "Hermes session history", "notifications and deep links",
-    "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)"
+    "context grid with several categories and an autocompact buffer (the fixture agent reports totals only)",
+    "live preview chip: old -> new build marker, auto-reload and Metro switch (dev client only: needs a Metro serving a build manifest; none exists in the web export)"
   ]
 }

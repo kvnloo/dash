@@ -42,6 +42,8 @@ import { hydrate, store } from "./src/store/app";
 import { colors } from "./src/theme";
 import { NativeEvents } from "./src/components/NativeEvents";
 import { ContinuousVoiceRoot } from "./src/components/ContinuousVoiceRoot";
+import { ServedBuildChip } from "./src/components/ServedBuildChip";
+import { observeTouch } from "./src/lib/touch-idle";
 import { flushNotificationTarget, handleChatLink } from "./src/lib/notification-routing";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -124,6 +126,7 @@ export default function App() {
     <GestureHandlerRootView style={styles.root}><DensityProvider><OrbMotionProvider><TileGestureProvider><TileDetailProvider>
       {Platform.OS === "web" ? <style>{"input:focus,textarea:focus{outline:none!important}"}</style> : null}
       <SafeAreaProvider>
+        <View style={styles.touchRoot} onStartShouldSetResponderCapture={observeTouch}>
         <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
           <BridgePullProvider>
             <NavigationContainer
@@ -160,8 +163,10 @@ export default function App() {
             </NavigationContainer>
           </BridgePullProvider>
           <DebugHost />
+          <ServedBuildChip />
           <StatusBar style="light" hidden />
         </KeyboardProvider>
+        </View>
       </SafeAreaProvider>
     </TileDetailProvider></TileGestureProvider></OrbMotionProvider></DensityProvider></GestureHandlerRootView>
   );
@@ -169,6 +174,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  touchRoot: { flex: 1 },
   splash: { flex: 1, backgroundColor: colors.bg },
   clear: { flex: 1, backgroundColor: "transparent" },
 });
