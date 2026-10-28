@@ -1,6 +1,6 @@
 // One real Expo web app -> authenticated Bun bridge -> fixture ACP agent per journey.
 // The entry and error paths are driven through visible controls, never through a store hook.
-import { test, expect, openChat, web } from './fixtures';
+import { test, expect, openChat, send, web } from './fixtures';
 
 test.afterEach(async ({ page }, info) => {
   if (!page.isClosed()) await page.screenshot({ path: info.outputPath('final.png') });
@@ -10,6 +10,8 @@ for (const width of [390, 800]) {
   test(`annotation-entry: window button opens annotation at ${width}`, async ({ page, bridge }, info) => {
     await page.setViewportSize({ width, height: 844 });
     await openChat(page, bridge, `${web}?annotateEngine=skia`);
+    await send(page, `annotation-entry ACP fixture at ${width}`);
+    await expect(page.getByText(`ARMY_REPLY: annotation-entry ACP fixture at ${width}`).first()).toBeVisible();
 
     const button = page.getByTestId('chat-annotate');
     await expect(page.getByTestId('chat-window')).toBeVisible();
