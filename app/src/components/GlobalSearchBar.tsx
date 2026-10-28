@@ -63,7 +63,11 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
     if (speechBusy) void speech.end();
     else void speech.begin();
   };
-  const onLive = () => onVoice?.();
+  const onLive = () => {
+    // A slide to Live during dictation must release the shared microphone first.
+    if (speechBusy) void Promise.resolve(speech.cancel()).then(() => onVoice?.());
+    else onVoice?.();
+  };
 
   const changeValue = (next: string) => {
     setSelection(null);
