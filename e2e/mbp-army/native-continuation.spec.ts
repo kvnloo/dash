@@ -38,18 +38,26 @@ test('phone-created OMP chat resumes after its ACP process exits and the roster 
  expect(bridge.logs()).not.toMatch(/turn\.rejected/);
 });
 
-test.describe('restored OMP panes share one native session',()=>{
- test.use({persistSession:true,bridgeOptions:{env:{ARMY_DUPLICATE_SESSION:'1'}}});
- test('two restored OMP panes retain one usable chat when its first pane closes',async({page,bridge},info)=>{
+for(const differentCwd of [false,true]){
+test.describe(`restored OMP panes share one native session${differentCwd?' across launcher directories':''}`,()=>{
+ test.use({persistSession:true,bridgeOptions:{env:{ARMY_DUPLICATE_SESSION:'1',ARMY_SECONDARY_CWD:differentCwd?'1':'0'}}});
+ test(`two restored OMP panes retain one usable chat when its first pane closes${differentCwd?' across launcher directories':''}`,async({page,bridge},info)=>{
   test.setTimeout(90000);
   const token=(await readFile(join(bridge.dir,'.dash','token'),'utf8')).trim();
-  const roster=async()=>{
+  const livePanes=async()=>{
    const response=await fetch(`http://127.0.0.1:${bridge.port}/roster`,{headers:{Authorization:`Bearer ${token}`}});
-   const body:{hosts:{self:boolean;agents:{id:string;sessionId?:string}[]}[]}=await response.json();
+   const body:{hosts:{self:boolean;agents:{id:string;sessionId?:string;cwd?:string}[]}[]}=await response.json();
    return body.hosts.filter(host=>host.self).flatMap(host=>host.agents)
-    .filter(agent=>agent.sessionId==='army-fixture-session'&&agent.id.startsWith('omp:')).map(agent=>agent.id).sort();
+    .filter(agent=>agent.sessionId==='army-fixture-session'&&agent.id.startsWith('omp:'));
   };
+  const roster=async()=>(await livePanes()).map(agent=>agent.id).sort();
   await expect.poll(roster,{timeout:20000}).toEqual(['omp:tern-700001','omp:tern-700002']);
+  const panes=await livePanes();
+  const primary=panes.find(agent=>agent.id==='omp:tern-700001');
+  const secondary=panes.find(agent=>agent.id==='omp:tern-700002');
+  expect(primary?.cwd).toBeTruthy();expect(secondary?.cwd).toBeTruthy();
+  if(differentCwd)expect(secondary?.cwd).not.toBe(primary?.cwd);
+  else expect(secondary?.cwd).toBe(primary?.cwd);
   await pair(page,bridge);
   const row=page.getByTestId('chat-row-live:omp:army-fixture-session');
   await expect(row).toHaveCount(1);
@@ -76,5 +84,7 @@ test.describe('restored OMP panes share one native session',()=>{
   const calls=(await readFile(join(bridge.dir,'army-acp-calls.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line));
   expect(calls.map(call=>call.method)).toEqual(['session/load','session/load']);
   expect(calls.map(call=>call.sessionId)).toEqual(['army-fixture-session','army-fixture-session']);
+  expect(calls.map(call=>call.cwd)).toEqual([primary?.cwd,secondary?.cwd]);
  });
 });
+}

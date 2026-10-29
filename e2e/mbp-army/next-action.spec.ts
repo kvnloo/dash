@@ -182,8 +182,8 @@ test('Next up prioritizes a real pending ACP permission and Open never chooses i
 });
 
 test('Next up surfaces a newer same-chat reply after the browser clock moves backward', async ({ page, bridge }) => {
-  await openChat(page, bridge);
   await page.clock.install();
+  await openChat(page, bridge);
   await send(page, 'reply read before browser clock rollback');
   await expect(visibleText(page, 'ARMY_REPLY: reply read before browser clock rollback')).toBeInViewport();
   await page.clock.setSystemTime(new Date(Date.now() - 24 * 60 * 60_000));

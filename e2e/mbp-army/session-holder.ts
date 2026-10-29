@@ -10,6 +10,9 @@ const dir=join(root,'sessions','army-fixture');mkdirSync(dir,{recursive:true});
 const fd=openSync(join(dir,'fixture_army-fixture-session.jsonl'),'a+');
 writeSync(fd,JSON.stringify({type:'session',id:'army-fixture-session'})+'\n');
 const label=process.argv[2];
+if(label==='secondary'&&process.env.ARMY_SECONDARY_CWD==='1'){
+ const cwd=join(root,'army-secondary-cwd');mkdirSync(cwd,{recursive:true});process.chdir(cwd);
+}
 const control=label?`army-holder-${label}`:'army-holder';
 writeFileSync(join(root,control+'.pid'),String(process.pid));
 setInterval(()=>{
