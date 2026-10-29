@@ -133,6 +133,10 @@ cover partial native-user persistence and canonical catch-up.
 The reopened-chat journey holds actual older HTTP responses across a closed visit.
 It changes a row in the isolated native journal without changing its keyset,
 then checks the current prompt through the rendered rail and transcript.
+The full-message reopen journey holds actual `/chats/message` bytes while the
+isolated native row changes, rejects the closed visit's response, then expands
+the current row normally. Full-text reads use the same visit fence as older
+pages: a revoked completion returns no text to the screen's replacement callback.
 `history-lifecycle.spec.ts` exercises controlled production-consumer transitions:
 endpoint A → B → A with a newer cursor, closed/reopened loader ownership,
 partial native persistence/catch-up, nonempty shared-anchor rewind, and a native

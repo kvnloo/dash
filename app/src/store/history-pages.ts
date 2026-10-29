@@ -263,8 +263,9 @@ export async function fetchFullText(conversation: Conversation, messageId: strin
   const settings = deps.settings();
   if (!settings) return undefined;
   if (!ownsHistoryRequest(conversation, settings)) return undefined;
+  const visit = historyVisit(conversation.id);
   const result = await deps.api.message(settings, { key: conversationKey(conversation), id: messageId });
-  if (!ownsHistoryRequest(conversation, settings)) return undefined;
+  if (visitOwners.get(conversation.id) !== visit || !ownsHistoryRequest(conversation, settings)) return undefined;
   if (!result.ok) return undefined;
   const text = result.value.text;
   patch(conversation.id, s => s.older.some(m => m.id === messageId)

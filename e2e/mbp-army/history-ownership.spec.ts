@@ -12,10 +12,11 @@ const [port] = process.argv.slice(2);
 let held = []; let holding = true; let delivered = 0;
 let freezeNative = false; let nativeHeld = 0; const nativeWaiters = [];
 let holdOlder = false; let olderDelivered = 0; const olderWaiters = []; const olderSnapshots = [];
+let holdMessage = false; const messageWaiters = []; const messageSnapshots = [];
 const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
   fetch(req, server) {
     const url = new URL(req.url);
-    if (url.pathname === '/army-held') return Response.json({ held: held.length, delivered, nativeHeld, olderHeld: olderWaiters.length, olderDelivered, olderSnapshots });
+    if (url.pathname === '/army-held') return Response.json({ held: held.length, delivered, nativeHeld, olderHeld: olderWaiters.length, olderDelivered, olderSnapshots, messageHeld: messageWaiters.length, messageSnapshots });
     if (url.pathname === '/army-freeze-native' && req.method === 'POST') {
       freezeNative = true; return Response.json({ frozen: true });
     }
@@ -32,6 +33,15 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
       if (!release) return new Response('No held older page', { status: 409 });
       olderDelivered++; release();
       return Response.json({ olderDelivered });
+    }
+    if (url.pathname === '/army-freeze-message' && req.method === 'POST') {
+      holdMessage = true; return Response.json({ frozen: true });
+    }
+    if (url.pathname === '/army-release-one-message' && req.method === 'POST') {
+      const release = messageWaiters.shift();
+      if (!release) return new Response('No held full message', { status: 409 });
+      holdMessage = false; release();
+      return Response.json({ released: true });
     }
     if (url.pathname === '/army-release' && req.method === 'POST') {
       holding = false;
@@ -50,6 +60,23 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
     const forwarded = new Request('http://127.0.0.1:' + port + url.pathname + url.search, req);
     forwarded.headers.set('host', '127.0.0.1:' + port);
     return fetch(forwarded).then(async response => {
+      if (holdMessage && req.method === 'GET' && url.pathname === '/chats/message') {
+        server.timeout(req, 0);
+        const body = await response.arrayBuffer();
+        const value = JSON.parse(new TextDecoder().decode(body));
+        const ordinal = messageSnapshots.push({ id: url.searchParams.get('id'), prefix: value.message.text.slice(0, 96) });
+        const headers = new Headers(response.headers);
+        headers.set('x-army-full-message', String(ordinal));
+        headers.set('access-control-expose-headers', 'ETag, X-Army-Full-Message');
+        headers.set('cache-control', 'no-store');
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(body, 0, 1));
+            messageWaiters.push(() => { controller.enqueue(new Uint8Array(body, 1)); controller.close(); });
+          },
+        });
+        return new Response(stream, { status: response.status, headers });
+      }
       if (holdOlder && req.method === 'GET' && url.pathname === '/chats/history' && url.searchParams.has('before')) {
         server.timeout(req, 0);
         const body = await response.arrayBuffer();
@@ -350,5 +377,83 @@ test('reopening native chat rejects its closed visit older page and displays the
     await expect(page.getByTestId('transcript-viewport').getByText(refreshedPrompt, { exact: true })).toBeInViewport();
     await page.screenshot({ path: info.outputPath('final.png') });
     await writeFile(info.outputPath('history-visit-source.json'), JSON.stringify(snapshot, null, 2));
+  } finally { await relay.stop(); await bridge.dispose(); }
+});
+
+test('reopening native chat rejects its closed visit full-message response and expands the current source', async ({ page }, info) => {
+  const bridge = await createBridge(true, { env: { ARMY_LONG_HERMES: '30' } });
+  const relay = await historyRelay(bridge);
+  const control = `http://127.0.0.1:${relay.port}`;
+  const oldPrefix = 'ARMY full-text old source ';
+  const currentPrefix = 'ARMY full-text current source ';
+  const oldText = oldPrefix + 'x'.repeat(17_000) + ' OLD_FULL_END';
+  const currentText = currentPrefix + 'x'.repeat(17_000) + ' CURRENT_FULL_END';
+  const writeNative = async (text: string) => {
+    const writer = spawn(process.env.ARMY_BUN || 'bun', ['-e', `
+      const { Database } = require('bun:sqlite');
+      const [path, text] = process.argv.slice(1);
+      const db = new Database(path);
+      const changed = db.query("UPDATE messages SET content=? WHERE id=(SELECT MIN(id) FROM messages WHERE session_id=? AND role='user')")
+        .run(text,'army-long-hermes').changes;
+      db.close();
+      process.exit(changed === 1 ? 0 : 1);
+    `, join(bridge.dir, '.hermes', 'state.db'), text], { stdio: 'ignore' });
+    const [code] = await once(writer, 'exit');
+    expect(code).toBe(0);
+  };
+  try {
+    await writeNative(oldText);
+    await fetch(control + '/army-release', { method: 'POST' });
+    await pair(page, bridge);
+    await page.getByRole('button', { name: 'Open settings', exact: true }).first().click();
+    await page.getByRole('textbox', { name: 'Address', exact: true }).fill(`127.0.0.1:${relay.port}`);
+    await page.getByRole('button', { name: 'Save and reconnect', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save and reconnect', exact: true })).toBeHidden();
+    const row = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ has: page.getByText(LONG_HERMES_TITLE, { exact: true }) });
+    await expect(row).toHaveCount(1);
+    const rail = page.getByRole('slider', { name: 'Prompt navigator', exact: true });
+    const jumpFirst = async (prefix: string) => {
+      await expect(rail.getByTestId('rail-tick')).toHaveCount(30);
+      const box = await rail.boundingBox();
+      if (!box) throw Error('Source prompt rail has no rendered bounds');
+      await page.mouse.click(box.x + box.width / 2, box.y + 1);
+      await expect(page.getByLabel('Turn preview', { exact: true })).toContainText(prefix);
+      await page.getByRole('button', { name: 'Jump', exact: true }).click();
+      await page.getByRole('button', { name: 'Close turn preview', exact: true }).click();
+      await expect(page.getByTestId('transcript-viewport').getByText(new RegExp('^' + prefix))).toBeInViewport();
+    };
+    await row.click();
+    await expect(page.getByText(/^ARMY hermes answer 030 /)).toBeVisible();
+    await jumpFirst(oldPrefix);
+    await fetch(control + '/army-freeze-message', { method: 'POST' });
+    const oldHeaders = page.waitForResponse(async response => await response.headerValue('x-army-full-message') === '1');
+    await page.getByRole('button', { name: 'Show full message', exact: true }).click();
+    const oldResponse = await oldHeaders;
+    expect(oldResponse.status()).toBe(200);
+    await writeNative(currentText);
+    await page.getByRole('button', { name: 'Close chat window', exact: true }).click();
+    await page.getByRole('button', { name: /^(Create new chat|New chat)$/ }).first().click();
+    await send(page, 'ARMY leave held full message visit');
+    await expect(page.getByText('ARMY_STREAM_BEGIN ARMY_REPLY: ARMY leave held full message visit', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await row.click();
+    await expect(page.getByText(/^ARMY hermes answer 030 /)).toBeVisible();
+    await jumpFirst(currentPrefix);
+    const snapshot = await (await fetch(control + '/army-held')).json();
+    expect(snapshot.messageHeld).toBe(1);
+    expect(snapshot.messageSnapshots[0].prefix).toContain(oldPrefix);
+    expect((await fetch(control + '/army-release-one-message', { method: 'POST' })).status).toBe(200);
+    expect(await oldResponse.finished()).toBeNull();
+    expect((await oldResponse.json()).message.text).toBe(oldText);
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    const rendered = await page.getByTestId('transcript-viewport').getByText(/^ARMY full-text (old|current) source /).allTextContents();
+    expect(rendered).toHaveLength(1);
+    expect(rendered[0]).toContain(currentPrefix);
+    expect(rendered[0]).not.toContain('OLD_FULL_END');
+    await page.getByRole('button', { name: 'Show full message', exact: true }).click();
+    await expect(page.getByTestId('transcript-viewport').getByText(currentText, { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Show full message', exact: true })).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath('final.png') });
+    await writeFile(info.outputPath('history-full-text-visit.json'), JSON.stringify(snapshot, null, 2));
   } finally { await relay.stop(); await bridge.dispose(); }
 });

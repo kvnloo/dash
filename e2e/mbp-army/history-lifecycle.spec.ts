@@ -2,7 +2,7 @@ import { test, expect } from 'playwright/test';
 import { parseConversation, type Conversation } from '../../app/src/model';
 import type { HistoryPage } from '../../shared/protocol';
 import { createChatsApi, type ApiSettings } from '../../app/src/net/chats-api';
-import { configureHistoryPages, dropHistory, fillOlder, historyState, loadOlder, primeCursor, setHistoryCursor } from '../../app/src/store/history-pages';
+import { configureHistoryPages, dropHistory, fetchFullText, fillOlder, historyState, loadOlder, primeCursor, setHistoryCursor } from '../../app/src/store/history-pages';
 import { historyToMessages, hydrateLiveConversation, mergeOlderHistory, mergeTranscriptMessages } from '../../app/src/lib/live-sessions';
 import { redactTool } from '../../shared/tool-format';
 
@@ -14,12 +14,12 @@ function chat(id: string): Conversation {
     messages: [{ id: 'shown', role: 'assistant', text: 'Shown reply', at: 101, state: 'done', turnId: 'history:owned:shown', seq: 0 }],
   };
 }
-function network() {
-  const requests: { url: string; response: PromiseWithResolvers<HistoryPage> }[] = [];
+function network<T = HistoryPage>() {
+  const requests: { url: string; response: PromiseWithResolvers<T> }[] = [];
   const api = createChatsApi({
     token: async () => 'synthetic-test-credential',
     fetch: async url => {
-      const response = Promise.withResolvers<HistoryPage>();
+      const response = Promise.withResolvers<T>();
       requests.push({ url, response });
       const value = await response.promise;
       return { ok: true, status: 200, headers: { get: () => null }, json: async () => value };
@@ -28,6 +28,39 @@ function network() {
   return { api, requests };
 }
 const page = (id: string, text: string): HistoryPage => ({ messages: [{ id, role: 'user', text, at: 10 }], before: null });
+
+test('full text from a closed visit cannot replace a reopened message or return stale text to its caller', async () => {
+  const conversation = chat('history-full-text-visit');
+  const settings: ApiSettings = { address: 'owned-a:4747', token: 'fixture-a' };
+  const transport = network<HistoryPage | { message: HistoryPage['messages'][number] }>();
+  const nativePage = (text: string): HistoryPage => ({
+    messages: [{ id: 'native-row', role: 'user', text, at: 10, truncated: true }], before: null,
+  });
+  configureHistoryPages({ api: transport.api, settings: () => settings, conversation: id => id === conversation.id ? conversation : undefined });
+  try {
+    setHistoryCursor(conversation.id, 'same-cursor');
+    const initial = loadOlder(conversation);
+    await expect.poll(() => transport.requests.length).toBe(1);
+    transport.requests[0]!.response.resolve(nativePage('Closed visit short text'));
+    await initial;
+    const old = fetchFullText(conversation, 'native-row');
+    await expect.poll(() => transport.requests.length).toBe(2);
+    dropHistory(conversation.id);
+    setHistoryCursor(conversation.id, 'same-cursor');
+    const reopened = loadOlder(conversation);
+    await expect.poll(() => transport.requests.length).toBe(3);
+    transport.requests[2]!.response.resolve(nativePage('Current visit short text'));
+    await reopened;
+    transport.requests[1]!.response.resolve({ message: { id: 'native-row', role: 'user', text: 'Closed visit full text', at: 10 } });
+    expect(await old).toBeUndefined();
+    expect(historyState(conversation.id).older).toMatchObject([{ id: 'native-row', text: 'Current visit short text', truncated: true }]);
+    const current = fetchFullText(conversation, 'native-row');
+    await expect.poll(() => transport.requests.length).toBe(4);
+    transport.requests[3]!.response.resolve({ message: { id: 'native-row', role: 'user', text: 'Current visit full text', at: 10 } });
+    expect(await current).toBe('Current visit full text');
+    expect(historyState(conversation.id).older).toMatchObject([{ id: 'native-row', text: 'Current visit full text', truncated: undefined }]);
+  } finally { dropHistory(conversation.id); }
+});
 
 test('history loader clears its flag after endpoint ABA and a newer cursor without admitting the stale page', async () => {
   const conversation = chat('history-loader-aba');
