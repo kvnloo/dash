@@ -67,6 +67,8 @@ export function setHistoryCursor(conversationId: string, before: string | null |
 
 export function dropHistory(conversationId: string): void {
   loadingOwners.delete(conversationId);
+  visitOwners.delete(conversationId);
+  fillPages.delete(conversationId);
   historyPages.set(all => {
     if (!(conversationId in all)) return all;
     const rest: Record<string, HistoryPagesState> = {};
@@ -137,6 +139,15 @@ function releaseLoading(id: string, owner: symbol): boolean {
   return true;
 }
 
+// Background pages do not hold the visible loading flag, but still belong to one
+// open visit. A cursor or endpoint reused after close cannot revive that visit.
+const visitOwners = new Map<string, symbol>();
+function historyVisit(id: string): symbol {
+  let owner = visitOwners.get(id);
+  if (!owner) { owner = Symbol(); visitOwners.set(id, owner); }
+  return owner;
+}
+
 type PageOutcome = "landed" | "failed" | "skipped";
 /** The background fill's page in flight per chat, so the owner's own scroll-up can wait for it. */
 const fillPages = new Map<string, Promise<PageOutcome>>();
@@ -151,8 +162,10 @@ async function fetchOlder(conversation: Conversation, limit: number, listed: boo
   if (!settings || state.loading || typeof state.before !== "string") return "skipped";
   if (!ownsHistoryRequest(conversation, settings)) return "skipped";
   const before = state.before;
+  const visit = historyVisit(conversation.id);
   const pending = listed ? beginLoading(conversation.id) : undefined;
   const result = await deps.api.history(settings, { key: conversationKey(conversation), before, limit });
+  if (visitOwners.get(conversation.id) !== visit) return "skipped";
   if (pending && !releaseLoading(conversation.id, pending)) return "skipped";
   if (!ownsHistoryRequest(conversation, settings)) {
     if (listed) patch(conversation.id, s => ({ ...s, loading: false }));
@@ -175,8 +188,10 @@ async function fetchOlder(conversation: Conversation, limit: number, listed: boo
  * join first, with no request; otherwise it is fetched. No-op while loading or when nothing is older.
  */
 export async function loadOlder(conversation: Conversation): Promise<void> {
+  const visit = historyVisit(conversation.id);
   // A background page is in flight: let it land (it joins the unlisted rows), then take from them.
   await fillPages.get(conversation.id);
+  if (visitOwners.get(conversation.id) !== visit) return;
   const unlisted = historyState(conversation.id).unlisted;
   const next = unlisted[Math.max(0, unlisted.length - HISTORY_PAGE)];
   if (next) { listUnlisted(conversation.id, next.id); return; }
@@ -194,8 +209,9 @@ export async function loadOlder(conversation: Conversation): Promise<void> {
  * after it gave up. It runs until `open()` turns false, the chat starts, or OLDER_MAX rows are loaded.
  */
 export async function fillOlder(conversation: Conversation, open: () => boolean): Promise<void> {
+  const visit = historyVisit(conversation.id);
   let failures = 0;
-  while (open()) {
+  while (open() && visitOwners.get(conversation.id) === visit) {
     if (!conversation.endpointAddress || conversation.endpointAddress !== deps.settings()?.address) return;
     const state = historyState(conversation.id);
     if (typeof state.before !== "string" || olderLoaded(state) >= OLDER_MAX) return;
@@ -206,6 +222,7 @@ export async function fillOlder(conversation: Conversation, open: () => boolean)
     fillPages.set(conversation.id, page);
     let outcome: PageOutcome;
     try { outcome = await page; } finally { if (fillPages.get(conversation.id) === page) fillPages.delete(conversation.id); }
+    if (visitOwners.get(conversation.id) !== visit) return;
     if (outcome === "landed" && historyState(conversation.id).before !== before) { failures = 0; continue; }
     if (++failures > FILL_RETRIES) return;
     await sleep(Math.min(FILL_RETRY_MAX_MS, 1000 * 2 ** (failures - 1)));

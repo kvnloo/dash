@@ -2,7 +2,7 @@ import { test, expect } from 'playwright/test';
 import { parseConversation, type Conversation } from '../../app/src/model';
 import type { HistoryPage } from '../../shared/protocol';
 import { createChatsApi, type ApiSettings } from '../../app/src/net/chats-api';
-import { configureHistoryPages, dropHistory, historyState, loadOlder, primeCursor, setHistoryCursor } from '../../app/src/store/history-pages';
+import { configureHistoryPages, dropHistory, fillOlder, historyState, loadOlder, primeCursor, setHistoryCursor } from '../../app/src/store/history-pages';
 import { historyToMessages, hydrateLiveConversation, mergeOlderHistory, mergeTranscriptMessages } from '../../app/src/lib/live-sessions';
 import { redactTool } from '../../shared/tool-format';
 
@@ -75,6 +75,77 @@ test('history loader from a closed visit cannot clear the replacement visit load
     expect(historyState(conversation.id).loading).toBe(false);
     expect(historyState(conversation.id).older.map(message => message.text)).toEqual(['Replacement visit transcript']);
   } finally { dropHistory(conversation.id); }
+});
+
+test('background history from a closed visit cannot populate a reopened chat with the same cursor', async () => {
+  const conversation = chat('history-fill-visit');
+  const settings: ApiSettings = { address: 'owned-a:4747', token: 'fixture-a' };
+  const transport = network();
+  configureHistoryPages({ api: transport.api, settings: () => settings, conversation: id => id === conversation.id ? conversation : undefined });
+  let oldOpen = true;
+  let currentOpen = true;
+  let oldFill: Promise<void> | undefined;
+  let currentFill: Promise<void> | undefined;
+  try {
+    setHistoryCursor(conversation.id, 'same-cursor');
+    oldFill = fillOlder(conversation, () => oldOpen);
+    await expect.poll(() => transport.requests.length).toBe(1);
+    oldOpen = false;
+    dropHistory(conversation.id);
+    setHistoryCursor(conversation.id, 'same-cursor');
+    currentFill = fillOlder(conversation, () => currentOpen);
+    await expect.poll(() => transport.requests.length).toBe(2);
+    transport.requests[0]!.response.resolve(page('old-visit', 'Closed visit page'));
+    await oldFill;
+    expect(historyState(conversation.id).unlisted).toEqual([]);
+    expect(historyState(conversation.id).before).toBe('same-cursor');
+    transport.requests[1]!.response.resolve(page('current-visit', 'Replacement visit page'));
+    await currentFill;
+    expect(historyState(conversation.id).unlisted.map(message => message.text)).toEqual(['Replacement visit page']);
+    expect(historyState(conversation.id).before).toBe(null);
+  } finally {
+    oldOpen = false;
+    currentOpen = false;
+    for (const request of transport.requests) request.response.resolve({ messages: [], before: null });
+    await Promise.allSettled([oldFill, currentFill].filter((pending): pending is Promise<void> => pending !== undefined));
+    dropHistory(conversation.id);
+  }
+});
+
+test('a scroll waiting on a closed visit cannot consume the replacement visit background page', async () => {
+  const conversation = chat('history-fill-scroll-visit');
+  const settings: ApiSettings = { address: 'owned-a:4747', token: 'fixture-a' };
+  const transport = network();
+  configureHistoryPages({ api: transport.api, settings: () => settings, conversation: id => id === conversation.id ? conversation : undefined });
+  let open = true;
+  const pending: Promise<void>[] = [];
+  try {
+    setHistoryCursor(conversation.id, 'same-cursor');
+    const oldFill = fillOlder(conversation, () => open);
+    pending.push(oldFill);
+    await expect.poll(() => transport.requests.length).toBe(1);
+    const oldScroll = loadOlder(conversation);
+    pending.push(oldScroll);
+    dropHistory(conversation.id);
+    setHistoryCursor(conversation.id, 'same-cursor');
+    const currentFill = fillOlder(conversation, () => open);
+    pending.push(currentFill);
+    await expect.poll(() => transport.requests.length).toBe(2);
+    transport.requests[1]!.response.resolve(page('current-visit', 'Replacement visit page'));
+    await currentFill;
+    transport.requests[0]!.response.resolve(page('old-visit', 'Closed visit page'));
+    await Promise.all([oldFill, oldScroll]);
+    expect(historyState(conversation.id).older).toEqual([]);
+    expect(historyState(conversation.id).unlisted.map(message => message.text)).toEqual(['Replacement visit page']);
+    await loadOlder(conversation);
+    expect(historyState(conversation.id).older.map(message => message.text)).toEqual(['Replacement visit page']);
+    expect(historyState(conversation.id).unlisted).toEqual([]);
+  } finally {
+    open = false;
+    for (const request of transport.requests) request.response.resolve({ messages: [], before: null });
+    await Promise.allSettled(pending);
+    dropHistory(conversation.id);
+  }
 });
 
 test('native user-only persistence preserves the phone reply while canonical catch-up and rewind remain authoritative', () => {

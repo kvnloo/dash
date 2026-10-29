@@ -108,12 +108,20 @@ evidence; the test removes its generated bundles and compiler cache.
 including asynchronous cache hydration of an inactive Hermes transcript before
 its fresh native request. The delayed, unknown and unchanged response cases also
 cover partial native-user persistence and canonical catch-up.
+The reopened-chat journey holds actual older HTTP responses across a closed visit.
+It changes a row in the isolated native journal without changing its keyset,
+then checks the current prompt through the rendered rail and transcript.
 `history-lifecycle.spec.ts` exercises controlled production-consumer transitions:
 endpoint A → B → A with a newer cursor, closed/reopened loader ownership,
 partial native persistence/catch-up, nonempty shared-anchor rewind, and a native
 poll beating durable load despite host/phone clock skew.
 Each loader owns its flag through a token: stale work cannot supply a page or
 clear a replacement loader's flag.
+Background fills and scrolls waiting on them also belong to an open visit.
+Closing the chat revokes that visit before a replacement can reuse its cursor.
+A late fill cannot populate the replacement transcript or move its unlisted
+rows into the visible list. These lifecycle cases exercise production consumers,
+not browser or native-phone acceptance.
 
 Native ids anchor transcript order. Alignment starts at a shared anchor (or the
 first phone turn), not at any later repeated prompt. Comparisons use the native
