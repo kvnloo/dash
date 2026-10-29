@@ -96,7 +96,10 @@ if(process.env.ARMY_LONG_CLAUDE){
  await seedAgentsview({id:'33333333-4444-4555-8666-777777777777',machine:installId,installId,title:'ARMY long Claude Code chat',cwd:process.env.DASH_CWD||'',transcript});
 }
 if(process.env.ARMY_REMOTE_CLAUDE){
- await seedAgentsview({id:'army-remote~22222222-3333-4444-8555-666666666666',machine:'army-remote',title:'ARMY remote Claude Code chat',cwd:process.env.ARMY_REMOTE_CLAUDE});
+ for(const machine of (process.env.ARMY_REMOTE_MACHINES||'army-remote').split(',')){
+  if(!/^[A-Za-z0-9._-]{1,64}$/.test(machine))throw Error('invalid remote fixture machine');
+  await seedAgentsview({id:machine+'~22222222-3333-4444-8555-666666666666',machine,title:'ARMY remote Claude Code chat'+(machine==='army-remote'?'':' '+machine),cwd:process.env.ARMY_REMOTE_CLAUDE});
+ }
 }
 
 // /pm: a repository ledger in the _pm format (shared/pm.ts), the Hermes board and the roadmap file.

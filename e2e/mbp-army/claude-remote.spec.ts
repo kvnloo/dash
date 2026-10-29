@@ -82,6 +82,39 @@ test.describe('Claude Code chat recorded on another computer',()=>{
  });
 });
 
+test.describe('remote machine names with the same first 56 characters',()=>{
+ const prefix='a'.repeat(56);
+ const first=prefix+'11111111';
+ const second=prefix+'22222222';
+ test.use({bridgeOptions:{remoteClaude:'route',env:{
+  ARMY_REMOTE_MACHINES:first+','+second,
+  DASH_REMOTE_HOSTS:first+'=first-hop,'+second+'=second-hop',
+ }}});
+ test('each long-named host opens and sends to its own native session route',async({page,bridge})=>{
+  await pair(page,bridge);
+  for(const [machine,destination] of [[first,'first-hop'],[second,'second-hop']]){
+   const row=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({hasText:'ARMY remote Claude Code chat '+machine});
+   await expect(row).toHaveCount(1,{timeout:30000});
+   await row.click({noWaitAfter:true});
+   await expect(page.getByTestId('chat-window')).toBeVisible();
+   await expect(page.getByTestId('chat-window-badge')).toHaveAttribute('aria-label',new RegExp('host '+machine+', harness Claude Code'));
+   await expect(composer(page)).toBeEditable();
+   const prompt='route to '+destination;
+   await send(page,prompt);
+   await expect(visible(page,new RegExp('ARMY_CLAUDE_REPLY: '+prompt))).toBeVisible({timeout:20000});
+   await page.getByRole('button',{name:/^(Back|Close chat window)$/}).first().click({noWaitAfter:true});
+   await expect(page.getByTestId('chats-pane')).toBeVisible();
+  }
+  const hops=(await lines(join(bridge.dir,'army-ssh.log'))).filter(hop=>hop.includes('\tdash-acp '));
+  expect(hops.map(hop=>hop.split('\t')[0])).toEqual(['first-hop','second-hop']);
+  const calls=(await lines(join(bridge.dir,'army-acp-calls.jsonl'))).map((line):unknown=>JSON.parse(line));
+  expect(calls).toEqual([
+   expect.objectContaining({method:'session/resume',sessionId:REMOTE_SESSION}),
+   expect.objectContaining({method:'session/resume',sessionId:REMOTE_SESSION}),
+  ]);
+ });
+});
+
 test.describe('the same chat without a route to its computer',()=>{
  test.use({bridgeOptions:{remoteClaude:'off'}});
  test('opens view only and sends nothing',async({page,bridge})=>{

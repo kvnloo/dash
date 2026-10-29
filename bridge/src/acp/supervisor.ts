@@ -11,6 +11,7 @@ export function acpCommand(id: string, which: (bin: string) => string | null = B
   switch (id) {
     case "omp": bin = "omp"; args = ["acp"]; break;
     case "hermes": bin = "hermes"; args = ["acp"]; break;
+    case "fx": bin = "fx"; args = ["acp"]; break;
     case "grok": bin = "grok"; args = ["agent", "--no-leader", "stdio"]; break;
     case "claude": bin = which("claude-agent-acp") ?? join(adapterBin, "claude-agent-acp"); args = []; break;
     case "codex": bin = which("codex-acp") ?? join(adapterBin, "codex-acp"); args = []; break;

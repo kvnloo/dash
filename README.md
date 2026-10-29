@@ -98,7 +98,7 @@ Pixel language: [docs/design/language.md](docs/design/language.md). Competitor +
 - **Hermes** — `hermes chat -q` (slow; may warn on toolsets)
 - **Claude Code** — shown unavailable until `claude` is on `PATH`
 - **Pi** — `pi --mode json`; unavailable until `pi` is on `PATH`
-- **fx** — `fx ask --json --full-access` (Vercel Labs; not antonmedv/fx); unavailable until `fx` is on `PATH`
+- **fx** — native `fx acp` over stdio (Vercel Labs; not antonmedv/fx); unavailable until an ACP-capable `fx` is on `PATH`. No legacy `ask` fallback or permission-bypass flags.
 
 Each harness keeps its own session id for multi-turn threads.
 
@@ -110,6 +110,11 @@ turns are not frontends, and nested subagent transcripts are not separate chats.
 If process inspection is unavailable, broker discovery remains the fallback.
 Both current `--absolute-cwd--` and older single-dash session folders are read.
 An unreadable frontend handle is listed without guessing another session's ID.
+
+`DASH_REMOTE_HOSTS="mbp=ssh-alias"` enables recorded Claude Code and Codex
+sessions on that machine. Remote machine IDs preserve the full accepted name
+(up to 64 characters), so names with identical first 56 characters stay distinct.
+This setting does not add remote routes for other harnesses.
 
 Canonical ids: [kvnloo/aodl `harnesses/catalog.json`](https://github.com/kvnloo/aodl/blob/main/harnesses/catalog.json). `o8` is a control room; firstmate is a distro — neither is a Dash spawn target.
 

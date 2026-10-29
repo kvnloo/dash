@@ -39,6 +39,8 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
  for (const name of ['hermes','omp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+'\n', {mode:0o700});
  // Claude Code: the bridge drives it through `claude-agent-acp` (ACP over stdio).
  for (const name of ['claude','claude-agent-acp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' claude\n', {mode:0o700});
+ // Native fx accepts only its maintained stdio ACP entrypoint, never legacy ask flags.
+ await writeFile(join(bin,'fx'), '#!/bin/sh\n[ "$#" -eq 1 ] && [ "$1" = acp ] || exit 64\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' fx\n', {mode:0o700});
  if (options.finishedSessions) {
   const codex = join(dir,'.codex','sessions','2026','10','28');
   const claude = join(dir,'.claude','projects','army');
