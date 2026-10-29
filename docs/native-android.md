@@ -132,6 +132,11 @@ made during those waits. It then checks the target and automatic-reload eligibil
 again without another asynchronous wait. Resumed interaction cancels an idle reload.
 Changing the launch asset URL requires a new health check, even for the same SHA.
 
+`verify-served.sh` requires the expected SHA in both the Expo manifest and the
+downloaded launch bundle. A matching release directory does not establish identity.
+Missing or mismatched identity fails the check, including older bundles without
+baked build metadata.
+
 Channel switches, promotions, explicit rollbacks and automatic re-serving require
 a green, complete O15 army receipt for the target commit before release state
 changes. `--force` only bypasses the native fingerprint check, never O15 approval.
