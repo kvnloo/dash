@@ -49,6 +49,10 @@ test('annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Sk
     const context = await browser.newContext({ viewport: { width: 480, height: 780 } });
 
     const page = await context.newPage();
+    const coordinateProbe: string[] = [];
+    page.on('console', message => {
+      if (message.text().startsWith('[annotate-coordinate-probe]')) coordinateProbe.push(message.text());
+    });
     page.on('websocket', socket => socket.on('framesent', frame => {
       if (typeof frame.payload === 'string' && frame.payload.includes('⟦stroke 1⟧')) sent.push(frame.payload);
     }));
@@ -70,6 +74,7 @@ test('annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Sk
       await writeFile(info.outputPath(`${engine}-sent.json`), documents.at(-1)!);
       await page.screenshot({ path: info.outputPath(`${engine}-sent.png`) });
     } finally {
+      await info.attach(`${engine}-coordinate-probe`, { body: JSON.stringify(coordinateProbe), contentType: 'application/json' });
 
       await context.close();
     }
