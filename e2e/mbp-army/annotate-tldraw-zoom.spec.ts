@@ -23,9 +23,11 @@ test('annotate-tldraw: zoomed ink is normalized in capture page coordinates', as
   });
   await stroke(page);
   await expect(page.locator('[data-shape-type="draw"]')).toBeVisible();
-  const uploaded = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'application/json');
   await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
   await expect(page.getByText('No words captured. Send the marks only?')).toBeVisible();
+  // Armed once the confirmation is up: nothing uploads before Send anyway, so the confirmation's own
+  // clicks under load must not eat the upload's wait.
+  const uploaded = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'application/json');
   await page.getByRole('button', { name: 'Send anyway', exact: true }).click();
   const doc = JSON.parse((await uploaded).postDataBuffer()!.toString('utf8'));
   for (const [index, point] of doc.strokes[0].points.entries()) {
