@@ -54,6 +54,12 @@ active and still prove that OMP ink is not sent to the attached Hermes session.
 Run the complete suite on the integrated commit before RC3 merge. A filtered
 feature run is not a complete release receipt or native phone acceptance.
 
+The roster reconnect journey holds an unchanged real HTTP body while a newer
+socket admits and its roster completes. It then releases the old body and reads
+the rendered host row immediately, before the next periodic poll can mask a stale
+replacement. Roster completion must retain its originating connection generation,
+even when reconnect reuses the same Settings object.
+
 ## Release law O15
 
 No green, complete army receipt for the exact commit means no APK, no phone
