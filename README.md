@@ -58,7 +58,7 @@ The middle **Chats** page has four compact controls:
 - **Dates** filters by last activity. Today, the last 7 calendar days, and the last 30 calendar days start at local midnight.
 - **Recent**, **Oldest**, and **Priority** choose the ordering. Priority puts chats needing attention first, then running chats, then other chats by recency, with ended chats last.
 
-Filters combine. **Reset** clears the filters and restores Recent. Changing a filter or sort returns the list to the top.
+Filters combine. **Reset** clears the filters and restores Recent. Changing a filter or sort returns the list to the top. Stopping a turn counts as activity for Recent and date filtering.
 
 With a `chats.v1` bridge, project discovery and global sorts load older pages while Chats is focused and online. The page shows **Searching history…** until the scan finishes. A date filter stops automatic and scroll-triggered paging at its lower bound, including while the project picker is open. Leaving Chats pauses automatic paging. Older bridges filter the conversations already available on the phone.
 

@@ -41,6 +41,7 @@ export const MainPager = forwardRef<MainPagerRef, MainPagerProps>(function MainP
   };
   useImperativeHandle(ref, () => ({ setPage(index) { move(index, 0); } }));
   useEffect(() => { if (page !== selected.current) move(page, 0); }, [page]); // shared-value animation is interrupted, never queued
+  // Latch through release so Pressable cannot treat a swipe as a tap. The next pointer begins afresh.
   const pan = Gesture.Pan().activeOffsetX([-10, 10]).failOffsetY([-14, 14])
     .onBegin(() => { swiping.value = false; cancelAnimation(progress); start.value = progress.value; })
     .onStart(() => { swiping.value = true; })
@@ -49,10 +50,7 @@ export const MainPager = forwardRef<MainPagerRef, MainPagerProps>(function MainP
       const velocity = -e.velocityX / pageWidth;
       move(Math.round(progress.value + velocity * 0.12), velocity);
     })
-    .onFinalize((_e, success) => {
-      swiping.value = false;
-      if (!success) move(Math.round(progress.value), 0);
-    });
+    .onFinalize((_e, success) => { if (!success) move(Math.round(progress.value), 0); });
   const track = useAnimatedStyle(() => ({ transform: [{ translateX: -progress.value * pageWidth }] }));
   return <PagerGestureContext.Provider value={swiping}><GestureDetector gesture={pan}>
     <View style={[style, { overflow: "hidden" }]} testID="main-pager">

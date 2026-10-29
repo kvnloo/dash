@@ -788,18 +788,23 @@ export function conversationBusy(conversationId: string): boolean {
 export function stopConversation(conversationId: string, cancel: (turnId: string) => void): void {
   const running: string[] = [];
   const stopped: AssistantMessage[] = [];
-  updateConversation(conversationId, (c) => ({
-    ...c,
-    queuePreview: undefined,
-    queueWaitForIdle: false,
-    messages: c.messages.map((m) => {
+  const stoppedAt = Date.now();
+  updateConversation(conversationId, (c) => {
+    const messages = c.messages.map((m) => {
       if (m.role !== "assistant" || (m.state !== "streaming" && m.state !== "pending")) return m;
       if (m.state === "streaming") running.push(m.turnId);
       stopped.push(m);
       liveSequences.delete(m.turnId);
-      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", endedAt: Date.now(), status: "Stopped" };
-    }),
-  }));
+      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", endedAt: stoppedAt, status: "Stopped" };
+    });
+    return {
+      ...c,
+      queuePreview: undefined,
+      queueWaitForIdle: false,
+      messages,
+      updatedAt: stopped.length > 0 ? stoppedAt : c.updatedAt,
+    };
+  });
   while (dequeue(conversationId)) { /* Drain canceled turns before settlement listeners run. */ }
   for (const turnId of running) cancel(turnId);
   notifyTurnSettled(conversationId);
