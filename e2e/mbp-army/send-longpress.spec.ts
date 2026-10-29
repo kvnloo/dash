@@ -69,6 +69,7 @@ test('returning from fullscreen after a pager swipe preserves the first row tap 
  await expect(page.getByRole('tab').nth(2)).toHaveAttribute('aria-selected','true');
  await expect(page.getByTestId('chat-window')).toHaveCount(0);
  await page.getByRole('tab').nth(1).click({noWaitAfter:true});
+ await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected','true');
  await page.getByRole('button',{name:/^(Create new chat|New chat)$/}).first().click({noWaitAfter:true});
  await expect(composer(page)).toBeVisible();
  await page.getByRole('button',{name:'Back',exact:true}).click({noWaitAfter:true});
