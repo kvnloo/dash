@@ -1,7 +1,8 @@
 import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Platform, StyleSheet, Text, View } from "react-native";
+import type { NavigationProp } from "@react-navigation/native";
 import { chatKey, type ChatSummary, type HostInfo } from "../../../../shared/protocol";
 import type { WindowOrigin } from "../../lib/chat-window";
 import { threadAppearance } from "../../components/thread-appearance";
@@ -20,7 +21,8 @@ import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { usePagedChats } from "../../hooks/usePagedChats";
 import type { ConnectionStatus, Conversation } from "../../model";
-import type { ScreenProps } from "../../navigation";
+import type { RootStackParamList } from "../../navigation";
+import { useDeskActive } from "../../lib/desk";
 import { clearEndedConversations, deleteConversation, openChat, setActive, store } from "../../store/app";
 import { summaryByKey } from "../../store/chat-index-store";
 import { colors, space, type } from "../../theme";
@@ -129,13 +131,27 @@ const Row = memo(function Row({
   const press = () => pressRow(frame.current, item.id, onPress);
   const content = item.content;
   const activityShimmer = activityShimmerEnabled(thinking.phase, connectionStatus, stale);
+  // Desk mode (DeX / wide window): mouse hover and right-click open the same row menu as a long-press.
+  const desk = useDeskActive();
+  const [hovered, setHovered] = useState(false);
+  const menuRef = useRef(onLongPress);
+  menuRef.current = onLongPress;
+  useEffect(() => {
+    const element: unknown = frame.current;
+    if (!desk || Platform.OS !== "web" || typeof HTMLElement === "undefined" || !(element instanceof HTMLElement)) return;
+    const contextMenu = (event: MouseEvent) => { event.preventDefault(); menuRef.current(item.id); };
+    element.addEventListener("contextmenu", contextMenu);
+    return () => element.removeEventListener("contextmenu", contextMenu);
+  }, [desk, item.id]);
   return (
     <View ref={frame} collapsable={false}>
     <PressScale
       onPress={press}
       onLongPress={() => onLongPress(item.id)}
       delayLongPress={350}
-      style={[styles.row, active && !stale && styles.rowActive]}
+      onHoverIn={desk ? () => setHovered(true) : undefined}
+      onHoverOut={desk ? () => setHovered(false) : undefined}
+      style={[styles.row, active && !stale && styles.rowActive, desk && hovered && styles.rowHover]}
       accessibilityRole="button"
       testID={`chat-row-${item.id}`}
     >
@@ -216,7 +232,7 @@ function startOfToday(): number {
 const NO_ENTRIES: readonly ConversationEntry[] = [];
 const NO_LIST = emptyList();
 
-export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Main">, "navigation"> & { focused?: boolean }) {
+export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: { navigation: NavigationProp<RootStackParamList>; focused?: boolean }) {
   const thumb = useHandedness();
   const conversations = store.use((s) => s.conversations);
   const activeId = store.use((s) => s.activeId);
@@ -400,6 +416,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   rowActive: { backgroundColor: "rgba(215,185,134,.035)" },
+  rowHover: { backgroundColor: "rgba(236,232,223,.05)" },
   stale: { color: colors.textTertiary },
   liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.gold },
   badge: { color: colors.textTertiary, ...type.mono, fontSize: 10, textTransform: "none", letterSpacing: 0 },

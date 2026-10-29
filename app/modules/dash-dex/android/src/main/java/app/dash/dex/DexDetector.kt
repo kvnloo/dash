@@ -9,16 +9,19 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.Configuration
 import android.hardware.display.DisplayManager
+import android.hardware.input.InputManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Display
+import android.view.InputDevice
 import java.lang.ref.WeakReference
 
 class DexDetector(private val app: Application, private val changed: (Map<String, Any?>) -> Unit) :
-  DisplayManager.DisplayListener, Application.ActivityLifecycleCallbacks, ComponentCallbacks {
+  DisplayManager.DisplayListener, Application.ActivityLifecycleCallbacks, ComponentCallbacks, InputManager.InputDeviceListener {
   private val displays = app.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+  private val inputs = app.getSystemService(Context.INPUT_SERVICE) as InputManager
   private var main = WeakReference<Activity>(null)
   private var knox = false
   private var previous: Map<String, Any?>? = null
@@ -34,6 +37,7 @@ class DexDetector(private val app: Application, private val changed: (Map<String
   fun start(activity: Activity?) {
     track(activity)
     displays.registerDisplayListener(this, handler)
+    inputs.registerInputDeviceListener(this, handler)
     app.registerActivityLifecycleCallbacks(this)
     app.registerComponentCallbacks(this)
     val filter = IntentFilter().apply { addAction(ENTER); addAction(EXIT) }
@@ -45,6 +49,7 @@ class DexDetector(private val app: Application, private val changed: (Map<String
   fun stop() {
     handler.removeCallbacks(refresh)
     displays.unregisterDisplayListener(this)
+    inputs.unregisterInputDeviceListener(this)
     app.unregisterActivityLifecycleCallbacks(this)
     app.unregisterComponentCallbacks(this)
     app.unregisterReceiver(receiver)
@@ -60,6 +65,14 @@ class DexDetector(private val app: Application, private val changed: (Map<String
   fun displayId(activity: Activity): Int = if (Build.VERSION.SDK_INT >= 30) {
     activity.display?.displayId ?: Display.DEFAULT_DISPLAY
   } else activity.windowManager.defaultDisplay.displayId
+
+  /** A real (non-virtual) mouse or touchpad is attached: DeX, a Bluetooth mouse, a keyboard cover. */
+  private fun pointerAttached(): Boolean = try {
+    inputs.inputDeviceIds.any { id ->
+      val device = inputs.getInputDevice(id) ?: return@any false
+      !device.isVirtual && (device.supportsSource(InputDevice.SOURCE_MOUSE) || device.supportsSource(InputDevice.SOURCE_TOUCHPAD))
+    }
+  } catch (_: Exception) { false }
 
   fun state(): Map<String, Any?> {
     val activity = mainActivity()
@@ -79,8 +92,12 @@ class DexDetector(private val app: Application, private val changed: (Map<String
       if (desk != null || samsung != null) {
         tvId = (desk ?: samsung)?.displayId
         mode = "dual"; source = if (desk != null) "display-desk" else "samsung-category"
+      } else if ((activity ?: app).resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_DESK) {
+        // Public signal on the phone's own display: standalone DeX / desktop windowing reports desk ui mode.
+        mode = "standalone"; source = "ui-mode-desk"
       } else {
-        // Private APIs may disappear on any One UI update. No private failure escapes.
+        // Private, optional: getSystemService("desktopmode") is absent on One UI 8/9 (S22+, S25 scouted
+        // 2026-10-28); reflection may disappear on any One UI update. No private failure escapes.
         try {
           val config = (activity ?: app).resources.configuration
           val enabled = config.javaClass.getField("semDesktopModeEnabled").getInt(config)
@@ -99,8 +116,11 @@ class DexDetector(private val app: Application, private val changed: (Map<String
       }
     }
     activity?.let { DexLifecycle.relaxOrientation(it, mainId) }
+    val config = (activity ?: app).resources.configuration
     return mapOf("available" to true, "mode" to mode, "source" to source,
-      "tvDisplayId" to tvId, "mainDisplayId" to mainId, "padOpen" to DashPadActivity.isOpen)
+      "tvDisplayId" to tvId, "mainDisplayId" to mainId, "padOpen" to DashPadActivity.isOpen,
+      "pointer" to pointerAttached(), "widthDp" to config.screenWidthDp,
+      "uiModeDesk" to (config.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_DESK))
   }
 
   fun publish() {
@@ -113,6 +133,9 @@ class DexDetector(private val app: Application, private val changed: (Map<String
   override fun onDisplayRemoved(id: Int) = publish()
   override fun onDisplayChanged(id: Int) = publish()
   override fun onConfigurationChanged(config: Configuration) = publish()
+  override fun onInputDeviceAdded(id: Int) = publish()
+  override fun onInputDeviceRemoved(id: Int) = publish()
+  override fun onInputDeviceChanged(id: Int) = publish()
   override fun onLowMemory() { }
   override fun onActivityResumed(activity: Activity) { track(activity); publish() }
   override fun onActivityCreated(activity: Activity, saved: Bundle?) { track(activity) }

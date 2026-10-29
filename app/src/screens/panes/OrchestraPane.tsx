@@ -1,7 +1,7 @@
 import { sessionChats } from "../../lib/session-chats";
 import { shallowArrayEqual } from "../../store/createStore";
 import { memo, useMemo } from "react";
-import { useWindowDimensions } from "react-native";
+import { usePaneDimensions } from "../../lib/pane-size";
 import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
 import { OrchestraGraph } from "../../components/OrchestraGraph";
 import { AodlCatalogNetwork } from "../../components/AodlCatalogNetwork";
@@ -23,7 +23,7 @@ export const OrchestraPane = memo(function OrchestraPane({ navigation }: Pick<Sc
   const hosts = store.use(s => s.connection.hosts);
   const fixture = debugUi.use(s => s.orchestraFixture);
   const fixtureOn = isDebugActive() && fixture === true;
-  const { width } = useWindowDimensions();
+  const { width } = usePaneDimensions();
   const { snapshot, error } = useOrchestraEvidence(settings);
   const graph = useMemo(() => fixtureOn ? orchestraMotionFixture() : snapshot ? {
     nodes: snapshot.nodes.map(n => ({ ...n, thinking: n.state === "live" ? { phase: "thinking" as const } : { phase: "idle" as const } })),

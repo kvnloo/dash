@@ -179,6 +179,8 @@ export interface HostStats {
   gpus?: { name: string; usagePct?: number; usedBytes?: number; totalBytes?: number; temperatureC?: number }[];
   temperatureC?: number;
   battery?: { percent: number; status: string; temperatureC?: number };
+  /** Summed non-loopback interface throughput since the previous reading (bytes/s). */
+  net?: { rxBytesPerSec: number; txBytesPerSec: number };
 }
 
 function statsNumber(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
@@ -197,9 +199,109 @@ function isHostStats(value: unknown): value is HostStats {
   if (value.gpus !== undefined && (!Array.isArray(value.gpus) || !value.gpus.every((gpu: unknown) => isRecord(gpu) && str(gpu.name)
     && (gpu.usagePct === undefined || statsPercent(gpu.usagePct)) && (gpu.usedBytes === undefined || statsNumber(gpu.usedBytes))
     && (gpu.totalBytes === undefined || statsNumber(gpu.totalBytes)) && (gpu.temperatureC === undefined || statsNumber(gpu.temperatureC))))) return false;
+  if (value.net !== undefined && (!isRecord(value.net) || !statsNumber(value.net.rxBytesPerSec) || !statsNumber(value.net.txBytesPerSec))) return false;
   return true;
 }
 export function parseHostStats(value: unknown): HostStats | null { return isHostStats(value) ? value : null; }
+
+/**
+ * One bucket of the bridge host's own utilization samples (`GET /hosts/utilization`). Averages are
+ * absent when no sample in the bucket carried that reading; never zero-filled.
+ */
+export interface HostUtilizationBucket {
+  /** Bucket start (epoch ms). */
+  at: number;
+  samples: number;
+  cpuAvg?: number;
+  cpuMax?: number;
+  gpuAvg?: number;
+  memAvg?: number;
+  /** Samples whose CPU or GPU was at or above `busyThresholdPct`. */
+  busy: number;
+}
+
+/** Rolling window (24 h by default) of the bridge host's utilization, sampled by the bridge itself. */
+export interface HostUtilization {
+  hostId: string;
+  sampledAt: number;
+  /** First sample still inside the window (or the sampler start). */
+  since: number;
+  sampleMs: number;
+  bucketMs: number;
+  windowMs: number;
+  busyThresholdPct: number;
+  buckets: HostUtilizationBucket[];
+}
+
+function isUtilizationBucket(value: unknown): value is HostUtilizationBucket {
+  if (!isRecord(value) || !statsNumber(value.at) || !statsNumber(value.samples) || !Number.isInteger(value.samples) || !statsNumber(value.busy) || value.busy > value.samples) return false;
+  for (const key of ["cpuAvg", "cpuMax", "gpuAvg", "memAvg"] as const) if (value[key] !== undefined && !statsPercent(value[key])) return false;
+  return true;
+}
+
+export function parseHostUtilization(value: unknown): HostUtilization | null {
+  if (!isRecord(value) || !str(value.hostId)) return null;
+  if (!statsNumber(value.sampledAt) || !statsNumber(value.since) || !statsNumber(value.sampleMs) || !statsNumber(value.bucketMs) || value.bucketMs <= 0) return null;
+  if (!statsNumber(value.windowMs) || !statsPercent(value.busyThresholdPct)) return null;
+  if (!Array.isArray(value.buckets) || !value.buckets.every(isUtilizationBucket)) return null;
+  return { hostId: value.hostId, sampledAt: value.sampledAt, since: value.since, sampleMs: value.sampleMs, bucketMs: value.bucketMs, windowMs: value.windowMs, busyThresholdPct: value.busyThresholdPct, buckets: value.buckets };
+}
+
+/** A phone known to the k3s phone queue, normalized by the bridge (`GET /phones/queue`). */
+export interface PhoneQueueDevice {
+  id: string;
+  name: string;
+  /** Upstream state word as reported (idle, busy, owner-active, offline, …). */
+  state: string;
+  ownerActive?: boolean;
+  batteryPct?: number;
+  foreground?: string;
+  queued?: number;
+  detail?: string;
+}
+
+export interface PhoneQueueJob {
+  id: string;
+  state: string;
+  device?: string;
+  kind?: string;
+  title?: string;
+  agent?: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+/** What the bridge could read from the phone queue. `reachable: false` is a normal answer, not an error. */
+export interface PhoneQueueSnapshot {
+  reachable: boolean;
+  /** The queue base URL the bridge read (no credentials). */
+  source: string;
+  fetchedAt: number;
+  devices: PhoneQueueDevice[];
+  jobs: PhoneQueueJob[];
+  error?: string;
+}
+
+function optionalStr(value: unknown): boolean { return value === undefined || str(value); }
+function optionalNumber(value: unknown): boolean { return value === undefined || statsNumber(value); }
+function isPhoneQueueDevice(value: unknown): value is PhoneQueueDevice {
+  return isRecord(value) && str(value.id) && str(value.name) && str(value.state)
+    && (value.ownerActive === undefined || typeof value.ownerActive === "boolean")
+    && (value.batteryPct === undefined || statsPercent(value.batteryPct))
+    && optionalStr(value.foreground) && optionalNumber(value.queued) && optionalStr(value.detail);
+}
+function isPhoneQueueJob(value: unknown): value is PhoneQueueJob {
+  return isRecord(value) && str(value.id) && str(value.state) && optionalStr(value.device) && optionalStr(value.kind)
+    && optionalStr(value.title) && optionalStr(value.agent) && optionalNumber(value.createdAt) && optionalNumber(value.updatedAt);
+}
+
+export function parsePhoneQueueSnapshot(value: unknown): PhoneQueueSnapshot | null {
+  if (!isRecord(value) || typeof value.reachable !== "boolean" || typeof value.source !== "string" || !statsNumber(value.fetchedAt)) return null;
+  if (!Array.isArray(value.devices) || !value.devices.every(isPhoneQueueDevice)) return null;
+  if (!Array.isArray(value.jobs) || !value.jobs.every(isPhoneQueueJob)) return null;
+  if (!optionalStr(value.error)) return null;
+  return { reachable: value.reachable, source: value.source, fetchedAt: value.fetchedAt, devices: value.devices, jobs: value.jobs, ...(str(value.error) ? { error: value.error } : {}) };
+}
 
 /** A machine on the tailnet (this laptop, host-b/0, …). */
 export interface HostInfo {

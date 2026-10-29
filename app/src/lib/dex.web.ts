@@ -2,6 +2,7 @@ import { DEX_OFF, type DexListener, type DexSimulation, type DexState } from "./
 export * from "./dex-types";
 // Web has no native feature. Explicit developer simulation is the only opt-in.
 export const available = false;
+export const detects = false;
 let state: DexState = DEX_OFF;
 const listeners = new Set<DexListener>();
 function update(next: DexState) { state = next; for (const listener of listeners) listener(state); return state; }
