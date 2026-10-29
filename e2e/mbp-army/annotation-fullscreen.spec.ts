@@ -79,7 +79,7 @@ for (const engine of ENGINES) {
 
       const imageUpload = page.waitForRequest(request =>
         request.method() === 'POST' && request.url().includes('/attachments?') &&
-        request.headers()['content-type'] === 'image/png');
+        request.headers()['content-type'] === 'image/png', { timeout: 30000 }); // same budget as jsonUpload: html2canvas capture runs first
       const jsonUpload = page.waitForResponse(response =>
         response.request().method() === 'POST' && response.url().includes('/attachments?') &&
         response.request().headers()['content-type'] === 'application/json', { timeout: 30000 });

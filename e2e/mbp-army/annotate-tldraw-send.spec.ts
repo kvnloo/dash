@@ -16,8 +16,9 @@ test('annotate-tldraw: confirmed send removes only submitted ink, retaining newe
   await page.getByRole('button', { name: 'Send and keep drawing', exact: true }).click();
   await expect(page.getByText('No words captured. Send the marks only?')).toBeVisible();
   // Armed once the confirmation is up: nothing uploads before Send anyway, so the confirmation's own
-  // clicks under load must not eat the upload's wait.
-  const uploading = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'image/png');
+  // clicks under load must not eat the upload's wait. The capture is html2canvas on the page's main
+  // thread (about 10 s at load 28 in cov-fc2bbdf-r5); 30 s is the upload budget annotation-fullscreen uses.
+  const uploading = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'image/png'), { timeout: 30000 });
   const confirmed = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/attachments?') && response.request().headers()['content-type'] === 'image/png', { timeout: 45000 });
   await page.getByRole('button', { name: 'Send anyway', exact: true }).click();
   await uploading;
@@ -34,7 +35,7 @@ test('annotate-tldraw: confirmed send removes only submitted ink, retaining newe
   await expect(page.getByText('No words captured. Send the marks only?')).toBeVisible();
   // Armed once the confirmation is up: nothing uploads before Send anyway, so the confirmation's own
   // clicks under load must not eat the upload's wait.
-  const nextUpload = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'application/json');
+  const nextUpload = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'application/json'), { timeout: 30000 });
   await page.getByRole('button', { name: 'Send anyway', exact: true }).click();
   const bytes = (await nextUpload).postDataBuffer()!;
   const doc = JSON.parse(bytes.toString('utf8'));
