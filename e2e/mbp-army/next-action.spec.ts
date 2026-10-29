@@ -252,12 +252,15 @@ test('Next up isolates unread replies by selected endpoint and opens the exact e
     await bRow.click({ noWaitAfter: true });
     await send(page, 'ARMY_HOLD unread endpoint B reply');
     await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
+    await toChats(page);
+    const draftRows = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: 'New chat' });
+    const previousDraftIds = new Set(await draftRows.evaluateAll(rows => rows.map(row => row.getAttribute('data-testid'))));
     await newChat(page);
     await composer(page).fill('endpoint B draft survives attention navigation');
     await toChats(page);
-    // A's saved draft remains in history; capture the new B draft by its current Recent position.
-    const bDraftRow = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: 'New chat' }).first();
-    const bDraftId = await bDraftRow.getAttribute('data-testid');
+    const newDraftIds = (await draftRows.evaluateAll(rows => rows.map(row => row.getAttribute('data-testid')))).filter(id => !previousDraftIds.has(id));
+    expect(newDraftIds).toHaveLength(1);
+    const bDraftId = newDraftIds[0];
     if (!bDraftId) throw Error('The new endpoint B draft must have a rendered row identity');
     await writeFile(join(b.dir, 'army-release'), '');
     await expect.poll(() => turnEvents(b.dir, 'end'), { timeout: 30_000 }).toBe(1);
