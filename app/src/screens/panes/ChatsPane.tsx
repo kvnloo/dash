@@ -1,6 +1,6 @@
 import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { chatKey, type ChatSummary, type HostInfo } from "../../../../shared/protocol";
 import type { WindowOrigin } from "../../lib/chat-window";
@@ -15,7 +15,9 @@ import { haptic } from "../../haptics";
 import { chatRow } from "../../lib/chat-row";
 import { chatRowActions, chatRowMenu, pressRow, runChatRowMenu } from "../../lib/chat-row-actions";
 import { BottomActionSheet } from "../../components/BottomActionSheet";
-import { conversationEntries, emptyList, groupLabeler, labelList, mergeLocal, stableEntries, type ChatListRow, type ConversationEntry, type RemoteLabeled } from "../../lib/chat-index";
+import { ChatListControls } from "../../components/ChatListControls";
+import { DEFAULT_CHAT_FILTERS, filterChatRows, historyNeeded, projectPath, type ChatFilters } from "../../lib/chat-filters";
+import { conversationEntries, emptyList, groupLabeler, labelList, listRows, mergeLocal, stableEntries, type ChatListRow, type ConversationEntry, type RemoteLabeled } from "../../lib/chat-index";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { usePagedChats } from "../../hooks/usePagedChats";
@@ -224,15 +226,16 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
   const connectionStatus = store.use((s) => s.connection.status);
   const hosts = store.use((s) => s.connection.hosts);
   const hasEnded = store.useSelector((s) => s.conversations.some(c => c.stale));
-  const remote = usePagedChats({}, { focused, online: connectionStatus === "online" });
+  const [filters, setFilters] = useState<ChatFilters>(DEFAULT_CHAT_FILTERS);
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const remote = usePagedChats(filters.harness ? { kinds: [filters.harness] } : {}, { focused, online: connectionStatus === "online" });
 
-  // Entries keep their identity while a conversation's list placement and header are unchanged,
-  // so most store changes (status, adoption, setActive) skip the merge entirely.
   const previousLocal = useRef<readonly ConversationEntry[]>(NO_ENTRIES);
   const local = useMemo(() => {
-    previousLocal.current = stableEntries(previousLocal.current, conversationEntries(conversations));
+    const next = conversationEntries(conversations);
+    previousLocal.current = filters.sort === "priority" && filters.date === "all" ? stableEntries(previousLocal.current, next) : next;
     return previousLocal.current;
-  }, [conversations]);
+  }, [conversations, filters.sort, filters.date]);
   const today = startOfToday();
   const groupOf = useMemo(() => groupLabeler(today), [today]);
   // The remote half is labeled incrementally: an appended page labels only its own rows and a head
@@ -244,15 +247,43 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
     previousLabeled.current = labelList(remoteList, groupOf, previousLabeled.current);
     return previousLabeled.current;
   }, [remoteList, groupOf]);
-  const items = useMemo((): ChatListRow[] => {
-    const rows = mergeLocal(labeled, { local, exhausted: remote.exhausted, endedLast: !remote.enabled, groupOf });
-    return rows.length === 0 && remote.enabled && remote.status === "loading" ? SKELETONS : rows;
-  }, [labeled, local, groupOf, remote.exhausted, remote.enabled, remote.status]);
-
   const liveKeys = useMemo(() => liveKeySet(hosts), [hosts]);
   const selfId = useMemo(() => hosts.find(host => host.self)?.id, [hosts]);
   const harnessNames = useMemo(() => new Map(harnesses.map(h => [h.id, h.name])), [harnesses]);
-
+  const summaries = useMemo(() => listRows(remoteList), [remoteList]);
+  const needsHistory = historyNeeded(filters, summaries, today);
+  const withinDateRange = filters.date === "all" || needsHistory;
+  const scanning = remote.enabled && !remote.exhausted && withinDateRange && (projectsOpen || needsHistory);
+  useEffect(() => {
+    if (scanning && focused && connectionStatus === "online" && remote.status === "ready" && !remote.loadingMore && !remote.error) remote.loadMore();
+  }, [scanning, focused, connectionStatus, remote.status, remote.loadingMore, remote.error, remote.list, remote.loadMore]);
+  const filtered = filters.harness !== null || filters.project !== null || filters.date !== "all" || filters.sort !== "recent";
+  const items = useMemo((): ChatListRow[] => {
+    const rows = mergeLocal(labeled, { local, exhausted: remote.exhausted || filtered, endedLast: !remote.enabled, groupOf });
+    if (rows.length === 0 && remote.enabled && remote.status === "loading") return SKELETONS;
+    return filterChatRows(rows, filters, today, liveKeys);
+  }, [labeled, local, groupOf, remote.exhausted, remote.enabled, remote.status, filtered, filters, today, liveKeys]);
+  const count = useMemo(() => items.reduce((total, row) => total + (row.type === "chat" ? 1 : 0), 0), [items]);
+  const filterOptions = useMemo(() => {
+    const kinds = new Set(harnesses.map(h => h.id));
+    const projects = new Set<string>();
+    for (const entry of local) {
+      kinds.add(entry.harness);
+      const path = projectPath(entry.cwd);
+      if (path) projects.add(path);
+    }
+    for (const summary of summaries) {
+      kinds.add(summary.kind);
+      const path = projectPath(summary.cwd);
+      if (path) projects.add(path);
+    }
+    if (filters.harness) kinds.add(filters.harness);
+    if (filters.project) projects.add(filters.project);
+    return {
+      harnesses: [...kinds].map(id => ({ id, label: harnessNames.get(id) ?? id })).sort((a, b) => a.label.localeCompare(b.label)),
+      projects: [...projects].sort((a, b) => a.localeCompare(b)),
+    };
+  }, [harnesses, local, summaries, harnessNames, filters.harness, filters.project]);
   const actions = useMemo(() => chatRowActions({
     select: () => haptic.select(),
     // A row not opened on this phone yet becomes a conversation only now (or opens view-only).
@@ -349,6 +380,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
 
   return (
     <View style={styles.wrap} testID="chats-pane">
+      <ChatListControls filters={filters} harnesses={filterOptions.harnesses} projects={filterOptions.projects} onChange={setFilters} onProjectsOpen={setProjectsOpen} loading={scanning && focused && connectionStatus === "online" && !remote.error} count={count} />
       {hasEnded && (
         <PressScale onPress={() => confirmDestructive("Clear ended chats?", "Saved history is removed from this phone only.", "Clear ended", clearEndedConversations)} accessibilityRole="button" style={[styles.clearEnded, thumb.align]}>
           <Text style={styles.clearEndedText}>Clear ended</Text>
@@ -356,19 +388,21 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
       )}
       <BottomActionSheet open={menuFor !== null} title={menu.title} options={menu.options} onSelect={onMenu} onClose={closeMenu} />
       <FlashList
+        key={JSON.stringify(filters)}
         data={items}
         renderItem={renderItem}
         getItemType={getItemType}
         keyExtractor={keyExtractor}
         extraData={`${activeId}:${connectionStatus}`}
         drawDistance={600}
-        onEndReached={loadMore}
+        onEndReached={withinDateRange && focused && connectionStatus === "online" ? loadMore : undefined}
         onEndReachedThreshold={0.5}
         ListFooterComponent={footer}
         contentContainerStyle={{ paddingBottom: 120 }}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>No chats yet</Text>
+            <Text style={styles.emptyText}>{scanning && !remote.error ? connectionStatus === "online" ? "Searching chat history…" : "Connect to search older chats" : filtered ? "No matching chats" : "No chats yet"}</Text>
+            {filtered && <PressScale onPress={() => setFilters(DEFAULT_CHAT_FILTERS)} accessibilityRole="button" style={styles.retry}><Text style={styles.retryText}>Reset filters</Text></PressScale>}
           </View>
         }
       />
