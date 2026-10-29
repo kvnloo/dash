@@ -180,7 +180,7 @@ test('desk keyboard: Ctrl+K quick switch opens a chat, Ctrl+1..9 jump to panels,
   await expect(page.getByText('ARMY_REPLY: quick switch target').first()).toBeVisible();
   await page.keyboard.press('Control+3');
   await expect(page.getByTestId('desk-orchestra')).toBeVisible();
-  await expect(composer(page)).toHaveCount(0);
+  await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
 
   // Right-click a chat row: the same menu as a long-press, nothing is sent.
   const sentBefore = (bridge.logs().match(/quick switch target/g) ?? []).length;
@@ -220,25 +220,28 @@ test('desk mode degrades when the phone queue is unreachable and keeps annotatio
   await expect(page.getByLabel('Annotation mode on', { exact: true })).toHaveCount(0);
 });
 
-test('desk override: ?desk=off keeps the phone layout wide, the Settings choice forces desk on a narrower window', async ({ page, bridge }) => {
+test('desk override: ?desk=off keeps the phone layout in a 1920-wide window', async ({ page, bridge }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await pair(page, bridge, `${web}?desk=off`);
   await expect(page.getByTestId('desk-shell')).toHaveCount(0);
   await expect(page.getByRole('tab')).toHaveCount(3);
-  // Settings -> Desk layout On, at a width below the auto threshold.
+  await expect(page.getByTestId('desk-rail')).toHaveCount(0);
+});
+
+test('desk override: the Settings choice forces desk on a narrower window, persists, and a URL override still wins', async ({ page, bridge }) => {
+  // 1000 wide is below the auto threshold: the phone layout.
   await page.setViewportSize({ width: 1000, height: 780 });
-  await page.goto(web, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('tab').nth(1)).toBeVisible({ timeout: 60000 });
+  await pair(page, bridge);
   await expect(page.getByRole('tab')).toHaveCount(3);
   await expect(page.getByTestId('desk-shell')).toHaveCount(0);
   // The phone layout reaches Settings from the Chats header.
-  await page.getByRole('tab').nth(1).click({ noWaitAfter: true });
-  await expect(page.getByTestId('chats-pane')).toBeVisible();
   await page.getByRole('button', { name: 'Open settings', exact: true }).first().click({ noWaitAfter: true });
   await page.getByTestId('settings-desk-on').scrollIntoViewIfNeeded();
   await page.getByTestId('settings-desk-on').click({ noWaitAfter: true });
   await expect(page.getByTestId('settings-desk-on')).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByTestId('desk-shell')).toBeVisible();
+  await expect(page.getByTestId('desk-signal')).toContainText('Desk setting-on');
+  // Saved: a reload comes back in desk mode.
   await page.waitForTimeout(400);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('desk-shell')).toBeVisible({ timeout: 60000 });
