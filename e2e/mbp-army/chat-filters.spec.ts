@@ -148,7 +148,7 @@ test('Chats priority puts failed and interrupted turns ahead of running and newe
     await page.getByRole('button', { name: 'Choose harness', exact: true }).click({ noWaitAfter: true });
     await page.getByRole('button', { name: harness, exact: true }).click({ noWaitAfter: true });
     await send(page, prompt);
-    await expect(page.getByText(outcome).first()).toBeVisible();
+    await expect(page.getByText(outcome).filter({ visible: true }).first()).toBeVisible();
     await page.getByRole('button', { name: 'Back', exact: true }).click({ noWaitAfter: true });
     const row = chatRows(page).filter({ hasText: prompt });
     await expect(row).toHaveCount(1);
