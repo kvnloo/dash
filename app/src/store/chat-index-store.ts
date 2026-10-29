@@ -109,10 +109,11 @@ export function seedFromSnapshot(): Promise<void> {
 }
 
 const inflight = new Map<string, Promise<void>>();
-function once(id: string, run: () => Promise<void>): Promise<void> {
+function once(id: string, run: (release: () => void) => Promise<void>): Promise<void> {
   const running = inflight.get(id);
   if (running) return running;
-  const promise = run().finally(() => { inflight.delete(id); });
+  const release = () => { if (inflight.get(id) === promise) inflight.delete(id); };
+  const promise = run(release).finally(release);
   inflight.set(id, promise);
   return promise;
 }
@@ -162,13 +163,16 @@ function withNext(list: PagedList, page: ChatPage | undefined): PagedList {
 /** Fetch the next page for a query unless one is already loading for it. */
 export function loadMore(query: ChatQuery = {}): Promise<void> {
   const key = queryKey(query);
-  return once(`more:${key}`, async () => {
+  return once(`more:${key}`, async (release) => {
     const settings = deps.settings();
     const current = listState(key);
     if (!settings || chatsMode() !== "chats" || current.seeded || current.list.version === 0 || current.list.exhausted || !current.list.next) return;
     const cursor = current.list.next;
     patchList(key, s => ({ ...s, loadingMore: true, error: undefined }));
     const result = await deps.api.list(settings, { limit: PAGE_SIZE, cursor, kinds: query.kinds, hosts: query.hosts });
+    // Allow the next page before publishing the completed page: subscribers can
+    // synchronously request it as soon as loadingMore becomes false.
+    release();
     if (!result.ok) {
       if (!result.notModified && result.code === "bad_cursor") {
         // The index changed shape under the cursor: start over from page 1.

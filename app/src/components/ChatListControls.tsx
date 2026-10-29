@@ -1,14 +1,14 @@
 import { Feather } from "@expo/vector-icons";
 import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { CHAT_DATES, CHAT_SORTS, DEFAULT_CHAT_FILTERS, type ChatFilters } from "../lib/chat-filters";
+import { CHAT_ACTIVITY, CHAT_DATES, CHAT_SORTS, DEFAULT_CHAT_FILTERS, type ChatFilters } from "../lib/chat-filters";
 import type { BottomActionOption } from "../lib/bottom-action-sheet";
 import { colors, radius, space, type } from "../theme";
 import { BottomActionSheet } from "./BottomActionSheet";
 import { PressScale } from "./PressScale";
 
-type FilterMenu = "harness" | "project" | "date" | "sort";
-const TITLES: Record<FilterMenu, string> = { harness: "Harness", project: "Project", date: "Updated date", sort: "Sort chats" };
+type FilterMenu = "activity" | "harness" | "project" | "date" | "sort";
+const TITLES: Record<FilterMenu, string> = { activity: "Sessions", harness: "Harness", project: "Project", date: "Updated date", sort: "Sort chats" };
 const SORT_LABELS: Record<ChatFilters["sort"], string> = { recent: "Recent", oldest: "Oldest", priority: "Priority" };
 
 export function ChatListControls({ filters, harnesses, projects, onChange, onProjectsOpen, loading, count }: {
@@ -24,24 +24,29 @@ export function ChatListControls({ filters, harnesses, projects, onChange, onPro
   const harnessLabel = harnesses.find(h => h.id === filters.harness)?.label ?? filters.harness;
   const projectLabel = filters.project?.split("/").filter(Boolean).at(-1) ?? filters.project;
   const dateLabel = CHAT_DATES.find(d => d.id === filters.date)?.label ?? "Any date";
-  const changed = filters.harness !== null || filters.project !== null || filters.date !== "all" || filters.sort !== "recent";
+  const changed = filters.activity !== "all" || filters.harness !== null || filters.project !== null || filters.date !== "all" || filters.sort !== "recent";
   const controls: { id: FilterMenu; label: string; value: string; active: boolean }[] = [
+    { id: "activity", label: filters.activity === "active" ? "Active" : "Sessions", value: filters.activity === "active" ? "Active sessions" : "All sessions", active: filters.activity === "active" },
     { id: "harness", label: harnessLabel ?? "Harness", value: harnessLabel ?? "All harnesses", active: filters.harness !== null },
     { id: "project", label: projectLabel ?? "Project", value: filters.project ?? "All projects", active: filters.project !== null },
     { id: "date", label: filters.date === "all" ? "Dates" : dateLabel, value: dateLabel, active: filters.date !== "all" },
     { id: "sort", label: SORT_LABELS[filters.sort], value: SORT_LABELS[filters.sort], active: filters.sort !== "recent" },
   ];
-  const values = menu === "harness" ? [{ id: "", label: "All harnesses" }, ...harnesses]
+  const values = menu === "activity" ? CHAT_ACTIVITY
+    : menu === "harness" ? [{ id: "", label: "All harnesses" }, ...harnesses]
     : menu === "project" ? [{ id: "", label: "All projects" }, ...projects.map(path => ({ id: path, label: path }))]
     : menu === "date" ? CHAT_DATES : CHAT_SORTS;
-  const selected = menu === "harness" ? filters.harness ?? "" : menu === "project" ? filters.project ?? "" : menu === "date" ? filters.date : filters.sort;
+  const selected = menu === "activity" ? filters.activity : menu === "harness" ? filters.harness ?? "" : menu === "project" ? filters.project ?? "" : menu === "date" ? filters.date : filters.sort;
   const options: BottomActionOption[] = values.map(value => ({
     id: value.id, label: `${value.label}${value.id === selected ? " · Selected" : ""}`,
     accessibilityLabel: `${value.label}${value.id === selected ? ", selected" : ""}`, destructive: false,
   }));
   const close = () => { setMenu(null); onProjectsOpen(false); };
   const select = (id: string) => {
-    if (menu === "harness") onChange({ ...filters, harness: id === "" ? null : id });
+    if (menu === "activity") {
+      const activity = CHAT_ACTIVITY.find(value => value.id === id);
+      if (activity) onChange({ ...filters, activity: activity.id });
+    } else if (menu === "harness") onChange({ ...filters, harness: id === "" ? null : id });
     else if (menu === "project") onChange({ ...filters, project: id === "" ? null : id });
     else if (menu === "date") {
       const date = CHAT_DATES.find(value => value.id === id);
@@ -71,6 +76,7 @@ export function ChatListControls({ filters, harnesses, projects, onChange, onPro
         <Text style={styles.resetText}>Reset</Text>
       </PressScale>}
     </View>}
+    {filters.activity === "active" && <Text style={styles.explanation}>Live or open on a host, or a turn in progress. Saved history alone is not active.</Text>}
     {filters.sort === "priority" && <Text style={styles.explanation}>Needs attention, then running, then recent. Ended chats last.</Text>}
     <BottomActionSheet open={menu !== null} title={menu ? `${TITLES[menu]}${menu === "project" && loading ? " · Loading…" : ""}` : "Filters"} options={options} onSelect={select} onClose={close} />
   </View>;
