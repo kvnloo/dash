@@ -51,6 +51,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
     forwarded.headers.set('host', '127.0.0.1:' + port);
     return fetch(forwarded).then(async response => {
       if (holdOlder && req.method === 'GET' && url.pathname === '/chats/history' && url.searchParams.has('before')) {
+        server.timeout(req, 0);
         const body = await response.arrayBuffer();
         const page = JSON.parse(new TextDecoder().decode(body));
         const ordinal = olderSnapshots.push({ before: url.searchParams.get('before'), prompts: page.messages.filter(row => row.role === 'user').map(row => row.text) });
@@ -58,8 +59,12 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
         headers.set('x-army-older-page', String(ordinal));
         headers.set('access-control-expose-headers', 'ETag, X-Army-Older-Page');
         headers.set('cache-control', 'no-store');
-        await new Promise(resolve => olderWaiters.push(resolve));
-        return new Response(body, { status: response.status, headers });
+        const stream = new ReadableStream({
+          start(controller) {
+            olderWaiters.push(() => { controller.enqueue(new Uint8Array(body)); controller.close(); });
+          },
+        });
+        return new Response(stream, { status: response.status, headers });
       }
       if (freezeNative && (url.pathname === '/hermes/activity' || url.pathname === '/chats/history')) {
         nativeHeld++;
@@ -289,11 +294,14 @@ test('reopening native chat rejects its closed visit older page and displays the
     await expect(page.getByRole('button', { name: 'Save and reconnect', exact: true })).toBeHidden();
     const row = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ has: page.getByText(LONG_HERMES_TITLE, { exact: true }) });
     await expect(row).toHaveCount(1);
+    const oldHeaders = page.waitForResponse(async response => await response.headerValue('x-army-older-page') === '1');
     await row.click();
     await expect(page.getByText(/^ARMY hermes answer 030 /)).toBeVisible();
     const rail = page.getByRole('slider', { name: 'Prompt navigator', exact: true });
     const ticks = rail.getByTestId('rail-tick');
     await expect.poll(async () => (await (await fetch(control + '/army-held')).json()).olderHeld).toBe(1);
+    const releasedOld = await oldHeaders;
+    expect(releasedOld.status()).toBe(200);
     await expect(ticks).toHaveCount(25);
 
     // Change the real isolated native row after its first HTTP page was produced.
@@ -322,11 +330,9 @@ test('reopening native chat rejects its closed visit older page and displays the
     expect(snapshot.olderSnapshots[0].prompts).toContain('ARMY hermes prompt 001');
     expect(snapshot.olderSnapshots[1].prompts).toContain(refreshedPrompt);
 
-    const oldResponse = page.waitForResponse(async response => await response.headerValue('x-army-older-page') === '1');
+    const oldBodyFinished = releasedOld.finished();
     expect((await fetch(control + '/army-release-one-older', { method: 'POST' })).status).toBe(200);
-    const releasedOld = await oldResponse;
-    expect(releasedOld.status()).toBe(200);
-    await releasedOld.finished();
+    await oldBodyFinished;
     const releasedPage = await releasedOld.json();
     expect(releasedPage.messages.filter((row: { role: string }) => row.role === 'user').map((row: { text: string }) => row.text)).toContain('ARMY hermes prompt 001');
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
