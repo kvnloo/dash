@@ -124,8 +124,10 @@ test.describe('roster connection ownership', () => {
         hosts: expect.arrayContaining([expect.objectContaining({ id: 'galaxy-s22', name: 'Galaxy S22+' })]),
       }));
       await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-      await expect(phone).toContainText('ARMY current S22');
-      await expect(phone).not.toContainText('Galaxy S22+');
+      // Do not let the next ten-second poll hide a transient stale replacement.
+      const hostText = await phone.textContent();
+      expect(hostText).toContain('ARMY current S22');
+      expect(hostText).not.toContain('Galaxy S22+');
       await page.screenshot({ path: testInfo.outputPath('final.png') });
     } finally {
       if (relay.exitCode === null && relay.signalCode === null) {
