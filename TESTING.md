@@ -54,10 +54,23 @@ active and still prove that OMP ink is not sent to the attached Hermes session.
 Run the complete suite on the integrated commit before RC3 merge. A filtered
 feature run is not a complete release receipt or native phone acceptance.
 
+The roster reconnect journey holds an unchanged real HTTP body while a newer
+socket admits and its roster completes. It then releases the old body and reads
+the rendered host row immediately, before the next periodic poll can mask a stale
+replacement. Roster completion must retain its originating connection generation,
+even when reconnect reuses the same Settings object.
+
 `next-action.spec.ts` also covers current-connection attention, identity-based
 unread replies under clock rollback, exact-chat navigation without sending,
 draft preservation, defer/reload and explicit permission decisions. CI retains
 compact filter and attention screenshots in `chats-ui-<sha>` for visual inspection.
+
+The remote ACP journey first sends a normal chat through the UI, then submits
+an authenticated unsupported steer to that same remote route. It requires an
+error without a second ACP invocation or reply delta. Remote routing preserves
+the supplied mode so the existing Turn admission rejects unsupported steering,
+rather than silently executing a new normal prompt. This is protocol rejection
+coverage, not a claim that the Claude composer offers steering.
 
 ## Release law O15
 
@@ -102,12 +115,20 @@ evidence; the test removes its generated bundles and compiler cache.
 including asynchronous cache hydration of an inactive Hermes transcript before
 its fresh native request. The delayed, unknown and unchanged response cases also
 cover partial native-user persistence and canonical catch-up.
+The reopened-chat journey holds actual older HTTP responses across a closed visit.
+It changes a row in the isolated native journal without changing its keyset,
+then checks the current prompt through the rendered rail and transcript.
 `history-lifecycle.spec.ts` exercises controlled production-consumer transitions:
 endpoint A → B → A with a newer cursor, closed/reopened loader ownership,
 partial native persistence/catch-up, nonempty shared-anchor rewind, and a native
 poll beating durable load despite host/phone clock skew.
 Each loader owns its flag through a token: stale work cannot supply a page or
 clear a replacement loader's flag.
+Background fills and scrolls waiting on them also belong to an open visit.
+Closing the chat revokes that visit before a replacement can reuse its cursor.
+A late fill cannot populate the replacement transcript or move its unlisted
+rows into the visible list. These lifecycle cases exercise production consumers,
+not browser or native-phone acceptance.
 
 Native ids anchor transcript order. Alignment starts at a shared anchor (or the
 first phone turn), not at any later repeated prompt. Comparisons use the native

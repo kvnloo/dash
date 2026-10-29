@@ -395,8 +395,9 @@ class Bridge {
   private async refreshRoster(): Promise<void> {
     const settings = this.settings;
     if (!settings || !this.isOpen()) return;
+    const epoch = this.connectEpoch;
     const fetched = await fetchRosterIfChanged(settings, this.rosterEtag);
-    if (!fetched || this.settings !== settings || !this.isOpen()) return;
+    if (!fetched || this.settings !== settings || this.connectEpoch !== epoch || !this.isOpen()) return;
     // 304: nothing re-renders and nothing reconciles.
     if (fetched !== "unchanged") {
       this.rosterEtag = fetched.etag;

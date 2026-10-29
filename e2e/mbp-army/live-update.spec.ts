@@ -87,6 +87,9 @@ async function startMetro(): Promise<MetroStub> {
       releaseBundles();
       const { promise, resolve, reject } = Promise.withResolvers<void>();
       server.close(error => error ? reject(error) : resolve());
+      // A paused browser clock may retain an active fetch after assertions finish.
+      // Close only this fixture's connections; never wait for the app to poll again.
+      server.closeAllConnections();
       return promise;
     },
   };
