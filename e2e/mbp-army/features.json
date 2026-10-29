@@ -17,6 +17,8 @@
                "cached inactive Hermes chat hydrates before requesting its fresh owned newest window",
                "history loader clears its flag after endpoint ABA and a newer cursor without admitting the stale page",
                "history loader from a closed visit cannot clear the replacement visit loading flag or supply its page",
+               "background history from a closed visit cannot populate a reopened chat with the same cursor",
+               "a scroll waiting on a closed visit cannot consume the replacement visit background page",
                "native user-only persistence preserves the phone reply while canonical catch-up and rewind remain authoritative",
                "native catch-up ignores clock skew and reconciles newly polled source rows with a loaded phone turn",
                "an old stopped phone turn cannot take a repeated prompt from a disjoint newer native cache window",
