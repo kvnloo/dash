@@ -60,6 +60,38 @@ test.describe('Claude Code chat recorded on another computer',()=>{
   expect(calls.map(c=>c.method)).toEqual(['session/resume','session/resume']);
   for(const c of calls){expect(c.sessionId).toBe(REMOTE_SESSION);expect(c.cwd).toBe(join(bridge.dir,'remote-home','project'));expect(c.pwd).toBe(join(bridge.dir,'remote-home','project'));}
  });
+ test('remote ACP rejects steer without starting another prompt',async({page,bridge},info)=>{
+  await pair(page,bridge);
+  await expect(remoteRow(page)).toHaveCount(1,{timeout:30000});
+  await remoteRow(page).click({noWaitAfter:true});
+  await send(page,'normal remote intent control');
+  await expect(visible(page,/ARMY_CLAUDE_REPLY: normal remote intent control/)).toBeVisible({timeout:20000});
+  const before=await lines(join(bridge.dir,'army-acp-calls.jsonl'));
+  expect(before).toHaveLength(1);
+  // The protocol must reject unsupported control intent even from another client.
+  // The current Claude composer does not offer a Steer button.
+  const token=(await readFile(join(bridge.dir,'.dash','token'),'utf8')).trim();
+  const socket=new WebSocket(`ws://127.0.0.1:${bridge.port}/ws?token=${encodeURIComponent(token)}`);
+  const frames:Record<string,unknown>[]=[];
+  socket.addEventListener('message',event=>frames.push(JSON.parse(String(event.data))));
+  try{
+   await new Promise<void>((resolve,reject)=>{
+    socket.addEventListener('open',()=>resolve(),{once:true});
+    socket.addEventListener('error',()=>reject(Error('Owned authenticated protocol client failed')),{once:true});
+   });
+   await expect.poll(()=>frames.some(frame=>frame.type==='hello')).toBe(true);
+   socket.send(JSON.stringify({type:'chat',id:'army-remote-steer',harness:'claude',mode:'steer',
+    hostId:'machine:army-remote',profileId:`av:claude:${REMOTE_SESSION}`,sessionId:REMOTE_SESSION,
+    cwd:join(bridge.dir,'remote-home','project'),text:'must not become a normal remote prompt'}));
+   await expect.poll(()=>frames.some(frame=>frame.id==='army-remote-steer'&&frame.type==='done'),{timeout:15000}).toBe(true);
+   expect(frames.filter(frame=>frame.id==='army-remote-steer'&&frame.type==='error')).toHaveLength(1);
+   expect(await lines(join(bridge.dir,'army-acp-calls.jsonl'))).toEqual(before);
+   expect(frames.some(frame=>frame.id==='army-remote-steer'&&frame.type==='delta')).toBe(false);
+  }finally{
+   socket.close();
+   await writeFile(info.outputPath('remote-steer-frames.json'),JSON.stringify(frames,null,2));
+  }
+ });
  // Owner's S25: a chat once marked ended (before the bridge's routes were known) stayed
  // "This chat has ended on the host" forever, although the bridge still continues it.
  test('a chat saved as ended comes back sendable once the bridge routes to its computer',async({page,bridge})=>{
