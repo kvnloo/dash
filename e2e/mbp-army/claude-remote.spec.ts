@@ -64,6 +64,8 @@ test.describe('Claude Code chat recorded on another computer',()=>{
   await pair(page,bridge);
   await expect(remoteRow(page)).toHaveCount(1,{timeout:30000});
   await remoteRow(page).click({noWaitAfter:true});
+  await expect(page.getByTestId('chat-window')).toBeVisible();
+  await expect(composer(page)).toBeEditable();
   await send(page,'normal remote intent control');
   await expect(visible(page,/ARMY_CLAUDE_REPLY: normal remote intent control/)).toBeVisible({timeout:20000});
   const before=await lines(join(bridge.dir,'army-acp-calls.jsonl'));
