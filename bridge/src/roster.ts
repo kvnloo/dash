@@ -46,6 +46,8 @@ export type RosterSignals = {
 const PHONE_OS = new Set(["android", "ios", "ipados", "tvos"]);
 const A2A_PORT = 9900;
 
+type FleetPhone = { name: string; aliases: readonly string[]; tailnetIp?: string };
+
 export function dnsLabel(dnsName: string, fallback: string): string {
   const label = dnsName.replace(/\.$/, "").split(".")[0]?.trim();
   return label && label.length > 0 ? label : fallback;
@@ -415,6 +417,20 @@ function firstV4(ips: string[]): string | undefined {
   return ips.find((ip) => ip.includes(".")) ?? ips[0];
 }
 
+/** Match explicit registry identities first; allow phone-OS alias tokens for Android hostnames. */
+function matchedFleetPhone(node: TailscaleNode, phones: readonly FleetPhone[]): FleetPhone | undefined {
+  if (node.self && !isPhoneOs(node.os)) return undefined; // never turn a bridge host into a phone
+  const labels = [node.hostName.trim().toLowerCase(), dnsLabel(node.dnsName, node.hostName).toLowerCase()];
+  const direct = phones.filter(phone =>
+    [phone.name, ...phone.aliases].some(alias => labels.includes(alias.toLowerCase())) ||
+    (!isPhoneOs(node.os) && phone.tailnetIp !== undefined && node.ips.includes(phone.tailnetIp)));
+  if (direct.length > 0) return direct.length === 1 ? direct[0] : undefined;
+  if (!isPhoneOs(node.os)) return undefined;
+  const tokens = new Set(labels.join(" ").split(/[^a-z0-9]+/).filter(Boolean));
+  const matches = phones.filter(phone => phone.aliases.some(alias => tokens.has(alias.toLowerCase())));
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 export function assembleRoster(input: {
   nodes: TailscaleNode[];
   ompTabs: OmpTab[];
@@ -422,13 +438,38 @@ export function assembleRoster(input: {
   selfFallback: { hostname: string; address?: string };
   signals?: RosterSignals;
   fleetHostNames?: readonly string[];
+  fleetPhones?: readonly FleetPhone[];
   now?: number;
 }): HostInfo[] {
   const cutoff = (input.now ?? Date.now()) - 30 * 24 * 60 * 60 * 1000;
+  const fleetPhones = input.fleetPhones ?? [];
   const nodes = input.nodes.filter(node => !isPhoneOs(node.os) || node.self || node.online ||
     (node.lastSeen !== undefined && Date.parse(node.lastSeen) >= cutoff) ||
-    input.fleetHostNames?.some(name => name === node.hostName || name === dnsLabel(node.dnsName, node.hostName)));
-  const hosts: HostInfo[] = nodes.map((node) => nodeToHost(node, input));
+    input.fleetHostNames?.some(name => name === node.hostName || name === dnsLabel(node.dnsName, node.hostName)) ||
+    matchedFleetPhone(node, fleetPhones) !== undefined);
+  const grouped = new Map<string, TailscaleNode[]>();
+  for (const node of nodes) {
+    const phone = matchedFleetPhone(node, fleetPhones);
+    if (phone) grouped.set(phone.name, [...(grouped.get(phone.name) ?? []), node]);
+  }
+  const hosts: HostInfo[] = nodes.flatMap(node => {
+    const phone = matchedFleetPhone(node, fleetPhones);
+    if (!phone) return [nodeToHost(node, input)];
+    const members = grouped.get(phone.name) ?? [node];
+    // Do not silently collapse two distinct Android identities sharing an alias.
+    if (members.filter(member => isPhoneOs(member.os)).length > 1) {
+      const host = nodeToHost(node, input);
+      if (!isPhoneOs(node.os)) { host.kind = "phone"; host.agents = []; }
+      return [host];
+    }
+    const primary = members.find(member => isPhoneOs(member.os)) ?? members.find(member => member.online) ?? node;
+    if (node !== primary) return [];
+    const host = nodeToHost(node, input);
+    host.kind = "phone";
+    host.agents = [];
+    host.online = members.some(member => member.online);
+    return [host];
+  });
   if (!hosts.some((h) => h.self)) {
     hosts.unshift(
       selfHost(input.selfFallback.hostname, input.selfFallback.address, input.ompTabs, input.harnesses, input.signals),
@@ -698,11 +739,32 @@ function listedHermesProfiles(profiles: HermesProfileInfo[]): HermesProfileInfo[
 refreshHermesList();
 
 /** Registry membership keeps intentionally retained phones visible while offline. */
-function fleetHostNames(): string[] {
-  try {
-    const registry: unknown = Bun.YAML.parse(readFileSync(process.env.DASH_FLEET_REGISTRY ?? "/workspace/.files-k3s/config/fleet/nodes.yaml", "utf8"));
-    return isRecord(registry) && isRecord(registry.nodes) ? Object.keys(registry.nodes) : [];
-  } catch { return []; }
+function fleetRegistry(): { hostNames: string[]; phones: FleetPhone[] } {
+  const override = process.env.DASH_FLEET_REGISTRY;
+  const paths = override ? [override] : [
+    "/workspace/.files-k3s/config/fleet/nodes.yaml",
+    join(homedir(), "workspace/.files-mbp/config/fleet/nodes.yaml"),
+  ];
+  for (const path of paths) {
+    try {
+      const registry: unknown = Bun.YAML.parse(readFileSync(path, "utf8"));
+      if (!isRecord(registry) || !isRecord(registry.nodes)) continue;
+      const entries = Object.entries(registry.nodes);
+      const phones: FleetPhone[] = [];
+      for (const [name, value] of entries) {
+        if (!isRecord(value) || value.kind !== "phone") continue;
+        phones.push({
+          name,
+          aliases: Array.isArray(value.aliases)
+            ? value.aliases.filter((alias): alias is string => typeof alias === "string" && alias.trim().length > 0)
+            : [],
+          tailnetIp: typeof value.tailnet_ip === "string" ? value.tailnet_ip.trim() : undefined,
+        });
+      }
+      return { hostNames: entries.map(([name]) => name), phones };
+    } catch { /* try the next default path */ }
+  }
+  return { hostNames: [], phones: [] };
 }
 
 export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }, remoteAgents?: Record<string, AgentInfo[]>): Promise<HostInfo[]> {
@@ -717,9 +779,11 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
   const selfAddress = self.address ?? firstV4(selfNode?.ips ?? []);
   const hermesProfiles = listedHermesProfiles(parseHermesGatewayList(gatewayList.read()));
   const a2aUrl = hermesA2AUrl(process.env, selfAddress);
+  const fleet = fleetRegistry();
   const hosts = assembleRoster({
     nodes,
-    fleetHostNames: fleetHostNames(),
+    fleetHostNames: fleet.hostNames,
+    fleetPhones: fleet.phones,
     now,
     ompTabs,
     harnesses,
