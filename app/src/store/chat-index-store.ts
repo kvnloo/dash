@@ -135,8 +135,9 @@ const inflight = new Map<string, Promise<void>>();
 function once(id: string, run: (release: () => void) => Promise<void>): Promise<void> {
   const running = inflight.get(id);
   if (running) return running;
+  let promise: Promise<void>;
   const release = () => { if (inflight.get(id) === promise) inflight.delete(id); };
-  const promise = run(release).finally(release);
+  promise = run(release).finally(release);
   inflight.set(id, promise);
   return promise;
 }
@@ -210,14 +211,20 @@ export function loadMore(query: ChatQuery = {}): Promise<void> {
     release();
     if (!result.ok) {
       if (!result.notModified && result.code === "bad_cursor") {
-        // The index changed shape under the cursor: start over from page 1.
+        // Publish the reset only after this request leaves the single-flight slot. An automatic
+        // scanner may react synchronously to the store update and must be able to fetch page 1.
+        release();
         patchList(key, () => idle());
         await refreshHead(query, { force: true });
         return;
       }
+      release();
       patchList(key, s => ({ ...s, loadingMore: false, error: result.notModified || result.aborted ? s.error : errorText(result.code) }));
       return;
     }
+    // Store subscribers run synchronously. Release single-flight before publishing the new cursor
+    // so a history scan can immediately request the following page instead of reusing this request.
+    release();
     patchList(key, s => s.list.next !== cursor ? { ...s, loadingMore: false } : { ...s, loadingMore: false, list: mergePage(s.list, result.value) });
   });
 }

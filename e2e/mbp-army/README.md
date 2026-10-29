@@ -70,6 +70,26 @@ ACP turn files and the normal bridge log back the visible assertions; no route
 mocks or app store seeding. Web evidence does not prove native screen-reader or
 text-selection behavior. No passing receipt is claimed merely by adding specs.
 
+## Next up attention journey
+
+`next-action.spec.ts` drives the compact Next up section through the real Expo UI,
+isolated bridge and ACP fixture. Attention includes only chats opened on this phone
+for the current endpoint and account scope.
+Open navigates to the exact chat; it never sends, retries, approves or otherwise
+executes the action. Later is a one-hour in-app snooze, not a notification promise,
+and Skip dismisses only the current event. The journeys cover completed background
+replies, draft preservation, persistent defer, a newer reply in the same chat and a
+real pending `session/request_permission` choice that outranks an unread reply.
+
+Run only this feature with `army-stack.sh drive <run> 1
+e2e/mbp-army/next-action.spec.ts`, or run `bun run test` for the complete headless
+army. Coverage includes browsing older history, reloads, snooze expiry, exact-chat
+navigation, explicit host permission choice, browser-clock rollback, and isolation
+after switching to a second real bridge through Settings. Read checkpoints compare
+reply identities, not phone or host timestamps. The official receipt for the
+commit under evaluation is the proof; web evidence does not establish native
+phone or live-model acceptance.
+
 ## Host preparation
 
 Use the served source SHAs, not current branch names:

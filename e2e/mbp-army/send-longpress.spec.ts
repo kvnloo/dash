@@ -34,6 +34,52 @@ test('long-press on a chat row opens the row menu and sends nothing',async({page
  expect(turnLines(bridge.logs()).slice(before)).toEqual([]);
 });
 
+test('swiping from a chat row never opens it and the next single tap opens that exact chat without sending',async({page,bridge})=>{
+ await page.setViewportSize({width:390,height:844});
+ await pair(page,bridge);
+ const row=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({hasText:'ARMY native fixture'});
+ await expect(row).toHaveCount(1,{timeout:30000});
+ const before=turnLines(bridge.logs()).length;
+ const box=await row.boundingBox();if(!box)throw Error('Chat row has no bounds');
+ const y=box.y+box.height/2;
+ await page.mouse.move(box.x+box.width*.85,y);await page.mouse.down();
+ await page.mouse.move(box.x+box.width*.1,y,{steps:12});await page.mouse.up();
+ await expect(page.getByRole('tab').nth(2)).toHaveAttribute('aria-selected','true');
+ await expect(page.getByTestId('chat-window')).toHaveCount(0);
+ await expect(page.getByTestId('bottom-action-sheet')).toHaveCount(0);
+ await page.getByRole('tab').nth(1).click({noWaitAfter:true});
+ await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected','true');
+ await row.click({noWaitAfter:true});
+ await expect(page.getByTestId('chat-window')).toBeVisible();
+ await expect(composer(page)).toBeInViewport();
+ await expect(page.getByTestId('chat-window')).toContainText('ARMY native fixture');
+ expect(turnLines(bridge.logs()).slice(before)).toEqual([]);
+});
+
+test('returning from fullscreen after a pager swipe preserves the first row tap without sending',async({page,bridge})=>{
+ await page.setViewportSize({width:390,height:844});
+ await pair(page,bridge);
+ const row=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({hasText:'ARMY native fixture'});
+ await expect(row).toHaveCount(1,{timeout:30000});
+ const before=turnLines(bridge.logs()).length;
+ const box=await row.boundingBox();if(!box)throw Error('Chat row has no bounds');
+ const y=box.y+box.height/2;
+ await page.mouse.move(box.x+box.width*.85,y);await page.mouse.down();
+ await page.mouse.move(box.x+box.width*.1,y,{steps:12});await page.mouse.up();
+ await expect(page.getByRole('tab').nth(2)).toHaveAttribute('aria-selected','true');
+ await expect(page.getByTestId('chat-window')).toHaveCount(0);
+ await page.getByRole('tab').nth(1).click({noWaitAfter:true});
+ await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected','true');
+ await page.getByRole('button',{name:/^(Create new chat|New chat)$/}).first().click({noWaitAfter:true});
+ await expect(composer(page)).toBeVisible();
+ await page.getByRole('button',{name:'Back',exact:true}).click({noWaitAfter:true});
+ await row.click({noWaitAfter:true});
+ await expect(page.getByTestId('chat-window')).toBeVisible();
+ await expect(composer(page)).toBeInViewport();
+ await expect(page.getByTestId('chat-window')).toContainText('ARMY native fixture');
+ expect(turnLines(bridge.logs()).slice(before)).toEqual([]);
+});
+
 test('send to a new Claude Code chat gets a streamed reply',async({page,bridge},info)=>{
  await pair(page,bridge);
  await page.getByRole('button',{name:'Create new chat',exact:true}).first().click({noWaitAfter:true});

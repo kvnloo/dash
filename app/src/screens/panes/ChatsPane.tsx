@@ -1,7 +1,8 @@
+import { useIsFocused } from "@react-navigation/native";
 import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { AppState, StyleSheet, Text, View } from "react-native";
 import { chatKey, type ChatSummary, type HostInfo } from "../../../../shared/protocol";
 import type { WindowOrigin } from "../../lib/chat-window";
 import { threadAppearance } from "../../components/thread-appearance";
@@ -15,16 +16,28 @@ import { haptic } from "../../haptics";
 import { chatRow } from "../../lib/chat-row";
 import { chatRowActions, chatRowMenu, pressRow, runChatRowMenu } from "../../lib/chat-row-actions";
 import { BottomActionSheet } from "../../components/BottomActionSheet";
+import { NextActionCard } from "../../components/NextActionCard";
 import { ChatListControls } from "../../components/ChatListControls";
 import { DEFAULT_CHAT_FILTERS, filterChatRows, historyNeeded, projectPath, type ChatFilters } from "../../lib/chat-filters";
 import { conversationEntries, emptyList, groupLabeler, labelList, listRows, mergeLocal, stableEntries, type ChatListRow, type ConversationEntry, type RemoteLabeled } from "../../lib/chat-index";
-import { inAppFeedbackEnabled } from "../../lib/feedback";
+import { FEEDBACK_CONVERSATION_ID, inAppFeedbackEnabled } from "../../lib/feedback";
+import { nextAction, replyObservationKey } from "../../lib/next-action";
+import { NEXT_ACTION_LATER_MS } from "../../lib/next-action-card";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { usePagedChats } from "../../hooks/usePagedChats";
-import type { ConnectionStatus, Conversation } from "../../model";
+import type { AssistantMessage, ConnectionStatus, Conversation } from "../../model";
 import type { ScreenProps } from "../../navigation";
 import { clearEndedConversations, deleteConversation, openChat, setActive, store } from "../../store/app";
 import { summaryByKey } from "../../store/chat-index-store";
+import { composerDrafts } from "../../store/composer-drafts";
+import {
+  dismissNextAction,
+  initializeReplySeen,
+  isReplySeenInitialized,
+  nextActionPreferences,
+  snoozeNextAction,
+} from "../../store/next-action-preferences";
+import { permissionRequests } from "../../net/bridge";
 import { colors, space, type } from "../../theme";
 import { confirmDestructive, timeAgo } from "../../util";
 
@@ -127,16 +140,12 @@ const Row = memo(function Row({
 }) {
   const appearance = threadAppearance({ stale: item.stale, live });
   const stale = appearance.stale;
-  const frame = useRef<View>(null);
-  // What the agent is doing now, as a thinking-orbs orb (idle orbs hold still).
   const thinking = item.thinking;
-  const press = () => pressRow(frame.current, item.id, onPress);
   const content = item.content;
   const activityShimmer = activityShimmerEnabled(thinking.phase, connectionStatus, stale);
   return (
-    <View ref={frame} collapsable={false}>
     <PressScale
-      onPress={press}
+      onPress={(event) => pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress)}
       onLongPress={() => onLongPress(item.id)}
       delayLongPress={350}
       style={[styles.row, active && !stale && styles.rowActive]}
@@ -170,7 +179,6 @@ const Row = memo(function Row({
       </View>
       <View style={styles.hairline} />
     </PressScale>
-    </View>
   );
 }, (a, b) => a.item === b.item && a.saved === b.saved && a.live === b.live && a.active === b.active && a.connectionStatus === b.connectionStatus && a.onPress === b.onPress && a.onLongPress === b.onLongPress);
 
@@ -225,12 +233,15 @@ const NO_LIST = emptyList();
 
 export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Main">, "navigation"> & { focused?: boolean }) {
   const thumb = useHandedness();
+  const screenFocused = useIsFocused();
   const conversations = store.use((s) => s.conversations);
+  const hydrated = store.use((s) => s.hydrated);
   const activeId = store.use((s) => s.activeId);
   const harnesses = store.use((s) => s.connection.harnesses);
   const connectionStatus = store.use((s) => s.connection.status);
   const hosts = store.use((s) => s.connection.hosts);
   const endpointAddress = store.use(s => s.settings?.address);
+  const chatIndexScope = store.use(s => s.settings?.chatIndexScope);
   const hasEnded = store.useSelector((s) => s.conversations.some(c => c.stale));
   const [filters, setFilters] = useState<ChatFilters>(DEFAULT_CHAT_FILTERS);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -270,6 +281,9 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
     if (rows.length === 0 && remote.enabled && remote.status === "loading") return SKELETONS;
     return filterChatRows(rows, filters, today, liveKeys);
   }, [labeled, local, endpointAddress, groupOf, remote.exhausted, remote.enabled, remote.status, filtered, filters, today, liveKeys]);
+  // Placeholder cells and real rows must not share a recycler/layout manager.
+  // Ordinary live updates keep the same instance and its visible-content anchor.
+  const listLifecycleKey = `${JSON.stringify(filters)}:${items === SKELETONS ? "loading" : "ready"}`;
   const count = useMemo(() => items.reduce((total, row) => total + (row.type === "chat" ? 1 : 0), 0), [items]);
   const filterOptions = useMemo(() => {
     const kinds = new Set(harnesses.map(h => h.id));
@@ -304,6 +318,62 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
   }), [navigation]);
   const open = actions.open;
   const remove = actions.remove;
+
+  const drafts = composerDrafts.use(all => all);
+  const permissionRecords = permissionRequests.state.use(state => state.records);
+  const preferences = nextActionPreferences.use(state => state);
+  const [appActive, setAppActive] = useState(AppState.currentState === "active");
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const listener = AppState.addEventListener("change", state => setAppActive(state === "active"));
+    return () => listener.remove();
+  }, []);
+  useEffect(() => {
+    if (!focused || !screenFocused || !appActive) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [focused, screenFocused, appActive]);
+  useEffect(() => {
+    if (!hydrated || !preferences.restored || !chatIndexScope || isReplySeenInitialized(preferences, chatIndexScope)) return;
+    const seen: Record<string, string> = {};
+    for (const chat of conversations) {
+      if (chat.endpointAddress !== endpointAddress) continue;
+      const reply = chat.messages.findLast((message): message is AssistantMessage => message.role === "assistant" && message.state === "done") ??
+        (chat.messages.length === 0 && chat.latestReply?.state === "done" ? chat.latestReply : undefined);
+      if (reply) seen[chat.id] = replyObservationKey(reply);
+    }
+    initializeReplySeen(chatIndexScope, seen);
+  }, [chatIndexScope, conversations, endpointAddress, hydrated, preferences]);
+  const attention = useMemo(() => {
+    if (!preferences.restored || !chatIndexScope || !isReplySeenInitialized(preferences, chatIndexScope)) return null;
+    const hidden = new Set(Object.keys(preferences.dismissed));
+    for (const [id, snooze] of Object.entries(preferences.snoozed)) {
+      if (snooze.until > now) hidden.add(id);
+    }
+    const draftText: Record<string, string> = {};
+    for (const [id, draft] of Object.entries(drafts)) draftText[id] = draft.text;
+    return nextAction({
+      scope: chatIndexScope,
+      conversations: conversations.filter(chat => chat.endpointAddress === endpointAddress && chat.id !== FEEDBACK_CONVERSATION_ID && (chat.openedAt !== undefined || !chat.id.startsWith("live:"))),
+      permissions: Object.values(permissionRecords),
+      draftTextByConversation: draftText,
+      now,
+      dismissed: hidden,
+      lastSeen: preferences.lastSeen,
+    });
+  }, [chatIndexScope, conversations, drafts, endpointAddress, now, permissionRecords, preferences]);
+  const attentionHeader = attention ? (
+    <View style={styles.nextUp}>
+      <Text style={styles.nextUpLabel}>Next up</Text>
+      <NextActionCard
+        action={attention}
+        onDo={action => open(action.conversationId)}
+        onLater={action => snoozeNextAction(action.id, Date.now() + NEXT_ACTION_LATER_MS)}
+        onSkip={action => dismissNextAction(action.id, Date.now())}
+      />
+    </View>
+  ) : null;
 
   const onFeedback = useCallback(
     (id: string) => {
@@ -395,7 +465,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
       )}
       <BottomActionSheet open={menuFor !== null} title={menu.title} options={menu.options} onSelect={onMenu} onClose={closeMenu} />
       <FlashList
-        key={JSON.stringify(filters)}
+        key={listLifecycleKey}
         data={items}
         renderItem={renderItem}
         getItemType={getItemType}
@@ -405,6 +475,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
         onEndReached={filters.activity !== "active" && withinDateRange && focused && connectionStatus === "online" ? loadMore : undefined}
         onEndReachedThreshold={0.5}
         ListFooterComponent={footer}
+        ListHeaderComponent={attentionHeader}
         contentContainerStyle={{ paddingBottom: 120 }}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -427,6 +498,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { color: colors.textMuted, ...type.label },
   attention: { color: colors.danger },
+  nextUp: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs, gap: space.xs },
+  nextUpLabel: { color: colors.gold, ...type.label },
   clearEnded: { paddingHorizontal: space.lg, paddingTop: space.sm, minHeight: 44, justifyContent: "center" },
   clearEndedText: { color: colors.gold, ...type.label },
   retry: { paddingHorizontal: space.lg, minHeight: 44, justifyContent: "center" },

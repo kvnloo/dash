@@ -1,10 +1,6 @@
-import type { Conversation } from "../model";
+import type { AssistantMessage, Conversation } from "../model";
 
-/**
- * The persisted Conversation intentionally does not contain permission, outbox, or
- * composer-draft state. Hermes can pass enriched snapshots from their existing
- * owners; this selector never reads stores, transport, or the clock itself.
- */
+
 export interface NextActionPermission {
   readonly conversationId: string;
   readonly sessionId: string;
@@ -12,22 +8,6 @@ export interface NextActionPermission {
   readonly requestId: string;
   readonly phase: string;
   readonly deadlineAt: number;
-  readonly error?: string | null;
-}
-
-export interface NextActionDelivery {
-  readonly conversationId: string;
-  readonly clientId: string;
-  readonly turnId: string;
-  readonly stage: string;
-  readonly retryNeeded?: boolean;
-  readonly updatedAt: number;
-}
-
-export interface NextActionConversation extends Conversation {
-  readonly pendingPermissions?: readonly NextActionPermission[];
-  readonly deliveries?: readonly NextActionDelivery[];
-  readonly draftText?: string;
 }
 
 export type NextActionKind = "approve" | "retry-send" | "read-reply" | "unstick" | "continue";
@@ -38,15 +18,17 @@ export interface NextAction {
   readonly conversationId: string;
   readonly title: string;
   readonly detail: string;
-  readonly estimateSec: number;
   readonly why: string;
 }
 
 export interface NextActionInput {
+  readonly scope: string;
   readonly conversations: readonly Conversation[];
+  readonly permissions: readonly NextActionPermission[];
+  readonly draftTextByConversation: Readonly<Record<string, string>>;
   readonly now: number;
   readonly dismissed: ReadonlySet<string>;
-  readonly lastSeen: Readonly<Record<string, number>>;
+  readonly lastSeen: Readonly<Record<string, string>>;
 }
 
 const STREAM_IDLE_MS = 5 * 60_000;
@@ -80,6 +62,14 @@ function abbreviate(value: string, limit: number): string {
 }
 
 /** JSON tuple encoding prevents collisions between IDs containing punctuation. */
+export function replyObservationKey(reply: Pick<AssistantMessage, "id" | "turnId">): string {
+  return JSON.stringify([reply.id, reply.turnId]);
+}
+export function nextActionConversationKey(scope: string, conversationId: string): string {
+  return JSON.stringify([scope, conversationId]);
+}
+
+
 function actionId(kind: NextActionKind, ...parts: string[]): string {
   return JSON.stringify([kind, ...parts]);
 }
@@ -97,10 +87,8 @@ function candidate(
   kind: NextActionKind,
   id: string,
   chat: Conversation,
-  title: string,
-  detail: string,
+  label: string,
   why: string,
-  estimateSec: number,
   at: number,
 ): RankedAction {
   return {
@@ -108,10 +96,9 @@ function candidate(
       id,
       kind,
       conversationId: chat.id,
-      title: abbreviate(title, 60),
-      detail: abbreviate(detail, 90),
+      title: abbreviate(chat.title.trim() || "Untitled chat", 60),
+      detail: label,
       why,
-      estimateSec,
     },
     priority: PRIORITY[kind],
     at,
@@ -119,22 +106,17 @@ function candidate(
 }
 
 /**
- * One deterministic, dismissible suggestion across current chat snapshots.
+ * One deterministic, dismissible suggestion across chats opened on this phone.
  * Priority is fixed; within a priority, the newest underlying observation wins.
- * Caller-provided permissions and deliveries must come from trusted parsed state,
- * never from assistant text or a regex match on a chat transcript.
+ * Permissions must come from trusted parsed state, never assistant text.
  */
 export function nextAction(input: NextActionInput): NextAction | null {
-  if (!timestamp(input.now)) return null;
+  if (!timestamp(input.now) || !validId(input.scope)) return null;
   const candidates: RankedAction[] = [];
 
-  for (const conversation of input.conversations) {
-    if (!validId(conversation.id)) continue;
-    // Optional fields are structural: a plain Conversation is valid too.
-    const chat: NextActionConversation = conversation;
-    const name = chat.title.trim() || "this chat";
-
-    for (const permission of chat.pendingPermissions ?? []) {
+  for (const chat of input.conversations) {
+    if (!validId(chat.id)) continue;
+    for (const permission of input.permissions) {
       if (
         permission.conversationId !== chat.id ||
         !validId(permission.requestId) ||
@@ -146,89 +128,63 @@ export function nextAction(input: NextActionInput): NextAction | null {
       ) continue;
       candidates.push(candidate(
         "approve",
-        actionId("approve", chat.id, permission.sessionId, permission.turnId, permission.requestId),
+        actionId("approve", input.scope, chat.id, permission.sessionId, permission.turnId, permission.requestId),
         chat,
         "Review pending approval",
-        "A host permission request is waiting in " + name + ".",
         "A current request needs your explicit decision before its deadline.",
-        30,
         timestamp(chat.updatedAt) ? chat.updatedAt : 0,
       ));
     }
 
-    for (const delivery of chat.deliveries ?? []) {
-      if (
-        delivery.conversationId !== chat.id ||
-        !validId(delivery.clientId) ||
-        !validId(delivery.turnId) ||
-        !delivery.retryNeeded ||
-        (delivery.stage !== "queued" && delivery.stage !== "sent")
-      ) continue;
+    for (const message of chat.messages) {
+      if (message.role !== "user" || message.delivery !== "failed" || !validId(message.id)) continue;
       candidates.push(candidate(
         "retry-send",
-        actionId("retry-send", chat.id, delivery.clientId, delivery.turnId),
+        actionId("retry-send", input.scope, chat.id, message.id),
         chat,
-        "Review unconfirmed send",
-        "Delivery is unconfirmed in " + name + ". Check before retrying.",
-        "The bridge has not acknowledged this delivery; retry must reuse its original IDs.",
-        45,
-        timestamp(delivery.updatedAt) ? delivery.updatedAt : 0,
+        "Review failed send",
+        "A saved user message is marked failed; investigate before sending again.",
+        timestamp(message.deliveryAt ?? message.at) ? (message.deliveryAt ?? message.at) : 0,
       ));
     }
 
-    // Legacy conversations can expose failed user sends before outbox wiring.
-    // Once outbox is supplied, its acknowledgement and retry state is authoritative.
-    if (chat.deliveries === undefined) {
-      for (const message of chat.messages) {
-        if (message.role !== "user" || message.delivery !== "failed" || !validId(message.id)) continue;
-        candidates.push(candidate(
-          "retry-send",
-          actionId("retry-send", chat.id, message.id),
-          chat,
-          "Review failed send",
-          "A message in " + name + " needs a delivery check.",
-          "A saved user message is marked failed; investigate before sending again.",
-          45,
-          timestamp(message.deliveryAt ?? message.at) ? (message.deliveryAt ?? message.at) : 0,
-        ));
-      }
-    }
-
-    const last = chat.messages.at(-1);
-    if (last?.role === "assistant" && validId(last.id)) {
-      const eventAt = Math.max(timestamp(last.at) ? last.at : 0, timestamp(chat.updatedAt) ? chat.updatedAt : 0);
-      const seen = input.lastSeen[chat.id];
-      const seenAt = typeof seen === "number" && Number.isFinite(seen) ? seen : -1;
-      if (last.state === "done" && eventAt > seenAt) {
+    const latestAssistant = chat.messages.findLast((message): message is AssistantMessage => message.role === "assistant") ?? (chat.messages.length === 0 ? chat.latestReply : undefined);
+    const latestCompleted = chat.messages.findLast((message): message is AssistantMessage => message.role === "assistant" && message.state === "done") ??
+      (chat.messages.length === 0 && chat.latestReply?.state === "done" ? chat.latestReply : undefined);
+    if (latestCompleted && validId(latestCompleted.id)) {
+      const eventAt = timestamp(latestCompleted.at) ? latestCompleted.at : 0;
+      const seen = input.lastSeen[nextActionConversationKey(input.scope, chat.id)];
+      const observation = replyObservationKey(latestCompleted);
+      if (observation !== seen) {
         candidates.push(candidate(
           "read-reply",
-          actionId("read-reply", chat.id, last.id, last.turnId),
+          actionId("read-reply", input.scope, chat.id, latestCompleted.id, latestCompleted.turnId),
           chat,
           "Read completed reply",
-          "A new assistant reply is ready in " + name + ".",
-          "This reply was completed after you last viewed its conversation.",
-          45,
+          "This reply has not been viewed in its conversation.",
           eventAt,
         ));
       }
+    }
+    if (latestAssistant && validId(latestAssistant.id)) {
+      const eventAt = timestamp(latestAssistant.at) ? latestAssistant.at : 0;
+      const activityAt = Math.max(eventAt, timestamp(chat.updatedAt) ? chat.updatedAt : 0);
       if (
-        last.state === "streaming" &&
-        input.now - eventAt > STREAM_IDLE_MS
+        latestAssistant.state === "streaming" &&
+        input.now - activityAt > STREAM_IDLE_MS
       ) {
         candidates.push(candidate(
           "unstick",
-          actionId("unstick", chat.id, last.turnId, last.id),
+          actionId("unstick", input.scope, chat.id, latestAssistant.turnId, latestAssistant.id),
           chat,
           "Check idle turn",
-          name + " has had no recorded update for over five minutes.",
           "The assistant appears idle; inspect the turn before trying to recover it.",
-          60,
-          eventAt,
+          activityAt,
         ));
       }
     }
 
-    const draft = chat.draftText;
+    const draft = input.draftTextByConversation[chat.id];
     if (
       typeof draft === "string" &&
       draft.trim().length > 0 &&
@@ -236,12 +192,10 @@ export function nextAction(input: NextActionInput): NextAction | null {
     ) {
       candidates.push(candidate(
         "continue",
-        actionId("continue", chat.id, draftFingerprint(draft)),
+        actionId("continue", input.scope, chat.id, draftFingerprint(draft)),
         chat,
         "Continue unfinished draft",
-        name + " has text waiting in the composer.",
         "A saved draft is waiting in an ended or inactive conversation.",
-        90,
         timestamp(chat.updatedAt) ? chat.updatedAt : 0,
       ));
     }
