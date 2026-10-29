@@ -8,8 +8,9 @@ agent. No route mocks, no store seeding, no phone, no live services.
 bun run test            # = scripts/army.sh: web export -> army -> O15 receipt for HEAD
 ```
 
-Needs bun, node, `bwrap` with unprivileged user namespaces, and Playwright
-Chromium (`node node_modules/playwright/cli.js install chromium`). Runs headless
+Needs bun, node, `bwrap` with unprivileged user namespaces, `ffmpeg`, and Playwright
+Chromium (`node node_modules/playwright/cli.js install chromium`). Channel-denial
+journeys also need HEAD's parent, so shallow CI checkouts use depth 2. Runs headless
 on any host and in CI. The MBP headed variant on a private headless compositor
 is `python3 e2e/mbp-army/run.py <name> <workers>` (see `e2e/mbp-army/README.md`).
 
@@ -113,6 +114,13 @@ native/profile/remote targets keep their original routing and lease rules.
 genuine changed roster after the executor exits, then require a second ACP
 `session/load` with the original native id. Noncatalog continuation requires
 the existing matching generic local harness profile, not an arbitrary profile.
+
+`live-search-ownership.spec.ts` uses an actual UI-created durable chat as its
+legacy upgrade input before it tests ambiguous saved ownership and native
+recovery after local deletion. New ACP chats already have a confirmed host and
+must not be treated as unowned. The subagent-strip journey opens Orchestra's
+Fleet view before it checks full-graph classification; hidden panes and the
+Lineage projection are not the full fleet.
 
 These browser fixtures and controlled production-consumer tests are not S25 or
 native-host qualification. They do not establish live MBP/Groot harness connectivity,

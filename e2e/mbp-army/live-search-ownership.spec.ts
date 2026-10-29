@@ -45,8 +45,34 @@ test('live search restores the paired OMP owner after local deletion without ope
   await page.getByRole('button', { name: 'Close chat window', exact: true }).click();
   expect(await runningOwners(paired)).toEqual([]);
 
-  // Both native owners must be present in the first reconnected snapshot. A partial
-  // snapshot could legitimately establish ownership for the previously unscoped chat.
+  // Emulate an upgraded saved chat that predates confirmed ACP host binding.
+  // A new chat now records that binding from its authenticated session event.
+  const savedRowId = await chatRow(page).getAttribute('data-testid');
+  if (!savedRowId) throw Error('Missing real saved chat row');
+  const savedId = savedRowId.slice('chat-row-'.length);
+  await expect.poll(() => page.evaluate(id => {
+   const entries = JSON.parse(localStorage.getItem('dash.conversations.index.v3') || '[]');
+   return entries.some((c: { id: string; sessionId?: string; targetHostId?: string }) =>
+    c.id === id && c.sessionId === 'army-fixture-session' && c.targetHostId === 'groot');
+  }, savedId)).toBe(true);
+  await page.evaluate(id => {
+   const key = 'dash.conversations.index.v3';
+   const entries = JSON.parse(localStorage.getItem(key)!);
+   const chat = entries.find((c: { id: string }) => c.id === id);
+   if (!chat?.endpointAddress) throw Error('Missing UI-owned durable source');
+   delete chat.targetHostId; delete chat.profileId; chat.stale = true;
+   for (const area of ['durable', 'cache']) {
+    const file = `dash.${area}.files.v2/${encodeURIComponent(id)}.json`;
+    const raw = localStorage.getItem(file);
+    if (!raw) { if (area === 'durable') throw Error('Missing durable file'); continue; }
+    const record = JSON.parse(raw);
+    delete record.targetHostId; delete record.profileId; record.stale = true;
+    localStorage.setItem(file, JSON.stringify(record));
+   }
+   localStorage.setItem(key, JSON.stringify(entries));
+  }, savedId);
+  await page.reload();
+  await page.getByRole('tab').nth(1).click();
   await page.context().setOffline(true);
   await paired.stop();
   await writeFile(peerSignal, 'release\n');
