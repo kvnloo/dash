@@ -23,6 +23,7 @@ import { pruneArchive } from "./prune-archive";
 import { createStore } from "./createStore";
 import { dequeue, enqueue, notifyTurnSettled } from "./queue";
 import { nextPendingSend, parkMessage } from "./offline-send";
+import { clearNextActionPreferences } from "./next-action-preferences";
 import { combineQueued, mergedQueue, queuedParts, reorderQueued, queueMergeError } from "../lib/pending-queue";
 import { replyText, replySummaries, replyStatus } from "./text";
 import { appendActivity } from "../lib/message-details";
@@ -262,6 +263,7 @@ export async function forgetEverything(send: (message: ClientMessage) => boolean
     activeId: null,
     connection: { status: "idle", harnesses: [], hosts: [] },
   }));
+  await clearNextActionPreferences();
 }
 
 // ---- conversations ---------------------------------------------------------

@@ -106,7 +106,11 @@ function previewText(chat: Conversation): string | undefined {
 export function indexEntry(chat: Conversation): string {
   const { messages: _messages, viewOnly: _viewOnly, ...meta } = chat;
   const preview = previewText(chat);
-  return JSON.stringify({ ...meta, ...(preview ? { preview } : {}), hasPending: hasPending(chat) });
+  const last = chat.messages.at(-1);
+  const latestReply = last?.role === "assistant"
+    ? { id: last.id, turnId: last.turnId, at: last.at, state: last.state }
+    : last ? undefined : chat.latestReply;
+  return JSON.stringify({ ...meta, latestReply, ...(preview ? { preview } : {}), hasPending: hasPending(chat) });
 }
 export function parseIndex(raw: string | null): { chat: Conversation; part: string; hasPending: boolean }[] | null {
   if (!raw) return null;

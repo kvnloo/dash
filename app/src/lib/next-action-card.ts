@@ -1,21 +1,6 @@
-/**
- * Standalone DF-115 presentation model.
- * NextAction is a structural copy of the selector contract in issue #444.
- * Keep the two shapes aligned when Hermes connects the components.
- */
-export type NextActionKind = "approve" | "retry-send" | "read-reply" | "unstick" | "continue";
+import type { NextAction } from "./next-action";
 
-export interface NextAction {
-  id: string;
-  kind: NextActionKind;
-  conversationId: string;
-  title: string;
-  detail: string;
-  estimateSec: number;
-  why: string;
-}
-
-export type NextActionCardButtonId = "do" | "later" | "skip" | "edit" | "why";
+export type NextActionCardButtonId = "do" | "later" | "skip" | "why";
 
 export interface NextActionCardButton {
   id: NextActionCardButtonId;
@@ -36,7 +21,6 @@ export interface NextActionCardHandlers {
   onDo: (action: NextAction) => void;
   onLater: (action: NextAction) => void;
   onSkip: (action: NextAction) => void;
-  onEdit: (action: NextAction) => void;
 }
 
 /** The caller owns persistence and the one-hour snooze deadline. */
@@ -58,27 +42,21 @@ export function cardModel(action: NextAction, options: { expandedWhy: boolean })
     buttons: [
       {
         id: "do",
-        label: "Do",
-        accessibilityLabel: "Do next action: " + subject,
-        accessibilityHint: "Open the conversation to handle this action.",
+        label: "Open",
+        accessibilityLabel: "Open next action: " + subject,
+        accessibilityHint: "Open this conversation without taking the suggested action.",
       },
       {
         id: "later",
         label: "Later",
         accessibilityLabel: "Snooze for one hour: " + subject,
-        accessibilityHint: "Tell the app to remind you about this suggestion in one hour.",
+        accessibilityHint: "Hide this suggestion for one hour in the app. No notification is sent.",
       },
       {
         id: "skip",
         label: "Skip",
         accessibilityLabel: "Skip next action: " + subject,
         accessibilityHint: "Dismiss this suggestion without performing it.",
-      },
-      {
-        id: "edit",
-        label: "Edit",
-        accessibilityLabel: "Edit next action: " + subject,
-        accessibilityHint: "Open the conversation to revise this suggestion.",
       },
       {
         id: "why",
@@ -91,7 +69,7 @@ export function cardModel(action: NextAction, options: { expandedWhy: boolean })
   };
 }
 
-/** Dispatch only an intent. Permission, execution, snooze, and dismissal belong to the caller. */
+/** Dispatch only an intent. Navigation, snooze, and dismissal belong to the caller. */
 export function dispatchCardAction(
   id: Exclude<NextActionCardButtonId, "why">,
   action: NextAction,
@@ -106,9 +84,6 @@ export function dispatchCardAction(
       return;
     case "skip":
       handlers.onSkip(action);
-      return;
-    case "edit":
-      handlers.onEdit(action);
       return;
   }
 }

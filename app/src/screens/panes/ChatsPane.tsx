@@ -1,7 +1,8 @@
+import { useIsFocused } from "@react-navigation/native";
 import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { AppState, StyleSheet, Text, View } from "react-native";
 import { chatKey, type ChatSummary, type HostInfo } from "../../../../shared/protocol";
 import type { WindowOrigin } from "../../lib/chat-window";
 import { threadAppearance } from "../../components/thread-appearance";
@@ -15,16 +16,27 @@ import { haptic } from "../../haptics";
 import { chatRow } from "../../lib/chat-row";
 import { chatRowActions, chatRowMenu, pressRow, runChatRowMenu } from "../../lib/chat-row-actions";
 import { BottomActionSheet } from "../../components/BottomActionSheet";
+import { NextActionCard } from "../../components/NextActionCard";
 import { ChatListControls } from "../../components/ChatListControls";
 import { DEFAULT_CHAT_FILTERS, filterChatRows, historyNeeded, projectPath, type ChatFilters } from "../../lib/chat-filters";
 import { conversationEntries, emptyList, groupLabeler, labelList, listRows, mergeLocal, stableEntries, type ChatListRow, type ConversationEntry, type RemoteLabeled } from "../../lib/chat-index";
-import { inAppFeedbackEnabled } from "../../lib/feedback";
+import { FEEDBACK_CONVERSATION_ID, inAppFeedbackEnabled } from "../../lib/feedback";
+import { nextAction } from "../../lib/next-action";
+import { NEXT_ACTION_LATER_MS } from "../../lib/next-action-card";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { usePagedChats } from "../../hooks/usePagedChats";
 import type { ConnectionStatus, Conversation } from "../../model";
 import type { ScreenProps } from "../../navigation";
 import { clearEndedConversations, deleteConversation, openChat, setActive, store } from "../../store/app";
 import { summaryByKey } from "../../store/chat-index-store";
+import { composerDrafts } from "../../store/composer-drafts";
+import {
+  dismissNextAction,
+  initializeReplySeen,
+  nextActionPreferences,
+  snoozeNextAction,
+} from "../../store/next-action-preferences";
+import { permissionRequests } from "../../net/bridge";
 import { colors, space, type } from "../../theme";
 import { confirmDestructive, timeAgo } from "../../util";
 
@@ -220,7 +232,9 @@ const NO_LIST = emptyList();
 
 export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Main">, "navigation"> & { focused?: boolean }) {
   const thumb = useHandedness();
+  const screenFocused = useIsFocused();
   const conversations = store.use((s) => s.conversations);
+  const hydrated = store.use((s) => s.hydrated);
   const activeId = store.use((s) => s.activeId);
   const harnesses = store.use((s) => s.connection.harnesses);
   const connectionStatus = store.use((s) => s.connection.status);
@@ -297,6 +311,62 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
   }), [navigation]);
   const open = actions.open;
   const remove = actions.remove;
+
+  const drafts = composerDrafts.use(all => all);
+  const permissionRecords = permissionRequests.state.use(state => state.records);
+  const preferences = nextActionPreferences.use(state => state);
+  const [appActive, setAppActive] = useState(AppState.currentState === "active");
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const listener = AppState.addEventListener("change", state => setAppActive(state === "active"));
+    return () => listener.remove();
+  }, []);
+  useEffect(() => {
+    if (!focused || !screenFocused || !appActive) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [focused, screenFocused, appActive]);
+  useEffect(() => {
+    if (!hydrated || !preferences.restored || preferences.initialized) return;
+    const seen: Record<string, number> = {};
+    for (const chat of conversations) {
+      const latest = chat.messages.at(-1);
+      if (latest?.role === "assistant" && latest.state === "done") {
+        seen[chat.id] = latest.at;
+      }
+      else if (chat.messages.length === 0) seen[chat.id] = chat.updatedAt;
+    }
+    initializeReplySeen(seen);
+  }, [conversations, hydrated, preferences.initialized, preferences.restored]);
+  const attention = useMemo(() => {
+    if (!preferences.restored || !preferences.initialized) return null;
+    const hidden = new Set(Object.keys(preferences.dismissed));
+    for (const [id, snooze] of Object.entries(preferences.snoozed)) {
+      if (snooze.until > now) hidden.add(id);
+    }
+    const draftText: Record<string, string> = {};
+    for (const [id, draft] of Object.entries(drafts)) draftText[id] = draft.text;
+    return nextAction({
+      conversations: conversations.filter(chat => chat.id !== FEEDBACK_CONVERSATION_ID && (chat.openedAt !== undefined || !chat.id.startsWith("live:"))),
+      permissions: Object.values(permissionRecords),
+      draftTextByConversation: draftText,
+      now,
+      dismissed: hidden,
+      lastSeen: preferences.lastSeen,
+    });
+  }, [conversations, drafts, now, permissionRecords, preferences]);
+  const attentionHeader = attention ? (
+    <View style={styles.nextUp}>
+      <Text style={styles.nextUpLabel}>Next up</Text>
+      <NextActionCard
+        action={attention}
+        onDo={action => open(action.conversationId)}
+        onLater={action => snoozeNextAction(action.id, Date.now() + NEXT_ACTION_LATER_MS)}
+        onSkip={action => dismissNextAction(action.id, Date.now())}
+      />
+    </View>
+  ) : null;
 
   const onFeedback = useCallback(
     (id: string) => {
@@ -398,6 +468,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
         onEndReached={withinDateRange && focused && connectionStatus === "online" ? loadMore : undefined}
         onEndReachedThreshold={0.5}
         ListFooterComponent={footer}
+        ListHeaderComponent={attentionHeader}
         contentContainerStyle={{ paddingBottom: 120 }}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -420,6 +491,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { color: colors.textMuted, ...type.label },
   attention: { color: colors.danger },
+  nextUp: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs, gap: space.xs },
+  nextUpLabel: { color: colors.gold, ...type.label },
   clearEnded: { paddingHorizontal: space.lg, paddingTop: space.sm, minHeight: 44, justifyContent: "center" },
   clearEndedText: { color: colors.gold, ...type.label },
   retry: { paddingHorizontal: space.lg, minHeight: 44, justifyContent: "center" },

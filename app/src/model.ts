@@ -130,6 +130,8 @@ export interface Conversation {
   viewOnly?: boolean;
   /** Short last-message text kept in the conversation index while the transcript is not loaded. */
   preview?: string;
+  /** Latest reply identity in the light index, so attention does not load every transcript. */
+  latestReply?: Pick<AssistantMessage, "id" | "turnId" | "at" | "state">;
   messages: Message[];
 }
 
@@ -283,6 +285,9 @@ export function parseConversation(raw: unknown): Conversation | null {
     stale: raw.stale === true,
     ...(typeof raw.openedAt === "number" ? { openedAt: raw.openedAt } : {}),
     ...(typeof raw.preview === "string" && raw.preview ? { preview: raw.preview.slice(0, 200) } : {}),
+    latestReply: isRecord(raw.latestReply) && nonBlank(raw.latestReply.id) && nonBlank(raw.latestReply.turnId) &&
+      finite(raw.latestReply.at) && isAssistantState(raw.latestReply.state)
+      ? { id: raw.latestReply.id, turnId: raw.latestReply.turnId, at: raw.latestReply.at, state: raw.latestReply.state } : undefined,
     messages: displayedMessages,
   };
 }

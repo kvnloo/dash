@@ -1,10 +1,5 @@
 import type { Conversation } from "../model";
 
-/**
- * The persisted Conversation intentionally does not contain permission, outbox, or
- * composer-draft state. Hermes can pass enriched snapshots from their existing
- * owners; this selector never reads stores, transport, or the clock itself.
- */
 export interface NextActionPermission {
   readonly conversationId: string;
   readonly sessionId: string;
@@ -12,22 +7,6 @@ export interface NextActionPermission {
   readonly requestId: string;
   readonly phase: string;
   readonly deadlineAt: number;
-  readonly error?: string | null;
-}
-
-export interface NextActionDelivery {
-  readonly conversationId: string;
-  readonly clientId: string;
-  readonly turnId: string;
-  readonly stage: string;
-  readonly retryNeeded?: boolean;
-  readonly updatedAt: number;
-}
-
-export interface NextActionConversation extends Conversation {
-  readonly pendingPermissions?: readonly NextActionPermission[];
-  readonly deliveries?: readonly NextActionDelivery[];
-  readonly draftText?: string;
 }
 
 export type NextActionKind = "approve" | "retry-send" | "read-reply" | "unstick" | "continue";
@@ -44,6 +23,8 @@ export interface NextAction {
 
 export interface NextActionInput {
   readonly conversations: readonly Conversation[];
+  readonly permissions: readonly NextActionPermission[];
+  readonly draftTextByConversation: Readonly<Record<string, string>>;
   readonly now: number;
   readonly dismissed: ReadonlySet<string>;
   readonly lastSeen: Readonly<Record<string, number>>;
@@ -119,22 +100,18 @@ function candidate(
 }
 
 /**
- * One deterministic, dismissible suggestion across current chat snapshots.
+ * One deterministic, dismissible suggestion across chats opened on this phone.
  * Priority is fixed; within a priority, the newest underlying observation wins.
- * Caller-provided permissions and deliveries must come from trusted parsed state,
- * never from assistant text or a regex match on a chat transcript.
+ * Permissions must come from trusted parsed state, never assistant text.
  */
 export function nextAction(input: NextActionInput): NextAction | null {
   if (!timestamp(input.now)) return null;
   const candidates: RankedAction[] = [];
 
-  for (const conversation of input.conversations) {
-    if (!validId(conversation.id)) continue;
-    // Optional fields are structural: a plain Conversation is valid too.
-    const chat: NextActionConversation = conversation;
+  for (const chat of input.conversations) {
+    if (!validId(chat.id)) continue;
     const name = chat.title.trim() || "this chat";
-
-    for (const permission of chat.pendingPermissions ?? []) {
+    for (const permission of input.permissions) {
       if (
         permission.conversationId !== chat.id ||
         !validId(permission.requestId) ||
@@ -156,50 +133,27 @@ export function nextAction(input: NextActionInput): NextAction | null {
       ));
     }
 
-    for (const delivery of chat.deliveries ?? []) {
-      if (
-        delivery.conversationId !== chat.id ||
-        !validId(delivery.clientId) ||
-        !validId(delivery.turnId) ||
-        !delivery.retryNeeded ||
-        (delivery.stage !== "queued" && delivery.stage !== "sent")
-      ) continue;
+    for (const message of chat.messages) {
+      if (message.role !== "user" || message.delivery !== "failed" || !validId(message.id)) continue;
       candidates.push(candidate(
         "retry-send",
-        actionId("retry-send", chat.id, delivery.clientId, delivery.turnId),
+        actionId("retry-send", chat.id, message.id),
         chat,
-        "Review unconfirmed send",
-        "Delivery is unconfirmed in " + name + ". Check before retrying.",
-        "The bridge has not acknowledged this delivery; retry must reuse its original IDs.",
+        "Review failed send",
+        "A message in " + name + " needs a delivery check.",
+        "A saved user message is marked failed; investigate before sending again.",
         45,
-        timestamp(delivery.updatedAt) ? delivery.updatedAt : 0,
+        timestamp(message.deliveryAt ?? message.at) ? (message.deliveryAt ?? message.at) : 0,
       ));
     }
 
-    // Legacy conversations can expose failed user sends before outbox wiring.
-    // Once outbox is supplied, its acknowledgement and retry state is authoritative.
-    if (chat.deliveries === undefined) {
-      for (const message of chat.messages) {
-        if (message.role !== "user" || message.delivery !== "failed" || !validId(message.id)) continue;
-        candidates.push(candidate(
-          "retry-send",
-          actionId("retry-send", chat.id, message.id),
-          chat,
-          "Review failed send",
-          "A message in " + name + " needs a delivery check.",
-          "A saved user message is marked failed; investigate before sending again.",
-          45,
-          timestamp(message.deliveryAt ?? message.at) ? (message.deliveryAt ?? message.at) : 0,
-        ));
-      }
-    }
-
-    const last = chat.messages.at(-1);
-    if (last?.role === "assistant" && validId(last.id)) {
-      const eventAt = Math.max(timestamp(last.at) ? last.at : 0, timestamp(chat.updatedAt) ? chat.updatedAt : 0);
+    const message = chat.messages.at(-1);
+    const last = message?.role === "assistant" ? message : chat.messages.length === 0 ? chat.latestReply : undefined;
+    if (last && validId(last.id)) {
+      const eventAt = timestamp(last.at) ? last.at : 0;
       const seen = input.lastSeen[chat.id];
       const seenAt = typeof seen === "number" && Number.isFinite(seen) ? seen : -1;
-      if (last.state === "done" && eventAt > seenAt) {
+      if (!chat.stale && last.state === "done" && eventAt > seenAt) {
         candidates.push(candidate(
           "read-reply",
           actionId("read-reply", chat.id, last.id, last.turnId),
@@ -211,9 +165,10 @@ export function nextAction(input: NextActionInput): NextAction | null {
           eventAt,
         ));
       }
+      const activityAt = Math.max(eventAt, timestamp(chat.updatedAt) ? chat.updatedAt : 0);
       if (
         last.state === "streaming" &&
-        input.now - eventAt > STREAM_IDLE_MS
+        input.now - activityAt > STREAM_IDLE_MS
       ) {
         candidates.push(candidate(
           "unstick",
@@ -223,12 +178,12 @@ export function nextAction(input: NextActionInput): NextAction | null {
           name + " has had no recorded update for over five minutes.",
           "The assistant appears idle; inspect the turn before trying to recover it.",
           60,
-          eventAt,
+          activityAt,
         ));
       }
     }
 
-    const draft = chat.draftText;
+    const draft = input.draftTextByConversation[chat.id];
     if (
       typeof draft === "string" &&
       draft.trim().length > 0 &&
