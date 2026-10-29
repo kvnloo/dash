@@ -97,6 +97,9 @@ evidence; the test removes its generated bundles and compiler cache.
 including asynchronous cache hydration of an inactive Hermes transcript before
 its fresh native request. The delayed, unknown and unchanged response cases also
 cover partial native-user persistence and canonical catch-up.
+The reopened-chat journey holds actual older HTTP responses across a closed visit.
+It changes a row in the isolated native journal without changing its keyset,
+then checks the current prompt through the rendered rail and transcript.
 `history-lifecycle.spec.ts` exercises controlled production-consumer transitions:
 endpoint A → B → A with a newer cursor, closed/reopened loader ownership,
 partial native persistence/catch-up, nonempty shared-anchor rewind, and a native

@@ -11,10 +11,11 @@ async function historyRelay(bridge: Bridge) {
 const [port] = process.argv.slice(2);
 let held = []; let holding = true; let delivered = 0;
 let freezeNative = false; let nativeHeld = 0; const nativeWaiters = [];
+let holdOlder = false; let olderDelivered = 0; const olderWaiters = []; const olderSnapshots = [];
 const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
   fetch(req, server) {
     const url = new URL(req.url);
-    if (url.pathname === '/army-held') return Response.json({ held: held.length, delivered, nativeHeld });
+    if (url.pathname === '/army-held') return Response.json({ held: held.length, delivered, nativeHeld, olderHeld: olderWaiters.length, olderDelivered, olderSnapshots });
     if (url.pathname === '/army-freeze-native' && req.method === 'POST') {
       freezeNative = true; return Response.json({ frozen: true });
     }
@@ -22,6 +23,15 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
       freezeNative = false;
       for (const release of nativeWaiters.splice(0)) release();
       return Response.json({ released: true });
+    }
+    if (url.pathname === '/army-freeze-older' && req.method === 'POST') {
+      holdOlder = true; return Response.json({ frozen: true });
+    }
+    if (url.pathname === '/army-release-one-older' && req.method === 'POST') {
+      const release = olderWaiters.shift();
+      if (!release) return new Response('No held older page', { status: 409 });
+      olderDelivered++; release();
+      return Response.json({ olderDelivered });
     }
     if (url.pathname === '/army-release' && req.method === 'POST') {
       holding = false;
@@ -40,6 +50,11 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
     const forwarded = new Request('http://127.0.0.1:' + port + url.pathname + url.search, req);
     forwarded.headers.set('host', '127.0.0.1:' + port);
     return fetch(forwarded).then(async response => {
+      if (holdOlder && url.pathname === '/chats/history' && url.searchParams.has('before')) {
+        const page = await response.clone().json();
+        olderSnapshots.push({ before: url.searchParams.get('before'), prompts: page.messages.filter(row => row.role === 'user').map(row => row.text) });
+        await new Promise(resolve => olderWaiters.push(resolve));
+      }
       if (freezeNative && (url.pathname === '/hermes/activity' || url.pathname === '/chats/history')) {
         nativeHeld++;
         await new Promise(resolve => nativeWaiters.push(resolve));
@@ -250,5 +265,71 @@ test('cached inactive Hermes chat hydrates before requesting its fresh owned new
     await expect.poll(async () => (await (await fetch(control + '/army-held')).json()).nativeHeld).toBeGreaterThan(0);
     await writeFile(info.outputPath('cached-history-ordering.json'), JSON.stringify({ freshFrame, rowId, relay: await (await fetch(control + '/army-held')).json() }, null, 2));
     await page.screenshot({ path: info.outputPath('final.png') });
+  } finally { await relay.stop(); await bridge.dispose(); }
+});
+
+test('reopening native chat rejects its closed visit older page and displays the current source prompts', async ({ page }, info) => {
+  const bridge = await createBridge(true, { env: { ARMY_LONG_HERMES: '30' } });
+  const relay = await historyRelay(bridge);
+  const control = `http://127.0.0.1:${relay.port}`;
+  const refreshedPrompt = 'ARMY refreshed Hermes prompt 001';
+  try {
+    await fetch(control + '/army-release', { method: 'POST' });
+    await fetch(control + '/army-freeze-older', { method: 'POST' });
+    await pair(page, bridge);
+    await page.getByRole('button', { name: 'Open settings', exact: true }).first().click();
+    await page.getByRole('textbox', { name: 'Address', exact: true }).fill(`127.0.0.1:${relay.port}`);
+    await page.getByRole('button', { name: 'Save and reconnect', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save and reconnect', exact: true })).toBeHidden();
+    const row = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ has: page.getByText(LONG_HERMES_TITLE, { exact: true }) });
+    await expect(row).toHaveCount(1);
+    await row.click();
+    await expect(page.getByText(/^ARMY hermes answer 030 /)).toBeVisible();
+    const rail = page.getByRole('slider', { name: 'Prompt navigator', exact: true });
+    const ticks = rail.getByTestId('rail-tick');
+    await expect.poll(async () => (await (await fetch(control + '/army-held')).json()).olderHeld).toBe(1);
+    await expect(ticks).toHaveCount(25);
+
+    // Change the real isolated native row after its first HTTP page was produced.
+    // Timestamp and id stay fixed, so reopening legitimately uses the same keyset cursor.
+    const writer = spawn(process.env.ARMY_BUN || 'bun', ['-e', `
+      const { Database } = require('bun:sqlite');
+      const [path, text] = process.argv.slice(1);
+      const db = new Database(path);
+      const changed = db.query('UPDATE messages SET content=? WHERE session_id=? AND role=? AND content=?')
+        .run(text,'army-long-hermes','user','ARMY hermes prompt 001').changes;
+      db.close();
+      process.exit(changed === 1 ? 0 : 1);
+    `, join(bridge.dir, '.hermes', 'state.db'), refreshedPrompt], { stdio: 'ignore' });
+    const [code] = await once(writer, 'exit');
+    expect(code).toBe(0);
+    await page.getByRole('button', { name: 'Close chat window', exact: true }).click();
+    await page.getByRole('button', { name: /^(Create new chat|New chat)$/ }).first().click();
+    await send(page, 'ARMY leave held older history visit');
+    await expect(page.getByText('ARMY_STREAM_BEGIN ARMY_REPLY: ARMY leave held older history visit', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await row.click();
+    await expect(page.getByText(/^ARMY hermes answer 030 /)).toBeVisible();
+    await expect.poll(async () => (await (await fetch(control + '/army-held')).json()).olderHeld).toBe(2);
+    const snapshot = await (await fetch(control + '/army-held')).json();
+    expect(snapshot.olderSnapshots[0].before).toBe(snapshot.olderSnapshots[1].before);
+    expect(snapshot.olderSnapshots[0].prompts).toContain('ARMY hermes prompt 001');
+    expect(snapshot.olderSnapshots[1].prompts).toContain(refreshedPrompt);
+
+    const oldResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/chats/history' && new URL(response.url()).searchParams.has('before'));
+    expect((await fetch(control + '/army-release-one-older', { method: 'POST' })).status).toBe(200);
+    await (await oldResponse).finished();
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expect(ticks).toHaveCount(25);
+    expect((await fetch(control + '/army-release-one-older', { method: 'POST' })).status).toBe(200);
+    await expect(ticks).toHaveCount(30);
+    const box = await rail.boundingBox();
+    if (!box) throw Error('Current source prompt rail has no rendered bounds');
+    await page.mouse.click(box.x + box.width / 2, box.y + 1);
+    await expect(page.getByLabel('Turn preview', { exact: true })).toContainText(refreshedPrompt);
+    await page.getByRole('button', { name: 'Jump', exact: true }).click();
+    await expect(page.getByTestId('transcript-viewport').getByText(refreshedPrompt, { exact: true })).toBeInViewport();
+    await page.screenshot({ path: info.outputPath('final.png') });
+    await writeFile(info.outputPath('history-visit-source.json'), JSON.stringify(snapshot, null, 2));
   } finally { await relay.stop(); await bridge.dispose(); }
 });

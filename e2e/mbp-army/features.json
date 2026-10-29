@@ -15,6 +15,7 @@
                "history ownership unknown newest response preserves its transcript owner",
                "history ownership unchanged newest response preserves its transcript owner",
                "cached inactive Hermes chat hydrates before requesting its fresh owned newest window",
+               "reopening native chat rejects its closed visit older page and displays the current source prompts",
                "history loader clears its flag after endpoint ABA and a newer cursor without admitting the stale page",
                "history loader from a closed visit cannot clear the replacement visit loading flag or supply its page",
                "background history from a closed visit cannot populate a reopened chat with the same cursor",
