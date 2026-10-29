@@ -131,6 +131,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       previous.down.badge === next.down.badge && previous.up.visible === next.up.visible &&
       previous.up.top === next.up.top ? previous : next);
   }, []);
+  const [following, setFollowing] = useState(true);
+  const setFollow = useCallback((next: boolean) => {
+    followRef.current = next;
+    setFollowing(next);
+    if (next) unseenMessages.current = 0;
+    updateQuickScroll(next);
+  }, [updateQuickScroll]);
   /** The furthest the transcript can scroll, as of its last scroll event. */
   const scrollMax = useRef(Number.POSITIVE_INFINITY);
   // Web: when the owner last scrolled the transcript themselves (wheel, touch, pointer, keys). Web has no
@@ -146,19 +153,23 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       // Typing in a field is not scrolling, and a mouse moving with no button down is not a drag.
       if (event.type === "keydown" && event.target instanceof HTMLElement && event.target.closest("input, textarea, [contenteditable=\"true\"]")) return;
       if (event.type === "pointermove" && event instanceof PointerEvent && event.buttons === 0) return;
+      // Pressing a control over or in the transcript (Latest, the quick scroll button, Show full message, a
+      // rail action) is not scrolling. Counting it let the list's own follow scrolls in the next second
+      // detach following again, so Latest left the view short of the streaming reply.
+      if ((event.type === "pointerdown" || event.type === "touchstart" || event.type === "keydown") && event.target instanceof Element
+        && event.target.closest("button, a, [role=\"button\"], [role=\"link\"], [role=\"switch\"], [role=\"tab\"]")) return;
       userScrollAt.current = Date.now();
+      // Wheeling up over the transcript leaves the latest message: stop following now. Waiting for the scroll
+      // event is not enough, because with threaded scrolling it can arrive before this (passive) wheel event
+      // reaches the page, or over a second later on a loaded device, and then it reads as the list's own
+      // scroll and the next streamed chunk pulls the view back down.
+      if (event instanceof WheelEvent && event.deltaY < 0 && followRef.current && previousOffset.current > 1
+        && !(event.target instanceof Element && event.target.closest("button, [role=\"button\"], [role=\"adjustable\"]"))) setFollow(false);
     };
     const events = ["wheel", "touchstart", "touchmove", "pointerdown", "pointermove", "keydown"];
     for (const type of events) element.addEventListener(type, mark, { capture: true, passive: true });
     return () => { for (const type of events) element.removeEventListener(type, mark, { capture: true }); };
-  }, []);
-  const [following, setFollowing] = useState(true);
-  const setFollow = useCallback((next: boolean) => {
-    followRef.current = next;
-    setFollowing(next);
-    if (next) unseenMessages.current = 0;
-    updateQuickScroll(next);
-  }, [updateQuickScroll]);
+  }, [setFollow]);
   const scrollToNewest = useCallback(() => {
     if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
   }, []);
