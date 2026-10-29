@@ -17,7 +17,7 @@ import { ensureMicPermission, permissionRequestInFlight } from "../lib/mic-permi
 import { createStore } from "../store/createStore";
 import { VoiceOrbOverlay } from "./VoiceOrbOverlay";
 import { debugUi } from "../debug/ui-store";
-import { voiceTarget } from "../lib/voice-target";
+import { attachedHermes, voiceTarget } from "../lib/voice-target";
 import { voicePhase } from "../lib/voice-phase";
 
 /** One logcat line per failed voice stage (phone-watch turns these into incidents). Notes never carry secrets. */
@@ -116,10 +116,12 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     // Retry is pinned to the original conversation, even if the user navigated elsewhere.
     // Conversation mode is usually opened from the main screen, where the open chat is rarely an
     // attached Hermes chat: bind the most recent attached one instead of refusing before the mic.
-    const conversation = (state.phase === "error" ? attached.current : null) ??
-      voiceTarget(store.get().conversations, store.get().activeId);
+    const retryTarget = state.phase === "error" ? attached.current : null;
+    const conversation = retryTarget
+      ? (attachedHermes(retryTarget, settings?.address) ? retryTarget : undefined)
+      : voiceTarget(store.get().conversations, store.get().activeId, settings?.address);
     if (!settings || !identity || !conversation?.sessionId || !conversation.profileId) {
-      const note = !identity ? "Pair Dash with z0bridge identity to use voice" : "Open a Hermes chat once, then start voice";
+      const note = !identity ? "Pair Dash with z0bridge identity to use voice" : "Open an attached Hermes chat owned by this paired address before starting voice";
       reportFailure("target", note);
       starting.current = false;
       return;

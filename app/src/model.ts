@@ -16,6 +16,8 @@ export interface Settings {
   /** `host:port` of the bridge, no scheme. */
   address: string;
   token: string;
+  /** Random cache namespace, rotated when the active endpoint/account changes. */
+  chatIndexScope?: string;
   /** Harness id to use for new chats. */
   harness: string;
   /** Optional working directory override sent with every turn. */
@@ -59,6 +61,8 @@ export interface UserMessage {
   role: "user";
   text: string;
   at: number;
+  /** This row came from a native history snapshot, not the phone clock. */
+  native?: true;
   /** Files uploaded to the bridge with this message. */
   attachments?: ChatAttachment[];
   /** Host history cut this text; the full text loads on demand. */
@@ -80,6 +84,8 @@ export interface AssistantMessage {
   /** Actual bridge tool/thinking statuses, retained for collapsed activity details. */
   activity?: string[];
   parts?: ReplyPart[];
+  /** Observed native rows already represented by this richer phone reply (display alignment only). */
+  nativeProjection?: { userId: string; replyIds: string[] };
   /**
    * The host holds this session open elsewhere (CLI/TUI). `queued`: nothing sent yet;
    * `sending`: the owner closed and the reply is going out. Never shown as work.
@@ -98,6 +104,8 @@ export interface AssistantMessage {
 export type Message = UserMessage | AssistantMessage;
 
 export interface Conversation {
+  /** Configured paired bridge address. Missing legacy provenance must never be inferred. */
+  endpointAddress?: string;
   /** Default on, including chats saved before this preference existed. */
   deliverQueuedAsOne?: boolean;
   /** A durable merge preview pauses automatic delivery until saved or canceled. */
@@ -163,6 +171,7 @@ export function parseSettings(raw: unknown): Settings | null {
   const endpoints = parseEndpoints(raw.endpoints);
   return {
     ...(identity ? { identity } : {}),
+    ...(typeof raw.chatIndexScope === "string" && /^[a-z0-9-]{16,80}$/.test(raw.chatIndexScope) ? { chatIndexScope: raw.chatIndexScope } : {}),
     address: raw.address,
     token: raw.token,
     harness: raw.harness,
@@ -193,6 +202,13 @@ function optionalId(value: unknown): string | undefined {
   return nonBlank(value) ? value : undefined;
 }
 
+function nativeProjection(raw: unknown): AssistantMessage["nativeProjection"] {
+  if (!isRecord(raw) || !nonBlank(raw.userId) || raw.userId.length > 1024 ||
+    !Array.isArray(raw.replyIds) || raw.replyIds.length > 600 ||
+    !raw.replyIds.every((id): id is string => nonBlank(id) && id.length <= 1024)) return undefined;
+  return { userId: raw.userId, replyIds: raw.replyIds };
+}
+
 function parseMessage(raw: unknown): Message | null {
   if (!isRecord(raw) || !nonBlank(raw.id) || typeof raw.text !== "string" || !finite(raw.at)) {
     return null;
@@ -201,7 +217,7 @@ function parseMessage(raw: unknown): Message | null {
     // A present-but-malformed upload list drops the row rather than replaying it as text-only.
     const attachments = parseChatAttachments(raw.attachments);
     if (attachments === null) return null;
-    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(attachments?.length ? { attachments } : {}), ...(raw.truncated === true ? { truncated: true } : {}), delivery: raw.delivery === "steering" || raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" || raw.delivery === "failed" ? raw.delivery : undefined, deliveryAt: finite(raw.deliveryAt) ? raw.deliveryAt : undefined, deliveryNote: typeof raw.deliveryNote === "string" ? raw.deliveryNote : undefined };
+    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(raw.native === true ? { native: true } : {}), ...(attachments?.length ? { attachments } : {}), ...(raw.truncated === true ? { truncated: true } : {}), delivery: raw.delivery === "steering" || raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" || raw.delivery === "failed" ? raw.delivery : undefined, deliveryAt: finite(raw.deliveryAt) ? raw.deliveryAt : undefined, deliveryNote: typeof raw.deliveryNote === "string" ? raw.deliveryNote : undefined };
   }
   if (raw.role === "assistant" && isAssistantState(raw.state) && nonBlank(raw.turnId)) {
     // A corrupt sequence would make re-attach resume from a nonsensical offset.
@@ -219,6 +235,7 @@ function parseMessage(raw: unknown): Message | null {
       parts: parseReplyParts(raw.parts),
       summaries: Array.isArray(raw.summaries) ? raw.summaries.flatMap(item => { const summary = parseSummary(item); return summary ? [summary] : []; }).slice(-64) : undefined,
       activity: Array.isArray(raw.activity) ? raw.activity.filter((item): item is string => typeof item === "string").slice(-32) : undefined,
+      nativeProjection: nativeProjection(raw.nativeProjection),
       handoff: raw.handoff === "queued" || raw.handoff === "sending" ? raw.handoff : undefined,
       error: typeof raw.error === "string" ? raw.error : undefined,
       ...(raw.truncated === true ? { truncated: true } : {}),
@@ -263,6 +280,7 @@ export function parseConversation(raw: unknown): Conversation | null {
     : messages;
   return {
     id: raw.id,
+    endpointAddress: typeof raw.endpointAddress === "string" && raw.endpointAddress.trim() ? raw.endpointAddress : undefined,
     harness: raw.harness,
     detailMode: raw.detailMode === "Hide" || raw.detailMode === "Compact" || raw.detailMode === "Full" ? raw.detailMode : undefined,
     title: raw.title,

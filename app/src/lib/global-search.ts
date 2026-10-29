@@ -169,6 +169,7 @@ export function runGlobalSearch(params: {
   products?: OrchestraProject[];
   hosts?: HostInfo[];
   cwd?: string;
+  endpointAddress?: string;
 }): SearchResult[] {
   const parsed = parseSearchQuery(params.query);
   const bots = (params.hosts ?? []).flatMap(host => (host.bots ?? []).map(bot => ({ host, bot })));
@@ -229,13 +230,13 @@ export function runGlobalSearch(params: {
         ...host,
         agents: host.agents.filter((agent) => agent.status === "running" && Boolean(agent.sessionId?.trim())),
       }));
-    const listed = mergeLiveConversations([], runningHosts, Date.now());
+    const listed = mergeLiveConversations([], runningHosts, Date.now(), { endpointAddress: params.endpointAddress });
 
     // The store uses the synthetic id as its activation key. If two profiles
     // report that same key, neither is safe to open from search.
     const idCounts = new Map<string, number>();
     for (const live of listed) idCounts.set(live.id, (idCounts.get(live.id) ?? 0) + 1);
-    const findLive = liveConversationIndex(params.conversations);
+    const findLive = liveConversationIndex(params.conversations.filter(c => c.endpointAddress !== undefined && c.endpointAddress === params.endpointAddress));
     for (const live of listed) {
       if (idCounts.get(live.id) !== 1) continue;
       const conversation = findLive(live) ?? live;

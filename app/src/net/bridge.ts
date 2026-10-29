@@ -5,7 +5,7 @@ import { CHATS_FEATURE, parseServerMessage, type ChatAttachment, type ClientMess
 import { agentNoticeInbox, noticeFailure } from "../store/notices";
 import type { LiveIntent } from "../../../shared/live";
 import { isDebugMode } from "../debug/mode";
-import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf } from "../store/live";
+import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf, liveRequestConversation } from "../store/live";
 import { fetchRosterIfChanged } from "../lib/roster";
 import { executionToken, socketUrl } from "../lib/bridge-auth";
 import { visibleHarnesses } from "../lib/hidden-harnesses";
@@ -13,7 +13,7 @@ import { activate, endpointsOf, pickEndpoint, probeBridge } from "../lib/bridge-
 import { shouldRequestHistory } from "../lib/live-sessions";
 import { headerSocket } from "../lib/native-socket";
 import { isPongFrame, reattachStreamingTurns, startSocketKeepalive } from "./socket-keepalive";
-import type { Settings } from "../model";
+import type { Conversation, Settings } from "../model";
 import { configureChatIndex, setChatsFeatures } from "../store/chat-index-store";
 import { configureHistoryPages } from "../store/history-pages";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -47,6 +47,7 @@ export function wsUrl(settings: Settings): string {
 
 class Bridge {
   private ws: WebSocket | null = null;
+  private admittedSocket: WebSocket | null = null;
   private connectEpoch = 0;
   private settings: Settings | null = null;
   private attempt = 0;
@@ -54,13 +55,13 @@ class Bridge {
   private connectTimer: ReturnType<typeof setTimeout> | undefined;
   private rosterTimer: ReturnType<typeof setInterval> | undefined;
   private stopKeepalive: (() => void) | undefined;
-  private pending = new Map<string, { text: string; seq: number }>();
+  private pending = new Map<string, { text: string; seq: number }[]>();
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private appState: AppStateStatus = RNAppState.currentState;
   private rosterEtag: string | undefined;
   /** chats.v1 bridge: history requests carry limit + requestId, replies carry `before`. */
   private chats = false;
-  private historyRequests = new Map<string, string>();
+  private historyRequests = new Map<string, { conversationId: string; messages: Conversation["messages"] | undefined }>();
   private historySeq = 0;
   /** Hermes roster messageCount last requested per conversation: re-request only when it moves. */
   private hermesCounts = new Map<string, number | undefined>();
@@ -87,6 +88,7 @@ class Bridge {
    * bridge (pairing or editing must report that bridge's own failure) until it connects once.
    */
   start(settings: Settings, options?: { failover?: boolean }): void {
+    this.flushDeltas();
     this.settings = settings;
     this.failover = options?.failover ?? true;
     if (isDebugMode()) {
@@ -135,14 +137,27 @@ class Bridge {
 
   isOpen(): boolean {
     if (isDebugMode()) return true;
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.ws !== null && this.admittedSocket === this.ws && this.ws.readyState === WebSocket.OPEN;
   }
 
   send(message: ClientMessage): boolean {
+    if (message.type === "attach" && message.turns.some(turn => !this.ownsTurn(turn.id))) return false;
+    if ("id" in message && (message.type === "chat" || message.type === "cancel" || message.type === "tool_detail" || message.type === "voice_begin" || message.type === "voice_chunk" || message.type === "voice_commit") && !this.ownsTurn(message.id)) return false;
+    if ("turnId" in message && typeof message.turnId === "string" && !this.ownsTurn(message.turnId)) return false;
     if (isDebugMode()) return true;
     if (!this.isOpen() || !this.ws) return false;
     this.ws.send(JSON.stringify(message));
     return true;
+  }
+
+  ownsConversation(id: string): boolean {
+    const conversation = store.get().conversations.find(c => c.id === id);
+    return Boolean(conversation?.endpointAddress && conversation.endpointAddress === this.settings?.address);
+  }
+
+  private ownsTurn(id: string): boolean {
+    const where = locateTurn(id);
+    return Boolean(where && this.ownsConversation(where.conversationId));
   }
 
   private async connectNow(): Promise<void> {
@@ -164,19 +179,15 @@ class Bridge {
     }
     this.ws = ws;
     this.connectTimer = setTimeout(() => {
-      if (this.ws === ws && ws.readyState !== WebSocket.OPEN) {
+      if (this.ws === ws && this.connectEpoch === epoch && this.admittedSocket !== ws) {
         // Detach first so the later onclose of this socket cannot run onClosed a second time.
         this.ws = null;
         ws.close();
-        this.onClosed("Timed out connecting");
+        this.onClosed("Timed out waiting for bridge hello");
       }
     }, CONNECT_TIMEOUT_MS);
     ws.onopen = () => {
       if (this.ws !== ws) return;
-      clearTimeout(this.connectTimer);
-      this.attempt = 0;
-      // Connected once: from now on a lost connection may move to another paired bridge.
-      this.failover = true;
       this.lastInboundAt = Date.now();
       this.pongSeen = false;
       this.stopKeepalive?.();
@@ -210,6 +221,7 @@ class Bridge {
   }
 
   private onClosed(reason: string): void {
+    this.admittedSocket = null;
     this.clearTimers();
     this.flushDeltas();
     if (!this.settings) return;
@@ -277,6 +289,8 @@ class Bridge {
     }
     const message = parseServerMessage(parsed);
     if (!message) return;
+    if ("id" in message && (message.type === "lost" || message.type === "delta" || message.type === "transcript" || message.type === "session" || message.type === "status" || message.type === "done" || message.type === "error") && !this.ownsTurn(message.id)) return;
+    if ("turnId" in message && typeof message.turnId === "string" && !this.ownsTurn(message.turnId)) return;
     switch (message.type) {
       case "notice": void agentNoticeInbox.receive(message).catch(noticeFailure); return;
       case "gate_snapshot":
@@ -294,6 +308,12 @@ class Bridge {
         return;
       }
       case "hello": {
+        this.admittedSocket = this.ws;
+        clearTimeout(this.connectTimer);
+        this.connectTimer = undefined;
+        this.attempt = 0;
+        // Only an authenticated hello admits this endpoint for automatic failover.
+        this.failover = true;
         this.chats = message.features?.includes(CHATS_FEATURE) === true;
         this.rosterEtag = undefined;
         setChatsFeatures(message.features);
@@ -321,10 +341,8 @@ class Bridge {
         return;
       case "delta": {
         const entry = this.pending.get(message.id);
-        if (entry) {
-          entry.text += message.text;
-          entry.seq = message.seq;
-        } else this.pending.set(message.id, { text: message.text, seq: message.seq });
+        if (entry) entry.push(message);
+        else this.pending.set(message.id, [message]);
         this.flushTimer ??= setTimeout(() => this.flushDeltas(), DELTA_FLUSH_MS);
         return;
       }
@@ -342,10 +360,17 @@ class Bridge {
         if (message.type === "done" || message.type === "error") flushPendingSends(sendChat);
         return;
       case "history": {
-        const conversationId = message.requestId ? this.historyRequests.get(message.requestId) : undefined;
-        if (message.requestId) this.historyRequests.delete(message.requestId);
-        if (conversationId) {
-          applyHistoryReply(conversationId, message.messages, message.before);
+        if (message.requestId !== undefined) {
+          const request = this.historyRequests.get(message.requestId);
+          this.historyRequests.delete(message.requestId);
+          // A supplied id owns the reply, even after eviction: never guess another session.
+          if (!request) return;
+          this.flushDeltas();
+          const conversation = store.get().conversations.find(c => c.id === request.conversationId);
+          // A newest-window snapshot cannot replace intervening transcript work,
+          // including a local turn that has already completed.
+          if (!conversation || !this.ownsConversation(conversation.id) || conversation.messages !== request.messages) return;
+          applyHistoryReply(request.conversationId, message.messages, message.before);
           return;
         }
         applyLiveHistory(message.harness, message.sessionId, message.messages, message.hostId, message.profileId);
@@ -355,7 +380,10 @@ class Bridge {
       case "live_event":
       case "live_receipts":
       case "live_error":
-        applyLiveMessage(message);
+        {
+          const conversationId = liveRequestConversation(message.id);
+          if (conversationId && this.ownsConversation(conversationId)) applyLiveMessage(message);
+        }
         return;
       default: {
         const _exhaustive: never = message;
@@ -383,6 +411,7 @@ class Bridge {
 
   /** One ws history request. chats.v1 pages it and matches the reply by requestId. */
   requestHistory(input: { conversationId: string; harness: string; sessionId: string; cwd?: string; hostId?: string; profileId?: string }): void {
+    if (!this.ownsConversation(input.conversationId)) return;
     const conversation = store.get().conversations.find(c => c.id === input.conversationId);
     if (input.harness === "hermes") this.hermesCounts.set(input.conversationId, conversation?.messageCount);
     if (!this.chats) {
@@ -390,7 +419,7 @@ class Bridge {
       return;
     }
     const requestId = `h${(++this.historySeq).toString(36)}`;
-    this.historyRequests.set(requestId, input.conversationId);
+    this.historyRequests.set(requestId, { conversationId: input.conversationId, messages: conversation?.messages });
     if (this.historyRequests.size > 64) {
       const oldest = this.historyRequests.keys().next();
       if (!oldest.done) this.historyRequests.delete(oldest.value);
@@ -432,7 +461,10 @@ class Bridge {
 
   private teardownSocket(): void {
     const ws = this.ws;
+    this.flushDeltas();
+    this.historyRequests.clear();
     this.ws = null;
+    this.admittedSocket = null;
     if (ws) {
       ws.onopen = null;
       ws.onmessage = null;
@@ -540,6 +572,7 @@ export function sendVoiceCommit(turnId: string): boolean {
 
 /** Live surface (fast lane of a Hermes chat): open the worker for this conversation. */
 export function openLiveSurface(conversationId: string, target: { profileId?: string; sessionId?: string }): boolean {
+  if (!bridge.ownsConversation(conversationId)) return false;
   const id = beginOpen(conversationId);
   const ok = bridge.send({ type: "live_open", id, ...(target.profileId ? { profileId: target.profileId } : {}), ...(target.sessionId ? { sessionId: target.sessionId } : {}) });
   if (!ok) applyLiveMessage({ type: "live_error", id, message: "Not connected to the bridge." });
@@ -547,6 +580,7 @@ export function openLiveSurface(conversationId: string, target: { profileId?: st
 }
 
 export function sendLiveTurn(conversationId: string, text: string): boolean {
+  if (!bridge.ownsConversation(conversationId)) return false;
   const live = liveOf(conversationId);
   if (!live.workerId || !live.profileId) return false;
   const id = beginLiveTurn(conversationId, text, live.askHermes);
@@ -557,6 +591,7 @@ export function sendLiveTurn(conversationId: string, text: string): boolean {
 
 /** The owner's tap on an fx0 control or a native fast control: recorded in Hermes, then the worker reacts. */
 export function sendLiveIntent(conversationId: string, intent: LiveIntent): boolean {
+  if (!bridge.ownsConversation(conversationId)) return false;
   const live = liveOf(conversationId);
   if (!live.workerId || !live.profileId) return false;
   const id = beginIntent(conversationId, intent);
@@ -566,6 +601,7 @@ export function sendLiveIntent(conversationId: string, intent: LiveIntent): bool
 }
 
 export function refreshLiveReceipts(conversationId: string): boolean {
+  if (!bridge.ownsConversation(conversationId)) return false;
   const live = liveOf(conversationId);
   if (!live.workerId || !live.profileId) return false;
   return bridge.send({ type: "live_receipts", id: beginReceipts(conversationId), workerId: live.workerId, profileId: live.profileId });

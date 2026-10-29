@@ -127,6 +127,9 @@ export default function TldrawAnnotateDOM(props: Props) {
   function sample(event: React.PointerEvent<HTMLDivElement>) {
     const current = capture.current;
     if (!editor || !current || current.pointerId !== event.pointerId) return;
+    // Position changes do not trigger ResizeObserver. Refresh before both our
+    // capture and tldraw's bubble handler convert this event into page space.
+    editor.updateViewportScreenBounds(editor.getContainer());
     const samples = event.nativeEvent.getCoalescedEvents?.() ?? [];
     for (const e of [...samples, event.nativeEvent]) {
       const page = editor.screenToPage({ x: e.clientX, y: e.clientY });

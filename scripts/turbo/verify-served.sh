@@ -45,11 +45,7 @@ b=(c.get("extra") or {}).get("dashBuild") or {}
 print(b.get("sha") or "-", (c.get("_internal") or {}).get("projectRoot","-"), m["launchAsset"]["url"])' <<<"$manifest")
 say "manifest  dashBuild.sha=$SERVED"
 say "          projectRoot=$ROOT"
-if [[ "$SERVED" == "-" ]]; then
-  # Releases built before the build-info change carry no dashBuild; the release directory is named by the commit.
-  SERVED="$(basename "$(dirname "$ROOT")")"; say "          (no dashBuild in manifest; release dir says $SERVED)"
-fi
-[[ "$SERVED" == "$WANT" ]] && say "OK        manifest serves the expected commit" || bad "manifest serves $SERVED, expected $WANT"
+[[ "$SERVED" != "-" && "$SERVED" == "$WANT" ]] && say "OK        manifest serves the expected commit" || bad "manifest serves $SERVED, expected $WANT"
 
 tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
 code="$(curl -sS -m 300 -o "$tmp" -w '%{http_code} %{size_download} %{time_total}' "$BUNDLE")"
@@ -58,7 +54,7 @@ say "bundle    HTTP $http, $size bytes, ${secs}s  $BUNDLE"
 code="$http"
 [[ "$code" == 200 ]] || bad "bundle did not return 200"
 # The sha also appears in every module path, so look for the baked build-info.json object itself.
-if grep -qE "\"sha\": *\"$WANT\"" "$tmp"; then say "OK        bundle bakes in build-info.json for this commit (the app knows which build it runs)"; else say "NOTE      bundle has no build-info.json for this commit (release predates the live-update app code)"; fi
+if grep -qE "\"sha\": *\"$WANT\"" "$tmp"; then say "OK        bundle bakes in build-info.json for this commit (the app knows which build it runs)"; else bad "bundle has no build-info.json for the expected commit"; fi
 
 # Async chunks: fetch each embedded URL as written and after dot-segment normalisation.
 mapfile -t chunks < <(grep -o '"[^"]*modulesOnly=true[^"]*"' "$tmp" | tr -d '"' | sort -u)

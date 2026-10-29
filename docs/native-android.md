@@ -125,6 +125,32 @@ Three Metro servers run on the dev host, each behind a tailnet-only relay: `:821
 - Latency from a push to the new bundle on `:8213` is the 30 s tick plus a few seconds to build, restart and compile. Check what a Metro serves the way the phone fetches it: `scripts/turbo/verify-served.sh [--port 8213|8214]`.
 - A phone that predates the chip needs one reload (or `DASH_CHANNEL_CONF_DIR=~/.config/dash-turbo-live dash-channel open <adb-serial>` while the phone is idle) to start auto-updating. `scripts/adb-tailscale.sh` explains why Wireless debugging needs `ADB_PORT`.
 
+Before loading a newer build, the app checks the exact advertised launch asset again.
+A build that stops serving HTTP 200 while an update waits is not reloaded.
+After network and preference writes finish, the app persists drafts, including edits
+made during those waits. It then checks the target and automatic-reload eligibility
+again without another asynchronous wait. Resumed interaction cancels an idle reload.
+Changing the launch asset URL requires a new health check, even for the same SHA.
+
+`verify-served.sh` requires the expected SHA in both the Expo manifest and the
+downloaded launch bundle. A matching release directory does not establish identity.
+Missing or mismatched identity fails the check, including older bundles without
+baked build metadata.
+
+Channel switches, promotions, explicit rollbacks and automatic re-serving require
+a green, complete O15 army receipt for the target commit before release state
+changes. `--force` only bypasses the native fingerprint check, never O15 approval.
+The former receipt opt-out is no longer used. A missing receipt holds the update;
+copy the genuine army receipt and report into the configured receipt store.
+
+Native baselines use `v4:` and include `app.config.js`/`app.config.ts`, installed
+native package versions, local native sources and config plugins. Older baseline
+versions do not establish this compatibility. After a verified native build and
+installation, record the baseline for that installed release with
+`dash-channel baseline <channel>`. Do not reset a baseline merely to clear a
+mismatch. Chat-only JavaScript, module documentation and generated native caches
+do not require a new native baseline.
+
 ## Notifications
 
 Settings has an explicit Enable notifications action. It creates a silent, private-lockscreen channel before asking Android for permission. Denied permissions offer the Android settings route; Dash does not repeatedly prompt on launch. Disabling clears existing Dash notifications.

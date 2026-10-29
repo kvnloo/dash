@@ -2,11 +2,11 @@
 
 Dash keeps host session history as a disposable projection. Android stores it under `FileSystem.cacheDirectory/dash-history-v1/`. Each file holds at most the last 80 settled messages, is conservatively bounded to 256 KiB before JSON allocation, and participates in a maximum of 64 retained entries. An oversized message or nested tool payload is not persisted in this cache. The host still owns the original.
 
-`FileSystem.documentDirectory/dash-conversations-v2/` holds routing metadata, preferences, queued/failed user messages and running-turn replay identities. Local-only conversations retain their complete history here. A session identifier alone is not evidence of host history support; only registered harness routes are treated as host-backed. Pairing and composer drafts keep their existing independent storage.
+`FileSystem.documentDirectory/dash-conversations-v2/` holds routing metadata, preferences, queued/failed user messages and running-turn replay identities. It also retains completed, interrupted and failed phone-only turns, their user messages and native ordering anchors when the host has not saved an equivalent complete turn. Host-owned tool payloads remain outside the durable projection. Local-only conversations retain their complete history here. A session identifier alone is not evidence of host history support; only registered harness routes are treated as host-backed. Pairing and composer drafts keep their existing independent storage.
 
 The native adapter uses asynchronous Expo file I/O. It writes a sibling temporary file, then uses the SDK's rename operation to replace the committed file. Durable and cache writes are serialized. Waiting snapshots coalesce to the newest state. Unchanged conversation references do no serialization or disk writes. Changes to queued or running state do not rewrite an unchanged settled-history cache.
 
-Startup reads durable records in batches of eight, then loads only the active host history. Other cache entries load when selected. Corrupt or missing cache files fall back to host history. A late cache response cannot replace a newer network response. The bridge requests empty active history for all supported harnesses, not only Hermes.
+Startup reads durable records in batches of eight, then loads the active and pending transcripts. Other transcripts and cache entries load when selected. Unopened index snapshots cannot replace their durable messages during roster updates. A corrupt unloaded file is preserved and reported after unrelated saves drain. The bounded cache suffix merges after the durable transcript, with shared source ids and native anchors rather than phone/host clock comparisons. Matching cached reply disclosures enrich the durable body without replacing a newer answer. Cache and durable hydration complete before a newly selected chat requests fresh native history.
 
 ## Migration and recovery
 
@@ -20,12 +20,6 @@ The completion marker lets an installed client finalize that explicit recovery w
 
 ## Verification
 
-Run through the owner's worker route:
+Run the e2e tester army described in [Testing Dash](../TESTING.md). `history-reload.spec.ts` exercises real browser offline reloads and unopened-chat roster updates. `persistence-lifecycle.spec.ts` checks bounded-cache ordering, disclosure enrichment and failure isolation through the production persistence consumers. These are not Android disk-latency or frame-performance measurements.
 
-```sh
-fleet-build --node mbp --cpus 2 --mem 3G --fetch .cache-receipts --out <receipt-directory> -- bash scripts/verify-cache-persistence.sh
-```
-
-The gate includes focused storage tests, the existing application suite, strict typechecks, lint, the mutation suite, Android export and a seven-trial synthetic persistence benchmark. The benchmark uses an in-memory file adapter to count serialization/write amplification. Its timing is not Android disk latency, cold-start time or frame performance.
-
-On the phone, verify both physical directories, legacy-key removal, unchanged pairing/draft records, host refetch after removing only the history cache, and absence of CursorWindow errors during restart. Do not claim a native performance improvement from desktop tests alone.
+Native acceptance must separately verify both physical directories, legacy-key removal, unchanged pairing/draft records, host refetch after removing only the history cache, and absence of CursorWindow errors during restart. Do not clear app data to obtain a passing result. Desktop receipts do not establish native performance or installed-device acceptance.

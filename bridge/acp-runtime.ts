@@ -13,7 +13,7 @@ const startedAt = new Date().toISOString();
 const cwd = await mkdtemp(join(tmpdir(), "dash-acp-probe-"));
 try {
   // Deliberately serial. Each connection owns and kills its process group.
-  for (const agent of ["omp", "hermes", "grok", "claude", "codex"]) {
+  for (const agent of ["omp", "hermes", "grok", "claude", "codex", "fx"]) {
     const command = acpCommand(agent);
     if (!command) { results.push({ agent, installedAcp: false, verified: false, blocker: "Maintained ACP adapter not installed" }); continue; }
     let response = "";

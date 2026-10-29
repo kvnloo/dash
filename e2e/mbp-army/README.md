@@ -6,6 +6,33 @@ The fixture is not a model turn. It implements initialize/session/new/load/promp
 Each test has its own bridge, HOME, credential/config/outbox directories, loopback port, PID namespace, and browser context.
 A fixture-native Hermes SQLite row and a fixture-only discoverable OMP process support persisted-session journeys. The separate ephemeral regression intentionally omits them.
 
+## Chat-index HTTP ownership journey (#493)
+
+`chat-index-ownership.spec.ts` pairs normally, then selects a loopback TCP/HTTP relay
+through Settings. Isolated real bridges index archived AgentsView source rows;
+native-only roster overlays are unpaged and cannot exercise cursor ownership.
+The relay holds actual response bytes without changing payloads: one journey replaces
+the endpoint through Settings before releasing the old head, then reloads; another lets the normal
+30-second head refresh supersede a held tail and checks that the unchanged
+304/cursor path can request a fresh tail.
+
+The app invalidates list state synchronously on endpoint/account replacement.
+Each request owns both that endpoint generation and its list-state instance;
+late success, error, bad-cursor recovery and promise cleanup cannot act for a new
+owner. A new head invalidates pending tails while a valid 304 preserves loaded
+rows and the pagination cursor. Distinct filter keys remain independently cached.
+
+The single persisted default-head slot has an opaque random namespace saved with
+settings, rotated on active address/authentication identity replacement. Snapshot
+writes are serialized and the envelope must match that namespace on cold boot.
+Legacy unbound snapshots are ignored, not attributed to the current account.
+No token or authentication identity is added to cache keys or snapshot envelopes.
+This covers heads only, not endpoint scoping of saved conversation/history/drafts.
+The endpoint-replacement journey failed on the old app (75 old rows admitted
+after replacement) and passed on `770121d3`, including cold reload. The cursor
+journey passes in both arms; it is a pagination boundary check, not proof of a
+previously failing unchanged-cursor race. Neither result is native acceptance.
+
 ## Mesh/native roster journey (#474, #476, #481)
 
 `mesh-roster.spec.ts` starts two isolated real bridges named `groot` and `mbp`, pairs the
@@ -87,3 +114,87 @@ Inspect error-context.md, console.json, bridge.log, screenshot/video and trace b
 Append confirmed bugs immediately and under a file lock to the private army bug ledger (its path lives in the private ops notes, never here), with the owner's required id/title/severity/repro steps/evidence path/suspected file:line keys. Do not publish fixture credentials or real secrets. Never fix app code in this qualification lane.
 
 Web evidence is not native phone/context-gauge acceptance; it does not prove native IME, voice, Android attachment permissions, or live model behavior.
+
+`delta-replay.spec.ts` forwards the real authenticated bridge stream through an
+owned WebSocket relay. It duplicates a delta within one batch and replays an
+already-applied delta immediately before fresh text. Both cases require the exact
+original agent reply and one actual agent invocation. The app retains individual
+frames until the store rejects stale sequences against its applied watermark,
+then appends the accepted text once per batch.
+
+Both replay journeys failed with duplicated visible text on the old app and
+passed on `770121d3`. These are filtered browser/bridge receipts, not complete
+release qualification.
+
+## Authenticated hello admission
+
+`hello-admission.spec.ts` selects an owned relay through Settings. The relay
+preserves Origin/authentication and withholds the real authenticated hello while
+accepting WebSocket OPEN and forwarding keepalive. The old client never closed
+that unadmitted socket. The corrected client times it out, retries, and recovers
+through Settings while retaining the draft and streaming a real fixture reply.
+Transport OPEN alone neither admits sends nor resets retry/failover state.
+
+## Terminal retention
+
+`terminal-retention.spec.ts` holds a real local summary provider to its production
+deadline, adds 50 real settled rejected turns, and reconnects a subscriber. The
+old bridge returned `lost`; the corrected bridge replays text and terminal `done`
+before applying the settled-turn cap. This does not prove automatic post-error
+app reattachment or the ten-minute expiry timer.
+
+## Conversation endpoint ownership
+
+New and adopted chats persist their configured paired-bridge address. Host IDs,
+matching session strings, changed credentials, and alternate addresses are not
+evidence that another endpoint owns an existing turn. Selecting another bridge
+parks foreign streams and queued sends; selecting their owner permits reattach.
+Incoming turn, permission and Live events are checked against that owner too.
+Native activity/context readers and HTTP history pages must not query the newly
+selected bridge for a foreign conversation.
+
+Legacy chats without provenance keep their history and drafts but cannot send
+or attach automatically. The chat explains how to reopen the native session from
+the correct paired computer's list or create a new chat. There is no silent
+legacy assignment, endpoint-alias equivalence or draft transfer.
+
+`endpoint-ownership.spec.ts` exercises two real bridges through ordinary Settings
+and checks actual outbound frames, ACP invocations, session identity and native
+history request paths. Relay-based journeys select their relay before creating
+the chat; hello recovery reconnects the same address after saving its draft.
+These journeys do not establish real MBP/Groot model availability or S25 delivery.
+
+## History response ownership
+
+Newest WebSocket history requests retain their dispatch-time transcript identity.
+Unknown supplied request IDs are discarded rather than matched by a guessed
+session. A changed transcript invalidates both snapshot and cursor. HTTP history
+requests retain endpoint/settings ownership across awaits.
+
+Native Hermes persistence can lag an already completed or failed ACP turn.
+`history-ownership.spec.ts`, `history-merge.spec.ts` and
+`hermes-failure-history.spec.ts` exercise partial native persistence through real
+SQLite/JSONL producers and the isolated bridge. Native source ids anchor ordering;
+phone/host timestamps do not establish turn identity. Richer phone replies retain
+bounded associations with the actual source rows they represent, including when
+the newest window drops their prompt. Empty history also means unavailable at
+the current bridge boundary, so it cannot attest deletion.
+
+`history-reload.spec.ts` covers active/inactive offline reload and unopened-chat
+roster updates. `history-lifecycle.spec.ts` and `persistence-lifecycle.spec.ts`
+cover controlled production-consumer transitions, not native-phone acceptance.
+
+## Native ACP continuation and saved-local recovery
+
+`native-continuation.spec.ts` and `fx-native-acp.spec.ts` require a second
+`session/load` after the first executor exits and a changed roster arrives.
+`paired-session-continuation.spec.ts` additionally reloads the phone client and
+checks the exact original session and confirmed host with no native OMP row.
+An explicit live OMP lease still expires. Noncatalog resumability requires the
+existing matching generic profile on the authenticated paired self host.
+
+`legacy-recovery.spec.ts` keeps legacy, foreign and unscoped saved histories and
+drafts separate from current native list/search results. Recovery selects the
+host-indexed native result explicitly. No address, host or draft is inferred or
+silently transferred. These focused journeys do not replace complete exact-head
+release qualification or actual MBP/Groot phone acceptance.

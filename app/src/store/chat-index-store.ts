@@ -55,9 +55,29 @@ interface Deps {
 
 let deps: Deps = { api: chatsApi, settings: () => null, now: () => Date.now() };
 
+export function sameChatEndpoint(a: ApiSettings | null, b: ApiSettings | null): boolean {
+  return a === b || !!a && !!b && a.address === b.address && a.token === b.token &&
+    a.identity?.url === b.identity?.url && a.identity?.issuer === b.identity?.issuer &&
+    a.identity?.kid === b.identity?.kid && a.identity?.credentialId === b.identity?.credentialId;
+}
+
+let endpoint: ApiSettings | null = null;
+let epoch = 0;
+/** Called synchronously with settings replacement, before the new hello can mark it ready. */
+export function bindChatIndex(settings: ApiSettings | null): void {
+  if (sameChatEndpoint(endpoint, settings) && endpoint?.chatIndexScope === settings?.chatIndexScope) return;
+  endpoint = settings ? { ...settings, ...(settings.identity ? { identity: { ...settings.identity } } : {}) } : null;
+  resetChatIndex();
+}
+
+function owned(settings: ApiSettings, generation: number): boolean {
+  return epoch === generation && chatsMode() === "chats" && sameChatEndpoint(settings, deps.settings());
+}
+
 /** Wire the store to the app (settings source, storage) or to fakes in tests. */
 export function configureChatIndex(next: Partial<Deps>): void {
   deps = { ...deps, ...next };
+  bindChatIndex(deps.settings());
 }
 
 const lists = new LRU<true>({
@@ -97,9 +117,12 @@ let snapshotRead: Promise<void> | undefined;
 /** Seed the default list from the persisted head once, before the first network page. */
 export function seedFromSnapshot(): Promise<void> {
   const storage = deps.storage;
-  if (!storage) return Promise.resolve();
-  snapshotRead ??= loadHeadSnapshot(storage).then(snapshot => {
-    if (!snapshot || listState(DEFAULT_QUERY).list.version > 0) return;
+  const settings = deps.settings();
+  bindChatIndex(settings);
+  const generation = epoch;
+  if (!storage || !settings?.chatIndexScope) return Promise.resolve();
+  snapshotRead ??= loadHeadSnapshot(storage, settings.chatIndexScope).then(snapshot => {
+    if (epoch !== generation || !sameChatEndpoint(settings, deps.settings()) || !snapshot || listState(DEFAULT_QUERY).status !== "idle") return;
     patchList(DEFAULT_QUERY, current => current.list.version > 0 ? current : {
       ...current, seeded: true, status: "ready", etag: snapshot.etag,
       list: { ...mergePage(emptyList(), { items: snapshot.items, next: snapshot.next, rev: snapshot.rev }), exhausted: false },
@@ -109,10 +132,11 @@ export function seedFromSnapshot(): Promise<void> {
 }
 
 const inflight = new Map<string, Promise<void>>();
-function once(id: string, run: () => Promise<void>): Promise<void> {
+function once(id: string, run: (release: () => void) => Promise<void>): Promise<void> {
   const running = inflight.get(id);
   if (running) return running;
-  const promise = run().finally(() => { inflight.delete(id); });
+  const release = () => { if (inflight.get(id) === promise) inflight.delete(id); };
+  const promise = run(release).finally(release);
   inflight.set(id, promise);
   return promise;
 }
@@ -126,14 +150,21 @@ function errorText(code: string): string {
 
 /** Fetch page 1 (ETag-aware). A 304 keeps every loaded row as it is. */
 export function refreshHead(query: ChatQuery = {}, opts: { force?: boolean } = {}): Promise<void> {
+  const settings = deps.settings();
+  bindChatIndex(settings);
+  if (!settings || chatsMode() !== "chats") return Promise.resolve();
+  const generation = epoch;
   const key = queryKey(query);
-  return once(`head:${key}`, async () => {
-    const settings = deps.settings();
-    if (!settings || chatsMode() !== "chats") return;
+  return once(`head:${generation}:${key}`, async () => {
     const before = listState(key);
     if (!opts.force && before.fetchedAt !== undefined && deps.now() - before.fetchedAt < 1000) return;
-    patchList(key, s => s.list.version === 0 ? { ...s, status: "loading", error: undefined } : s);
+    inflight.delete(`more:${generation}:${key}`);
+    // Replacing the state object invalidates every tail request based on this head,
+    // even when a bridge reuses the same opaque cursor.
+    patchList(key, s => ({ ...s, loadingMore: false, error: undefined, status: s.list.version === 0 ? "loading" : s.status }));
+    const head = listState(key);
     const result = await deps.api.list(settings, { limit: PAGE_SIZE, kinds: query.kinds, hosts: query.hosts }, { etag: before.list.version > 0 ? before.etag : undefined });
+    if (!owned(settings, generation) || listState(key) !== head) return;
     const fetchedAt = deps.now();
     if (!result.ok) {
       if (result.notModified) { patchList(key, s => ({ ...s, status: "ready", seeded: false, fetchedAt })); return; }
@@ -147,8 +178,8 @@ export function refreshHead(query: ChatQuery = {}, opts: { force?: boolean } = {
       const list = fresh ? mergePage(s.list, page) : withNext(applyHead(s.list, page), s.seeded ? page : undefined);
       return { ...s, list, status: "ready", error: undefined, etag: result.etag, seeded: false, building: result.building === true, fetchedAt };
     });
-    if (key === DEFAULT_QUERY && deps.storage && !result.building) {
-      void saveHeadSnapshot(deps.storage, { items: page.items, next: page.next, rev: page.rev, ...(result.etag ? { etag: result.etag } : {}) });
+    if (key === DEFAULT_QUERY && deps.storage && settings.chatIndexScope && !result.building) {
+      void saveHeadSnapshot(deps.storage, { items: page.items, next: page.next, rev: page.rev, ...(result.etag ? { etag: result.etag } : {}) }, settings.chatIndexScope);
     }
   });
 }
@@ -161,14 +192,22 @@ function withNext(list: PagedList, page: ChatPage | undefined): PagedList {
 
 /** Fetch the next page for a query unless one is already loading for it. */
 export function loadMore(query: ChatQuery = {}): Promise<void> {
+  const settings = deps.settings();
+  bindChatIndex(settings);
+  if (!settings || chatsMode() !== "chats") return Promise.resolve();
+  const generation = epoch;
   const key = queryKey(query);
-  return once(`more:${key}`, async () => {
-    const settings = deps.settings();
+  return once(`more:${generation}:${key}`, async (release) => {
     const current = listState(key);
-    if (!settings || chatsMode() !== "chats" || current.seeded || current.list.version === 0 || current.list.exhausted || !current.list.next) return;
+    if (inflight.has(`head:${generation}:${key}`) || current.seeded || current.list.version === 0 || current.list.exhausted || !current.list.next) return;
     const cursor = current.list.next;
     patchList(key, s => ({ ...s, loadingMore: true, error: undefined }));
+    const tail = listState(key);
     const result = await deps.api.list(settings, { limit: PAGE_SIZE, cursor, kinds: query.kinds, hosts: query.hosts });
+    if (!owned(settings, generation) || listState(key) !== tail) return;
+    // Allow the next page before publishing the completed page: subscribers can
+    // synchronously request it as soon as loadingMore becomes false.
+    release();
     if (!result.ok) {
       if (!result.notModified && result.code === "bad_cursor") {
         // The index changed shape under the cursor: start over from page 1.
@@ -194,6 +233,7 @@ export function summaryByKey(key: string): ChatSummary | undefined {
 
 /** Forget every loaded page (unpair / forget everything). */
 export function resetChatIndex(): void {
+  epoch++;
   lists.clear();
   inflight.clear();
   snapshotRead = undefined;

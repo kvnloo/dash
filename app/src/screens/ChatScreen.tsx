@@ -1,12 +1,13 @@
 import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
+import { mergeOlderHistory } from "../lib/live-sessions";
 import { useHandedness } from "../lib/useHandedness";
 import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
 import { setThinkingSummaries } from "../store/app";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, Platform, StyleSheet, Text, View, Pressable, useWindowDimensions } from "react-native";
 import Animated from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
@@ -152,9 +153,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     const queued = new Set(conversation ? queuedParts(conversation).flatMap(part => [part.user.id, part.assistant.id]) : []);
     const current = messages.filter(message => !queued.has(message.id));
     if (!older.length) return current;
-    const shown = new Set(current.map(message => message.id));
-    return [...older.filter(message => !shown.has(message.id)), ...current];
+    return mergeOlderHistory(current, older);
   }, [messages, conversation, older]);
+  const visibleRows = useRef(visibleMessages);
+  useLayoutEffect(() => { visibleRows.current = visibleMessages; }, [visibleMessages]);
   // A view-only chat is transient: closing it drops it from the phone.
   const viewOnlyId = conversation?.viewOnly ? conversation.id : undefined;
   useEffect(() => () => { if (viewOnlyId) releaseViewOnly(viewOnlyId); }, [viewOnlyId]);
@@ -173,26 +175,29 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     const listed = new Set(visibleMessages.map(message => message.id));
     return history.unlisted.filter(message => !listed.has(message.id));
   }, [history.unlisted, visibleMessages]);
-  const railMessages = useMemo(() => railOnly.length ? [...railOnly, ...visibleMessages] : visibleMessages, [railOnly, visibleMessages]);
+  const railMessages = useMemo(() => mergeOlderHistory(visibleMessages, railOnly), [railOnly, visibleMessages]);
   const anchors = useMemo(() => railTurns(railMessages), [railMessages]);
   useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
   const jumpedTo = useRef<string | null>(null);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(settleTimer.current), []);
-  const scrollToPrompt = useCallback((anchor: RailTurn, railOnlyRows: number) => {
-    // `anchor.index` counts the rail's rows; the list's own rows start after the rail-only ones.
-    const at = { ...anchor, index: anchor.index - railOnlyRows };
+  const scrollToPrompt = useCallback((anchor: RailTurn): boolean => {
+    clearTimeout(settleTimer.current);
+    const index = visibleRows.current.findIndex(message => message.id === anchor.id);
+    if (index < 0) return false;
+    const at = { ...anchor, index };
     const offset = promptOffset([at], 0, index => listRef.current?.getLayout(index));
     if (offset !== null) listRef.current?.scrollToOffset({ offset, animated: false });
     else void listRef.current?.scrollToIndex({ index: at.index, animated: false, viewPosition: 0 });
     // The rows between were placed by estimate: as they are measured the prompt moves away from where the
     // jump aimed. Re-aim at it until it holds still, unless the owner scrolls or resumes following meanwhile.
-    clearTimeout(settleTimer.current);
     const startedAt = Date.now();
     let still = 0;
     const settle = () => {
       if (followRef.current || dragging.current || userScrollAt.current > startedAt || Date.now() - startedAt > JUMP_SETTLE_MS) return;
-      const layout = listRef.current?.getLayout(at.index);
+      const index = visibleRows.current.findIndex(message => message.id === anchor.id);
+      if (index < 0) return;
+      const layout = listRef.current?.getLayout(index);
       if (layout) {
         const target = Math.max(0, Math.min(layout.y, scrollMax.current));
         if (Math.abs(target - previousOffset.current) > 4) {
@@ -203,35 +208,36 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       settleTimer.current = setTimeout(settle, 100);
     };
     settleTimer.current = setTimeout(settle, 100);
+    return true;
   }, []);
   const jumpPrompt = useCallback((prompt: number) => {
     const anchor = anchors[prompt];
     if (!anchor || !conversation) return;
     dragging.current = false;
     setFollow(false);
-    if (anchor.index >= railOnly.length) { scrollToPrompt(anchor, railOnly.length); return; }
-    // The prompt is above what the list holds: list it (and everything between), then scroll to it.
+    if (scrollToPrompt(anchor)) return;
+    // This source id is still rail-only: list it and the intervening source rows first.
     jumpedTo.current = anchor.id;
     listUnlisted(conversation.id, anchor.id);
-  }, [anchors, conversation, railOnly.length, scrollToPrompt, setFollow]);
+  }, [anchors, conversation, scrollToPrompt, setFollow]);
   useEffect(() => {
     const id = jumpedTo.current;
     if (!id) return;
     const anchor = anchors.find(a => a.id === id);
     if (!anchor) { jumpedTo.current = null; return; }
-    if (anchor.index < railOnly.length) return;
+    if (!visibleMessages.some(message => message.id === id)) return;
     // The rows just listed are laid out on the next frame.
     const timer = setTimeout(() => {
       if (jumpedTo.current !== id) return;
       jumpedTo.current = null;
-      scrollToPrompt(anchor, railOnly.length);
+      scrollToPrompt(anchor);
     }, 50);
     return () => clearTimeout(timer);
-  }, [anchors, railOnly.length, scrollToPrompt]);
+  }, [anchors, visibleMessages, scrollToPrompt]);
   const harnessId = conversation?.harness ?? settings?.harness ?? "omp";
   const harness = connection.harnesses.find((h) => h.id === harnessId);
   const harnessName = harness?.name ?? harnessId;
-  const online = connection.status === "online";
+  const online = connection.status === "online" && (!conversation || conversation.endpointAddress === settings?.address);
   const targetError = conversation ? conversationTargetError(conversation) : undefined;
   const live = liveStore.use((all) => (conversation ? all[conversation.id] ?? EMPTY_LIVE : EMPTY_LIVE));
   const liveOn = harnessId === "hermes" && live.open;
@@ -342,11 +348,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, [online, conversation?.id, flushQueue]);
 
   useEffect(() => {
-    if (conversation?.queueWaitForIdle && observed?.observed && observed.phase === "idle") {
+    if (online && conversation?.queueWaitForIdle && observed?.observed && observed.phase === "idle") {
       setQueueWaiting(conversation.id, false);
       flushQueue(conversation.id);
     }
-  }, [conversation?.id, conversation?.queueWaitForIdle, observed?.observed, observed?.phase, flushQueue]);
+  }, [online, conversation?.id, conversation?.queueWaitForIdle, observed?.observed, observed?.phase, flushQueue]);
 
   const onStop = useCallback(() => {
     if (conversation) stopConversation(conversation.id, (id) => { bridge.send({ type: "cancel", id }); });

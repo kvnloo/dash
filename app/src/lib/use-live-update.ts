@@ -12,12 +12,13 @@ import {
   metroOrigin,
   probeLaunchAsset,
   reloadBlockedBy,
-  sameBuild,
   scriptUrlOrigin,
   type BundleHealth,
   type LiveBuild,
   type MetroEndpoint,
   type ReloadDecision,
+  type ReloadInput,
+  type ServedManifest,
 } from "./live-update";
 import { idleMs } from "./touch-idle";
 import { reloadApp } from "./reload-app";
@@ -121,9 +122,9 @@ export function useLiveUpdate(): LiveUpdate {
     : running === null ? null : bundleOrigin() ?? metroOrigin(Constants.expoConfig?.hostUri);
   const [served, setServed] = useState<LiveBuild | null>(null);
   const [bundleHealth, setBundleHealth] = useState<BundleHealth | null>(null);
-  // A successful bundle probe is cached per SHA and origin; failures retry on later polls.
-  const healthyKeys = useRef(new Set<string>());
-  const latestServedKey = useRef<string | null>(null);
+  // Polling reuses successful probes; each newer-build reload revalidates its launch asset.
+  const healthyAssets = useRef(new Map<string, string | null>());
+  const latestManifest = useRef<(ServedManifest & { key: string; origin: string }) | null>(null);
   const verifiedKey = useRef<string | null>(null);
   const [autoReload, setAutoState] = useState(true);
   const [lastAutoFor, setLastAutoFor] = useState<string | null>(null);
@@ -159,33 +160,33 @@ export function useLiveUpdate(): LiveUpdate {
           if (!alive) return;
           if (manifest === null) {
             // Metro may have restarted into a different bundle; revalidate after an outage.
-            if (latestServedKey.current !== null) healthyKeys.current.delete(latestServedKey.current);
+            if (latestManifest.current) healthyAssets.current.delete(latestManifest.current.key);
             verifiedKey.current = null;
             setBundleHealth(null);
             return;
           }
           const { build, launchAssetUrl } = manifest;
           const key = origin + "|" + build.sha;
-          if (latestServedKey.current !== key) {
+          if (latestManifest.current?.key !== key || latestManifest.current.launchAssetUrl !== launchAssetUrl) {
             verifiedKey.current = null;
             setBundleHealth(null);
           }
-          latestServedKey.current = key;
+          latestManifest.current = { key, origin, build, launchAssetUrl };
           setServed(build);
           if (runningSha === null || runningSha === build.sha) {
             verifiedKey.current = null;
             setBundleHealth(null);
             return;
           }
-          if (healthyKeys.current.has(key)) {
+          if (healthyAssets.current.get(key) === launchAssetUrl) {
             verifiedKey.current = key;
             setBundleHealth({ sha: build.sha, origin, state: "healthy" });
             return;
           }
           const health = await probeLaunchAsset(launchAssetUrl, fetch);
-          if (!alive || latestServedKey.current !== key) return;
+          if (!alive || latestManifest.current?.key !== key || latestManifest.current.launchAssetUrl !== launchAssetUrl) return;
           if (health.ok) {
-            healthyKeys.current.add(key);
+            healthyAssets.current.set(key, launchAssetUrl);
             verifiedKey.current = key;
             setBundleHealth({ sha: build.sha, origin, state: "healthy" });
           } else {
@@ -209,7 +210,7 @@ export function useLiveUpdate(): LiveUpdate {
     return () => {
       alive = false;
       verifiedKey.current = null;
-      latestServedKey.current = null;
+      latestManifest.current = null;
       clearInterval(timer);
       clearInterval(tick);
       sub.remove();
@@ -226,12 +227,13 @@ export function useLiveUpdate(): LiveUpdate {
   }, [runningSha, lastAutoFor]);
 
   const blockedBy = reloadBlockedBy();
-  const decision = decideReload({
+  const automaticEnabled = autoReload && prefsReady;
+  const reloadInput: ReloadInput = {
     running,
     served,
     origin,
     bundleHealth,
-    autoReload: autoReload && prefsReady,
+    autoReload: automaticEnabled,
     sinceForegroundMs: foregroundAt.current === null ? Number.POSITIVE_INFINITY : Date.now() - foregroundAt.current,
     idleMs: idleMs(),
     idleReloadMs: webIdleReloadMs(),
@@ -239,33 +241,58 @@ export function useLiveUpdate(): LiveUpdate {
     blockedBy,
     heldFor: heldFor.current,
     lastAutoFor,
-  });
+  };
+  const latestReloadInput = useRef(reloadInput);
+  latestReloadInput.current = reloadInput;
+  const decision = decideReload(reloadInput);
   const blocked = decision.kind === "ready" && decision.why === "blocked";
   useEffect(() => {
-    if (blocked && served !== null && autoReload) heldFor.current = served.sha;
-  }, [blocked, served, autoReload]);
+    if (blocked && served !== null && automaticEnabled && latestReloadInput.current.autoReload) heldFor.current = served.sha;
+  }, [blocked, served, automaticEnabled]);
 
-  const servedKey = origin !== null && served !== null ? origin + "|" + served.sha : null;
-  const needsBundleCheck = running !== null && served !== null && !sameBuild(running, served);
   const requestReload = useCallback((automatic: boolean) => {
-    const healthy = () => !needsBundleCheck ||
-      (servedKey !== null && verifiedKey.current === servedKey && latestServedKey.current === servedKey);
-    if (reloading.current || !healthy() || (automatic && reloadBlockedBy() !== null)) return;
+    const target = latestManifest.current;
+    const needsBundleCheck = target !== null && runningSha !== null && target.build.sha !== runningSha;
+    const sameTarget = () => latestManifest.current?.key === target?.key &&
+      latestManifest.current?.launchAssetUrl === target?.launchAssetUrl;
+    const healthy = () => sameTarget() && (!needsBundleCheck || (target !== null && verifiedKey.current === target.key));
+    const permitted = () => {
+      if (!healthy()) return false;
+      if (!automatic) return true;
+      return AppState.currentState === "active" && decideReload({
+        ...latestReloadInput.current,
+        sinceForegroundMs: foregroundAt.current === null ? Number.POSITIVE_INFINITY : Date.now() - foregroundAt.current,
+        idleMs: idleMs(),
+        keyboardVisible: keyboardVisible(),
+        blockedBy: reloadBlockedBy(),
+        heldFor: heldFor.current,
+      }).kind === "reload";
+    };
+    if (reloading.current || !permitted()) return;
     reloading.current = true;
     void (async () => {
-      let invoked = false;
+      let invoked = false, attemptMarked = false;
       try {
-        // Don't trust the 250ms debounce to finish before a full JS reload.
-        await flushDrafts();
-        // Health or a guard can change while a draft is being persisted.
-        if (!healthy() || (automatic && reloadBlockedBy() !== null)) return;
-        if (automatic && served !== null) await writePref(TRIED_KEY, served.sha);
-        // This is the final check: no await between observing a safe app and reloadApp().
-        if (!healthy() || (automatic && reloadBlockedBy() !== null)) {
-          if (automatic && served !== null) await writePref(TRIED_KEY, null);
-          return;
+        if (needsBundleCheck && target !== null) {
+          const health = await probeLaunchAsset(target.launchAssetUrl, fetch);
+          if (!sameTarget()) return;
+          if (!health.ok) {
+            healthyAssets.current.delete(target.key);
+            verifiedKey.current = null;
+            setBundleHealth({ sha: target.build.sha, origin: target.origin, state: "failed", reason: health.reason });
+            return;
+          }
         }
-        if (automatic && served !== null) setLastAutoFor(served.sha);
+        if (!permitted()) return;
+        if (automatic && target !== null) {
+          await writePref(TRIED_KEY, target.build.sha);
+          attemptMarked = true;
+        }
+        // Persist edits made during every earlier await, including the launch probe.
+        await flushDrafts();
+        // No await between validating the target/activity and invoking the reload.
+        if (!permitted()) return;
+        if (automatic && target !== null) setLastAutoFor(target.build.sha);
         invoked = true;
         reloadApp();
       } catch (error) {
@@ -273,12 +300,13 @@ export function useLiveUpdate(): LiveUpdate {
       } finally {
         if (invoked) setTimeout(() => { reloading.current = false; }, 10_000);
         else {
+          if (attemptMarked) await writePref(TRIED_KEY, null);
           reloading.current = false;
           setTick(n => n + 1);
         }
       }
     })();
-  }, [served, servedKey, needsBundleCheck]);
+  }, [runningSha]);
   const reloadNow = useCallback(() => requestReload(false), [requestReload]);
 
   useEffect(() => {
@@ -286,10 +314,11 @@ export function useLiveUpdate(): LiveUpdate {
   }, [decision.kind, served, requestReload]);
 
   const setAutoReload = useCallback((on: boolean) => {
+    latestReloadInput.current = { ...latestReloadInput.current, autoReload: on && prefsReady };
     setAutoState(on);
     if (!on) heldFor.current = null;
     void writePref(AUTO_KEY, on ? null : "0");
-  }, []);
+  }, [prefsReady]);
 
   const switchTo = useCallback(
     (endpoint: MetroEndpoint) => {

@@ -30,10 +30,22 @@ export function serializeHeadSnapshot(snapshot: HeadSnapshot): string {
   return JSON.stringify({ items: snapshot.items.slice(0, HEAD_SNAPSHOT_MAX), next: snapshot.next, rev: snapshot.rev, ...(snapshot.etag ? { etag: snapshot.etag } : {}) });
 }
 
-export async function loadHeadSnapshot(storage: SnapshotStorage): Promise<HeadSnapshot | null> {
-  try { return parseHeadSnapshot(await storage.getItem(HEAD_SNAPSHOT_KEY)); } catch { return null; }
+export async function loadHeadSnapshot(storage: SnapshotStorage, scope: string): Promise<HeadSnapshot | null> {
+  try {
+    const text = await storage.getItem(HEAD_SNAPSHOT_KEY);
+    if (!text) return null;
+    const raw: unknown = JSON.parse(text);
+    if (typeof raw !== "object" || raw === null || !("scope" in raw) || raw.scope !== scope) return null;
+    return parseHeadSnapshot(text);
+  } catch { return null; }
 }
 
-export async function saveHeadSnapshot(storage: SnapshotStorage, snapshot: HeadSnapshot): Promise<void> {
-  try { await storage.setItem(HEAD_SNAPSHOT_KEY, serializeHeadSnapshot(snapshot)); } catch { /* A cache write cannot break the list. */ }
+// Serialize writes to the one bounded cache slot, including writes already in progress
+// when pairing changes. The scope envelope makes an old final write unusable elsewhere.
+let pendingWrite: Promise<void> = Promise.resolve();
+export function saveHeadSnapshot(storage: SnapshotStorage, snapshot: HeadSnapshot, scope: string): Promise<void> {
+  pendingWrite = pendingWrite.then(async () => {
+    try { await storage.setItem(HEAD_SNAPSHOT_KEY, JSON.stringify({ ...JSON.parse(serializeHeadSnapshot(snapshot)), scope })); } catch { /* Cache only. */ }
+  });
+  return pendingWrite;
 }

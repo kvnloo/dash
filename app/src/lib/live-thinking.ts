@@ -27,7 +27,7 @@ export function useLiveThinking(conversation: Conversation | undefined): LiveThi
   const connection = store.use((s) => s.connection);
   const messages = conversation?.messages ?? EMPTY;
   const harnessId = conversation?.harness ?? settings?.harness ?? "omp";
-  const online = connection.status === "online";
+  const online = connection.status === "online" && (!conversation || Boolean(conversation.endpointAddress && conversation.endpointAddress === settings?.address));
   const streamingMessage = useMemo(() => {
     for (const m of messages) if (m.role === "assistant" && m.state === "streaming") return m;
     return undefined;

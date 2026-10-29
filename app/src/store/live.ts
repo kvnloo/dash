@@ -62,6 +62,7 @@ interface LiveRequest {
   generation?: number;
 }
 const requests = new Map<string, LiveRequest>();
+export function liveRequestConversation(id: string): string | undefined { return requests.get(id)?.conversationId; }
 /** Conversation id → its newest open request; an older open's reply must not swap identity. */
 const latestOpen = new Map<string, string>();
 

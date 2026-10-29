@@ -16,7 +16,7 @@ export type ApiResult<T> =
   | { ok: false; notModified: true }
   | { ok: false; notModified?: false; status: number; code: string; retryAfterMs?: number; aborted?: boolean };
 
-export interface ApiSettings extends AuthSettings { address: string }
+export interface ApiSettings extends AuthSettings { address: string; chatIndexScope?: string }
 
 export interface ChatListParams { limit?: number; cursor?: string | null; kinds?: readonly string[]; hosts?: readonly string[]; chatable?: boolean }
 export interface ChatSearchParams { q: string; limit?: number; cursor?: string | null; kinds?: readonly string[]; hosts?: readonly string[]; in?: "all" | "titles" }

@@ -100,7 +100,7 @@ export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
         debugResetTo("Chat", {}); flushPendingDebugNavigation();
       }
       if (cmd.part) applyTurnEvent({ type: "status", id: "detail-fixture-turn", seq: cmd.seq, text: "", part: cmd.part });
-      if (cmd.text) applyDeltas(new Map([["detail-fixture-turn", { seq: cmd.seq, text: cmd.text }]]));
+      if (cmd.text) applyDeltas(new Map([["detail-fixture-turn", [{ seq: cmd.seq, text: cmd.text }]]]));
       return { ok: true };
     }
     case "thinkingSummary": {

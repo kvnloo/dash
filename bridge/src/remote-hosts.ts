@@ -22,9 +22,12 @@ export interface RemoteHost {
   dest: string;
 }
 
-/** The chat-index host id for an AgentsView machine name (shared with chat-index/agentsview-src). */
+/**
+ * The chat-index host id for an AgentsView machine name (shared with chat-index/agentsview-src).
+ * Keep the full name: accepted remote names are already safe, and truncating them aliases routes.
+ */
 export function machineHostId(raw: string): string {
-  return `machine:${raw.trim().replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 56) || "unknown"}`;
+  return `machine:${raw.trim().replace(/[^A-Za-z0-9._-]/g, "-") || "unknown"}`;
 }
 
 const NAME = /^[A-Za-z0-9._-]{1,64}$/;
