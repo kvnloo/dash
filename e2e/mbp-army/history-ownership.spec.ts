@@ -61,7 +61,9 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
         headers.set('cache-control', 'no-store');
         const stream = new ReadableStream({
           start(controller) {
-            olderWaiters.push(() => { controller.enqueue(new Uint8Array(body)); controller.close(); });
+            // Flush headers with the first real byte; keep JSON incomplete until release.
+            controller.enqueue(new Uint8Array(body, 0, 1));
+            olderWaiters.push(() => { controller.enqueue(new Uint8Array(body, 1)); controller.close(); });
           },
         });
         return new Response(stream, { status: response.status, headers });
