@@ -102,6 +102,47 @@ Pixel language: [docs/design/language.md](docs/design/language.md). Competitor +
 
 Each harness keeps its own session id for multi-turn threads.
 
+A phone-created ACP chat adopts the paired self host confirmed by its session
+reply, so the native session id remains resumable after an executor exits or a
+reconnect without a live roster row. This does not rebind an explicitly selected
+host/profile or turn an ended native OMP process lease into a resumable chat.
+For harnesses outside the native-history catalog, continuation requires the
+existing matching generic harness profile on that exact self host.
+
+### Saved history and endpoint ownership
+
+Saved-local history with no endpoint provenance, or with another endpoint's
+address, stays separate from the current endpoint's resumable native chat.
+The same rule applies to an old session with no verified host binding. The
+current native Chats list/search provides explicit recovery when the host
+indexes that session. Otherwise start a new chat; do not guess its owner.
+Opening a native result does not rebind the saved history or consume its draft.
+Empty harness chats are reusable only by their owning current endpoint.
+Phase polling, retained tool details and bound voice targets likewise retain
+their endpoint provenance across switching.
+
+An inactive chat's asynchronous cached transcript hydrates before a fresh native
+history request. History loaders use per-loader ownership tokens so a stale
+response cannot replace a newer page or clear another visit's loading flag.
+Partial native user persistence preserves the phone-completed tail until native
+catch-up. Native ids anchor ordering; ordered prompt/reply matching avoids
+cross-clock duplicate turns and preserves richer multipart/cut/stopped replies.
+Text-only native catch-up also retains phone attachments, tool cards and reply
+disclosures with their original bridge turn owner. Older pages use observed
+projection source ids to place rows before or after that retained phone turn.
+Completed phone-only turns survive cache eviction, offline reload and unopened
+roster updates without storing host-owned tool payloads.
+
+A nonempty native refresh with a shared final source id can revoke a newer native
+suffix. Empty history also means unavailable at the current bridge boundary, so
+undo-to-empty cannot safely clear the display. A tool-round assistant anchor is
+not final-text persistence attestation when the final save and its retry fail;
+complete recovery from those two cases is not claimed.
+
+See [Testing Dash](TESTING.md) for the browser and controlled consumer coverage.
+Those tests are not S25/native-host qualification or proof of live MBP/Groot
+connectivity, reconnect/session switching or native voice delivery.
+
 The authenticated `GET /roster` also lists existing interactive OMP sessions on
 Linux. It reads live `omp` processes and their open session JSONL handles under
 `~/.omp/agent/sessions` (or `$PI_CODING_AGENT_DIR/sessions`); `TERN_PANE` supplies

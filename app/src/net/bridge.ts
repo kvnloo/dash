@@ -142,7 +142,7 @@ class Bridge {
 
   send(message: ClientMessage): boolean {
     if (message.type === "attach" && message.turns.some(turn => !this.ownsTurn(turn.id))) return false;
-    if ("id" in message && (message.type === "chat" || message.type === "cancel" || message.type === "voice_begin" || message.type === "voice_chunk" || message.type === "voice_commit") && !this.ownsTurn(message.id)) return false;
+    if ("id" in message && (message.type === "chat" || message.type === "cancel" || message.type === "tool_detail" || message.type === "voice_begin" || message.type === "voice_chunk" || message.type === "voice_commit") && !this.ownsTurn(message.id)) return false;
     if ("turnId" in message && typeof message.turnId === "string" && !this.ownsTurn(message.turnId)) return false;
     if (isDebugMode()) return true;
     if (!this.isOpen() || !this.ws) return false;

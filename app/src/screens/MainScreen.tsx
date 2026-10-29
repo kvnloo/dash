@@ -249,7 +249,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       if (!harnessId) return;
       haptic.select();
       if (settings) saveSettings({ ...settings, harness: harnessId });
-      const existing = store.get().conversations.find((c) => c.harness === harnessId && !c.targetHostId && !c.sessionId);
+      const address = store.get().settings?.address;
+      const existing = address ? store.get().conversations.find((c) => c.endpointAddress === address && c.harness === harnessId && !c.targetHostId && !c.sessionId) : undefined;
       if (existing) setActive(existing.id);
       else createConversation(harnessId);
       navigation.navigate("Chat", draft ? { draft } : undefined);

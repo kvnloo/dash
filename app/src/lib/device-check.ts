@@ -199,10 +199,10 @@ export async function runDeviceCheck(): Promise<DeviceCheckReport> {
   });
 
   await inspect("target", "Voice target", () => {
-    const target = voiceTarget(conversations, activeId);
+    const target = voiceTarget(conversations, activeId, settings?.address);
     return target
       ? { state: "ok", detail: "attached - " + concise(target.title) }
-      : { state: "fail", detail: "missing - open an attached Hermes chat" };
+      : { state: "fail", detail: "missing - no eligible Hermes chat owned by this paired address" };
   }, true);
   await inspect("annotationSink", "Annotation sink", () => {
     const sink = currentSink();

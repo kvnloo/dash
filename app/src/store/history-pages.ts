@@ -27,11 +27,6 @@ export interface HistoryPagesState {
   before: string | null | undefined;
   loading: boolean;
   error?: string;
-  /**
-   * `before` came with the page at the front of `older` (or `unlisted`), so the next page continues it
-   * exactly (server keyset: AV ordinal, Hermes (timestamp, id)) and joins by id alone.
-   */
-  chained?: boolean;
 }
 
 export const historyPages = createStore<Readonly<Record<string, HistoryPagesState>>>({});
@@ -67,10 +62,11 @@ function patch(conversationId: string, fn: (s: HistoryPagesState) => HistoryPage
 /** The newest page arrived (ws reply or first HTTP page): remember where older pages start. */
 export function setHistoryCursor(conversationId: string, before: string | null | undefined): void {
   // Once older pages are loaded their cursor is further back; a refreshed newest page keeps it.
-  patch(conversationId, s => olderLoaded(s) > 0 || s.before === before ? s : { ...s, before, chained: false, error: undefined });
+  patch(conversationId, s => olderLoaded(s) > 0 || s.before === before ? s : { ...s, before, error: undefined });
 }
 
 export function dropHistory(conversationId: string): void {
+  loadingOwners.delete(conversationId);
   historyPages.set(all => {
     if (!(conversationId in all)) return all;
     const rest: Record<string, HistoryPagesState> = {};
@@ -95,12 +91,12 @@ function freshOf(state: HistoryPagesState, page: readonly Message[], shown: Read
 
 /** Prepend one older page to the list, dropping ids already shown. */
 export function prependOlder(state: HistoryPagesState, page: readonly Message[], shown: ReadonlySet<string>, before: string | null): HistoryPagesState {
-  return { ...state, ...capOlder([...freshOf(state, page, shown), ...state.older], state.unlisted), before, chained: true, loading: false, error: undefined };
+  return { ...state, ...capOlder([...freshOf(state, page, shown), ...state.older], state.unlisted), before, loading: false, error: undefined };
 }
 
 /** Prepend one older page behind the list, for the prompt rail alone. */
 export function prependUnlisted(state: HistoryPagesState, page: readonly Message[], shown: ReadonlySet<string>, before: string | null): HistoryPagesState {
-  return { ...state, ...capOlder(state.older, [...freshOf(state, page, shown), ...state.unlisted]), before, chained: true, error: undefined };
+  return { ...state, ...capOlder(state.older, [...freshOf(state, page, shown), ...state.unlisted]), before, error: undefined };
 }
 
 /** The unlisted messages from the one with id `firstId` on join the list. */
@@ -126,6 +122,21 @@ function ownsHistoryRequest(conversation: Conversation, settings: ApiSettings): 
     && deps.conversation(conversation.id)?.endpointAddress === settings.address;
 }
 
+// A cursor refresh may replace list state without replacing its in-flight loader.
+// A closed visit, however, must revoke that loader before another one can start.
+const loadingOwners = new Map<string, symbol>();
+function beginLoading(id: string): symbol {
+  const owner = Symbol();
+  loadingOwners.set(id, owner);
+  patch(id, s => ({ ...s, loading: true, error: undefined }));
+  return owner;
+}
+function releaseLoading(id: string, owner: symbol): boolean {
+  if (loadingOwners.get(id) !== owner) return false;
+  loadingOwners.delete(id);
+  return true;
+}
+
 type PageOutcome = "landed" | "failed" | "skipped";
 /** The background fill's page in flight per chat, so the owner's own scroll-up can wait for it. */
 const fillPages = new Map<string, Promise<PageOutcome>>();
@@ -140,11 +151,11 @@ async function fetchOlder(conversation: Conversation, limit: number, listed: boo
   if (!settings || state.loading || typeof state.before !== "string") return "skipped";
   if (!ownsHistoryRequest(conversation, settings)) return "skipped";
   const before = state.before;
-  if (listed) patch(conversation.id, s => ({ ...s, loading: true, error: undefined }));
-  const pending = historyState(conversation.id);
+  const pending = listed ? beginLoading(conversation.id) : undefined;
   const result = await deps.api.history(settings, { key: conversationKey(conversation), before, limit });
+  if (pending && !releaseLoading(conversation.id, pending)) return "skipped";
   if (!ownsHistoryRequest(conversation, settings)) {
-    if (listed) patch(conversation.id, s => s === pending ? { ...s, loading: false } : s);
+    if (listed) patch(conversation.id, s => ({ ...s, loading: false }));
     return "skipped";
   }
   if (!result.ok) {
@@ -153,7 +164,7 @@ async function fetchOlder(conversation: Conversation, limit: number, listed: boo
   }
   const current = deps.conversation(conversation.id) ?? conversation;
   const shown = new Set(current.messages.map(m => m.id));
-  const page = alignToShown(historyToMessages(result.value.messages, conversation.id, conversation.harness === "hermes"), current, historyState(conversation.id));
+  const page = historyToMessages(result.value.messages, conversation.id, conversation.harness === "hermes");
   patch(conversation.id, s => s.before !== before ? (listed ? { ...s, loading: false } : s)
     : listed ? prependOlder(s, page, shown, result.value.before) : prependUnlisted(s, page, shown, result.value.before));
   return "landed";
@@ -202,32 +213,6 @@ export async function fillOlder(conversation: Conversation, open: () => boolean)
 }
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
-/**
- * The messages of an older page that may join the scrollback. A page that continues `older`
- * (chained) is exact: ids dedupe it, and messages with no timestamp (at 0) or with a timestamp
- * shared across the page boundary are kept. The first page after a cursor that came with the shown
- * window is aligned by time, because ids alone do not dedupe chats whose shown messages carry phone
- * ids (Dash-started chats): it keeps messages at or before the oldest shown time that do not repeat
- * a shown message.
- */
-function alignToShown(page: Message[], conversation: Conversation, state: HistoryPagesState): Message[] {
-  if (state.chained) return page;
-  const oldest = oldestShown(conversation, state);
-  const shown = new Set(conversation.messages.map(signature));
-  return page.filter(m => m.at <= oldest && !shown.has(signature(m)));
-}
-
-function signature(m: Message): string {
-  return `${m.at}\u0000${m.text.slice(0, 200)}`;
-}
-
-/** Oldest timestamp on screen. A message without one (at 0) cannot pin it to the epoch. */
-function oldestShown(conversation: Conversation, state: HistoryPagesState): number {
-  let oldest = Infinity;
-  for (const m of conversation.messages) if (m.at > 0 && m.at < oldest) oldest = m.at;
-  for (const m of state.older) if (m.at > 0 && m.at < oldest) oldest = m.at;
-  return oldest;
-}
 
 /** Pages primeCursor walks back, at most, to get past the cached window. */
 export const PRIME_MAX_PAGES = 4;
@@ -238,11 +223,11 @@ export async function loadNewest(conversation: Conversation, apply: (messages: H
   const settings = deps.settings();
   if (!settings || state.loading) return;
   if (!ownsHistoryRequest(conversation, settings)) return;
-  patch(conversation.id, s => ({ ...s, loading: true, error: undefined }));
-  const pending = historyState(conversation.id);
+  const pending = beginLoading(conversation.id);
   const result = await deps.api.history(settings, { key: conversationKey(conversation), limit: HISTORY_PAGE });
+  if (!releaseLoading(conversation.id, pending)) return;
   if (!ownsHistoryRequest(conversation, settings)) {
-    patch(conversation.id, s => s === pending ? { ...s, loading: false } : s);
+    patch(conversation.id, s => ({ ...s, loading: false }));
     return;
   }
   if (!result.ok) {
@@ -272,29 +257,35 @@ export async function fetchFullText(conversation: Conversation, messageId: strin
 
 /**
  * Find the older-page cursor for a chat opened from its cached window (no ws reply this visit).
- * Only messages at or before everything shown join `older`, so a stale cache never misorders.
+ * Server keysets and native ids determine membership; retained phone clocks cannot discard a page.
  */
 export async function primeCursor(conversation: Conversation): Promise<void> {
   const state = historyState(conversation.id);
   const settings = deps.settings();
   if (!settings || state.loading || state.before !== undefined || !conversation.sessionId || !conversation.targetHostId) return;
   if (!ownsHistoryRequest(conversation, settings)) return;
-  patch(conversation.id, s => ({ ...s, loading: true }));
-  const pending = historyState(conversation.id);
+  const pending = beginLoading(conversation.id);
   const shown = new Set(conversation.messages.map(m => m.id));
   // The cached window (up to 80) can be longer than one page: walk back until a page reaches past
   // it, so the stored cursor never points inside what is already on screen.
   let before: string | undefined;
   for (let n = 0; n < PRIME_MAX_PAGES; n++) {
     const result = await deps.api.history(settings, { key: conversationKey(conversation), limit: HISTORY_PAGE, ...(before ? { before } : {}) });
+    if (loadingOwners.get(conversation.id) !== pending) return;
     if (!ownsHistoryRequest(conversation, settings)) {
-      patch(conversation.id, s => s === pending ? { ...s, loading: false } : s);
+      releaseLoading(conversation.id, pending);
+      patch(conversation.id, s => ({ ...s, loading: false }));
       return;
     }
-    if (!result.ok) { patch(conversation.id, s => ({ ...s, loading: false })); return; }
-    const page = alignToShown(historyToMessages(result.value.messages, conversation.id, conversation.harness === "hermes"), conversation, state);
+    if (!result.ok) {
+      releaseLoading(conversation.id, pending);
+      patch(conversation.id, s => ({ ...s, loading: false }));
+      return;
+    }
+    const page = historyToMessages(result.value.messages, conversation.id, conversation.harness === "hermes").filter(message => !shown.has(message.id));
     const next = result.value.before;
     if (page.length > 0 || next === null || n === PRIME_MAX_PAGES - 1) {
+      releaseLoading(conversation.id, pending);
       patch(conversation.id, s => s.before !== undefined ? { ...s, loading: false } : prependOlder(s, page, shown, next));
       return;
     }

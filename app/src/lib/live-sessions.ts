@@ -1,5 +1,6 @@
 import type { AgentInfo, ChatSummary, HistoryMessage, HostInfo } from "../../../shared/protocol";
 import { isCatalogHarness } from "../../../shared/catalog";
+import { redactTool } from "../../../shared/tool-format";
 import { unwrapHermesHistoryText } from "./history-display";
 import { adoptableSessions } from "./remote-host-sessions";
 import type { Conversation, Message } from "../model";
@@ -53,13 +54,16 @@ function sessionAgents(hosts: HostInfo[]) {
 }
 
 /**
- * A self-host catalog chat that resumes by session id, so it needs no roster row to be sent to.
- * OMP live sessions (`omp:` profiles) are the exception: they end when the host stops listing them.
+ * A persisted self-host chat resumes by session id, so it needs no session roster row.
+ * Non-catalog harnesses must retain their exact generic local harness route.
+ * OMP live sessions (`omp:` profiles) end when the host stops listing them.
  */
 /** `routes`: other computers the paired bridge carries chats to (hello `routes`). */
 export function resumableWithoutRoster(c: Pick<Conversation, "harness" | "sessionId" | "targetHostId" | "profileId" | "stale" | "viewOnly">, hosts: readonly HostInfo[], routes: readonly string[] = []): boolean {
-  if (!c.sessionId?.trim() || !isCatalogHarness(c.harness) || c.viewOnly || c.profileId?.startsWith("omp:")) return false;
-  return hosts.some(host => host.self && host.id === c.targetHostId) || (c.targetHostId !== undefined && routes.includes(c.targetHostId));
+  if (!c.sessionId?.trim() || c.viewOnly || c.profileId?.startsWith("omp:")) return false;
+  const self = hosts.some(host => host.self && host.id === c.targetHostId);
+  if (!isCatalogHarness(c.harness)) return self && c.profileId === `harness:${c.harness}`;
+  return self || (c.targetHostId !== undefined && routes.includes(c.targetHostId));
 }
 
 export interface MergeLiveOptions {
@@ -180,30 +184,214 @@ export function shouldRequestHistory(c: Conversation | undefined): boolean {
 export function hydrateLiveConversation(conversation: Conversation, history: HistoryMessage[]): Conversation {
   if (conversation.messages.some(m => m.role === "assistant" && (m.state === "streaming" || m.state === "pending"))) return conversation;
   if (conversation.messages.length > 0 && conversation.harness !== "hermes" && !isRemoteClaude(conversation)) return conversation;
-  const messages = historyToMessages(history, conversation.id, conversation.harness === "hermes");
-  if (!messages.length) return conversation;
-  // Native persistence can lag a completed ACP turn. A newest-window snapshot
-  // cannot replace already-observed messages newer than its own final timestamp.
-  const newest = messages.at(-1)?.at ?? 0;
-  const ids = new Set(messages.map(message => message.id));
-  const tail = conversation.messages.filter(message => message.at > newest && !ids.has(message.id));
-  return { ...conversation, messages: tail.length ? [...messages, ...tail] : messages, updatedAt: Math.max(newest, conversation.updatedAt) };
+  const incoming = historyToMessages(history, conversation.id, conversation.harness === "hermes");
+  // Empty currently also means unavailable at the bridge boundary; it cannot attest deletion.
+  if (!incoming.length) return conversation;
+  const messages = mergeTranscriptMessages(conversation.messages, incoming, true);
+  return { ...conversation, messages, updatedAt: Math.max(incoming.at(-1)?.at ?? 0, conversation.updatedAt) };
 }
-/**
- * A refreshed newest window on top of a conversation whose older pages were already paged in:
- * like hydrateLiveConversation, but messages that slid out of the window (not in the page and
- * older than its first message) stay in front of it, so the scrollback has no hole.
- */
+
+/** Preserve order; source ids keep a richer phone projection aligned across moving windows. */
+export function mergeTranscriptMessages(existing: readonly Message[], incoming: readonly Message[], nativeNewest = false): Message[] {
+  const positions = new Map<string, number>();
+  for (let index = 0; index < incoming.length; index++) positions.set(incoming[index]!.id, index);
+  const existingById = new Map<string, Message>();
+  const phoneText = new Map<string, string>();
+  for (const message of existing) {
+    existingById.set(message.id, message);
+    if (message.role === "assistant" && !message.turnId.startsWith("history:"))
+      phoneText.set(message.id, redactTool(message.text));
+  }
+  const represented = new Set<string>();
+  for (const message of existing) {
+    if (message.role !== "assistant" || !message.nativeProjection || message.turnId.startsWith("history:")) continue;
+    represented.add(message.nativeProjection.userId);
+    for (const id of message.nativeProjection.replyIds) {
+      const position = positions.get(id);
+      const native = position === undefined ? existingById.get(id) : incoming[position];
+      // A native row that has grown past the stopped phone reply is new visible evidence.
+      if (!native || phoneText.get(message.id)!.includes(native.text)) represented.add(id);
+    }
+  }
+  const consumed = new Set<string>();
+  const result: Message[] = [];
+  const lastIncoming = incoming.at(-1);
+  const rewindAfter = nativeNewest && lastIncoming && !lastIncoming.truncated
+    ? existing.findIndex(message => message.id === lastIncoming.id) : -1;
+  let next = 0;
+  let aligned = true;
+  const appendUntil = (end: number) => {
+    for (; next < end; next++) {
+      const native = incoming[next];
+      if (native && !existingById.has(native.id) && !represented.has(native.id) && !consumed.has(native.id)) result.push(native);
+    }
+  };
+  for (let index = 0; index < existing.length; index++) {
+    const message = existing[index];
+    if (!message || consumed.has(message.id) || represented.has(message.id)) continue;
+    const position = positions.get(message.id);
+    if (position !== undefined && position >= next) {
+      appendUntil(position);
+      const native = incoming[position];
+      const row = native && (!native.truncated || message.truncated) ? native : message;
+      result.push(row.role === "assistant" && message.role === "assistant" && message.endedAt !== undefined
+        ? { ...row, endedAt: message.endedAt } : row);
+      next = position + 1;
+      aligned = true;
+      continue;
+    }
+    const assistant = existing[index + 1];
+    const nativeRow = message.role === "assistant" ? message.turnId.startsWith("history:")
+      : message.native === true || assistant?.role === "assistant" && assistant.turnId.startsWith("history:");
+    if (rewindAfter >= 0 && index > rewindAfter && nativeRow && !positions.has(message.id)) continue;
+    const phoneAssistant = assistant?.role === "assistant" && !assistant.turnId.startsWith("history:") &&
+      (assistant.state === "done" || assistant.state === "error" || assistant.state === "interrupted") ? assistant : undefined;
+    if (message.role !== "user" || !phoneAssistant) {
+      result.push(message);
+      if (!(message.role === "user" && message.delivery === "failed")) aligned = false;
+      continue;
+    }
+    const projection = phoneAssistant.nativeProjection;
+    const projectedUser = projection ? positions.get(projection.userId) : undefined;
+    if (projection && projectedUser === undefined) {
+      let first = incoming.length;
+      for (const id of projection.replyIds) {
+        const at = positions.get(id);
+        if (at !== undefined && at >= next && at < first) first = at;
+      }
+      if (first < incoming.length) appendUntil(first);
+      result.push(message, phoneAssistant);
+      while (next < incoming.length && represented.has(incoming[next]!.id)) next++;
+      aligned = first < incoming.length;
+      index++;
+      continue;
+    }
+    if (!aligned && !projection) {
+      result.push(message, phoneAssistant);
+      index++;
+      continue;
+    }
+    const prompt = redactTool(message.text);
+    const matchesUser = (native: Message) => native.role === "user" &&
+      (!native.truncated ? native.text === prompt : Boolean(native.text) && prompt.startsWith(native.text));
+    let candidate = projectedUser ?? next;
+    if (!projection) while (candidate < incoming.length) {
+      const native = incoming[candidate];
+      // An established native row belongs to its own turn, even when its prompt repeats.
+      if (!native || existingById.has(native.id) || matchesUser(native)) break;
+      candidate++;
+    }
+    const user = incoming[candidate];
+    if (!user || message.truncated || !matchesUser(user) || !projection && existingById.has(user.id)) {
+      result.push(message, phoneAssistant);
+      aligned = false;
+      index++;
+      continue;
+    }
+    const start = candidate + 1;
+    let joined = "";
+    let paragraphs = "";
+    let count = 0;
+    let complete = false;
+    let cut = false;
+    const replyText = phoneText.get(phoneAssistant.id)!;
+    for (let i = start; i < incoming.length; i++) {
+      const part = incoming[i];
+      if (!part || part.role !== "assistant") break;
+      const raw = joined + part.text;
+      const spaced = paragraphs + (count ? "\n\n" : "") + part.text;
+      if (!replyText.startsWith(raw) && !replyText.startsWith(spaced)) {
+        if (count === 0 && part.truncated && phoneAssistant.state === "done") { count++; cut = true; }
+        break;
+      }
+      joined = raw; paragraphs = spaced; count++;
+      cut ||= part.truncated === true;
+      if (joined === replyText || paragraphs === replyText) { complete = true; break; }
+      if (cut) break;
+    }
+    let retry = false;
+    if (!projection && phoneAssistant.state !== "done" && count === 0) {
+      for (let later = index + 2; later < existing.length; later++) {
+        const row = existing[later]!;
+        if (positions.has(row.id)) break;
+        if (row.role === "user" && redactTool(row.text) === prompt) { retry = true; break; }
+      }
+    }
+    if (retry) { result.push(message, phoneAssistant); index++; continue; }
+    appendUntil(candidate);
+    next = start;
+    consumed.add(user.id);
+    const replyIds = new Set(projection?.replyIds);
+    for (let part = 0; part < count; part++) {
+      const id = incoming[start + part]!.id;
+      consumed.add(id); replyIds.add(id);
+    }
+    const reply = incoming[start];
+    const richer = Boolean(message.attachments?.length || phoneAssistant.parts?.length ||
+      phoneAssistant.activity?.length || phoneAssistant.summaries?.length);
+    if (!richer && phoneAssistant.state === "done" && !phoneAssistant.truncated && !user.truncated &&
+      count === 1 && complete && !cut && reply?.role === "assistant")
+      result.push(user, { ...reply, ...(phoneAssistant.endedAt !== undefined ? { endedAt: phoneAssistant.endedAt } : {}) });
+    else result.push(message, { ...phoneAssistant, nativeProjection: { userId: user.id, replyIds: [...replyIds].slice(-600) } });
+    next += count;
+    aligned = true;
+    index++;
+  }
+  appendUntil(incoming.length);
+  return result;
+}
+
+/** Newest-window refreshes share the same id/order-based reconciliation as hydration. */
 export function mergeHistoryWindow(conversation: Conversation, history: HistoryMessage[]): Conversation {
-  const hydrated = hydrateLiveConversation(conversation, history);
-  const first = hydrated.messages[0];
-  if (hydrated === conversation || !first) return hydrated;
-  const ids = new Set(hydrated.messages.map(m => m.id));
-  const kept = conversation.messages.filter(m => !ids.has(m.id) && m.at < first.at);
-  return kept.length ? { ...hydrated, messages: [...kept, ...hydrated.messages] } : hydrated;
+  return hydrateLiveConversation(conversation, history);
 }
+/** Join server-keyset pages around retained phone turns using native anchors, never phone time. */
+export function mergeOlderHistory(current: Message[], older: readonly Message[]): Message[] {
+  if (!older.length) return current;
+  const shown = new Set(current.map(message => message.id));
+  const byId = new Map<string, Message>();
+  const positions = new Map<string, number>();
+  for (let index = 0; index < older.length; index++) {
+    const message = older[index]!;
+    byId.set(message.id, message); positions.set(message.id, index);
+  }
+  for (const message of current) {
+    if (message.role !== "assistant" || !message.nativeProjection) continue;
+    shown.add(message.nativeProjection.userId);
+    const text = redactTool(message.text);
+    for (const id of message.nativeProjection.replyIds) {
+      const row = byId.get(id);
+      if (row && text.includes(row.text)) shown.add(id);
+    }
+  }
+  const result: Message[] = [];
+  let next = 0;
+  const append = (message: Message) => {
+    if (!shown.has(message.id)) { result.push(message); shown.add(message.id); }
+  };
+  for (let index = 0; index < current.length; index++) {
+    const message = current[index]!;
+    const following = current[index + 1];
+    const projection = message.role === "user" && following?.role === "assistant" ? following.nativeProjection : undefined;
+    if (projection) {
+      let anchor = positions.get(projection.userId) ?? older.length;
+      for (const id of projection.replyIds) {
+        const at = positions.get(id);
+        if (at !== undefined && at < anchor) anchor = at;
+      }
+      if (anchor < older.length) while (next < anchor) append(older[next++]!);
+    }
+    const native = message.role === "assistant" ? message.turnId.startsWith("history:")
+      : message.native === true || following?.role === "assistant" && following.turnId.startsWith("history:");
+    if (native) while (next < older.length && older[next]!.at <= message.at) append(older[next++]!);
+    result.push(message);
+  }
+  while (next < older.length) append(older[next++]!);
+  return result;
+}
+
 export function historyToMessages(history: HistoryMessage[], conversationId: string, hermes: boolean): Message[] {
   return history.map(h => h.role === "user"
-    ? { id: h.id, role: "user", text: hermes ? unwrapHermesHistoryText(h.text) : h.text, at: h.at, ...(h.truncated ? { truncated: true } : {}) }
+    ? { id: h.id, role: "user", native: true, text: hermes ? unwrapHermesHistoryText(h.text) : h.text, at: h.at, ...(h.truncated ? { truncated: true } : {}) }
     : { id: h.id, role: "assistant", text: h.text, at: h.at, state: "done", parts: h.parts, ...(h.truncated ? { truncated: true } : {}), turnId: `history:${conversationId}:${h.id}`, seq: 0 });
 }

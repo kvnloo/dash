@@ -171,11 +171,30 @@ Unknown supplied request IDs are discarded rather than matched by a guessed
 session. A changed transcript invalidates both snapshot and cursor. HTTP history
 requests retain endpoint/settings ownership across awaits.
 
-Native Hermes persistence can lag an already completed ACP turn. Reconciliation
-keeps observed messages newer than the incoming window's final timestamp,
-deduplicating native IDs; this chronological boundary is not a cryptographic
-acknowledgement or a cross-host clock guarantee. The real native SQLite activity
-poll is exercised by `history-ownership.spec.ts`: an old source snapshot must not
-erase the reply, and advancing the native source must replace the local tail
-without duplicate messages. The completed isolated candidate passed all three
-focused history journeys; combined exact-head and native acceptance remain open.
+Native Hermes persistence can lag an already completed or failed ACP turn.
+`history-ownership.spec.ts`, `history-merge.spec.ts` and
+`hermes-failure-history.spec.ts` exercise partial native persistence through real
+SQLite/JSONL producers and the isolated bridge. Native source ids anchor ordering;
+phone/host timestamps do not establish turn identity. Richer phone replies retain
+bounded associations with the actual source rows they represent, including when
+the newest window drops their prompt. Empty history also means unavailable at
+the current bridge boundary, so it cannot attest deletion.
+
+`history-reload.spec.ts` covers active/inactive offline reload and unopened-chat
+roster updates. `history-lifecycle.spec.ts` and `persistence-lifecycle.spec.ts`
+cover controlled production-consumer transitions, not native-phone acceptance.
+
+## Native ACP continuation and saved-local recovery
+
+`native-continuation.spec.ts` and `fx-native-acp.spec.ts` require a second
+`session/load` after the first executor exits and a changed roster arrives.
+`paired-session-continuation.spec.ts` additionally reloads the phone client and
+checks the exact original session and confirmed host with no native OMP row.
+An explicit live OMP lease still expires. Noncatalog resumability requires the
+existing matching generic profile on the authenticated paired self host.
+
+`legacy-recovery.spec.ts` keeps legacy, foreign and unscoped saved histories and
+drafts separate from current native list/search results. Recovery selects the
+host-indexed native result explicitly. No address, host or draft is inferred or
+silently transferred. These focused journeys do not replace complete exact-head
+release qualification or actual MBP/Groot phone acceptance.

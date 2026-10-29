@@ -76,12 +76,19 @@ createInterface({input:process.stdin}).on('line', line => {
   // Provider failures as a real agent reports them: an HTTP status in the error data, provider text in details.
   if (text.includes('ARMY_402')) { send({jsonrpc:'2.0',id:r.id,error:{code:-32000,message:'Internal error',data:{http_status:402,details:'ARMY_PROVIDER_DETAIL usage balance exhausted'}}}); return; }
   if (text.includes('ARMY_429')) { send({jsonrpc:'2.0',id:r.id,error:{code:-32000,message:'Internal error',data:{http_status:429,details:'ARMY_PROVIDER_DETAIL too many requests'}}}); return; }
+  // An admitted Hermes turn can stream its provider explanation before failing.
+  if (text.includes('ARMY_ERROR_AFTER_TEXT')) {
+   update('ARMY provider quota explanation before failure');
+   send({jsonrpc:'2.0',id:r.id,error:{code:-32603,message:'Internal error',data:{details:'admitted_turn_failed'}}});
+   return;
+  }
   if (text.includes('ARMY_ERROR')) { send({jsonrpc:'2.0',id:r.id,error:{code:-32000,message:'ARMY_EXPECTED_AGENT_ERROR'}}); return; }
   // What a real agent reports for context occupancy: the bridge turns this ACP usage_update into the gauge's snapshot.
   if (text.includes('ARMY_USAGE')) send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'usage_update',used:85000,size:200000}}});
-  const generated = generatedReply(text);
+  const longReply = text.includes('ARMY_LONG_REPLY') ? 'ARMY_LONG_REPLY_BEGIN ' + 'x'.repeat(17000) + ' ARMY_LONG_REPLY_END' : null;
+  const generated = longReply ?? generatedReply(text);
   const split = generated?.indexOf('\n');
-  const prefix = generated && split !== undefined ? generated.slice(0, split + 1) : 'ARMY_STREAM_BEGIN ';
+  const prefix = longReply ? longReply.slice(0, 8500) : generated && split !== undefined ? generated.slice(0, split + 1) : 'ARMY_STREAM_BEGIN ';
   update(prefix);
   if (text.includes('ARMY_HANG')) return;
   const answer = () => { clearInterval(ticker); ticker = undefined; turnLog('end', text); update(generated ? generated.slice(prefix.length) : replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); };

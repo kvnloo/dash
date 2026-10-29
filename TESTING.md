@@ -38,3 +38,85 @@ Web army evidence is not native phone acceptance: native IME, voice, Android
 permissions and live model behaviour are not covered yet
 (`not_yet_in_army` in `features.json`). Never report a test, screenshot or phone
 check as passed unless it ran against that exact commit.
+
+## History and endpoint ownership qualification
+
+`history-ownership.spec.ts` exercises newest-history ownership in the browser,
+including asynchronous cache hydration of an inactive Hermes transcript before
+its fresh native request. The delayed, unknown and unchanged response cases also
+cover partial native-user persistence and canonical catch-up.
+`history-lifecycle.spec.ts` exercises controlled production-consumer transitions:
+endpoint A → B → A with a newer cursor, closed/reopened loader ownership,
+partial native persistence/catch-up, nonempty shared-anchor rewind, and a native
+poll beating durable load despite host/phone clock skew.
+Each loader owns its flag through a token: stale work cannot supply a page or
+clear a replacement loader's flag.
+
+Native ids anchor transcript order. Alignment starts at a shared anchor (or the
+first phone turn), not at any later repeated prompt. Comparisons use the native
+producer's redaction rules. Richer multipart/cut/stopped replies retain the
+observed native user/reply ids they already represent, so a moving source window
+cannot duplicate their partial reply after its prompt leaves the window. These
+bounded display associations are not source-identity or completion attestation;
+a native row growing beyond the retained phone text remains visible as new
+evidence. Ambiguous pre-existing duplicate turns are not destructively deduped.
+`history-merge.spec.ts` exercises native catch-up and moving-window behaviour
+through a real isolated remote journal and bridge.
+`history-reload.spec.ts` covers active/inactive offline reload and a roster update
+to an unopened index stub. Phone-only completed turns and ordering anchors are
+durable; tool payloads remain host-owned and native history remains cacheable.
+`persistence-lifecycle.spec.ts` exercises a bounded cache suffix disjoint from an
+older durable phone turn, cache disclosure enrichment without stale-answer
+replacement, and a corrupt unloaded file alongside an unrelated durable save.
+Native refresh, cache, durable load and concurrent stub hydration share one
+ordered matcher; only a newest native snapshot may revoke a native suffix.
+Unreadable durable input is preserved and reported after unrelated saves drain,
+and a failed startup transcript load does not skip the other needed chats.
+Older-page membership follows server keysets and native ids, not the oldest
+retained phone timestamp. The list and prompt rail place native pages around
+retained phone turns by their native anchors. An old local turn must not discard
+the intervening native page or put it above its older native anchor. Projection
+source ids place rows that precede a retained phone prompt before that prompt.
+Prompt jumps resolve the actual visible row id, not an assumed unlisted-prefix
+offset, and re-resolve it after row measurements change.
+
+A nonempty newest window ending at a shared native id can revoke a newer native
+suffix. Empty native history currently also means unavailable at the bridge
+boundary, so it cannot safely clear the display after undo-to-empty. A native
+tool-round assistant anchor likewise cannot attest final text persistence after
+both the final save and its retry fail. Neither case is claimed as fully recovered.
+
+`legacy-recovery.spec.ts` has nine browser cases. Legacy/unowned, foreign and
+same-endpoint sessions without a host binding retain their saved-local drafts
+beside the current endpoint's resumable native rows in list and search. The user
+explicitly selects the native result; no saved chat acquires an inferred host.
+Harness search reuses an empty chat only when it belongs to the current endpoint;
+it must not rebind a legacy or foreign chat.
+
+`endpoint-ownership.spec.ts` drives the real ChatScreen phase poll and MessageRow
+retained-tool request through A → B → A. Phase reads must resume on A and never
+carry A's native target to B; retained tool requests must obey the turn owner.
+`annotation-voice-target.spec.ts` adds provenance assertions for exact-address,
+legacy, foreign, stale and retry targets alongside its existing voice journeys.
+Device self-check must report a missing owned eligible Hermes target as failure,
+not voice readiness. New-chat creation can still use the global online connection
+before a conversation exists.
+
+`paired-session-continuation.spec.ts` uses an isolated real bridge without a
+native OMP roster holder: first streamed reply, persisted cache, cold reload,
+fresh authenticated hello explicitly missing that native session, then a second
+real ACP request with the original session id and confirmed paired host.
+The client only adopts the known self host for an unscoped same-endpoint session
+with matching harness and explicit ACP/legacy transport. Existing selected
+native/profile/remote targets keep their original routing and lease rules.
+`native-continuation.spec.ts` and `fx-native-acp.spec.ts` additionally wait for a
+genuine changed roster after the executor exits, then require a second ACP
+`session/load` with the original native id. Noncatalog continuation requires
+the existing matching generic local harness profile, not an arbitrary profile.
+
+These browser fixtures and controlled production-consumer tests are not S25 or
+native-host qualification. They do not establish live MBP/Groot harness connectivity,
+reconnect/session-switch acceptance, microphone, native WebRTC or live voice
+delivery. No native voice activation, credential grant or token issuance is
+authorized by these tests. Registry entries describe coverage, not a claim that
+these new or strengthened tests have passed.

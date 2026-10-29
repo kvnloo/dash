@@ -7,7 +7,7 @@ import { LRU } from "../lib/lru";
 import { createRequestGuard } from "../lib/request-guard";
 import { chatsApi } from "../net/chats-api";
 import { store } from "../store/app";
-import { chatIndexStore, queryKey, type ChatQuery } from "../store/chat-index-store";
+import { chatIndexStore, queryKey, sameChatEndpoint, type ChatQuery } from "../store/chat-index-store";
 
 export const SEARCH_DEBOUNCE_MS = 200;
 
@@ -53,12 +53,18 @@ export function useChatSearch(query: string, opts: { enabled: boolean; filters?:
   const terms = useMemo(() => searchTerms(deferred), [deferred]);
   const local = useMemo(() => {
     if (!enabled) return [];
-    return searchLocal(entries, deferred, harnessName, opts.localLimit).map(row => localRowModel(row, terms));
-  }, [enabled, entries, deferred, harnessName, opts.localLimit, terms]);
+    return searchLocal(entries, deferred, harnessName, opts.localLimit).map(row => {
+      const model = localRowModel(row, terms);
+      return settings?.address && row.entry.conversation.endpointAddress === settings.address &&
+        (!row.entry.conversation.sessionId || row.entry.conversation.targetHostId !== undefined)
+        ? model
+        : { ...model, key: `saved:${row.entry.id}`, kindLabel: "Chat · saved local" };
+    });
+  }, [enabled, entries, deferred, harnessName, opts.localLimit, terms, settings?.address]);
 
   const text = query.trim();
   const filters = opts.filters;
-  const cacheKey = `${text.toLowerCase()}|${queryKey(filters)}`;
+  const cacheKey = JSON.stringify([settings?.address, settings?.chatIndexScope, text.toLowerCase(), queryKey(filters)]);
   const wantsRemote = enabled && remoteEnabled && text.length >= (opts.minRemoteChars ?? 1) && text.length <= 200;
   const [remote, setRemote] = useState<RemoteState>({ key: "", pages: [], status: "idle" });
   const guard = useRef(createRequestGuard());
@@ -70,7 +76,7 @@ export function useChatSearch(query: string, opts: { enabled: boolean; filters?:
     const ticket = guard.current.next();
     setRemote(prev => prev.key === key ? { ...prev, status: "loading" } : { key, pages: [], status: "loading" });
     void chatsApi.search(current, { q: text, limit: opts.remoteLimit ?? 20, cursor, kinds: filters?.kinds, hosts: filters?.hosts }, { signal: ticket.signal }).then(result => {
-      if (!ticket.isCurrent()) return;
+      if (!ticket.isCurrent() || !sameChatEndpoint(current, store.get().settings)) return;
       if (!result.ok) {
         if (!result.notModified && result.aborted) return;
         setRemote(prev => ({ ...prev, key, status: "error" }));
@@ -100,7 +106,7 @@ export function useChatSearch(query: string, opts: { enabled: boolean; filters?:
       return;
     }
     const timer = setTimeout(() => run(cacheKey, null, 0), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); guard.current.cancel(); };
   }, [wantsRemote, cacheKey, run]);
 
   useEffect(() => () => guard.current.cancel(), []);

@@ -3,6 +3,7 @@
 import { test as base, expect, pair } from './fixtures';
 import { stroke } from './annotation';
 import { startFixtureZ0liveBroker, type FixtureZ0liveBroker, type VoiceBrokerCall } from './fixture-z0live-broker';
+import { attachedHermes, voiceTarget } from '../../app/src/lib/voice-target';
 
 const test = base.extend<{ voiceBroker: FixtureZ0liveBroker }>({
   voiceBroker: async ({}, use) => {
@@ -66,6 +67,18 @@ async function sendMarkedInk(page: import('playwright/test').Page, note: string)
 }
 
 test('annotation-voice-target: OMP chat beats a voice call bound to Hermes', async ({ page, bridge, voiceBroker }) => {
+  // Consumer-boundary qualification; these candidates are not injected into the UI below.
+  const owned = { id: 'owned', endpointAddress: 'A:1', harness: 'hermes', profileId: 'same-profile', sessionId: 'same-session', updatedAt: 1 };
+  const foreign = { ...owned, id: 'foreign', endpointAddress: 'B:1', updatedAt: 100 };
+  const legacy = { ...owned, id: 'legacy', endpointAddress: undefined, updatedAt: 200 };
+  expect(voiceTarget([legacy, foreign, owned], legacy.id, 'A:1')).toEqual(owned);
+  expect(voiceTarget([legacy, foreign, owned], foreign.id, 'A:1')).toEqual(owned);
+  expect(voiceTarget([legacy, foreign], legacy.id, 'A:1')).toBeUndefined();
+  expect(voiceTarget([owned], owned.id, undefined)).toBeUndefined();
+  expect(voiceTarget([{ ...owned, stale: true }], owned.id, 'A:1')).toBeUndefined();
+  expect(voiceTarget([{ ...owned, harness: 'omp' }], owned.id, 'A:1')).toBeUndefined();
+  expect(attachedHermes(owned, 'B:1')).toBe(false);
+  expect(attachedHermes(owned, 'A:1')).toBe(true);
   await pairedVoice(page, bridge, voiceBroker);
   await expect(hermes(page)).toHaveCount(1);
   await hermes(page).click({ noWaitAfter: true });
