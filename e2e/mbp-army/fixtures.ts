@@ -98,7 +98,7 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
   async dispose() { await f.stop(); await identity?.stop(); },
   async start() {
    const oldPort=port; if(oldPort) env.DASH_PORT=String(oldPort);
-   let startup='';child=spawn('bwrap',['--bind','/','/','--unshare-pid','--proc','/proc','--dev','/dev','--die-with-parent','/bin/sh','-c','if [ "$ARMY_PERSIST_SESSION" = 1 ]; then "$1" "$2" & fi; exec "$1" "$3"','army-bridge',bun,join(__dirname,'session-holder.ts'),join(bridgeRoot,'bridge/index.ts')],{cwd:bridgeRoot,env,stdio:['ignore','pipe','pipe']});
+   let startup='';child=spawn('bwrap',['--bind','/','/','--unshare-pid','--proc','/proc','--dev','/dev','--die-with-parent','/bin/sh','-c','if [ "$ARMY_PERSIST_SESSION" = 1 ]; then if [ "$ARMY_DUPLICATE_SESSION" = 1 ]; then TERN_PANE=700001 "$1" "$2" primary & TERN_PANE=700002 "$1" "$2" secondary & else "$1" "$2" & fi; fi; exec "$1" "$3"','army-bridge',bun,join(__dirname,'session-holder.ts'),join(bridgeRoot,'bridge/index.ts')],{cwd:bridgeRoot,env,stdio:['ignore','pipe','pipe']});
    const collect=(d: Buffer)=>{const s=d.toString();log+=s;startup+=s; const m=/dash bridge\s+ws:\/\/127\.0\.0\.1:(\d+)/.exec(startup);if(m)port=Number(m[1]);};
    child.stdout?.on('data',collect);child.stderr?.on('data',collect);
    await expect.poll(()=>port>0 && startup.includes('dash bridge'),{timeout:20000,message:'isolated real bridge startup'}).toBeTruthy();

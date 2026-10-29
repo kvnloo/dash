@@ -9,5 +9,9 @@ const root=process.env.PI_CODING_AGENT_DIR;if(!root)throw Error('isolated OMP ro
 const dir=join(root,'sessions','army-fixture');mkdirSync(dir,{recursive:true});
 const fd=openSync(join(dir,'fixture_army-fixture-session.jsonl'),'a+');
 writeSync(fd,JSON.stringify({type:'session',id:'army-fixture-session'})+'\n');
-writeFileSync(join(root,'army-holder.pid'),String(process.pid));
-setInterval(()=>{},10000);
+const label=process.argv[2];
+const control=label?`army-holder-${label}`:'army-holder';
+writeFileSync(join(root,control+'.pid'),String(process.pid));
+setInterval(()=>{
+ if(process.env.ARMY_DUPLICATE_SESSION==='1'&&existsSync(join(root,control+'.stop')))process.exit(0);
+},process.env.ARMY_DUPLICATE_SESSION==='1'?50:10000);
