@@ -9,6 +9,9 @@ type MetroStub = {
   origin: string;
   setBuild(sha: string): void;
   setBundleStatus(status: number): void;
+  setAsset(label: string): void;
+  holdNextBundle(): void;
+  releaseBundles(): void;
   manifestRequests(): number;
   bundleRequests(): number;
   close(): Promise<void>;
@@ -18,6 +21,9 @@ type MetroStub = {
 async function startMetro(): Promise<MetroStub> {
   let served = A;
   let bundleStatus = 200;
+  let asset = '', holdNext = false;
+  const held: (() => void)[] = [];
+  const releaseBundles = () => { for (const reply of held.splice(0)) reply(); };
   let manifestRequests = 0;
   let bundleRequests = 0;
   let origin = '';
@@ -39,7 +45,7 @@ async function startMetro(): Promise<MetroStub> {
       res.end(JSON.stringify({
         id: 'dash-army-live-preview',
         // Deliberately stale host: the app must fetch the asset at the polled Metro origin.
-        launchAsset: { key: served, url: 'https://stale-metro.invalid/bundles/' + served + '.bundle', contentType: 'application/javascript' },
+        launchAsset: { key: served, url: 'https://stale-metro.invalid/bundles/' + served + '.bundle' + (asset ? '?asset=' + encodeURIComponent(asset) : ''), contentType: 'application/javascript' },
         assets: [],
         extra: { expoClient: { extra: { dashBuild: { sha: served, builtAtMs: Date.now() - 210_000 } } } },
       }));
@@ -47,8 +53,13 @@ async function startMetro(): Promise<MetroStub> {
     }
     if (path === '/bundles/' + served + '.bundle') {
       bundleRequests++;
-      res.writeHead(bundleStatus, { 'Content-Type': 'application/javascript' });
-      res.end(bundleStatus === 200 ? '// fixture Metro bundle\n' : 'Bundle unavailable');
+      const status = bundleStatus;
+      const reply = () => {
+        if (res.destroyed || res.writableEnded) return;
+        res.writeHead(status, { 'Content-Type': 'application/javascript' });
+        res.end(status === 200 ? '// fixture Metro bundle\n' : 'Bundle unavailable');
+      };
+      if (holdNext) { holdNext = false; held.push(reply); } else reply();
       return;
     }
     res.writeHead(404); res.end();
@@ -67,9 +78,17 @@ async function startMetro(): Promise<MetroStub> {
     origin,
     setBuild: (sha) => { served = sha; },
     setBundleStatus: (status) => { bundleStatus = status; },
+    setAsset: label => { asset = label; },
+    holdNextBundle: () => { holdNext = true; },
+    releaseBundles,
     manifestRequests: () => manifestRequests,
     bundleRequests: () => bundleRequests,
-    close: () => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
+    close: async () => {
+      releaseBundles();
+      const { promise, resolve, reject } = Promise.withResolvers<void>();
+      server.close(error => error ? reject(error) : resolve());
+      return promise;
+    },
   };
 }
 
@@ -87,6 +106,27 @@ async function reloads(page: Page): Promise<number> {
     const value: unknown = Reflect.get(window, '__dashReloads');
     return typeof value === 'number' ? value : 0;
   });
+}
+
+async function captureDraftAtReload(page: Page) {
+  await page.evaluate(() => {
+    const previous: unknown = Reflect.get(window, '__dashReloads');
+    let count = typeof previous === 'number' ? previous : 0;
+    Object.defineProperty(window, '__dashReloads', {
+      configurable: true,
+      get: () => count,
+      set: (next: unknown) => {
+        if (typeof next !== 'number') return;
+        if (next > count) Reflect.set(window, '__dashDraftAtReload', localStorage.getItem('dash.composerDrafts.v1'));
+        count = next;
+      },
+    });
+  });
+}
+
+async function pauseClock(page: Page, advance: number) {
+  const now = await page.evaluate(() => Date.now());
+  await page.clock.pauseAt(now + advance);
 }
 
 /**
@@ -399,19 +439,7 @@ test('live-reload-guards: manual Reload now flushes a sub-debounce draft before 
     metro.setBuild(B);
     const chip = page.getByTestId('turbo-served-build');
     await expect(chip).toContainText('aaaaaaa → bbbbbbb');
-    // Snapshot storage at the exact moment the web reload adapter increments its counter.
-    await page.evaluate(() => {
-      let count = 0;
-      Object.defineProperty(window, '__dashReloads', {
-        configurable: true,
-        get: () => count,
-        set: (next: unknown) => {
-          if (typeof next !== 'number') return;
-          if (next > count) Reflect.set(window, '__dashDraftAtReload', localStorage.getItem('dash.composerDrafts.v1'));
-          count = next;
-        },
-      });
-    });
+    await captureDraftAtReload(page);
     const draft = 'Manual reload must flush before 250ms';
     await composer(page).fill(draft);
     await chip.click({ noWaitAfter: true });
@@ -422,4 +450,94 @@ test('live-reload-guards: manual Reload now flushes a sub-debounce draft before 
     await page.waitForTimeout(1_200);
     expect(await reloads(page)).toBe(1);
   } finally { await metro.close(); }
+});
+
+test.describe('reload commit preparation', () => {
+  test.beforeEach(async ({ page }) => { await page.clock.install(); });
+
+  test('live-reload-commit: edits made during a held probe are persisted at reload', async ({ page, bridge }, info) => {
+    const metro = await startMetro();
+    try {
+      await openChat(page, bridge, appUrl(metro, 60_000, 250));
+      await composer(page).fill('Draft before probe');
+      metro.setBuild(B);
+      const chip = page.getByTestId('turbo-served-build');
+      await expect(chip).toContainText('update ready - held: unsent draft');
+      await captureDraftAtReload(page);
+      await pauseClock(page, 1000);
+      const probes = metro.bundleRequests();
+      metro.holdNextBundle();
+      await chip.click({ noWaitAfter: true });
+      await page.clock.runFor(200);
+      await expect.poll(() => metro.bundleRequests()).toBeGreaterThan(probes);
+      const draft = 'Edit during probe must survive the reload';
+      await composer(page).fill(draft);
+      await page.clock.runFor(50);
+      metro.releaseBundles();
+      await expect.poll(() => reloads(page)).toBe(1);
+      const snapshot: unknown = await page.evaluate(() => Reflect.get(window, '__dashDraftAtReload'));
+      expect(snapshot).toContain(draft);
+      await page.screenshot({ path: info.outputPath('latest-draft-persisted.png') });
+    } finally { await metro.close(); }
+  });
+
+  test('live-reload-commit: resumed interaction cancels an idle reload until the owner is idle again', async ({ page, bridge }, info) => {
+    const metro = await startMetro();
+    try {
+      await openChat(page, bridge, appUrl(metro, 1000, 250));
+      await composer(page).focus();
+      metro.setBuild(B);
+      const chip = page.getByTestId('turbo-served-build');
+      await expect(chip).toContainText('aaaaaaa → bbbbbbb');
+      const probes = metro.bundleRequests();
+      metro.holdNextBundle();
+      await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+      await pauseClock(page, 1500);
+      await expect.poll(() => metro.bundleRequests()).toBeGreaterThan(probes);
+      await composer(page).click();
+      await expect(composer(page)).toBeFocused();
+      const response = page.waitForResponse(response => response.url().startsWith(metro.origin + '/bundles/'));
+      metro.releaseBundles();
+      await response;
+      await page.clock.runFor(500);
+      expect(await reloads(page)).toBe(0);
+      await page.screenshot({ path: info.outputPath('interaction-holds-reload.png') });
+      await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+      await page.clock.runFor(1500);
+      await expect.poll(() => reloads(page)).toBe(1);
+    } finally { await metro.close(); }
+  });
+
+  test('live-reload-commit: a changed asset URL for the same SHA loses its old health approval', async ({ page, bridge }, info) => {
+    const metro = await startMetro();
+    try {
+      await openChat(page, bridge, appUrl(metro, 60_000, 250));
+      await composer(page).fill('Retain this draft while the asset changes');
+      metro.setBuild(B);
+      const chip = page.getByTestId('turbo-served-build');
+      await expect(chip).toContainText('update ready - held: unsent draft');
+      await pauseClock(page, 1000);
+      const probes = metro.bundleRequests();
+      metro.holdNextBundle();
+      await chip.click({ noWaitAfter: true });
+      await page.clock.runFor(200);
+      await expect.poll(() => metro.bundleRequests()).toBeGreaterThan(probes);
+      const manifests = metro.manifestRequests();
+      metro.setAsset('replacement');
+      metro.setBundleStatus(500);
+      await page.clock.runFor(500);
+      await expect.poll(() => metro.manifestRequests()).toBeGreaterThan(manifests);
+      await expect(chip).toContainText('bbbbbbb failed to build (HTTP 500)', { timeout: 5000 });
+      metro.releaseBundles();
+      await page.clock.runFor(200);
+      expect(await reloads(page)).toBe(0);
+      await page.screenshot({ path: info.outputPath('replacement-asset-blocked.png') });
+      metro.setBundleStatus(200);
+      await page.clock.runFor(500);
+      await expect(chip).toContainText('update ready - held: unsent draft');
+      await chip.click({ noWaitAfter: true });
+      await page.clock.runFor(200);
+      await expect.poll(() => reloads(page)).toBe(1);
+    } finally { await metro.close(); }
+  });
 });

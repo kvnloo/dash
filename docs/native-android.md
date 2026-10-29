@@ -125,9 +125,12 @@ Three Metro servers run on the dev host, each behind a tailnet-only relay: `:821
 - Latency from a push to the new bundle on `:8213` is the 30 s tick plus a few seconds to build, restart and compile. Check what a Metro serves the way the phone fetches it: `scripts/turbo/verify-served.sh [--port 8213|8214]`.
 - A phone that predates the chip needs one reload (or `DASH_CHANNEL_CONF_DIR=~/.config/dash-turbo-live dash-channel open <adb-serial>` while the phone is idle) to start auto-updating. `scripts/adb-tailscale.sh` explains why Wireless debugging needs `ADB_PORT`.
 
-Before loading a newer build, the app checks its launch asset again after persisting
-drafts. A build that stops serving HTTP 200 while an update waits is not reloaded.
-Its failure is shown until a later probe succeeds; the draft remains intact.
+Before loading a newer build, the app checks the exact advertised launch asset again.
+A build that stops serving HTTP 200 while an update waits is not reloaded.
+After network and preference writes finish, the app persists drafts, including edits
+made during those waits. It then checks the target and automatic-reload eligibility
+again without another asynchronous wait. Resumed interaction cancels an idle reload.
+Changing the launch asset URL requires a new health check, even for the same SHA.
 
 Channel switches, promotions, explicit rollbacks and automatic re-serving require
 a green, complete O15 army receipt for the target commit before release state
