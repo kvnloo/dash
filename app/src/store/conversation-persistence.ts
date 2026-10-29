@@ -35,14 +35,58 @@ function pending(message: Message): boolean {
   return message.role === "user" ? message.delivery === "queued" || message.delivery === "failed" || message.delivery === "steering"
     : message.state === "pending" || message.state === "streaming";
 }
+
+/** Keep the base order, using newer rows for shared ids and placing new rows by their nearest predecessor. */
+export function mergeTranscriptMessages(base: readonly Message[], newer: readonly Message[]): Message[] {
+  const baseIds = new Set(base.map(message => message.id));
+  const replacements = new Map(newer.map(message => [message.id, message]));
+  const after = new Map<string, Message[]>();
+  const before = new Map<string, Message[]>();
+  const leading: Message[] = [];
+  let predecessor: string | undefined;
+  for (const message of newer) {
+    if (baseIds.has(message.id)) {
+      if (leading.length) before.set(message.id, leading.splice(0));
+      predecessor = message.id;
+    } else if (predecessor) {
+      const additions = after.get(predecessor) ?? [];
+      additions.push(message);
+      after.set(predecessor, additions);
+    } else {
+      leading.push(message);
+    }
+  }
+  const result: Message[] = [];
+  for (const message of base) {
+    for (const addition of before.get(message.id) ?? []) result.push(addition);
+    result.push(replacements.get(message.id) ?? message);
+    for (const addition of after.get(message.id) ?? []) result.push(addition);
+  }
+  for (const message of leading) result.push(message);
+  return result;
+}
+
 export function durableConversation(chat: Conversation): Conversation {
   if (!hasHostHistory(chat)) return chat;
-  const messages = chat.messages.filter((message, index, all) => {
-    const next = all[index + 1];
-    return pending(message) || (message.role === "user" && next?.role === "assistant" && pending(next));
-  });
+  const retained = new Set<number>();
+  for (let index = 0; index < chat.messages.length; index++) {
+    const message = chat.messages[index];
+    if (!message) continue;
+    if (pending(message)) retained.add(index);
+    if (message.role !== "assistant" || message.turnId.startsWith(`history:${chat.id}:`)) continue;
+    retained.add(index);
+    const user = chat.messages[index - 1];
+    if (user?.role === "user") {
+      retained.add(index - 1);
+      // Retain the source-id ordering anchor too, independent of cache eviction.
+      if (index > 1) retained.add(index - 2);
+    }
+  }
+  const messages = chat.messages.filter((message, index, all) =>
+    retained.has(index) || message.role === "user" && all[index + 1]?.role === "assistant" && retained.has(index + 1));
   return { ...chat, messages: messages.map(message => message.role === "assistant"
-    ? { ...message, text: "", seq: 0, parts: undefined, activity: undefined, summaries: undefined } : message) };
+    ? { ...message, parts: undefined, activity: undefined, summaries: undefined,
+      ...(pending(message) ? { text: "", seq: 0, status: undefined } : {}) } : message) };
 }
 function fitsCache(value: unknown, budget: { left: number }): boolean {
   if (typeof value === "string") budget.left -= value.length * 6 + 2;
@@ -131,6 +175,8 @@ export class ConversationPersistence {
   private running: Promise<void> | undefined;
   /** Conversations hydrated from the index whose durable transcript was not read yet. */
   private unloaded = new Set<string>();
+  /** A queued snapshot stays a stub even if a concurrent load finishes before its drain. */
+  private unloadedSnapshots = new WeakSet<Conversation>();
   /** Serialized index entries by id; the index key is written once per drain. */
   private indexParts = new Map<string, string>();
   private indexDirty = false;
@@ -175,16 +221,11 @@ export class ConversationPersistence {
   /** Read one conversation's durable transcript on demand (active chat, pending sends). */
   async loadOne(chat: Conversation): Promise<Conversation> {
     if (!this.unloaded.has(chat.id)) return chat;
-    let disk: Conversation | null = null;
-    try {
-      const raw = await this.files.read("durable", filename(chat.id));
-      disk = parse(raw);
-      if (raw && disk && hasHostHistory(disk)) this.durableValues.set(chat.id, raw);
-    } catch { disk = null; }
+    const raw = await this.files.read("durable", filename(chat.id));
+    const disk = parse(raw);
+    if (raw && (!disk || disk.id !== chat.id)) throw new Error("Invalid durable conversation");
     if (!disk) return chat;
-    const ids = new Set(chat.messages.map(message => message.id));
-    const messages = [...disk.messages.filter(message => !ids.has(message.id)), ...chat.messages];
-    return { ...disk, ...chat, messages };
+    return { ...disk, ...chat, messages: mergeTranscriptMessages(disk.messages, chat.messages) };
   }
 
   async load(): Promise<Conversation[]> {
@@ -261,12 +302,12 @@ export class ConversationPersistence {
       const cached = parse(raw);
       if (!cached || cached.id !== chat.id || cached.sessionId !== chat.sessionId ||
         cached.harness !== chat.harness || cached.profileId !== chat.profileId || cached.targetHostId !== chat.targetHostId) return chat;
-      const ids = new Set(chat.messages.map(message => message.id));
-      return { ...chat, messages: [...cached.messages.filter(message => !ids.has(message.id)), ...chat.messages] };
+      return { ...chat, messages: mergeTranscriptMessages(cached.messages, chat.messages) };
     } catch { return chat; }
   }
 
   save(chats: readonly Conversation[]): Promise<void> {
+    for (const chat of chats) if (this.unloaded.has(chat.id)) this.unloadedSnapshots.add(chat);
     this.waiting = chats;
     this.waitingSeq = ++this.saveSeq;
     if (!this.running) {
@@ -305,13 +346,13 @@ export class ConversationPersistence {
           if (this.saved.get(chat.id) === chat) continue;
           const name = filename(chat.id);
           let record = chat;
-          if (this.unloaded.has(chat.id) && !hasHostHistory(chat)) {
-            // The transcript of a local chat lives only in its durable file: never overwrite it with a stub.
-            const disk = parse(await this.files.read("durable", name).catch(() => null));
-            if (disk) {
-              const ids = new Set(chat.messages.map(message => message.id));
-              record = { ...chat, messages: [...disk.messages.filter(message => !ids.has(message.id)), ...chat.messages] };
-            }
+          const wasUnloaded = this.unloaded.has(chat.id) || this.unloadedSnapshots.has(chat);
+          if (wasUnloaded) {
+            // An index stub never owns the transcript, including for host chats.
+            const raw = await this.files.read("durable", name);
+            const disk = parse(raw);
+            if (raw && (!disk || disk.id !== chat.id)) throw new Error("Invalid durable conversation");
+            if (disk) record = { ...chat, messages: mergeTranscriptMessages(disk.messages, chat.messages) };
           }
           const durable = JSON.stringify(durableConversation(record));
           if (this.durableValues.get(chat.id) !== durable) {
@@ -319,7 +360,7 @@ export class ConversationPersistence {
             if (hasHostHistory(chat)) this.durableValues.set(chat.id, durable);
             else this.durableValues.delete(chat.id);
           }
-          if (hasHostHistory(chat) && !this.unloaded.has(chat.id) && !sameHistory(this.saved.get(chat.id), chat)) {
+          if (hasHostHistory(chat) && !wasUnloaded && !sameHistory(this.saved.get(chat.id), chat)) {
             const cache = cacheConversation(chat);
             try {
               if (cache) {

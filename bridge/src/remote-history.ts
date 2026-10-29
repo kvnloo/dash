@@ -62,7 +62,8 @@ export async function remoteClaudeHistory(host: RemoteHost, session: string, lim
     const rows: unknown[] = raw.rows;
     for (const row of rows) {
       if (typeof row !== "object" || row === null || !("text" in row) || !("at" in row) || !("id" in row) || !("role" in row) || typeof row.text !== "string" || typeof row.at !== "string") return undefined;
-      messages.push({ id: row.id, role: row.role, text: redact(row.text).slice(0, MESSAGE_TEXT_MAX), at: Date.parse(row.at) || 0 });
+      const text = redact(row.text);
+      messages.push({ id: row.id, role: row.role, text: text.slice(0, MESSAGE_TEXT_MAX), at: Date.parse(row.at) || 0, ...(text.length > MESSAGE_TEXT_MAX ? { truncated: true } : {}) });
     }
     const parsed = parseServerMessage({ type: "history", harness: "claude", sessionId: session, messages });
     if (parsed?.type !== "history") return undefined;

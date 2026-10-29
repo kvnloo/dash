@@ -26,6 +26,56 @@ unsafe or unprovisioned credentials leave the peer undiscovered. Native peer ros
 remain view-only: existing archive SSH routing is unchanged. No credential provisioning,
 live service or device changes are part of this journey.
 
+## Routed Claude native-history reconciliation
+
+`claude-remote.spec.ts` registers **completed phone turns survive stale and partial
+remote journals and reconcile repeated prompts**. It sends the same `ARMY_HOLD`
+prompt twice through the real composer, observes each held stream, and releases
+each turn with the fixture HOME's `army-release` file. A passive WebSocket listener
+waits for subsequent actual `history` replies for `REMOTE_SESSION`: first the
+unchanged old journal, then a partial user-only append, then the confirmed pair
+plus a new host message. Only the isolated
+`remote-home/.claude/projects/army-project/<session>.jsonl` is changed. Distinct
+stable byte-offset native IDs distinguish repeated turns; visible exact-text counts must remain one
+pair per send, while each new host message becomes visible. ACP start/end logs
+and two `session/resume` calls supply fixture-side evidence.
+
+Run with the normal army runner against the baseline export or corrected export,
+selecting `e2e/mbp-army/claude-remote.spec.ts -g "completed phone turns survive"`.
+No passing receipt is claimed by authoring this regression. The pre-existing
+turn-after-turn streaming regression remains unchanged.
+
+`history-merge.spec.ts` extends this path to multipart and truncated assistant
+rows, the first phone turn without a preceding native row, and stopped/error
+turns followed by a later completed turn. `ARMY_LONG_REPLY` emits a deterministic
+reply longer than the history text limit through two real ACP chunks, including
+the existing `ARMY_HOLD` release gate.
+
+`history-reload.spec.ts` completes real phone turns, retains earlier and later
+native rows, then stops its isolated bridge before app reload and reopen. It
+checks visible row order rather than inverted transcript DOM order. A separate
+journey changes the owned Hermes source while its phone chat remains unopened
+and verifies that a roster save does not erase the durable phone turn.
+
+`native-continuation.spec.ts` covers the installed Android failure where the first
+OMP reply completes but a later roster refresh disables the next Send. It starts
+a new ACP chat without a persistent process holder, completes its first turn,
+changes the owned external-discovery source, then waits for the app's actual
+successful roster refresh. The second turn must remain sendable and load the
+same native session. New phone-created ACP chats retain the authenticated
+bridge's resolved local route. Non-catalogued harnesses use only an already
+listed matching generic local harness profile, not a native-history catalog.
+`fx-native-acp.spec.ts` also forces a real changed roster between its two turns.
+Existing targeted live-process routes are not retargeted; non-catalogued remote
+or arbitrary profile routes do not gain roster-free resumption.
+
+`hermes-failure-history.spec.ts` exercises an explanation chunk followed by an
+ACP admitted-turn failure, then an actual user-only native history response.
+The visible explanation and failure must remain; the failed turn must not turn
+into a blank transcript or disable the next draft. This fixture shape does not
+attest which ACP frames the separately observed installed phone received.
+
+
 ## OpenUI / GenUI native reply journey
 
 `openui-native.spec.ts` uses `bridgeOptions.generatedUI` in `fixtures.ts` to enable

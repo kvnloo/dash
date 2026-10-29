@@ -51,13 +51,16 @@ function sessionAgents(hosts: HostInfo[]) {
 }
 
 /**
- * A self-host catalog chat that resumes by session id, so it needs no roster row to be sent to.
- * OMP live sessions (`omp:` profiles) are the exception: they end when the host stops listing them.
+ * A persisted self-host chat resumes by session id, so it needs no session roster row.
+ * Non-catalog harnesses must retain their exact generic local harness route.
+ * OMP live sessions (`omp:` profiles) end when the host stops listing them.
  */
 /** `routes`: other computers the paired bridge carries chats to (hello `routes`). */
 export function resumableWithoutRoster(c: Pick<Conversation, "harness" | "sessionId" | "targetHostId" | "profileId" | "stale" | "viewOnly">, hosts: readonly HostInfo[], routes: readonly string[] = []): boolean {
-  if (!c.sessionId?.trim() || !isCatalogHarness(c.harness) || c.viewOnly || c.profileId?.startsWith("omp:")) return false;
-  return hosts.some(host => host.self && host.id === c.targetHostId) || (c.targetHostId !== undefined && routes.includes(c.targetHostId));
+  if (!c.sessionId?.trim() || c.viewOnly || c.profileId?.startsWith("omp:")) return false;
+  const self = hosts.some(host => host.self && host.id === c.targetHostId);
+  if (!isCatalogHarness(c.harness)) return self && c.profileId === `harness:${c.harness}`;
+  return self || (c.targetHostId !== undefined && routes.includes(c.targetHostId));
 }
 
 export interface MergeLiveOptions {
@@ -174,22 +177,121 @@ export function shouldRequestHistory(c: Conversation | undefined): boolean {
 export function hydrateLiveConversation(conversation: Conversation, history: HistoryMessage[]): Conversation {
   if (conversation.messages.some(m => m.role === "assistant" && (m.state === "streaming" || m.state === "pending"))) return conversation;
   if (conversation.messages.length > 0 && conversation.harness !== "hermes" && !isRemoteClaude(conversation)) return conversation;
-  const messages = historyToMessages(history, conversation.id, conversation.harness === "hermes");
-  if (!messages.length) return conversation;
-  return { ...conversation, messages, updatedAt: Math.max(messages.at(-1)?.at ?? 0, conversation.updatedAt) };
+  const incoming = historyToMessages(history, conversation.id, conversation.harness === "hermes");
+  if (!incoming.length) return conversation;
+  const messages = reconcileHistory(conversation.messages, incoming, conversation.id);
+  return { ...conversation, messages, updatedAt: Math.max(incoming.at(-1)?.at ?? 0, conversation.updatedAt) };
 }
+
 /**
- * A refreshed newest window on top of a conversation whose older pages were already paged in:
- * like hydrateLiveConversation, but messages that slid out of the window (not in the page and
- * older than its first message) stay in front of it, so the scrollback has no hole.
+ * History is an ordered window, not a deletion list. Native ids order rows already
+ * seen; text matching only aligns their display with a phone turn, not its identity.
+ * Consume matches in order so repeated prompts remain distinct. A partial or cut
+ * native reply must not replace the phone's richer text or its stopped/error state.
  */
+function reconcileHistory(existing: Message[], incoming: Message[], conversationId: string): Message[] {
+  const positions = new Map(incoming.map((message, index) => [message.id, index]));
+  const existingIds = new Set(existing.map(message => message.id));
+  const result: Message[] = [];
+  let next = 0;
+  const appendUntil = (end: number) => {
+    for (; next < end; next++) {
+      const native = incoming[next];
+      if (native && !existingIds.has(native.id)) result.push(native);
+    }
+  };
+
+  for (let index = 0; index < existing.length; index++) {
+    const message = existing[index];
+    if (!message) continue;
+    const position = positions.get(message.id);
+    if (position !== undefined && position >= next) {
+      appendUntil(position);
+      const native = incoming[position];
+      result.push(native && (!native.truncated || message.truncated) ? native : message);
+      next = position + 1;
+      continue;
+    }
+
+    const assistant = existing[index + 1];
+    const phoneAssistant = assistant?.role === "assistant" &&
+      !assistant.turnId.startsWith(`history:${conversationId}:`) &&
+      (assistant.state === "done" || assistant.state === "error" || assistant.state === "interrupted")
+      ? assistant : undefined;
+    if (message.role !== "user" || (!phoneAssistant && message.delivery !== "failed")) {
+      result.push(message);
+      continue;
+    }
+
+    // Do not search through a later row already in the transcript: that would
+    // move a phone turn past an established native anchor.
+    let candidate = next;
+    while (candidate < incoming.length) {
+      const native = incoming[candidate];
+      if (!native || existingIds.has(native.id)) break;
+      if (native.role === "user" && !native.truncated && !message.truncated && native.text === message.text) break;
+      candidate++;
+    }
+    const user = incoming[candidate];
+    if (!user || existingIds.has(user.id) || user.role !== "user" || user.truncated ||
+      message.truncated || user.text !== message.text) {
+      result.push(message);
+      if (phoneAssistant) { result.push(phoneAssistant); index++; }
+      continue;
+    }
+
+    appendUntil(candidate);
+    next = candidate + 1;
+    // Native assistant text can span multiple rows. Accept either concatenated
+    // stream chunks or Hermes' paragraph-separated projection, and stop as soon
+    // as the local reply is complete so later host rows remain visible.
+    let joined = "";
+    let paragraphs = "";
+    let count = 0;
+    let complete = false;
+    let cut = false;
+    if (phoneAssistant) {
+      for (let i = next; i < incoming.length; i++) {
+        const part = incoming[i];
+        if (!part || part.role !== "assistant" || existingIds.has(part.id)) break;
+        const raw = joined + part.text;
+        const spaced = paragraphs + (count ? "\n\n" : "") + part.text;
+        if (!phoneAssistant.text.startsWith(raw) && !phoneAssistant.text.startsWith(spaced)) {
+          // Redaction can prevent a text comparison. A cut first reply still
+          // cannot supersede a completed phone response; consume only that row.
+          if (count === 0 && part.truncated && phoneAssistant.state === "done") {
+            count++;
+            cut = true;
+          }
+          break;
+        }
+        joined = raw;
+        paragraphs = spaced;
+        count++;
+        cut ||= part.truncated === true;
+        if (joined === phoneAssistant.text || paragraphs === phoneAssistant.text) {
+          complete = true;
+          break;
+        }
+        if (cut) break;
+      }
+    }
+    const reply = incoming[next];
+    if (phoneAssistant?.state === "done" && !phoneAssistant.truncated && count === 1 && complete && !cut && reply?.role === "assistant") {
+      result.push(user, reply);
+    } else {
+      result.push(message);
+      if (phoneAssistant) result.push(phoneAssistant);
+    }
+    next += count;
+    if (phoneAssistant) index++;
+  }
+  appendUntil(incoming.length);
+  return result;
+}
+/** Newest-window refreshes use the same id-based merge as full hydration. */
 export function mergeHistoryWindow(conversation: Conversation, history: HistoryMessage[]): Conversation {
-  const hydrated = hydrateLiveConversation(conversation, history);
-  const first = hydrated.messages[0];
-  if (hydrated === conversation || !first) return hydrated;
-  const ids = new Set(hydrated.messages.map(m => m.id));
-  const kept = conversation.messages.filter(m => !ids.has(m.id) && m.at < first.at);
-  return kept.length ? { ...hydrated, messages: [...kept, ...hydrated.messages] } : hydrated;
+  return hydrateLiveConversation(conversation, history);
 }
 export function historyToMessages(history: HistoryMessage[], conversationId: string, hermes: boolean): Message[] {
   return history.map(h => h.role === "user"

@@ -2,8 +2,9 @@
 // Real Expo web UI -> isolated real bridge -> ssh stand-in -> the real bridge/bin/dash-acp of this
 // checkout -> Claude-shaped ACP fixture, resumed by session id without a history replay.
 import {test,expect,composer,send,pair,REMOTE_SESSION} from './fixtures';
-import {appendFile,mkdir,readFile,writeFile} from 'node:fs/promises';
+import {appendFile,mkdir,readFile,unlink,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import {parseServerMessage,type ServerMessage} from '../../shared/protocol';
 
 test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({path:info.outputPath('final.png')});});
 
@@ -30,6 +31,86 @@ test.describe('Claude Code chat recorded on another computer',()=>{
   const hops=await lines(join(bridge.dir,'army-ssh.log'));
   expect(hops.filter(hop=>hop.startsWith('army-remote\tpython3 ')).length).toBeGreaterThanOrEqual(2);
   expect(bridge.logs()).not.toMatch(/ws\.chat |turn\.remote/);
+ });
+ test('completed phone turns survive stale and partial remote journals and reconcile repeated prompts',async({page,bridge},info)=>{
+  const project=join(bridge.dir,'remote-home','.claude','projects','army-project');
+  await mkdir(project,{recursive:true});
+  const path=join(project,REMOTE_SESSION+'.jsonl');
+  const record=(id:string,role:'user'|'assistant',text:string)=>JSON.stringify({
+   type:role,uuid:id,timestamp:new Date().toISOString(),
+   message:{role,content:[{type:'text',text}]},
+  })+'\n';
+  const initial='ARMY journal before phone turns';
+  let journal=record('army-history-initial','assistant',initial);
+  await writeFile(path,journal);
+  // Passive observation only: the app sends every history request and the real
+  // bridge reads the owned remote JSONL through its normal SSH route.
+  const histories:Extract<ServerMessage,{type:'history'}>[]=[];
+  page.on('websocket',socket=>socket.on('framereceived',frame=>{
+   try{
+    const message=parseServerMessage(JSON.parse(String(frame.payload)));
+    if(message?.type==='history'&&message.harness==='claude'&&message.sessionId===REMOTE_SESSION)histories.push(message);
+   }catch{/* Ignore non-protocol socket frames. */}
+  }));
+  const refreshed=async(after:number,texts:string[])=>{
+   await expect.poll(()=>histories.slice(after).some(message=>
+    message.messages.map(item=>item.text).join('\n')===texts.join('\n')
+   ),{timeout:30000}).toBe(true);
+   // A received frame precedes React's paint; assert after its UI consumer runs.
+   await page.evaluate(()=>{
+    const {promise,resolve}=Promise.withResolvers<void>();
+    requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()));
+    return promise;
+   });
+  };
+  await pair(page,bridge);
+  await expect(remoteRow(page)).toHaveCount(1,{timeout:30000});
+  await remoteRow(page).click({noWaitAfter:true});
+  await expect(visible(page,/ARMY journal before phone turns/)).toBeVisible({timeout:15000});
+  const prompt='ARMY_HOLD repeated remote history prompt';
+  const reply='ARMY_STREAM_BEGIN ARMY_CLAUDE_REPLY: '+prompt;
+  const transcript=page.getByTestId('transcript-viewport');
+  const confirmed=[initial];
+  for(let turn=1;turn<=2;turn++){
+   if(turn===2)await unlink(join(bridge.dir,'army-release'));
+   await send(page,prompt);
+   await expect(transcript.getByText('ARMY_STREAM_BEGIN',{exact:true})).toBeVisible();
+   await expect(page.getByRole('button',{name:'Stop',exact:true})).toBeVisible();
+   await writeFile(join(bridge.dir,'army-release'),'release\n');
+   await expect(page.getByRole('button',{name:'Stop',exact:true})).toHaveCount(0,{timeout:20000});
+   await expect(transcript.getByText(reply,{exact:true})).toHaveCount(turn);
+   // No journal write: a subsequent genuine refresh still returns the older
+   // snapshot, after the streamed turn has completed.
+   await refreshed(histories.length,confirmed);
+   await expect(transcript.getByText(prompt,{exact:true})).toHaveCount(turn);
+   await expect(transcript.getByText(reply,{exact:true})).toHaveCount(turn);
+   // Native writers may flush the user row before the assistant row. Identical
+   // prompts on distinct source IDs must not consume the previous turn twice.
+   journal+=record('army-phone-user-'+turn,'user',prompt);
+   const partialAfter=histories.length;
+   await writeFile(path,journal);
+   await refreshed(partialAfter,[...confirmed,prompt]);
+   await expect(transcript.getByText(prompt,{exact:true})).toHaveCount(turn);
+   await expect(transcript.getByText(reply,{exact:true})).toHaveCount(turn);
+   const host='ARMY genuinely new host message '+turn;
+   journal+=record('army-phone-assistant-'+turn,'assistant',reply)+record('army-host-'+turn,'assistant',host);
+   const catchupAfter=histories.length;
+   await writeFile(path,journal);
+   confirmed.push(prompt,reply,host);
+   await refreshed(catchupAfter,confirmed);
+   await expect(transcript.getByText(host,{exact:true})).toBeVisible();
+   await expect(transcript.getByText(prompt,{exact:true})).toHaveCount(turn);
+   await expect(transcript.getByText(reply,{exact:true})).toHaveCount(turn);
+  }
+  await page.screenshot({path:info.outputPath('remote-history-catchup.png')});
+  const turns=(await lines(join(bridge.dir,'army-acp-turns.jsonl'))).map(line=>JSON.parse(line));
+  expect(turns.filter(turn=>turn.event==='start')).toHaveLength(2);
+  expect(turns.filter(turn=>turn.event==='end')).toHaveLength(2);
+  const calls=(await lines(join(bridge.dir,'army-acp-calls.jsonl'))).map(line=>JSON.parse(line));
+  expect(calls.map(call=>({method:call.method,sessionId:call.sessionId}))).toEqual([
+   {method:'session/resume',sessionId:REMOTE_SESSION},
+   {method:'session/resume',sessionId:REMOTE_SESSION},
+  ]);
  });
  test('resumes on that computer and streams the reply, turn after turn',async({page,bridge},info)=>{
   await pair(page,bridge);

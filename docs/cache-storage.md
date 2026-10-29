@@ -2,11 +2,13 @@
 
 Dash keeps host session history as a disposable projection. Android stores it under `FileSystem.cacheDirectory/dash-history-v1/`. Each file holds at most the last 80 settled messages, is conservatively bounded to 256 KiB before JSON allocation, and participates in a maximum of 64 retained entries. An oversized message or nested tool payload is not persisted in this cache. The host still owns the original.
 
-`FileSystem.documentDirectory/dash-conversations-v2/` holds routing metadata, preferences, queued/failed user messages and running-turn replay identities. Local-only conversations retain their complete history here. A session identifier alone is not evidence of host history support; only registered harness routes are treated as host-backed. Pairing and composer drafts keep their existing independent storage.
+`FileSystem.documentDirectory/dash-conversations-v2/` holds routing metadata, preferences, queued/failed user messages and running-turn replay identities. Host-backed chats also retain locally created completed, interrupted and failed phone turns with their preceding ordering anchors. Assistant tool parts, activity and summaries are not retained there. Pending/streaming assistant projections clear text, sequence and transient status, while user text and delivery flags remain unchanged. Local-only conversations retain their complete history. A session identifier alone is not evidence of host history support; only registered harness routes are treated as host-backed. Pairing and composer drafts keep their independent storage.
 
 The native adapter uses asynchronous Expo file I/O. It writes a sibling temporary file, then uses the SDK's rename operation to replace the committed file. Durable and cache writes are serialized. Waiting snapshots coalesce to the newest state. Unchanged conversation references do no serialization or disk writes. Changes to queued or running state do not rewrite an unchanged settled-history cache.
 
-Startup reads durable records in batches of eight, then loads only the active host history. Other cache entries load when selected. Corrupt or missing cache files fall back to host history. A late cache response cannot replace a newer network response. The bridge requests empty active history for all supported harnesses, not only Hermes.
+Startup reads the light conversation index and loads active or pending transcripts on demand. Host-backed loads merge the bounded cache even when durable phone turns already exist. Shared message IDs keep cache order and newer durable content; durable-only rows follow their nearest shared predecessor. An unopened index stub must read and preserve its durable transcript before a roster-driven save. Unreadable durable data fails the save rather than being overwritten. Corrupt or missing cache files remain disposable. Late loads merge with current messages instead of replacing concurrent changes.
+
+Native history replies are ordered windows, not deletion lists. A lagging journal cannot erase a completed phone reply. Ordered display alignment consumes repeated prompts separately and retains the phone's richer text when native assistant rows are partial, multipart or truncated. This alignment does not attest native message identity. Completed visible phone text remains durable until reconciliation; unlike the disposable cache, that retained text has no eviction cap. It must not be silently clipped to resolve storage pressure.
 
 ## Migration and recovery
 
@@ -20,12 +22,10 @@ The completion marker lets an installed client finalize that explicit recovery w
 
 ## Verification
 
-Run through the owner's worker route:
+The tester army is the verification route:
 
 ```sh
-fleet-build --node mbp --cpus 2 --mem 3G --fetch .cache-receipts --out <receipt-directory> -- bash scripts/verify-cache-persistence.sh
+bun run test
 ```
 
-The gate includes focused storage tests, the existing application suite, strict typechecks, lint, the mutation suite, Android export and a seven-trial synthetic persistence benchmark. The benchmark uses an in-memory file adapter to count serialization/write amplification. Its timing is not Android disk latency, cold-start time or frame performance.
-
-On the phone, verify both physical directories, legacy-key removal, unchanged pairing/draft records, host refetch after removing only the history cache, and absence of CursorWindow errors during restart. Do not claim a native performance improvement from desktop tests alone.
+`history-merge.spec.ts` exercises partial, multipart and truncated remote journals, repeated prompts, and stopped/error turns through the real UI and isolated bridge. `history-reload.spec.ts` exercises active/nonactive offline reload and an unopened host chat's roster-driven save. The bridge is stopped before offline assertions so a fresh network history cannot mask cache loss. These web journeys do not prove Android disk latency, native restart performance or physical-device acceptance. A release still requires complete army coverage for the exact commit and O15 approval.

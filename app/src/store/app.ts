@@ -1,7 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ConversationPersistence, hasHostHistory, uniqueConversationIds } from "./conversation-persistence";
+import { ConversationPersistence, hasHostHistory, mergeTranscriptMessages, uniqueConversationIds } from "./conversation-persistence";
 import { conversationFiles, conversationIndex } from "./conversation-files";
 import { hostDisplayName } from "../../../shared/host-display";
+import { isCatalogHarness } from "../../../shared/catalog";
 import { appendReplyPart, partsFor, replyParts } from "./text";
 import type { DetailMode } from "../lib/reply-details";
 import { CHATS_FEATURE, type ChatAttachment, type ChatSummary, type ClientMessage, type HistoryMessage, type TurnEvent } from "../../../shared/protocol";
@@ -119,7 +120,8 @@ export async function hydrate(): Promise<void> {
         const stub = conversations.find(chat => chat.id === id);
         if (!stub) continue;
         const loaded = await persistence.loadOne(stub);
-        conversations = conversations.map(chat => chat.id === id ? loaded : chat);
+        const full = id === activeId ? loaded : await persistence.cached(loaded);
+        conversations = conversations.map(chat => chat.id === id ? full : chat);
         persistence.markLoaded(id);
       }
     } else {
@@ -349,18 +351,21 @@ export function setActive(id: string | null): void {
 /** Read a conversation's durable transcript (if the index hydrated it as a stub) and its cache. */
 async function loadTranscript(current: Conversation): Promise<void> {
   const loaded = await persistence.loadOne(current);
-  const full = loaded.messages.length === 0 && loaded.sessionId ? await persistence.cached(loaded) : loaded;
+  const full = await persistence.cached(loaded);
+  let applied = false;
   store.set(state => ({ ...state, conversations: state.conversations.map(chat => {
-    if (chat.id !== current.id) return chat;
-    if (chat === current) return full;
-    const ids = new Set(chat.messages.map(message => message.id));
-    const older = full.messages.filter(message => !ids.has(message.id));
-    return older.length ? { ...chat, messages: [...older, ...chat.messages] } : chat;
+    if (chat.id !== current.id || chat.sessionId !== current.sessionId || chat.harness !== current.harness ||
+      chat.profileId !== current.profileId || chat.targetHostId !== current.targetHostId) return chat;
+    applied = true;
+    return chat === current ? full : { ...chat, messages: mergeTranscriptMessages(full.messages, chat.messages) };
   }) }));
+  if (!applied) return;
   persistence.markLoaded(current.id);
-  for (const message of full.messages) {
+  const messages = store.get().conversations.find(chat => chat.id === current.id)?.messages ?? [];
+  for (const message of messages) {
     if (message.role === "assistant" && message.state === "streaming" && !replyText.get(message.turnId)) replyText.set(message.turnId, message.text);
   }
+  scheduleSave();
 }
 
 /**
@@ -666,9 +671,23 @@ export function applyTurnEvent(
   if (!where) return;
   switch (event.type) {
     case "session":
-      // Host-resolved identity: native API turns, and Hermes sessions the bridge names
-      // (new ACP chats land in a host profile), so the roster row merges into this chat.
-      updateConversation(where.conversationId, (c) => ({ ...c, sessionId: event.sessionId, ...(event.transport === "api" || event.profileId?.startsWith("hermes:session:") ? { profileId: event.profileId ?? c.profileId, targetHostId: rosterHostId(event.hostId, store.get().connection) ?? c.targetHostId, stale: false } : {}) }));
+      // Bind a newly created ACP chat to the authenticated bridge's persisted
+      // route, not a temporary live-process row that disappears after its turn.
+      updateConversation(where.conversationId, (c) => {
+        const connection = store.get().connection;
+        const hostId = rosterHostId(event.hostId, connection);
+        const selfHost = connection.hosts.find(host => host.self && host.id === hostId);
+        const genericProfile = selfHost?.agents.find(agent => agent.id === `harness:${c.harness}` && agent.kind === c.harness);
+        const newAcpRoute = event.transport === "acp" &&
+          c.targetHostId === undefined && c.profileId === undefined &&
+          event.profileId !== undefined && selfHost !== undefined &&
+          (isCatalogHarness(c.harness) || genericProfile !== undefined);
+        const resolvedRoute = event.transport === "api" || event.profileId?.startsWith("hermes:session:") || newAcpRoute;
+        return { ...c, sessionId: event.sessionId, ...(resolvedRoute ? {
+          profileId: newAcpRoute && !isCatalogHarness(c.harness) ? genericProfile?.id : event.profileId ?? c.profileId,
+          targetHostId: hostId ?? c.targetHostId, stale: false,
+        } : {}) };
+      });
       updateMessage(where.conversationId, where.messageId, (m) => (event.seq <= m.seq ? m : { ...m, seq: event.seq }));
       return;
     case "status":
