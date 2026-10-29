@@ -40,6 +40,17 @@ permissions and live model behaviour are not covered yet
 (`not_yet_in_army` in `features.json`). Never report a test, screenshot or phone
 check as passed unless it ran against that exact commit.
 
+## Export variant isolation
+
+Metro's transform cache is namespaced by the sorted `EXPO_PUBLIC_*` inputs.
+These values are compiled into the client. A warm cache must not carry debug,
+demo or fake-voice code into another variant, nor suppress a requested variant.
+The namespace preserves warm reuse for the same inputs without a global cache wipe.
+`export-variants.spec.ts` exports production → debug → production with one private
+warm cache and drives each actual export in the browser. Production must show
+Pair and debug must show the workspace. Logs, screenshots and traces remain as
+evidence; the test removes its generated bundles and compiler cache.
+
 ## History and endpoint ownership qualification
 
 `history-ownership.spec.ts` exercises newest-history ownership in the browser,

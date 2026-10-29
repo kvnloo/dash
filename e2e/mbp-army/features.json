@@ -1,6 +1,8 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "export-variant-isolation", "title": "Warm Metro exports cannot reuse debug or production UI across public environment variants",
+     "tests": ["export variants change between Pair and debug workspace with the same warm Metro cache"]},
     {"id": "conversation-endpoint-ownership", "title": "Changing paired endpoints parks foreign streams, queues and native-history reads without rebinding",
      "tests": ["endpoint switch OMP parks A stream and queue, B receives neither, A resumes once",
                "endpoint switch Hermes parks A stream and queue, B receives neither, A resumes once",
