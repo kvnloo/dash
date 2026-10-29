@@ -84,6 +84,8 @@ test.describe('roster connection ownership', () => {
       await expect.poll(() => log).toContain('"event":"roster-armed"');
       await page.getByRole('button', { name: 'Open settings', exact: true }).first().click();
       await page.getByRole('textbox', { name: 'Address', exact: true }).fill(`127.0.0.1:${port}`);
+      const oldResponse = page.waitForResponse(async response =>
+        await response.headerValue('x-army-held-roster') === '1');
       await page.getByRole('button', { name: 'Save and reconnect', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Save and reconnect', exact: true })).toBeHidden();
       await expect.poll(() => log).toContain('"event":"roster-held"');
@@ -114,8 +116,6 @@ test.describe('roster connection ownership', () => {
         hosts: expect.arrayContaining([expect.objectContaining({ id: 'galaxy-s22', name: 'ARMY current S22' })]),
       }));
       await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-      const oldResponse = page.waitForResponse(async response =>
-        await response.headerValue('x-army-held-roster') === '1');
       relay.stdin.write('release-roster\n');
       const released = await oldResponse;
       expect(released.status()).toBe(200);

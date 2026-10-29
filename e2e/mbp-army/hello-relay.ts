@@ -42,6 +42,7 @@ const server = Bun.serve<Peer>({
     const holdRoster = request.method === 'GET' && url.pathname === '/roster' && holdNextRoster;
     if (holdRoster) {
       holdNextRoster = false;
+      server.timeout(request, 0);
       // Capture a complete real snapshot, not a conditional cache confirmation.
       headers.delete('if-none-match');
     }
@@ -54,9 +55,19 @@ const server = Bun.serve<Peer>({
     responseHeaders.set('x-army-held-roster', '1');
     responseHeaders.set('access-control-expose-headers', 'ETag, X-Army-Held-Roster');
     responseHeaders.set('cache-control', 'no-store');
-    await new Promise<void>(resolve => { releaseRoster = resolve; report('roster-held'); });
-    report(`roster-released:${response.status}`);
-    return new Response(body, { status: response.status, headers: responseHeaders });
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        releaseRoster = () => {
+          controller.enqueue(new Uint8Array(body));
+          controller.close();
+          report(`roster-released:${response.status}`);
+        };
+        report('roster-held');
+      },
+    });
+    // Send no-store headers now so a newer request is not coalesced behind this
+    // deliberately delayed body. The selected request lives until explicit release.
+    return new Response(stream, { status: response.status, headers: responseHeaders });
   },
   websocket: {
     open(client) { clients.set(client.data.id, client); report('client-open', client.data.id); },
