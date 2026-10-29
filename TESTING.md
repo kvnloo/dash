@@ -60,6 +60,14 @@ the rendered host row immediately, before the next periodic poll can mask a stal
 replacement. Roster completion must retain its originating connection generation,
 even when reconnect reuses the same Settings object.
 
+The restored OMP journey starts two isolated, real roster processes holding the
+same persisted transcript. It sends through the adopted chat, closes its first
+pane, and sends again through the surviving pane into the same native session.
+Pane ids identify liveness, not separate conversations. Handover requires the
+same host, native session and working directory; it does not adopt a foreign
+endpoint or change Hermes profile identity. With no surviving pane, native OMP
+chats still end. This journey does not establish phone or live-model acceptance.
+
 `next-action.spec.ts` also covers current-connection attention, identity-based
 unread replies under clock rollback, exact-chat navigation without sending,
 draft preservation, defer/reload and explicit permission decisions. CI retains
