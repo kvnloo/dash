@@ -59,13 +59,13 @@ test('annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Sk
       // physical mouse endpoints go through each renderer's real input path.
       await page.clock.setFixedTime(1700000000000);
       await stroke(page);
-      await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
+      await page.getByRole('button', { name: 'Send annotation', exact: true }).click({ noWaitAfter: true });
       await expect(page.getByText('No words captured. Send the marks only?')).toBeVisible();
       // Armed once the confirmation is up: nothing uploads before Send anyway, so the confirmation's own
       // clicks under load must not eat the upload's wait. The capture is html2canvas on the page's main
       // thread (about 10 s at load 28 in cov-fc2bbdf-r5); 30 s is the upload budget annotation-fullscreen uses.
       const uploaded = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'application/json', { timeout: 30000 });
-      await page.getByRole('button', { name: 'Send anyway', exact: true }).click();
+      await page.getByRole('button', { name: 'Send anyway', exact: true }).click({ noWaitAfter: true });
       const bytes = (await uploaded).postDataBuffer();
       expect(bytes).not.toBeNull();
       documents.push(bytes!.toString('utf8'));

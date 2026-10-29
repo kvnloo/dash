@@ -41,7 +41,7 @@ for (const engine of engines) {
     // Hide the editor to leave the full drawing area clear; its words remain.
     await page.getByRole('button', { name: 'Type a note', exact: true }).click();
     await stroke(page);
-    await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
+    await page.getByRole('button', { name: 'Send annotation', exact: true }).click({ noWaitAfter: true });
     await expect(page.getByTestId('chat-window')).toContainText('make this taller');
     await expect(page.getByTestId('chat-window')).toContainText('⟦stroke 1⟧');
     await expect.poll(() => newestJsonText(attachments), { timeout: 15000 }).toContain('make this taller');
@@ -57,7 +57,7 @@ for (const engine of engines) {
     page.on('request', request => {
       if (request.method() === 'POST' && request.url().includes('/attachments?')) posts.push(request.url());
     });
-    await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
+    await page.getByRole('button', { name: 'Send annotation', exact: true }).click({ noWaitAfter: true });
     await expect(page.getByText('No words captured. Send the marks only?', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Send anyway', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Add note', exact: true }).click();

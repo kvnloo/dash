@@ -83,7 +83,7 @@ for (const engine of ENGINES) {
       const jsonUpload = page.waitForResponse(response =>
         response.request().method() === 'POST' && response.url().includes('/attachments?') &&
         response.request().headers()['content-type'] === 'application/json', { timeout: 30000 });
-      await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
+      await page.getByRole('button', { name: 'Send annotation', exact: true }).click({ noWaitAfter: true });
 
       // PNG captureTarget must include the former composer blind spot too.
       const png = (await imageUpload).postDataBuffer();

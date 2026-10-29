@@ -25,7 +25,7 @@ async function startedTurns(dir: string): Promise<number> {
 test('annotation-receipt: OMP streamed delta confirms one annotation before its 35s-held reply ends', async ({ page, bridge }) => {
   await openAnnotation(page, bridge);
   await noteAndStroke(page, 'ARMY_HOLD receipt stream stays active');
-  await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
+  await page.getByRole('button', { name: 'Send annotation', exact: true }).click({ noWaitAfter: true });
 
   // The ACP peer sends ARMY_STREAM_BEGIN, then deliberately remains held.
   await expect(page.getByText(/ARMY_STREAM_BEGIN/).filter({ visible: true }).first()).toBeVisible({ timeout: 20000 });
@@ -56,14 +56,14 @@ test('annotation-receipt: offline Send then reconnect and Send again creates jus
   await page.context().setOffline(true);
   // Network emulation rejects the real bridge upload even if the existing
   // WebSocket has not emitted its close event yet.
-  await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
+  await page.getByRole('button', { name: 'Send annotation', exact: true }).click({ noWaitAfter: true });
   await expect(page.getByRole('alert').filter({ hasText: /Offline|Network|fetch failed|Failed to fetch|Could not reach the bridge/i })).toBeVisible({ timeout: 20000 });
   await expect(page.getByTestId('transcript-viewport').getByText(/^Annotated .* \(1 stroke\)/)).toHaveCount(0);
   expect(await startedTurns(bridge.dir)).toBe(0);
 
   await page.context().setOffline(false);
   await expect(page.getByTestId('connection-banner')).toHaveCount(0, { timeout: 30000 });
-  await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
+  await page.getByRole('button', { name: 'Send annotation', exact: true }).click({ noWaitAfter: true });
   await expect(page.getByText(/Sent to .+ · 1 strokes/)).toBeVisible({ timeout: 20000 });
   await expect(page.getByTestId('transcript-viewport').getByText(/^Annotated .* \(1 stroke\)/)).toHaveCount(1);
   await expect(page.getByText(/ARMY_REPLY:/).filter({ visible: true }).first()).toBeVisible({ timeout: 30000 });
