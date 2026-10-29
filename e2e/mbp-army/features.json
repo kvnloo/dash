@@ -1,6 +1,9 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "restored-omp-session-identity", "title": "Two restored OMP panes remain one addressable native chat while either pane is live",
+     "tests": ["two restored OMP panes retain one usable chat when its first pane closes",
+               "two restored OMP panes retain one usable chat when its first pane closes across launcher directories"]},
     {"id": "roster-connection-generation", "title": "A delayed roster from a retired socket cannot replace the current admitted connection hosts",
      "tests": ["roster response from a retired socket cannot replace the reconnected host list"]},
     {"id": "export-variant-isolation", "title": "Warm Metro exports cannot reuse debug or production UI across public environment variants",

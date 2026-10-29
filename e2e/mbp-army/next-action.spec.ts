@@ -97,11 +97,11 @@ test('Next up opens the exact completed background reply without sending and pre
 });
 
 test('Next up Later survives reload, Skip dismisses only one completion, and a newer reply in that chat returns', async ({ page, bridge }) => {
+  await page.clock.install();
   await pair(page, bridge);
   const firstChatTitle = 'ARMY archived Claude Code chat';
   await page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: firstChatTitle }).click({ noWaitAfter: true });
   await expect(page.getByTestId('chat-window')).toBeVisible();
-  await page.clock.install();
   await send(page, 'ARMY_HOLD first background completion');
   await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
   await newChat(page);
@@ -182,8 +182,8 @@ test('Next up prioritizes a real pending ACP permission and Open never chooses i
 });
 
 test('Next up surfaces a newer same-chat reply after the browser clock moves backward', async ({ page, bridge }) => {
-  await openChat(page, bridge);
   await page.clock.install();
+  await openChat(page, bridge);
   await send(page, 'reply read before browser clock rollback');
   await expect(visibleText(page, 'ARMY_REPLY: reply read before browser clock rollback')).toBeInViewport();
   await page.clock.setSystemTime(new Date(Date.now() - 24 * 60 * 60_000));

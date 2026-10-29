@@ -23,6 +23,12 @@ export function conversationPreview(c: Conversation): string {
 /** Bucket key for harness+session lookups. Profile and host are compared inside a bucket. */
 function sessionBucket(harness: string, sessionId: string): string { return `${harness}\u0000${sessionId}`; }
 
+/** OMP pane ids are liveness handles; ACP resumes the host's persisted session. */
+function rosterOwnerKey(harness: string, sessionId: string, hostId: string, profileId: string): string {
+  const profile = harness === "omp" && profileId.startsWith("omp:") ? "omp:" : profileId;
+  return `${harness}\u0000${sessionId}\u0000${hostId}\u0000${profile}`;
+}
+
 export function findLiveConversation(conversations: Conversation[], agent: { harness: string; sessionId?: string; targetHostId?: string; profileId?: string }): Conversation | undefined {
   const sessionId = agent.sessionId?.trim();
   if (!sessionId) return undefined;
@@ -97,9 +103,12 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     // native route, even when that route reports the same session string.
     const unownedSaved = c.stale === true && !c.targetHostId && !c.profileId;
     const matches = unownedSaved ? [] : bucket.filter(({ host, agent }) => (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
-    const match = matches.length === 1 ? matches[0] : undefined;
+    const survivingPane = matches.length === 0 && c.harness === "omp" && c.profileId?.startsWith("omp:") && c.targetHostId
+      ? bucket.find(({ host, agent }) => host.id === c.targetHostId && agent.id.startsWith("omp:"))
+      : undefined;
+    const match = matches.length === 1 ? matches[0] : survivingPane;
     if (!match) {
-      owned.add(`${c.harness}\u0000${c.sessionId}\u0000${c.targetHostId ?? ""}\u0000${c.profileId ?? ""}`);
+      owned.add(rosterOwnerKey(c.harness, c.sessionId, c.targetHostId ?? "", c.profileId ?? ""));
       // A bridge-owned ACP session may be running without a native session row.
       // A uniquely identified, online local harness profile plus an in-flight
       // reply is evidence to retain this exact route, not to adopt another one.
@@ -137,7 +146,7 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
       changed = true; return { ...c, stale: true, openIn: undefined };
     }
     const { host, agent } = match;
-    owned.add(`${c.harness}\u0000${c.sessionId}\u0000${host.id}\u0000${agent.id}`);
+    owned.add(rosterOwnerKey(c.harness, c.sessionId, host.id, agent.id));
     const title = c.harness === "hermes" ? agent.name : c.title;
     const updatedAt = agent.lastActivityAt ?? c.updatedAt;
     if (c.stale === false && title === c.title && updatedAt === c.updatedAt && c.messageCount === agent.messageCount && c.targetHostId === host.id && c.profileId === agent.id && c.openIn === agent.openIn && (!agent.model || c.sessionModel?.model === agent.model && c.sessionModel.sessionId === agent.sessionId)) return c;
@@ -147,7 +156,9 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
   const adopted: Conversation[] = [];
   for (const { host, agent } of reported) {
     const sessionId = agent.sessionId;
-    if (!sessionId || owned.has(`${agent.kind}\u0000${sessionId}\u0000${host.id}\u0000${agent.id}`)) continue;
+    if (!sessionId) continue;
+    const ownerKey = rosterOwnerKey(agent.kind, sessionId, host.id, agent.id);
+    if (owned.has(ownerKey)) continue;
     if (options.adopt === "live" && agent.status !== "running" && !agent.openIn) continue;
     const baseId = liveConversationId(agent.kind, sessionId, host.self ? undefined : host.id);
     const logicalId = agent.kind === "hermes" ? `${baseId}:${host.id}:${agent.profileId ?? agent.id}` : baseId;
@@ -156,6 +167,7 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
       harness: agent.kind, title: liveSessionTitle(agent), createdAt: agent.lastActivityAt ?? now, updatedAt: agent.lastActivityAt ?? now,
       ...(agent.model ? { sessionModel: { sessionId, model: agent.model } } : {}),
       sessionId, cwd: agent.cwd, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, messageCount: agent.messageCount, stale: false, ...(!host.self ? { viewOnly: true } : {}), ...(agent.openIn ? { openIn: agent.openIn } : {}), messages: [] });
+    owned.add(ownerKey);
   }
   return adopted.length ? [...adopted, ...rows] : changed ? rows : existing;
 }
