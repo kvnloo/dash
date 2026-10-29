@@ -790,7 +790,7 @@ export function stopConversation(conversationId: string, cancel: (turnId: string
   const stopped: AssistantMessage[] = [];
   const stoppedAt = Date.now();
   updateConversation(conversationId, (c) => {
-    const messages = c.messages.map((m) => {
+    const messages = c.messages.map<Message>((m) => {
       if (m.role !== "assistant" || (m.state !== "streaming" && m.state !== "pending")) return m;
       if (m.state === "streaming") running.push(m.turnId);
       stopped.push(m);
