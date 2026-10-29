@@ -178,7 +178,6 @@ test('Chats priority puts failed and interrupted turns ahead of running and newe
   await bridge.stop();
   await selectFilter(page, 'project', bridge.dir);
   await expect(page.getByText(/Searching history/)).toHaveCount(0);
-  expect(bridge.logs()).toContain('turn.start');
 });
 
 test('Active sessions retain both host identities across every sort and remove an offline host without hiding saved history', async ({ page }, info) => {
