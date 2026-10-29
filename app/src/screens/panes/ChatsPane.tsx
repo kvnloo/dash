@@ -137,16 +137,12 @@ const Row = memo(function Row({
 }) {
   const appearance = threadAppearance({ stale: item.stale, live });
   const stale = appearance.stale;
-  const frame = useRef<View>(null);
-  // What the agent is doing now, as a thinking-orbs orb (idle orbs hold still).
   const thinking = item.thinking;
-  const press = () => pressRow(frame.current, item.id, onPress);
   const content = item.content;
   const activityShimmer = activityShimmerEnabled(thinking.phase, connectionStatus, stale);
   return (
-    <View ref={frame} collapsable={false}>
     <PressScale
-      onPress={press}
+      onPress={(event) => pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress)}
       onLongPress={() => onLongPress(item.id)}
       delayLongPress={350}
       style={[styles.row, active && !stale && styles.rowActive]}
@@ -179,7 +175,6 @@ const Row = memo(function Row({
       </View>
       <View style={styles.hairline} />
     </PressScale>
-    </View>
   );
 }, (a, b) => a.item === b.item && a.live === b.live && a.active === b.active && a.connectionStatus === b.connectionStatus && a.onPress === b.onPress && a.onLongPress === b.onLongPress);
 

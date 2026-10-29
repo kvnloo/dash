@@ -12,7 +12,6 @@ export interface NextActionCardButton {
 export interface NextActionCardModel {
   title: string;
   detail: string;
-  timeChip: string;
   buttons: readonly NextActionCardButton[];
   whyText: string | null;
 }
@@ -26,19 +25,12 @@ export interface NextActionCardHandlers {
 /** The caller owns persistence and the one-hour snooze deadline. */
 export const NEXT_ACTION_LATER_MS = 60 * 60 * 1000;
 
-export function formatActionTimeChip(estimateSec: number): string {
-  if (!Number.isFinite(estimateSec) || estimateSec <= 0) return "Time varies";
-  if (estimateSec < 60) return "~" + Math.ceil(estimateSec) + " sec";
-  return "~" + Math.ceil(estimateSec / 60) + " min";
-}
-
 /** Pure projection: no clock, storage, transport, or side effects. */
 export function cardModel(action: NextAction, options: { expandedWhy: boolean }): NextActionCardModel {
   const subject = action.title.trim() || "suggested action";
   return {
     title: action.title,
     detail: action.detail,
-    timeChip: formatActionTimeChip(action.estimateSec),
     buttons: [
       {
         id: "do",

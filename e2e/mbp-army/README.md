@@ -54,9 +54,11 @@ replies, draft preservation, persistent defer, a newer reply in the same chat an
 real pending `session/request_permission` choice that outranks an unread reply.
 
 Run only this feature with `army-stack.sh drive <run> 1
-e2e/mbp-army/next-action.spec.ts`. Status: **UNCOVERED** until a committed exact
-revision has a passing tester-army receipt. Authored specs and screenshots do not
-claim acceptance.
+e2e/mbp-army/next-action.spec.ts`, or run `bun run test` for the complete headless
+army. Coverage includes browsing older history, reloads, snooze expiry, exact-chat
+navigation and an explicit host permission choice. The official receipt for the
+commit under evaluation is the proof; web evidence does not establish native
+phone or live-model acceptance.
 
 ## Host preparation
 

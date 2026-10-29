@@ -17,7 +17,6 @@ export interface NextAction {
   readonly conversationId: string;
   readonly title: string;
   readonly detail: string;
-  readonly estimateSec: number;
   readonly why: string;
 }
 
@@ -78,10 +77,8 @@ function candidate(
   kind: NextActionKind,
   id: string,
   chat: Conversation,
-  title: string,
-  detail: string,
+  label: string,
   why: string,
-  estimateSec: number,
   at: number,
 ): RankedAction {
   return {
@@ -89,10 +86,9 @@ function candidate(
       id,
       kind,
       conversationId: chat.id,
-      title: abbreviate(title, 60),
-      detail: abbreviate(detail, 90),
+      title: abbreviate(chat.title.trim() || "Untitled chat", 60),
+      detail: label,
       why,
-      estimateSec,
     },
     priority: PRIORITY[kind],
     at,
@@ -110,7 +106,6 @@ export function nextAction(input: NextActionInput): NextAction | null {
 
   for (const chat of input.conversations) {
     if (!validId(chat.id)) continue;
-    const name = chat.title.trim() || "this chat";
     for (const permission of input.permissions) {
       if (
         permission.conversationId !== chat.id ||
@@ -126,9 +121,7 @@ export function nextAction(input: NextActionInput): NextAction | null {
         actionId("approve", chat.id, permission.sessionId, permission.turnId, permission.requestId),
         chat,
         "Review pending approval",
-        "A host permission request is waiting in " + name + ".",
         "A current request needs your explicit decision before its deadline.",
-        30,
         timestamp(chat.updatedAt) ? chat.updatedAt : 0,
       ));
     }
@@ -140,9 +133,7 @@ export function nextAction(input: NextActionInput): NextAction | null {
         actionId("retry-send", chat.id, message.id),
         chat,
         "Review failed send",
-        "A message in " + name + " needs a delivery check.",
         "A saved user message is marked failed; investigate before sending again.",
-        45,
         timestamp(message.deliveryAt ?? message.at) ? (message.deliveryAt ?? message.at) : 0,
       ));
     }
@@ -159,9 +150,7 @@ export function nextAction(input: NextActionInput): NextAction | null {
           actionId("read-reply", chat.id, last.id, last.turnId),
           chat,
           "Read completed reply",
-          "A new assistant reply is ready in " + name + ".",
           "This reply was completed after you last viewed its conversation.",
-          45,
           eventAt,
         ));
       }
@@ -175,9 +164,7 @@ export function nextAction(input: NextActionInput): NextAction | null {
           actionId("unstick", chat.id, last.turnId, last.id),
           chat,
           "Check idle turn",
-          name + " has had no recorded update for over five minutes.",
           "The assistant appears idle; inspect the turn before trying to recover it.",
-          60,
           activityAt,
         ));
       }
@@ -194,9 +181,7 @@ export function nextAction(input: NextActionInput): NextAction | null {
         actionId("continue", chat.id, draftFingerprint(draft)),
         chat,
         "Continue unfinished draft",
-        name + " has text waiting in the composer.",
         "A saved draft is waiting in an ended or inactive conversation.",
-        90,
         timestamp(chat.updatedAt) ? chat.updatedAt : 0,
       ));
     }

@@ -12,7 +12,7 @@ const card = (page: Page) => page.getByTestId('next-action-card');
 const visibleText = (page: Page, text: string) => page.getByText(text, { exact: false }).filter({ visible: true }).first();
 
 async function expectReadReplyFor(page: Page, chatTitle: string) {
-  await expect(page.getByTestId('next-action-detail')).toContainText(chatTitle);
+  await expect(page.getByTestId('next-action-title')).toContainText(chatTitle);
 }
 
 async function toChats(page: Page) {
@@ -155,7 +155,7 @@ test('Next up prioritizes a real pending ACP permission and Open never chooses i
   await toChats(page);
   await writeFile(join(bridge.dir, 'army-release'), '');
 
-  await expect(card(page)).toContainText('permission', { timeout: 30_000 });
+  await expect(card(page)).toContainText('owner choice outranks reply', { timeout: 30_000 });
   const startsBeforeOpen = await turnEvents(bridge.dir);
   await page.getByTestId('next-action-do').click({ noWaitAfter: true });
   await expect(page.getByRole('heading', { name: 'Needs OK', exact: true })).toBeVisible();
@@ -163,7 +163,7 @@ test('Next up prioritizes a real pending ACP permission and Open never chooses i
   expect(await readFile(join(bridge.dir, 'army-acp-permissions.jsonl'), 'utf8').catch(() => '')).toBe('');
   expect(await turnEvents(bridge.dir)).toBe(startsBeforeOpen);
   await toChats(page);
-  await expect(card(page)).toContainText('permission');
+  await expect(card(page)).toContainText('owner choice outranks reply');
   await page.getByTestId('next-action-later').click();
   await expect(card(page)).toContainText('background reply below permission');
   const permissionChat = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: 'owner choice outranks reply' });

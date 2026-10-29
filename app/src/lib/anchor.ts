@@ -6,7 +6,6 @@ export interface AnchorRect { x: number; y: number; width: number; height: numbe
 /** After an IME hide: a few frames of agreement, not one. The first frames after the hide event can still be the lifted dock. */
 export const AFTER_IME_QUIET_MS = 80;
 const SETTLE_TIMEOUT_MS = 800;
-const FOLLOW_MS = 100;
 /** Under half a dp is rounding noise, not movement. */
 const MOVED_DP = 0.5;
 
@@ -75,7 +74,10 @@ export function followAnchor(node: () => View | null, from: AnchorRect, onMove: 
   let live = true;
   let reading = false;
   let last = from;
-  const timer = setInterval(() => {
+  let frame = 0;
+  const tick = () => {
+    if (!live) return;
+    frame = requestAnimationFrame(tick);
     if (reading) return;
     reading = true;
     void measureAnchor(node()).then(rect => {
@@ -84,6 +86,7 @@ export function followAnchor(node: () => View | null, from: AnchorRect, onMove: 
       last = rect;
       onMove(rect);
     });
-  }, FOLLOW_MS);
-  return () => { live = false; clearInterval(timer); };
+  };
+  frame = requestAnimationFrame(tick);
+  return () => { live = false; cancelAnimationFrame(frame); };
 }

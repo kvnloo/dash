@@ -36,14 +36,6 @@ export function NextActionCard({ action, onDo, onLater, onSkip }: NextActionCard
         <Text testID="next-action-title" numberOfLines={1} ellipsizeMode="tail" style={styles.title}>
           {model.title}
         </Text>
-        <View
-          accessible
-          accessibilityRole="text"
-          accessibilityLabel={"Estimated time " + model.timeChip}
-          style={styles.timeChip}
-        >
-          <Text accessible={false} style={styles.timeText}>{model.timeChip}</Text>
-        </View>
       </View>
       <Text testID="next-action-detail" numberOfLines={1} ellipsizeMode="tail" style={styles.detail}>{model.detail}</Text>
       <View style={styles.actions}>
@@ -99,15 +91,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: colors.text,
   },
-  timeChip: {
-    paddingHorizontal: space.sm,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: glass.hair,
-    backgroundColor: glass.fillChip,
-  },
-  timeText: { ...type.label, color: colors.textMuted },
   detail: { ...type.small, color: colors.textMuted },
   actions: { flexDirection: "row", gap: space.xs, alignItems: "stretch" },
   button: {

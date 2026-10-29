@@ -136,7 +136,7 @@ test('Chats priority puts failed and interrupted turns ahead of running and newe
     await expect(composer(page)).toBeVisible();
     await chooseNewChatHarness(page, harness);
     await send(page, prompt);
-    await expect(page.getByText(outcome).first()).toBeVisible();
+    await expect(page.getByTestId('transcript-viewport').getByText(outcome).filter({ visible: true }).first()).toBeVisible();
     await page.getByRole('button', { name: 'Back', exact: true }).click({ noWaitAfter: true });
     const row = chatRows(page).filter({ hasText: prompt });
     await expect(row).toHaveCount(1);

@@ -49,7 +49,10 @@ export const MainPager = forwardRef<MainPagerRef, MainPagerProps>(function MainP
       const velocity = -e.velocityX / pageWidth;
       move(Math.round(progress.value + velocity * 0.12), velocity);
     })
-    .onFinalize((_e, success) => { if (!success) move(Math.round(progress.value), 0); });
+    .onFinalize((_e, success) => {
+      swiping.value = false;
+      if (!success) move(Math.round(progress.value), 0);
+    });
   const track = useAnimatedStyle(() => ({ transform: [{ translateX: -progress.value * pageWidth }] }));
   return <PagerGestureContext.Provider value={swiping}><GestureDetector gesture={pan}>
     <View style={[style, { overflow: "hidden" }]} testID="main-pager">

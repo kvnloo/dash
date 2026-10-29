@@ -62,6 +62,16 @@ Filters combine. **Reset** clears the filters and restores Recent. Changing a fi
 
 With a `chats.v1` bridge, project discovery and global sorts load older pages while Chats is focused and online. The page shows **Searching history…** until the scan finishes. A date filter stops automatic and scroll-triggered paging at its lower bound, including while the project picker is open. Leaving Chats pauses automatic paging. Older bridges filter the conversations already available on the phone.
 
+## Next up
+
+Chats shows one attention card from conversations already opened on this phone, independently of the list filters. It names the chat and the action it needs. Pending approvals and failed sends come first, followed by unread replies, turns without recorded activity, and older drafts.
+
+**Open** goes to that exact conversation. It never approves, retries, or sends anything. Each conversation keeps its own draft.
+
+**Later** hides the current event for one hour in the app; it does not schedule a notification. **Skip** dismisses only that event, so a newer reply in the same chat can appear again. **Why?** explains the suggestion.
+
+Seen replies and deferrals survive reloads. Reading older history does not mark a newer reply seen. On the first launch, existing replies are baselined rather than presented as new; unopened archives are not scanned for attention.
+
 ## Layout
 
 | Path | Role |
