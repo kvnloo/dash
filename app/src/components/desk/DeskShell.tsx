@@ -8,6 +8,7 @@ import {
 } from "../../lib/desk";
 import { DEX_OFF, getState as getDexState, subscribe as subscribeDex, type DexState } from "../../lib/dex";
 import { PaneSizeProvider } from "../../lib/pane-size";
+import { toMain } from "../../lib/main-nav";
 import { approvals, actionable } from "../../store/approvals";
 import { setActive, store } from "../../store/app";
 import { ChatsPane } from "../../screens/panes/ChatsPane";
@@ -48,7 +49,8 @@ export function DeskShell({ children }: { children: ReactNode }) {
   const width = rootWidth ?? window.width;
   const decision = deskDecision({ choice, urlChoice: URL_DESK_CHOICE, width, dex, pointer: Platform.OS !== "web" && dex.pointer === true });
   const on = decision.on && paired && loaded;
-  useEffect(() => { deskState.set({ on, reason: decision.reason, width }); }, [on, decision.reason, width]);
+  const signal = dex.mode !== "off" ? dex.source : dex.desktopSource ?? "none";
+  useEffect(() => { deskState.set({ on, reason: decision.reason, width, signal }); }, [on, decision.reason, width, signal]);
   const onRoot = useCallback((e: LayoutChangeEvent) => setRootWidth(e.nativeEvent.layout.width), []);
   const onCenter = useCallback((e: LayoutChangeEvent) => {
     const { width: w, height: h } = e.nativeEvent.layout;
@@ -72,7 +74,8 @@ function useOpenPanel() {
   const navigation = useNavigation<Nav>();
   return useCallback((id: DeskPanelId) => {
     focusDeskPanel(id);
-    if (id === "orchestra") navigation.navigate("Main");
+    // popTo, not navigate: React Navigation 7's navigate pushes a second Main over the chat.
+    if (id === "orchestra") toMain(navigation);
     else if (id === "chat" && store.get().activeId) navigation.navigate("Chat");
   }, [navigation]);
 }

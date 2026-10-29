@@ -63,7 +63,13 @@ for (const size of [{ width: 1920, height: 1080 }, { width: 1280, height: 800 }]
       await expect(phones.getByTestId('desk-phone-s22')).toContainText('battery 81%');
       await expect(phones.getByTestId('desk-phone-s25')).toContainText('owner using');
       await expect(phones.getByTestId('desk-phone-s25')).toContainText('battery 47%');
-      await expect(phones.getByTestId('desk-phone-job-counts')).toHaveText('1 running · 2 queued');
+      // The live service's shape (gate + owner idle, no state word) is normalized too.
+      await expect(phones.getByTestId('desk-phone-s25b')).toContainText('blocked');
+      await expect(phones.getByTestId('desk-phone-s25b')).toContainText('s25 worker mode is off · owner idle 12h');
+      await expect(phones.getByTestId('desk-phone-job-job4live')).toContainText('openai-codex/gpt-6-luna · fx');
+      await expect(phones.getByTestId('desk-phone-job-counts')).toContainText('1 running');
+      await expect(phones.getByTestId('desk-phone-job-counts')).toContainText('2 queued');
+      await expect(phones.getByTestId('desk-phone-job-counts')).toContainText('1 succeeded');
       await expect(phones.getByTestId('desk-phone-job-job-1')).toContainText('ARMY phone job one');
       await expect(panel(page, 'workers')).toBeVisible();
       await expect(panel(page, 'traces').getByTestId('trace-entry')).toBeVisible();
@@ -222,7 +228,10 @@ test('desk override: ?desk=off keeps the phone layout wide, the Settings choice 
   await expect(page.getByRole('tab').nth(1)).toBeVisible({ timeout: 60000 });
   await expect(page.getByRole('tab')).toHaveCount(3);
   await expect(page.getByTestId('desk-shell')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Settings', exact: true }).first().click({ noWaitAfter: true });
+  // The phone layout reaches Settings from the Chats header.
+  await page.getByRole('tab').nth(1).click({ noWaitAfter: true });
+  await expect(page.getByTestId('chats-pane')).toBeVisible();
+  await page.getByRole('button', { name: 'Open settings', exact: true }).first().click({ noWaitAfter: true });
   await page.getByTestId('settings-desk-on').scrollIntoViewIfNeeded();
   await page.getByTestId('settings-desk-on').click({ noWaitAfter: true });
   await expect(page.getByTestId('settings-desk-on')).toHaveAttribute('aria-checked', 'true');
@@ -255,4 +264,29 @@ test('phone width 480x780 keeps the phone layout (no desk shell)', async ({ page
   await chatRow(page).click({ button: 'right', noWaitAfter: true });
   await expect(page.getByRole('button', { name: /^Delete .* from this phone$/ })).toHaveCount(0);
   await shot(page, 'phone-480x780.png', info);
+});
+
+// One UI 9 (S25 Ultra) runs DeX inside the Samsung launcher on Android desktop windowing: no
+// desktopmode service, no legacy DeX packages. The native detector reports that as `desktop`
+// (a freeform window on a tablet-sized display, or an external presentation display); the web
+// build's explicit simulation drives the same state so the layout decision is proven here.
+// Native signal capture on the phones needs a new APK and is not proven by this spec.
+test('One UI 9 DeX desktop-windowing signal turns desk on in a 1000-wide window and off when DeX ends', async ({ page, bridge }) => {
+  await page.setViewportSize({ width: 1000, height: 780 });
+  await pair(page, bridge);
+  await expect(page.getByTestId('desk-shell')).toHaveCount(0);
+  await expect(page.getByRole('tab')).toHaveCount(3);
+  await expect.poll(() => page.evaluate('typeof window.__dashDex?.simulate')).toBe('function');
+  await page.evaluate("window.__dashDex?.simulate({ mode: 'off', desktop: 'freeform-window' })");
+  await expect(page.getByTestId('desk-shell')).toBeVisible();
+  // Only the layout reacts: the legacy TV/Pad simulation stays off.
+  await expect(page.getByTestId('dex-tv')).toHaveCount(0);
+  await expect(page.getByTestId('desk-signal')).toContainText('Desk dex');
+  await expect(page.getByTestId('desk-signal')).toContainText('DeX signal freeform-window');
+  await page.evaluate("window.__dashDex?.simulate({ mode: 'off', desktop: 'external-display' })");
+  await expect(page.getByTestId('desk-signal')).toContainText('DeX signal external-display');
+  await page.evaluate("window.__dashDex?.simulate({ mode: 'off' })");
+  await expect(page.getByTestId('desk-shell')).toHaveCount(0);
+  await expect(page.getByRole('tab')).toHaveCount(3);
+  await expect(page.getByTestId('chats-pane')).toBeVisible();
 });

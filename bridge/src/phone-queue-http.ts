@@ -5,7 +5,8 @@ import type { PhoneQueueDevice, PhoneQueueJob, PhoneQueueSnapshot } from "../../
  * app never talks to the queue directly. The queue's schema is owned elsewhere, so fields are read
  * tolerantly and normalized; an unreachable or malformed queue is reported as `reachable: false`.
  */
-export const DEFAULT_PHONE_QUEUE_URL = "http://100.113.138.100:8790";
+// groot :8790 is taken (garden_room); the k3s phone-queue API listens on :8792 (ledger 2026-10-29T01:45Z).
+export const DEFAULT_PHONE_QUEUE_URL = "http://100.113.138.100:8792";
 const CACHE_MS = 5000;
 const TIMEOUT_MS = 4000;
 const MAX_ROWS = 200;
@@ -59,10 +60,17 @@ export function normalizeDevices(body: unknown): PhoneQueueDevice[] | null {
     const batteryPct = percent(row, ["batteryPct", "battery_pct", "battery"]);
     const foreground = text(row, ["foreground", "foreground_app", "foregroundApp"]);
     const queued = count(row, ["queued", "queue_depth", "pending", "queue"]);
-    const detail = text(row, ["detail", "reason", "note", "gate"]);
+    // The live service (groot phone-queue) reports `online`, `gate: {allowed, reason}`,
+    // `lock_holder` and `owner_idle_s` instead of a state word; derive one from them.
+    const gate = isRow(row.gate) ? row.gate : undefined;
+    const gateReason = gate ? text(gate, ["reason"]) : undefined;
+    const idle = pick(row, ["owner_idle_s", "ownerIdleS"]);
+    const idleText = typeof idle === "number" && Number.isFinite(idle) && idle >= 0 ? `owner idle ${idle >= 3600 ? `${Math.floor(idle / 3600)}h` : idle >= 60 ? `${Math.floor(idle / 60)}m` : `${Math.floor(idle)}s`}` : undefined;
+    const derived = row.online === false ? "offline" : text(row, ["lock_holder"]) ? "busy" : gate?.allowed === false ? "blocked" : gate?.allowed === true || row.online === true ? "ready" : undefined;
+    const detail = [text(row, ["detail", "reason", "note"]) ?? gateReason, idleText].filter(Boolean).join(" · ") || undefined;
     devices.push({
       id, name: text(row, ["name", "label", "model", "id"]) ?? id,
-      state: text(row, ["state", "status"], 40) ?? "unknown",
+      state: text(row, ["state", "status"], 40) ?? derived ?? "unknown",
       ...(typeof owner === "boolean" ? { ownerActive: owner } : {}),
       ...(batteryPct !== undefined ? { batteryPct } : {}),
       ...(foreground ? { foreground } : {}), ...(queued !== undefined ? { queued } : {}), ...(detail ? { detail } : {}),
@@ -81,7 +89,9 @@ export function normalizeJobs(body: unknown): PhoneQueueJob[] | null {
     if (!id) continue;
     const device = text(row, ["device", "target", "serial", "phone"]);
     const kind = text(row, ["kind", "type", "app"], 40);
-    const title = text(row, ["title", "summary", "prompt", "text"], 120);
+    const model = text(row, ["model"], 60);
+    const title = text(row, ["title", "summary", "prompt", "text", "goal"], 120)
+      ?? ([text(row, ["app"], 40), model, text(row, ["harness"], 20)].filter(Boolean).join(" · ") || undefined);
     const agent = text(row, ["agent", "submitter", "requested_by", "requestedBy", "owner"], 60);
     const createdAt = time(row, ["createdAt", "created_at", "submitted_at", "enqueued_at"]);
     const updatedAt = time(row, ["updatedAt", "updated_at", "finished_at", "started_at"]);

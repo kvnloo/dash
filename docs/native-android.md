@@ -50,11 +50,22 @@ Decision order: `?desk=on|off|auto` (web, per page load) > Settings "Desk
 layout" > auto. Auto turns on at a root width >= 1100 dp, or >= 960 dp with
 a desktop signal (DeX mode from `DashDex`, or a native mouse/touchpad).
 
-Native detection (`DexDetector.kt`) no longer requires the Pad opt-in; it
-uses MainActivity's display, desk `uiMode` on external displays and on the
-activity itself, Samsung's display category, mouse/touchpad presence and
-`screenWidthDp`. `getSystemService("desktopmode")` is absent on One UI 8/9
-(S22+, S25, scouted 2026-10-28) and stays an optional, guarded fallback.
+Targets: the S25 Ultra (One UI 9, Android 17) is the primary DeX device, the
+S22+ (One UI 8) second. One UI 9 has DeX, but built into the Samsung launcher
+(`com.honeyspace.dexservice`, Wireless DeX tile, `dex_policy` service) on top
+of Android desktop windowing; the standalone `desktopmode.uiservice` /
+`desktoplauncher` packages are gone and `getSystemService("desktopmode")` is
+absent on both phones (read-only adb, 2026-10-28). So detection
+(`DexDetector.kt`, no Pad opt-in needed) works from the window/display side:
+MainActivity on a non-default display, desk `uiMode` on external displays or
+the activity, Samsung's display category, a freeform window smaller than its
+display on a display >= 600 dp (desktop windowing), a public external
+presentation display that is on, mouse/touchpad presence and `screenWidthDp`.
+The Samsung paths (`semDesktopModeEnabled`, `desktopmode`, Knox broadcast) are
+optional, guarded fallbacks. The freeform/external signals set `desktop` /
+`desktopSource` only: they lower the desk threshold and never change `mode`,
+so they cannot open the Pad or move a window. The Build panel shows the live
+decision (`Desk <reason> · <width> wide · DeX signal <source>`).
 `with-dex.js` adds `com.samsung.android.keepalive.density`,
 `com.sec.android.support.multiwindow`, keyboard/navigation/screenSize
 config changes and a freeform `<layout>` (default 1280x800 dp, min 360x480).

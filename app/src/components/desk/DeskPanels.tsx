@@ -3,7 +3,7 @@ import { memo, useMemo, useState, type ReactNode } from "react";
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { parseHostUtilization, parsePhoneQueueSnapshot, type AgentInfo, type HostInfo, type HostUtilization, type PhoneQueueJob } from "../../../../shared/protocol";
 import type { RootStackParamList } from "../../navigation";
-import { deskPrefs, type DeskPanelId } from "../../lib/desk";
+import { deskPrefs, deskState, type DeskPanelId } from "../../lib/desk";
 import { hostLabel } from "../../lib/hosts-tree";
 import { profileFromAgent } from "../../lib/roster";
 import { useBridgeJson } from "../../lib/use-bridge-json";
@@ -225,6 +225,7 @@ export const DeskBuildPanel = memo(function DeskBuildPanel({ onLayout }: { onLay
   const health = useBridgeJson("/health", parseHealth, 60_000, open);
   const sha = RUNNING_BUILD ? shortSha(RUNNING_BUILD) : SERVED_BUILD.sha ? SERVED_BUILD.sha.slice(0, 7) : "local checkout";
   const release = health.data?.release?.slice(0, 7);
+  const desk = deskState.use(st => st);
   return <DeskPanel id="build" title="Build" onLayout={onLayout}>
     <View testID="desk-build-chip" style={s.row} accessibilityLabel={`App ${sha}, ${channelLabel()}, bridge ${release ?? "release unknown"}`}>
       <Text style={s.pill}>{`app ${sha}`}</Text>
@@ -232,6 +233,7 @@ export const DeskBuildPanel = memo(function DeskBuildPanel({ onLayout }: { onLay
       <Text style={s.pill}>{`bridge ${release ?? (health.error ? "unreachable" : health.data ? "unreleased" : "…")}`}</Text>
       {health.data ? <Text style={s.faint}>{`up ${timeAgo(health.data.startedAtMs)}`}</Text> : null}
     </View>
+    <Text testID="desk-signal" style={[s.faint, styles.indent]}>{`Desk ${desk.reason} · ${Math.round(desk.width)} wide · DeX signal ${desk.signal}`}</Text>
   </DeskPanel>;
 });
 

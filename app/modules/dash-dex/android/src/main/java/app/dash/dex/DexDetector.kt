@@ -74,6 +74,35 @@ class DexDetector(private val app: Application, private val changed: (Map<String
     }
   } catch (_: Exception) { false }
 
+  /**
+   * Android desktop windowing, which One UI 9 DeX is built on (launcher-integrated: honeyspace
+   * dexservice; no desktopmode service, no legacy DeX packages): the activity is in a multi-window
+   * mode whose window is smaller than its display in both dimensions (a floating, resizable window
+   * rather than split screen), on a display at least tablet-sized. A phone's own screen
+   * (smallest width < 600 dp) never counts, so One UI pop-up view on the phone is not "desktop".
+   */
+  private fun freeformWindow(activity: Activity): Boolean = try {
+    if (Build.VERSION.SDK_INT < 30 || !activity.isInMultiWindowMode || activity.isInPictureInPictureMode) false
+    else {
+      val now = activity.windowManager.currentWindowMetrics.bounds
+      val max = activity.windowManager.maximumWindowMetrics.bounds
+      val density = activity.resources.displayMetrics.density.takeIf { it > 0f } ?: 1f
+      now.width() < max.width() && now.height() < max.height() && minOf(max.width(), max.height()) / density >= 600f
+    }
+  } catch (_: Exception) { false }
+
+  /**
+   * An external, public display that DeX could be driving (wired HDMI/USB-C or Wireless DeX):
+   * not the phone's panel, not app-private, not a virtual display, switched on. Android reports
+   * such displays as presentation displays; One UI 9 puts DeX on them via desktop windowing.
+   */
+  private fun externalDisplay(): Display? = try {
+    displays.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION).firstOrNull {
+      it.displayId != Display.DEFAULT_DISPLAY && it.state == Display.STATE_ON &&
+        (it.flags and Display.FLAG_PRIVATE) == 0 && (it.flags and Display.FLAG_PRESENTATION) != 0
+    }
+  } catch (_: Exception) { null }
+
   fun state(): Map<String, Any?> {
     val activity = mainActivity()
     val mainId = activity?.let { displayId(it) } ?: Display.DEFAULT_DISPLAY
@@ -117,7 +146,19 @@ class DexDetector(private val app: Application, private val changed: (Map<String
     }
     activity?.let { DexLifecycle.relaxOrientation(it, mainId) }
     val config = (activity ?: app).resources.configuration
+    // "desktop" feeds only the desk layout (a lower width threshold). It never changes `mode`,
+    // which gates the Pad and window moves, so a mis-read here cannot open or move anything.
+    val freeform = activity?.let { freeformWindow(it) } == true
+    val external = if (mode == "off" && !freeform) externalDisplay() else null
+    val desktopSource = when {
+      mode != "off" -> source
+      freeform -> "freeform-window"
+      external != null -> "external-display"
+      else -> "none"
+    }
     return mapOf("available" to true, "mode" to mode, "source" to source,
+      "desktop" to (desktopSource != "none"), "desktopSource" to desktopSource,
+      "freeform" to freeform, "externalDisplayId" to external?.displayId,
       "tvDisplayId" to tvId, "mainDisplayId" to mainId, "padOpen" to DashPadActivity.isOpen,
       "pointer" to pointerAttached(), "widthDp" to config.screenWidthDp,
       "uiModeDesk" to (config.uiMode and Configuration.UI_MODE_TYPE_MASK == Configuration.UI_MODE_TYPE_DESK))

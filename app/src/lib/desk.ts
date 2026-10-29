@@ -22,7 +22,7 @@ export interface DeskInput {
   choice: DeskChoice;
   urlChoice: DeskChoice | null;
   width: number;
-  dex: Pick<DexState, "mode">;
+  dex: Pick<DexState, "mode" | "desktop">;
   /** Native: a mouse/trackpad is attached. Web never sets it (every desktop browser has one). */
   pointer: boolean;
 }
@@ -33,7 +33,7 @@ export function deskDecision(input: DeskInput): { on: boolean; reason: DeskReaso
   if (input.choice === "on") return { on: true, reason: "setting-on" };
   if (input.choice === "off") return { on: false, reason: "setting-off" };
   if (input.width >= DESK_MIN_WIDTH) return { on: true, reason: "wide" };
-  if (input.width >= DESK_SIGNAL_MIN_WIDTH && input.dex.mode !== "off") return { on: true, reason: "dex" };
+  if (input.width >= DESK_SIGNAL_MIN_WIDTH && (input.dex.mode !== "off" || input.dex.desktop === true)) return { on: true, reason: "dex" };
   if (input.width >= DESK_SIGNAL_MIN_WIDTH && input.pointer) return { on: true, reason: "pointer" };
   return { on: false, reason: "narrow" };
 }
@@ -116,7 +116,7 @@ export const setDeskChoice = (choice: DeskChoice) => updateDeskPrefs(() => ({ ch
 export const setPanelCollapsed = (id: DeskPanelId, collapsed: boolean) => updateDeskPrefs(s => ({ collapsed: { ...s.collapsed, [id]: collapsed } }));
 
 /** The live desk decision, shared by the shell, Main and the chat rows. */
-export const deskState = createStore<{ on: boolean; reason: DeskReason; width: number }>({ on: false, reason: "narrow", width: 0 });
+export const deskState = createStore<{ on: boolean; reason: DeskReason; width: number; signal: string }>({ on: false, reason: "narrow", width: 0, signal: "none" });
 export function useDeskActive(): boolean { return deskState.use(s => s.on); }
 
 /** What a desk panel asked to show; panels watch their id and scroll/expand/highlight. */

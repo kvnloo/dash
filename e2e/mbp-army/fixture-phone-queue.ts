@@ -12,11 +12,16 @@ export async function startFixturePhoneQueue(): Promise<FixturePhoneQueue> {
   const devices = { devices: [
     { id: 's22', name: 'Galaxy S22+', serial: 'ARMYS22', status: 'busy', owner_active: false, battery: 81, foreground_app: 'com.openai.chatgpt', queue_depth: 2 },
     { id: 's25', name: 'S25 Ultra', serial: 'ARMYS25', status: 'held', owner_active: true, battery: { percent: 0.47 }, reason: 'owner using phone' },
+    // The live groot phone-queue shape (2026-10-29): no state word, a gate and owner idle seconds.
+    { id: 's25b', hardware: 'ARMYS25B', serial: '100.64.0.9:38319', online: true, foreground: 'com.sec.android.app.clockpackage', in_call: false,
+      owner_idle_s: 45869, battery: 62, gate: { allowed: false, reason: 's25 worker mode is off' }, lock_holder: null, queue_depth: 0, queue_depth_any: 0 },
   ] };
   const jobs = { jobs: [
     { job_id: 'job-1', status: 'running', device: 's22', type: 'chatgpt', prompt: 'ARMY phone job one: summarize issue 554', submitter: 'omp', created_at: now - 120, started_at: now - 60 },
     { job_id: 'job-2', status: 'queued', device: 's22', type: 'chatgpt', prompt: 'ARMY phone job two', submitter: 'hermes', created_at: now - 30 },
     { job_id: 'job-3', status: 'queued', device: 's25', type: 'deepseek', prompt: 'ARMY phone job three waits for owner', submitter: 'claude-code', created_at: now - 10 },
+    { id: 'job4live', kind: 'goal', device: 's22', state: 'succeeded', submitter: 'claude-code/proof-v2', model: 'openai-codex/gpt-6-luna', harness: 'fx', app: null,
+      created_at: new Date((now - 600) * 1000).toISOString(), finished_at: new Date((now - 580) * 1000).toISOString(), result: { final_output: 'Android version: 16.' } },
   ] };
   const server = createServer((request, response) => {
     hits.push(request.url ?? '');
