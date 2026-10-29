@@ -92,7 +92,7 @@
     {"id": "annotate-tldraw", "title": "Offline warm tldraw annotation and history",
      "tests": ["annotate-tldraw: warm open, visible stroke, local assets and history"]},
     {"id": "annotate-tldraw-contract", "title": "Unchanged sent annotation JSON and markers",
-     "tests": ["annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Skia"]},
+     "tests": ["annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Skia", "annotate-tldraw: positioned canvas uses its current origin for sent ink"]},
     {"id": "annotate-tldraw-zoom", "title": "Capture-normalized strokes after camera zoom",
      "tests": ["annotate-tldraw: zoomed ink is normalized in capture page coordinates"]},
     {"id": "dex-simulation", "title": "Explicit web DeX TV and Pad simulation",
