@@ -82,7 +82,8 @@ test('annotation-voice-target: OMP chat beats a voice call bound to Hermes', asy
 
   await page.getByRole('tab').nth(1).click({ noWaitAfter: true });
   await expect(omp(page)).toHaveCount(1);
-  await omp(page).click({ noWaitAfter: true });
+  // The centered call owns its hit region; the chat's harness icon stays exposed.
+  await omp(page).getByTestId('agent-orb').click({ noWaitAfter: true });
   const ompTitle = await page.getByTestId('chat-window-pill-title').innerText();
   expect(ompTitle).not.toBe(hermesTitle);
   await annotateHere(page);

@@ -80,21 +80,27 @@ let lastActiveId: string | null | undefined;
 function persistenceFailure(): void {
   console.error("[dash.persistence] storage_operation_failed");
 }
+function saveConversations(): void {
+  saveTimer = undefined;
+  const { conversations, activeId } = store.get();
+  // View-only chats are transient: they are read from the bridge and never written to the phone.
+  const snapshots = conversations.filter(chat => !chat.viewOnly).map(chat => !hasHostHistory(chat) && chat.messages.some(message => message.role === "assistant" && message.state === "streaming")
+    ? { ...chat, messages: chat.messages.map(message => message.role === "assistant" && message.state === "streaming"
+      ? { ...message, parts: partsFor(message.turnId).length ? partsFor(message.turnId) : message.parts, text: replyText.get(message.turnId) || message.text, seq: Math.max(message.seq, liveSequences.get(message.turnId) ?? 0) } : message) }
+    : chat);
+  void persistence.save(snapshots).catch(persistenceFailure);
+  if (lastActiveId !== activeId) {
+    void AsyncStorage.setItem(KEYS.activeId, activeId ?? "").then(() => { lastActiveId = activeId; }, persistenceFailure);
+  }
+}
 function scheduleSave(): void {
   if (!store.get().hydrated) return;
-  saveTimer ??= setTimeout(() => {
-    saveTimer = undefined;
-    const { conversations, activeId } = store.get();
-    // View-only chats are transient: they are read from the bridge and never written to the phone.
-    const snapshots = conversations.filter(chat => !chat.viewOnly).map(chat => !hasHostHistory(chat) && chat.messages.some(message => message.role === "assistant" && message.state === "streaming")
-      ? { ...chat, messages: chat.messages.map(message => message.role === "assistant" && message.state === "streaming"
-        ? { ...message, parts: partsFor(message.turnId).length ? partsFor(message.turnId) : message.parts, text: replyText.get(message.turnId) || message.text, seq: Math.max(message.seq, liveSequences.get(message.turnId) ?? 0) } : message) }
-      : chat);
-    void persistence.save(snapshots).catch(persistenceFailure);
-    if (lastActiveId !== activeId) {
-      void AsyncStorage.setItem(KEYS.activeId, activeId ?? "").then(() => { lastActiveId = activeId; }, persistenceFailure);
-    }
-  }, 400);
+  saveTimer ??= setTimeout(saveConversations, 400);
+}
+function saveSettledReply(): void {
+  if (!store.get().hydrated) return;
+  clearTimeout(saveTimer);
+  saveConversations();
 }
 
 export async function hydrate(): Promise<void> {
@@ -717,6 +723,7 @@ export function applyTurnEvent(
       });
       notifyTurnSettled(where.conversationId);
       if (checkpointed) releaseSettledReply(where.conversationId, where.messageId);
+      if (checkpointed) saveSettledReply();
       return;
     }
     case "error": {

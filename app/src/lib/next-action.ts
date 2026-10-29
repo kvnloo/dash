@@ -153,7 +153,7 @@ export function nextAction(input: NextActionInput): NextAction | null {
       const eventAt = timestamp(last.at) ? last.at : 0;
       const seen = input.lastSeen[chat.id];
       const seenAt = typeof seen === "number" && Number.isFinite(seen) ? seen : -1;
-      if (!chat.stale && last.state === "done" && eventAt > seenAt) {
+      if (last.state === "done" && eventAt > seenAt) {
         candidates.push(candidate(
           "read-reply",
           actionId("read-reply", chat.id, last.id, last.turnId),

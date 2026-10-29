@@ -106,6 +106,7 @@ createInterface({input:process.stdin}).on('line', line => {
    return;
   }
   update(prefix);
+  if (text.includes('ARMY_HANG')) return;
   // ARMY_HOLD: no answer until the spec creates $HOME/army-release, so overlap never races a clock.
   const hold = () => { if (existsSync(join(process.env.HOME || '.', 'army-release'))) answer(); else timer = setTimeout(hold, 100); };
   // ARMY_MS=<n> delays completion; ARMY_TICK=<n> emits progress frames during the wait.

@@ -29,10 +29,13 @@ test.describe('subagent strip',()=>{
   await expect(page.getByRole('treeitem',{name:/ARMY worker verify/})).toBeVisible();
   await expect(page.getByRole('treeitem',{name:/ARMY worker review/})).toBeVisible();
   await expect(chat.getByText('ARMY worker done')).toHaveCount(0);
-  // Orchestra: all three workers count as subagents (one live), and only the two real chats as chats.
-  await expect(page.getByText('subagent 3 · 1 live',{exact:true})).toHaveCount(1);
-  await expect(page.getByText('chat 2 · 1 live',{exact:true})).toHaveCount(1);
   await strip.click({noWaitAfter:true});
   await expect(page.getByRole('treeitem',{name:/ARMY worker verify/})).toHaveCount(0);
+  await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});
+  await page.getByRole('tab').nth(2).click({noWaitAfter:true});
+  await page.getByRole('button',{name:'Fleet',exact:true}).click({noWaitAfter:true});
+  // Fleet retains finished subagents as workers rather than promoting them to chats.
+  await expect(page.getByText('subagent 3 · 1 live',{exact:true})).toHaveCount(1);
+  await expect(page.getByText('chat 2 · 1 live',{exact:true})).toHaveCount(1);
  });
 });

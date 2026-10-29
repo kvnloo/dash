@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Page } from 'playwright/test';
-import { test, expect, pair, composer, chooseHarness, send } from './fixtures';
+import { test, expect, pair, composer, send } from './fixtures';
 
 test.use({ bridgeOptions: { archiveClaude: true }, timezoneId: 'America/New_York' });
 test.afterEach(async ({ page }, info) => {
@@ -34,6 +34,11 @@ async function selectFilter(page: Page, menu: 'harness' | 'project' | 'date' | '
   await expect(sheet).toHaveCount(0);
   await expect(page.getByTestId(`chat-filter-${menu}`)).toBeInViewport({ ratio: 1 });
   expect(await page.getByTestId('main-pager').evaluate(element => element.scrollLeft)).toBe(0);
+}
+
+async function chooseNewChatHarness(page: Page, name: string) {
+  await page.getByRole('button', { name: 'Choose harness', exact: true }).click({ noWaitAfter: true });
+  await page.getByRole('button', { name: new RegExp(`^${name}(?:\\s|$)`) }).last().click({ noWaitAfter: true });
 }
 
 async function scrollChats(page: Page) {
@@ -129,7 +134,7 @@ test('Chats priority puts failed and interrupted turns ahead of running and newe
   const start = async (harness: string, prompt: string, outcome: RegExp) => {
     await page.getByRole('button', { name: /^(Create new chat|New chat)$/ }).first().click({ noWaitAfter: true });
     await expect(composer(page)).toBeVisible();
-    await chooseHarness(page, harness);
+    await chooseNewChatHarness(page, harness);
     await send(page, prompt);
     await expect(page.getByText(outcome).first()).toBeVisible();
     await page.getByRole('button', { name: 'Back', exact: true }).click({ noWaitAfter: true });

@@ -1,9 +1,9 @@
 import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Page } from 'playwright/test';
-import { test, expect, openChat, composer, send } from './fixtures';
+import { test, expect, pair, openChat, composer, send } from './fixtures';
 
-test.use({ viewport: { width: 390, height: 844 }, persistSession: false });
+test.use({ viewport: { width: 390, height: 844 }, persistSession: false, bridgeOptions: { archiveClaude: true } });
 test.afterEach(async ({ page }, info) => {
   if (!page.isClosed()) await page.screenshot({ path: info.outputPath('final.png') });
 });
@@ -11,9 +11,15 @@ test.afterEach(async ({ page }, info) => {
 const card = (page: Page) => page.getByTestId('next-action-card');
 const visibleText = (page: Page, text: string) => page.getByText(text, { exact: false }).filter({ visible: true }).first();
 
+async function expectReadReplyFor(page: Page, chatTitle: string) {
+  await expect(page.getByTestId('next-action-detail')).toContainText(chatTitle);
+}
+
 async function toChats(page: Page) {
   const close = page.getByRole('button', { name: /^(Back|Close chat window)$/ }).first();
   if (await close.isVisible()) await close.click({ noWaitAfter: true });
+  await page.getByRole('tab').nth(1).click({ noWaitAfter: true });
+  await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('chats-pane')).toBeVisible();
 }
 
@@ -58,7 +64,7 @@ test('Next up opens the exact completed background reply without sending and pre
   if (!viewport) throw Error('No transcript viewport');
   await page.mouse.move(viewport.x + viewport.width / 2, viewport.y + viewport.height / 2);
   await page.mouse.wheel(0, -10000);
-  await expect(page.getByText('Earlier attention history 0', { exact: true })).toBeInViewport();
+  await expect(page.getByTestId('transcript-viewport').getByText('Earlier attention history 0', { exact: true })).toBeInViewport();
   await writeFile(join(bridge.dir, 'army-release'), '');
   await expect.poll(() => turnEvents(bridge.dir, 'end'), { timeout: 30_000 }).toBe(9);
   await toChats(page);
@@ -80,7 +86,7 @@ test('Next up opens the exact completed background reply without sending and pre
   await toChats(page);
   await expect(card(page)).toHaveCount(0);
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await expect(page.getByTestId('chats-pane')).toBeVisible({ timeout: 25_000 });
+  await toChats(page);
   await expect(card(page)).toHaveCount(0);
 
   const draftRow = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: 'New chat' });
@@ -91,7 +97,10 @@ test('Next up opens the exact completed background reply without sending and pre
 });
 
 test('Next up Later survives reload, Skip dismisses only one completion, and a newer reply in that chat returns', async ({ page, bridge }) => {
-  await openChat(page, bridge);
+  await pair(page, bridge);
+  const firstChatTitle = 'ARMY archived Claude Code chat';
+  await page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: firstChatTitle }).click({ noWaitAfter: true });
+  await expect(page.getByTestId('chat-window')).toBeVisible();
   await page.clock.install();
   await send(page, 'ARMY_HOLD first background completion');
   await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
@@ -105,30 +114,31 @@ test('Next up Later survives reload, Skip dismisses only one completion, and a n
 
   const startsBeforeLater = await turnEvents(bridge.dir);
   await page.getByTestId('next-action-later').click();
-  await expect(card(page)).toContainText('first background completion');
+  await expectReadReplyFor(page, firstChatTitle);
   expect(await turnEvents(bridge.dir)).toBe(startsBeforeLater);
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await expect(card(page)).toContainText('first background completion', { timeout: 25_000 });
+  await toChats(page);
+  await expectReadReplyFor(page, firstChatTitle);
   const rows = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]');
   await page.getByTestId('next-action-skip').click();
   await expect(card(page)).toHaveCount(0);
-  await expect(rows.filter({ hasText: 'first background completion' })).toHaveCount(1);
+  await expect(rows.filter({ hasText: firstChatTitle })).toHaveCount(1);
   await expect(rows.filter({ hasText: 'second background completion' })).toHaveCount(1);
   expect(await turnEvents(bridge.dir)).toBe(startsBeforeLater);
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await expect(page.getByTestId('chats-pane')).toBeVisible({ timeout: 25_000 });
+  await toChats(page);
   await expect(card(page)).toHaveCount(0);
 
-  await rows.filter({ hasText: 'first background completion' }).click({ noWaitAfter: true });
+  await rows.filter({ hasText: firstChatTitle }).click({ noWaitAfter: true });
   await unlink(join(bridge.dir, 'army-release'));
   await send(page, 'ARMY_HOLD newer completion in the same chat');
   await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
   await toChats(page);
   await writeFile(join(bridge.dir, 'army-release'), '');
-  await expect(card(page)).toContainText('first background completion', { timeout: 30_000 });
+  await expectReadReplyFor(page, firstChatTitle);
   expect(await turnEvents(bridge.dir)).toBe(startsBeforeLater + 1);
   await page.getByTestId('next-action-do').click({ noWaitAfter: true });
-  await expect(visibleText(page, 'ARMY_REPLY: ARMY_HOLD newer completion in the same chat')).toBeInViewport();
+  await expect(visibleText(page, 'ARMY_CLAUDE_REPLY: ARMY_HOLD newer completion in the same chat')).toBeInViewport();
   expect(await turnEvents(bridge.dir)).toBe(startsBeforeLater + 1);
   await toChats(page);
   await expect(card(page)).toHaveCount(0);
@@ -163,10 +173,10 @@ test('Next up prioritizes a real pending ACP permission and Open never chooses i
   await expect.poll(async () => readFile(join(bridge.dir, 'army-acp-permissions.jsonl'), 'utf8').catch(() => '')).toContain('"response":{"outcome":{"outcome":"selected","optionId":"army-allow-once"}}');
   await expect(visibleText(page, 'ARMY_PERMISSION_SELECTED')).toBeVisible();
   await toChats(page);
-  await expect(card(page)).not.toContainText('permission');
+  await expectReadReplyFor(page, 'ARMY_HOLD background reply below permission');
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await expect(page.getByTestId('chats-pane')).toBeVisible({ timeout: 25_000 });
-  await expect(card(page)).not.toContainText('permission');
+  await toChats(page);
+  await expectReadReplyFor(page, 'ARMY_HOLD background reply below permission');
   expect(await turnEvents(bridge.dir)).toBe(startsBeforeOpen);
 });
