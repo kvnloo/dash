@@ -39,16 +39,20 @@ const server = Bun.serve<Peer>({
       remote.onclose = () => { peers.delete(remote); clients.get(data.id)?.close(); };
       return;
     }
-    const holdRoster = url.pathname === '/roster' && holdNextRoster;
-    if (holdRoster) holdNextRoster = false;
+    const holdRoster = request.method === 'GET' && url.pathname === '/roster' && holdNextRoster;
+    if (holdRoster) {
+      holdNextRoster = false;
+      // Capture a complete real snapshot, not a conditional cache confirmation.
+      headers.delete('if-none-match');
+    }
     const response = await fetch(target, { method: request.method, headers, body: request.body, redirect: 'manual' });
     if (!holdRoster) return response;
     // Delay the real authenticated response, without changing its roster bytes.
+    if (response.status !== 200) throw Error(`Roster snapshot returned ${response.status}`);
     const body = await response.arrayBuffer();
     const responseHeaders = new Headers(response.headers);
-    responseHeaders.set('x-army-held-roster', '1');
     await new Promise<void>(resolve => { releaseRoster = resolve; report('roster-held'); });
-    report('roster-released');
+    report(`roster-released:${response.status}`);
     return new Response(body, { status: response.status, headers: responseHeaders });
   },
   websocket: {

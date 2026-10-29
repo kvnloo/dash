@@ -84,6 +84,8 @@ test.describe('roster connection ownership', () => {
       await expect.poll(() => log).toContain('"event":"roster-armed"');
       await page.getByRole('button', { name: 'Open settings', exact: true }).first().click();
       await page.getByRole('textbox', { name: 'Address', exact: true }).fill(`127.0.0.1:${port}`);
+      const heldRequest = page.waitForRequest(request =>
+        request.method() === 'GET' && request.url() === `http://127.0.0.1:${port}/roster`);
       await page.getByRole('button', { name: 'Save and reconnect', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Save and reconnect', exact: true })).toBeHidden();
       await expect.poll(() => log).toContain('"event":"roster-held"');
@@ -105,9 +107,11 @@ test.describe('roster connection ownership', () => {
       relay.stdin.write('disconnect\n');
       await expect.poll(() => log).toContain('"event":"authenticated-hello","id":2');
       await expect(phone).toContainText('ARMY current S22');
-      const oldResponse = page.waitForResponse(response => response.headers()['x-army-held-roster'] === '1');
+      const request = await heldRequest;
       relay.stdin.write('release-roster\n');
-      const released = await oldResponse;
+      const released = await request.response();
+      if (!released) throw Error('Held real roster request has no response');
+      expect(released.status()).toBe(200);
       expect(await released.finished()).toBeNull();
       await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       await expect(phone).toContainText('ARMY current S22');
