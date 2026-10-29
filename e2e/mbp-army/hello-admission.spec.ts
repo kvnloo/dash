@@ -70,10 +70,6 @@ test.describe('roster connection ownership', () => {
 
   test('roster response from a retired socket cannot replace the reconnected host list', async ({ page, bridge }, testInfo) => {
     test.setTimeout(90000);
-    const diagnostics: string[] = [];
-    page.on('console', message => {
-      if (message.text().startsWith('[roster-investigation]')) diagnostics.push(message.text());
-    });
     await pair(page, bridge);
     const bun = process.env.ARMY_BUN || execFileSync('sh', ['-c', 'command -v bun'], { encoding: 'utf8' }).trim();
     const relay = spawn(bun, [join(__dirname, 'hello-relay.ts'), `http://127.0.0.1:${bridge.port}`], { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -108,9 +104,18 @@ test.describe('roster connection ownership', () => {
       }, { timeout: 25000 }).toContain('ARMY current S22');
 
       // Dropping the transport preserves the same Settings object on reconnect.
+      const currentRequest = page.waitForRequest(request =>
+        request.method() === 'GET' && request.url() === `http://127.0.0.1:${port}/roster`);
       relay.stdin.write('disconnect\n');
       await expect.poll(() => log).toContain('"event":"authenticated-hello","id":2');
       await expect(phone).toContainText('ARMY current S22');
+      const currentResponse = await (await currentRequest).response();
+      if (!currentResponse) throw Error('Reconnected roster request has no response');
+      expect(await currentResponse.finished()).toBeNull();
+      expect(await currentResponse.json()).toEqual(expect.objectContaining({
+        hosts: expect.arrayContaining([expect.objectContaining({ id: 'galaxy-s22', name: 'ARMY current S22' })]),
+      }));
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       const request = await heldRequest;
       relay.stdin.write('release-roster\n');
       const released = await request.response();
@@ -130,7 +135,6 @@ test.describe('roster connection ownership', () => {
         await once(relay, 'exit');
       }
       await writeFile(testInfo.outputPath('roster-relay.log'), log);
-      await testInfo.attach('roster-investigation', { body: Buffer.from(JSON.stringify({ diagnostics, relay: log })), contentType: 'application/json' });
     }
   });
 });
