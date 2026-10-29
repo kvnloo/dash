@@ -1013,7 +1013,7 @@ const server = Bun.serve<SocketData>({
             ws.data.turns.add(message.id);
             turns.set(message.id, turn);
             if (message.summariesEnabled) turn.enableSummaries();
-            turn.start({ text: message.text, cwd: message.cwd ?? "", sessionId: message.sessionId, profileId: message.profileId }, remote);
+            turn.start({ text: message.text, mode: message.mode, cwd: message.cwd ?? "", sessionId: message.sessionId, profileId: message.profileId }, remote);
             break;
           }
           if (!(await isSelfHost(message.hostId))) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");

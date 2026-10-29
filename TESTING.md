@@ -65,6 +65,13 @@ unread replies under clock rollback, exact-chat navigation without sending,
 draft preservation, defer/reload and explicit permission decisions. CI retains
 compact filter and attention screenshots in `chats-ui-<sha>` for visual inspection.
 
+The remote ACP journey first sends a normal chat through the UI, then submits
+an authenticated unsupported steer to that same remote route. It requires an
+error without a second ACP invocation or reply delta. Remote routing preserves
+the supplied mode so the existing Turn admission rejects unsupported steering,
+rather than silently executing a new normal prompt. This is protocol rejection
+coverage, not a claim that the Claude composer offers steering.
+
 ## Release law O15
 
 No green, complete army receipt for the exact commit means no APK, no phone
