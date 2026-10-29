@@ -126,10 +126,14 @@ genuine changed roster after the executor exits, then require a second ACP
 `session/load` with the original native id. Noncatalog continuation requires
 the existing matching generic local harness profile, not an arbitrary profile.
 
-`live-search-ownership.spec.ts` uses an actual UI-created durable chat as its
-legacy upgrade input before it tests ambiguous saved ownership and native
-recovery after local deletion. New ACP chats already have a confirmed host and
-must not be treated as unowned. The subagent-strip journey opens Orchestra's
+`live-search-ownership.spec.ts` uses an actual UI-created, completed durable chat
+as its legacy upgrade input. It closes the old runtime and bridge before
+transforming that input at document initialization, then verifies the unowned
+saved state before reconnecting. This prevents live persistence or authenticated
+session replay from restoring ownership during fixture setup. Native recovery
+after local deletion must still leave that ambiguous saved chat separate.
+New ACP chats already have a confirmed host and must not be treated as unowned.
+The subagent-strip journey opens Orchestra's
 Fleet view before it checks full-graph classification; hidden panes and the
 Lineage projection are not the full fleet.
 

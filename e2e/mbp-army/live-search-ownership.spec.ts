@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import { test, expect, createBridge, openChat, chatRow, composer, send, type Bridge } from './fixtures';
+import { test, expect, createBridge, openChat, chatRow, composer, send, web, type Bridge } from './fixtures';
 
 const sessionId = 'army-fixture-session';
 const savedPrompt = 'ARMY saved unknown owner must not become the live target';
@@ -51,11 +51,17 @@ test('live search restores the paired OMP owner after local deletion without ope
   if (!savedRowId) throw Error('Missing real saved chat row');
   const savedId = savedRowId.slice('chat-row-'.length);
   await expect.poll(() => page.evaluate(id => {
-   const entries = JSON.parse(localStorage.getItem('dash.conversations.index.v3') || '[]');
-   return entries.some((c: { id: string; sessionId?: string; targetHostId?: string }) =>
-    c.id === id && c.sessionId === 'army-fixture-session' && c.targetHostId === 'groot');
+   const raw = localStorage.getItem(`dash.durable.files.v2/${encodeURIComponent(id)}.json`);
+   if (!raw) return false;
+   const chat = JSON.parse(raw);
+   return chat.sessionId === 'army-fixture-session' && chat.targetHostId === 'groot' &&
+    chat.messages.some((message: { role: string; state?: string }) => message.role === 'assistant' && message.state === 'done');
   }, savedId)).toBe(true);
-  await page.evaluate(id => {
+  // The old saved input must precede hydration. A live store can overwrite it,
+  // and the still-running bridge can replay authenticated ownership on reload.
+  await page.goto('about:blank');
+  await paired.stop();
+  await page.addInitScript(id => {
    const key = 'dash.conversations.index.v3';
    const entries = JSON.parse(localStorage.getItem(key)!);
    const chat = entries.find((c: { id: string }) => c.id === id);
@@ -71,10 +77,14 @@ test('live search restores the paired OMP owner after local deletion without ope
    }
    localStorage.setItem(key, JSON.stringify(entries));
   }, savedId);
-  await page.reload();
+  await page.goto(web);
   await page.getByRole('tab').nth(1).click();
   await page.context().setOffline(true);
-  await paired.stop();
+  await expect.poll(() => page.evaluate(id => {
+   const chat = JSON.parse(localStorage.getItem('dash.conversations.index.v3') || '[]')
+    .find((entry: { id: string }) => entry.id === id);
+   return chat?.stale === true && !chat.targetHostId && !chat.profileId;
+  }, savedId)).toBe(true);
   await writeFile(peerSignal, 'release\n');
   await expect.poll(() => runningOwners(peer), { timeout: 25000 }).toEqual([
    { host: 'mbp', self: true, profile: expect.stringMatching(/^omp:/) },
