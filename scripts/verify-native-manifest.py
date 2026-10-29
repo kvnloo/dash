@@ -29,6 +29,10 @@ assert pad.attrib.get(android + "launchMode") == "singleTask"
 assert required_changes <= set(pad.attrib.get(android + "configChanges", "").split("|"))
 metadata = {node.attrib.get(android + "name"): node.attrib.get(android + "value") for node in manifest.findall("application/meta-data")}
 assert metadata.get("com.samsung.android.multidisplay.keep_process_alive") == "true"
+assert metadata.get("com.samsung.android.keepalive.density") == "true"
+assert metadata.get("com.sec.android.support.multiwindow") == "true"
+assert {"keyboard", "keyboardHidden", "navigation", "screenSize"} <= set(main.attrib.get(android + "configChanges", "").split("|"))
+assert any(node.attrib.get(android + "minWidth") == "360dp" for node in main.findall("layout"))
 assert all(node.attrib.get(android + "reqTouchScreen") != "finger" for node in manifest.iter())
 assert all(node.attrib.get(android + "required") == "false" for node in manifest.findall("uses-feature") if node.attrib.get(android + "name") == "android.hardware.touchscreen")
 filters = main.findall("intent-filter")

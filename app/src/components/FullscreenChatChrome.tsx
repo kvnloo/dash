@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { usePaneDimensions } from "../lib/pane-size";
 import Svg, { Path } from "react-native-svg";
 import { haptic } from "../haptics";
 import {
@@ -32,7 +33,7 @@ export interface FullscreenChatChromeProps {
 export function FullscreenChatChrome({
   geometry, title, status, primary, onClose, onTogglePill, pillOpen, closeSide,
 }: FullscreenChatChromeProps) {
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth } = usePaneDimensions();
   const close = fullscreenCloseBounds(geometry, windowWidth, closeSide);
   const hole = geometry.hole;
   const r = geometry.height / 2;
