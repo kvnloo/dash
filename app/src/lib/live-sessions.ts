@@ -103,8 +103,8 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     // native route, even when that route reports the same session string.
     const unownedSaved = c.stale === true && !c.targetHostId && !c.profileId;
     const matches = unownedSaved ? [] : bucket.filter(({ host, agent }) => (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
-    const survivingPane = matches.length === 0 && c.harness === "omp" && c.profileId?.startsWith("omp:") && c.targetHostId && c.cwd
-      ? bucket.find(({ host, agent }) => host.id === c.targetHostId && agent.id.startsWith("omp:") && agent.cwd === c.cwd)
+    const survivingPane = matches.length === 0 && c.harness === "omp" && c.profileId?.startsWith("omp:") && c.targetHostId
+      ? bucket.find(({ host, agent }) => host.id === c.targetHostId && agent.id.startsWith("omp:"))
       : undefined;
     const match = matches.length === 1 ? matches[0] : survivingPane;
     if (!match) {
