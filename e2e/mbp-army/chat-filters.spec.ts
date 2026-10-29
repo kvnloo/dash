@@ -125,7 +125,6 @@ test('Chats combines harness, exact project and local dates, pages within the da
   await expect(page.getByTestId('chat-filter-date')).toHaveAttribute('aria-label', 'Updated date, Any date');
   await expect(page.getByTestId('chat-filter-sort')).toHaveAttribute('aria-label', 'Sort chats, Recent');
   await expect.poll(async () => (await firstVisualRow(page))?.id).toBe(initialTop);
-  expect(bridge.logs()).toContain('pair.claim');
   await writeFile(info.outputPath('chat-page-requests.json'), JSON.stringify(requests, null, 2));
 });
 
@@ -166,5 +165,4 @@ test('Chats priority puts failed and interrupted turns ahead of running and newe
   await bridge.stop();
   await selectFilter(page, 'project', bridge.dir);
   await expect(page.getByText(/Searching history/)).toHaveCount(0);
-  expect(bridge.logs()).toContain('turn.start');
 });

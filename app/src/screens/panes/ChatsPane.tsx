@@ -272,6 +272,9 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
     if (rows.length === 0 && remote.enabled && remote.status === "loading") return SKELETONS;
     return filterChatRows(rows, filters, today, liveKeys);
   }, [labeled, local, groupOf, remote.exhausted, remote.enabled, remote.status, filtered, filters, today, liveKeys]);
+  // Placeholder cells and real rows must not share a recycler/layout manager.
+  // Ordinary live updates keep the same instance and its visible-content anchor.
+  const listLifecycleKey = `${JSON.stringify(filters)}:${items === SKELETONS ? "loading" : "ready"}`;
   const count = useMemo(() => items.reduce((total, row) => total + (row.type === "chat" ? 1 : 0), 0), [items]);
   const filterOptions = useMemo(() => {
     const kinds = new Set(harnesses.map(h => h.id));
@@ -453,7 +456,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
       )}
       <BottomActionSheet open={menuFor !== null} title={menu.title} options={menu.options} onSelect={onMenu} onClose={closeMenu} />
       <FlashList
-        key={JSON.stringify(filters)}
+        key={listLifecycleKey}
         data={items}
         renderItem={renderItem}
         getItemType={getItemType}
