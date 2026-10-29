@@ -89,6 +89,8 @@ test.describe('roster connection ownership', () => {
       await page.getByRole('button', { name: 'Save and reconnect', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Save and reconnect', exact: true })).toBeHidden();
       await expect.poll(() => log).toContain('"event":"roster-held"');
+      const released = await oldResponse;
+      expect(released.status()).toBe(200);
       await page.getByRole('tab', { name: 'Hosts', exact: true }).click();
       const phone = page.getByTestId('tree-row-host:galaxy-s22');
       await expect(phone).toContainText('Galaxy S22+');
@@ -117,8 +119,6 @@ test.describe('roster connection ownership', () => {
       }));
       await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       relay.stdin.write('release-roster\n');
-      const released = await oldResponse;
-      expect(released.status()).toBe(200);
       expect(await released.finished()).toBeNull();
       expect(await released.json()).toEqual(expect.objectContaining({
         hosts: expect.arrayContaining([expect.objectContaining({ id: 'galaxy-s22', name: 'Galaxy S22+' })]),

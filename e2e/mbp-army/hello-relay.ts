@@ -57,8 +57,11 @@ const server = Bun.serve<Peer>({
     responseHeaders.set('cache-control', 'no-store');
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
+        const bytes = new Uint8Array(body);
+        // Produce the first unchanged byte so Bun flushes the no-store headers.
+        controller.enqueue(bytes.subarray(0, 1));
         releaseRoster = () => {
-          controller.enqueue(new Uint8Array(body));
+          controller.enqueue(bytes.subarray(1));
           controller.close();
           report(`roster-released:${response.status}`);
         };
