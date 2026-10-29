@@ -127,15 +127,12 @@ export default function TldrawAnnotateDOM(props: Props) {
   function sample(event: React.PointerEvent<HTMLDivElement>) {
     const current = capture.current;
     if (!editor || !current || current.pointerId !== event.pointerId) return;
+    // Position changes do not trigger ResizeObserver. Refresh before both our
+    // capture and tldraw's bubble handler convert this event into page space.
+    editor.updateViewportScreenBounds(editor.getContainer());
     const samples = event.nativeEvent.getCoalescedEvents?.() ?? [];
     for (const e of [...samples, event.nativeEvent]) {
       const page = editor.screenToPage({ x: e.clientX, y: e.clientY });
-      console.info("[annotate-coordinate-probe]", JSON.stringify({
-        event: event.type, client: { x: e.clientX, y: e.clientY }, page,
-        cached: editor.getViewportScreenBounds().toJson(),
-        actual: editor.getContainer().getBoundingClientRect().toJSON(),
-        camera: editor.getCamera(),
-      }));
       current.flat = appendInkSample(current.flat, page.x, page.y, pressureOf(current.kind, e.pressure), Date.now());
     }
   }

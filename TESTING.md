@@ -14,6 +14,18 @@ journeys also need HEAD's parent, so shallow CI checkouts use depth 2. Runs head
 on any host and in CI. The MBP headed variant on a private headless compositor
 is `python3 e2e/mbp-army/run.py <name> <workers>` (see `e2e/mbp-army/README.md`).
 
+## Annotation coordinates
+
+The tldraw contract journeys keep the normal exact Skia parity check and exercise
+a positioned DOM canvas whose origin changes without a resize. They derive page
+coordinates from the rendered canvas and shape-layer transform, draw with real
+mouse input, and inspect the authenticated upload. The existing zoom journey
+separately covers camera transforms. No editor, store or camera setter seeds ink.
+
+Pointer capture refreshes the editor's viewport bounds before converting samples;
+the SDK's throttled resize/scroll observer alone cannot track position changes.
+This does not reset the camera or compensate with a fixed coordinate offset.
+
 ## Session filters and sort
 
 `e2e/mbp-army/chat-filters.spec.ts` covers the combined harness, exact project,
