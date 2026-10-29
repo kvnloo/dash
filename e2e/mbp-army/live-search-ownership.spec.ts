@@ -30,7 +30,8 @@ async function runningOwners(bridge: Bridge): Promise<Owner[]> {
  return owners;
 }
 
-test('live search restores the paired OMP owner after local deletion without opening an ambiguous saved chat', async ({ page }, info) => {
+test('live search restores the paired OMP owner after local deletion without opening an ambiguous saved chat', async ({ page: initialPage }, info) => {
+ let page = initialPage;
  const peerSignal = info.outputPath('release-mbp-holder');
  const selfSignal = info.outputPath('release-groot-holder');
  const peer = await createBridge(false, { rosterHost: 'mbp', env: { ARMY_PERSIST_SESSION: '1', ARMY_SESSION_HOLDER_WAIT: peerSignal } });
@@ -59,7 +60,9 @@ test('live search restores the paired OMP owner after local deletion without ope
   }, savedId)).toBe(true);
   // The old saved input must precede hydration. A live store can overwrite it,
   // and the still-running bridge can replay authenticated ownership on reload.
-  await page.goto('about:blank');
+  const context = page.context();
+  await page.close();
+  page = await context.newPage();
   await paired.stop();
   await page.addInitScript(id => {
    const key = 'dash.conversations.index.v3';
@@ -110,8 +113,8 @@ test('live search restores the paired OMP owner after local deletion without ope
   });
   await deleteAction.click();
   await expect(liveRow).toHaveCount(0);
-  await expect(chatRow(page)).toBeVisible();
-  await expect(chatRow(page)).toContainText(savedPrompt.slice(0, 30));
+  await expect(page.getByTestId(savedRowId)).toBeVisible();
+  await expect(page.getByTestId(savedRowId)).toContainText(savedPrompt.slice(0, 30));
   await composer(page).fill('/live ' + sessionId);
   const result = page.getByRole('button').filter({ hasText: liveTitle }).filter({ hasText: 'Chat' });
   await expect(result).toHaveCount(1, { timeout: 30000 });

@@ -3,10 +3,10 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   cardModel,
   dispatchCardAction,
-  type NextAction,
   type NextActionCardButtonId,
   type NextActionCardHandlers,
 } from "../lib/next-action-card";
+import type { NextAction } from "../lib/next-action";
 import { colors, controlMin, glass, radius, space, type } from "../theme";
 
 export interface NextActionCardProps extends NextActionCardHandlers {
@@ -14,10 +14,10 @@ export interface NextActionCardProps extends NextActionCardHandlers {
 }
 
 /**
- * Unmounted by design. Callers own navigation, permissions, dismissals, and one-hour snooze.
- * The only local state is whether this action's Why? explanation is expanded.
+ * Compact global attention card. The caller owns navigation and persisted deferrals;
+ * local state only expands the explanation for the current action.
  */
-export function NextActionCard({ action, onDo, onLater, onSkip, onEdit }: NextActionCardProps) {
+export function NextActionCard({ action, onDo, onLater, onSkip }: NextActionCardProps) {
   const [expandedForId, setExpandedForId] = useState<string | null>(null);
   const expandedWhy = expandedForId === action.id;
   const model = cardModel(action, { expandedWhy });
@@ -27,7 +27,7 @@ export function NextActionCard({ action, onDo, onLater, onSkip, onEdit }: NextAc
       setExpandedForId((current) => current === action.id ? null : action.id);
       return;
     }
-    dispatchCardAction(id, action, { onDo, onLater, onSkip, onEdit });
+    dispatchCardAction(id, action, { onDo, onLater, onSkip });
   };
 
   return (
@@ -36,16 +36,8 @@ export function NextActionCard({ action, onDo, onLater, onSkip, onEdit }: NextAc
         <Text testID="next-action-title" numberOfLines={1} ellipsizeMode="tail" style={styles.title}>
           {model.title}
         </Text>
-        <View
-          accessible
-          accessibilityRole="text"
-          accessibilityLabel={"Estimated time " + model.timeChip}
-          style={styles.timeChip}
-        >
-          <Text accessible={false} style={styles.timeText}>{model.timeChip}</Text>
-        </View>
       </View>
-      <Text numberOfLines={1} ellipsizeMode="tail" style={styles.detail}>{model.detail}</Text>
+      <Text testID="next-action-detail" numberOfLines={1} ellipsizeMode="tail" style={styles.detail}>{model.detail}</Text>
       <View style={styles.actions}>
         {model.buttons.map((button) => (
           <Pressable
@@ -68,7 +60,7 @@ export function NextActionCard({ action, onDo, onLater, onSkip, onEdit }: NextAc
         ))}
       </View>
       {model.whyText !== null ? (
-        <Text testID="next-action-why" accessibilityRole="text" style={styles.whyText}>
+        <Text testID="next-action-reason" accessibilityRole="text" style={styles.whyText}>
           {model.whyText}
         </Text>
       ) : null}
@@ -99,15 +91,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: colors.text,
   },
-  timeChip: {
-    paddingHorizontal: space.sm,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: glass.hair,
-    backgroundColor: glass.fillChip,
-  },
-  timeText: { ...type.label, color: colors.textMuted },
   detail: { ...type.small, color: colors.textMuted },
   actions: { flexDirection: "row", gap: space.xs, alignItems: "stretch" },
   button: {

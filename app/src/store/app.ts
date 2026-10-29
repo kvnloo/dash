@@ -25,6 +25,7 @@ import { createStore } from "./createStore";
 import { bindChatIndex, sameChatEndpoint } from "./chat-index-store";
 import { dequeue, enqueue, notifyTurnSettled } from "./queue";
 import { nextPendingSend, parkMessage } from "./offline-send";
+import { clearNextActionPreferences } from "./next-action-preferences";
 import { combineQueued, mergedQueue, queuedParts, reorderQueued, queueMergeError } from "../lib/pending-queue";
 import { replyText, replySummaries, replyStatus } from "./text";
 import { appendActivity } from "../lib/message-details";
@@ -81,21 +82,27 @@ let lastActiveId: string | null | undefined;
 function persistenceFailure(): void {
   console.error("[dash.persistence] storage_operation_failed");
 }
+function saveConversations(): void {
+  saveTimer = undefined;
+  const { conversations, activeId } = store.get();
+  // View-only chats are transient: they are read from the bridge and never written to the phone.
+  const snapshots = conversations.filter(chat => !chat.viewOnly).map(chat => !hasHostHistory(chat) && chat.messages.some(message => message.role === "assistant" && message.state === "streaming")
+    ? { ...chat, messages: chat.messages.map(message => message.role === "assistant" && message.state === "streaming"
+      ? { ...message, parts: partsFor(message.turnId).length ? partsFor(message.turnId) : message.parts, text: replyText.get(message.turnId) || message.text, seq: Math.max(message.seq, liveSequences.get(message.turnId) ?? 0) } : message) }
+    : chat);
+  void persistence.save(snapshots).catch(persistenceFailure);
+  if (lastActiveId !== activeId) {
+    void AsyncStorage.setItem(KEYS.activeId, activeId ?? "").then(() => { lastActiveId = activeId; }, persistenceFailure);
+  }
+}
 function scheduleSave(): void {
   if (!store.get().hydrated) return;
-  saveTimer ??= setTimeout(() => {
-    saveTimer = undefined;
-    const { conversations, activeId } = store.get();
-    // View-only chats are transient: they are read from the bridge and never written to the phone.
-    const snapshots = conversations.filter(chat => !chat.viewOnly).map(chat => !hasHostHistory(chat) && chat.messages.some(message => message.role === "assistant" && message.state === "streaming")
-      ? { ...chat, messages: chat.messages.map(message => message.role === "assistant" && message.state === "streaming"
-        ? { ...message, parts: partsFor(message.turnId).length ? partsFor(message.turnId) : message.parts, text: replyText.get(message.turnId) || message.text, seq: Math.max(message.seq, liveSequences.get(message.turnId) ?? 0) } : message) }
-      : chat);
-    void persistence.save(snapshots).catch(persistenceFailure);
-    if (lastActiveId !== activeId) {
-      void AsyncStorage.setItem(KEYS.activeId, activeId ?? "").then(() => { lastActiveId = activeId; }, persistenceFailure);
-    }
-  }, 400);
+  saveTimer ??= setTimeout(saveConversations, 400);
+}
+function saveSettledReply(): void {
+  if (!store.get().hydrated) return;
+  clearTimeout(saveTimer);
+  saveConversations();
 }
 
 export async function hydrate(): Promise<void> {
@@ -275,6 +282,7 @@ export async function forgetEverything(send: (message: ClientMessage) => boolean
     activeId: null,
     connection: { status: "idle", harnesses: [], hosts: [] },
   }));
+  await clearNextActionPreferences();
 }
 
 // ---- conversations ---------------------------------------------------------
@@ -773,6 +781,7 @@ export function applyTurnEvent(
       });
       notifyTurnSettled(where.conversationId);
       if (checkpointed) releaseSettledReply(where.conversationId, where.messageId);
+      if (checkpointed) saveSettledReply();
       return;
     }
     case "error": {
@@ -837,16 +846,22 @@ export function conversationBusy(conversationId: string): boolean {
 export function stopConversation(conversationId: string, cancel: (turnId: string) => void): void {
   const running: string[] = [];
   const stopped: AssistantMessage[] = [];
+  const stoppedAt = Date.now();
   updateConversation(conversationId, (c) => {
-    const messages = c.messages.map((m): Message => {
+    const messages = c.messages.map<Message>((m) => {
       if (m.role !== "assistant" || (m.state !== "streaming" && m.state !== "pending")) return m;
       if (m.state === "streaming") running.push(m.turnId);
       stopped.push(m);
       liveSequences.delete(m.turnId);
-      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", endedAt: Date.now(), status: "Stopped" };
+      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", endedAt: stoppedAt, status: "Stopped" };
     });
-    return { ...c, messages, queuePreview: undefined, queueWaitForIdle: false,
-      updatedAt: stopped.length > 0 ? Date.now() : c.updatedAt };
+    return {
+      ...c,
+      queuePreview: undefined,
+      queueWaitForIdle: false,
+      messages,
+      updatedAt: stopped.length > 0 ? stoppedAt : c.updatedAt,
+    };
   });
   while (dequeue(conversationId)) { /* Drain canceled turns before settlement listeners run. */ }
   for (const turnId of running) cancel(turnId);

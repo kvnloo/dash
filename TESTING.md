@@ -60,6 +60,11 @@ the rendered host row immediately, before the next periodic poll can mask a stal
 replacement. Roster completion must retain its originating connection generation,
 even when reconnect reuses the same Settings object.
 
+`next-action.spec.ts` also covers current-connection attention, identity-based
+unread replies under clock rollback, exact-chat navigation without sending,
+draft preservation, defer/reload and explicit permission decisions. CI retains
+compact filter and attention screenshots in `chats-ui-<sha>` for visual inspection.
+
 ## Release law O15
 
 No green, complete army receipt for the exact commit means no APK, no phone

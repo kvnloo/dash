@@ -11,7 +11,7 @@ import { type RefObject, memo, useCallback, useEffect, useLayoutEffect, useRef, 
 import { ActivityIndicator, Alert, Image, Keyboard, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AttachmentChooser, type AttachmentAnchor } from "./AttachmentChooser";
 import { dismissKeyboard } from "../lib/dismiss-keyboard";
-import { AFTER_IME_QUIET_MS, followAnchor, settledAnchor } from "../lib/anchor";
+import { followAnchor, settledAnchor } from "../lib/anchor";
 import type { ChatAttachment } from "../../../shared/protocol";
 import * as Clipboard from "expo-clipboard";
 import { clipboardInsertion } from "../lib/clipboard-paste";
@@ -227,21 +227,20 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
 
   const onAttach = useCallback(async () => {
     const request = ++attachRequest.current;
-    // Hiding the IME is what moves the dock. With the IME already down it is at rest.
-    const hidesIme = Keyboard.isVisible();
     await dismissKeyboard();
     if (!mounted.current || request !== attachRequest.current) return;
-    // Open once the paperclip has stopped moving. After an IME hide that outlasts the hide animation:
-    // the hide event arrives as the animation starts, with the dock still up. Draft text and selection stay intact.
-    const rect = await settledAnchor(() => attachRef.current, () => mounted.current && request === attachRequest.current, hidesIme ? AFTER_IME_QUIET_MS : 0);
+    // IME visibility can already be false while the dock is still closing.
+    // Wait for quiet geometry, preserving the draft and selection.
+    const rect = await settledAnchor(() => attachRef.current, () => mounted.current && request === attachRequest.current);
     if (rect && mounted.current && request === attachRequest.current) setAttachAnchor(rect);
   }, []);
   // The chooser is a snapshot taken from a view that can still be moving (an IME that finishes
   // hiding late, a window settling). Keep it on the paperclip for as long as it is open.
   const attachOpen = attachAnchor !== null;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!attachAnchor) return;
-    // Armed when the chooser opens and dropped when it closes. followAnchor keeps its own baseline.
+    // Arm before the chooser's first paint. The opening measurement can already be stale by commit
+    // while the dock is moving, so the first animation frame must refresh it too.
     return followAnchor(() => attachRef.current, attachAnchor, rect => { if (mounted.current) setAttachAnchor(rect); });
   }, [attachOpen]);
   useEffect(() => {

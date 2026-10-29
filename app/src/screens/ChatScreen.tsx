@@ -1,14 +1,16 @@
+import { useIsFocused } from "@react-navigation/native";
 import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
 import { mergeOlderHistory } from "../lib/live-sessions";
+import { replyObservationKey } from "../lib/next-action";
 import { useHandedness } from "../lib/useHandedness";
 import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
 import { setThinkingSummaries } from "../store/app";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { FlashList, type FlashListRef } from "@shopify/flash-list";
+import { FlashList, type FlashListRef, type ViewToken } from "@shopify/flash-list";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { BackHandler, Platform, StyleSheet, Text, View, Pressable, useWindowDimensions } from "react-native";
+import { AppState, BackHandler, Platform, StyleSheet, Text, View, Pressable, useWindowDimensions } from "react-native";
 import Animated from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 import { ComposerActionMenu, type ComposerMenuRow } from "../components/ComposerActionMenu";
@@ -34,11 +36,12 @@ import { debugUi } from "../debug/ui-store";
 import { haptic } from "../haptics";
 import { canSteer, type SendMode } from "../lib/composer-mode";
 import type { ChatAttachment } from "../../../shared/protocol";
-import type { Message } from "../model";
+import type { AssistantMessage, Message } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge, openLiveSurface, permissionRequests, sendChat, sendLiveTurn } from "../net/bridge";
 import { PermissionCard } from "../components/PermissionCard";
 import { EMPTY_LIVE, liveOf, liveStore, setLiveOpen } from "../store/live";
+import { markConversationReplySeen } from "../store/next-action-preferences";
 import {
   applyTurnEvent,
   beginTurn,
@@ -84,6 +87,7 @@ const EMPTY: Message[] = [];
 const USER_SCROLL_MS = 1000;
 /** How long a rail jump keeps re-aiming at its prompt while the rows it passed over are measured. */
 const JUMP_SETTLE_MS = 3000;
+const REPLY_VIEWABILITY = { viewAreaCoveragePercentThreshold: 10, minimumViewTime: 0 };
 
 function keyExtractor(item: Message): string {
   return item.id;
@@ -126,6 +130,17 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     return () => { for (const type of events) element.removeEventListener(type, mark, { capture: true }); };
   }, []);
   const [following, setFollowing] = useState(true);
+  const focused = useIsFocused();
+  const [appActive, setAppActive] = useState(AppState.currentState === "active");
+  const [viewedMessageIds, setViewedMessageIds] = useState<ReadonlySet<string>>(() => new Set());
+  const onViewableMessages = useCallback(({ viewableItems }: { viewableItems: ViewToken<Message>[] }) => {
+    const ids = new Set(viewableItems.filter(item => item.isViewable).map(item => item.item.id));
+    setViewedMessageIds(current => current.size === ids.size && [...ids].every(id => current.has(id)) ? current : ids);
+  }, []);
+  useEffect(() => {
+    const listener = AppState.addEventListener("change", state => setAppActive(state === "active"));
+    return () => listener.remove();
+  }, []);
   const setFollow = useCallback((next: boolean) => { followRef.current = next; setFollowing(next); }, []);
   const scrollToNewest = useCallback(() => {
     if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
@@ -275,6 +290,21 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     void voice.start();
   };
 
+  const latestCompletedAssistant = messages.findLast((message): message is AssistantMessage => message.role === "assistant" && message.state === "done");
+  useEffect(() => {
+    if (
+      !focused ||
+      !appActive ||
+      !latestCompletedAssistant ||
+      !viewedMessageIds.has(latestCompletedAssistant.id) ||
+      !following ||
+      liveOn ||
+      !conversation ||
+      !settings?.chatIndexScope ||
+      conversation.endpointAddress !== settings.address
+    ) return;
+    markConversationReplySeen(settings.chatIndexScope, conversation.id, replyObservationKey(latestCompletedAssistant));
+  }, [appActive, conversation, focused, following, latestCompletedAssistant, liveOn, settings, viewedMessageIds]);
   const sendTurn = useCallback(
     (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId), mode: SendMode = "queue") => {
       const { turnId } = beginTurn(active.id, text, { attachments, mode });
@@ -580,6 +610,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           </View> : <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
+          onViewableItemsChanged={onViewableMessages}
+          viewabilityConfig={REPLY_VIEWABILITY}
           maintainVisibleContentPosition={{ startRenderingFromBottom: true }}
           onStartReached={history.canLoadOlder ? history.loadOlder : undefined}
           onStartReachedThreshold={0.5}
@@ -590,11 +622,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             scrollMax.current = Math.max(0, contentSize.height - layoutMeasurement.height);
             const moved = Math.abs(contentOffset.y - previousOffset.current) > 1;
             previousOffset.current = contentOffset.y;
-            // Only the owner's own scroll changes following. A content resize, or the list's own
-            // measuring scroll, must not detach it before onContentSizeChange can scroll.
+            // Programmatic following may move the viewport; only owner scrolls detach it.
             const byOwner = dragging.current || (Platform.OS === "web" && Date.now() - userScrollAt.current < USER_SCROLL_MS);
+            const atLatest = followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y);
             if (!moved || !byOwner) return;
-            setFollow(followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y));
+            setFollow(atLatest);
           }}
           scrollEventThrottle={16}
           onContentSizeChange={scrollToNewest}

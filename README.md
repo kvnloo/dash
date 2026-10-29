@@ -51,16 +51,29 @@ In debug mode, `window.__DASH_DEBUG__` exposes `scenario(id)`, `run({ action })`
 
 ## Chats filters and sorting
 
-The middle **Chats** page has four compact controls:
+The middle **Chats** page has five compact controls:
 
+- **Sessions** switches between All sessions and Active sessions. Active uses current host-scoped running or open sessions, plus phone turns in progress; saved history alone does not qualify.
 - **Harness** filters by the session's agent, including non-catalog harnesses reported by the bridge.
 - **Project** filters by the exact working folder. The picker shows full paths to distinguish folders with the same name.
 - **Dates** filters by last activity. Today, the last 7 calendar days, and the last 30 calendar days start at local midnight.
 - **Recent**, **Oldest**, and **Priority** choose the ordering. Priority puts chats needing attention first, then running chats, then other chats by recency, with ended chats last.
 
-Filters combine. **Reset** clears the filters and restores Recent. Changing a filter or sort returns the list to the top.
+Filters combine. **Reset** clears the filters and restores Recent. Changing a filter or sort returns the list to the top. Stopping a turn counts as activity for Recent and date filtering.
 
 With a `chats.v1` bridge, project discovery and global sorts load older pages while Chats is focused and online. The page shows **Searching history…** until the scan finishes. A date filter stops automatic and scroll-triggered paging at its lower bound, including while the project picker is open. Leaving Chats pauses automatic paging. Older bridges filter the conversations already available on the phone.
+
+Live roster updates preserve your place in the list. After closing a full-screen chat, a single tap opens another chat; swiping between pages never opens a chat or sends a message.
+
+## Next up
+
+Chats shows one attention card from conversations already opened on this phone for the current connection, independently of the list filters. It names the chat and the action it needs. Pending approvals and failed sends come first, followed by unread replies, turns without recorded activity, and older drafts.
+
+**Open** goes to that exact conversation. It never approves, retries, or sends anything. Each conversation keeps its own draft.
+
+**Later** hides the current event for one hour in the app; it does not schedule a notification. **Skip** dismisses only that event, so a newer reply in the same chat can appear again. **Why?** explains the suggestion.
+
+Seen replies and deferrals survive reloads within the current connection. Reading older history does not mark a newer reply seen, and clock changes cannot hide a new reply. First use and connection changes start a fresh baseline rather than presenting existing replies as new; unopened archives are not scanned for attention.
 
 ## Layout
 
