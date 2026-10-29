@@ -14,6 +14,25 @@ journeys also need HEAD's parent, so shallow CI checkouts use depth 2. Runs head
 on any host and in CI. The MBP headed variant on a private headless compositor
 is `python3 e2e/mbp-army/run.py <name> <workers>` (see `e2e/mbp-army/README.md`).
 
+## Session filters and sort
+
+`e2e/mbp-army/chat-filters.spec.ts` covers the combined harness, exact project,
+local-date, pagination and visual-sort controls. The Active session journey
+uses two isolated hosts with the same native session ID. It checks membership
+under Recent, Oldest and Priority, then removes an offline host.
+
+Active means a current host-scoped running or open session, or a phone turn
+in progress. It includes an idle session held in a host TUI. Saved history
+alone does not qualify. Active does not scan archive pages. Switching back
+to All sessions preserves access to saved history.
+
+The combined journey also crosses successive history pages. A completed page
+must release its single-flight entry before notifying subscribers, so a filter
+scan can request the next page without stalling.
+
+Run the complete suite on the integrated commit before RC3 merge. A filtered
+feature run is not a complete release receipt or native phone acceptance.
+
 ## Release law O15
 
 No green, complete army receipt for the exact commit means no APK, no phone

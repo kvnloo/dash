@@ -132,10 +132,11 @@ export function seedFromSnapshot(): Promise<void> {
 }
 
 const inflight = new Map<string, Promise<void>>();
-function once(id: string, run: () => Promise<void>): Promise<void> {
+function once(id: string, run: (release: () => void) => Promise<void>): Promise<void> {
   const running = inflight.get(id);
   if (running) return running;
-  const promise = run().finally(() => { if (inflight.get(id) === promise) inflight.delete(id); });
+  const release = () => { if (inflight.get(id) === promise) inflight.delete(id); };
+  const promise = run(release).finally(release);
   inflight.set(id, promise);
   return promise;
 }
@@ -196,7 +197,7 @@ export function loadMore(query: ChatQuery = {}): Promise<void> {
   if (!settings || chatsMode() !== "chats") return Promise.resolve();
   const generation = epoch;
   const key = queryKey(query);
-  return once(`more:${generation}:${key}`, async () => {
+  return once(`more:${generation}:${key}`, async (release) => {
     const current = listState(key);
     if (inflight.has(`head:${generation}:${key}`) || current.seeded || current.list.version === 0 || current.list.exhausted || !current.list.next) return;
     const cursor = current.list.next;
@@ -204,6 +205,9 @@ export function loadMore(query: ChatQuery = {}): Promise<void> {
     const tail = listState(key);
     const result = await deps.api.list(settings, { limit: PAGE_SIZE, cursor, kinds: query.kinds, hosts: query.hosts });
     if (!owned(settings, generation) || listState(key) !== tail) return;
+    // Allow the next page before publishing the completed page: subscribers can
+    // synchronously request it as soon as loadingMore becomes false.
+    release();
     if (!result.ok) {
       if (!result.notModified && result.code === "bad_cursor") {
         // The index changed shape under the cursor: start over from page 1.

@@ -100,7 +100,7 @@ function liveKeySet(hosts: HostInfo[]): Set<string> {
   for (const host of hosts) {
     if (!host.online) continue;
     for (const agent of host.agents) {
-      if (!agent.sessionId || agent.status !== "running") continue;
+      if (!agent.sessionId || (agent.status !== "running" && !agent.openIn) || agent.status === "offline") continue;
       keys.add(chatKey({ hostId: host.id, kind: agent.kind, sessionId: agent.sessionId, ...(agent.kind === "hermes" && agent.profileId ? { profileId: agent.profileId } : {}) }));
       keys.add(`any:${agent.kind}:${agent.sessionId}`);
     }
@@ -260,11 +260,11 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
   const summaries = useMemo(() => listRows(remoteList), [remoteList]);
   const needsHistory = historyNeeded(filters, summaries, today);
   const withinDateRange = filters.date === "all" || needsHistory;
-  const scanning = remote.enabled && !remote.exhausted && withinDateRange && (projectsOpen || needsHistory);
+  const scanning = filters.activity !== "active" && remote.enabled && !remote.exhausted && withinDateRange && (projectsOpen || needsHistory);
   useEffect(() => {
     if (scanning && focused && connectionStatus === "online" && remote.status === "ready" && !remote.loadingMore && !remote.error) remote.loadMore();
   }, [scanning, focused, connectionStatus, remote.status, remote.loadingMore, remote.error, remote.list, remote.loadMore]);
-  const filtered = filters.harness !== null || filters.project !== null || filters.date !== "all" || filters.sort !== "recent";
+  const filtered = filters.activity !== "all" || filters.harness !== null || filters.project !== null || filters.date !== "all" || filters.sort !== "recent";
   const items = useMemo((): ChatListRow[] => {
     const rows = mergeLocal(labeled, { local, endpointAddress, exhausted: remote.exhausted || filtered, endedLast: !remote.enabled, groupOf });
     if (rows.length === 0 && remote.enabled && remote.status === "loading") return SKELETONS;
@@ -402,7 +402,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
         keyExtractor={keyExtractor}
         extraData={`${activeId}:${connectionStatus}`}
         drawDistance={600}
-        onEndReached={withinDateRange && focused && connectionStatus === "online" ? loadMore : undefined}
+        onEndReached={filters.activity !== "active" && withinDateRange && focused && connectionStatus === "online" ? loadMore : undefined}
         onEndReachedThreshold={0.5}
         ListFooterComponent={footer}
         contentContainerStyle={{ paddingBottom: 120 }}

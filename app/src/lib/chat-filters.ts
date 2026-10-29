@@ -3,13 +3,17 @@ import type { ChatListRow } from "./chat-index";
 import { groupLabeler } from "./chat-index";
 
 export interface ChatFilters {
+  activity: "all" | "active";
   harness: string | null;
   project: string | null;
   date: "all" | "today" | "week" | "month";
   sort: "recent" | "oldest" | "priority";
 }
 
-export const DEFAULT_CHAT_FILTERS: ChatFilters = { harness: null, project: null, date: "all", sort: "recent" };
+export const DEFAULT_CHAT_FILTERS: ChatFilters = { activity: "all", harness: null, project: null, date: "all", sort: "recent" };
+export const CHAT_ACTIVITY: readonly { id: ChatFilters["activity"]; label: string }[] = [
+  { id: "all", label: "All sessions" }, { id: "active", label: "Active sessions" },
+];
 export const CHAT_DATES: readonly { id: ChatFilters["date"]; label: string }[] = [
   { id: "all", label: "Any date" }, { id: "today", label: "Today" },
   { id: "week", label: "Last 7 days" }, { id: "month", label: "Last 30 days" },
@@ -33,6 +37,8 @@ function dateStart(date: ChatFilters["date"], now: number): number {
 
 /** The bridge pages newest first, so dates bound the scan even under priority or oldest sorting. */
 export function historyNeeded(filters: ChatFilters, remote: readonly ChatSummary[], now: number): boolean {
+  // Every live/host-held row is overlaid on page one; older archive pages cannot add live owners.
+  if (filters.activity === "active") return false;
   if (filters.date !== "all") return (remote.at(-1)?.lastActivityAt ?? Infinity) >= dateStart(filters.date, now);
   return filters.sort !== "recent" || filters.project !== null;
 }
@@ -51,8 +57,13 @@ export function filterChatRows(rows: readonly ChatListRow[], filters: ChatFilter
     const at = local?.updatedAt ?? remote?.lastActivityAt ?? 0;
     if (at < since || (filters.harness !== null && (local?.harness ?? remote?.kind) !== filters.harness)) continue;
     if (filters.project !== null && projectPath(local?.cwd ?? remote?.cwd) !== filters.project) continue;
-    const live = liveKeys.has(local?.key ?? row.key) || Boolean(local?.sessionId && !local.hostId && liveKeys.has(`any:${local.harness}:${local.sessionId}`));
-    const priority = local?.stale ? 3 : local?.attention === "Needs attention" ? 0 : local?.attention === "Running" || remote?.running || live ? 1 : 2;
+    const linkedLive = liveKeys.has(local?.key ?? row.key);
+    const live = linkedLive || Boolean(local?.sessionId && !local.hostId && liveKeys.has(`any:${local.harness}:${local.sessionId}`));
+    const runningTurn = local?.attention === "Running";
+    // Indexed liveness can outlast its owner. Active uses the current host-scoped roster or our live turn.
+    const active = !local?.stale && (linkedLive || runningTurn);
+    if (filters.activity === "active" && !active) continue;
+    const priority = local?.stale ? 3 : local?.attention === "Needs attention" ? 0 : runningTurn || remote?.running || live ? 1 : 2;
     chats.push({ row, at, priority });
   }
   chats.sort((a, b) => (filters.sort === "priority" ? a.priority - b.priority : 0)
