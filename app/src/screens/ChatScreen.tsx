@@ -110,22 +110,37 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // and when a page lands; those scrolls must not detach following, or a chat opens away from its latest
   // message on a slow device.
   const userScrollAt = useRef(Number.NEGATIVE_INFINITY);
+  const [following, setFollowing] = useState(true);
+  const setFollow = useCallback((next: boolean) => {
+    followRef.current = next;
+    setFollowing(next);
+    // Resuming Latest invalidates older input; it must not own the list's settling scroll.
+    if (next) userScrollAt.current = Number.NEGATIVE_INFINITY;
+  }, []);
   // A ref callback (React 19 cleanup), so a remounted viewport (live surface closed) listens again.
   const viewportRef = useCallback((node: View | null) => {
     const element: unknown = node;
     if (Platform.OS !== "web" || typeof HTMLElement === "undefined" || !(element instanceof HTMLElement)) return;
     const mark = (event: Event) => {
-      // Typing in a field is not scrolling, and a mouse moving with no button down is not a drag.
-      if (event.type === "keydown" && event.target instanceof HTMLElement && event.target.closest("input, textarea, [contenteditable=\"true\"]")) return;
+      // Only scrolling keys count; control clicks, text editing, and idle mouse motion do not.
+      const target = event.target instanceof Element ? event.target : null;
+      if (event instanceof KeyboardEvent && (
+        !["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key) ||
+        event.altKey || event.ctrlKey || event.metaKey ||
+        target?.closest('input, textarea, [contenteditable="true"]') ||
+        (event.key === " " && target?.closest('button, [role="button"], [role="switch"], [role="tab"]'))
+      )) return;
       if (event.type === "pointermove" && event instanceof PointerEvent && event.buttons === 0) return;
+      if ((event.type === "pointerdown" || event.type === "touchstart") && target?.closest('button, a, [role="button"], [role="link"], [role="switch"], [role="tab"]')) return;
       userScrollAt.current = Date.now();
+      // A genuine upward wheel should beat the next streamed chunk, including over links/buttons.
+      if (event instanceof WheelEvent && event.deltaY < 0 && Math.abs(event.deltaY) > Math.abs(event.deltaX)
+        && followRef.current && previousOffset.current > 1 && scrollMax.current > 1) setFollow(false);
     };
     const events = ["wheel", "touchstart", "touchmove", "pointerdown", "pointermove", "keydown"];
     for (const type of events) element.addEventListener(type, mark, { capture: true, passive: true });
     return () => { for (const type of events) element.removeEventListener(type, mark, { capture: true }); };
-  }, []);
-  const [following, setFollowing] = useState(true);
-  const setFollow = useCallback((next: boolean) => { followRef.current = next; setFollowing(next); }, []);
+  }, [setFollow]);
   const scrollToNewest = useCallback(() => {
     if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
   }, []);
