@@ -207,6 +207,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
                 accessibilityRole="radio"
                 accessibilityLabel={`Desk layout ${value}`}
                 accessibilityState={{ checked: deskChoice === value }}
+                aria-checked={deskChoice === value}
                 testID={`settings-desk-${value}`}
                 onPress={() => { setDeskChoice(value); haptic.select(); }}
                 style={{ flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, borderWidth: 1, borderColor: deskChoice === value ? colors.gold : colors.border }}>

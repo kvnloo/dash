@@ -174,10 +174,13 @@ test('desk keyboard: Ctrl+K quick switch opens a chat, Ctrl+1..9 jump to panels,
   await page.keyboard.press('Control+1');
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
   await expect(panel(page, 'hosts')).toBeInViewport();
-  // Ctrl+9 = the open chat again.
+  // Ctrl+9 = the open chat again (full chat in the centre pane), Ctrl+3 back to Orchestra.
   await page.keyboard.press('Control+9');
   await expect(composer(page)).toBeVisible();
-  await page.getByRole('button', { name: 'Close chat window', exact: true }).click({ noWaitAfter: true });
+  await expect(page.getByText('ARMY_REPLY: quick switch target').first()).toBeVisible();
+  await page.keyboard.press('Control+3');
+  await expect(page.getByTestId('desk-orchestra')).toBeVisible();
+  await expect(composer(page)).toHaveCount(0);
 
   // Right-click a chat row: the same menu as a long-press, nothing is sent.
   const sentBefore = (bridge.logs().match(/quick switch target/g) ?? []).length;
