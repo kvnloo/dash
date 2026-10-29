@@ -70,6 +70,10 @@ test.describe('roster connection ownership', () => {
 
   test('roster response from a retired socket cannot replace the reconnected host list', async ({ page, bridge }, testInfo) => {
     test.setTimeout(90000);
+    const diagnostics: string[] = [];
+    page.on('console', message => {
+      if (message.text().startsWith('[roster-investigation]')) diagnostics.push(message.text());
+    });
     await pair(page, bridge);
     const bun = process.env.ARMY_BUN || execFileSync('sh', ['-c', 'command -v bun'], { encoding: 'utf8' }).trim();
     const relay = spawn(bun, [join(__dirname, 'hello-relay.ts'), `http://127.0.0.1:${bridge.port}`], { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -113,6 +117,9 @@ test.describe('roster connection ownership', () => {
       if (!released) throw Error('Held real roster request has no response');
       expect(released.status()).toBe(200);
       expect(await released.finished()).toBeNull();
+      expect(await released.json()).toEqual(expect.objectContaining({
+        hosts: expect.arrayContaining([expect.objectContaining({ id: 'galaxy-s22', name: 'Galaxy S22+' })]),
+      }));
       await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       await expect(phone).toContainText('ARMY current S22');
       await expect(phone).not.toContainText('Galaxy S22+');
@@ -123,6 +130,7 @@ test.describe('roster connection ownership', () => {
         await once(relay, 'exit');
       }
       await writeFile(testInfo.outputPath('roster-relay.log'), log);
+      await testInfo.attach('roster-investigation', { body: Buffer.from(JSON.stringify({ diagnostics, relay: log })), contentType: 'application/json' });
     }
   });
 });
