@@ -3,6 +3,8 @@ import Constants from "expo-constants";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Keyboard, Linking, NativeModules, Platform } from "react-native";
 import {
+  FOREGROUND_GRACE_MS,
+  IDLE_RELOAD_MS,
   POLL_MS,
   RUNNING_BUILD,
   decideReload,
@@ -19,7 +21,7 @@ import {
   type MetroEndpoint,
   type ReloadDecision,
 } from "./live-update";
-import { idleMs } from "./touch-idle";
+import { idleMs, markTouch } from "./touch-idle";
 import { reloadApp } from "./reload-app";
 import { installReloadGuards } from "./reload-guards";
 import { flushDrafts } from "../store/composer-drafts";
@@ -130,7 +132,8 @@ export function useLiveUpdate(): LiveUpdate {
   const [prefsReady, setPrefsReady] = useState(false);
   const [, setTick] = useState(0);
   const foregroundAt = useRef<number | null>(null);
-  const heldFor = useRef<string | null>(null);
+  // The boot splash is not time spent idle in the interactive app.
+  const mountedAt = useRef(Date.now());
   const reloading = useRef(false);
 
   useEffect(() => {
@@ -145,6 +148,13 @@ export function useLiveUpdate(): LiveUpdate {
   }, []);
 
   useEffect(() => installReloadGuards(() => setTick(n => n + 1)), []);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    const events = ["pointerdown", "pointermove", "pointerup", "wheel", "scroll", "keydown"];
+    for (const event of events) document.addEventListener(event, markTouch, true);
+    return () => { for (const event of events) document.removeEventListener(event, markTouch, true); };
+  }, []);
 
   useEffect(() => {
     if (origin === null) return;
@@ -233,24 +243,28 @@ export function useLiveUpdate(): LiveUpdate {
     bundleHealth,
     autoReload: autoReload && prefsReady,
     sinceForegroundMs: foregroundAt.current === null ? Number.POSITIVE_INFINITY : Date.now() - foregroundAt.current,
-    idleMs: idleMs(),
+    idleMs: Math.min(idleMs(), Math.max(0, Date.now() - mountedAt.current)),
     idleReloadMs: webIdleReloadMs(),
     keyboardVisible: keyboardVisible(),
     blockedBy,
-    heldFor: heldFor.current,
     lastAutoFor,
   });
-  const blocked = decision.kind === "ready" && decision.why === "blocked";
-  useEffect(() => {
-    if (blocked && served !== null && autoReload) heldFor.current = served.sha;
-  }, [blocked, served, autoReload]);
-
   const servedKey = origin !== null && served !== null ? origin + "|" + served.sha : null;
   const needsBundleCheck = running !== null && served !== null && !sameBuild(running, served);
   const requestReload = useCallback((automatic: boolean) => {
     const healthy = () => !needsBundleCheck ||
       (servedKey !== null && verifiedKey.current === servedKey && latestServedKey.current === servedKey);
-    if (reloading.current || !healthy() || (automatic && reloadBlockedBy() !== null)) return;
+    // Flush and preference writes can yield while the owner resumes interacting.
+    const stillIdle = () => {
+      const now = Date.now();
+      const quietMs = Math.min(idleMs(now), Math.max(0, now - mountedAt.current));
+      const sinceForegroundMs = foregroundAt.current === null ? Number.POSITIVE_INFINITY : now - foregroundAt.current;
+      return !keyboardVisible() && (
+        quietMs >= (webIdleReloadMs() ?? IDLE_RELOAD_MS) ||
+        (sinceForegroundMs <= FOREGROUND_GRACE_MS && quietMs > sinceForegroundMs)
+      );
+    };
+    if (reloading.current || !healthy() || (automatic && (reloadBlockedBy() !== null || !stillIdle()))) return;
     reloading.current = true;
     void (async () => {
       let invoked = false;
@@ -258,10 +272,10 @@ export function useLiveUpdate(): LiveUpdate {
         // Don't trust the 250ms debounce to finish before a full JS reload.
         await flushDrafts();
         // Health or a guard can change while a draft is being persisted.
-        if (!healthy() || (automatic && reloadBlockedBy() !== null)) return;
+        if (!healthy() || (automatic && (reloadBlockedBy() !== null || !stillIdle()))) return;
         if (automatic && served !== null) await writePref(TRIED_KEY, served.sha);
         // This is the final check: no await between observing a safe app and reloadApp().
-        if (!healthy() || (automatic && reloadBlockedBy() !== null)) {
+        if (!healthy() || (automatic && (reloadBlockedBy() !== null || !stillIdle()))) {
           if (automatic && served !== null) await writePref(TRIED_KEY, null);
           return;
         }
@@ -287,7 +301,6 @@ export function useLiveUpdate(): LiveUpdate {
 
   const setAutoReload = useCallback((on: boolean) => {
     setAutoState(on);
-    if (!on) heldFor.current = null;
     void writePref(AUTO_KEY, on ? null : "0");
   }, []);
 
