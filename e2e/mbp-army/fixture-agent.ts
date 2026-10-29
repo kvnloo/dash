@@ -257,10 +257,22 @@ import {appendFileSync as armyHarnessAppend} from 'node:fs';
   const text=parts.map((p:unknown)=>isRecord(p)&&typeof p.text==='string'?p.text:'').join('');
   const m=/ARMY_R07_([A-Z]+)/.exec(text);
   if(!m||!text.includes('ARMY_HANG')||text.includes('ARMY_ERROR')||/ARMY_HOLD_/.test(text))return;
-  const steps=scripts[m[1]??''];if(!steps)return;
+  const steps=m[1]==='STREAM'?[]:scripts[m[1]??''];if(!steps)return;
   let at=0;
   for(const [delay,run] of steps){at+=delay;const t=setTimeout(()=>{timers.delete(t);run();},at);timers.add(t);}
   if(m[1]==='LIVETOOL')return; // stays running until Stop (session/cancel)
+  if(m[1]==='STREAM'){
+   // SLOW without a clock: chunks keep arriving every 450 ms until the spec creates $HOME/army-release,
+   // so a journey that needs content still streaming never races the end of the reply.
+   let i=0;
+   const tick=()=>{
+    if(existsSync(join(process.env.HOME||'.','army-release'))){say('\n\nARMY_SLOW_DONE');const end=setTimeout(()=>{timers.delete(end);send({jsonrpc:'2.0',id,result:{stopReason:'end_turn'}});},150);timers.add(end);return;}
+    say('\n\nARMY_SLOW_CHUNK_'+String(i++).padStart(2,'0')+' '+'streamed transcript filler '.repeat(6));
+    const t=setTimeout(()=>{timers.delete(t);tick();},450);timers.add(t);
+   };
+   const t=setTimeout(()=>{timers.delete(t);tick();},450);timers.add(t);
+   return;
+  }
   const end=setTimeout(()=>{timers.delete(end);send({jsonrpc:'2.0',id,result:{stopReason:'end_turn'}});},at+150);timers.add(end);
  });
 }

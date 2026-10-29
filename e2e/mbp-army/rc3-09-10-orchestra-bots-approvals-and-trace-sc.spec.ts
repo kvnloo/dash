@@ -487,7 +487,11 @@ test.describe('rc3 10 trace screen',()=>{
   await zoom(page,'1h');
   const {x,y}=await axisPoint(page,timeline(page),pl);
   const before=(await layer(pl)).left;
-  await page.mouse.move(x,y);await page.mouse.down();
+  await page.mouse.move(x,y);
+  // A press held still for 320 ms is a scrub (TraceTimeline scrub: Pan.activateAfterLongPress(320)). Under
+  // load each awaited Playwright step takes ~300 ms, so the drag's first move could land after the long
+  // press and scrub instead of pan. The press and the first move go out back to back, so the page sees a drag.
+  await Promise.all([page.mouse.down(),page.mouse.move(x+20,y)]);
   await page.mouse.move(x+160,y,{steps:12});await page.mouse.up();
   await expect.poll(async()=>Math.abs((await layer(pl)).left-before)).toBeGreaterThan(40);
   // Long-press to scrub: playhead fades in and the floating readout follows the finger.

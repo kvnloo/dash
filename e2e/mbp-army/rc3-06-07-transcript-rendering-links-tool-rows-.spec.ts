@@ -457,7 +457,9 @@ test('07.14 inline image opens full view and closes; inline HTML opens ArtifactS
 
 test('07.15 scrolling up stops auto-follow while content streams; Latest reply scrolls to newest and resumes follow',async({page,bridge})=>{
  await openFullscreen(page,bridge);
- await send(page,scenario('SLOW','follow journey'));
+ // STREAM: SLOW's chunks, but the reply keeps streaming until army-release, so 'content kept arriving' and
+ // 'follow resumed for new chunks' never race the end of a fixed 13.5 s reply on a loaded host.
+ await send(page,scenario('STREAM','follow journey'));
  await expect(page.getByText(/ARMY_SLOW_CHUNK_08/).filter({visible:true}).first()).toBeVisible({timeout:20000});
  await wheelTranscript(page,-2500,5);
  const s1=await scroller(page);if(!s1)throw Error('transcript scroller not found');
@@ -471,7 +473,10 @@ test('07.15 scrolling up stops auto-follow while content streams; Latest reply s
  await latest.click({noWaitAfter:true});
  await expect.poll(async()=>{const s=await scroller(page);return s?s.max-s.top:9999;},{message:'list scrolled to newest'}).toBeLessThanOrEqual(60);
  await page.waitForTimeout(1800);
+ const s3=await scroller(page);if(!s3)throw Error('transcript scroller not found');
+ await expect.poll(async()=>(await scroller(page))?.max??0,{message:'new chunks keep arriving after Latest'}).toBeGreaterThan(s3.max);
  await expect.poll(async()=>{const s=await scroller(page);return s?s.max-s.top:9999;},{message:'follow resumed for new chunks'}).toBeLessThanOrEqual(60);
+ await writeFile(join(bridge.dir,'army-release'),'');
  await expect(page.getByText(/ARMY_SLOW_DONE/).first()).toBeInViewport({timeout:25000});
 });
 
