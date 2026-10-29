@@ -51,9 +51,15 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
     forwarded.headers.set('host', '127.0.0.1:' + port);
     return fetch(forwarded).then(async response => {
       if (holdOlder && req.method === 'GET' && url.pathname === '/chats/history' && url.searchParams.has('before')) {
-        const page = await response.clone().json();
-        olderSnapshots.push({ before: url.searchParams.get('before'), prompts: page.messages.filter(row => row.role === 'user').map(row => row.text) });
+        const body = await response.arrayBuffer();
+        const page = JSON.parse(new TextDecoder().decode(body));
+        const ordinal = olderSnapshots.push({ before: url.searchParams.get('before'), prompts: page.messages.filter(row => row.role === 'user').map(row => row.text) });
+        const headers = new Headers(response.headers);
+        headers.set('x-army-older-page', String(ordinal));
+        headers.set('access-control-expose-headers', 'ETag, X-Army-Older-Page');
+        headers.set('cache-control', 'no-store');
         await new Promise(resolve => olderWaiters.push(resolve));
+        return new Response(body, { status: response.status, headers });
       }
       if (freezeNative && (url.pathname === '/hermes/activity' || url.pathname === '/chats/history')) {
         nativeHeld++;
@@ -316,9 +322,13 @@ test('reopening native chat rejects its closed visit older page and displays the
     expect(snapshot.olderSnapshots[0].prompts).toContain('ARMY hermes prompt 001');
     expect(snapshot.olderSnapshots[1].prompts).toContain(refreshedPrompt);
 
-    const oldResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/chats/history' && new URL(response.url()).searchParams.has('before'));
+    const oldResponse = page.waitForResponse(async response => await response.headerValue('x-army-older-page') === '1');
     expect((await fetch(control + '/army-release-one-older', { method: 'POST' })).status).toBe(200);
-    await (await oldResponse).finished();
+    const releasedOld = await oldResponse;
+    expect(releasedOld.status()).toBe(200);
+    await releasedOld.finished();
+    const releasedPage = await releasedOld.json();
+    expect(releasedPage.messages.filter((row: { role: string }) => row.role === 'user').map((row: { text: string }) => row.text)).toContain('ARMY hermes prompt 001');
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     await expect(ticks).toHaveCount(25);
     expect((await fetch(control + '/army-release-one-older', { method: 'POST' })).status).toBe(200);
