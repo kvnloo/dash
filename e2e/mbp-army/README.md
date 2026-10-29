@@ -6,6 +6,29 @@ The fixture is not a model turn. It implements initialize/session/new/load/promp
 Each test has its own bridge, HOME, credential/config/outbox directories, loopback port, PID namespace, and browser context.
 A fixture-native Hermes SQLite row and a fixture-only discoverable OMP process support persisted-session journeys. The separate ephemeral regression intentionally omits them.
 
+## Chat-index HTTP ownership journey (#493)
+
+`chat-index-ownership.spec.ts` pairs through a loopback TCP/HTTP relay to isolated
+real bridges with native Codex JSONL histories. The relay holds actual response
+bytes without changing payloads: one journey replaces the endpoint through
+Settings before releasing the old head, then reloads; another lets the normal
+30-second head refresh supersede a held tail and checks that the unchanged
+304/cursor path can request a fresh tail.
+
+The app invalidates list state synchronously on endpoint/account replacement.
+Each request owns both that endpoint generation and its list-state instance;
+late success, error, bad-cursor recovery and promise cleanup cannot act for a new
+owner. A new head invalidates pending tails while a valid 304 preserves loaded
+rows and the pagination cursor. Distinct filter keys remain independently cached.
+
+The single persisted default-head slot has an opaque random namespace saved with
+settings, rotated on active address/authentication identity replacement. Snapshot
+writes are serialized and the envelope must match that namespace on cold boot.
+Legacy unbound snapshots are ignored, not attributed to the current account.
+No token or authentication identity is added to cache keys or snapshot envelopes.
+This covers heads only, not endpoint scoping of saved conversation/history/drafts.
+Status: authored, not run; no web or native acceptance claimed.
+
 ## Mesh/native roster journey (#474, #476, #481)
 
 `mesh-roster.spec.ts` starts two isolated real bridges named `groot` and `mbp`, pairs the
@@ -87,3 +110,10 @@ Inspect error-context.md, console.json, bridge.log, screenshot/video and trace b
 Append confirmed bugs immediately and under a file lock to the private army bug ledger (its path lives in the private ops notes, never here), with the owner's required id/title/severity/repro steps/evidence path/suspected file:line keys. Do not publish fixture credentials or real secrets. Never fix app code in this qualification lane.
 
 Web evidence is not native phone/context-gauge acceptance; it does not prove native IME, voice, Android attachment permissions, or live model behavior.
+
+`delta-replay.spec.ts` forwards the real authenticated bridge stream through an
+owned WebSocket relay. It duplicates a delta within one batch and replays an
+already-applied delta immediately before fresh text. Both cases require the exact
+original agent reply and one actual agent invocation. The app retains individual
+frames until the store rejects stale sequences against its applied watermark,
+then appends the accepted text once per batch.

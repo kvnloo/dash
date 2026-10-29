@@ -25,9 +25,11 @@ function sessionBucket(harness: string, sessionId: string): string { return `${h
 export function findLiveConversation(conversations: Conversation[], agent: { harness: string; sessionId?: string; targetHostId?: string; profileId?: string }): Conversation | undefined {
   const sessionId = agent.sessionId?.trim();
   if (!sessionId) return undefined;
-  const candidates = conversations.filter(c => c.harness === agent.harness && c.sessionId === sessionId && (!agent.profileId || !c.profileId || c.profileId === agent.profileId));
-  if (agent.targetHostId) return candidates.find(c => c.targetHostId === agent.targetHostId) ?? candidates.find(c => !c.targetHostId);
-  return candidates.find(c => !c.targetHostId) ?? (candidates.length === 1 ? candidates[0] : undefined);
+  const candidates = conversations.filter(c =>
+    c.harness === agent.harness && c.sessionId === sessionId &&
+    (agent.targetHostId === undefined || c.targetHostId === agent.targetHostId) &&
+    (agent.profileId === undefined || c.profileId === agent.profileId));
+  return candidates.length === 1 ? candidates[0] : undefined;
 }
 
 /** One keyed index over conversations for many lookups: O(C) to build, O(bucket) per lookup. */

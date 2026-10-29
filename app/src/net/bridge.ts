@@ -54,7 +54,7 @@ class Bridge {
   private connectTimer: ReturnType<typeof setTimeout> | undefined;
   private rosterTimer: ReturnType<typeof setInterval> | undefined;
   private stopKeepalive: (() => void) | undefined;
-  private pending = new Map<string, { text: string; seq: number }>();
+  private pending = new Map<string, { text: string; seq: number }[]>();
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private appState: AppStateStatus = RNAppState.currentState;
   private rosterEtag: string | undefined;
@@ -321,10 +321,8 @@ class Bridge {
         return;
       case "delta": {
         const entry = this.pending.get(message.id);
-        if (entry) {
-          entry.text += message.text;
-          entry.seq = message.seq;
-        } else this.pending.set(message.id, { text: message.text, seq: message.seq });
+        if (entry) entry.push(message);
+        else this.pending.set(message.id, [message]);
         this.flushTimer ??= setTimeout(() => this.flushDeltas(), DELTA_FLUSH_MS);
         return;
       }

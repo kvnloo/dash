@@ -16,6 +16,8 @@ export interface Settings {
   /** `host:port` of the bridge, no scheme. */
   address: string;
   token: string;
+  /** Random cache namespace, rotated when the active endpoint/account changes. */
+  chatIndexScope?: string;
   /** Harness id to use for new chats. */
   harness: string;
   /** Optional working directory override sent with every turn. */
@@ -163,6 +165,7 @@ export function parseSettings(raw: unknown): Settings | null {
   const endpoints = parseEndpoints(raw.endpoints);
   return {
     ...(identity ? { identity } : {}),
+    ...(typeof raw.chatIndexScope === "string" && /^[a-z0-9-]{16,80}$/.test(raw.chatIndexScope) ? { chatIndexScope: raw.chatIndexScope } : {}),
     address: raw.address,
     token: raw.token,
     harness: raw.harness,

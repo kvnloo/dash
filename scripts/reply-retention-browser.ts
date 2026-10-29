@@ -9,7 +9,7 @@ function run(count = 128): { retainedCharacters: number; conversations: number; 
     const turn = app.beginTurn(chat.id, "synthetic retention probe");
     ids.push(turn.turnId);
     const text = `${ids.length}: synthetic answer line. `.repeat(8192);
-    app.applyDeltas(new Map([[turn.turnId, { seq: 1, text }]]));
+    app.applyDeltas(new Map([[turn.turnId, [{ seq: 1, text }]]]));
     app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 2, text: "", part: { kind: "reasoning", text: `${ids.length}: synthetic reasoning. `.repeat(8192) } });
     app.applyTurnEvent({ type: "status", id: turn.turnId, seq: 3, text: "", summary: { kind: "turn", blockId: "turn", text: "synthetic summary", model: "fixture", durationMs: 1 } });
     app.applyTurnEvent({ type: "done", id: turn.turnId, seq: 4, exitCode: 0 });

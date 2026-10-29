@@ -21,6 +21,7 @@ import { historyState, olderLoaded, setHistoryCursor } from "./history-pages";
 import { conversationKey } from "../lib/chat-index";
 import { pruneArchive } from "./prune-archive";
 import { createStore } from "./createStore";
+import { bindChatIndex, sameChatEndpoint } from "./chat-index-store";
 import { dequeue, enqueue, notifyTurnSettled } from "./queue";
 import { nextPendingSend, parkMessage } from "./offline-send";
 import { combineQueued, mergedQueue, queuedParts, reorderQueued, queueMergeError } from "../lib/pending-queue";
@@ -103,6 +104,11 @@ export async function hydrate(): Promise<void> {
     AsyncStorage.getItem(KEYS.activeId).catch(() => null),
   ]);
   const settings = parseSettings(safeJson(settingsText));
+  if (settings && !settings.chatIndexScope) {
+    settings.chatIndexScope = newId();
+    void AsyncStorage.setItem(KEYS.settings, JSON.stringify(settings));
+  }
+  bindChatIndex(settings);
   const activeId = activeIdText || null;
   let conversations: Conversation[] = [];
   let indexed = false;
@@ -196,6 +202,9 @@ function safeJson(text: string | null | undefined): unknown {
 // ---- settings / connection -------------------------------------------------
 
 export function saveSettings(settings: Settings): void {
+  const previous = store.get().settings;
+  settings = { ...settings, chatIndexScope: sameChatEndpoint(previous, settings) && previous?.chatIndexScope ? previous.chatIndexScope : newId() };
+  bindChatIndex(settings);
   store.set((s) => ({ ...s, settings }));
   void AsyncStorage.setItem(KEYS.settings, JSON.stringify(settings));
 }
@@ -623,14 +632,22 @@ export function streamingTurns(): { id: string; seq: number }[] {
   return out;
 }
 
-/** Apply a batch of coalesced deltas: turnId -> appended text and last seq. */
-export function applyDeltas(batch: Map<string, { text: string; seq: number }>): void {
-  for (const [turnId, { text, seq }] of batch) {
+/** Reject stale frames against the applied watermark before coalescing their text. */
+export function applyDeltas(batch: ReadonlyMap<string, readonly { text: string; seq: number }[]>): void {
+  for (const [turnId, deltas] of batch) {
     const where = locateTurn(turnId);
     if (!where) continue;
     const message = store.get().conversations.find((c) => c.id === where.conversationId)?.messages.find((m) => m.id === where.messageId);
     if (message?.role !== "assistant" || message.state !== "streaming") continue;
-    if (seq <= Math.max(message.seq, liveSequences.get(turnId) ?? 0)) continue;
+    const applied = Math.max(message.seq, liveSequences.get(turnId) ?? 0);
+    let seq = applied;
+    let text = "";
+    for (const delta of deltas) {
+      if (delta.seq <= seq) continue;
+      text += delta.text;
+      seq = delta.seq;
+    }
+    if (seq === applied) continue;
     if (!replyText.get(turnId) && message.text) replyText.set(turnId, message.text);
     replyText.append(turnId, text);
     liveSequences.set(turnId, seq);

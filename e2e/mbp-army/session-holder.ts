@@ -1,6 +1,8 @@
 // Fixture-only discoverable OMP session, confined to the bridge PID namespace.
-import {mkdirSync,openSync,writeSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,openSync,writeSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+const wait=process.env.ARMY_SESSION_HOLDER_WAIT;
+if(wait)while(!existsSync(wait))await new Promise(resolve=>setTimeout(resolve,50));
 // Bun's process.title does not update Linux comm; roster discovery reads comm.
 writeFileSync('/proc/self/comm','omp');
 const root=process.env.PI_CODING_AGENT_DIR;if(!root)throw Error('isolated OMP root required');

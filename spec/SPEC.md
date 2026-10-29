@@ -93,6 +93,10 @@ Sources: owner task brief 2026-10-25, hermes-telegram 2026-10-25T17:22, H-014, C
 Code: `app/src/lib/global-search.ts:62`, `app/src/lib/global-search.ts:214`, `app/src/components/GlobalSearchBar.tsx:43`
 
 Note: Search is an in-memory scan of locally cached conversations and the current roster; there is no host-side index or transcript search route in the bridge.
+
+The main-screen `/live` search projects running agents from the online paired host. It reuses a saved conversation only when harness/session and every supplied host/profile match exactly and the remaining candidate is unique. Unknown ownership never satisfies an explicit owner; omitted lookup fields do not justify choosing the first of several candidates. Otherwise search opens the roster-derived conversation, not a saved chat from another or unknown owner.
+
+`e2e/mbp-army/live-search-ownership.spec.ts` exercises an unscoped saved OMP chat colliding with the same native session on two isolated bridges. Ordinary roster reconciliation also adopts an exact scoped row, so the journey explicitly deletes that row from the phone through its chat menu before searching. The running roster remains authoritative; `/live` must reopen its paired-host conversation rather than the unrelated saved thread. The journey then continues and reopens that exact scoped conversation. This is implemented coverage, pending an army run. Native Hermes roster rows report `available`, not `running`; the two-Hermes-profile helper case remains source-only, not demonstrated mobile `/live` behavior. Web army coverage does not establish physical-device or voice acceptance.
 Sources: owner task brief 2026-10-25
 
 #### DF-003 Current live Hermes and OMP sessions shown; stale ones flagged
