@@ -50,7 +50,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
     const forwarded = new Request('http://127.0.0.1:' + port + url.pathname + url.search, req);
     forwarded.headers.set('host', '127.0.0.1:' + port);
     return fetch(forwarded).then(async response => {
-      if (holdOlder && url.pathname === '/chats/history' && url.searchParams.has('before')) {
+      if (holdOlder && req.method === 'GET' && url.pathname === '/chats/history' && url.searchParams.has('before')) {
         const page = await response.clone().json();
         olderSnapshots.push({ before: url.searchParams.get('before'), prompts: page.messages.filter(row => row.role === 'user').map(row => row.text) });
         await new Promise(resolve => olderWaiters.push(resolve));
