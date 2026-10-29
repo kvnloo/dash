@@ -4,6 +4,8 @@ type Peer = { id: number; upstream?: WebSocket; queue: string[] };
 const upstream = new URL(process.argv[2]);
 let withholding = true;
 let nextId = 0;
+let holdNextRoster = false;
+let releaseRoster: (() => void) | undefined;
 const peers = new Set<WebSocket>();
 const report = (event: string, id = 0) => console.log(JSON.stringify({ event, id, at: Date.now() }));
 const server = Bun.serve<Peer>({
@@ -37,7 +39,17 @@ const server = Bun.serve<Peer>({
       remote.onclose = () => { peers.delete(remote); clients.get(data.id)?.close(); };
       return;
     }
-    return fetch(target, { method: request.method, headers, body: request.body, redirect: 'manual' });
+    const holdRoster = url.pathname === '/roster' && holdNextRoster;
+    if (holdRoster) holdNextRoster = false;
+    const response = await fetch(target, { method: request.method, headers, body: request.body, redirect: 'manual' });
+    if (!holdRoster) return response;
+    // Delay the real authenticated response, without changing its roster bytes.
+    const body = await response.arrayBuffer();
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.set('x-army-held-roster', '1');
+    await new Promise<void>(resolve => { releaseRoster = resolve; report('roster-held'); });
+    report('roster-released');
+    return new Response(body, { status: response.status, headers: responseHeaders });
   },
   websocket: {
     open(client) { clients.set(client.data.id, client); report('client-open', client.data.id); },
@@ -59,6 +71,8 @@ report(`listening:${server.port}`);
 createInterface({ input: process.stdin }).on('line', command => {
   if (command === 'allow') { withholding = false; report('allow'); }
   if (command === 'hold') { withholding = true; report('hold'); }
+  if (command === 'hold-roster') { holdNextRoster = true; report('roster-armed'); }
+  if (command === 'release-roster') { releaseRoster?.(); releaseRoster = undefined; }
   if (command === 'disconnect') {
     report('disconnect');
     for (const client of clients.values()) client.close(1000, 'Owned reconnect');
