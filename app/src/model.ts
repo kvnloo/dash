@@ -100,6 +100,8 @@ export interface AssistantMessage {
 export type Message = UserMessage | AssistantMessage;
 
 export interface Conversation {
+  /** Configured paired bridge address. Missing legacy provenance must never be inferred. */
+  endpointAddress?: string;
   /** Default on, including chats saved before this preference existed. */
   deliverQueuedAsOne?: boolean;
   /** A durable merge preview pauses automatic delivery until saved or canceled. */
@@ -266,6 +268,7 @@ export function parseConversation(raw: unknown): Conversation | null {
     : messages;
   return {
     id: raw.id,
+    endpointAddress: typeof raw.endpointAddress === "string" && raw.endpointAddress.trim() ? raw.endpointAddress : undefined,
     harness: raw.harness,
     detailMode: raw.detailMode === "Hide" || raw.detailMode === "Compact" || raw.detailMode === "Full" ? raw.detailMode : undefined,
     title: raw.title,

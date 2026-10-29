@@ -58,6 +58,11 @@ const clients = new Map<number, Bun.ServerWebSocket<Peer>>();
 report(`listening:${server.port}`);
 createInterface({ input: process.stdin }).on('line', command => {
   if (command === 'allow') { withholding = false; report('allow'); }
+  if (command === 'hold') { withholding = true; report('hold'); }
+  if (command === 'disconnect') {
+    report('disconnect');
+    for (const client of clients.values()) client.close(1000, 'Owned reconnect');
+  }
 });
 process.on('SIGTERM', () => {
   for (const peer of peers) peer.close();

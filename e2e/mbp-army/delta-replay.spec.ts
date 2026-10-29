@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { test, expect, openChat, chatRow, send, type Bridge } from './fixtures';
+import { test, expect, pair, composer, send, type Bridge } from './fixtures';
 
 async function replayRelay(bridge: Bridge, mode: string) {
   const script = join(bridge.dir, 'delta-replay-relay.ts');
@@ -91,14 +91,14 @@ for (const mode of ['duplicate-in-batch', 'stale-before-fresh']) {
       socket.on('close', () => frames.push({ endpoint, event: 'closed' }));
     });
     try {
-      await openChat(page, bridge);
-      await page.getByRole('button', { name: 'Close chat window', exact: true }).click();
+      // Pair advertises upstream; select the relay before creating an owned chat.
+      await pair(page, bridge);
       await page.getByRole('button', { name: 'Open settings', exact: true }).first().click();
       await page.getByRole('textbox', { name: 'Address', exact: true }).fill(`127.0.0.1:${relay.bridge.port}`);
       await page.getByRole('button', { name: 'Save and reconnect', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Save and reconnect', exact: true })).toBeHidden();
-      await chatRow(page).click();
-      await expect(page.getByTestId('chat-window')).toBeVisible();
+      await page.getByRole('button', { name: /^(Create new chat|New chat)$/ }).first().click();
+      await expect(composer(page)).toBeVisible();
       await send(page, prompt);
       await expect(page.getByText(`ARMY_STREAM_BEGIN ARMY_REPLY: ${prompt}`, { exact: true })).toBeVisible();
       const starts = (await readFile(join(bridge.dir, 'army-acp-turns.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line)).filter(row => row.event === 'start' && row.text === prompt);

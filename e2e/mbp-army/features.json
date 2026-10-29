@@ -1,6 +1,13 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "conversation-endpoint-ownership", "title": "Changing paired endpoints parks foreign streams, queues and native-history reads without rebinding",
+     "tests": ["endpoint switch OMP parks A stream and queue, B receives neither, A resumes once",
+               "endpoint switch Hermes parks A stream and queue, B receives neither, A resumes once"]},
+    {"id": "history-request-ownership", "title": "Newest history snapshots preserve dispatch ownership and newer observed transcript messages",
+     "tests": ["history ownership delayed newest response preserves its transcript owner",
+               "history ownership unknown newest response preserves its transcript owner",
+               "history ownership unchanged newest response preserves its transcript owner"]},
     {"id": "hello-admission", "title": "WebSocket OPEN requires authenticated hello before admission and retries a missing hello",
      "tests": ["hello admission: OPEN without authenticated hello times out, retries and recovers through Settings"]},
     {"id": "terminal-retention", "title": "Pending terminal summaries survive settled-turn cap pressure and explicit subscriber reconnect",

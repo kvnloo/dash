@@ -121,6 +121,11 @@ export interface HistoryDeps {
 let deps: HistoryDeps = { api: chatsApi, settings: () => null, conversation: () => undefined };
 export function configureHistoryPages(next: Partial<HistoryDeps>): void { deps = { ...deps, ...next }; }
 
+function ownsHistoryRequest(conversation: Conversation, settings: ApiSettings): boolean {
+  return deps.settings() === settings && conversation.endpointAddress === settings.address
+    && deps.conversation(conversation.id)?.endpointAddress === settings.address;
+}
+
 type PageOutcome = "landed" | "failed" | "skipped";
 /** The background fill's page in flight per chat, so the owner's own scroll-up can wait for it. */
 const fillPages = new Map<string, Promise<PageOutcome>>();
@@ -133,9 +138,15 @@ async function fetchOlder(conversation: Conversation, limit: number, listed: boo
   const state = historyState(conversation.id);
   const settings = deps.settings();
   if (!settings || state.loading || typeof state.before !== "string") return "skipped";
+  if (!ownsHistoryRequest(conversation, settings)) return "skipped";
   const before = state.before;
   if (listed) patch(conversation.id, s => ({ ...s, loading: true, error: undefined }));
+  const pending = historyState(conversation.id);
   const result = await deps.api.history(settings, { key: conversationKey(conversation), before, limit });
+  if (!ownsHistoryRequest(conversation, settings)) {
+    if (listed) patch(conversation.id, s => s === pending ? { ...s, loading: false } : s);
+    return "skipped";
+  }
   if (!result.ok) {
     if (listed) patch(conversation.id, s => ({ ...s, loading: false, error: result.notModified || result.aborted ? undefined : "Could not load older messages." }));
     return "failed";
@@ -174,6 +185,7 @@ export async function loadOlder(conversation: Conversation): Promise<void> {
 export async function fillOlder(conversation: Conversation, open: () => boolean): Promise<void> {
   let failures = 0;
   while (open()) {
+    if (!conversation.endpointAddress || conversation.endpointAddress !== deps.settings()?.address) return;
     const state = historyState(conversation.id);
     if (typeof state.before !== "string" || olderLoaded(state) >= OLDER_MAX) return;
     // The owner's own page (scroll-up) is in flight: let it land, then carry on behind it.
@@ -225,21 +237,32 @@ export async function loadNewest(conversation: Conversation, apply: (messages: H
   const state = historyState(conversation.id);
   const settings = deps.settings();
   if (!settings || state.loading) return;
+  if (!ownsHistoryRequest(conversation, settings)) return;
   patch(conversation.id, s => ({ ...s, loading: true, error: undefined }));
+  const pending = historyState(conversation.id);
   const result = await deps.api.history(settings, { key: conversationKey(conversation), limit: HISTORY_PAGE });
+  if (!ownsHistoryRequest(conversation, settings)) {
+    patch(conversation.id, s => s === pending ? { ...s, loading: false } : s);
+    return;
+  }
   if (!result.ok) {
     patch(conversation.id, s => ({ ...s, loading: false, error: result.notModified || result.aborted ? undefined : "Could not load this chat from the bridge." }));
     return;
   }
-  apply(result.value.messages);
-  patch(conversation.id, s => ({ ...s, loading: false, before: result.value.before }));
+  const current = deps.conversation(conversation.id);
+  if (current?.messages === conversation.messages) {
+    apply(result.value.messages);
+    patch(conversation.id, s => ({ ...s, loading: false, before: result.value.before }));
+  } else patch(conversation.id, s => ({ ...s, loading: false }));
 }
 
 /** Replace a truncated message's text with the full text from the bridge. */
 export async function fetchFullText(conversation: Conversation, messageId: string): Promise<string | undefined> {
   const settings = deps.settings();
   if (!settings) return undefined;
+  if (!ownsHistoryRequest(conversation, settings)) return undefined;
   const result = await deps.api.message(settings, { key: conversationKey(conversation), id: messageId });
+  if (!ownsHistoryRequest(conversation, settings)) return undefined;
   if (!result.ok) return undefined;
   const text = result.value.text;
   patch(conversation.id, s => s.older.some(m => m.id === messageId)
@@ -255,13 +278,19 @@ export async function primeCursor(conversation: Conversation): Promise<void> {
   const state = historyState(conversation.id);
   const settings = deps.settings();
   if (!settings || state.loading || state.before !== undefined || !conversation.sessionId || !conversation.targetHostId) return;
+  if (!ownsHistoryRequest(conversation, settings)) return;
   patch(conversation.id, s => ({ ...s, loading: true }));
+  const pending = historyState(conversation.id);
   const shown = new Set(conversation.messages.map(m => m.id));
   // The cached window (up to 80) can be longer than one page: walk back until a page reaches past
   // it, so the stored cursor never points inside what is already on screen.
   let before: string | undefined;
   for (let n = 0; n < PRIME_MAX_PAGES; n++) {
     const result = await deps.api.history(settings, { key: conversationKey(conversation), limit: HISTORY_PAGE, ...(before ? { before } : {}) });
+    if (!ownsHistoryRequest(conversation, settings)) {
+      patch(conversation.id, s => s === pending ? { ...s, loading: false } : s);
+      return;
+    }
     if (!result.ok) { patch(conversation.id, s => ({ ...s, loading: false })); return; }
     const page = alignToShown(historyToMessages(result.value.messages, conversation.id, conversation.harness === "hermes"), conversation, state);
     const next = result.value.before;

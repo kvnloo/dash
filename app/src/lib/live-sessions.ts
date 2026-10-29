@@ -63,6 +63,7 @@ export function resumableWithoutRoster(c: Pick<Conversation, "harness" | "sessio
 }
 
 export interface MergeLiveOptions {
+  endpointAddress?: string;
   /**
    * `all` (legacy bridges): every reported session becomes a conversation.
    * `live` (chats.v1): only running or host-held sessions do; the paged list shows the rest.
@@ -85,6 +86,7 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
   let changed = false;
   const owned = new Set<string>();
   const rows = existing.map(c => {
+    if (options.endpointAddress !== undefined && c.endpointAddress !== options.endpointAddress) return c;
     if (!c.sessionId) return c;
     const bucket = bySession.get(sessionBucket(c.harness, c.sessionId)) ?? [];
     const matches = bucket.filter(({ host, agent }) => (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
@@ -141,7 +143,9 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     if (!sessionId || owned.has(`${agent.kind}\u0000${sessionId}\u0000${host.id}\u0000${agent.id}`)) continue;
     if (options.adopt === "live" && agent.status !== "running" && !agent.openIn) continue;
     const baseId = liveConversationId(agent.kind, sessionId, host.self ? undefined : host.id);
-    adopted.push({ id: agent.kind === "hermes" ? `${baseId}:${host.id}:${agent.profileId ?? agent.id}` : baseId,
+    const logicalId = agent.kind === "hermes" ? `${baseId}:${host.id}:${agent.profileId ?? agent.id}` : baseId;
+    const id = existing.some(c => c.id === logicalId) ? `${logicalId}:endpoint:${encodeURIComponent(options.endpointAddress ?? "")}` : logicalId;
+    adopted.push({ id, endpointAddress: options.endpointAddress,
       harness: agent.kind, title: liveSessionTitle(agent), createdAt: agent.lastActivityAt ?? now, updatedAt: agent.lastActivityAt ?? now,
       ...(agent.model ? { sessionModel: { sessionId, model: agent.model } } : {}),
       sessionId, cwd: agent.cwd, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, messageCount: agent.messageCount, stale: false, ...(!host.self ? { viewOnly: true } : {}), ...(agent.openIn ? { openIn: agent.openIn } : {}), messages: [] });
@@ -178,7 +182,12 @@ export function hydrateLiveConversation(conversation: Conversation, history: His
   if (conversation.messages.length > 0 && conversation.harness !== "hermes" && !isRemoteClaude(conversation)) return conversation;
   const messages = historyToMessages(history, conversation.id, conversation.harness === "hermes");
   if (!messages.length) return conversation;
-  return { ...conversation, messages, updatedAt: Math.max(messages.at(-1)?.at ?? 0, conversation.updatedAt) };
+  // Native persistence can lag a completed ACP turn. A newest-window snapshot
+  // cannot replace already-observed messages newer than its own final timestamp.
+  const newest = messages.at(-1)?.at ?? 0;
+  const ids = new Set(messages.map(message => message.id));
+  const tail = conversation.messages.filter(message => message.at > newest && !ids.has(message.id));
+  return { ...conversation, messages: tail.length ? [...messages, ...tail] : messages, updatedAt: Math.max(newest, conversation.updatedAt) };
 }
 /**
  * A refreshed newest window on top of a conversation whose older pages were already paged in:

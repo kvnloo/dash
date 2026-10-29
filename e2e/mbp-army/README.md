@@ -142,3 +142,40 @@ deadline, adds 50 real settled rejected turns, and reconnects a subscriber. The
 old bridge returned `lost`; the corrected bridge replays text and terminal `done`
 before applying the settled-turn cap. This does not prove automatic post-error
 app reattachment or the ten-minute expiry timer.
+
+## Conversation endpoint ownership
+
+New and adopted chats persist their configured paired-bridge address. Host IDs,
+matching session strings, changed credentials, and alternate addresses are not
+evidence that another endpoint owns an existing turn. Selecting another bridge
+parks foreign streams and queued sends; selecting their owner permits reattach.
+Incoming turn, permission and Live events are checked against that owner too.
+Native activity/context readers and HTTP history pages must not query the newly
+selected bridge for a foreign conversation.
+
+Legacy chats without provenance keep their history and drafts but cannot send
+or attach automatically. The chat explains how to reopen the native session from
+the correct paired computer's list or create a new chat. There is no silent
+legacy assignment, endpoint-alias equivalence or draft transfer.
+
+`endpoint-ownership.spec.ts` exercises two real bridges through ordinary Settings
+and checks actual outbound frames, ACP invocations, session identity and native
+history request paths. Relay-based journeys select their relay before creating
+the chat; hello recovery reconnects the same address after saving its draft.
+These journeys do not establish real MBP/Groot model availability or S25 delivery.
+
+## History response ownership
+
+Newest WebSocket history requests retain their dispatch-time transcript identity.
+Unknown supplied request IDs are discarded rather than matched by a guessed
+session. A changed transcript invalidates both snapshot and cursor. HTTP history
+requests retain endpoint/settings ownership across awaits.
+
+Native Hermes persistence can lag an already completed ACP turn. Reconciliation
+keeps observed messages newer than the incoming window's final timestamp,
+deduplicating native IDs; this chronological boundary is not a cryptographic
+acknowledgement or a cross-host clock guarantee. The real native SQLite activity
+poll is exercised by `history-ownership.spec.ts`: an old source snapshot must not
+erase the reply, and advancing the native source must replace the local tail
+without duplicate messages. The completed isolated candidate passed all three
+focused history journeys; combined exact-head and native acceptance remain open.

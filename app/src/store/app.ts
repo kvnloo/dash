@@ -234,7 +234,7 @@ export function setConnection(patch: Partial<Connection>): void {
       connection.cwd === was.cwd && connection.harnesses === was.harnesses && connection.error === was.error;
     if (patch.hosts === undefined) return unchanged ? s : { ...s, connection };
     // chats.v1: only running or host-held sessions become conversations; the paged list has the rest.
-    const conversations = mergeLiveConversations(s.conversations, connection.hosts, Date.now(), { adopt: chatsEnabled(connection) ? "live" : "all", routes: connection.routes });
+    const conversations = mergeLiveConversations(s.conversations, connection.hosts, Date.now(), { endpointAddress: s.settings?.address, adopt: chatsEnabled(connection) ? "live" : "all", routes: connection.routes });
     conversationsChanged = conversations !== s.conversations;
     if (!conversationsChanged) return unchanged ? s : { ...s, connection };
     return { ...s, connection, conversations };
@@ -295,7 +295,7 @@ export function rosterHostId(hostId: string | undefined, connection: Pick<Connec
 
 export function applyLiveHistory(harness: string, sessionId: string, messages: HistoryMessage[], hostId?: string, profileId?: string): void {
   const host = rosterHostId(hostId, store.get().connection);
-  const candidates = store.get().conversations.filter(c => c.harness === harness && c.sessionId === sessionId && (!host || c.targetHostId === host) && (!profileId || c.profileId === profileId));
+  const candidates = store.get().conversations.filter(c => c.endpointAddress !== undefined && c.endpointAddress === store.get().settings?.address && c.harness === harness && c.sessionId === sessionId && (!host || c.targetHostId === host) && (!profileId || c.profileId === profileId));
   const conv = candidates.length === 1 ? candidates[0] : undefined;
   if (!conv) return;
   // Once older pages are loaded, a refreshed newest window merges (as a ws history reply does), so the
@@ -378,15 +378,15 @@ async function loadTranscript(current: Conversation): Promise<void> {
  */
 export function openChat(summary: ChatSummary): Conversation {
   const { conversations } = store.get();
-  const existing = conversations.find(c => conversationKey(c) === summary.key);
+  const existing = conversations.find(c => c.endpointAddress === store.get().settings?.address && conversationKey(c) === summary.key);
   if (existing) {
     const updated = summary.model ? { ...existing, sessionModel: { sessionId: summary.sessionId, model: summary.model } } : existing;
     if (updated !== existing) store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id === existing.id ? updated : c) }));
     setActive(existing.id);
     return updated;
   }
-  let conversation = adoptSummary(summary, Date.now(), store.get().connection.hosts.find(host => host.self)?.id);
-  if (conversations.some(c => c.id === conversation.id)) conversation = { ...conversation, id: `${conversation.id}:${summary.hostId}` };
+  let conversation = { ...adoptSummary(summary, Date.now(), store.get().connection.hosts.find(host => host.self)?.id), endpointAddress: store.get().settings?.address };
+  if (conversations.some(c => c.id === conversation.id)) conversation = { ...conversation, id: `${conversation.id}:endpoint:${encodeURIComponent(conversation.endpointAddress ?? "")}` };
   store.set(s => ({ ...s, conversations: [conversation, ...s.conversations] }));
   persistence.markLoaded(conversation.id);
   setActive(conversation.id);
@@ -395,9 +395,14 @@ export function openChat(summary: ChatSummary): Conversation {
 
 /** Open a conversation a search listed (e.g. a /live row) that the store may not hold yet. */
 export function openListedConversation(conversation: Conversation): Conversation {
-  const existing = store.get().conversations.find(c => c.id === conversation.id);
+  // Saved search hits retain their original provenance, including unowned legacy rows.
+  if (store.get().conversations.includes(conversation)) { setActive(conversation.id); return conversation; }
+  const endpointAddress = store.get().settings?.address;
+  const scopedId = `${conversation.id}:endpoint:${encodeURIComponent(endpointAddress ?? "")}`;
+  const existing = store.get().conversations.find(c => (c.id === conversation.id || c.id === scopedId) && c.endpointAddress === endpointAddress);
   if (existing) { setActive(existing.id); return existing; }
-  const adopted: Conversation = { ...conversation, openedAt: conversation.openedAt ?? Date.now() };
+  const id = store.get().conversations.some(c => c.id === conversation.id) ? scopedId : conversation.id;
+  const adopted: Conversation = { ...conversation, id, endpointAddress, openedAt: conversation.openedAt ?? Date.now() };
   store.set(s => ({ ...s, conversations: [adopted, ...s.conversations] }));
   persistence.markLoaded(adopted.id);
   setActive(adopted.id);
@@ -422,7 +427,7 @@ export async function migrateArchive(options: { legacy: boolean; pause?: () => P
   // The live store decides, at the moment of each removal: an opened, active or written-to chat stays.
   const prunable = (s: AppState, id: string) => {
     const c = s.conversations.find(chat => chat.id === id);
-    return !c || (c.id !== s.activeId && c.openedAt === undefined && c.messages.length === 0);
+    return !c || (c.endpointAddress !== undefined && c.endpointAddress === s.settings?.address && c.id !== s.activeId && c.openedAt === undefined && c.messages.length === 0);
   };
   const result = await pruneArchive({ storage: AsyncStorage, activeId: store.get().activeId, legacy: options.legacy, pause: options.pause, stillPrunable: id => prunable(store.get(), id) });
   if (result.status !== "done") return;
@@ -440,8 +445,10 @@ export async function migrateArchive(options: { legacy: boolean; pause?: () => P
 }
 
 export function createConversation(harness: string, opts?: { id?: string; title?: string; targetHostId?: string; profileId?: string; sessionId?: string; cwd?: string }): Conversation {
+  const endpointAddress = store.get().settings?.address;
+  const scopedId = opts?.id ? `${opts.id}:endpoint:${encodeURIComponent(endpointAddress ?? "")}` : undefined;
   if (opts?.id) {
-    const existing = store.get().conversations.find((c) => c.id === opts.id);
+    const existing = store.get().conversations.find(c => (c.id === opts.id || c.id === scopedId) && c.endpointAddress === endpointAddress);
     if (existing) {
       setActive(existing.id);
       return existing;
@@ -449,7 +456,8 @@ export function createConversation(harness: string, opts?: { id?: string; title?
   }
   const now = Date.now();
   const conversation: Conversation = {
-    id: opts?.id ?? newId(),
+    id: opts?.id && store.get().conversations.some(c => c.id === opts.id) ? scopedId! : opts?.id ?? newId(),
+    endpointAddress,
     harness,
     title: opts?.title ?? "New chat",
     createdAt: now,
@@ -465,8 +473,10 @@ export function createConversation(harness: string, opts?: { id?: string; title?
   return conversation;
 }
 
-export function conversationTargetError(target: Pick<Conversation, "targetHostId" | "profileId" | "harness" | "sessionId" | "stale"> & { viewOnly?: boolean }): string | undefined {
+export function conversationTargetError(target: Pick<Conversation, "targetHostId" | "profileId" | "harness" | "sessionId" | "stale"> & { viewOnly?: boolean; endpointAddress?: string; messages?: Message[] }): string | undefined {
   if (target.viewOnly) return "View only: Dash can read this chat but cannot send to it.";
+  if (target.messages && !target.endpointAddress) return "This saved chat has no verified bridge address. Keep its history and drafts; open the session again from the paired computer's Chats list, or start a new chat.";
+  if (target.messages && target.endpointAddress !== store.get().settings?.address) return `This chat belongs to ${target.endpointAddress}. Select that address in Settings to resume; your history and queued drafts stay here.`;
   const { connection } = store.get();
   // A chat recorded on another computer that the paired bridge continues there (hello `routes`).
   if (target.sessionId && target.targetHostId && connection.status === "online" && connection.routes?.includes(target.targetHostId)) return undefined;
@@ -493,7 +503,7 @@ export function openAgentConversation(profile: AgentTarget): { conversation: Con
   const error = conversationTargetError(profile);
   if (error) return { error };
   if (!profile.targetHostId || !profile.profileId) return { error: "This agent has no target identity. Refresh the roster." };
-  const existing = store.get().conversations.find((c) => c.harness === profile.harness && c.targetHostId === profile.targetHostId && c.profileId === profile.profileId && c.sessionId === profile.sessionId && c.cwd === profile.cwd);
+  const existing = store.get().conversations.find(c => c.endpointAddress === store.get().settings?.address && c.harness === profile.harness && c.targetHostId === profile.targetHostId && c.profileId === profile.profileId && c.sessionId === profile.sessionId && c.cwd === profile.cwd);
   if (existing) {
     setActive(existing.id);
     return { conversation: store.get().conversations.find(c => c.id === existing.id) ?? existing };
@@ -625,6 +635,7 @@ export function rejectUnavailableTurn(turnId: string): boolean {
 export function streamingTurns(): { id: string; seq: number }[] {
   const out: { id: string; seq: number }[] = [];
   for (const c of store.get().conversations) {
+    if (!c.endpointAddress || c.endpointAddress !== store.get().settings?.address) continue;
     for (const m of c.messages) {
       if (m.role === "assistant" && m.state === "streaming") out.push({ id: m.turnId, seq: Math.max(m.seq, liveSequences.get(m.turnId) ?? 0) });
     }
@@ -912,6 +923,7 @@ export function takeQueuedForSteer(id: string): { text: string; attachments: Cha
 export function flushPendingSends(send: ChatSender): number {
   let sent = 0;
   for (const snapshot of store.get().conversations) {
+    if (!snapshot.endpointAddress || snapshot.endpointAddress !== store.get().settings?.address) continue;
     if (snapshot.queueWaitForIdle || snapshot.queuePreview !== undefined || !nextPendingSend(snapshot)) continue;
     if (snapshot.deliverQueuedAsOne !== false && queueMergeError(snapshot)) continue;
     if (snapshot.deliverQueuedAsOne !== false) updateConversation(snapshot.id, combineQueued);

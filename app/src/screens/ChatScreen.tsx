@@ -231,7 +231,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const harnessId = conversation?.harness ?? settings?.harness ?? "omp";
   const harness = connection.harnesses.find((h) => h.id === harnessId);
   const harnessName = harness?.name ?? harnessId;
-  const online = connection.status === "online";
+  const online = connection.status === "online" && (!conversation || conversation.endpointAddress === settings?.address);
   const targetError = conversation ? conversationTargetError(conversation) : undefined;
   const live = liveStore.use((all) => (conversation ? all[conversation.id] ?? EMPTY_LIVE : EMPTY_LIVE));
   const liveOn = harnessId === "hermes" && live.open;

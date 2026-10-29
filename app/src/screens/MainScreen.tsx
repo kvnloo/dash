@@ -220,8 +220,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
     [hosts, cwd, globalActive],
   );
   const results = useMemo(
-    () => (globalActive && conversations ? visibleSearchResults(runGlobalSearch({ query, conversations, harnesses, hosts, cwd, products }), query) : NO_RESULTS),
-    [globalActive, query, conversations, harnesses, hosts, cwd, products],
+    () => (globalActive && conversations ? visibleSearchResults(runGlobalSearch({ query, conversations, harnesses, hosts, cwd, products, endpointAddress: settings?.address }), query) : NO_RESULTS),
+    [globalActive, query, conversations, harnesses, hosts, cwd, products, settings?.address],
   );
   const chatSearch = useChatSearch(chatScope ? parsed.text : discoverChats ? parsed.text : "", {
     enabled: chatScope || discoverChats,
