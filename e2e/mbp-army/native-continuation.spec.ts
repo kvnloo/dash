@@ -59,7 +59,7 @@ test.describe(`restored OMP panes share one native session${differentCwd?' acros
   if(differentCwd)expect(secondary?.cwd).not.toBe(primary?.cwd);
   else expect(secondary?.cwd).toBe(primary?.cwd);
   await pair(page,bridge);
-  const row=page.getByTestId('chat-row-live:omp:army-fixture-session');
+  const row=page.getByTestId('chats-pane').getByRole('button',{name:/^OMP ·/,includeHidden:true});
   await expect(row).toHaveCount(1);
   await row.click({noWaitAfter:true});
   await expect(page.getByTestId('chat-window')).toBeVisible();
@@ -75,6 +75,7 @@ test.describe(`restored OMP panes share one native session${differentCwd?' acros
   await expect.poll(roster,{timeout:20000}).toEqual(['omp:tern-700002']);
   await (await refreshed).finished();
   await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+  await expect(page.getByText(/ARMY_REPLY: before restored pane closes/).filter({visible:true}).first()).toBeVisible();
   await composer(page).fill('after restored pane closes');
   await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled();
   await page.getByRole('button',{name:'Send',exact:true}).click({noWaitAfter:true});
