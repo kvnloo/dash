@@ -51,6 +51,9 @@ const server = Bun.serve<Peer>({
     if (response.status !== 200) throw Error(`Roster snapshot returned ${response.status}`);
     const body = await response.arrayBuffer();
     const responseHeaders = new Headers(response.headers);
+    responseHeaders.set('x-army-held-roster', '1');
+    responseHeaders.set('access-control-expose-headers', 'ETag, X-Army-Held-Roster');
+    responseHeaders.set('cache-control', 'no-store');
     await new Promise<void>(resolve => { releaseRoster = resolve; report('roster-held'); });
     report(`roster-released:${response.status}`);
     return new Response(body, { status: response.status, headers: responseHeaders });
