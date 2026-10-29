@@ -59,6 +59,16 @@ jobs:
           path: ${{ runner.temp }}/army-receipts/${{ env.SHA }}/
           if-no-files-found: ignore
           retention-days: 90
+      - name: Compact Chats UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chats-ui-${{ env.SHA }}
+          path: |
+            artifacts/army/${{ env.SHA }}/test-results/next-action-*/*.png
+            artifacts/army/${{ env.SHA }}/test-results/chat-filters-*/*.png
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Army evidence (report, traces, screenshots)
         if: failure()
         uses: actions/upload-artifact@v4

@@ -54,6 +54,11 @@ active and still prove that OMP ink is not sent to the attached Hermes session.
 Run the complete suite on the integrated commit before RC3 merge. A filtered
 feature run is not a complete release receipt or native phone acceptance.
 
+`next-action.spec.ts` also covers current-connection attention, identity-based
+unread replies under clock rollback, exact-chat navigation without sending,
+draft preservation, defer/reload and explicit permission decisions. CI retains
+compact filter and attention screenshots in `chats-ui-<sha>` for visual inspection.
+
 ## Release law O15
 
 No green, complete army receipt for the exact commit means no APK, no phone
