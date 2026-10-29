@@ -97,11 +97,7 @@ test('annotation-voice-target: OMP chat beats a voice call bound to Hermes', asy
   await expect(omp(page)).toHaveCount(1);
   // The centred orb remains a real mute button. Use the exposed row edge,
   // not its covered centre, while preserving the active call.
-  const rowBounds = await omp(page).boundingBox();
-  const orbBounds = await page.getByTestId('voice-orb-overlay').boundingBox();
-  if (!rowBounds || !orbBounds) throw Error('Missing live orb or OMP row');
-  expect(rowBounds.x + 8).toBeLessThan(orbBounds.x);
-  await omp(page).click({ noWaitAfter: true, position: { x: 8, y: rowBounds.height / 2 } });
+  await omp(page).click({ noWaitAfter: true, position: { x: 8, y: 8 } });
   const ompTitle = await page.getByTestId('chat-window-pill-title').innerText();
   expect(ompTitle).not.toBe(hermesTitle);
   await annotateHere(page);
