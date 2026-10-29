@@ -328,6 +328,7 @@ test('reopening native chat rejects its closed visit older page and displays the
     await page.mouse.click(box.x + box.width / 2, box.y + 1);
     await expect(page.getByLabel('Turn preview', { exact: true })).toContainText(refreshedPrompt);
     await page.getByRole('button', { name: 'Jump', exact: true }).click();
+    await page.getByRole('button', { name: 'Close turn preview', exact: true }).click();
     await expect(page.getByTestId('transcript-viewport').getByText(refreshedPrompt, { exact: true })).toBeInViewport();
     await page.screenshot({ path: info.outputPath('final.png') });
     await writeFile(info.outputPath('history-visit-source.json'), JSON.stringify(snapshot, null, 2));
