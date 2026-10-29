@@ -98,7 +98,7 @@ function DeskRail({ onQuick }: { onQuick(): void }) {
 function RailButton({ role, selected = false, label, hint, icon, badge, onPress }: { role: "tab" | "button"; selected?: boolean; label: string; hint?: string; icon: string; badge?: string; onPress(): void }) {
   const [hover, setHover] = useState(false);
   const dom = useDomElement(element => { if (hint) element.title = `${label} (${hint})`; });
-  return <Pressable ref={dom} accessibilityRole={role} accessibilityLabel={label} accessibilityHint={hint} accessibilityState={role === "tab" ? { selected } : undefined}
+  return <Pressable ref={dom} accessibilityRole={role} accessibilityLabel={label} accessibilityHint={hint} accessibilityState={role === "tab" ? { selected } : undefined} aria-selected={role === "tab" ? selected : undefined}
     onPress={onPress} onHoverIn={() => setHover(true)} onHoverOut={() => setHover(false)}
     style={[styles.railButton, hover && styles.railHover, selected && styles.railSelected]}>
     <Text style={[styles.railIcon, selected && styles.railIconOn]}>{icon}</Text>

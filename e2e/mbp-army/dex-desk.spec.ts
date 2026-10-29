@@ -219,7 +219,8 @@ test('desk override: ?desk=off keeps the phone layout wide, the Settings choice 
   // Settings -> Desk layout On, at a width below the auto threshold.
   await page.setViewportSize({ width: 1000, height: 780 });
   await page.goto(web, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByTestId('chats-pane')).toBeVisible({ timeout: 60000 });
+  await expect(page.getByRole('tab').nth(1)).toBeVisible({ timeout: 60000 });
+  await expect(page.getByRole('tab')).toHaveCount(3);
   await expect(page.getByTestId('desk-shell')).toHaveCount(0);
   await page.getByRole('button', { name: 'Settings', exact: true }).first().click({ noWaitAfter: true });
   await page.getByTestId('settings-desk-on').scrollIntoViewIfNeeded();
@@ -231,7 +232,8 @@ test('desk override: ?desk=off keeps the phone layout wide, the Settings choice 
   await expect(page.getByTestId('desk-shell')).toBeVisible({ timeout: 60000 });
   // A URL override still wins over the saved setting.
   await page.goto(`${web}?desk=off`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByTestId('chats-pane')).toBeVisible({ timeout: 60000 });
+  await expect(page.getByRole('tab').nth(1)).toBeVisible({ timeout: 60000 });
+  await expect(page.getByRole('tab')).toHaveCount(3);
   await expect(page.getByTestId('desk-shell')).toHaveCount(0);
 });
 
