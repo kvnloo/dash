@@ -30,6 +30,15 @@ The combined journey also crosses successive history pages. A completed page
 must release its single-flight entry before notifying subscribers, so a filter
 scan can request the next page without stalling.
 
+Stopping a pending or streaming turn updates that chat's activity time, so
+Recent sorting reflects the interruption. A Stop with no active turn does not
+manufacture newer activity. The priority journey checks both attention order
+and the stopped chat's position after switching back to Recent.
+
+The annotation voice-target journey selects the exposed edge of the chat row
+while the centred voice orb keeps its mute hit target. It must keep the call
+active and still prove that OMP ink is not sent to the attached Hermes session.
+
 Run the complete suite on the integrated commit before RC3 merge. A filtered
 feature run is not a complete release receipt or native phone acceptance.
 
