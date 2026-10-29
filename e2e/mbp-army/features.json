@@ -1,6 +1,10 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "hello-admission", "title": "WebSocket OPEN requires authenticated hello before admission and retries a missing hello",
+     "tests": ["hello admission: OPEN without authenticated hello times out, retries and recovers through Settings"]},
+    {"id": "terminal-retention", "title": "Pending terminal summaries survive settled-turn cap pressure and explicit subscriber reconnect",
+     "tests": ["pending terminal work survives retained-turn cap and explicit subscriber reconnect"]},
     {"id": "native-fingerprint-inputs", "title": "Native compatibility includes dynamic Expo config and native sources without rebuilding for chat-only edits",
      "tests": ["native compatibility: dynamic Expo config that changes the Android package changes the fingerprint",
                "native compatibility: source, registration and plugin changes invalidate while JS and generated files do not"]},

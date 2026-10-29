@@ -76,6 +76,21 @@ async function seedAgentsview(row:{id:string;machine:string;title:string;cwd:str
  db.query("update messages set model = ? where session_id = ? and role = 'user'").run('not-an-assistant-model',row.id);
  db.close();
 }
+// Archived source rows exercise real index pagination, rather than the unpaged live overlay.
+if (process.env.ARMY_INDEX_LABEL) {
+ const label = process.env.ARMY_INDEX_LABEL;
+ if (!/^[A-Z]+$/.test(label)) throw Error('Invalid index fixture label');
+ const installId = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+ for (let i = 0; i < 75; i++) {
+  await seedAgentsview({
+   id: '44444444-5555-4666-8777-' + String(i).padStart(12, '0'),
+   machine: installId, installId,
+   title: `ARMY index ${label} ${String(i).padStart(3, '0')}`,
+   cwd: process.env.DASH_CWD || '',
+  });
+ }
+}
+
 if(process.env.ARMY_ARCHIVE_CLAUDE==='1'){
  const installId='a1b2c3d4e5f60718293a4b5c6d7e8f90';
  await seedAgentsview({id:'11111111-2222-4333-8444-555555555555',machine:installId,installId,title:'ARMY archived Claude Code chat',cwd:process.env.DASH_CWD||'',transcript:[['user','ARMY archived Claude Code chat'],['assistant','ARMY older model answer'],['user','ARMY next question'],['assistant','ARMY earlier answer from '+installId],['user','ARMY pending follow-up']]});

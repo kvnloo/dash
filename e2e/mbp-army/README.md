@@ -8,10 +8,11 @@ A fixture-native Hermes SQLite row and a fixture-only discoverable OMP process s
 
 ## Chat-index HTTP ownership journey (#493)
 
-`chat-index-ownership.spec.ts` pairs through a loopback TCP/HTTP relay to isolated
-real bridges with native Codex JSONL histories. The relay holds actual response
-bytes without changing payloads: one journey replaces the endpoint through
-Settings before releasing the old head, then reloads; another lets the normal
+`chat-index-ownership.spec.ts` pairs normally, then selects a loopback TCP/HTTP relay
+through Settings. Isolated real bridges index archived AgentsView source rows;
+native-only roster overlays are unpaged and cannot exercise cursor ownership.
+The relay holds actual response bytes without changing payloads: one journey replaces
+the endpoint through Settings before releasing the old head, then reloads; another lets the normal
 30-second head refresh supersede a held tail and checks that the unchanged
 304/cursor path can request a fresh tail.
 
@@ -27,7 +28,10 @@ writes are serialized and the envelope must match that namespace on cold boot.
 Legacy unbound snapshots are ignored, not attributed to the current account.
 No token or authentication identity is added to cache keys or snapshot envelopes.
 This covers heads only, not endpoint scoping of saved conversation/history/drafts.
-Status: authored, not run; no web or native acceptance claimed.
+The endpoint-replacement journey failed on the old app (75 old rows admitted
+after replacement) and passed on `770121d3`, including cold reload. The cursor
+journey passes in both arms; it is a pagination boundary check, not proof of a
+previously failing unchanged-cursor race. Neither result is native acceptance.
 
 ## Mesh/native roster journey (#474, #476, #481)
 
@@ -117,3 +121,24 @@ already-applied delta immediately before fresh text. Both cases require the exac
 original agent reply and one actual agent invocation. The app retains individual
 frames until the store rejects stale sequences against its applied watermark,
 then appends the accepted text once per batch.
+
+Both replay journeys failed with duplicated visible text on the old app and
+passed on `770121d3`. These are filtered browser/bridge receipts, not complete
+release qualification.
+
+## Authenticated hello admission
+
+`hello-admission.spec.ts` selects an owned relay through Settings. The relay
+preserves Origin/authentication and withholds the real authenticated hello while
+accepting WebSocket OPEN and forwarding keepalive. The old client never closed
+that unadmitted socket. The corrected client times it out, retries, and recovers
+through Settings while retaining the draft and streaming a real fixture reply.
+Transport OPEN alone neither admits sends nor resets retry/failover state.
+
+## Terminal retention
+
+`terminal-retention.spec.ts` holds a real local summary provider to its production
+deadline, adds 50 real settled rejected turns, and reconnects a subscriber. The
+old bridge returned `lost`; the corrected bridge replays text and terminal `done`
+before applying the settled-turn cap. This does not prove automatic post-error
+app reattachment or the ten-minute expiry timer.

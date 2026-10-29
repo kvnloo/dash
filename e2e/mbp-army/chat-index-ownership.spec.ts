@@ -1,7 +1,7 @@
 import { createServer, request, type ServerResponse, type IncomingHttpHeaders } from 'node:http';
 import { connect } from 'node:net';
 import { once } from 'node:events';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test, expect, createBridge, pair, type Bridge } from './fixtures';
 
@@ -50,18 +50,7 @@ async function relay(bridge: Bridge) {
 }
 
 async function indexedBridge(label: string) {
-  const bridge = await createBridge(false);
-  await bridge.stop();
-  const directory = join(bridge.dir, '.codex', 'sessions', '2026', '10', '28');
-  await mkdir(directory, { recursive: true });
-  for (let i = 0; i < 75; i++) {
-    await writeFile(join(directory, `rollout-2026-10-28T00-00-00-${label}-${i}.jsonl`), [
-      { type: 'session_meta', payload: { id: `${label}-${i}`, cwd: join(bridge.dir, label) } },
-      { type: 'event_msg', payload: { type: 'user_message', message: `ARMY index ${label} ${String(i).padStart(3, '0')}` } },
-    ].map(row => JSON.stringify(row)).join('\n') + '\n');
-  }
-  await bridge.start();
-  return bridge;
+  return createBridge(false, { env: { ARMY_INDEX_LABEL: label } });
 }
 
 test('chat index endpoint replacement rejects held old HTTP heads and persists only its account scope', async ({ page }, info) => {

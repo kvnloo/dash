@@ -66,7 +66,7 @@ test('live search restores the paired OMP owner after local deletion without ope
   if (!box) throw Error('The native live chat row must have a visible long-press target');
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  const deleteAction = page.getByRole('button', { name: `Delete ${liveTitle} from this phone`, exact: true });
+  const deleteAction = page.getByRole('button', { name: new RegExp(`^Delete ${liveTitle} from this phone(?:, \\d+ of \\d+)?$`) });
   try { await expect(deleteAction).toBeVisible(); } finally { await page.mouse.up(); }
   page.once('dialog', dialog => {
    expect(dialog.message()).toBe('Delete chat?\n\nThis removes it from this phone only.');
@@ -82,18 +82,19 @@ test('live search restores the paired OMP owner after local deletion without ope
   await expect(result).not.toContainText(savedPrompt);
   await expect(page.getByRole('button').filter({ hasText: savedPrompt })).toHaveCount(0);
   await result.click();
-  await expect(page.getByTestId('chat-window')).toBeVisible();
-  await expect(page.getByTestId('chat-window-badge')).toContainText(/groot/i);
+  await expect(composer(page)).toBeVisible();
+  await expect(page.getByText('on groot', { exact: true })).toBeVisible();
   await expect(page.getByTestId('transcript-viewport')).not.toContainText(savedPrompt);
   await send(page, livePrompt);
-  await expect(page.getByText('ARMY_STREAM_BEGIN ARMY_REPLY: ' + livePrompt, { exact: true })).toBeVisible();
+  await expect(page.getByTestId('transcript-viewport').getByText('ARMY_STREAM_BEGIN ARMY_REPLY: ' + livePrompt, { exact: true })).toBeVisible();
 
   // The exact scoped conversation is reusable on the next search, including its reply.
-  await page.getByRole('button', { name: 'Close chat window', exact: true }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   await composer(page).fill('/live ' + sessionId);
   await expect(result).toHaveCount(1);
   await expect(result).toContainText(livePrompt);
   await result.click();
+  await expect(composer(page)).toBeVisible();
   await expect(page.getByTestId('transcript-viewport')).toContainText(livePrompt);
   await expect(page.getByTestId('transcript-viewport')).not.toContainText(savedPrompt);
 

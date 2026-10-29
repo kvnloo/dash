@@ -47,6 +47,7 @@ export function wsUrl(settings: Settings): string {
 
 class Bridge {
   private ws: WebSocket | null = null;
+  private admittedSocket: WebSocket | null = null;
   private connectEpoch = 0;
   private settings: Settings | null = null;
   private attempt = 0;
@@ -135,7 +136,7 @@ class Bridge {
 
   isOpen(): boolean {
     if (isDebugMode()) return true;
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.ws !== null && this.admittedSocket === this.ws && this.ws.readyState === WebSocket.OPEN;
   }
 
   send(message: ClientMessage): boolean {
@@ -164,19 +165,15 @@ class Bridge {
     }
     this.ws = ws;
     this.connectTimer = setTimeout(() => {
-      if (this.ws === ws && ws.readyState !== WebSocket.OPEN) {
+      if (this.ws === ws && this.connectEpoch === epoch && this.admittedSocket !== ws) {
         // Detach first so the later onclose of this socket cannot run onClosed a second time.
         this.ws = null;
         ws.close();
-        this.onClosed("Timed out connecting");
+        this.onClosed("Timed out waiting for bridge hello");
       }
     }, CONNECT_TIMEOUT_MS);
     ws.onopen = () => {
       if (this.ws !== ws) return;
-      clearTimeout(this.connectTimer);
-      this.attempt = 0;
-      // Connected once: from now on a lost connection may move to another paired bridge.
-      this.failover = true;
       this.lastInboundAt = Date.now();
       this.pongSeen = false;
       this.stopKeepalive?.();
@@ -210,6 +207,7 @@ class Bridge {
   }
 
   private onClosed(reason: string): void {
+    this.admittedSocket = null;
     this.clearTimers();
     this.flushDeltas();
     if (!this.settings) return;
@@ -294,6 +292,12 @@ class Bridge {
         return;
       }
       case "hello": {
+        this.admittedSocket = this.ws;
+        clearTimeout(this.connectTimer);
+        this.connectTimer = undefined;
+        this.attempt = 0;
+        // Only an authenticated hello admits this endpoint for automatic failover.
+        this.failover = true;
         this.chats = message.features?.includes(CHATS_FEATURE) === true;
         this.rosterEtag = undefined;
         setChatsFeatures(message.features);
@@ -431,6 +435,7 @@ class Bridge {
   private teardownSocket(): void {
     const ws = this.ws;
     this.ws = null;
+    this.admittedSocket = null;
     if (ws) {
       ws.onopen = null;
       ws.onmessage = null;
