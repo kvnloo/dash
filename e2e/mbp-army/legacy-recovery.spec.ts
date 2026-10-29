@@ -16,7 +16,7 @@ async function leaveChat(page: Page) {
 
 for (const owner of ['legacy', 'foreign', 'unscoped']) for (const activation of ['list', 'search']) {
   test(`saved ${owner} native chat coexists with resumable ${activation} rows`, async ({ page }, info) => {
-    const bridge = await createBridge(true, { env: { ARMY_LONG_HERMES: '2', ...(owner === 'unscoped' ? { DASH_ROSTER_HERMES_HEAD: '1' } : {}) } });
+    const bridge = await createBridge(true, { env: { ARMY_LONG_HERMES: '2' } });
     const wire: { type: string; text?: string; sessionId?: string }[] = [];
     page.on('websocket', socket => socket.on('framesent', frame => {
       try { const m = JSON.parse(String(frame.payload)); wire.push({ type: m.type, text: m.text, sessionId: m.sessionId }); } catch { /* Non-JSON frame. */ }

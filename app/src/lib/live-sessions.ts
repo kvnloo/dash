@@ -93,7 +93,10 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     if (options.endpointAddress !== undefined && c.endpointAddress !== options.endpointAddress) return c;
     if (!c.sessionId) return c;
     const bucket = bySession.get(sessionBucket(c.harness, c.sessionId)) ?? [];
-    const matches = bucket.filter(({ host, agent }) => (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
+    // An upgraded saved chat with no owner must remain separate from a selected
+    // native route, even when that route reports the same session string.
+    const unownedSaved = c.stale === true && !c.targetHostId && !c.profileId;
+    const matches = unownedSaved ? [] : bucket.filter(({ host, agent }) => (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
     const match = matches.length === 1 ? matches[0] : undefined;
     if (!match) {
       owned.add(`${c.harness}\u0000${c.sessionId}\u0000${c.targetHostId ?? ""}\u0000${c.profileId ?? ""}`);
