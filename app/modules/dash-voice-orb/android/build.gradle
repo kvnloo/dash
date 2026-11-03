@@ -1,0 +1,10 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'app.dash.orb'
+version = '1.0.0'
+android {
+  namespace 'app.dash.orb'
+  defaultConfig { versionCode 1; versionName '1.0.0' }
+}

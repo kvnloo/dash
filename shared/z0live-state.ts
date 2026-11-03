@@ -40,13 +40,34 @@ function clip(text: string): string {
   return flat.length > Z0LIVE_LINE_MAX ? `${flat.slice(0, Z0LIVE_LINE_MAX - 1)}…` : flat;
 }
 
+/**
+ * What the over-any-app orb shows. The in-app vocabulary plus "user" (the caller holds the floor)
+ * and "error" (the client lost the bridge mid-call; never produced by the parser).
+ */
+export type Z0LiveOrb = "idle" | "connecting" | "listening" | "user" | "thinking" | "speaking" | "working" | "error";
+type Floor = "user" | "assistant" | "quiet";
+
 /** Parse one session's JSONL tail. `now` is Unix seconds. */
 export function parseZ0LiveSession(sessionId: string, jsonl: string, now: number): Z0LiveState {
-  if (!SESSION.test(sessionId)) return Z0LIVE_OFF;
+  return scanZ0LiveSession(sessionId, jsonl, now).state;
+}
+
+/** The orb phase for one session's JSONL tail; same parse as parseZ0LiveSession. */
+export function z0liveOrbPhase(sessionId: string, jsonl: string, now: number): Z0LiveOrb {
+  const { state, floor } = scanZ0LiveSession(sessionId, jsonl, now);
+  if (!state.live) return "idle";
+  if (state.phase === "tool") return "working";
+  if (state.phase === "listening" && floor === "user") return "user";
+  return state.phase;
+}
+
+function scanZ0LiveSession(sessionId: string, jsonl: string, now: number): { state: Z0LiveState; floor: Floor } {
+  const off = { state: Z0LIVE_OFF, floor: "quiet" as const };
+  if (!SESSION.test(sessionId)) return off;
   let last = -Infinity;
   let ended = false;
   let connected = false;
-  let floor: "user" | "assistant" | "quiet" = "quiet";
+  let floor: Floor = "quiet";
   let audio = false;
   let muted = false;
   const pending = new Map<string, string>();
@@ -87,7 +108,7 @@ export function parseZ0LiveSession(sessionId: string, jsonl: string, now: number
       pending.clear();
     }
   }
-  if (ended || now - last > Z0LIVE_STALE_SECONDS || last - now > Z0LIVE_STALE_SECONDS) return Z0LIVE_OFF;
+  if (ended || now - last > Z0LIVE_STALE_SECONDS || last - now > Z0LIVE_STALE_SECONDS) return off;
   const tool = [...pending.values()].at(-1);
   const awaiting = transcript.at(-1)?.role === "user";
   const phase: Z0LivePhase = !connected ? "connecting"
@@ -96,7 +117,7 @@ export function parseZ0LiveSession(sessionId: string, jsonl: string, now: number
     : tool ? "tool"
     : awaiting ? "thinking"
     : "listening";
-  return { live: true, sessionId, phase, ...(phase === "tool" && tool ? { tool } : {}), muted, transcript, updated: last };
+  return { state: { live: true, sessionId, phase, ...(phase === "tool" && tool ? { tool } : {}), muted, transcript, updated: last }, floor };
 }
 
 /** Validate what the bridge sent; anything off-shape is "no call". */
