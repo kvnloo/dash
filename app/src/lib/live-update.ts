@@ -195,6 +195,8 @@ export interface ReloadInput {
   idleReloadMs?: number;
   keyboardVisible: boolean;
   blockedBy: string | null;
+  /** A build held by a guard reloads once every guard releases. */
+  heldFor?: string | null;
   /** The served sha an automatic reload was already attempted for (never loop on one build). */
   lastAutoFor: string | null;
 }
@@ -215,6 +217,7 @@ export function decideReload(input: ReloadInput): ReloadDecision {
   if (input.blockedBy !== null) return { kind: "ready", why: "blocked" };
   if (!input.autoReload) return { kind: "ready", why: "manual" };
   if (input.lastAutoFor === served.sha) return { kind: "ready", why: "retried" };
+  if (input.heldFor === served.sha) return { kind: "reload" };
   if (input.keyboardVisible) return { kind: "ready", why: "keyboard" };
   // Returning to the foreground is safe only until the owner's next interaction.
   if (input.sinceForegroundMs <= FOREGROUND_GRACE_MS && input.idleMs > input.sinceForegroundMs) return { kind: "reload" };

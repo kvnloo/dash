@@ -133,6 +133,7 @@ export function useLiveUpdate(): LiveUpdate {
   const foregroundAt = useRef<number | null>(null);
   // The boot splash is not time spent idle in the interactive app.
   const mountedAt = useRef(Date.now());
+  const heldFor = useRef<string | null>(null);
   const reloading = useRef(false);
 
   useEffect(() => {
@@ -247,11 +248,16 @@ export function useLiveUpdate(): LiveUpdate {
     idleReloadMs: webIdleReloadMs(),
     keyboardVisible: keyboardVisible(),
     blockedBy,
+    heldFor: heldFor.current,
     lastAutoFor,
   };
   const latestReloadInput = useRef(reloadInput);
   latestReloadInput.current = reloadInput;
   const decision = decideReload(reloadInput);
+  const blocked = decision.kind === "ready" && decision.why === "blocked";
+  useEffect(() => {
+    if (blocked && served !== null && automaticEnabled && latestReloadInput.current.autoReload) heldFor.current = served.sha;
+  }, [blocked, served, automaticEnabled]);
 
   const requestReload = useCallback((automatic: boolean) => {
     const target = latestManifest.current;
@@ -268,6 +274,7 @@ export function useLiveUpdate(): LiveUpdate {
         idleMs: Math.min(idleMs(), Math.max(0, Date.now() - mountedAt.current)),
         keyboardVisible: keyboardVisible(),
         blockedBy: reloadBlockedBy(),
+        heldFor: heldFor.current,
       }).kind === "reload";
     };
     if (reloading.current || !permitted()) return;
@@ -318,6 +325,7 @@ export function useLiveUpdate(): LiveUpdate {
   const setAutoReload = useCallback((on: boolean) => {
     latestReloadInput.current = { ...latestReloadInput.current, autoReload: on && prefsReady };
     setAutoState(on);
+    if (!on) heldFor.current = null;
     void writePref(AUTO_KEY, on ? null : "0");
   }, [prefsReady]);
 
