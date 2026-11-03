@@ -174,7 +174,7 @@ export function reloadBlockedBy(): string | null {
   return null;
 }
 
-/** Foreground return reloads at once; otherwise wait for this long without a touch. */
+/** Untouched foreground return reloads at once; otherwise wait this long without activity. */
 export const IDLE_RELOAD_MS = 30_000;
 export const POLL_MS = 20_000;
 /** After coming back to the foreground the owner has not started anything yet. */
@@ -195,8 +195,6 @@ export interface ReloadInput {
   idleReloadMs?: number;
   keyboardVisible: boolean;
   blockedBy: string | null;
-  /** A build held by a guard reloads once every guard releases. */
-  heldFor?: string | null;
   /** The served sha an automatic reload was already attempted for (never loop on one build). */
   lastAutoFor: string | null;
 }
@@ -217,9 +215,9 @@ export function decideReload(input: ReloadInput): ReloadDecision {
   if (input.blockedBy !== null) return { kind: "ready", why: "blocked" };
   if (!input.autoReload) return { kind: "ready", why: "manual" };
   if (input.lastAutoFor === served.sha) return { kind: "ready", why: "retried" };
-  if (input.heldFor === served.sha) return { kind: "reload" };
   if (input.keyboardVisible) return { kind: "ready", why: "keyboard" };
-  if (input.sinceForegroundMs <= FOREGROUND_GRACE_MS) return { kind: "reload" };
+  // Returning to the foreground is safe only until the owner's next interaction.
+  if (input.sinceForegroundMs <= FOREGROUND_GRACE_MS && input.idleMs > input.sinceForegroundMs) return { kind: "reload" };
   if (input.idleMs >= (input.idleReloadMs ?? IDLE_RELOAD_MS)) return { kind: "reload" };
   return { kind: "ready", why: "busy" };
 }

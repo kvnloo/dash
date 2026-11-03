@@ -20,7 +20,7 @@ import {
   type ReloadInput,
   type ServedManifest,
 } from "./live-update";
-import { idleMs } from "./touch-idle";
+import { idleMs, markTouch } from "./touch-idle";
 import { reloadApp } from "./reload-app";
 import { installReloadGuards } from "./reload-guards";
 import { flushDrafts } from "../store/composer-drafts";
@@ -131,7 +131,8 @@ export function useLiveUpdate(): LiveUpdate {
   const [prefsReady, setPrefsReady] = useState(false);
   const [, setTick] = useState(0);
   const foregroundAt = useRef<number | null>(null);
-  const heldFor = useRef<string | null>(null);
+  // The boot splash is not time spent idle in the interactive app.
+  const mountedAt = useRef(Date.now());
   const reloading = useRef(false);
 
   useEffect(() => {
@@ -146,6 +147,13 @@ export function useLiveUpdate(): LiveUpdate {
   }, []);
 
   useEffect(() => installReloadGuards(() => setTick(n => n + 1)), []);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    const events = ["pointerdown", "pointermove", "pointerup", "wheel", "scroll", "keydown"];
+    for (const event of events) document.addEventListener(event, markTouch, true);
+    return () => { for (const event of events) document.removeEventListener(event, markTouch, true); };
+  }, []);
 
   useEffect(() => {
     if (origin === null) return;
@@ -235,20 +243,15 @@ export function useLiveUpdate(): LiveUpdate {
     bundleHealth,
     autoReload: automaticEnabled,
     sinceForegroundMs: foregroundAt.current === null ? Number.POSITIVE_INFINITY : Date.now() - foregroundAt.current,
-    idleMs: idleMs(),
+    idleMs: Math.min(idleMs(), Math.max(0, Date.now() - mountedAt.current)),
     idleReloadMs: webIdleReloadMs(),
     keyboardVisible: keyboardVisible(),
     blockedBy,
-    heldFor: heldFor.current,
     lastAutoFor,
   };
   const latestReloadInput = useRef(reloadInput);
   latestReloadInput.current = reloadInput;
   const decision = decideReload(reloadInput);
-  const blocked = decision.kind === "ready" && decision.why === "blocked";
-  useEffect(() => {
-    if (blocked && served !== null && automaticEnabled && latestReloadInput.current.autoReload) heldFor.current = served.sha;
-  }, [blocked, served, automaticEnabled]);
 
   const requestReload = useCallback((automatic: boolean) => {
     const target = latestManifest.current;
@@ -262,10 +265,9 @@ export function useLiveUpdate(): LiveUpdate {
       return AppState.currentState === "active" && decideReload({
         ...latestReloadInput.current,
         sinceForegroundMs: foregroundAt.current === null ? Number.POSITIVE_INFINITY : Date.now() - foregroundAt.current,
-        idleMs: idleMs(),
+        idleMs: Math.min(idleMs(), Math.max(0, Date.now() - mountedAt.current)),
         keyboardVisible: keyboardVisible(),
         blockedBy: reloadBlockedBy(),
-        heldFor: heldFor.current,
       }).kind === "reload";
     };
     if (reloading.current || !permitted()) return;
@@ -316,7 +318,6 @@ export function useLiveUpdate(): LiveUpdate {
   const setAutoReload = useCallback((on: boolean) => {
     latestReloadInput.current = { ...latestReloadInput.current, autoReload: on && prefsReady };
     setAutoState(on);
-    if (!on) heldFor.current = null;
     void writePref(AUTO_KEY, on ? null : "0");
   }, [prefsReady]);
 
