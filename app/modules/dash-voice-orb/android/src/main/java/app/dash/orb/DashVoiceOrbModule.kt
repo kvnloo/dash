@@ -1,76 +1,56 @@
 package app.dash.orb
 
-import android.app.ActivityManager
-import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
+/**
+ * JS surface of the z0live overlay orb. JS arms the service with the bridge's SSE URL and a
+ * token while Dash is in front; from then on the native service follows the call by itself and
+ * only calls back (onTokenNeeded) when it must reconnect with a fresh token.
+ */
 class DashVoiceOrbModule : Module() {
-    override fun definition() = ModuleDefinition {
-        Name("DashVoiceOrb")
+  override fun definition() = ModuleDefinition {
+    Name("DashVoiceOrb")
+    Events("onTokenNeeded")
 
-        AsyncFunction("startOrb") { phase: String, muted: Boolean ->
-            val ctx = appContext.reactContext ?: return@AsyncFunction
-            if (!canDrawOverlays(ctx)) return@AsyncFunction
-            val intent = Intent(ctx, VoiceOrbService::class.java).apply {
-                putExtra(VoiceOrbService.EXTRA_ACTION, VoiceOrbService.ACTION_START)
-                putExtra(VoiceOrbService.EXTRA_PHASE, phase)
-                putExtra(VoiceOrbService.EXTRA_MUTED, muted)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ctx.startForegroundService(intent)
-            } else {
-                ctx.startService(intent)
-            }
-        }
+    OnCreate {
+      VoiceOrbService.tokenNeeded = { sendEvent("onTokenNeeded", emptyMap<String, Any>()) }
+      VoiceOrbService.setAppForeground(true)
+    }
+    OnDestroy { VoiceOrbService.tokenNeeded = null }
+    OnActivityEntersForeground { VoiceOrbService.setAppForeground(true) }
+    OnActivityEntersBackground { VoiceOrbService.setAppForeground(false) }
 
-        AsyncFunction("updateOrb") { phase: String, muted: Boolean ->
-            val ctx = appContext.reactContext ?: return@AsyncFunction
-            val intent = Intent(ctx, VoiceOrbService::class.java).apply {
-                putExtra(VoiceOrbService.EXTRA_ACTION, VoiceOrbService.ACTION_UPDATE)
-                putExtra(VoiceOrbService.EXTRA_PHASE, phase)
-                putExtra(VoiceOrbService.EXTRA_MUTED, muted)
-            }
-            ctx.startService(intent)
-        }
-
-        AsyncFunction("stopOrb") {
-            val ctx = appContext.reactContext ?: return@AsyncFunction
-            val intent = Intent(ctx, VoiceOrbService::class.java).apply {
-                putExtra(VoiceOrbService.EXTRA_ACTION, VoiceOrbService.ACTION_STOP)
-            }
-            ctx.startService(intent)
-        }
-
-        AsyncFunction("setAppForegrounded") { foregrounded: Boolean ->
-            val ctx = appContext.reactContext ?: return@AsyncFunction
-            val intent = Intent(ctx, VoiceOrbService::class.java).apply {
-                putExtra(VoiceOrbService.EXTRA_ACTION, VoiceOrbService.ACTION_APP_FOREGROUNDED)
-                putExtra(VoiceOrbService.EXTRA_FOREGROUNDED, foregrounded)
-            }
-            ctx.startService(intent)
-        }
-
-        Function("getOverlayPermissionGranted") {
-            val ctx = appContext.reactContext ?: return@Function false
-            canDrawOverlays(ctx)
-        }
-
-        AsyncFunction("requestOverlayPermission") {
-            val ctx = appContext.reactContext ?: return@AsyncFunction
-            if (!canDrawOverlays(ctx)) {
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    android.net.Uri.parse("package:${ctx.packageName}")
-                ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-                ctx.startActivity(intent)
-            }
-        }
+    Function("canDrawOverlays") {
+      val ctx = appContext.reactContext ?: return@Function false
+      Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(ctx)
     }
 
-    private fun canDrawOverlays(ctx: Context): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(ctx)
+    Function("isArmed") { VoiceOrbService.running() }
+
+    AsyncFunction("requestOverlayPermission") {
+      val ctx = appContext.reactContext ?: return@AsyncFunction
+      ctx.startActivity(
+        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}"))
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      )
+    }
+
+    /** Starts (or re-points) the foreground service. Call while Dash is in front. */
+    AsyncFunction("arm") { eventsUrl: String, token: String ->
+      val ctx = requireNotNull(appContext.reactContext) { "React context unavailable" }
+      VoiceOrbService.arm(ctx.applicationContext, eventsUrl, token)
+    }
+
+    Function("setToken") { token: String -> VoiceOrbService.setToken(token) }
+
+    AsyncFunction("disarm") {
+      val ctx = appContext.reactContext ?: return@AsyncFunction
+      VoiceOrbService.disarm(ctx.applicationContext)
+    }
+  }
 }
