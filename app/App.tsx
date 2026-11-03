@@ -41,6 +41,7 @@ import { applyDemoSeed } from "./src/mock/seed";
 import { hydrate, store } from "./src/store/app";
 import { colors } from "./src/theme";
 import { NativeEvents } from "./src/components/NativeEvents";
+import { Z0LiveOrbMount } from "./src/components/Z0LiveOrbMount";
 import { ContinuousVoiceRoot } from "./src/components/ContinuousVoiceRoot";
 import { ServedBuildChip } from "./src/components/ServedBuildChip";
 import { observeTouch } from "./src/lib/touch-idle";
@@ -160,6 +161,7 @@ export default function App() {
               </Stack.Navigator>
               <BridgePullOverlay />
               <NativeEvents />
+              <Z0LiveOrbMount />
             </AnnotationRoot></ContinuousVoiceRoot>
             </NavigationContainer>
           </BridgePullProvider>

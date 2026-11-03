@@ -1,0 +1,16 @@
+{
+  "name": "dash-voice-orb",
+  "version": "0.1.0",
+  "description": "z0live voice orb overlay — Expo native module (Android)",
+  "main": "build/index.js",
+  "files": [
+    "android",
+    "src",
+    "build",
+    "expo-module.config.json",
+    "dash-voice-orb.podspec"
+  ],
+  "peerDependencies": {
+    "expo": "*"
+  }
+}
