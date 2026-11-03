@@ -31,6 +31,9 @@ check_apk_inclusion() {
   if [ -d app/modules/dash-audio-route ]; then
     required_classes+=('Lapp/dash/audio/DashAudioRouteModule;')
   fi
+  if [ -d app/modules/dash-voice-orb ]; then
+    required_classes+=('Lapp/dash/orb/DashVoiceOrbModule;' 'Lapp/dash/orb/VoiceOrbService;')
+  fi
   if [ -d app/modules/dash-stylus ]; then
     required_classes+=('Lapp/dash/stylus/DashStylusModule;')
   fi
