@@ -8,3 +8,9 @@ android {
   namespace 'app.dash.dex'
   defaultConfig { versionCode 1; versionName '1.0.0' }
 }
+dependencies {
+  // DashPadActivity extends ReactActivity which is in react-android.
+  // expo-modules-core exposes it as 'implementation' (not 'api'), so we must
+  // declare it explicitly to have it on the compile classpath.
+  implementation 'com.facebook.react:react-android'
+}
