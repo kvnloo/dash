@@ -10,7 +10,7 @@ internal const val MAX_TEXT = 60_000
 
 internal fun safeName(name: String): String = name
   .substringAfterLast('/').substringAfterLast('\\')
-  .replace(Regex("[\\p{Cntrl}]"), "_").take(240).ifBlank { "shared-file" }
+  .replace(Regex("[\\x00-\\x1F\\x7F]"), "_").take(240).ifBlank { "shared-file" }
 
 internal fun copyBounded(input: InputStream, output: OutputStream, limit: Long): Long {
   val buffer = ByteArray(64 * 1024)
