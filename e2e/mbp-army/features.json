@@ -317,7 +317,9 @@
                "annotation-entry: pill exit and re-entry clear failed Send and cold reload closes mode"]},
     {"id": "annotation-voice-target", "title": "Annotated ink reaches the open chat; a bound voice call stays alive to speak a final reply before ending",
      "tests": ["annotation-voice-target: OMP chat beats a voice call bound to Hermes",
-               "annotation-voice-target: accepted Hermes ink stays live until spoken reply without cancel"]}
+               "annotation-voice-target: accepted Hermes ink stays live until spoken reply without cancel"]},
+    {"id": "z0live-orb-events", "title": "The bridge pushes z0live call state (listening, user speaking, thinking, working, speaking, muted, end) over SSE for the over-any-app orb",
+     "tests": ["z0live events stream pushes orb phases for a live call and its end"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",
