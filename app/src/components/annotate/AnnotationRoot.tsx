@@ -290,7 +290,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       .onTouchesUp((e, manager) => {
         const point = e.changedTouches?.find(touch => touch.id === pointerSv.value);
         if (!point || pointerSv.value < 0) return;
-        // Pan's final x/y may still be the last MOVE (or DOWN). Raw UP has the actual endpoint.
+        // The tracked raw UP supplies the endpoint; ignore every unrelated lift.
         const flat = appendInkSample(live.value, point.x, point.y, live.value.at(-2) ?? 0.5, Date.now());
         if (pointerKind(kindSv.value) === "stylus") {
           lastStylusUpSv.value = Date.now();
