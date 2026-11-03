@@ -1,15 +1,15 @@
 import type { BottomActionOption } from "./bottom-action-sheet";
 import type { WindowOrigin } from "./chat-window";
 
-/** Anything with React Native's `measureInWindow` (a row's host View). */
-export interface MeasurableRow {
-  measureInWindow(callback: (x: number, y: number, width: number, height: number) => void): void;
+export interface RowPressPosition {
+  pageY: number;
+  locationY: number;
 }
 
-/** Tap on a Chats row: measure it once (the window morphs from it), then open. An unmeasurable row still opens. */
-export function pressRow(node: MeasurableRow | null, id: string, onPress: (id: string, origin?: WindowOrigin) => void): void {
-  if (!node) { onPress(id); return; }
-  node.measureInWindow((_x, y, _width, height) => onPress(id, Number.isFinite(y) && height > 0 ? { y, height } : undefined));
+/** Tap on a Chats row: open synchronously, using the press coordinates for the window morph when available. */
+export function pressRow(position: RowPressPosition, height: number, id: string, onPress: (id: string, origin?: WindowOrigin) => void): void {
+  const y = position.pageY - position.locationY;
+  onPress(id, Number.isFinite(y) && y >= 0 && Number.isFinite(height) && height > 0 ? { y, height } : undefined);
 }
 
 export interface ChatRowDeps {

@@ -46,6 +46,14 @@ test('Triage lists live blockers and roadmap priorities, opens an item and label
   await page.getByRole('button', { name: 'Close triage item', exact: true }).click();
   await writeFile(join(directory, 'roadmap.json'), JSON.stringify({ id: 'army', title: 'Fixture roadmap', updated: new Date().toISOString(), items: [] }));
   await expect(list.getByText('Choose fixture release', { exact: true })).toHaveCount(0, { timeout: 25000 });
+  const running = list.getByTestId('triage-item-kanban:configured:army-board-running');
+  await expect(running).toContainText('Fixture current running work');
+  await expect(running).toContainText('Running · board status');
+  await running.click();
+  await expect(page.getByTestId('triage-detail')).toContainText('Process liveness is not independently verified');
+  await expect(page.getByTestId('triage-detail')).not.toContainText('Old resolved blocker');
+  await expect(page.getByTestId('triage-detail')).not.toContainText('Old resolved failure');
+  await page.getByRole('button', { name: 'Close triage item', exact: true }).click();
 });
 
 test('Agent Trace loads the bridge live session and clears it on unavailable', async ({ page, bridge }, info) => {

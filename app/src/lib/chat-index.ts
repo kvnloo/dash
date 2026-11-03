@@ -506,6 +506,8 @@ function sharedKeyRow(entry: ConversationEntry): ChatRowOf {
 
 export interface LocalMergeInput {
   local: readonly ConversationEntry[];
+  /** Only this paired endpoint's conversations may replace native rows. */
+  endpointAddress?: string;
   exhausted: boolean;
   endedLast?: boolean;
   groupOf: (at: number) => string;
@@ -541,9 +543,9 @@ export function mergeLocal(labeled: RemoteLabeled, input: LocalMergeInput): Chat
   const drops = new Map<Run, ChatRowOf[]>();
   const keyCount = new Map<string, number>();
   for (const entry of input.local) keyCount.set(entry.key, (keyCount.get(entry.key) ?? 0) + 1);
-  const localRowOf = (entry: ConversationEntry): ChatRowOf => (keyCount.get(entry.key) ?? 0) > 1 ? sharedKeyRow(entry) : localRow(entry);
+  const localRowOf = (entry: ConversationEntry): ChatRowOf => !input.endpointAddress || entry.conversation.endpointAddress !== input.endpointAddress || (keyCount.get(entry.key) ?? 0) > 1 ? sharedKeyRow(entry) : localRow(entry);
   for (const entry of input.local) {
-    const hit = remoteHit(labeled, entry.key);
+    const hit = input.endpointAddress && entry.conversation.endpointAddress === input.endpointAddress ? remoteHit(labeled, entry.key) : undefined;
     if (hit) {
       const list = drops.get(hit.run);
       if (list) list.push(hit.row); else drops.set(hit.run, [hit.row]);

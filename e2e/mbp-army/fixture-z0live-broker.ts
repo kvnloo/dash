@@ -150,7 +150,10 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
     // A held answer is released first: an open request would keep close() waiting.
     stop: () => {
       releaseHeld();
-      return new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      return new Promise<void>((resolve, reject) => {
+        server.close(error => error ? reject(error) : resolve());
+        server.closeAllConnections();
+      });
     },
   };
 }

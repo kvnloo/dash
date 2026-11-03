@@ -5,6 +5,7 @@ import { useEffect, useState, type ComponentType } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { DexSimulation } from "./components/dex/DexSimulation";
 import { loadSkia } from "./components/annotate/skia-ready";
+import "./pager.web.css";
 function WebBootstrap() {
   const [App, setApp] = useState<ComponentType | null>(null);
   const [error, setError] = useState(false);

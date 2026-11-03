@@ -1,7 +1,8 @@
+import { useIsFocused } from "@react-navigation/native";
 import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AppState, StyleSheet, Text, View } from "react-native";
 import { chatKey, type ChatSummary, type HostInfo } from "../../../../shared/protocol";
 import type { WindowOrigin } from "../../lib/chat-window";
 import { threadAppearance } from "../../components/thread-appearance";
@@ -15,14 +16,28 @@ import { haptic } from "../../haptics";
 import { chatRow } from "../../lib/chat-row";
 import { chatRowActions, chatRowMenu, pressRow, runChatRowMenu } from "../../lib/chat-row-actions";
 import { BottomActionSheet } from "../../components/BottomActionSheet";
-import { conversationEntries, emptyList, groupLabeler, labelList, mergeLocal, stableEntries, type ChatListRow, type ConversationEntry, type RemoteLabeled } from "../../lib/chat-index";
-import { inAppFeedbackEnabled } from "../../lib/feedback";
+import { NextActionCard } from "../../components/NextActionCard";
+import { ChatListControls } from "../../components/ChatListControls";
+import { DEFAULT_CHAT_FILTERS, filterChatRows, historyNeeded, projectPath, type ChatFilters } from "../../lib/chat-filters";
+import { conversationEntries, emptyList, groupLabeler, labelList, listRows, mergeLocal, stableEntries, type ChatListRow, type ConversationEntry, type RemoteLabeled } from "../../lib/chat-index";
+import { FEEDBACK_CONVERSATION_ID, inAppFeedbackEnabled } from "../../lib/feedback";
+import { nextAction, replyObservationKey } from "../../lib/next-action";
+import { NEXT_ACTION_LATER_MS } from "../../lib/next-action-card";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { usePagedChats } from "../../hooks/usePagedChats";
-import type { ConnectionStatus, Conversation } from "../../model";
+import type { AssistantMessage, ConnectionStatus, Conversation } from "../../model";
 import type { ScreenProps } from "../../navigation";
 import { clearEndedConversations, deleteConversation, openChat, setActive, store } from "../../store/app";
 import { summaryByKey } from "../../store/chat-index-store";
+import { composerDrafts } from "../../store/composer-drafts";
+import {
+  dismissNextAction,
+  initializeReplySeen,
+  isReplySeenInitialized,
+  nextActionPreferences,
+  snoozeNextAction,
+} from "../../store/next-action-preferences";
+import { permissionRequests } from "../../net/bridge";
 import { colors, space, type } from "../../theme";
 import { confirmDestructive, timeAgo } from "../../util";
 
@@ -63,7 +78,7 @@ function remoteModel(summary: ChatSummary, harnessName: string, selfId: string |
   const folderName = cwd?.split(/[\\/]/).filter(Boolean).at(-1) ?? cwd;
   const foreign = summary.hostId !== selfId;
   const model: ChatRowModel = {
-    id: summary.key, harnessName,
+    id: `remote:${summary.key}`, harnessName,
     content: {
       title: summary.title.trim() || harnessName,
       folder: folderName ? `Folder · ${folderName}` : "Folder unknown",
@@ -98,7 +113,7 @@ function liveKeySet(hosts: HostInfo[]): Set<string> {
   for (const host of hosts) {
     if (!host.online) continue;
     for (const agent of host.agents) {
-      if (!agent.sessionId || agent.status !== "running") continue;
+      if (!agent.sessionId || (agent.status !== "running" && !agent.openIn) || agent.status === "offline") continue;
       keys.add(chatKey({ hostId: host.id, kind: agent.kind, sessionId: agent.sessionId, ...(agent.kind === "hermes" && agent.profileId ? { profileId: agent.profileId } : {}) }));
       keys.add(`any:${agent.kind}:${agent.sessionId}`);
     }
@@ -111,6 +126,7 @@ const Row = memo(function Row({
   active,
   connectionStatus,
   live = false,
+  saved = false,
   onPress,
   onLongPress,
 }: {
@@ -118,26 +134,23 @@ const Row = memo(function Row({
   active: boolean;
   connectionStatus: ConnectionStatus;
   live?: boolean;
+  saved?: boolean;
   onPress(id: string, origin?: WindowOrigin): void;
   onLongPress(id: string): void;
 }) {
   const appearance = threadAppearance({ stale: item.stale, live });
   const stale = appearance.stale;
-  const frame = useRef<View>(null);
-  // What the agent is doing now, as a thinking-orbs orb (idle orbs hold still).
   const thinking = item.thinking;
-  const press = () => pressRow(frame.current, item.id, onPress);
   const content = item.content;
   const activityShimmer = activityShimmerEnabled(thinking.phase, connectionStatus, stale);
   return (
-    <View ref={frame} collapsable={false}>
     <PressScale
-      onPress={press}
+      onPress={(event) => pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress)}
       onLongPress={() => onLongPress(item.id)}
       delayLongPress={350}
       style={[styles.row, active && !stale && styles.rowActive]}
       accessibilityRole="button"
-      testID={`chat-row-${item.id}`}
+      testID={`chat-row-${item.id.startsWith("remote:") ? item.id.slice(7) : item.id}`}
     >
       <AgentOrb size={28} thinking={thinking} label={`${item.harnessName} · ${thinking.tool ?? thinking.phase}`} />
       <View style={styles.rowMain}>
@@ -147,6 +160,7 @@ const Row = memo(function Row({
           </Text>
           {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
           {item.viewOnly ? <Text style={styles.badge} accessibilityLabel="View only">view only</Text> : null}
+          {saved ? <Text style={styles.badge} accessibilityLabel="Saved local history">saved local</Text> : null}
           <Text style={styles.rowTime} numberOfLines={1}>{stale ? "ended" : item.openIn ? `${item.openIn} · ${timeAgo(item.updatedAt)}` : timeAgo(item.updatedAt)}</Text>
         </View>
         <View style={styles.rowMeta}>
@@ -165,9 +179,8 @@ const Row = memo(function Row({
       </View>
       <View style={styles.hairline} />
     </PressScale>
-    </View>
   );
-}, (a, b) => a.item === b.item && a.live === b.live && a.active === b.active && a.connectionStatus === b.connectionStatus && a.onPress === b.onPress && a.onLongPress === b.onLongPress);
+}, (a, b) => a.item === b.item && a.saved === b.saved && a.live === b.live && a.active === b.active && a.connectionStatus === b.connectionStatus && a.onPress === b.onPress && a.onLongPress === b.onLongPress);
 
 /**
  * A phone conversation's row. It reads its conversation live by id, so its title, activity and
@@ -183,11 +196,13 @@ const LocalChatRow = memo(function LocalChatRow({ id, harnessName, connectionSta
   onLongPress(id: string): void;
 }) {
   const conversation = store.use((s) => conversationById(s.conversations, id));
+  const address = store.use(s => s.settings?.address);
   if (!conversation) return null;
   return (
     <Row
       item={localModel(conversation, harnessName, connectionStatus)}
       active={active}
+      saved={!address || conversation.endpointAddress !== address || Boolean(conversation.sessionId && !conversation.targetHostId)}
       connectionStatus={connectionStatus}
       live={live}
       onPress={onPress}
@@ -218,21 +233,26 @@ const NO_LIST = emptyList();
 
 export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Main">, "navigation"> & { focused?: boolean }) {
   const thumb = useHandedness();
+  const screenFocused = useIsFocused();
   const conversations = store.use((s) => s.conversations);
+  const hydrated = store.use((s) => s.hydrated);
   const activeId = store.use((s) => s.activeId);
   const harnesses = store.use((s) => s.connection.harnesses);
   const connectionStatus = store.use((s) => s.connection.status);
   const hosts = store.use((s) => s.connection.hosts);
+  const endpointAddress = store.use(s => s.settings?.address);
+  const chatIndexScope = store.use(s => s.settings?.chatIndexScope);
   const hasEnded = store.useSelector((s) => s.conversations.some(c => c.stale));
-  const remote = usePagedChats({}, { focused, online: connectionStatus === "online" });
+  const [filters, setFilters] = useState<ChatFilters>(DEFAULT_CHAT_FILTERS);
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const remote = usePagedChats(filters.harness ? { kinds: [filters.harness] } : {}, { focused, online: connectionStatus === "online" });
 
-  // Entries keep their identity while a conversation's list placement and header are unchanged,
-  // so most store changes (status, adoption, setActive) skip the merge entirely.
   const previousLocal = useRef<readonly ConversationEntry[]>(NO_ENTRIES);
   const local = useMemo(() => {
-    previousLocal.current = stableEntries(previousLocal.current, conversationEntries(conversations));
+    const next = conversationEntries(conversations);
+    previousLocal.current = filters.sort === "priority" && filters.date === "all" ? stableEntries(previousLocal.current, next) : next;
     return previousLocal.current;
-  }, [conversations]);
+  }, [conversations, filters.sort, filters.date]);
   const today = startOfToday();
   const groupOf = useMemo(() => groupLabeler(today), [today]);
   // The remote half is labeled incrementally: an appended page labels only its own rows and a head
@@ -244,20 +264,52 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
     previousLabeled.current = labelList(remoteList, groupOf, previousLabeled.current);
     return previousLabeled.current;
   }, [remoteList, groupOf]);
-  const items = useMemo((): ChatListRow[] => {
-    const rows = mergeLocal(labeled, { local, exhausted: remote.exhausted, endedLast: !remote.enabled, groupOf });
-    return rows.length === 0 && remote.enabled && remote.status === "loading" ? SKELETONS : rows;
-  }, [labeled, local, groupOf, remote.exhausted, remote.enabled, remote.status]);
 
   const liveKeys = useMemo(() => liveKeySet(hosts), [hosts]);
   const selfId = useMemo(() => hosts.find(host => host.self)?.id, [hosts]);
   const harnessNames = useMemo(() => new Map(harnesses.map(h => [h.id, h.name])), [harnesses]);
-
+  const summaries = useMemo(() => listRows(remoteList), [remoteList]);
+  const needsHistory = historyNeeded(filters, summaries, today);
+  const withinDateRange = filters.date === "all" || needsHistory;
+  const scanning = filters.activity !== "active" && remote.enabled && !remote.exhausted && withinDateRange && (projectsOpen || needsHistory);
+  useEffect(() => {
+    if (scanning && focused && connectionStatus === "online" && remote.status === "ready" && !remote.loadingMore && !remote.error) remote.loadMore();
+  }, [scanning, focused, connectionStatus, remote.status, remote.loadingMore, remote.error, remote.list, remote.loadMore]);
+  const filtered = filters.activity !== "all" || filters.harness !== null || filters.project !== null || filters.date !== "all" || filters.sort !== "recent";
+  const items = useMemo((): ChatListRow[] => {
+    const rows = mergeLocal(labeled, { local, endpointAddress, exhausted: remote.exhausted || filtered, endedLast: !remote.enabled, groupOf });
+    if (rows.length === 0 && remote.enabled && remote.status === "loading") return SKELETONS;
+    return filterChatRows(rows, filters, today, liveKeys);
+  }, [labeled, local, endpointAddress, groupOf, remote.exhausted, remote.enabled, remote.status, filtered, filters, today, liveKeys]);
+  // Placeholder cells and real rows must not share a recycler/layout manager.
+  // Ordinary live updates keep the same instance and its visible-content anchor.
+  const listLifecycleKey = `${JSON.stringify(filters)}:${items === SKELETONS ? "loading" : "ready"}`;
+  const count = useMemo(() => items.reduce((total, row) => total + (row.type === "chat" ? 1 : 0), 0), [items]);
+  const filterOptions = useMemo(() => {
+    const kinds = new Set(harnesses.map(h => h.id));
+    const projects = new Set<string>();
+    for (const entry of local) {
+      kinds.add(entry.harness);
+      const path = projectPath(entry.cwd);
+      if (path) projects.add(path);
+    }
+    for (const summary of summaries) {
+      kinds.add(summary.kind);
+      const path = projectPath(summary.cwd);
+      if (path) projects.add(path);
+    }
+    if (filters.harness) kinds.add(filters.harness);
+    if (filters.project) projects.add(filters.project);
+    return {
+      harnesses: [...kinds].map(id => ({ id, label: harnessNames.get(id) ?? id })).sort((a, b) => a.label.localeCompare(b.label)),
+      projects: [...projects].sort((a, b) => a.localeCompare(b)),
+    };
+  }, [harnesses, local, summaries, harnessNames, filters.harness, filters.project]);
   const actions = useMemo(() => chatRowActions({
     select: () => haptic.select(),
     // A row not opened on this phone yet becomes a conversation only now (or opens view-only).
     setActive: (id: string) => {
-      const summary = store.get().conversations.some(c => c.id === id) ? undefined : summaryByKey(id);
+      const summary = id.startsWith("remote:") ? summaryByKey(id.slice(7)) : undefined;
       if (summary) openChat(summary); else setActive(id);
     },
     navigate: (route, params) => navigation.navigate(route, params),
@@ -266,6 +318,62 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
   }), [navigation]);
   const open = actions.open;
   const remove = actions.remove;
+
+  const drafts = composerDrafts.use(all => all);
+  const permissionRecords = permissionRequests.state.use(state => state.records);
+  const preferences = nextActionPreferences.use(state => state);
+  const [appActive, setAppActive] = useState(AppState.currentState === "active");
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const listener = AppState.addEventListener("change", state => setAppActive(state === "active"));
+    return () => listener.remove();
+  }, []);
+  useEffect(() => {
+    if (!focused || !screenFocused || !appActive) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [focused, screenFocused, appActive]);
+  useEffect(() => {
+    if (!hydrated || !preferences.restored || !chatIndexScope || isReplySeenInitialized(preferences, chatIndexScope)) return;
+    const seen: Record<string, string> = {};
+    for (const chat of conversations) {
+      if (chat.endpointAddress !== endpointAddress) continue;
+      const reply = chat.messages.findLast((message): message is AssistantMessage => message.role === "assistant" && message.state === "done") ??
+        (chat.messages.length === 0 && chat.latestReply?.state === "done" ? chat.latestReply : undefined);
+      if (reply) seen[chat.id] = replyObservationKey(reply);
+    }
+    initializeReplySeen(chatIndexScope, seen);
+  }, [chatIndexScope, conversations, endpointAddress, hydrated, preferences]);
+  const attention = useMemo(() => {
+    if (!preferences.restored || !chatIndexScope || !isReplySeenInitialized(preferences, chatIndexScope)) return null;
+    const hidden = new Set(Object.keys(preferences.dismissed));
+    for (const [id, snooze] of Object.entries(preferences.snoozed)) {
+      if (snooze.until > now) hidden.add(id);
+    }
+    const draftText: Record<string, string> = {};
+    for (const [id, draft] of Object.entries(drafts)) draftText[id] = draft.text;
+    return nextAction({
+      scope: chatIndexScope,
+      conversations: conversations.filter(chat => chat.endpointAddress === endpointAddress && chat.id !== FEEDBACK_CONVERSATION_ID && (chat.openedAt !== undefined || !chat.id.startsWith("live:"))),
+      permissions: Object.values(permissionRecords),
+      draftTextByConversation: draftText,
+      now,
+      dismissed: hidden,
+      lastSeen: preferences.lastSeen,
+    });
+  }, [chatIndexScope, conversations, drafts, endpointAddress, now, permissionRecords, preferences]);
+  const attentionHeader = attention ? (
+    <View style={styles.nextUp}>
+      <Text style={styles.nextUpLabel}>Next up</Text>
+      <NextActionCard
+        action={attention}
+        onDo={action => open(action.conversationId)}
+        onLater={action => snoozeNextAction(action.id, Date.now() + NEXT_ACTION_LATER_MS)}
+        onSkip={action => dismissNextAction(action.id, Date.now())}
+      />
+    </View>
+  ) : null;
 
   const onFeedback = useCallback(
     (id: string) => {
@@ -287,7 +395,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const longPress = useCallback((id: string) => { haptic.select(); setMenuFor(id); }, []);
   const closeMenu = useCallback(() => setMenuFor(null), []);
-  const menuTitle = menuFor ? store.get().conversations.find((c) => c.id === menuFor)?.title ?? summaryByKey(menuFor)?.title ?? "" : "";
+  const menuTitle = menuFor ? (menuFor.startsWith("remote:") ? summaryByKey(menuFor.slice(7))?.title : store.get().conversations.find(c => c.id === menuFor)?.title) ?? "" : "";
   const menu = useMemo(() => chatRowMenu(feedbackOn, menuTitle), [feedbackOn, menuTitle]);
   const onMenu = useCallback((choice: string) => {
     const id = menuFor;
@@ -349,6 +457,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
 
   return (
     <View style={styles.wrap} testID="chats-pane">
+      <ChatListControls filters={filters} harnesses={filterOptions.harnesses} projects={filterOptions.projects} onChange={setFilters} onProjectsOpen={setProjectsOpen} loading={scanning && focused && connectionStatus === "online" && !remote.error} count={count} />
       {hasEnded && (
         <PressScale onPress={() => confirmDestructive("Clear ended chats?", "Saved history is removed from this phone only.", "Clear ended", clearEndedConversations)} accessibilityRole="button" style={[styles.clearEnded, thumb.align]}>
           <Text style={styles.clearEndedText}>Clear ended</Text>
@@ -356,19 +465,22 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
       )}
       <BottomActionSheet open={menuFor !== null} title={menu.title} options={menu.options} onSelect={onMenu} onClose={closeMenu} />
       <FlashList
+        key={listLifecycleKey}
         data={items}
         renderItem={renderItem}
         getItemType={getItemType}
         keyExtractor={keyExtractor}
         extraData={`${activeId}:${connectionStatus}`}
         drawDistance={600}
-        onEndReached={loadMore}
+        onEndReached={filters.activity !== "active" && withinDateRange && focused && connectionStatus === "online" ? loadMore : undefined}
         onEndReachedThreshold={0.5}
         ListFooterComponent={footer}
+        ListHeaderComponent={attentionHeader}
         contentContainerStyle={{ paddingBottom: 120 }}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>No chats yet</Text>
+            <Text style={styles.emptyText}>{scanning && !remote.error ? connectionStatus === "online" ? "Searching chat history…" : "Connect to search older chats" : filtered ? "No matching chats" : "No chats yet"}</Text>
+            {filtered && <PressScale onPress={() => setFilters(DEFAULT_CHAT_FILTERS)} accessibilityRole="button" style={styles.retry}><Text style={styles.retryText}>Reset filters</Text></PressScale>}
           </View>
         }
       />
@@ -386,6 +498,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { color: colors.textMuted, ...type.label },
   attention: { color: colors.danger },
+  nextUp: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.xs, gap: space.xs },
+  nextUpLabel: { color: colors.gold, ...type.label },
   clearEnded: { paddingHorizontal: space.lg, paddingTop: space.sm, minHeight: 44, justifyContent: "center" },
   clearEndedText: { color: colors.gold, ...type.label },
   retry: { paddingHorizontal: space.lg, minHeight: 44, justifyContent: "center" },

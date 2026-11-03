@@ -3,13 +3,15 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import Prism from "prismjs";
 import "prismjs/components/prism-typescript";
+import "prismjs/components/prism-jsx";
+import "prismjs/components/prism-tsx";
 import "prismjs/components/prism-bash";
 import "prismjs/components/prism-json";
 import "prismjs/components/prism-python";
 import { colors, fonts, type } from "../theme";
 import { PressScale } from "./PressScale";
 
-const grammars = new Map(["javascript", "typescript", "bash", "json", "python", "css", "markup"].map(name => [name, Prism.languages[name]]));
+const grammars = new Map(["javascript", "typescript", "jsx", "tsx", "bash", "json", "python", "css", "markup"].map(name => [name, Prism.languages[name]]));
 
 function tokenText(token: string | Prism.Token, key: string): React.ReactNode {
   if (typeof token === "string") return token;

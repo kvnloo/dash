@@ -20,9 +20,9 @@
 #     a head moved, and a bundle probe of the live Metro otherwise (restarts it once if it 500s);
 #   - a head whose switch failed health is not retried until the head moves (no restart loop);
 #   - DASH_CHANNEL_POST_SWITCH runs after every healthy switch (best effort);
-#   - the native gate covers native packages, local Expo modules and config plugins ('v3:');
-#     v2 and legacy baselines keep their original comparison until `baseline` is run again;
-#   - DASH_CHANNEL_REQUIRE_RECEIPT=1 holds a head back until laws/release/check.py allows it (O15).
+#   - native compatibility covers native packages, local modules, plugins and dynamic Expo config ('v4:');
+#     older baselines must be replaced after rebuilding and verifying the installed dev client;
+#   - every public switch, promotion and rollback requires an exact-commit green O15 army receipt.
 #   One instance per Metro: DASH_CHANNEL_CONF_DIR / DASH_CHANNELS_HOME / DASH_CHANNEL_METRO_UNIT.
 set -Eeuo pipefail
 shopt -s inherit_errexit
@@ -142,72 +142,41 @@ deps_key() { # dir -> key of app dependencies
   cat "$1/app/package.json" "$1/app/bun.lock" 2>/dev/null | sha1sum | cut -c1-16
 }
 
-native_fp_legacy() { # release dir -> fingerprint over EVERY dependency in package.json (JS-only ones included)
-  python3 - "$1" <<'PY'
-import hashlib, json, sys
-root = sys.argv[1]
-pkg = json.load(open(f"{root}/app/package.json"))
-app = json.load(open(f"{root}/app/app.json")).get("expo", {})
-native = {
-  "dependencies": pkg.get("dependencies", {}),
-  "plugins": app.get("plugins", []),
-  "android": {k: v for k, v in app.get("android", {}).items() if k in ("package", "permissions")},
-  "newArch": app.get("newArchEnabled"),
-}
-print(hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
-PY
-}
-
-native_fp_v2() { # release dir -> v2:<hash> of the native code the dev client must contain
-  # Only installed packages that ship native code count (android/, ios/, an Expo module config,
-  # react-native.config.js or a codegenConfig), by their installed version, plus plugins, Android
-  # package/permissions and newArch. A JS-only dependency (tldraw) no longer demands a new APK.
+native_fp() { # release dir -> v4:<hash> of native source/config inputs
   python3 - "$1" <<'PY'
 import hashlib, json, os, sys
-root = sys.argv[1]
-app = json.load(open(f"{root}/app/app.json")).get("expo", {})
-nm = f"{root}/app/node_modules"
+from pathlib import Path
+root = Path(sys.argv[1]) / "app"
+app = json.loads((root / "app.json").read_text()).get("expo", {})
+nm = root / "node_modules"
 MARKERS = ("android", "ios", "expo-module.config.json", "react-native.config.js")
 
 def package_names():
     for entry in sorted(os.listdir(nm)):
         if entry.startswith("."):
             continue
-        path = os.path.join(nm, entry)
-        if entry.startswith("@") and os.path.isdir(path):
+        path = nm / entry
+        if entry.startswith("@") and path.is_dir():
             for sub in sorted(os.listdir(path)):
                 yield f"{entry}/{sub}"
         else:
             yield entry
 
-modules = {}
+packages = {}
 for name in package_names():
-    directory = os.path.join(nm, name)
+    directory = nm / name
     try:
-        meta = json.load(open(os.path.join(directory, "package.json")))
+        meta = json.loads((directory / "package.json").read_text())
     except (OSError, ValueError):
         continue
-    if any(os.path.exists(os.path.join(directory, m)) for m in MARKERS) or meta.get("codegenConfig"):
-        modules[name] = meta.get("version", "?")
+    if any((directory / m).exists() for m in MARKERS) or meta.get("codegenConfig"):
+        packages[name] = meta.get("version", "?")
 native = {
-  "modules": modules,
-  "plugins": app.get("plugins", []),
-  "android": {k: v for k, v in app.get("android", {}).items() if k in ("package", "permissions")},
-  "newArch": app.get("newArchEnabled"),
+    "modules": packages,
+    "plugins": app.get("plugins", []),
+    "android": {k: v for k, v in app.get("android", {}).items() if k in ("package", "permissions")},
+    "newArch": app.get("newArchEnabled"),
 }
-print("v2:" + hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
-PY
-}
-
-native_fp() { # release dir -> v3:<hash>, including local native sources and config plugins
-  local v2
-  v2="$(native_fp_v2 "$1")" || return
-  python3 - "$1" "$v2" <<'PY'
-import hashlib, json, os, sys
-from pathlib import Path
-root = Path(sys.argv[1]) / "app"
-# Retain every v2 input without changing the algorithm used by existing baselines.
-native = {"v2": sys.argv[2]}
 
 def source_hash(directory, paths):
     digest = hashlib.sha1()
@@ -218,9 +187,9 @@ def source_hash(directory, paths):
         digest.update(name + b"\0" + str(len(data)).encode() + b"\0" + data)
     return digest.hexdigest()
 
-modules = root / "modules"
-if modules.is_dir():
-    for directory in sorted(modules.iterdir()):
+local_modules = root / "modules"
+if local_modules.is_dir():
+    for directory in sorted(local_modules.iterdir()):
         config = directory / "expo-module.config.json"
         if not directory.is_dir() or not config.is_file():
             continue
@@ -230,8 +199,9 @@ if modules.is_dir():
                 dirs[:] = [d for d in dirs if d not in ("build", ".gradle")]
                 paths.extend(Path(current) / f for f in files if not f.endswith(".md"))
         native["local:" + directory.name] = source_hash(directory, paths)
-native["plugins"] = source_hash(root, (root / "plugins").glob("*.js"))
-print("v3:" + hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
+native["configPlugins"] = source_hash(root, (root / "plugins").glob("*.js"))
+native["dynamicConfig"] = source_hash(root, (root / name for name in ("app.config.js", "app.config.ts") if (root / name).is_file()))
+print("v4:" + hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
 PY
 }
 
@@ -351,13 +321,10 @@ do_switch() { # name [--force]
   need_channel "$name"
   [[ -L "$H/ch/$name" ]] || build_one "$name" >/dev/null
   sha="$(link_sha "$H/ch/$name")"
+  receipt_allows "$sha" || die "switch held: no green tester-army receipt for $sha"
   if [[ -f "$H/native-baseline" ]]; then
     base="$(cat "$H/native-baseline")"
-    case "$base" in
-      v3:*) fp="$(native_fp "$REL/$sha")";;
-      v2:*) fp="$(native_fp_v2 "$REL/$sha")";;
-      *) fp="$(native_fp_legacy "$REL/$sha")";;
-    esac
+    fp="$(native_fp "$REL/$sha")"
     if [[ "$fp" != "$base" && "$force" != "--force" ]]; then
       die "$name (${sha:0:12}) needs different native code than the installed dev client (fingerprint $fp, client $base). Build and install a new dev client, then run: dash-channel baseline $name. Or pass --force to try anyway."
     fi
@@ -401,6 +368,7 @@ do_rollback() {
   IFS=$'\t' read -r prev_sha prev_ch <"$H/previous"
   cur_sha="$(link_sha "$H/active")"; cur_ch="$(cat "$H/active.channel" 2>/dev/null || true)"
   [[ -d "$REL/$prev_sha" ]] || die "previous release $prev_sha is gone"
+  receipt_allows "$prev_sha" || die "rollback held: no green tester-army receipt for $prev_sha"
   point_active "$prev_sha" "$prev_ch"
   [[ -n "$cur_sha" ]] && printf '%s\t%s\n' "$cur_sha" "$cur_ch" >"$H/previous"
   restart_metro
@@ -467,6 +435,7 @@ cmd_promote() {
   local from="${1:-}" to="${2:-}"; [[ -n "$from" && -n "$to" ]] || die "usage: promote <from> <to>"
   valid_name "$to"; need_channel "$from"; lock
   local sha; sha="$(link_sha "$H/ch/$from")"; [[ -n "$sha" ]] || die "$from is not built"
+  receipt_allows "$sha" promote || die "promotion held: no green tester-army receipt for $sha"
   set_row "$to" "$sha" pin
   ln -sfn "$REL/$sha" "$H/ch/$to"
   history "promote $from $sha -> $to"
@@ -549,10 +518,9 @@ nightly_run() {
   (( failed == 0 ))
 }
 
-receipt_allows() { # sha -> 0 unless DASH_CHANNEL_REQUIRE_RECEIPT=1 and the O15 gate denies it
-  [[ "${DASH_CHANNEL_REQUIRE_RECEIPT:-0}" == 1 ]] || return 0
-  local dir="$REL/$1"
-  python3 "$dir/laws/release/check.py" --action ota --sha "$1" --root "$dir" >&2
+receipt_allows() { # sha [action] -> the mandatory exact-commit O15 gate
+  local dir="$REL/$1" action="${2:-ota}"
+  python3 "$dir/laws/release/check.py" --action "$action" --sha "$1" --root "$dir" >&2
 }
 
 # Cheap tick: one ls-remote per distinct tracked ref. A moved head runs the full nightly pass;

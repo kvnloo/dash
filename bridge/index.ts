@@ -520,12 +520,14 @@ class Turn implements Sink {
     const done = () => {
       this.emit({ type: "done", id: this.id, seq: 0, exitCode });
       this.settled = true;
+      setTimeout(() => {
+        if (turns.get(this.id) === this) turns.delete(this.id);
+      }, RETAIN_MS);
+      pruneTurns();
       maybeFinishDrain();
     };
     if (this.summaries) void this.summaries.finish().then(done, done);
     else done();
-    setTimeout(() => turns.delete(this.id), RETAIN_MS);
-    pruneTurns();
   }
 
   flush(): void {
@@ -561,10 +563,15 @@ function activeVoiceSessions(): number {
 }
 
 function pruneTurns(): void {
-  if (turns.size <= MAX_RETAINED) return;
+  let retained = 0;
+  for (const turn of turns.values()) if (turn.settled) retained++;
+  if (retained <= MAX_RETAINED) return;
   for (const [id, turn] of turns) {
-    if (turns.size <= MAX_RETAINED) break;
-    if (turn.finished) turns.delete(id);
+    if (retained <= MAX_RETAINED) break;
+    if (turn.settled) {
+      turns.delete(id);
+      retained--;
+    }
   }
 }
 
@@ -1006,7 +1013,7 @@ const server = Bun.serve<SocketData>({
             ws.data.turns.add(message.id);
             turns.set(message.id, turn);
             if (message.summariesEnabled) turn.enableSummaries();
-            turn.start({ text: message.text, cwd: message.cwd ?? "", sessionId: message.sessionId, profileId: message.profileId }, remote);
+            turn.start({ text: message.text, mode: message.mode, cwd: message.cwd ?? "", sessionId: message.sessionId, profileId: message.profileId }, remote);
             break;
           }
           if (!(await isSelfHost(message.hostId))) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");

@@ -87,3 +87,30 @@ test('annotate-tldraw: sent dash.annotation.v1 bytes and stroke markers match Sk
   }
   await writeFile(info.outputPath('sent-marker-frames.json'), JSON.stringify(sent, null, 2));
 });
+
+test('annotate-tldraw: positioned canvas uses its current origin for sent ink', async ({ page, bridge }, info) => {
+  await openAnnotation(page, bridge, 'tldraw');
+  await expect(page.getByTestId('annotate-tldraw')).toHaveAttribute('data-ready', 'true');
+  // An externally positioned DOM surface changes its origin without resizing.
+  // Exercise real layout and pointer input, never an editor/store/camera setter.
+  const expected = await page.locator('.tl-container').evaluate(element => {
+    element.style.transform = 'translate(36px, 24px)';
+    const canvas = element.querySelector('.tl-canvas')!.getBoundingClientRect();
+    const shapes = element.querySelector('.tl-shapes')!;
+    const inverse = new DOMMatrix(getComputedStyle(shapes).transform).inverse();
+    return [[80, 400], [260, 440]].map(([x, y]) => {
+      const point = new DOMPoint(x! - canvas.left, y! - canvas.top).matrixTransform(inverse);
+      return [point.x, point.y];
+    });
+  });
+  await stroke(page);
+  const uploaded = page.waitForRequest(request => request.method() === 'POST' && request.url().includes('/attachments?') && request.headers()['content-type'] === 'application/json');
+  await page.getByRole('button', { name: 'Send annotation', exact: true }).click();
+  await page.getByRole('button', { name: 'Send anyway', exact: true }).click();
+  const doc = JSON.parse((await uploaded).postDataBuffer()!.toString('utf8'));
+  for (const [index, point] of expected.entries()) {
+    expect(doc.strokes[0].points[index][0]).toBeCloseTo(point[0]! / doc.screen.width, 2);
+    expect(doc.strokes[0].points[index][1]).toBeCloseTo(point[1]! / doc.screen.height, 2);
+  }
+  await writeFile(info.outputPath('positioned-contract.json'), JSON.stringify({ expected, doc }, null, 2));
+});

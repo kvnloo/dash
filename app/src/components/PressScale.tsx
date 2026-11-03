@@ -52,9 +52,15 @@ export const PressScale = memo(function PressScale({
   // One gesture per mount, not per render: a new Gesture makes GestureDetector re-attach
   // its native handler and Reanimated event worklets on every parent render.
   const gesture = useMemo(() => Gesture.Manual().enabled(!disabled)
-    .onTouchesDown(() => { scale.value = withTiming(target, spring); })
+    // The pager latches a completed swipe through release so Pressable cannot turn that
+    // release into a tap. This child sees the next pointer down even while the parent Pan
+    // waits for Manual to fail, so it is the reliable boundary for a fresh sequence.
+    .onTouchesDown(() => {
+      if (swiping) swiping.value = false;
+      scale.value = withTiming(target, spring);
+    })
     .onTouchesUp((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); })
-    .onTouchesCancelled((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); }), [disabled, target, scale]);
+    .onTouchesCancelled((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); }), [disabled, target, scale, swiping]);
   // A press released by unmount (view switch) must not keep animating a dead view.
   useEffect(() => () => cancelAnimation(scale), [scale]);
   const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));

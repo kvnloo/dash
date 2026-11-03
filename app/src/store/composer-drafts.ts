@@ -115,5 +115,9 @@ export function updateComposerDraft(id: string, seed: ComposerDraft, update: (dr
 /** Drain the debounce and all earlier writes before any deliberate full reload. */
 export async function flushDrafts(): Promise<void> {
   await runtime.restored;
-  await runtime.flush();
+  for (;;) {
+    const snapshot = composerDrafts.get();
+    await runtime.flush();
+    if (composerDrafts.get() === snapshot) return;
+  }
 }

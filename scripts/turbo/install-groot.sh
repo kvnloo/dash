@@ -50,8 +50,6 @@ DASH_CHANNEL_METRO_PORT=18213
 DASH_CHANNEL_PUBLIC_URL=http://100.113.138.100:8213
 DASH_RELEASES_DIR=/mnt/zer0models/releases/dash
 DASH_CHANNEL_HEALTH_TIMEOUT=420
-# 1 = hold a head until laws/release/check.py --action ota allows it (green tester-army receipt for that exact sha).
-DASH_CHANNEL_REQUIRE_RECEIPT=0
 DASH_CHANNEL_POST_SWITCH='printf "{\\"at\\":\\"%s\\",\\"sha\\":\\"%s\\",\\"prev\\":\\"%s\\",\\"kind\\":\\"follow\\"}\\n" "\$(date -Is)" "\$DASH_SWITCH_SHA" "\$DASH_SWITCH_PREVIOUS" >> /mnt/zer0models/workspace/zer0/data/operations/dash-turbo/turbo-live-served.jsonl'
 ENV
 fi

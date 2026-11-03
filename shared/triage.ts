@@ -1,7 +1,7 @@
 /** Read-only priority evidence; source timestamps are never replaced by fetch time. */
 export type TriageItem = {
   id: string; title: string; reason: string; next: string;
-  kind: 'blocked' | 'owner' | 'roadmap'; priority: number;
+  kind: 'running' | 'blocked' | 'owner' | 'roadmap'; priority: number;
   updatedAt: number | null; sourceUpdatedAt: number | null;
   source: string; sessionId?: string; url?: string;
 };
@@ -14,7 +14,7 @@ export function parseTriage(raw: unknown): TriageSnapshot | null {
   const ids = new Set<string>();
   for (const i of raw.items) {
     if (!record(i) || typeof i.id !== 'string' || ids.has(i.id) || typeof i.title !== 'string' || typeof i.reason !== 'string' || typeof i.next !== 'string' || typeof i.source !== 'string' || !stamp(i.updatedAt) || !stamp(i.sourceUpdatedAt) || typeof i.priority !== 'number' || !Number.isFinite(i.priority)) return null;
-    if (i.kind !== 'blocked' && i.kind !== 'owner' && i.kind !== 'roadmap') return null;
+    if (i.kind !== 'running' && i.kind !== 'blocked' && i.kind !== 'owner' && i.kind !== 'roadmap') return null;
     items.push({ id: i.id, title: i.title, reason: i.reason, next: i.next, source: i.source, updatedAt: i.updatedAt, sourceUpdatedAt: i.sourceUpdatedAt, priority: i.priority, kind: i.kind, ...(typeof i.sessionId === 'string' ? { sessionId: i.sessionId } : {}), ...(typeof i.url === 'string' && /^https:\/\/github\.com\//.test(i.url) ? { url: i.url } : {}) });
     ids.add(i.id);
   }

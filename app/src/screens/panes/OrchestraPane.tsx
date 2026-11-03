@@ -16,7 +16,7 @@ import { submitInAppFeedback } from "../../lib/feedback-submit";
 import type { ScreenProps } from "../../navigation";
 import { setActive, openAgentConversation, store } from "../../store/app";
 
-export const OrchestraPane = memo(function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
+export const OrchestraPane = memo(function OrchestraPane({ navigation, focused }: Pick<ScreenProps<"Main">, "navigation"> & { focused: boolean }) {
   // Only host sessions matter here; a phone-only chat changing must not re-render this pane.
   const conversations = store.useSelector(sessionChats, shallowArrayEqual);
   const settings = store.use(s => s.settings);
@@ -24,7 +24,7 @@ export const OrchestraPane = memo(function OrchestraPane({ navigation }: Pick<Sc
   const fixture = debugUi.use(s => s.orchestraFixture);
   const fixtureOn = isDebugActive() && fixture === true;
   const { width } = useWindowDimensions();
-  const { snapshot, error } = useOrchestraEvidence(settings);
+  const { snapshot, error } = useOrchestraEvidence(settings, focused);
   const graph = useMemo(() => fixtureOn ? orchestraMotionFixture() : snapshot ? {
     nodes: snapshot.nodes.map(n => ({ ...n, thinking: n.state === "live" ? { phase: "thinking" as const } : { phase: "idle" as const } })),
     edges: snapshot.edges,
