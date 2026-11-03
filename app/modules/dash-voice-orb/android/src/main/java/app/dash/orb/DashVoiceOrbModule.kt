@@ -33,7 +33,7 @@ class DashVoiceOrbModule : Module() {
     Function("isArmed") { VoiceOrbService.running() }
 
     AsyncFunction("requestOverlayPermission") {
-      val ctx = appContext.reactContext ?: return@AsyncFunction
+      val ctx = appContext.reactContext ?: return@AsyncFunction null
       ctx.startActivity(
         Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}"))
           .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -49,7 +49,7 @@ class DashVoiceOrbModule : Module() {
     Function("setToken") { token: String -> VoiceOrbService.setToken(token) }
 
     AsyncFunction("disarm") {
-      val ctx = appContext.reactContext ?: return@AsyncFunction
+      val ctx = appContext.reactContext ?: return@AsyncFunction null
       VoiceOrbService.disarm(ctx.applicationContext)
     }
   }
