@@ -317,7 +317,9 @@
                "annotation-entry: pill exit and re-entry clear failed Send and cold reload closes mode"]},
     {"id": "annotation-voice-target", "title": "Annotated ink reaches the open chat; a bound voice call stays alive to speak a final reply before ending",
      "tests": ["annotation-voice-target: OMP chat beats a voice call bound to Hermes",
-               "annotation-voice-target: accepted Hermes ink stays live until spoken reply without cancel"]}
+               "annotation-voice-target: accepted Hermes ink stays live until spoken reply without cancel"]},
+    {"id": "annotation-palm", "title": "Skia stylus keeps its whole stroke through a palm touch and ignores the pen-up touch tail",
+     "tests": ["annotation-palm: pen stroke survives a second touch with every pen point"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",

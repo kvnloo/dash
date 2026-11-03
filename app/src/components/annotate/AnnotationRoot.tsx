@@ -154,6 +154,29 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const penSv = useSharedValue(false);
   const kindSv = useSharedValue(0);
   const pointerSv = useSharedValue(-1);
+  const lastStylusUpSv = useSharedValue(0);
+  const [palmShield, setPalmShield] = useState(false);
+  const palmShieldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The canvas blocks fingers only during a stylus stroke and its 250ms tail.
+  // Otherwise pen mode still lets fingers scroll the underlying app.
+  const shieldPalm = useCallback((released: boolean) => {
+    if (palmShieldTimer.current !== null) clearTimeout(palmShieldTimer.current);
+    palmShieldTimer.current = null;
+    setPalmShield(true);
+    if (released) palmShieldTimer.current = setTimeout(() => {
+      palmShieldTimer.current = null;
+      setPalmShield(false);
+    }, 250);
+  }, []);
+  useEffect(() => {
+    if (active && engine === "skia") return;
+    if (palmShieldTimer.current !== null) clearTimeout(palmShieldTimer.current);
+    palmShieldTimer.current = null;
+    setPalmShield(false);
+  }, [active, engine]);
+  useEffect(() => () => {
+    if (palmShieldTimer.current !== null) clearTimeout(palmShieldTimer.current);
+  }, []);
   useEffect(() => { activeSv.value = active; }, [active, activeSv]);
   useEffect(() => { penSv.value = penMode; }, [penMode, penSv]);
   const inkFailed = useCallback((error: unknown, fallbackStage: InkStage) => {
@@ -288,17 +311,26 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   }, []);
 
   const gesture = useMemo(() => {
-    const draw = Gesture.Pan()
-      .manualActivation(true)
+    // A Pan may finalize when a *different* contact lifts on web, dropping the pen.
+    // A Manual gesture ends only after the tracked pointer lifts or is cancelled.
+    const draw = Gesture.Manual()
       .enabled(engine === "skia" && active && !!ink && !inkError)
       .onTouchesDown((e, manager) => {
+        // A palm/second finger must never fail an already ACTIVE pen handler.
+        if (pointerSv.value >= 0) return;
         const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
-        // KeyboardDock moves with the IME; only its live rectangle blocks ink.
-        if (!point || point.y >= size.height - Math.max(0, -keyboardHeight.value)) { manager.fail(); return; }
         const kind = pointerKind(e.pointerType);
-        if (!activeSv.value || routePointer(kind, penSv.value, e.numberOfTouches) === "pass") { manager.fail(); return; }
+        // Do not draw or pass a finger through while the pen-up shield is active.
+        if (kind === "touch" && Date.now() - lastStylusUpSv.value < 250) return;
+        // KeyboardDock moves with the IME; only its live rectangle blocks ink.
+        if (!point || point.y >= size.height - Math.max(0, -keyboardHeight.value)) return;
+        // A new pen stroke can begin even if an ignored palm is still in contact.
+        const route = penSv.value && kind === "stylus" ? "draw" : routePointer(kind, penSv.value, e.numberOfTouches);
+        // A resting palm must not fail the handler before the next pen-down.
+        if (!activeSv.value || route === "pass") return;
         kindSv.value = e.pointerType; pointerSv.value = point.id;
         live.value = appendInkSample([], point.x, point.y, pressureOf(kind, undefined), Date.now());
+        if (kind === "stylus") runOnJS(shieldPalm)(false);
         runOnJS(tracePointer)(e.pointerType, e.numberOfTouches);
         manager.activate();
       })
@@ -307,23 +339,35 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         if (!point || pointerSv.value < 0) return;
         live.value = appendInkSample(live.value, point.x, point.y, live.value.at(-2) ?? 0.5, Date.now());
       })
-      .onUpdate(e => {
-        const p = pressureOf(pointerKind(kindSv.value), e.stylusData?.pressure);
-        live.value = appendInkSample(live.value, e.x, e.y, p, Date.now());
-      })
-      .onTouchesUp(e => {
+      .onTouchesUp((e, manager) => {
         const point = e.changedTouches?.find(touch => touch.id === pointerSv.value);
         if (!point || pointerSv.value < 0) return;
-        // Pan's final x/y may still be the last MOVE (or DOWN). Raw UP has the actual endpoint.
+        // The tracked raw UP supplies the endpoint; ignore every unrelated lift.
         const flat = appendInkSample(live.value, point.x, point.y, live.value.at(-2) ?? 0.5, Date.now());
+        if (pointerKind(kindSv.value) === "stylus") {
+          lastStylusUpSv.value = Date.now();
+          runOnJS(shieldPalm)(true);
+        }
         pointerSv.value = -1;
         runOnJS(finish)(flat, kindSv.value);
+        manager.end();
       })
-      .onFinalize(() => { live.value = []; pointerSv.value = -1; });
+      .onTouchesCancelled((e, manager) => {
+        // A palm cancellation cannot abort the tracked pen stroke either.
+        if (pointerSv.value >= 0 && e.changedTouches?.some(touch => touch.id === pointerSv.value)) manager.fail();
+      })
+      .onFinalize(() => {
+        // A real system cancellation still releases the palm shield eventually.
+        if (pointerSv.value >= 0 && pointerKind(kindSv.value) === "stylus") {
+          lastStylusUpSv.value = Date.now();
+          runOnJS(shieldPalm)(true);
+        }
+        live.value = []; pointerSv.value = -1;
+      });
     const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(engine === "skia" && active)
       .onEnd((e, success) => { if (success && e.y < size.height - Math.max(0, -keyboardHeight.value) && pointerKind(e.pointerType) === "stylus") runOnJS(queuePenSend)(); });
     return Gesture.Simultaneous(draw, penDoubleTap);
-  }, [engine, active, penMode, ink, inkError, finish, queuePenSend, live, activeSv, penSv, kindSv, pointerSv, tracePointer, size.height, keyboardHeight]);
+  }, [engine, active, penMode, ink, inkError, finish, queuePenSend, live, activeSv, penSv, kindSv, pointerSv, lastStylusUpSv, shieldPalm, tracePointer, size.height, keyboardHeight]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -347,7 +391,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         <View style={styles.root} collapsable={false} onLayout={onLayout}>
           <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
           {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
-          {engine === "skia" && active && !penMode && !inkError ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
+          {engine === "skia" && active && !inkError ? <Animated.View pointerEvents={penMode && !palmShield ? "none" : "auto"} style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
           {engine === "skia" && active && Ink ? <InkBoundary key={inkAttempt} onError={error => inkFailed(error, "ink-render")}><Animated.View style={[StyleSheet.absoluteFill, frameStyle, { overflow: "hidden" }]} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></Animated.View></InkBoundary> : null}
           {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active ? "auto" : "none"} {...overlayProps}>
             <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} tool={tool} color={color} penMode={penMode} mode="screen"
