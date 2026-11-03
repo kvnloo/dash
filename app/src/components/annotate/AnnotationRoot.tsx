@@ -259,8 +259,9 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   }, []);
 
   const gesture = useMemo(() => {
-    const draw = Gesture.Pan()
-      .manualActivation(true)
+    // A Pan may finalize when a *different* contact lifts on web, dropping the pen.
+    // A Manual gesture ends only after the tracked pointer lifts or is cancelled.
+    const draw = Gesture.Manual()
       .enabled(engine === "skia" && active && !!ink && !inkError)
       .onTouchesDown((e, manager) => {
         // A palm/second finger must never fail an already ACTIVE pen handler.
@@ -270,10 +271,11 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         // Do not draw or pass a finger through while the pen-up shield is active.
         if (kind === "touch" && Date.now() - lastStylusUpSv.value < 250) return;
         // The dock rides the IME without resizing Expo Go: never swallow input touches.
-        if (!point || point.y >= size.height - composerAvoidance(-keyboardHeight.value)) { manager.fail(); return; }
+        if (!point || point.y >= size.height - composerAvoidance(-keyboardHeight.value)) return;
         // A new pen stroke can begin even if an ignored palm is still in contact.
         const route = penSv.value && kind === "stylus" ? "draw" : routePointer(kind, penSv.value, e.numberOfTouches);
-        if (!activeSv.value || route === "pass") { manager.fail(); return; }
+        // A resting palm must not fail the handler before the next pen-down.
+        if (!activeSv.value || route === "pass") return;
         kindSv.value = e.pointerType; pointerSv.value = point.id;
         live.value = appendInkSample([], point.x, point.y, pressureOf(kind, undefined), Date.now());
         if (kind === "stylus") runOnJS(shieldPalm)(false);
@@ -285,13 +287,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         if (!point || pointerSv.value < 0) return;
         live.value = appendInkSample(live.value, point.x, point.y, live.value.at(-2) ?? 0.5, Date.now());
       })
-      .onUpdate(e => {
-        // Pan's centroid changes when a palm lands; raw moves track our pen ID.
-        if (pointerSv.value < 0 || e.numberOfPointers > 1 || e.pointerType !== kindSv.value) return;
-        const p = pressureOf(pointerKind(kindSv.value), e.stylusData?.pressure);
-        live.value = appendInkSample(live.value, e.x, e.y, p, Date.now());
-      })
-      .onTouchesUp(e => {
+      .onTouchesUp((e, manager) => {
         const point = e.changedTouches?.find(touch => touch.id === pointerSv.value);
         if (!point || pointerSv.value < 0) return;
         // Pan's final x/y may still be the last MOVE (or DOWN). Raw UP has the actual endpoint.
@@ -302,6 +298,11 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         }
         pointerSv.value = -1;
         runOnJS(finish)(flat, kindSv.value);
+        manager.end();
+      })
+      .onTouchesCancelled((e, manager) => {
+        // A palm cancellation cannot abort the tracked pen stroke either.
+        if (pointerSv.value >= 0 && e.changedTouches?.some(touch => touch.id === pointerSv.value)) manager.fail();
       })
       .onFinalize(() => {
         // A real system cancellation still releases the palm shield eventually.
