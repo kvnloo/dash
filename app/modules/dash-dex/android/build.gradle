@@ -13,4 +13,6 @@ dependencies {
   // expo-modules-core exposes it as 'implementation' (not 'api'), so we must
   // declare it explicitly to have it on the compile classpath.
   implementation 'com.facebook.react:react-android'
+  // ReactActivityDelegateWrapper is defined in the 'expo' package (not expo-modules-core).
+  compileOnly project(':expo')
 }
