@@ -1,20 +1,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Required for TYPE_APPLICATION_OVERLAY overlay window -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- Foreground service (already declared in host manifest; safe to redeclare) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- Android 14+: required for microphone-type foreground services -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <!-- Partial wake lock to keep service alive while screen is off -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- POST_NOTIFICATIONS: show the persistent orb notification on Android 13+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application>
+        <!-- specialUse: the service only watches the bridge for a z0live call started in another
+             app and draws an overlay; it never records, plays media or syncs data. -->
         <service
             android:name="app.dash.orb.VoiceOrbService"
             android:exported="false"
-            android:foregroundServiceType="microphone"
-            android:stopWithTask="false" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating indicator for a live z0live voice call started from another app" />
+        </service>
     </application>
 </manifest>

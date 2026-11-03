@@ -1,7 +1,1 @@
-{
-  "name": "dash-voice-orb",
-  "platforms": ["android"],
-  "android": {
-    "modules": ["app.dash.orb.DashVoiceOrbModule"]
-  }
-}
+{"platforms":["android"],"android":{"modules":["app.dash.orb.DashVoiceOrbModule"]}}
