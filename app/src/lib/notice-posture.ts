@@ -48,10 +48,13 @@ export function nativeNoticeAllowed(decision: Decision, routed: NoticeRoute): bo
   return routed.cls !== "decision" || publicView(decision).allowDecisions !== "none";
 }
 export function notificationChannels(importance: { LOW: number; DEFAULT: number }, visibility: number) {
-  const quiet = { importance: importance.LOW, sound: null, enableVibrate: false, showBadge: false, lockscreenVisibility: visibility };
+  const base = { enableVibrate: false, showBadge: false, lockscreenVisibility: visibility };
+  const quiet = { ...base, importance: importance.LOW, sound: null };
   return {
     "dash-quiet": { ...quiet, id: "dash-quiet", name: "Quiet notices" },
     "dash-updates": { ...quiet, id: "dash-updates-low-v1", name: "Silent updates" },
-    "dash-focus": { ...quiet, id: "dash-focus", name: "Focus notices", importance: importance.DEFAULT, sound: "default" },
+    // No `sound` key: Android then uses the system default channel sound. expo-notifications treats
+    // sound "default" as a missing custom resource and console.errors, and LogBox covers the composer.
+    "dash-focus": { ...base, id: "dash-focus", name: "Focus notices", importance: importance.DEFAULT },
   } satisfies Record<Channel, unknown>;
 }
