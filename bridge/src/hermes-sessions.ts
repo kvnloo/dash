@@ -14,7 +14,7 @@ import { hostGatewayProbe, ownerHosting, type GatewayHostProbe, type OwnerHostin
 
 // Deliberate allowlist: interactive surfaces and messaging platforms, never kitchen,
 // cron, oneshot, kanban, tool or delegated workers. `local` is native session authority CLI.
-export const HERMES_CHAT_SOURCES = ["local", "cli", "tui", "desktop", "acp", "api_server", "telegram", "discord", "slack", "whatsapp", "signal", "matrix", "email", "sms", "imessage", "mattermost", "dingtalk", "feishu", "wecom", "qq", "teams", "irc", "web", "gateway"];
+export const HERMES_CHAT_SOURCES = ["local", "cli", "tui", "desktop", "acp", "api_server", "telegram", "discord", "slack", "whatsapp", "signal", "matrix", "email", "sms", "imessage", "mattermost", "dingtalk", "feishu", "wecom", "qq", "teams", "irc", "web", "gateway", "gui"];
 const SOURCES = new Set(HERMES_CHAT_SOURCES);
 /**
  * Roster (hello) head per profile (DASH_ROSTER_HERMES_HEAD, default 50). The full list is served
