@@ -114,6 +114,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const [penSendPending, setPenSendPending] = useState(false);
   const penSendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const captureTarget = useRef<View>(null);
+  const webPenSurface = useRef<View>(null);
   const inkTraceId = useRef("");
 
   useEffect(() => {
@@ -314,7 +315,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     // A Pan may finalize when a *different* contact lifts on web, dropping the pen.
     // A Manual gesture ends only after the tracked pointer lifts or is cancelled.
     const draw = Gesture.Manual()
-      .enabled(engine === "skia" && active && !!ink && !inkError)
+      .enabled(engine === "skia" && active && !!ink && !inkError && (Platform.OS !== "web" || !penMode))
       .onTouchesDown((e, manager) => {
         // A palm/second finger must never fail an already ACTIVE pen handler.
         if (pointerSv.value >= 0) return;
@@ -369,6 +370,63 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     return Gesture.Simultaneous(draw, penDoubleTap);
   }, [engine, active, penMode, ink, inkError, finish, queuePenSend, live, activeSv, penSv, kindSv, pointerSv, lastStylusUpSv, shieldPalm, tracePointer, size.height, keyboardHeight]);
 
+  // RNGH 2.32 web can cancel its pen handler on a new touch/lost pointer capture.
+  // Pen mode uses the original DOM pen stream instead; native stays on Manual.
+  // The capture listener works even while the overlay passes fingers to scrolling.
+  useEffect(() => {
+    if (Platform.OS !== "web" || engine !== "skia" || !active || !penMode || !ink || inkError ||
+        !size.width || !size.height) return;
+    const surface = webPenSurface.current;
+    if (!(surface instanceof HTMLElement)) return;
+    let tracking = false;
+    const localPoint = (event: PointerEvent) => {
+      const rect = surface.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    };
+    const down = (event: PointerEvent) => {
+      if (event.pointerType !== "pen") return;
+      const point = localPoint(event);
+      if (point.x < 0 || point.x >= size.width || point.y < 0 ||
+          point.y >= size.height - Math.max(0, -keyboardHeight.value)) return;
+      event.preventDefault();
+      tracking = true;
+      pointerSv.value = event.pointerId;
+      kindSv.value = 1; // RNGH's PointerType.STYLUS, shared with finish().
+      live.value = appendInkSample([], point.x, point.y, pressureOf("stylus", event.pressure), Date.now());
+      shieldPalm(false);
+      tracePointer(1, 1);
+    };
+    const move = (event: PointerEvent) => {
+      if (!tracking || (event.pointerType !== "pen" && event.pointerId !== pointerSv.value) ||
+          (event.buttons & 1) === 0) return;
+      const point = localPoint(event);
+      live.value = appendInkSample(live.value, point.x, point.y, pressureOf("stylus", event.pressure), Date.now());
+    };
+    const up = (event: PointerEvent) => {
+      if (!tracking || (event.pointerType !== "pen" && event.pointerId !== pointerSv.value)) return;
+      const point = localPoint(event);
+      const samples = appendInkSample(live.value, point.x, point.y, pressureOf("stylus", event.pressure), Date.now());
+      tracking = false;
+      pointerSv.value = -1;
+      lastStylusUpSv.value = Date.now();
+      live.value = [];
+      shieldPalm(true);
+      finish(samples, 1);
+    };
+    // Touch down/up/cancel (and pen lostpointercapture) must not end a stroke:
+    // Chromium still delivers the subsequent pen moves and mouseReleased.
+    surface.addEventListener("pointerdown", down, true);
+    document.addEventListener("pointermove", move, true);
+    document.addEventListener("pointerup", up, true);
+    return () => {
+      surface.removeEventListener("pointerdown", down, true);
+      document.removeEventListener("pointermove", move, true);
+      document.removeEventListener("pointerup", up, true);
+      if (tracking) { live.value = []; pointerSv.value = -1; }
+    };
+  }, [engine, active, penMode, ink, inkError, size.width, size.height, keyboardHeight,
+      live, pointerSv, kindSv, lastStylusUpSv, shieldPalm, tracePointer, finish]);
+
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     setSize(prev => (prev.width === width && prev.height === height ? prev : { width, height }));
@@ -388,7 +446,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   return (
     <View style={styles.root}>
       <GestureDetector gesture={gesture}>
-        <View style={styles.root} collapsable={false} onLayout={onLayout}>
+        <View ref={webPenSurface} style={styles.root} collapsable={false} onLayout={onLayout}>
           <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
           {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
           {engine === "skia" && active && !inkError ? <Animated.View pointerEvents={penMode && !palmShield ? "none" : "auto"} style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
