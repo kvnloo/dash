@@ -19,9 +19,9 @@ test('annotation-palm: pen stroke survives a second touch with every pen point',
   });
   const cdp = await page.context().newCDPSession(page);
   const pen = [
-    { x: 92, y: 322 }, { x: 115, y: 336 }, { x: 140, y: 358 },
-    { x: 163, y: 347 }, { x: 188, y: 370 }, { x: 212, y: 363 },
-    { x: 234, y: 391 },
+    { x: 92, y: 422 }, { x: 115, y: 436 }, { x: 140, y: 458 },
+    { x: 163, y: 447 }, { x: 188, y: 470 }, { x: 212, y: 463 },
+    { x: 234, y: 491 },
   ];
   const start = pen[0];
   const second = pen[1];
@@ -34,7 +34,7 @@ test('annotation-palm: pen stroke survives a second touch with every pen point',
 
   // Palm touches down and lifts before the pen finishes; the active manual pan
   // must never enter FAILED, and its centroid must not leak into the ink.
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 298, y: 415, id: 41 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 298, y: 515, id: 41 }] });
   await expect(page.locator('body')).toHaveAttribute('data-army-touch', 'true');
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   for (const point of pen.slice(2)) {
@@ -43,7 +43,7 @@ test('annotation-palm: pen stroke survives a second touch with every pen point',
   await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...end, button: 'left', buttons: 0, pointerType: 'pen' });
 
   // A second finger immediately after pen-up must not create ink during the 250ms shield.
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 270, y: 421, id: 42 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 270, y: 521, id: 42 }] });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await expect(page.getByRole('button', { name: 'Send annotation', exact: true })).toBeEnabled();
 
@@ -82,6 +82,6 @@ test('annotation-palm: pen stroke survives a second touch with every pen point',
   }
   expect(points.some(sample => Array.isArray(sample) &&
     typeof sample[0] === 'number' && typeof sample[1] === 'number' &&
-    Math.abs(sample[0] * 390 - 298) < 2 && Math.abs(sample[1] * 844 - 415) < 2)).toBe(false);
+    Math.abs(sample[0] * 390 - 298) < 2 && Math.abs(sample[1] * 844 - 515) < 2)).toBe(false);
   await cdp.detach();
 });
