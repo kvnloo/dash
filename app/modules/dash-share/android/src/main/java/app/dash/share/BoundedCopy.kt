@@ -8,9 +8,14 @@ internal const val MAX_BATCH_BYTES = 50L * 1024 * 1024
 internal const val MAX_FILES = 8
 internal const val MAX_TEXT = 60_000
 
+// \p{Cntrl} is a Java-specific POSIX class name that Android's ICU regex engine rejects
+// inside a character class [...], producing PatternSyntaxException near index 3 at the '{'.
+// Use explicit hex escapes that are valid in both Java and ICU regex.
+private val CNTRL_REGEX = Regex("[\\x00-\\x1F\\x7F]")
+
 internal fun safeName(name: String): String = name
   .substringAfterLast('/').substringAfterLast('\\')
-  .replace(Regex("[\\p{Cntrl}]"), "_").take(240).ifBlank { "shared-file" }
+  .replace(CNTRL_REGEX, "_").take(240).ifBlank { "shared-file" }
 
 internal fun copyBounded(input: InputStream, output: OutputStream, limit: Long): Long {
   val buffer = ByteArray(64 * 1024)
