@@ -1,0 +1,20 @@
+{
+  "calibration": { "offsetMs": 12.5, "uncertaintyMs": 0.4 },
+  "marks": [
+    { "stage": "turn.commit", "trace_id": "turn-a", "at": 100, "generation": 0 },
+    { "stage": "genui.loader", "trace_id": "turn-a", "at": 125, "generation": 0 },
+    { "stage": "genui.first_node", "trace_id": "turn-a", "at": 180, "generation": 0 },
+    { "stage": "input.mic", "trace_id": "turn-a", "at": 20, "generation": 0 },
+    { "stage": "word.paint", "trace_id": "turn-a", "at": 70, "generation": 0 },
+
+    { "stage": "turn.commit", "trace_id": "turn-b", "at": 200, "generation": 1 },
+    { "stage": "genui.first_node", "trace_id": "turn-b", "at": 250, "generation": 1 },
+
+    { "stage": "genui.loader", "trace_id": "turn-c", "at": 345, "generation": 2 },
+    { "stage": "genui.loader", "trace_id": "turn-c", "at": 325, "generation": 1 },
+    { "stage": "turn.commit", "trace_id": "turn-c", "at": 300, "generation": 2 },
+    { "stage": "genui.first_node", "trace_id": "turn-c", "at": 390, "generation": 2 },
+    { "stage": "ink.down", "trace_id": "turn-c", "at": 80, "generation": 0 },
+    { "stage": "ink.frame", "trace_id": "turn-c", "at": 96, "generation": 0 }
+  ]
+}
