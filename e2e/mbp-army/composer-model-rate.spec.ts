@@ -33,14 +33,18 @@ test("composer model edit applies ACP set_model before prompting and rejects uns
   await expect(editModel).toContainText("Requested · army/custom-model");
 
   await send(page, "ARMY_H120 selected model");
-  await expect(page.getByText(/ARMY_REPLY: ARMY_H120 selected model/)).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId("transcript-viewport").getByText(/ARMY_REPLY: ARMY_H120 selected model/)).toBeVisible({ timeout: 15000 });
   const path = join(bridge.dir, "army-acp-calls.jsonl");
   await expect.poll(async () => (await readFile(path, "utf8")).includes('"modelId":"army/custom-model"')).toBe(true);
   const calls = (await readFile(path, "utf8")).trim().split("\n");
   const setModel = calls.findIndex(line => line.includes('"method":"session/set_model"') && line.includes('"modelId":"army/custom-model"'));
-  const prompted = calls.findIndex(line => line.includes('"method":"session/prompt"'));
+  const turnsPath = join(bridge.dir, "army-acp-turns.jsonl");
+  const turns = (await readFile(turnsPath, "utf8")).trim().split("\n");
+  const modelSelected = turns.findIndex(line => line.includes('"event":"model"') && line.includes('"text":"army/custom-model"'));
+  const prompted = turns.findIndex(line => line.includes('"event":"start"') && line.includes("ARMY_H120 selected model"));
   expect(setModel).toBeGreaterThan(-1);
-  expect(prompted).toBeGreaterThan(setModel);
+  expect(modelSelected).toBeGreaterThan(-1);
+  expect(prompted).toBeGreaterThan(modelSelected);
 
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("tab").nth(1).click({ noWaitAfter: true });
@@ -51,11 +55,12 @@ test("composer model edit applies ACP set_model before prompting and rejects uns
   await page.getByRole("button", { name: "Apply model" }).click({ noWaitAfter: true });
   await send(page, "ARMY_H120 must not run unsupported model");
   await expect(page.getByText(/harness did not accept the selected model/i)).toBeVisible({ timeout: 15000 });
-  const after = (await readFile(path, "utf8")).trim().split("\n");
-  expect(after.filter(line => line.includes('"method":"session/prompt"'))).toHaveLength(
-    calls.filter(line => line.includes('"method":"session/prompt"')).length,
+  const after = (await readFile(turnsPath, "utf8")).trim().split("\n");
+  expect(after.filter(line => line.includes('"event":"start"'))).toHaveLength(
+    turns.filter(line => line.includes('"event":"start"')).length,
   );
-  expect(after.some(line => line.includes('"method":"session/set_model"') && line.includes('"modelId":"army-unsupported"'))).toBe(true);
+  const afterCalls = (await readFile(path, "utf8")).trim().split("\n");
+  expect(afterCalls.some(line => line.includes('"method":"session/set_model"') && line.includes('"modelId":"army-unsupported"'))).toBe(true);
 });
 
 test("composer shows only estimated live token speed and expires after the turn", async ({ page, bridge }) => {
