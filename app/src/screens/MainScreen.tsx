@@ -494,7 +494,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
       <BottomActionSheet open={rowMenu !== null} title={rowMenu?.title || "Result"} options={rowMenuOptions} onSelect={onRowMenuSelect} onClose={closeRowMenu} />
       <KeyboardDock style={styles.searchDock}>
-        {attached && !searchMode ? (
+        {attached && screenFocused && !searchMode ? (
           <AttachedComposer
             key={attached.id}
             conversation={attached}
@@ -505,7 +505,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           />
         ) : (
           <>
-            {attached ? (
+            {attached && screenFocused ? (
               <Pressable accessibilityRole="button" accessibilityLabel="Return to attached session"
                 onPress={() => setSearchMode(false)} style={styles.resumeAttached}>
                 <Text numberOfLines={1} style={styles.resumeText}>Return to {attached.title || attached.harness}</Text>
