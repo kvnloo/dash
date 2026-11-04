@@ -524,9 +524,12 @@ export function sendChat(input: {
 }): boolean {
   if (rejectUnavailableTurn(input.turnId)) return false;
   const cwd = input.cwd ?? store.get().settings?.cwd;
+  const requestedModel = store.get().conversations.flatMap(c => c.messages)
+    .find(m => m.role === "assistant" && m.turnId === input.turnId);
   return bridge.send({
     type: "chat",
     mode: input.mode,
+    ...(requestedModel?.role === "assistant" && requestedModel.requestedModel ? { model: requestedModel.requestedModel } : {}),
     summariesEnabled: store.get().conversations.find(c => c.messages.some(m => m.role === "assistant" && m.turnId === input.turnId))?.summariesEnabled === true,
     id: input.turnId,
     ...targetForTurn(input.turnId),
