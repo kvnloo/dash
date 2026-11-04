@@ -527,7 +527,7 @@ export function sendChat(input: {
   const requestedModel = store.get().conversations.flatMap(c => c.messages)
     .find(m => m.role === "assistant" && m.turnId === input.turnId);
   const model = requestedModel?.role === "assistant" ? requestedModel.requestedModel : undefined;
-  if (model && !store.get().connection.features.includes(MODEL_SELECTION_FEATURE)) {
+  if (model && !store.get().connection.features?.includes(MODEL_SELECTION_FEATURE)) {
     applyTurnEvent({ type: "error", id: input.turnId, seq: 1, message: "Model switching requires an updated Dash bridge. No prompt was submitted." });
     return false;
   }
