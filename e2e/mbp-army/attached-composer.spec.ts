@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { test, expect, openChat, composer, send } from "./fixtures";
+import { test, expect, openChat, composer, send, chatRow, chooseHarness } from "./fixtures";
 
 test.afterEach(async ({ page }, info) => {
   if (!page.isClosed()) await page.screenshot({ path: info.outputPath("final.png") });
@@ -62,11 +62,8 @@ test("attached composer switches only when a different chat is explicitly chosen
   await expect(page.getByTestId("attached-composer-target")).toContainText("OMP");
   await expect(composer(page)).toHaveValue(reserved);
 
-  await page.getByRole("button", { name: "Open attached chat", exact: true }).click({ noWaitAfter: true });
-  const options = page.getByRole("button", { name: "Options. Current surface: Chat", exact: true });
-  await options.click({ noWaitAfter: true });
-  await page.getByRole("button", { name: /^Harness,/ }).click({ noWaitAfter: true });
-  await page.getByRole("button", { name: /Hermes/ }).last().click({ noWaitAfter: true });
+  await chatRow(page).click({ noWaitAfter: true });
+  await chooseHarness(page, "Hermes");
   await expect(composer(page)).toHaveValue("");
   await send(page, "ARMY_H108_HERMES_SCOPE");
   await expect(page.getByText("ARMY_REPLY: ARMY_H108_HERMES_SCOPE").first()).toBeVisible({ timeout: 20000 });
