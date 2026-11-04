@@ -601,7 +601,7 @@ function updateMessage(
 export function beginTurn(
   conversationId: string,
   text: string,
-  opts?: { pending?: boolean; attachments?: ChatAttachment[]; mode?: "steer" | "queue" },
+  opts?: { pending?: boolean; attachments?: ChatAttachment[]; mode?: "steer" | "queue"; preserveTitle?: boolean },
 ): { turnId: string; messageId: string } {
   const turnId = newId();
   const messageId = newId();
@@ -618,7 +618,7 @@ export function beginTurn(
   };
   updateConversation(conversationId, (c) => ({
     ...c,
-    title: c.messages.length === 0 && !c.sessionId ? titleFrom(text || opts?.attachments?.[0]?.name || "") : c.title,
+    title: c.messages.length === 0 && !c.sessionId && !opts?.preserveTitle ? titleFrom(text || opts?.attachments?.[0]?.name || "") : c.title,
     messages: [...c.messages, user, assistant],
     queuePreview: opts?.pending && c.queuePreview !== undefined ? `${c.queuePreview}\n\n${text}` : c.queuePreview,
     updatedAt: now,

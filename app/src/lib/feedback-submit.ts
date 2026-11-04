@@ -17,7 +17,7 @@ export function submitInAppFeedback(action: FeedbackAction): { conversationId: s
         title: "Dash feedback",
       });
       conversationId = conversation.id;
-      const { turnId } = beginTurn(conversation.id, action.text.trim() || issue.title);
+      const { turnId } = beginTurn(conversation.id, action.text.trim() || "Dash feedback", { preserveTitle: true });
       const current = store.get().conversations.find((c) => c.id === conversation.id) ?? conversation;
       const ok = sendChat({
         turnId,
