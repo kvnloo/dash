@@ -1,4 +1,4 @@
-import type { TraceFeed } from "./source";
+import { demoSnapshot, type TraceFeed } from "./source";
 
 export const TRACE_POLL_MS = 5000;
 
@@ -21,11 +21,27 @@ export function feedStatus(feed: TraceFeed, now: number): { title: string; detai
   return { title: `Live from bridge · updated ${ago(now - feed.receivedAt)}`, detail: "" };
 }
 
-/** The feed only runs while Trace is open, so before the first visit pairing decides the line. */
-export function entryLine(feed: TraceFeed, paired: boolean): string {
-  if (feed.phase === "unpaired") return paired ? "Open to load live events" : "Not paired · live trace unavailable";
-  if (feed.phase === "connecting") return "Open to load live events";
-  if (feed.phase === "unavailable") return `Live trace unavailable · ${feed.reason}`;
-  const st = feed.snapshot.stats;
-  return `${st.live} live · ${st.cut} cut · ${st.asks} need your OK · ${feed.snapshot.rows.length} events`;
+/** A bundled export's trace clock is local/unspecified, not a live update or a UTC receipt. */
+export const BUNDLED_TRACE_TIME = new Date(
+  Date.parse(`${demoSnapshot.t0}Z`) + demoSnapshot.now * 1000,
+).toISOString().slice(0, 16).replace("T", " ");
+
+const bundledNotice = `Bundled snapshot · ${BUNDLED_TRACE_TIME} (trace clock) · demo only, not live`;
+const TRACE_FRESH_MS = 30_000;
+
+/** Never advertise old bridge counts as live while the owner is away from Trace. */
+export function isFreshBridgeTrace(feed: TraceFeed, now: number): boolean {
+  return feed.phase === "live" && now >= feed.receivedAt && now - feed.receivedAt <= TRACE_FRESH_MS;
+}
+
+/** Owner-facing trace origin. Only an admitted, recent bridge sample gets live numbers. */
+export function entryLine(feed: TraceFeed, paired: boolean, now = Date.now()): string {
+  if (feed.phase === "live" && isFreshBridgeTrace(feed, now)) {
+    const st = feed.snapshot.stats;
+    return `Live from bridge · ${st.live} live · ${st.cut} cut · ${st.asks} needs OK · ${feed.snapshot.rows.length} events`;
+  }
+  if (feed.phase === "live") return `Last bridge update expired · ${bundledNotice}`;
+  if (feed.phase === "unavailable") return `Live trace unavailable · ${feed.reason} · ${bundledNotice}`;
+  if (feed.phase === "connecting") return `Loading bridge trace · ${bundledNotice}`;
+  return `${paired ? "Bridge trace not loaded" : "Not paired"} · ${bundledNotice}`;
 }
