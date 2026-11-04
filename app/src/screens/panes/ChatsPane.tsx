@@ -2,7 +2,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, StyleSheet, Text, View } from "react-native";
 import { chatKey, type ChatSummary, type HostInfo } from "../../../../shared/protocol";
 import type { WindowOrigin } from "../../lib/chat-window";
 import { threadAppearance } from "../../components/thread-appearance";
@@ -14,8 +14,9 @@ import { conversationThinking, type Thinking } from "../../lib/thinking";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { chatRow } from "../../lib/chat-row";
-import { chatRowActions, chatRowMenu, pressRow, runChatRowMenu } from "../../lib/chat-row-actions";
-import { BottomActionSheet } from "../../components/BottomActionSheet";
+import { chatRowActions, pressRow } from "../../lib/chat-row-actions";
+import { chatRowMenu, type RowMenuOptionId } from "../../lib/chat-row-menu";
+import { ChatRowDropdown } from "../../components/ChatRowDropdown";
 import { NextActionCard } from "../../components/NextActionCard";
 import { ChatListControls } from "../../components/ChatListControls";
 import { DEFAULT_CHAT_FILTERS, filterChatRows, historyNeeded, projectPath, type ChatFilters } from "../../lib/chat-filters";
@@ -55,6 +56,13 @@ interface ChatRowModel {
   viewOnly: boolean;
   /** Host name when the chat is not on the paired computer. */
   hostName?: string;
+}
+
+interface RowMenuAnchor {
+  id: string;
+  title: string;
+  x: number;
+  y: number;
 }
 
 const localModels = new WeakMap<Conversation, { harnessName: string; connectionStatus: ConnectionStatus; model: ChatRowModel }>();
@@ -136,17 +144,47 @@ const Row = memo(function Row({
   live?: boolean;
   saved?: boolean;
   onPress(id: string, origin?: WindowOrigin): void;
-  onLongPress(id: string): void;
+  onLongPress(id: string, anchor: { x: number; y: number }): void;
 }) {
   const appearance = threadAppearance({ stale: item.stale, live });
   const stale = appearance.stale;
   const thinking = item.thinking;
   const content = item.content;
   const activityShimmer = activityShimmerEnabled(thinking.phase, connectionStatus, stale);
+  const webHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const clearWebHold = () => {
+    if (webHoldTimer.current !== null) {
+      clearTimeout(webHoldTimer.current);
+      webHoldTimer.current = null;
+    }
+  };
+  useEffect(() => () => {
+    if (webHoldTimer.current !== null) clearTimeout(webHoldTimer.current);
+  }, []);
+  const triggerLongPress = (x: number, y: number) => {
+    if (held.current) return;
+    held.current = true;
+    clearWebHold();
+    onLongPress(item.id, { x, y });
+  };
   return (
     <PressScale
-      onPress={(event) => pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress)}
-      onLongPress={() => onLongPress(item.id)}
+      onPress={(event) => {
+        if (!held.current) pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress);
+      }}
+      onPressIn={(event) => {
+        held.current = false;
+        clearWebHold();
+        if (Platform.OS === "web") {
+          const { pageX, pageY } = event.nativeEvent;
+          // RN Web's gesture-handler manual recognizer can swallow Pressable.onLongPress.
+          // Preserve native Pressable semantics; detect the same hold on web.
+          webHoldTimer.current = setTimeout(() => triggerLongPress(pageX, pageY), 350);
+        }
+      }}
+      onPressOut={clearWebHold}
+      onLongPress={(event) => triggerLongPress(event.nativeEvent.pageX, event.nativeEvent.pageY)}
       delayLongPress={350}
       style={[styles.row, active && !stale && styles.rowActive]}
       accessibilityRole="button"
@@ -193,7 +231,7 @@ const LocalChatRow = memo(function LocalChatRow({ id, harnessName, connectionSta
   active: boolean;
   live: boolean;
   onPress(id: string, origin?: WindowOrigin): void;
-  onLongPress(id: string): void;
+  onLongPress(id: string, anchor: { x: number; y: number }): void;
 }) {
   const conversation = store.use((s) => conversationById(s.conversations, id));
   const address = store.use(s => s.settings?.address);
@@ -392,16 +430,39 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
 
   const feedbackOn = inAppFeedbackEnabled(store.use((s) => s.settings));
   // Long-press only opens the row menu; every action (including feedback, which sends) is an explicit choice.
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-  const longPress = useCallback((id: string) => { haptic.select(); setMenuFor(id); }, []);
+  const [menuFor, setMenuFor] = useState<RowMenuAnchor | null>(null);
+  const longPress = useCallback((id: string, anchor: { x: number; y: number }) => {
+    const title = id.startsWith("remote:")
+      ? summaryByKey(id.slice(7))?.title
+      : store.get().conversations.find(c => c.id === id)?.title;
+    if (!title) return;
+    haptic.select();
+    setMenuFor({ id, title, ...anchor });
+  }, []);
   const closeMenu = useCallback(() => setMenuFor(null), []);
-  const menuTitle = menuFor ? (menuFor.startsWith("remote:") ? summaryByKey(menuFor.slice(7))?.title : store.get().conversations.find(c => c.id === menuFor)?.title) ?? "" : "";
-  const menu = useMemo(() => chatRowMenu(feedbackOn, menuTitle), [feedbackOn, menuTitle]);
-  const onMenu = useCallback((choice: string) => {
-    const id = menuFor;
+  // Preserve the three existing row actions; the menu model provides stable identities
+  // and accessible names, while the dropdown is anchored at the pressed row.
+  const menu = useMemo(() => menuFor
+    ? chatRowMenu(
+      { id: menuFor.id, title: menuFor.title, live: false, hasSession: false },
+      { feedbackOn, canOpenWindow: false },
+    )
+    : [], [feedbackOn, menuFor]);
+  const onMenu = useCallback((choice: RowMenuOptionId) => {
+    const id = menuFor?.id;
     setMenuFor(null);
-    if (id) runChatRowMenu(choice, id, { open: (rowId) => open(rowId), feedback: onFeedback, remove });
-  }, [menuFor, open, onFeedback, remove]);
+    if (!id) return;
+    // A recycled/deleted row cannot dispatch an old selection.
+    if (id.startsWith("remote:")) {
+      if (!summaryByKey(id.slice(7))) return;
+    } else if (!store.get().conversations.some(c => c.id === id)) return;
+    switch (choice) {
+      case "open": open(id); return;
+      case "send-feedback": if (feedbackOn) onFeedback(id); return;
+      case "delete-local": remove(id); return;
+      default: return;
+    }
+  }, [feedbackOn, menuFor, onFeedback, open, remove]);
 
   const renderItem = useCallback(
     ({ item: row }: ListRenderItemInfo<ChatListRow | undefined>) => {
@@ -463,7 +524,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
           <Text style={styles.clearEndedText}>Clear ended</Text>
         </PressScale>
       )}
-      <BottomActionSheet open={menuFor !== null} title={menu.title} options={menu.options} onSelect={onMenu} onClose={closeMenu} />
+      <ChatRowDropdown anchor={menuFor} title={menuFor?.title ?? ""} options={menu} onSelect={onMenu} onClose={closeMenu} />
       <FlashList
         key={listLifecycleKey}
         data={items}

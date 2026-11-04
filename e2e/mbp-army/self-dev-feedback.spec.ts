@@ -41,10 +41,11 @@ test('chat row long press requires an explicit feedback choice before steering',
   await page.waitForTimeout(600);
   await page.mouse.up();
 
-  const sheet = page.getByTestId('bottom-action-sheet');
-  await expect(sheet).toBeVisible();
-  // The shared sheet includes the option's position in its accessible name.
-  const feedback = sheet.getByRole('button', { name: 'Send feedback about New chat, 2 of 3', exact: true });
+  const menu = page.getByTestId('chat-row-actions-menu');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Open chat: New chat', exact: true })).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Delete chat from this phone: New chat', exact: true })).toBeVisible();
+  const feedback = menu.getByRole('button', { name: 'Send feedback about chat: New chat', exact: true });
   await expect(feedback).toBeVisible();
   await expect(page.getByText('Dash feedback', { exact: true })).toHaveCount(0);
   await feedback.click({ noWaitAfter: true });
