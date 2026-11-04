@@ -159,13 +159,11 @@ export function ActionChip({ action, variant = "card", decision, decidedAt, onDe
           {decided ? (
             <View
               testID={`chip-completion-${action.id}`}
-              accessible
-              accessibilityRole="text"
-              accessibilityLiveRegion="polite"
-              accessibilityLabel={`${action.title}. ${decision === "do" ? "Do completed" : "Not now completed"}`}
               style={[styles.completion, { borderColor: decision === "do" ? tc.ok : tc.text2 }]}
             >
-              <Text style={[styles.completionText, { color: decision === "do" ? tc.ok : tc.text }]}>
+              <Text accessibilityRole="text" accessibilityLiveRegion="polite"
+                accessibilityLabel={`${action.title}. ${decision === "do" ? "Do completed" : "Not now completed"}`}
+                style={[styles.completionText, { color: decision === "do" ? tc.ok : tc.text }]}>
                 {decision === "do" ? "✓ Done · completed" : "× Not now · completed"}
               </Text>
               {undoVisible ? (
