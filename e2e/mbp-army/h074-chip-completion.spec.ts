@@ -73,9 +73,10 @@ test('H-074: Do and Not now swipes leave visible completed receipts, Undo and re
   await page.screenshot({ path: info.outputPath('h074-not-now-completed.png') });
 
   // Cold web reload reads the real AsyncStorage-backed feedback, not a seeded store.
+  // /lab is a full-screen route, not the Main pager: it has no role=tab controls.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByRole('tab').nth(1).waitFor({ timeout: 30000 });
-  block = await openLab(page);
+  await expect(page.getByTestId('lab-scroll')).toBeVisible({ timeout: 30000 });
+  block = await findActionChips(page);
   receipt = block.getByTestId('chip-completion-lab-card');
   await expect(receipt).toContainText('Not now · completed');
   await expect(receipt.getByText('× Not now · completed')).toHaveAttribute('aria-label', /Not now completed/);
