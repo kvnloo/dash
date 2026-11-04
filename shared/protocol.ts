@@ -69,6 +69,8 @@ export interface AgentInfo {
 }
 
 export const CHATS_FEATURE = "chats.v1";
+/** Old bridges silently discard unknown chat fields; require this before sending model overrides. */
+export const MODEL_SELECTION_FEATURE = "model-selection.v1";
 
 export type ChatOrigin = "live" | "hermes" | "agentsview";
 
