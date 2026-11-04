@@ -81,10 +81,9 @@ createInterface({input:process.stdin}).on('line', line => {
   calls(r.method,r.params);
   const modelId=isRecord(r.params)?r.params.modelId:undefined;
   if(typeof modelId !== 'string' || !modelId || modelId === 'army-unsupported')send({jsonrpc:'2.0',id:r.id,error:{code:-32601,message:'Fixture does not support this model'}});
-  else reply({});
+  else {turnLog('model', modelId);reply({});}
  }
  else if (r.method === 'session/prompt') {
-  calls(r.method,r.params);
   active = r.id;
   const params=typeof r.params==='object'&&r.params!==null&&'prompt' in r.params?r.params.prompt:[];
   const text = Array.isArray(params)?params.map((p:unknown)=>typeof p==='object'&&p!==null&&'text' in p&&typeof p.text==='string'?p.text:'').join(''):'';
