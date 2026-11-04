@@ -12,11 +12,13 @@ import { LivePulse, tc } from "./tokens";
 export const TraceEntryCard = memo(function TraceEntryCard({ onOpen }: { onOpen(): void }) {
   const feed = traceStore.use((s) => s.feed);
   const paired = store.use((s) => Boolean(s.settings?.address && (s.settings.token || s.settings.identity)));
-  const [now, setNow] = useState(Date.now);
+  const [, refreshClock] = useState(0);
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 5000);
+    const timer = setInterval(() => refreshClock((tick) => tick + 1), 5000);
     return () => clearInterval(timer);
   }, []);
+  // Re-evaluate immediately on a newly arrived bridge snapshot, not the last timer tick.
+  const now = Date.now();
   const fresh = isFreshBridgeTrace(feed, now);
   const line = entryLine(feed, paired, now);
   return (
