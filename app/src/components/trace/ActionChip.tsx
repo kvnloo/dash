@@ -140,27 +140,39 @@ export function ActionChip({ action, variant = "card", decision, decidedAt, onDe
   return (
     <Animated.View layout={reduced ? undefined : LinearTransition.duration(MOTION_MS.enter).reduceMotion(ReduceMotion.System)} style={styles.outer} onLayout={onLayout} testID={`chip-${action.id}`}>
       <GestureDetector gesture={pan}>
-        <Animated.View testID={`chip-surface-${action.id}`} style={[variant === "pill" ? styles.pill : styles.card, { minHeight: sizing.rowMin, padding: sizing.padding, alignSelf: "stretch" }, chipStyle]} accessibilityRole={decided ? "text" : "adjustable"} accessibilityLabel={`${action.title}. ${decided ? decision === "do" ? "Done" : "Not now" : hint}`}
+        <Animated.View testID={`chip-surface-${action.id}`} style={[variant === "pill" ? styles.pill : styles.card, { minHeight: sizing.rowMin, padding: sizing.padding, alignSelf: "stretch" }, chipStyle]} accessibilityRole={decided ? undefined : "adjustable"} accessibilityLabel={decided ? undefined : `${action.title}. ${hint}`}
           accessibilityActions={decided ? [] : [{ name: "increment", label: "Do" }, { name: "decrement", label: "Not now" }]}
           onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === "increment") commit("do"); else if (e.nativeEvent.actionName === "decrement") commit("not_now"); }}
         >
           <View style={styles.headRow}>
             <View style={[styles.outcome, { borderColor: tone }]}><Text style={[styles.outcomeText, { color: tone }]} numberOfLines={1}>{action.outcomeLabel}</Text></View>
-            <View style={styles.status}>
-              {decided ? <Text accessibilityLiveRegion="polite" style={[styles.badge, { color: decision === "do" ? tc.ok : tc.text2 }]}>{decision === "do" ? "✓ Done" : "× Not now"}</Text> : <>
-                <Text style={styles.hint}>⇠ swipe ⇢</Text>
-                <DensityAnimatedText style={[styles.preview, { color: tc.ok }, doLabel]}>✓ Do</DensityAnimatedText>
-                <DensityAnimatedText style={[styles.preview, { color: tc.text2 }, notLabel]}>× Not now</DensityAnimatedText>
-              </>}
-            </View>
-            {undoVisible ? <Pressable onPress={undo} hitSlop={8} accessibilityRole="button" accessibilityLabel="Undo" style={styles.undo}>
-              <Text style={[styles.badge, { color: tc.text2 }]}>Undo</Text>
-            </Pressable> : null}
+            {!decided ? <View style={styles.status}>
+              <Text style={styles.hint}>⇠ swipe ⇢</Text>
+              <DensityAnimatedText style={[styles.preview, { color: tc.ok }, doLabel]}>✓ Do</DensityAnimatedText>
+              <DensityAnimatedText style={[styles.preview, { color: tc.text2 }, notLabel]}>× Not now</DensityAnimatedText>
+            </View> : null}
           </View>
           <Animated.View style={contentStyle}>
             <Text style={styles.title} numberOfLines={variant === "pill" ? 1 : 2}>{action.title}</Text>
             {variant === "pill" ? null : <Text style={styles.why} numberOfLines={2}>{action.why}</Text>}
           </Animated.View>
+          {decided ? (
+            <View
+              testID={`chip-completion-${action.id}`}
+              style={[styles.completion, { borderColor: decision === "do" ? tc.ok : tc.text2 }]}
+            >
+              <Text accessibilityRole="text" accessibilityLiveRegion="polite"
+                accessibilityLabel={`${action.title}. ${decision === "do" ? "Do completed" : "Not now completed"}`}
+                style={[styles.completionText, { color: decision === "do" ? tc.ok : tc.text }]}>
+                {decision === "do" ? "✓ Done · completed" : "× Not now · completed"}
+              </Text>
+              {undoVisible ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Undo decision" onPress={undo} hitSlop={4} style={styles.undo}>
+                  <Text style={[styles.badge, { color: tc.text2 }]}>Undo</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
           {variant === "buttons" && !decided ? (
             <View style={styles.btnRow}>
               <ChipButton label="Do" tone={tc.ok} onPress={() => commit("do")} />
@@ -184,7 +196,9 @@ const styles = StyleSheet.create({
   outer: { position: "relative", marginBottom: space.sm },
   status: { minWidth: 88, minHeight: 32, justifyContent: "center", alignItems: "flex-end" },
   preview: { position: "absolute", right: 0, fontFamily: fonts.mono, fontSize: 11, backgroundColor: tc.raised, padding: 2 },
-  undo: { minHeight: 32, justifyContent: "center", paddingHorizontal: 4 },
+  completion: { minHeight: 44, marginTop: space.xs, paddingHorizontal: space.md, paddingVertical: space.xs, flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: space.sm, backgroundColor: tc.raised, borderWidth: 1, borderRadius: radius.sm },
+  completionText: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 19, flexShrink: 1 },
+  undo: { minHeight: 44, minWidth: 44, justifyContent: "center", alignItems: "center", paddingHorizontal: space.sm },
   card: { backgroundColor: tc.raised, borderRadius: radius.md, borderWidth: 1, borderColor: tc.rule, padding: space.md, gap: 4, minHeight: 44 },
   pill: { backgroundColor: tc.raised, borderRadius: radius.pill, borderWidth: 1, borderColor: tc.rule, paddingVertical: 8, paddingHorizontal: space.md, gap: 2, minHeight: 44, justifyContent: "center" },
   headRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
@@ -195,6 +209,6 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.semibold, fontSize: 15, lineHeight: 20, color: tc.text },
   why: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: tc.text2 },
   btnRow: { flexDirection: "row", gap: space.sm, marginTop: 6 },
-  btn: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 16, minHeight: 36, justifyContent: "center" },
+  btn: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: 16, minHeight: 44, justifyContent: "center" },
   btnText: { fontFamily: fonts.semibold, fontSize: 13 },
 });
