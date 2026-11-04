@@ -204,7 +204,15 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const hosts = store.use((s) => s.connection.hosts);
   const cwd = store.use((s) => s.connection.cwd);
   const settings = store.use((s) => s.settings);
-  const attached = store.use(s => s.activeId ? s.conversations.find(chat => chat.id === s.activeId && chat.id !== FEEDBACK_CONVERSATION_ID) : undefined);
+  // Only a chat owned by the currently paired bridge can use Main's attached composer.
+  // Saved-local, foreign, stale and view-only chats keep Main search available; opening
+  // their transcript still restores the draft under its original conversation id.
+  const attached = store.use(s => {
+    if (!s.hydrated || !s.activeId) return undefined;
+    const chat = s.conversations.find(c => c.id === s.activeId && c.id !== FEEDBACK_CONVERSATION_ID);
+    if (!chat || !chat.endpointAddress || chat.endpointAddress !== s.settings?.address || chat.stale || chat.viewOnly) return undefined;
+    return chat;
+  });
   const [searchMode, setSearchMode] = useState(false);
   // Returning from another screen shows the selected chat, not an old search query.
   useEffect(() => { if (screenFocused) setSearchMode(false); }, [screenFocused, attached?.id]);
