@@ -41,7 +41,10 @@ test('chat row long press requires an explicit feedback choice before steering',
   await page.waitForTimeout(600);
   await page.mouse.up();
 
-  const feedback = page.getByRole('button', { name: 'Send feedback about New chat', exact: true });
+  const sheet = page.getByTestId('bottom-action-sheet');
+  await expect(sheet).toBeVisible();
+  // The shared sheet includes the option's position in its accessible name.
+  const feedback = sheet.getByRole('button', { name: 'Send feedback about New chat, 2 of 3', exact: true });
   await expect(feedback).toBeVisible();
   await expect(page.getByText('Dash feedback', { exact: true })).toHaveCount(0);
   await feedback.click({ noWaitAfter: true });
@@ -51,7 +54,10 @@ test('chat row long press requires an explicit feedback choice before steering',
 
 test('beta feedback opt-out leaves Main text as an unsent agent draft', async ({ page, bridge }) => {
   await pair(page, bridge);
-  await page.getByRole('button', { name: 'Open settings', exact: true }).click({ noWaitAfter: true });
+  await page.getByRole('tab').nth(2).click({ noWaitAfter: true });
+  const orchestra = page.getByTestId('orchestra-graph');
+  await expect(orchestra).toBeVisible();
+  await orchestra.getByRole('button', { name: 'Open settings', exact: true }).click({ noWaitAfter: true });
   const feedback = page.getByRole('switch', { name: 'In-app feedback', exact: true });
   await expect(feedback).toHaveAttribute('aria-checked', 'true');
   await feedback.click({ noWaitAfter: true });
