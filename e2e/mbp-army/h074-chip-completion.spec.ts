@@ -79,11 +79,13 @@ test('H-074: Do and Not now swipes leave visible completed receipts, Undo and re
   card = block.getByTestId('chip-surface-lab-card');
   receipt = block.getByTestId('chip-completion-lab-card');
   await expect(receipt).toContainText('Not now · completed');
-  await expect(card).toHaveAttribute('aria-label', /Not now/);
+  await expect(receipt.getByText('× Not now · completed')).toHaveAttribute('aria-label', /Not now completed/);
   await expect(receipt.getByRole('button', { name: 'Undo decision', exact: true })).toHaveCount(0);
   await receipt.scrollIntoViewIfNeeded();
   await expect(receipt).toBeInViewport({ ratio: 0.9 });
   await page.setViewportSize({ width: 320, height: 700 });
+  block = await findActionChips(page);
+  receipt = block.getByTestId('chip-completion-lab-card');
   await receipt.scrollIntoViewIfNeeded();
   await expect(receipt).toBeInViewport({ ratio: 0.9 });
 });
