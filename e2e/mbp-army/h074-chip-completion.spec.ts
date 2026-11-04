@@ -83,4 +83,7 @@ test('H-074: Do and Not now swipes leave visible completed receipts, Undo and re
   await expect(receipt.getByRole('button', { name: 'Undo decision', exact: true })).toHaveCount(0);
   await receipt.scrollIntoViewIfNeeded();
   await expect(receipt).toBeInViewport({ ratio: 0.9 });
+  await page.setViewportSize({ width: 320, height: 700 });
+  await receipt.scrollIntoViewIfNeeded();
+  await expect(receipt).toBeInViewport({ ratio: 0.9 });
 });
