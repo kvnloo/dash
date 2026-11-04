@@ -326,6 +326,16 @@ export class AcpClient {
       this.stopTimers();
       return "metadata";
     }
+    // Apply the exact selected model before any prompt. An unsupported model/method must
+    // reject this turn rather than silently run the host default.
+    if (input.model) {
+      this.phase = "session/set_model";
+      try {
+        await this.request("session/set_model", { sessionId: this.sessionId, modelId: input.model });
+      } catch {
+        throw new Error("The harness did not accept the selected model. No prompt was submitted.");
+      }
+    }
     this.options.sink.session(this.sessionId);
     this.prompting = true;
     this.phase = "session/prompt";

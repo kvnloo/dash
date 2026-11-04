@@ -1,6 +1,10 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "composer-model-harness-rate", "title": "Composer controls edit harness/model and show honest streaming token speed through the real authenticated bridge",
+     "tests": ["composer harness chooser is attached to the input and never sends a turn",
+               "composer model edit applies ACP set_model before prompting and rejects unsupported models",
+               "composer shows only estimated live token speed and expires after the turn"]},
     {"id":"reply-to-selected-message-text","title":"Quote selected agent message text into the unsent composer without sending","tests":["reply selection adds only highlighted assistant text to unsent draft, preserving attachments","cancel text selection leaves draft and bridge unchanged"]},
     {"id": "restored-omp-session-identity", "title": "Two restored OMP panes remain one addressable native chat while either pane is live",
      "tests": ["two restored OMP panes retain one usable chat when its first pane closes",

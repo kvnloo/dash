@@ -12,7 +12,7 @@ let sessionId = agent === 'claude' ? 'army-claude-session' : 'army-fixture-sessi
 const replyTag = agent === 'claude' ? 'ARMY_CLAUDE_REPLY: ' : 'ARMY_REPLY: ';
 const update = (text: string) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text}}}});
 // Evidence for specs: which session method ran, for which id, in which directory.
-const calls = (method: string, params: unknown) => {if(!isRecord(params))return;try{appendFileSync(join(process.env.HOME || '.', 'army-acp-calls.jsonl'),JSON.stringify({agent,method,sessionId:params.sessionId,cwd:params.cwd,pwd:process.cwd()})+'\n');}catch{/* evidence only */}};
+const calls = (method: string, params: unknown) => {if(!isRecord(params))return;try{appendFileSync(join(process.env.HOME || '.', 'army-acp-calls.jsonl'),JSON.stringify({agent,method,sessionId:params.sessionId,modelId:params.modelId,cwd:params.cwd,pwd:process.cwd()})+'\n');}catch{/* evidence only */}};
 // Evidence for concurrency specs: when each prompt started and finished, in which fixture process.
 const turnLog = (event: string, text: string) => {try{appendFileSync(join(process.env.HOME || '.', 'army-acp-turns.jsonl'),JSON.stringify({agent,pid:process.pid,event,at:Date.now(),text:text.slice(0,80)})+'\n');}catch{/* evidence only */}};
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -77,7 +77,14 @@ createInterface({input:process.stdin}).on('line', line => {
  if (r.method === 'initialize') reply({protocolVersion:1,agentCapabilities:{loadSession:true,...(agent==='claude'?{sessionCapabilities:{resume:{}}}:{})},authMethods:[]});
  else if (r.method === 'session/new') {calls(r.method,r.params);reply({sessionId});}
  else if (r.method === 'session/load' || (r.method === 'session/resume' && agent === 'claude')) {calls(r.method,r.params);if(isRecord(r.params)&&typeof r.params.sessionId==='string')sessionId=r.params.sessionId;reply({});}
+ else if (r.method === 'session/set_model') {
+  calls(r.method,r.params);
+  const modelId=isRecord(r.params)?r.params.modelId:undefined;
+  if(typeof modelId !== 'string' || !modelId || modelId === 'army-unsupported')send({jsonrpc:'2.0',id:r.id,error:{code:-32601,message:'Fixture does not support this model'}});
+  else reply({});
+ }
  else if (r.method === 'session/prompt') {
+  calls(r.method,r.params);
   active = r.id;
   const params=typeof r.params==='object'&&r.params!==null&&'prompt' in r.params?r.params.prompt:[];
   const text = Array.isArray(params)?params.map((p:unknown)=>typeof p==='object'&&p!==null&&'text' in p&&typeof p.text==='string'?p.text:'').join(''):'';
@@ -124,7 +131,12 @@ createInterface({input:process.stdin}).on('line', line => {
   const tickMs = Number.isSafeInteger(markerTick) && markerTick > 0 ? markerTick : 0;
   const finish = () => {
    if (tickMs > 0) ticker = setInterval(() => think('ARMY_TICK progress'), tickMs);
-   if (text.includes('ARMY_HOLD')) hold(); else timer = setTimeout(answer, waitMs);
+   if (text.includes('ARMY_RATE_STREAM')) {
+   // Real ACP streaming deltas separated in time; no direct app/network fixture injection.
+   timer = setTimeout(() => { update('ARMY_RATE_FIRST ' + 'first '.repeat(24));
+    timer = setTimeout(() => { update('ARMY_RATE_SECOND ' + 'second '.repeat(24)); timer = setTimeout(answer, 1500); }, 600);
+   }, 600);
+  } else if (text.includes('ARMY_HOLD')) hold(); else timer = setTimeout(answer, waitMs);
   };
   if (text.includes('ARMY_TOOL_DETAIL')) {
    // A real write payload can exceed the bridge's 8 KiB preview before its path.

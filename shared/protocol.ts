@@ -69,6 +69,8 @@ export interface AgentInfo {
 }
 
 export const CHATS_FEATURE = "chats.v1";
+/** Old bridges silently discard unknown chat fields; require this before sending model overrides. */
+export const MODEL_SELECTION_FEATURE = "model-selection.v1";
 
 export type ChatOrigin = "live" | "hermes" | "agentsview";
 
@@ -244,6 +246,9 @@ export type GateServerMessage =
   | { type: "gate_status"; id: string; message: string }
   | { type: "gate_error"; message: string };
 
+/** A host-recognized model identifier, not a shell command or freeform prompt. */
+export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$/;
+
 export type ClientMessage =
   | GateClientMessage
   | LiveClientMessage
@@ -260,6 +265,8 @@ export type ClientMessage =
       id: string;
       harness: string;
       text: string;
+      /** Explicit choice for this turn; omitted means the host chooses. */
+      model?: string;
       /** Harness-native session id from a previous `session` event, for multi-turn. */
       sessionId?: string;
       hostId?: string;
@@ -442,6 +449,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
         str(raw.id) &&
         str(raw.harness) &&
         str(raw.text) &&
+        (raw.model === undefined || (str(raw.model) && MODEL_ID.test(raw.model))) &&
         optStr(raw.hostId) && optStr(raw.profileId) &&
         optStr(raw.sessionId) &&
         optStr(raw.cwd) &&
@@ -455,6 +463,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
           id: raw.id,
           harness: raw.harness,
           text: raw.text,
+          ...(str(raw.model) && MODEL_ID.test(raw.model) ? { model: raw.model } : {}),
           sessionId: raw.sessionId,
           hostId: raw.hostId,
           profileId: raw.profileId,
