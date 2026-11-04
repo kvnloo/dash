@@ -90,11 +90,11 @@ export const Markdown = memo(function Markdown({ text, onIntent, streaming = fal
   const [range, setRange] = useState<SelectionRange | null>(null);
   // Unfinished UI fences are buffered before Markdown can expose model source.
   const prepared = useMemo(() => prepareGenerativeMarkdown(text, flowMode), [text]);
-  // Android routes the long press to Dash's selection sheet; other platforms retain OS selection.
+  // Android and web open the same selection sheet; iOS keeps native selection.
   const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: Platform.OS !== "android" }); renderer.onIntent = onIntent; renderer.streaming = streaming; return renderer; }, [prepared, onIntent, streaming]);
   const nodes = useMarkdown(prepared, { renderer, styles, colorScheme: "dark" });
   const onLongPress = () => {
-    if (Platform.OS !== "android" || annotate.get().active) return;
+    if (Platform.OS === "ios" || annotate.get().active) return;
     const state = store.get();
     if (!state.activeId || !state.conversations.some(c => c.id === state.activeId)) return;
     const source = readableReplyText(text);
