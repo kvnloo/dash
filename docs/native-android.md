@@ -1,5 +1,44 @@
 # Android development build
 
+## S Pen side button (native DashStylus)
+
+The `DashStylus` Expo module watches **only Dash's own Android window**.
+Touch and generic-motion/hover events are always forwarded to the original
+`Window.Callback`. Stylus or eraser events with
+`BUTTON_STYLUS_PRIMARY` generate `button: { pressed: boolean }` only on
+state transitions. The existing JS reducer toggles Annotate on the rising
+edge; release, a held button and repeated frames never toggle it. The module
+also exposes `getUptimeMillis()` from `SystemClock.uptimeMillis()` for flow
+trace calibration. It cannot intercept a system-wide S Pen/Air Command event.
+
+**Rebuild and deliberately install a native APK** to obtain this module.
+The turbo follower's native fingerprint does not hash `app/modules/*`; a
+Metro reload, Fast Refresh or OTA cannot add Kotlin to an older APK.
+The native build runs `:dash-stylus:testDebugUnitTest` and saves XML/HTML
+reports under `.native-receipts/dash-stylus/`, plus APK module checks.
+Neither those tests nor dex counts prove S Pen behavior; O15 still requires
+a green tester-army receipt for the exact head before any build/install.
+Native-only side-button entry is the owner's explicit exception to the
+AGENTS.md Expo Go compatibility rule: the JS module lookup remains optional.
+Expo Go and older APKs retain the **Annotate pill** and
+**Options → Annotate** manual entry.
+
+**Owner acceptance — Galaxy S25 Ultra only (S22+ has no S Pen):**
+
+- Install the O15-approved newly rebuilt `app.dash.mobile` APK. Check that
+  manual Annotate entry and exit still work.
+- Hover the S Pen over Dash and press the side button: Annotate enters once.
+  Keep it pressed while hovering or touching: no repeat toggle. Release:
+  no toggle. Press again after release: exit once.
+- Repeat while the pen is in contact; include eraser tool where possible.
+  Verify normal touch, hovering and drawing are not consumed.
+- Check the Samsung Air Command interaction enabled and disabled. If Android
+  consumes the press before it reaches Dash's window, document that device
+  limitation rather than claiming global interception.
+- Background, foreground, destroy/reopen the app and verify observer cleanup
+  and fresh entry. No phone acceptance is claimed by the build or web army.
+
+
 ## DeX WP2 (device spike pending)
 
 The local `dash-dex` Expo module registers `DashDex` and a non-exported

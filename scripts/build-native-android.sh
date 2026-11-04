@@ -32,7 +32,7 @@ check_apk_inclusion() {
     required_classes+=('Lapp/dash/audio/DashAudioRouteModule;')
   fi
   if [ -d app/modules/dash-stylus ]; then
-    required_classes+=('Lapp/dash/stylus/DashStylusModule;')
+    required_classes+=('Lapp/dash/stylus/DashStylusModule;' 'app.dash.stylus.DashStylusModule')
   fi
   for module in "${required_classes[@]}"; do
     # grep -c consumes the complete dex stream; grep -q could SIGPIPE unzip.
@@ -134,7 +134,24 @@ variant="${DASH_VARIANT:-debug}"
 case "$variant" in debug) Variant=Debug ;; release) Variant=Release ;; *) echo "DASH_VARIANT must be debug or release" >&2; exit 2 ;; esac
 printf 'Variant: %s\n' "$variant" | tee .native-receipts/variant.txt
 env | grep '^EXPO_PUBLIC_' | sort | tee .native-receipts/expo-public-env.txt || true
-(cd app/android && ./gradlew ":app:assemble$Variant" -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon)
+# Clear prior Gradle receipts so a stale XML cannot mask missing results.
+rm -rf .native-receipts/dash-stylus
+# Existing Kotlin ButtonEdges test is a native build check, not O15 acceptance.
+# The exact-head web army receipt and owner S25 verification remain mandatory.
+gradle_result=0
+(cd app/android && ./gradlew ":dash-stylus:testDebugUnitTest" ":app:assemble$Variant" -PreactNativeArchitectures=arm64-v8a -Pkotlin.compiler.execution.strategy=in-process '-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' --max-workers=2 --build-cache --no-daemon) || gradle_result=$?
+for report in test-results/testDebugUnitTest reports/tests/testDebugUnitTest; do
+  source="app/modules/dash-stylus/android/build/$report"
+  if [ -d "$source" ]; then
+    mkdir -p ".native-receipts/dash-stylus/$(dirname "$report")"
+    cp -a "$source" ".native-receipts/dash-stylus/$report"
+  fi
+done
+[ "$gradle_result" -eq 0 ] || exit "$gradle_result"
+if ! compgen -G '.native-receipts/dash-stylus/test-results/testDebugUnitTest/TEST-*.xml' > /dev/null; then
+  printf 'DashStylus Kotlin test results missing; native build not accepted.\n' >&2
+  exit 1
+fi
 cp "app/android/app/build/outputs/apk/$variant/app-$variant.apk" .native-receipts/dash-native-arm64.apk
 if [ "$variant" = release ]; then
   # The RC must boot without Metro: the Hermes bundle has to be inside the APK.
