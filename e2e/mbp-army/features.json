@@ -329,7 +329,11 @@
     {"id": "annotation-palm", "title": "Skia stylus keeps its whole stroke through a palm touch and ignores the pen-up touch tail",
      "tests": ["annotation-palm: pen stroke survives a second touch with every pen point"]},
     {"id": "h074-swipe-completion", "title": "After a Do / Not now swipe, a full-width persistent completion receipt stays on screen, Undo expires, and reload preserves the choice",
-     "tests": ["H-074: Do and Not now swipes leave visible completed receipts, Undo and reload keep the decision"]}
+     "tests": ["H-074: Do and Not now swipes leave visible completed receipts, Undo and reload keep the decision"]},
+    {"id": "attached-composer-session", "title": "Main composer retains exact selected ACP session and provider (#629)",
+     "tests": ["attached composer sends into the same ACP session after leaving Chat",
+               "attached composer keeps per-session draft across tab, search and reload",
+               "attached composer switches only when a different chat is explicitly chosen"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",
