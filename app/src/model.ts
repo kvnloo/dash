@@ -1,7 +1,7 @@
 import { parseReplyParts } from "../../shared/reply-parts";
 import type { ReplyPart } from "../../shared/protocol";
 import type { DetailMode } from "./lib/reply-details";
-import { parseChatAttachments, type ChatAttachment, type HarnessInfo, type HostInfo } from "../../shared/protocol";
+import { MODEL_ID, parseChatAttachments, type ChatAttachment, type HarnessInfo, type HostInfo } from "../../shared/protocol";
 
 import { parseSummary, type SummaryInfo } from "../../shared/thinking-summary";
 import { unwrapHermesHistoryText } from "./lib/history-display";
@@ -95,6 +95,8 @@ export interface AssistantMessage {
   error?: string;
   /** Host history cut this text; the full text loads on demand. */
   truncated?: boolean;
+  /** The model requested when this turn was queued; stable through replay. */
+  requestedModel?: string;
   /** Bridge turn id; used to re-attach after a reconnect. */
   turnId: string;
   /** Last event sequence number applied. */
@@ -125,6 +127,8 @@ export interface Conversation {
   targetHostId?: string;
   profileId?: string;
   profileName?: string;
+  /** User-requested ACP model for future turns; not proof the host applied it. */
+  modelOverride?: string;
   /** Model from a host summary/roster, bound to the reported session. */
   sessionModel?: { sessionId: string; model: string };
   messageCount?: number;
@@ -242,6 +246,7 @@ function parseMessage(raw: unknown): Message | null {
       error: typeof raw.error === "string" ? raw.error : undefined,
       ...(raw.truncated === true ? { truncated: true } : {}),
       turnId: raw.turnId,
+      requestedModel: typeof raw.requestedModel === "string" && MODEL_ID.test(raw.requestedModel) ? raw.requestedModel : undefined,
       seq: typeof raw.seq === "number" ? raw.seq : 0,
     };
   }
@@ -293,6 +298,7 @@ export function parseConversation(raw: unknown): Conversation | null {
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     sessionId: optionalId(raw.sessionId),
+    modelOverride: typeof raw.modelOverride === "string" && MODEL_ID.test(raw.modelOverride) ? raw.modelOverride : undefined,
     sessionModel: isRecord(raw.sessionModel) && nonBlank(raw.sessionModel.sessionId) && nonBlank(raw.sessionModel.model)
       ? { sessionId: raw.sessionModel.sessionId, model: raw.sessionModel.model } : undefined,
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
