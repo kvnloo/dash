@@ -291,7 +291,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const workers = useSessionWorkers(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
   const [chatOptions, setChatOptions] = useState(false);
   const context = useContextView(settings, online && (!conversation?.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)), harnessId, conversation?.profileId, conversation?.sessionId, thinking.phase !== "idle");
-  const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
+  const latestAssistant = [...messages].reverse().find((message): message is AssistantMessage => message.role === "assistant");
   const { rateLabel, rateRecent } = useComposerStreamRate(latestAssistant?.turnId, latestAssistant?.state === "streaming");
   const permissionRecords = permissionRequests.state.use(s => s.records);
   // Open requests, plus the settled ones of the latest turn so the owner sees the host's outcome.
