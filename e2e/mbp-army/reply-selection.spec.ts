@@ -5,11 +5,15 @@ import type { Page } from 'playwright/test';
 async function selectAgentMessage(page: Page, phrase: string) {
   const reply = page.getByText(new RegExp('ARMY_REPLY: ' + phrase)).first();
   await expect(reply).toBeVisible({ timeout: 20000 });
-  const bounds = await reply.boundingBox();
-  if (!bounds) throw new Error('Agent reply has no visible bounds');
+  // React Native Web owns long presses on the surrounding Pressable, not its Text descendants.
+  // Target that real gesture surface to avoid triggering the browser's text selection.
+  const trigger = page.getByTestId('reply-selection-trigger').filter({ has: reply }).first();
+  await expect(trigger).toBeVisible();
+  const bounds = await trigger.boundingBox();
+  if (!bounds) throw new Error('Agent reply press target has no visible bounds');
   await page.mouse.move(bounds.x + Math.min(bounds.width / 2, 20), bounds.y + bounds.height / 2);
   await page.mouse.down();
-  await page.waitForTimeout(600); // React Native Pressable long-press threshold is 350 ms.
+  await page.waitForTimeout(650); // React Native Pressable long-press threshold is 350 ms.
   await page.mouse.up();
   const selection = page.getByTestId('reply-selection-input');
   await expect(selection).toBeVisible();
