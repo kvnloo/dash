@@ -1,10 +1,10 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { PressScale } from "../PressScale";
 import { haptic } from "../../haptics";
 import { traceStore } from "../../trace/source";
 import { store } from "../../store/app";
-import { entryLine } from "../../trace/feed-state";
+import { entryLine, isFreshBridgeTrace } from "../../trace/feed-state";
 import { fonts, radius, space, type } from "../../theme";
 import { LivePulse, tc } from "./tokens";
 
@@ -12,7 +12,15 @@ import { LivePulse, tc } from "./tokens";
 export const TraceEntryCard = memo(function TraceEntryCard({ onOpen }: { onOpen(): void }) {
   const feed = traceStore.use((s) => s.feed);
   const paired = store.use((s) => Boolean(s.settings?.address && (s.settings.token || s.settings.identity)));
-  const line = entryLine(feed, paired);
+  const [, refreshClock] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => refreshClock((tick) => tick + 1), 5000);
+    return () => clearInterval(timer);
+  }, []);
+  // Re-evaluate immediately on a newly arrived bridge snapshot, not the last timer tick.
+  const now = Date.now();
+  const fresh = isFreshBridgeTrace(feed, now);
+  const line = entryLine(feed, paired, now);
   return (
     <PressScale onPress={() => { haptic.select(); onOpen(); }} style={styles.card} accessibilityRole="button" accessibilityLabel={`Agent trace: ${line}`} testID="trace-entry">
       <View style={styles.inner}>
@@ -21,8 +29,8 @@ export const TraceEntryCard = memo(function TraceEntryCard({ onOpen }: { onOpen(
           <Text style={styles.chev}>›</Text>
         </View>
         <View style={styles.row}>
-          {feed.phase === "live" ? <LivePulse size={6} /> : null}
-          <Text style={[styles.k, feed.phase === "live" ? { color: tc.live } : null]} numberOfLines={2}>{line}</Text>
+          {fresh ? <LivePulse size={6} /> : null}
+          <Text style={[styles.k, fresh ? { color: tc.live } : null]} numberOfLines={3}>{line}</Text>
         </View>
       </View>
     </PressScale>
