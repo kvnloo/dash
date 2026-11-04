@@ -140,7 +140,7 @@ export function ActionChip({ action, variant = "card", decision, decidedAt, onDe
   return (
     <Animated.View layout={reduced ? undefined : LinearTransition.duration(MOTION_MS.enter).reduceMotion(ReduceMotion.System)} style={styles.outer} onLayout={onLayout} testID={`chip-${action.id}`}>
       <GestureDetector gesture={pan}>
-        <Animated.View testID={`chip-surface-${action.id}`} style={[variant === "pill" ? styles.pill : styles.card, { minHeight: sizing.rowMin, padding: sizing.padding, alignSelf: "stretch" }, chipStyle]} accessibilityRole={decided ? "text" : "adjustable"} accessibilityLabel={`${action.title}. ${decided ? decision === "do" ? "Done" : "Not now" : hint}`}
+        <Animated.View testID={`chip-surface-${action.id}`} style={[variant === "pill" ? styles.pill : styles.card, { minHeight: sizing.rowMin, padding: sizing.padding, alignSelf: "stretch" }, chipStyle]} accessibilityRole={decided ? undefined : "adjustable"} accessibilityLabel={decided ? undefined : `${action.title}. ${hint}`}
           accessibilityActions={decided ? [] : [{ name: "increment", label: "Do" }, { name: "decrement", label: "Not now" }]}
           onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === "increment") commit("do"); else if (e.nativeEvent.actionName === "decrement") commit("not_now"); }}
         >
