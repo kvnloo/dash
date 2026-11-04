@@ -6,7 +6,8 @@ import { replyObservationKey } from "../lib/next-action";
 import { useHandedness } from "../lib/useHandedness";
 import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
-import { setThinkingSummaries } from "../store/app";
+import { setThinkingSummaries, setConversationModel } from "../store/app";
+import { useComposerStreamRate } from "../hooks/useComposerStreamRate";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef, type ViewToken } from "@shopify/flash-list";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -291,6 +292,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const [chatOptions, setChatOptions] = useState(false);
   const context = useContextView(settings, online && (!conversation?.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)), harnessId, conversation?.profileId, conversation?.sessionId, thinking.phase !== "idle");
   const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
+  const { rateLabel, rateRecent } = useComposerStreamRate(latestAssistant?.turnId, latestAssistant?.state === "streaming");
   const permissionRecords = permissionRequests.state.use(s => s.records);
   // Open requests, plus the settled ones of the latest turn so the owner sees the host's outcome.
   const permissionCards = conversation ? Object.values(permissionRecords).filter(record => record.conversationId === conversation.id &&
@@ -540,6 +542,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       onQueuePreviewChange={text => { if (conversation) changeQueuePreview(conversation.id, text); }}
       onSaveQueuePreview={() => { if (conversation) saveQueuePreview(conversation.id); }}
       harness={harnessId}
+      model={identity.model}
+      modelOverride={conversation?.modelOverride}
+      rateLabel={rateLabel}
+      rateRecent={rateRecent}
+      onChooseHarness={() => { haptic.select(); setPickerVisible(true); }}
+      onChangeModel={next => {
+        const active = conversation ?? createConversation(harnessId);
+        setConversationModel(active.id, next);
+      }}
       blurTarget={liveOn ? undefined : blurTarget}
       cwd={conversation?.cwd}
       placeholder={liveOn ? (live.askHermes ? "Ask Hermes through the live surface" : "Live surface · quick reply") : composerPlaceholder({
