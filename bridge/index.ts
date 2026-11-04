@@ -21,6 +21,7 @@ import { homedir, hostname } from "node:os";
 import { basename, join } from "node:path";
 import {
   CHATS_FEATURE,
+  MODEL_SELECTION_FEATURE,
   PROTOCOL_VERSION,
   chatKey,
   parseClientMessage,
@@ -955,7 +956,7 @@ const server = Bun.serve<SocketData>({
         cwd: DEFAULT_CWD,
         harnesses,
         hosts: await selfRoster(harnesses, tailscaleIp ?? undefined),
-        features: [CHATS_FEATURE],
+        features: [CHATS_FEATURE, MODEL_SELECTION_FEATURE],
         routes: remoteRouteIds(),
         voice: { stt: voice.stt.ok, nativeVoice: voice.nativeVoice },
       });
