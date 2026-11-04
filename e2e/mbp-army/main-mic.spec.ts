@@ -5,7 +5,10 @@ const fixtureOptions = { pm: false, env: { DASH_STT_ENGINE: "fixture" } };
 test.use({
   bridgeOptions: fixtureOptions,
   launchOptions: {
+    // A spec-level launchOptions replaces the config's args, so keep the headed
+    // wayland flag here too, or headed Chromium exits with "Missing X server".
     args: [
+      ...(process.env.ARMY_HEADED === "1" ? ["--ozone-platform=wayland"] : []),
       "--disable-dev-shm-usage",
       "--use-fake-device-for-media-stream",
       "--use-fake-ui-for-media-stream",
