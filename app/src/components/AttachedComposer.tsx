@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, type RefObject } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
 import type { Conversation } from "../model";
@@ -15,6 +15,7 @@ import { onTurnSettled } from "../store/queue";
 
 interface Props {
   conversation: Conversation;
+  blurTarget?: RefObject<View | null>;
   onOpen(): void;
   onSearch(): void;
   onVoice(): void;
@@ -25,7 +26,7 @@ interface Props {
  * The main-screen composer keeps the exact chat's persisted draft and send target.
  * Harness settings are defaults for NEW chats, never authority for this one.
  */
-export function AttachedComposer({ conversation, onOpen, onSearch, onVoice, onDetach }: Props) {
+export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, onVoice, onDetach }: Props) {
   const online = store.use(state => state.connection.status === "online");
   const harnessName = store.use(state => state.connection.harnesses.find(harness => harness.id === conversation.harness)?.name) ?? conversation.harness;
   const blocked = conversationTargetError(conversation);
@@ -90,6 +91,7 @@ export function AttachedComposer({ conversation, onOpen, onSearch, onVoice, onDe
         draftKey={conversation.id}
         harness={conversation.harness}
         cwd={conversation.cwd}
+        blurTarget={blurTarget}
         disabled={!online || blocked !== undefined}
         streaming={busy}
         queuePreview={conversation.queuePreview}
