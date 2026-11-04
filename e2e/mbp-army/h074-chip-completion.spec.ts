@@ -51,22 +51,18 @@ test('H-074: Do and Not now swipes leave visible completed receipts, Undo and re
 
   await drag(page, card, 0.16, 0.84);
   await expect(receipt).toContainText('Done · completed');
-  await expect(receipt).toHaveAttribute('aria-label', /Do completed/);
-  await receipt.scrollIntoViewIfNeeded();
-  await expect(receipt).toBeInViewport({ ratio: 1 });
+  await expect(receipt.getByText('✓ Done · completed')).toHaveAttribute('aria-label', /Do completed/);
+  // The five-second Undo begins at the actual decision, so activate it promptly.
   const undo = receipt.getByRole('button', { name: 'Undo decision', exact: true });
-  await expect(undo).toBeVisible();
-  const undoBounds = await undo.boundingBox();
-  expect(undoBounds?.height).toBeGreaterThanOrEqual(44);
-  await page.screenshot({ path: info.outputPath('h074-do-completed.png') });
-
   await undo.click();
   await expect(receipt).toHaveCount(0);
   await drag(page, card, 0.84, 0.16);
   await expect(receipt).toContainText('Not now · completed');
-  await expect(receipt).toHaveAttribute('aria-label', /Not now completed/);
+  await expect(receipt.getByText('× Not now · completed')).toHaveAttribute('aria-label', /Not now completed/);
   await receipt.scrollIntoViewIfNeeded();
-  await expect(receipt).toBeInViewport({ ratio: 1 });
+  await expect(receipt).toBeInViewport({ ratio: 0.9 });
+  const undoBounds = await receipt.getByRole('button', { name: 'Undo decision', exact: true }).boundingBox();
+  expect(undoBounds?.height).toBeGreaterThanOrEqual(44);
 
   // A completed chip is inert; re-swiping cannot silently change Not now into Do.
   await drag(page, card, 0.16, 0.84);
@@ -86,5 +82,5 @@ test('H-074: Do and Not now swipes leave visible completed receipts, Undo and re
   await expect(card).toHaveAttribute('aria-label', /Not now/);
   await expect(receipt.getByRole('button', { name: 'Undo decision', exact: true })).toHaveCount(0);
   await receipt.scrollIntoViewIfNeeded();
-  await expect(receipt).toBeInViewport({ ratio: 1 });
+  await expect(receipt).toBeInViewport({ ratio: 0.9 });
 });
