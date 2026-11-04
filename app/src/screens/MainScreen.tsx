@@ -498,6 +498,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
           <AttachedComposer
             key={attached.id}
             conversation={attached}
+            blurTarget={blurTarget}
             onOpen={() => navigation.navigate("Chat")}
             onSearch={() => setSearchMode(true)}
             onVoice={() => navigation.navigate("Voice", { autostart: true })}
