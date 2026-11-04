@@ -84,6 +84,7 @@ createInterface({input:process.stdin}).on('line', line => {
   else reply({});
  }
  else if (r.method === 'session/prompt') {
+  calls(r.method,r.params);
   active = r.id;
   const params=typeof r.params==='object'&&r.params!==null&&'prompt' in r.params?r.params.prompt:[];
   const text = Array.isArray(params)?params.map((p:unknown)=>typeof p==='object'&&p!==null&&'text' in p&&typeof p.text==='string'?p.text:'').join(''):'';
