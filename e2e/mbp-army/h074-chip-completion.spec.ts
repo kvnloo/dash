@@ -76,7 +76,6 @@ test('H-074: Do and Not now swipes leave visible completed receipts, Undo and re
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('tab').nth(1).waitFor({ timeout: 30000 });
   block = await openLab(page);
-  card = block.getByTestId('chip-surface-lab-card');
   receipt = block.getByTestId('chip-completion-lab-card');
   await expect(receipt).toContainText('Not now · completed');
   await expect(receipt.getByText('× Not now · completed')).toHaveAttribute('aria-label', /Not now completed/);
