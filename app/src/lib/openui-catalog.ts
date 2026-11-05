@@ -1,5 +1,7 @@
 import { createLibrary, createStreamingParser, defineComponent, type ElementNode } from "@openuidev/lang-core";
 import { z } from "zod";
+import { EPHEMERAL_KINDS, type EphemeralKind } from "../vendor/ephemeral-ui/kinds.generated";
+import { ephemeralCardSpec } from "./ephemeral-card";
 
 // Pure presentation catalog: the language is parsed, never evaluated or executed.
 const text = z.string().max(2000);
@@ -57,9 +59,15 @@ const Roadmap = defineComponent({
   description: "Approved local snapshot handle only.",
   component: null,
 });
+const EphemeralCard = defineComponent({
+  name: "EphemeralCard",
+  props: z.object({ kind: z.enum(EPHEMERAL_KINDS), app: z.string().max(64).optional() }),
+  description: "One kvnloo/ephemeral-ui card (card.v0 kind plus optional catalog app id), drawn by the host from the pinned kit with synthetic demo data.",
+  component: null,
+});
 const schema = createLibrary({
   root: "Stack",
-  components: [Stack, Card, Text, Stat, Progress, List, Table, Callout, Roadmap],
+  components: [Stack, Card, Text, Stat, Progress, List, Table, Callout, Roadmap, EphemeralCard],
 }).toJSONSchema();
 
 export type OpenUINode =
@@ -71,7 +79,8 @@ export type OpenUINode =
   | { type: "List"; items: string[] }
   | { type: "Table"; columns: string[]; rows: string[][] }
   | { type: "Callout"; tone: string; text: string }
-  | { type: "Roadmap"; handle: "dash-roadmap" };
+  | { type: "Roadmap"; handle: "dash-roadmap" }
+  | { type: "EphemeralCard"; kind: EphemeralKind; app: string };
 
 export type OpenUIParseResult =
   | { state: "loading" }
@@ -83,7 +92,7 @@ const MAX_NODES = 200;
 const MAX_DEPTH = 8;
 const MAX_STRING = 2000;
 const MAX_TABLE_ROWS = 50;
-const COMPONENTS = new Set(["Stack", "Card", "Text", "Stat", "Progress", "List", "Table", "Callout", "Roadmap"]);
+const COMPONENTS = new Set(["Stack", "Card", "Text", "Stat", "Progress", "List", "Table", "Callout", "Roadmap", "EphemeralCard"]);
 const ROADMAP_SOURCE = /^\s*root\s*=\s*Roadmap\(\s*"dash-roadmap"\s*\)\s*;?\s*$/;
 
 function invalid(reason: string): OpenUIParseResult {
@@ -233,7 +242,7 @@ function propsOf(node: ElementNode, required: string[], optional: string[] = [])
     && Object.keys(node.props).every(key => required.includes(key) || optional.includes(key));
 }
 
-type DecodeBudget = { nodes: number; failure: string };
+type DecodeBudget = { nodes: number; cards: number; failure: string };
 function decode(value: unknown, depth: number, budget: DecodeBudget, source: string): OpenUINode | null {
   const fail = (reason: string): null => {
     budget.failure = reason;
@@ -312,6 +321,13 @@ function decode(value: unknown, depth: number, budget: DecodeBudget, source: str
       if (!propsOf(value, ["handle"]) || p.handle !== "dash-roadmap"
         || depth !== 1 || !ROADMAP_SOURCE.test(source)) return fail("Unapproved Roadmap handle or source");
       return { type: "Roadmap", handle: "dash-roadmap" };
+    case "EphemeralCard": {
+      // Ten cards per reply at most: each is a sandboxed page.
+      const spec = propsOf(value, ["kind"], ["app"]) ? ephemeralCardSpec(p.kind, p.app ?? undefined) : null;
+      if (!spec) return fail("Unknown ephemeral-ui kind or app");
+      if (++budget.cards > 10) return fail("More than 10 ephemeral-ui cards");
+      return { type: "EphemeralCard", kind: spec.kind, app: spec.app };
+    }
     default:
       return fail("Unknown component");
   }
@@ -328,7 +344,7 @@ export function parseOpenUI(source: string, complete: boolean): OpenUIParseResul
       || parsed.meta.statementCount > MAX_NODES || parsed.queryStatements.length
       || parsed.mutationStatements.length || Object.keys(parsed.stateDeclarations).length
       || parsed.root.hasDynamicProps) return invalid("Unresolved, dynamic, or invalid OpenUI program");
-    const budget: DecodeBudget = { nodes: 0, failure: "Invalid component tree" };
+    const budget: DecodeBudget = { nodes: 0, cards: 0, failure: "Invalid component tree" };
     const tree = decode(parsed.root, 1, budget, source);
     return tree ? { state: "ready", tree } : invalid(budget.failure);
   } catch {

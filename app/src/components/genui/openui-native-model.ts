@@ -3,6 +3,8 @@
  * Keep this local until Hermes wires the sibling parser into GenerativeBlock.
  * No executable props, actions, URLs or network-backed nodes are represented.
  */
+import type { EphemeralKind } from "../../vendor/ephemeral-ui/kinds.generated";
+
 export type OpenUINode =
   | { type: "Stack"; children: OpenUINode[] }
   | { type: "Card"; title: string; children: OpenUINode[] }
@@ -12,7 +14,8 @@ export type OpenUINode =
   | { type: "List"; items: string[] }
   | { type: "Table"; columns: string[]; rows: string[][] }
   | { type: "Callout"; tone: string; text: string }
-  | { type: "Roadmap"; handle: "dash-roadmap" };
+  | { type: "Roadmap"; handle: "dash-roadmap" }
+  | { type: "EphemeralCard"; kind: EphemeralKind; app: string };
 
 type RowBase = {
   /** Stable positional identity; content changes do not change row keys. */
@@ -32,6 +35,7 @@ export type OpenUILayoutRow = RowBase & (
   | { type: "Table"; columns: string[]; rows: string[][] }
   | { type: "Callout"; tone: string; text: string }
   | { type: "Roadmap"; handle: string }
+  | { type: "EphemeralCard"; kind: EphemeralKind; app: string }
 );
 
 export function clampProgress(value: number): number {
@@ -83,6 +87,9 @@ export function layoutModel(root: OpenUINode): OpenUILayoutRow[] {
         break;
       case "Roadmap":
         rows.push({ ...base, type: "Roadmap", handle: node.handle, accessibilityLabel: "Roadmap" });
+        break;
+      case "EphemeralCard":
+        rows.push({ ...base, type: "EphemeralCard", kind: node.kind, app: node.app, accessibilityLabel: `${node.app} ${node.kind} card` });
         break;
     }
 

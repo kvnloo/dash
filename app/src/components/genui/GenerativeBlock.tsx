@@ -27,7 +27,7 @@ export function GenerativeBlock({ code, language, onIntent, streaming = false }:
     <View style={loading.row}>{state === "loading" && !reduced ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}<Text style={loading.label}>{state === "loading" ? "Building interface…" : "Interface could not be rendered. Ask me to regenerate it."}</Text></View>
     {state === "loading" ? [90, 65, 80].map((width, i) => <View key={i} style={[loading.line, { width: `${width}%` }]} />) : null}
   </View>;
-  if (catalog?.state === "ready") return <OpenUINative tree={catalog.tree} />;
+  if (catalog?.state === "ready") return <OpenUINative tree={catalog.tree} onIntent={onIntent} />;
   if (diagram) return <DiagramDOM key={code} diagram={diagram} palette={palette} dom={{ style: { height: 350 }, scrollEnabled: false, useExpoDOMWebView: false }} />;
   if (widgets) return <GenUI key={code} widgets={widgets} onIntent={onIntent} />;
   if (language === "html" && code.length <= 200000) return <InlineHTML source={code} />;
