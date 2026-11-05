@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { colors, glass, radius, space, type } from "../../theme";
+import type { LiveIntent } from "../../../../shared/live";
+import { EphemeralCard } from "./EphemeralCard";
 import { RippleRoadmap } from "./RippleRoadmap";
 import { layoutModel } from "./openui-native-model";
 import type { OpenUINode, OpenUILayoutRow } from "./openui-native-model";
@@ -23,9 +25,10 @@ function toneColor(tone: string | undefined): string {
   }
 }
 
-function NativeRow({ row, childrenByParent }: { row: OpenUILayoutRow; childrenByParent: Map<string, OpenUILayoutRow[]> }) {
+type Intent = ((intent: LiveIntent) => boolean) | undefined;
+function NativeRow({ row, childrenByParent, onIntent }: { row: OpenUILayoutRow; childrenByParent: Map<string, OpenUILayoutRow[]>; onIntent: Intent }) {
   const children = childrenByParent.get(row.key) ?? [];
-  const descendants = children.map(child => <NativeRow key={child.key} row={child} childrenByParent={childrenByParent} />);
+  const descendants = children.map(child => <NativeRow key={child.key} row={child} childrenByParent={childrenByParent} onIntent={onIntent} />);
 
   switch (row.type) {
     case "Stack":
@@ -98,11 +101,13 @@ function NativeRow({ row, childrenByParent }: { row: OpenUILayoutRow; childrenBy
       return row.handle === "dash-roadmap"
         ? <View style={styles.card}><RippleRoadmap /></View>
         : <Text accessibilityRole="alert" selectable style={styles.body}>Unsupported roadmap</Text>;
+    case "EphemeralCard":
+      return <EphemeralCard spec={{ kind: row.kind, app: row.app }} onIntent={onIntent} />;
   }
 }
 
 /** Native-only, display-only OpenUI tree. Mounting in GenerativeBlock is Hermes-owned. */
-export function OpenUINative({ tree }: { tree: OpenUINode }) {
+export function OpenUINative({ tree, onIntent }: { tree: OpenUINode; onIntent?: (intent: LiveIntent) => boolean }) {
   const childrenByParent = useMemo(() => {
     const map = new Map<string, OpenUILayoutRow[]>();
     for (const row of layoutModel(tree)) {
@@ -115,7 +120,7 @@ export function OpenUINative({ tree }: { tree: OpenUINode }) {
   }, [tree]);
 
   return <View style={styles.root}>
-    {(childrenByParent.get(ROOT) ?? []).map(row => <NativeRow key={row.key} row={row} childrenByParent={childrenByParent} />)}
+    {(childrenByParent.get(ROOT) ?? []).map(row => <NativeRow key={row.key} row={row} childrenByParent={childrenByParent} onIntent={onIntent} />)}
   </View>;
 }
 
