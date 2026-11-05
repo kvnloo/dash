@@ -3,7 +3,7 @@ import type { AgentInfo, BotInfo, HostInfo } from "../../../shared/protocol";
 import { hostsTree } from "./hosts-tree";
 import type { TreeNode } from "./tree";
 
-// Shaped like groot's real roster (Kevin, 2026-11-05: "four profiles, then six harnesses, then a hundred chats
+// Shaped like the Hermes host's real roster (Kevin, 2026-11-05: "four profiles, then six harnesses, then a hundred chats
 // inside hermes"): Hermes profiles exposed as bots, other harnesses, and many persisted Hermes sessions.
 const profiles = ["default", "clean", "ayo", "analyst"];
 const hermesBots: BotInfo[] = profiles.map(p => ({ id: `hermes-bot:${p}`, name: p, runtime: "hermes", status: "running", channels: [], agentId: `hermes:${p}` }));
@@ -18,10 +18,10 @@ const otherHarnesses: AgentInfo[] = ["claude", "codex", "omp", "opencode", "pi"]
   { id: kind, name: kind, kind, status: "available" as const },
   { id: `${kind}:chat`, name: `${kind} chat`, kind, status: "running" as const, sessionId: `${kind}-1` },
 ]);
-const groot: HostInfo = { id: "groot", name: "groot", hostname: "groot", kind: "computer", online: true, address: "100.113.138.100",
-  agents: [...anchors, ...hermesChats, ...otherHarnesses], bots: [...hermesBots, serviceBot] } as HostInfo;
+const hostB: HostInfo = { id: "host-b", name: "host-b", hostname: "host-b", kind: "computer", online: true, self: true, address: "192.0.2.10",
+  agents: [...anchors, ...hermesChats, ...otherHarnesses], bots: [...hermesBots, serviceBot] };
 
-const tree = hostsTree([groot], () => {}, () => {}, 0)[0]!;
+const tree = hostsTree([hostB], () => {}, () => {}, 0)[0]!;
 const kids = (node: TreeNode) => (typeof node.children === "function" ? node.children() : node.children ?? []) as TreeNode[];
 const walk = (node: TreeNode): TreeNode[] => [node, ...kids(node).flatMap(walk)];
 
@@ -61,11 +61,11 @@ describe("hosts tree hierarchy", () => {
   });
 
   test("counts read in the singular for one, and every harness has a proper name", () => {
-    const small: HostInfo = { id: "mbp", name: "mbp", hostname: "mbp", kind: "computer", online: true, address: "100.0.0.2",
+    const small: HostInfo = { id: "host-a", name: "host-a", hostname: "host-a", kind: "computer", online: true, self: false, address: "192.0.2.20",
       agents: [{ id: "hermes:default", name: "Hermes default", kind: "hermes", status: "available" },
         { id: "hermes-session:1", name: "chat", kind: "hermes", status: "available", sessionId: "s1", profileId: "default" },
-        { id: "grok", name: "grok", kind: "grok", status: "available" }, { id: "fx", name: "fx", kind: "fx", status: "available" }] as AgentInfo[],
-      bots: [] } as HostInfo;
+        { id: "grok", name: "grok", kind: "grok", status: "available" }, { id: "fx", name: "fx", kind: "fx", status: "available" }],
+      bots: [] };
     const host = hostsTree([small], () => {}, () => {}, 0)[0]!;
     expect(host.meta).toBe("3 harnesses · 1 chat");
     const hermes = kids(host).find(node => node.label === "Hermes")!;
