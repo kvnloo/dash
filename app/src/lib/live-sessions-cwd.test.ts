@@ -79,7 +79,7 @@ test("restored OMP panes sharing a session retain each physical pane cwd through
     const log = join(dir, "session-load.jsonl");
     await loadSession(refreshed[0]!, log);
     await loadSession(surviving[0]!, log);
-    expect((await readFile(log, "utf8")).trim().split("\\n")).toEqual([
+    expect((await readFile(log, "utf8")).trim().split("\n")).toEqual([
       JSON.stringify({ method: "session/load", sessionId: primary.sessionId, cwd: primary.cwd }),
       JSON.stringify({ method: "session/load", sessionId: secondary.sessionId, cwd: secondary.cwd }),
     ]);
