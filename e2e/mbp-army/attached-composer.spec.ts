@@ -27,7 +27,8 @@ test("attached composer sends into the same ACP session after leaving Chat", asy
   }, { timeout: 20000 }).toBe(true);
 
   await page.getByRole("button", { name: "Open attached chat", exact: true }).click({ noWaitAfter: true });
-  await expect(page.getByTestId("chat-window")).toBeVisible();
+  // Wide layouts open the chat as a screen (no "chat-window" testID); phones use the window.
+  await expect(page.getByTestId("transcript-viewport")).toBeVisible();
   // Never keep Main's draft or attachment chips mounted behind an open chat.
   await expect(page.getByTestId("attached-composer")).toHaveCount(0);
   await expect(page.getByTestId("transcript-viewport").getByText("ARMY_REPLY: ARMY_H108_FIRST").first()).toBeVisible();
