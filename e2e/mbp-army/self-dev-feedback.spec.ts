@@ -53,7 +53,8 @@ test('chat row long press requires an explicit feedback choice before steering',
   await feedback.click({ noWaitAfter: true });
   // The feedback chat opens in its window while its row also lists it; assert the opened window.
   await expect(page.getByRole('heading', { name: 'Dash feedback', exact: true })).toBeVisible();
-  await expect(page.getByText(/ARMY_REPLY: You are the Dash secondmate/).first()).toBeVisible({ timeout: 20000 });
+  // The closed row list keeps a hidden "Last reply ·" preview that also matches; assert the visible transcript reply.
+  await expect(page.getByText(/ARMY_REPLY: You are the Dash secondmate/).locator('visible=true').first()).toBeVisible({ timeout: 20000 });
 });
 
 test('beta feedback opt-out leaves Main text as an unsent agent draft', async ({ page, bridge }) => {
