@@ -502,29 +502,19 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
       <BottomActionSheet open={rowMenu !== null} title={rowMenu?.title || "Result"} options={rowMenuOptions} onSelect={onRowMenuSelect} onClose={closeRowMenu} />
       <KeyboardDock style={styles.searchDock}>
-        {attached && !searchMode ? (
-          // Chat is a transparent modal: changing Main's dock while Chat owns focus
-          // reflows the backdrop. Retain the same dock/layout but hide its controls.
-          <View
-            style={!screenFocused ? styles.inactiveAttached : undefined}
-            pointerEvents={screenFocused ? "auto" : "none"}
-            accessibilityElementsHidden={!screenFocused}
-            importantForAccessibility={screenFocused ? "auto" : "no-hide-descendants"}
-          >
-            <AttachedComposer
-              key={attached.id}
-              conversation={attached}
-              active={screenFocused}
-              blurTarget={blurTarget}
-              onOpen={() => navigation.navigate("Chat")}
-              onSearch={(searchQuery) => {
-                if (searchQuery !== undefined) setQuery(searchQuery);
-                setSearchMode(true);
-              }}
-              onVoice={() => navigation.navigate("Voice", { autostart: true })}
-              onDetach={() => setActive(null)}
-            />
-          </View>
+        {attached && screenFocused && !searchMode ? (
+          <AttachedComposer
+            key={attached.id}
+            conversation={attached}
+            blurTarget={blurTarget}
+            onOpen={() => navigation.navigate("Chat")}
+            onSearch={(searchQuery) => {
+              if (searchQuery !== undefined) setQuery(searchQuery);
+              setSearchMode(true);
+            }}
+            onVoice={() => navigation.navigate("Voice", { autostart: true })}
+            onDetach={() => setActive(null)}
+          />
         ) : (
           <>
             {attached && screenFocused ? (
@@ -572,7 +562,6 @@ const styles = StyleSheet.create({
   searchDock: {
     backgroundColor: "transparent",
   },
-  inactiveAttached: { opacity: 0 },
   resumeAttached: { minHeight: 44, justifyContent: "center", paddingHorizontal: space.lg, backgroundColor: colors.bg },
   resumeText: { color: colors.gold, ...type.small },
   sectionHeader: { color: colors.textMuted, ...type.label, paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.xs },
