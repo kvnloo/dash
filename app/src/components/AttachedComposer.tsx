@@ -16,6 +16,7 @@ import { onTurnSettled } from "../store/queue";
 
 interface Props {
   conversation: Conversation;
+  active: boolean;
   blurTarget?: RefObject<View | null>;
   onOpen(): void;
   onSearch(query?: string): void;
@@ -27,7 +28,7 @@ interface Props {
  * The main-screen composer keeps the exact chat's persisted draft and send target.
  * Harness settings are defaults for NEW chats, never authority for this one.
  */
-export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, onVoice, onDetach }: Props) {
+export function AttachedComposer({ conversation, active, blurTarget, onOpen, onSearch, onVoice, onDetach }: Props) {
   const online = store.use(state => state.connection.status === "online");
   const draft = composerDrafts.use(all => all[conversation.id]);
   const priorDraft = useRef<{ id: string; value: ComposerDraft } | null>(null);
@@ -38,13 +39,13 @@ export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, o
     const current = draft ?? { text: "", attachments: [] };
     const previous = priorDraft.current;
     priorDraft.current = { id: conversation.id, value: current };
-    if (!previous || previous.id !== conversation.id || previous.value.text === current.text) return;
+    if (!active || !previous || previous.id !== conversation.id || previous.value.text === current.text) return;
     const parsed = parseSearchQuery(current.text);
     if ((parsed.mode !== "slash" && parsed.mode !== "mention") ||
       parsed.scope === "unknown" || !/^[@/]\w+\s/.test(current.text.trimStart())) return;
     updateComposerDraft(conversation.id, current, () => previous.value);
     onSearch(current.text);
-  }, [conversation.id, draft, onSearch]);
+  }, [active, conversation.id, draft, onSearch]);
 
   const harnessName = store.use(state => state.connection.harnesses.find(harness => harness.id === conversation.harness)?.name) ?? conversation.harness;
   const blocked = conversationTargetError(conversation);
@@ -59,13 +60,16 @@ export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, o
     ...(conversation.targetHostId ? ["host " + conversation.targetHostId] : []),
   ].join(" · ");
 
-  useEffect(() => onTurnSettled(id => {
-    if (id === conversation.id && store.get().connection.status === "online") flushPendingSends(sendChat);
-  }), [conversation.id]);
+  useEffect(() => {
+    if (!active) return;
+    return onTurnSettled(id => {
+      if (id === conversation.id && store.get().connection.status === "online") flushPendingSends(sendChat);
+    });
+  }, [active, conversation.id]);
 
   useEffect(() => {
-    if (online) flushPendingSends(sendChat);
-  }, [conversation.id, online]);
+    if (active && online) flushPendingSends(sendChat);
+  }, [active, conversation.id, online]);
 
   const onSend = useCallback((text: string, attachments: ChatAttachment[]) => {
     const state = store.get();
