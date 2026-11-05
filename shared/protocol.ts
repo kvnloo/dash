@@ -449,7 +449,6 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
         str(raw.id) &&
         str(raw.harness) &&
         str(raw.text) &&
-        (raw.model === undefined || (str(raw.model) && MODEL_ID.test(raw.model))) &&
         optStr(raw.hostId) && optStr(raw.profileId) &&
         optStr(raw.sessionId) &&
         optStr(raw.cwd) &&
@@ -463,7 +462,6 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
           id: raw.id,
           harness: raw.harness,
           text: raw.text,
-          ...(str(raw.model) && MODEL_ID.test(raw.model) ? { model: raw.model } : {}),
           sessionId: raw.sessionId,
           hostId: raw.hostId,
           profileId: raw.profileId,
