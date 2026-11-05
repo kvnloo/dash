@@ -14,6 +14,8 @@ test("attached composer sends into the same ACP session after leaving Chat", asy
   await page.getByRole("button", { name: "Close chat window", exact: true }).click({ noWaitAfter: true });
   await expect(page.getByTestId("attached-composer")).toBeVisible();
   await expect(page.getByTestId("attached-composer-target")).toContainText("OMP");
+  const dockNode = await page.getByTestId("attached-composer").elementHandle();
+  if (!dockNode) throw Error("Main's attached dock did not mount");
   // Main must never contain an alternate text copy of the assistant's reply.
   // That would shadow the transcript and break strict text locators across the army.
   await expect(page.getByTestId("attached-composer").getByText(/ARMY_REPLY:/)).toHaveCount(0);
@@ -27,8 +29,19 @@ test("attached composer sends into the same ACP session after leaving Chat", asy
   }, { timeout: 20000 }).toBe(true);
 
   await page.getByRole("button", { name: "Open attached chat", exact: true }).click({ noWaitAfter: true });
+  await expect(page.getByTestId("chat-window")).toBeVisible();
+  // The underlying Main dock must not be unmounted/replaced during a transparent
+  // Chat window: reflowing it perturbs the long transcript's wheel scroll.
+  await expect.poll(() => dockNode.evaluate(node =>
+    node.isConnected && node.parentElement !== null && getComputedStyle(node.parentElement).opacity === "0"
+  ), { timeout: 5000 }).toBe(true);
   await expect(page.getByTestId("transcript-viewport").getByText("ARMY_REPLY: ARMY_H108_FIRST").first()).toBeVisible();
   await expect(page.getByTestId("transcript-viewport").getByText("ARMY_REPLY: ARMY_H108_MAIN").first()).toBeVisible({ timeout: 20000 });
+  // Typing a Main search scope in Chat must not be consumed by the hidden
+  // attached composer, which subscribes to the same session draft.
+  await composer(page).fill("/harness OMP");
+  await expect(composer(page)).toHaveValue("/harness OMP");
+  await expect(page.getByTestId("chat-window")).toBeVisible();
 });
 
 test("attached composer keeps per-session draft across tab, search and reload", async ({ page, bridge }) => {
