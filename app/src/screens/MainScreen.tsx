@@ -508,7 +508,10 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             conversation={attached}
             blurTarget={blurTarget}
             onOpen={() => navigation.navigate("Chat")}
-            onSearch={() => setSearchMode(true)}
+            onSearch={(searchQuery) => {
+              if (searchQuery !== undefined) setQuery(searchQuery);
+              setSearchMode(true);
+            }}
             onVoice={() => navigation.navigate("Voice", { autostart: true })}
             onDetach={() => setActive(null)}
           />
