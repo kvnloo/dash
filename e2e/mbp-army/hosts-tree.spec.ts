@@ -6,10 +6,12 @@ import { test, expect, pair } from './fixtures';
 // (profiles, harnesses and loose Hermes chats as siblings) shipped unseen.
 test.use({bridgeOptions:{rosterHost:'groot',finishedSessions:true}});
 
-/** Ids of rendered tree rows exactly one level below `parent`, read from the DOM the user sees. */
+/** Ids of tree rows exactly one level below `parent`, in the on-screen order the user reads
+ * (DOM order differs: expanded children can mount after later siblings). */
 const childRows = (page: Page, parent: string) => page.locator('[data-testid^="tree-row-"]').evaluateAll((rows, parentId) => {
  const out: string[] = []; let level = -1;
- for (const row of rows) {
+ const visible = rows.filter(row => row.getBoundingClientRect().height > 0).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+ for (const row of visible) {
   const id = (row.getAttribute('data-testid') ?? '').replace(/^tree-row-/, ''); const at = Number(row.getAttribute('aria-level'));
   if (level < 0) { if (id === parentId) level = at; continue; }
   if (at <= level) break;
@@ -46,7 +48,7 @@ test('expanding a computer host shows harnesses, then Hermes profiles, then chat
  expect(await childRows(page,'groot:harness:codex')).toContain(chatId);
  expect(await childRows(page,'host:groot')).not.toContain(chatId);
 
- const dump=await page.locator('[data-testid^="tree-row-"]').evaluateAll(rows => rows.map(row => `${'  '.repeat(Math.max(0,Number(row.getAttribute('aria-level'))-1))}${row.getAttribute('data-testid')} | ${(row.textContent??'').trim()}`));
+ const dump=await page.locator('[data-testid^="tree-row-"]').evaluateAll(rows => rows.filter(row => row.getBoundingClientRect().height > 0).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).map(row => `${'  '.repeat(Math.max(0,Number(row.getAttribute('aria-level'))-1))}${row.getAttribute('data-testid')} | ${(row.textContent??'').trim()}`));
  await writeFile(info.outputPath('hosts-tree.txt'),dump.join('\n')+'\n');
  await page.screenshot({path:info.outputPath('hosts-tree.png')});
 });
