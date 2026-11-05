@@ -39,8 +39,12 @@ test('expanding a computer host shows harnesses, then Hermes profiles, then chat
  expect(underHermes.filter(id => id.startsWith('groot:session:'))).toEqual([]);
 
  await page.getByTestId('tree-row-groot:harness:codex').click({noWaitAfter:true});
- await expect.poll(async () => (await childRows(page,'groot:harness:codex')).filter(id => id.startsWith('groot:session:') && id.endsWith('army-finished-codex')).length,{timeout:20000}).toBe(1);
- await expect(page.locator('[data-testid^="tree-row-groot:session:"][data-testid$="army-finished-codex"]')).toContainText('ARMY finished Codex native chat');
+ // The finished native Codex chat is a direct child of the Codex harness, not of the host.
+ const codexChat=page.locator('[data-testid^="tree-row-groot:"]').filter({hasText:'ARMY finished Codex native chat'});
+ await expect(codexChat).toHaveCount(1,{timeout:20000});
+ const chatId=(await codexChat.getAttribute('data-testid'))!.replace(/^tree-row-/,'');
+ expect(await childRows(page,'groot:harness:codex')).toContain(chatId);
+ expect(await childRows(page,'host:groot')).not.toContain(chatId);
 
  const dump=await page.locator('[data-testid^="tree-row-"]').evaluateAll(rows => rows.map(row => `${'  '.repeat(Math.max(0,Number(row.getAttribute('aria-level'))-1))}${row.getAttribute('data-testid')} | ${(row.textContent??'').trim()}`));
  await writeFile(info.outputPath('hosts-tree.txt'),dump.join('\n')+'\n');
