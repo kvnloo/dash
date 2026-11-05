@@ -16,9 +16,10 @@ function activity(at: number | undefined, now: number): string | undefined {
   return minutes < 1 ? "now" : minutes < 60 ? `${minutes}m` : minutes < 1440 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 1440)}d`;
 }
 
-const HARNESS_LABELS: Record<string, string> = { hermes: "Hermes", claude: "Claude Code", codex: "Codex", omp: "omp", opencode: "OpenCode", pi: "pi", service: "Services" };
+const HARNESS_LABELS: Record<string, string> = { hermes: "Hermes", claude: "Claude Code", codex: "Codex", omp: "omp", opencode: "OpenCode", pi: "pi", grok: "Grok", fx: "fx", service: "Services" };
 /** One stable name per harness kind, so sibling rows never mix casing or naming schemes. */
 export const harnessLabel = (kind: string): string => HARNESS_LABELS[kind] ?? kind;
+const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function hostsTree(hosts: readonly HostInfo[], open: (host: HostInfo, agent: AgentInfo) => void, actions: (host: HostInfo, bot?: BotInfo) => void, now = Date.now(), conversations: readonly Conversation[] = []): TreeNode[] {
   return hosts.map(host => {
@@ -82,7 +83,7 @@ export function hostsTree(hosts: readonly HostInfo[], open: (host: HostInfo, age
           const live = states.find(item => item.state === "thinking" || item.state === "working" || item.state === "waiting-approval");
           return { identity: botFaceIdentity(profile ?? bot?.id ?? key, bot?.runtime ?? kind), state: live?.state ?? states[0]?.state ?? "idle" };
         })();
-        return { id: `${host.id}:${kind}:profile:${key}`, kind: "bot", label: bot?.name ?? key, detail: bot ? botSummary(bot) : undefined, meta: `${own.length} chats`,
+        return { id: `${host.id}:${kind}:profile:${key}`, kind: "bot", label: bot?.name ?? key, detail: bot ? botSummary(bot) : undefined, meta: count(own.length, "chat"),
           status: bot?.status ?? (host.online ? (own.some(agent => agent.status === "running") ? "running" : "available") : "offline"), dimmed: !host.online, botFace: face,
           onLongPress: bot ? () => actions(host, bot) : undefined,
           children: () => {
@@ -92,14 +93,14 @@ export function hostsTree(hosts: readonly HostInfo[], open: (host: HostInfo, age
         };
       };
       return { id: `${host.id}:harness:${kind}`, kind: "harness", label: harnessLabel(kind),
-        meta: `${groups.size ? `${groups.size} ${kind === "hermes" ? "profiles" : "bots"} · ` : ""}${chats.length} chats`, dimmed: !host.online,
+        meta: `${groups.size ? `${count(groups.size, kind === "hermes" ? "profile" : "bot")} · ` : ""}${count(chats.length, "chat")}`, dimmed: !host.online,
         status: host.online ? agents.some(agent => agent.status === "running") || bots.some(bot => bot.runtime === kind && bot.status === "running") ? "running" : "available" : "offline",
         children: () => [...ordered.map(profileNode), ...loose.filter(agent => agent.sessionId).map(sessionNode), ...installed.map(agent => newChat(agent, installed.length === 1 ? "New chat" : agent.name))],
       };
     };
     return {
       id: `host:${host.id}`, kind: "host", label: hostLabel(host), detail: host.address,
-      meta: `${kinds.length} harnesses · ${sessions.length} chats`,
+      meta: `${count(kinds.length, "harness", "harnesses")} · ${count(sessions.length, "chat")}`,
       status: host.online ? "running" : "offline", dimmed: !host.online,
       onLongPress: () => actions(host),
       children: () => kinds.length ? kinds.map(harnessNode) : [{ id: `${host.id}:empty`, kind: "note", label: host.online ? "No harnesses or sessions reported" : "Host offline" }],
