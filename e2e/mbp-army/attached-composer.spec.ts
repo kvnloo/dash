@@ -161,7 +161,7 @@ test.describe("Main background during transcript paging", () => {
     // Delay the real bridge's older pages until the reader has scrolled.
     let release = () => {};
     const held = new Promise<void>(resolve => { release = resolve; });
-    await page.route(/\\/chats\\/history\\?.*before=/, async route => {
+    await page.route(/\/chats\/history\?.*before=/, async route => {
       await held;
       await route.continue();
     });
