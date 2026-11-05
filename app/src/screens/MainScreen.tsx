@@ -215,7 +215,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   });
   const [searchMode, setSearchMode] = useState(false);
   // Returning from another screen shows the selected chat, not an old search query.
-  useEffect(() => { if (screenFocused) setSearchMode(false); }, [screenFocused, attached?.id]);
+  useEffect(() => { if (screenFocused) setSearchMode(false); }, [screenFocused]);
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
   const noTrigger = composerTrigger(query) === null;
