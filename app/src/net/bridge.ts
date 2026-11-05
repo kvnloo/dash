@@ -1,7 +1,7 @@
 import { applyGateMessage } from "../store/approvals";
 import { createPermissionsStore } from "../store/permissions";
 import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
-import { CHATS_FEATURE, parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
+import { CHATS_FEATURE, MODEL_SELECTION_FEATURE, parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
 import { agentNoticeInbox, noticeFailure } from "../store/notices";
 import type { LiveIntent } from "../../../shared/live";
 import { isDebugMode } from "../debug/mode";
@@ -524,9 +524,17 @@ export function sendChat(input: {
 }): boolean {
   if (rejectUnavailableTurn(input.turnId)) return false;
   const cwd = input.cwd ?? store.get().settings?.cwd;
+  const requestedModel = store.get().conversations.flatMap(c => c.messages)
+    .find(m => m.role === "assistant" && m.turnId === input.turnId);
+  const model = requestedModel?.role === "assistant" ? requestedModel.requestedModel : undefined;
+  if (model && !store.get().connection.features?.includes(MODEL_SELECTION_FEATURE)) {
+    applyTurnEvent({ type: "error", id: input.turnId, seq: 1, message: "Model switching requires an updated Dash bridge. No prompt was submitted." });
+    return false;
+  }
   return bridge.send({
     type: "chat",
     mode: input.mode,
+    ...(model ? { model } : {}),
     summariesEnabled: store.get().conversations.find(c => c.messages.some(m => m.role === "assistant" && m.turnId === input.turnId))?.summariesEnabled === true,
     id: input.turnId,
     ...targetForTurn(input.turnId),
