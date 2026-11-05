@@ -305,6 +305,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
                   style={({ pressed }) => [styles.harnessRow, pressed && styles.pressed]}
                   accessibilityRole="switch"
                   accessibilityState={{ checked: settings.inAppFeedback }}
+                  aria-checked={settings.inAppFeedback}
                   accessibilityLabel="In-app feedback"
                   accessibilityHint="Turn feedback to Dash secondmate on or off"
                 >
