@@ -1,0 +1,11 @@
+{"id": 229, "session_id": "fixture-tool", "ts": 1792430451.062, "type": "app_state", "text": "", "data": {"source": "session_ready"}}
+{"id": 230, "session_id": "fixture-tool", "ts": 1792430451.924, "type": "app_state", "text": "", "data": {"source": "connected"}}
+{"id": 231, "session_id": "fixture-tool", "ts": 1792430452.409, "type": "user_transcript", "text": "user line 2", "data": {"source": "user_transcript"}}
+{"id": 232, "session_id": "fixture-tool", "ts": 1792430452.931, "type": "tool_call", "text": "volume", "data": {"source": "tool_call", "call_id": "call_vQhWt2Nhhdj7mfYy", "name": "volume"}}
+{"id": 233, "session_id": "fixture-tool", "ts": 1792430452.955, "type": "tool_result", "text": "", "data": {"source": "tool_result", "call_id": "call_vQhWt2Nhhdj7mfYy", "name": "volume", "success": true}}
+{"id": 235, "session_id": "fixture-tool", "ts": 1792430453.239, "type": "app_state", "text": "", "data": {"source": "output_audio_buffer.started"}}
+{"id": 236, "session_id": "fixture-tool", "ts": 1792430453.948, "type": "assistant_transcript", "text": "assistant line 6", "data": {"source": "response.output_audio_transcript.done"}}
+{"id": 241, "session_id": "fixture-tool", "ts": 1792430456.654, "type": "app_state", "text": "", "data": {"source": "output_audio_buffer.stopped"}}
+{"id": 258, "session_id": "fixture-tool", "ts": 1792430488.463, "type": "app_state", "text": "", "data": {"source": "mute", "muted": true}}
+{"id": 259, "session_id": "fixture-tool", "ts": 1792430489.351, "type": "app_state", "text": "", "data": {"source": "mute", "muted": false}}
+{"id": 260, "session_id": "fixture-tool", "ts": 1792430490.475, "type": "app_state", "text": "", "data": {"source": "session_end", "session_end": true}}

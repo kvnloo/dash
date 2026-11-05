@@ -2,7 +2,7 @@
 
 **When to use:** First-run for any agent (Cursor, OMP, Hermes, etc.) opening the `kvnloo/dash` repo. Read this skill immediately to understand layout, ownership, and contribution workflow.
 
-If the human said **autodevelop**, switch to `.cursor/skills/autodevelop/SKILL.md` now.
+If the human said **autodevelop**, switch to `.cursor/skills/autodevelop/SKILL.md` now. This repo is onboarded to verified-oss-loop (`rolling`). `python3 .verified-oss-loop/rollout.py show` before you branch.
 
 ## What is Dash?
 
@@ -52,7 +52,7 @@ Read [CONTRIBUTING.md](../../../CONTRIBUTING.md) for the full guide. Quick summa
 1. **Search issues/PRs first** to avoid duplicate work.
 2. **Open a discussion** for large changes (new harnesses, protocol changes).
 3. **Respect ownership**: Don't edit `app/` files unless assigned.
-4. **Branch and PR**: Fork or branch from `main`, work in focused commits, open a PR early (draft is fine).
+4. **Branch and PR**: `python3 .verified-oss-loop/rollout.py show`. Branch from `nightly`, open a day-pass PR at `preview` (overnight at `nightly`). Do not pile PRs onto `main`.
 5. **Fail-then-pass proof**: Show the bug/gap, then fix it. Include tests or examples. Read `.cursor/skills/tdd/SKILL.md`. Run `bun scripts/mutate.ts` if you touched a mutate target.
 
 ## What NOT to Do
@@ -62,10 +62,12 @@ Read [CONTRIBUTING.md](../../../CONTRIBUTING.md) for the full guide. Quick summa
 - Do not unlock `keel` for production (keel is internal scaffolding, not ready).
 - Do not commit secrets (tokens, keys, credentials) in code or chat.
 - Do not force-push to `main` or rewrite shared history.
+- Do not merge `main` or `dev`. Channel automerge is only for `preview`/`nightly`.
 
 ## Next Steps
 
 - If working on **bridge or protocol changes**, read `.cursor/skills/dash-bridge/SKILL.md`.
+- If pairing, roster, hello, or attach is broken, read `.cursor/skills/dash-debug/SKILL.md`.
 - If opening a PR, read `.cursor/skills/dash-contribute/SKILL.md` for PR hygiene.
 - If adding a new harness, study `bridge/src/harnesses.ts` for adapter patterns.
 - If writing docs or skills, follow the existing structure (short, clear, actionable).

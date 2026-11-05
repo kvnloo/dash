@@ -1,0 +1,17 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'app.dash.share'
+version = '1.0.0'
+android {
+  namespace 'app.dash.share'
+  defaultConfig { versionCode 1; versionName '1.0.0' }
+  testOptions { unitTests.includeAndroidResources = true }
+}
+def sharingPublication = new groovy.json.JsonSlurper().parse(file('../../../node_modules/expo-sharing/expo-module.config.json')).android.publication
+dependencies {
+  implementation "${sharingPublication.groupId}:${sharingPublication.artifactId}:${sharingPublication.version}"
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.robolectric:robolectric:4.16.1'
+}

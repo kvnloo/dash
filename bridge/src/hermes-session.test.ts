@@ -10,6 +10,7 @@ import {
   hermesCliArgv,
   jsonRpcEndpoint,
   runHermesSession,
+  type HermesFetch,
 } from "./hermes-session";
 
 const hermes = HARNESSES.find((h) => h.id === "hermes");
@@ -115,7 +116,7 @@ describe("hermes gateway request builder", () => {
 describe("runHermesSession", () => {
   test("uses gateway JSON-RPC instead of spawning hermes chat -q", async () => {
     const calls: Array<{ url: string; method: string; jsonrpcMethod?: string }> = [];
-    const fetch: typeof globalThis.fetch = async (input, init) => {
+    const fetch: HermesFetch = async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const method = init?.method ?? "GET";
       let jsonrpcMethod: string | undefined;
@@ -167,12 +168,12 @@ describe("runHermesSession", () => {
   });
 
   test("falls back to CLI when the gateway is down", async () => {
-    const fetch: typeof globalThis.fetch = async () => {
+    const fetch: HermesFetch = async () => {
       throw new TypeError("fetch failed");
     };
     const result = await runHermesSession({
       input: { text: "hello", cwd: "/tmp" },
-      env: { A2A_PUBLIC_URL: "http://127.0.0.1:9" },
+      env: { A2A_PUBLIC_URL: "http://127.0.0.1:9", DASH_HERMES_CLI_FALLBACK: "1" },
       fetch,
       log() {},
     });
@@ -181,7 +182,7 @@ describe("runHermesSession", () => {
   });
 
   test("uses peer API when the agent card is not JSONRPC", async () => {
-    const fetch: typeof globalThis.fetch = async (input, init) => {
+    const fetch: HermesFetch = async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       if (url.endsWith("/.well-known/agent.json")) {
         return Response.json({
@@ -209,5 +210,105 @@ describe("runHermesSession", () => {
     });
     expect(result.path).toBe("peer");
     if (result.path === "peer") expect(result.text).toBe("from peer");
+  });
+});
+
+describe("Hermes send admission", () => {
+  const env = {
+    A2A_PUBLIC_URL: "http://gateway.test",
+    HERMES_PEER_URL: "http://peer.test",
+    DASH_HERMES_CLI_FALLBACK: "1",
+  };
+
+  for (const failure of ["rpc", "http", "network", "empty", "malformed", "cancel"] ) {
+    test(`gateway ${failure} after admission fails without another send`, async () => {
+      const sends: string[] = [];
+      const controller = new AbortController();
+      const fetch: HermesFetch = async (input, init) => {
+        const url = String(input);
+        if (init?.method === "GET") return Response.json({ url: "http://gateway.test/" });
+        sends.push(url);
+        if (failure === "rpc") return Response.json({ jsonrpc: "2.0", id: "1", error: { code: -32000, message: "provider rejected" } });
+        if (failure === "http") return new Response("unavailable", { status: 503 });
+        if (failure === "network") throw new TypeError("fetch failed after write");
+        if (failure === "malformed") return new Response("not JSON");
+        if (failure === "cancel") controller.abort();
+        return Response.json({ jsonrpc: "2.0", id: "1", result: {} });
+      };
+      await expect(runHermesSession({
+        input: { text: "hello", cwd: "/tmp" }, env, envFile: "/nonexistent/dash-test-env", fetch,
+        log() {}, signal: controller.signal,
+      })).rejects.toThrow();
+      expect(sends).toEqual(["http://gateway.test/"]);
+    });
+  }
+
+  test("an HTTP 200 JSON-RPC error from a real server is a terminal failure", async () => {
+    let sends = 0;
+    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request): Response {
+      if (request.method === "GET") return Response.json({ url: `${server.url}` });
+      sends++;
+      return Response.json({ jsonrpc: "2.0", id: "1", error: { code: -32603, message: "provider rejected" } });
+    } });
+    try {
+      await expect(runHermesSession({ input: { text: "hello", cwd: "/tmp" },
+        env: { A2A_PUBLIC_URL: String(server.url), DASH_HERMES_CLI_FALLBACK: "1" },
+        envFile: "/nonexistent/dash-test-env", log() {},
+      })).rejects.toThrow("provider rejected");
+      expect(sends).toBe(1);
+    } finally { server.stop(true); }
+  });
+
+  test("CLI fallback is disabled unless explicitly opted in", async () => {
+    const fetch: HermesFetch = async () => { throw new TypeError("fetch failed"); };
+    await expect(runHermesSession({ input: { text: "hello", cwd: "/tmp" }, env: {},
+      envFile: "/nonexistent/dash-test-env", fetch, log() {},
+    })).rejects.toThrow("fallback is disabled");
+  });
+
+  test("cancel during discovery cannot fall back", async () => {
+    const controller = new AbortController();
+    const fetch: HermesFetch = async () => { controller.abort(); throw new TypeError("fetch failed"); };
+    await expect(runHermesSession({ input: { text: "hello", cwd: "/tmp" }, env,
+      envFile: "/nonexistent/dash-test-env", fetch, log() {}, signal: controller.signal,
+    })).rejects.toThrow();
+  });
+
+  test("gateway discovery authorization failure cannot select peer or CLI", async () => {
+    let sends = 0;
+    const fetch: HermesFetch = async (_input, init) => {
+      if (init?.method === "POST") sends++;
+      return new Response("denied", { status: 401 });
+    };
+    await expect(runHermesSession({ input: { text: "hello", cwd: "/tmp" }, env,
+      envFile: "/nonexistent/dash-test-env", fetch, log() {},
+    })).rejects.toThrow("401");
+    expect(sends).toBe(0);
+  });
+
+  test("peer network error after admission cannot select CLI", async () => {
+    let sends = 0;
+    const fetch: HermesFetch = async (_input, init) => {
+      if (init?.method === "GET") return Response.json({ supportedInterfaces: [{ protocolBinding: "GRPC" }] });
+      sends++;
+      throw new TypeError("network failed after send");
+    };
+    await expect(runHermesSession({ input: { text: "hello", cwd: "/tmp", sessionId: "peer-session" }, env,
+      envFile: "/nonexistent/dash-test-env", fetch, log() {},
+    })).rejects.toThrow();
+    expect(sends).toBe(1);
+  });
+
+  test("peer requires a known session instead of reusing a shared default", async () => {
+    let sends = 0;
+    const fetch: HermesFetch = async (_input, init) => {
+      if (init?.method === "GET") return Response.json({ supportedInterfaces: [{ protocolBinding: "GRPC" }] });
+      sends++;
+      return Response.json({ message: "a different conversation" });
+    };
+    await expect(runHermesSession({ input: { text: "hello", cwd: "/tmp" }, env,
+      envFile: "/nonexistent/dash-test-env", fetch, log() {},
+    })).rejects.toThrow("requires an existing sessionId");
+    expect(sends).toBe(0);
   });
 });

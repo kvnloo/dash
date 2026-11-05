@@ -1,0 +1,15 @@
+# Tool activity details
+
+`shared/tool-format.ts` is the dependency-free harness/tool formatter registry. Native Hermes and known OMP/Pi/Codex/Claude aliases share title/detail rules; unknown tools retain their two most informative arguments. The producer uses the same redactor as the renderer. Consecutive identical tool names group without merging their call identities.
+
+Chat tool groups are shared Tree rows. Expand a call, then Inspect full details for pretty arguments, virtualized retained output, copy, patch/edit diff and authenticated text-file preview. `/files?format=text&path=...` preserves the existing allowlisted-root, hidden-file and credential-file restrictions, rejects binary or >1 MiB text, redacts content, and never renders it as HTML. Relative/missing/out-of-root paths can be unavailable; this is intentional, not authority to broaden file access.
+
+Foreground Hermes chat polls authenticated `/hermes/activity?profile=...&session=...` once a second after each completed request. The bridge uses only readonly/query_only native SQLite queries, never the gateway or a provider, and shares one bounded snapshot cache per identity for at least one second. ETags avoid retransmitting unchanged snapshots. Compression lineage, visible-session checks and existing preview/detail retention limits are reused. Native timestamps make replay duration stable. Error results/exit codes settle failed calls.
+
+Dash streaming wins: polling pauses during a locally streaming reply, and hydration refuses to replace streaming/pending replies. Once settled, native snapshots replace message/call identities rather than appending a duplicate streamed call. Switch/unmount/background transitions cancel or suspend polling. This is a bounded snapshot feed, not an unlimited transcript or a substitute for events Hermes has not persisted yet.
+
+Reasoning rows use available #94 summaries; otherwise they explicitly say `Reasoning · summary unavailable`, never a bare Thinking row. The existing per-chat opt-in and provider/latency limitations remain: no summary is invented when #94 cannot generate one. This change does not add a Codex OAuth summary transport or enable inference for native-history reads.
+
+Verification fixtures in `shared/fixtures/native-tools.json` contain 15 real clean/state.db argument/result pairs. Arbitrary payload text is shortened/omitted before publication; durationMs=123 is an explicit presentation placeholder, not recorded latency. `scripts/record-tool-fixtures.ts` reproduces the read-only sampling. Alias tests are explicitly source-contract fixtures, not native recordings: the requested Hermes DB does not provide successful native OMP/Pi/Codex/Claude captures for all aliases. Todo/MCP fallback contracts are tested synthetically. Do not claim all harnesses have native sample qualification.
+
+Browser receipts use actual before/after Expo Metro web builds and isolated Chromium at 412×915. The displayed order/actions/durations are a synthetic renderer turn assembled from sanitized recorded payloads; not a new native live model turn. No phone interaction is required or performed.

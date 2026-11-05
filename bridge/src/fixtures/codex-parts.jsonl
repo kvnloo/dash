@@ -1,0 +1,7 @@
+{"type": "thread.started", "thread_id": "01a15f23-b659-72a3-a6d9-61d9dabacff6"}
+{"type": "turn.started"}
+{"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": "I\u2019ll run the sample command once."}}
+{"type": "item.started", "item": {"id": "item_1", "type": "command_execution", "command": "/usr/bin/zsh -c 'printf dash-protocol-sample'", "aggregated_output": "", "exit_code": null, "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_1", "type": "command_execution", "command": "/usr/bin/zsh -c 'printf dash-protocol-sample'", "aggregated_output": "dash-protocol-sample", "exit_code": 0, "status": "completed"}}
+{"type": "item.completed", "item": {"id": "item_2", "type": "agent_message", "text": "sample complete"}}
+{"type": "turn.completed", "usage": {"input_tokens": 49697, "cached_input_tokens": 31744, "cache_write_input_tokens": 0, "output_tokens": 189, "reasoning_output_tokens": 127}}

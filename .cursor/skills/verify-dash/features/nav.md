@@ -21,7 +21,7 @@ Preconditions:
 
 - **Unit tests.** Run `bun scripts/verify-dash/control-dash.ts test`. `nav` exit 0. This is the default proof.
 - **Phone.** Shake → Reload. Swipe Bots / Chats / Orchestra. Gold tracks the page with a gel stretch (scaleX up, scaleY down) and a slight settle overshoot.
-- **Maestro.** `.maestro/inspect-nav.yaml` or MCP `inspect_screen` / `take_screenshot`. Do not dump uiautomator by hand.
+- **Maestro.** `.maestro/nav-dots.yaml` (CI: `bun test scripts/assert-nav-dots.test.ts`, then `bun scripts/assert-nav-dots.ts` on the cropped chrome PNG). `.maestro/inspect-nav.yaml` is screenshot-only. MCP `inspect_screen` / `take_screenshot`. Do not dump uiautomator by hand. Do not `launchApp`/`stopApp`.
 - **Debug web (8099).** `run({ action: "setMainTab", index: 2 })`. Screenshot the pager, not the whole phone chrome only.
 - **Proof.** `artifacts/verify-dash/tests.json` `nav.code === 0`. Pixel claims need a screenshot against `docs/design/frames/golden-nav-probe.png`.
 

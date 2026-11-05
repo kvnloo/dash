@@ -1,0 +1,10 @@
+{
+  "name": "dash-acp-adapters",
+  "private": true,
+  "type": "module",
+  "description": "Pinned maintained ACP adapters. Host credentials remain owned by the agents.",
+  "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.93.0",
+    "@agentclientprotocol/codex-acp": "2.2.2"
+  }
+}

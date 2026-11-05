@@ -64,7 +64,7 @@ describe("bridge pull wiring", () => {
   test("overlay is a Reanimated gel sheet, not a Modal", () => {
     const src = readFileSync(join(import.meta.dir, "BridgePull.tsx"), "utf8");
     expect(src).toContain("Gesture.Pan");
-    expect(src).toContain("withSpring");
+    expect(src).toContain("withTiming");
     expect(src).toContain("sheetTranslateY");
     expect(src).toContain("ReduceMotion.System");
     expect(src).toContain("...GEL");
@@ -81,21 +81,19 @@ describe("bridge pull wiring", () => {
   });
 
   test("down chevron and nav pan toggle the overlay instead of pushing Settings", () => {
-    const nav = readFileSync(join(import.meta.dir, "AppNav.tsx"), "utf8");
+    const nav = readFileSync(join(import.meta.dir, "GelNav.tsx"), "utf8");
     const web = readFileSync(join(import.meta.dir, "AppNav.web.tsx"), "utf8");
     expect(nav).toContain("useBridgePullPan");
     expect(nav).toContain("pull.toggle()");
     expect(nav).toContain("Bridge details");
-    expect(nav).toContain("rotateZ");
-    expect(web).toContain("pull.toggle()");
-    expect(web).toContain("Bridge details");
-    expect(nav).toContain("navigate(\"Voice\")");
+    expect(web).toContain("./GelNav");
+    expect(nav).toContain("<GestureDetector gesture={pullPan}>");
   });
 
   test("does not invent a third spring", () => {
     const src = readFileSync(join(import.meta.dir, "BridgePull.tsx"), "utf8");
     expect(src).toContain("GEL");
     expect(src).not.toContain("stiffness: 180");
-    expect(GEL.stiffness).toBe(240);
+    expect(GEL.duration).toBe(150);
   });
 });

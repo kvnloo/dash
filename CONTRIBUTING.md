@@ -27,12 +27,68 @@ See the [README](README.md) for more details.
 
 ## Contributing to Dash
 
+### Opt-in inline generative UI
+
+Dash renders Mermaid flowcharts/state diagrams, images, declarative components and
+static HTML directly in ordinary Hermes/omp reply Markdown. No command or live-mode
+switch is needed to render a reply that contains these blocks. See
+`.cursor/skills/dash-genui/SKILL.md` for the exact catalog and examples.
+
+Agent emission is opt-in, not globally enabled by this PR:
+
+- Hermes: copy `.cursor/skills/dash-genui/` into the chosen profile's
+  `$HERMES_HOME/skills/dash-genui/` (for Kevin's clean profile, explicitly
+  `/home/kvn/.hermes/profiles/clean/skills/dash-genui/`). Start a new session and
+  ask “Load dash-genui and use inline UI when useful for this conversation.”
+  Do not copy into other profiles or edit AGENTS.md. A discovered skill is not a
+  promise it has been loaded; explicitly loading it opts in for the conversation.
+- OMP: start the selected OMP session with
+  `omp --append-system-prompt /absolute/path/to/dash/docs/genui/omp-system-prompt.md`.
+  This flag was verified with the installed OMP help. Keep it in that profile's
+  launcher only if you want it on each session; no launcher/profile is changed here.
+
+Use `mermaid`, `genui` (or `openui` JSON alias), and `html` fenced blocks;
+`![description](https://host/image.png)` or an absolute shared host image path
+renders a thumbnail. Tap to expand; pinch or use zoom/reset. Mermaid uses locally
+bundled @xyflow/react + Dagre through Expo DOM (Expo Go's WebView), no CDN.
+Unsupported Mermaid syntax and invalid specs remain copyable source. `openui`
+does not evaluate the legacy OpenUI language or claim `.hvisual.json` compatibility.
+
+Choice taps are source-turn-owned LiveIntents. Existing libfx workers retain their
+live_intent receipt channel; ordinary Hermes and omp receive the same validated
+intent as a visible user turn in the original session. Busy/offline/stale targets
+refuse the tap with visible feedback. This is never an approval or tool-execution API.
+
+Model HTML gets a restrictive CSP (no scripts, forms, network or embedding); stage
+expansion is an unverified local preview, not a publication. Component data is a
+bounded catalog with no evaluator. Remote image hosts see the client's request;
+use trusted URLs. Local images use authenticated `GET /files?path=...`, existing
+share roots/hidden-secret restrictions, byte sniffing, and a 12 MiB limit. Tokens
+stay in headers, never model HTML or URLs. Local paths refer to the paired bridge,
+not an arbitrary remote harness host. Use a reachable URL for remote-host images.
+
+Verification (host only; never touch the owner's phone):
+
+    bun test app/src bridge/src shared
+    bun app/node_modules/typescript/bin/tsc -p app --noEmit
+    cd app && EXPO_PUBLIC_DEBUG=1 bunx expo export --platform web && cd ..
+    node scripts/genui-qualify.mjs
+
+The last command owns an ephemeral loopback HTTP port and isolated headless
+Chromium at 412×915 with touch emulation. It tests actual Markdown-rendered chat
+fixtures, node taps/zoom, image pinch, cards/table/choices, checklist/timeline,
+script blocking, stage expansion and readable fallback. Override `GENUI_WEB_DIR`
+and `GENUI_REPORT_DIR` to keep the web export and screenshots outside the repo.
+These fixtures do not claim a real model turn or native-device acceptance.
+
 ### Autodevelop (agents)
 
 If you are a coding agent told to **autodevelop**, read
 [`.cursor/skills/autodevelop/SKILL.md`](.cursor/skills/autodevelop/SKILL.md)
-and run that loop. Claim one `claimable` issue, work on a branch from
-`origin/main`, prove fail-then-pass, open a PR. Do not merge `main`.
+and run that loop. Dash follows the [Verified OSS Loop](https://github.com/kvnloo/verified-oss-loop)
+with scheme **rolling**. Claim one `claimable` issue, `python3 .verified-oss-loop/rollout.py show`,
+branch from `origin/nightly`, prove fail-then-pass, open a PR at `preview`
+(day) or `nightly` (overnight). Do not merge `main` or `dev`.
 
 
 Contributions come in two flavors: **unattended** and **copilot**.
@@ -67,10 +123,12 @@ Contribute code, docs, or skills by pairing with an agent on a focused branch. T
 
 **PR workflow:**
 
-1. Fork or branch from `main`.
+Answer the concrete surface and feedback checklist in [Design principles](docs/design/PRINCIPLES.md) for every Dash PR that changes an interaction. Name unavailable telemetry instead of implying that the accept/reject learning pipeline already exists.
+
+1. Fork or branch from `nightly` (`worker_base`). Day-pass PRs target `preview`. Overnight PRs target `nightly`. Do not pile PRs onto `main`.
 2. Work in small, focused commits.
-3. Write or update tests if applicable.
-4. Open a PR early (draft is fine) with a clear title and description.
+3. Write or update tests if applicable. Fill the evidence receipt in `.github/PULL_REQUEST_TEMPLATE.md`.
+4. Open a PR early (draft is fine) with a clear title and description. Automerge into `preview`/`nightly` waits for checks; it never merges `main`/`dev`.
 5. Request review from maintainers or relevant domain owners.
 6. Iterate based on feedback.
 
@@ -85,7 +143,7 @@ Contribute code, docs, or skills by pairing with an agent on a focused branch. T
 
 Dash is designed for human+agent collaboration. When contributing:
 
-- **Agent skills live in `.cursor/skills/`** (see [skills directory](.cursor/skills/)). Each skill is a short `SKILL.md` with a "when to use" description and a recipe. Agents read these to learn the repo.
+- **Agent skills live in `.cursor/skills/`** (see [skills directory](.cursor/skills/)). Each skill is a short `SKILL.md` with a "when to use" description and a recipe. Agents read these to learn the repo. Pairing, roster, and attach failures: `.cursor/skills/dash-debug/SKILL.md`.
 - **Agent-friendly commits**: Clear commit messages, one logical change per commit, and references to issues/discussions.
 - **Harness patterns**: Each harness (omp, codex, grok, claude, hermes) has its own CLI and output format. When adding harness support, see [`bridge/src/harnesses.ts`](bridge/src/harnesses.ts) for examples.
 
@@ -97,6 +155,7 @@ Dash is designed for human+agent collaboration. When contributing:
 - **Do not** unlock `keel` for production use. Keel is internal scaffolding and not ready for deployment.
 - **Do not** commit secrets (tokens, API keys, credentials) in code or chat logs. Use `~/.dash/token` or environment variables.
 - **Do not** force-push to `main` or rewrite shared history.
+- **Do not** merge `main` or `dev`. Channel automerge is only for `preview`/`nightly`.
 - **Do not** change `app/src/**`, `app/App.tsx`, `app/app.json`, or `app/metro.config.js` unless explicitly assigned. These files are owned by the UI session (Kevin) and are mid-flight.
 
 ## Priorities and Vision

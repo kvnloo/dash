@@ -1,4 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
+import { useHandedness } from "../lib/useHandedness";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { HarnessInfo } from "../../../shared/protocol";
@@ -15,12 +16,13 @@ interface Props {
 }
 
 export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose }: Props) {
+  const thumb = useHandedness();
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close">
         <Pressable onPress={() => {}}>
-          <GlassSurface variant="raised" borderRadius={radius.lg + 6} style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, space.lg) }]}>
+          <GlassSurface variant="raised" borderRadius={radius.md} style={styles.sheet} contentStyle={{ paddingBottom: Math.max(insets.bottom, space.lg) }}>
             <Text style={styles.label}>Harness</Text>
             {harnesses.map((h) => {
               const active = h.id === selected;
@@ -32,7 +34,7 @@ export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose 
                     onSelect(h.id);
                     onClose();
                   }}
-                  style={styles.row}
+                  style={[styles.row, thumb.row]}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active, disabled: !h.available }}
                 >
@@ -40,7 +42,7 @@ export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose 
                     <Text style={[styles.name, !h.available && styles.unavailable]}>{h.name}</Text>
                     {!h.available ? <Text style={styles.hint}>Not installed on the bridge machine</Text> : null}
                   </View>
-                  {active ? <Ionicons name="checkmark" size={20} color={colors.text} /> : null}
+                  {active ? <Feather name="check" size={20} color={colors.text} /> : null}
                 </PressScale>
               );
             })}
@@ -54,16 +56,19 @@ export function HarnessPicker({ visible, harnesses, selected, onSelect, onClose 
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
+  // Opaque raised base under the glass tint: chat text must not read through the list.
   sheet: {
+    backgroundColor: colors.surfaceRaised,
     paddingHorizontal: space.lg,
     paddingTop: space.lg,
     gap: 2,
     borderTopLeftRadius: radius.lg + 6,
     borderTopRightRadius: radius.lg + 6,
   },
-  label: { color: colors.textMuted, ...type.label, marginBottom: space.sm, marginLeft: space.sm },
+  label: { color: colors.gold, ...type.cardTitle, marginBottom: space.sm, marginLeft: space.sm },
   row: {
     flexDirection: "row",
+    gap: space.sm,
     alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: space.sm,

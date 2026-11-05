@@ -1,0 +1,21 @@
+appId: host.exp.exponent
+name: AppNav dots centered in gold pill
+tags:
+  - nav
+  - ci
+---
+# Opens Main. Do not relaunch Expo Go: that kills the live Metro session on 8097.
+- extendedWaitUntil:
+    visible: "Bots"
+    timeout: 15000
+- assertVisible: "Bots"
+- assertVisible: "Chats"
+- assertVisible: "Orchestra"
+- assertVisible: "Primary mobile workspace"
+# 60px AppNav chrome (pager is the 144×50 stadium inside it).
+- takeScreenshot:
+    path: artifacts/verify-dash/maestro-nav-chrome
+    cropOn:
+      text: "Primary mobile workspace"
+# Pixel proof that the three 4px dots sit in the gold-pill center:
+#   bun scripts/assert-nav-dots.ts artifacts/verify-dash/maestro-nav-chrome.png

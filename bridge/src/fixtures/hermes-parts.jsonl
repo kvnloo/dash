@@ -1,0 +1,6 @@
+{"type": "system", "subtype": "init", "model": "gpt-6.1-sol", "session_id": "", "timestamp": 1792597469146}
+{"type": "tool_use", "name": "terminal", "tool_call_id": "call_e0fa2d30bf5e47cda22ede6cb145089c", "input": {"command": "printf dash-protocol-sample"}, "timestamp": 1792597487551}
+{"type": "tool_result", "name": "terminal", "tool_call_id": "call_e0fa2d30bf5e47cda22ede6cb145089c", "output": "{\"output\": \"dash-protocol-sample\", \"exit_code\": 0, \"error\": null}", "duration_ms": 197, "is_error": false, "timestamp": 1792597487748}
+{"type": "text", "text": "\n\nsample", "timestamp": 1792597490044}
+{"type": "text", "text": " complete", "timestamp": 1792597490044}
+{"type": "result", "session_id": "local-eda32b9011b3b710b25b2dae1d119b16a83ee8132a2c21f6feb73f5816865d5c", "exit_code": 0, "text": "sample complete", "tokens": {"input": 9994, "output": 29, "total": 10023, "cache_read": 4864, "cache_write": 0}, "duration_ms": 22068, "timestamp": 1792597491214}
