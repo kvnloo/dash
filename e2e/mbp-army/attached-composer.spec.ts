@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { test, expect, openChat, composer, send, chatRow, chooseHarness } from "./fixtures";
+import { test, expect, openChat, composer, send, chatRow, chooseHarness, pair, LONG_CHAT_TITLE, LONG_CHAT_PROMPTS } from "./fixtures";
 
 test.afterEach(async ({ page }, info) => {
   if (!page.isClosed()) await page.screenshot({ path: info.outputPath("final.png") });
@@ -27,6 +27,10 @@ test("attached composer sends into the same ACP session after leaving Chat", asy
   }, { timeout: 20000 }).toBe(true);
 
   await page.getByRole("button", { name: "Open attached chat", exact: true }).click({ noWaitAfter: true });
+  // Wide layouts open the chat as a screen (no "chat-window" testID); phones use the window.
+  await expect(page.getByTestId("transcript-viewport")).toBeVisible();
+  // Never keep Main's draft or attachment chips mounted behind an open chat.
+  await expect(page.getByTestId("attached-composer")).toHaveCount(0);
   await expect(page.getByTestId("transcript-viewport").getByText("ARMY_REPLY: ARMY_H108_FIRST").first()).toBeVisible();
   await expect(page.getByTestId("transcript-viewport").getByText("ARMY_REPLY: ARMY_H108_MAIN").first()).toBeVisible({ timeout: 20000 });
 });
@@ -149,4 +153,63 @@ test("restored saved-local chat keeps its own draft and Main chat search", async
   await expect(page.getByText("Chat · saved local", { exact: true })).toBeVisible();
   await composer(page).fill("ARMY_H108_SAVED_LOCAL_SEED");
   await expect(page.getByText("Chat · saved local", { exact: true })).toBeVisible();
+});
+
+test.describe("Main background during transcript paging", () => {
+  test.use({ bridgeOptions: { longClaude: true }, viewport: { width: 390, height: 844 } });
+
+  test("Main does not remount a hidden attached composer or reset an upward wheel during long-chat history paging", async ({ page, bridge }) => {
+    // Delay the real bridge's older pages until the reader has scrolled.
+    let release = () => {};
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route(/\/chats\/history\?.*before=/, async route => {
+      await held;
+      await route.continue();
+    });
+    try {
+      await pair(page, bridge);
+      const row = page.getByTestId("chats-pane").locator('[data-testid^="chat-row-"]')
+        .filter({ hasText: LONG_CHAT_TITLE });
+      await expect(row).toHaveCount(1, { timeout: 30000 });
+      await row.click({ noWaitAfter: true });
+      await expect(page.getByTestId("chat-window")).toBeVisible();
+      const viewport = page.getByTestId("transcript-viewport");
+      const newest = new RegExp(`^ARMY answer ${String(LONG_CHAT_PROMPTS).padStart(3, "0")} `);
+      await expect(viewport.getByText(newest).first()).toBeVisible({ timeout: 30000 });
+      await expect(page.getByTestId("attached-composer")).toHaveCount(0);
+
+      const fromBottom = () => viewport.evaluate(element => {
+        const scroller = [element, ...Array.from(element.querySelectorAll("*"))].find(node => {
+          const overflow = getComputedStyle(node).overflowY;
+          return (overflow === "auto" || overflow === "scroll") && node.scrollHeight > node.clientHeight + 10;
+        });
+        if (!scroller) throw Error("Long-chat scroll viewport is missing");
+        return Math.round(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop);
+      });
+      const stableDistance = async () => {
+        let previous = await fromBottom();
+        for (let attempt = 0; attempt < 20; attempt++) {
+          await page.waitForTimeout(700);
+          const next = await fromBottom();
+          if (Math.abs(next - previous) <= 2) return next;
+          previous = next;
+        }
+        throw Error("Long-chat transcript never settled");
+      };
+
+      const before = await stableDistance();
+      const bounds = await viewport.boundingBox();
+      if (!bounds) throw Error("Long-chat viewport has no geometry");
+      await page.mouse.move(bounds.x + bounds.width / 3, bounds.y + bounds.height / 2);
+      for (let step = 0; step < 4; step++) {
+        await page.mouse.wheel(0, -250);
+        await page.waitForTimeout(120);
+      }
+      const after = await stableDistance();
+      expect(after - before, "four upward wheel steps must not be reset by background Main").toBeGreaterThanOrEqual(950);
+      await expect(page.getByTestId("attached-composer")).toHaveCount(0);
+    } finally {
+      release();
+    }
+  });
 });
