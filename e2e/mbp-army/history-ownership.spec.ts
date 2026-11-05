@@ -339,7 +339,6 @@ test('reopening native chat rejects its closed visit older page and displays the
       const { Database } = require('bun:sqlite');
       const [path, text] = process.argv.slice(1);
       const db = new Database(path);
-      db.exec('PRAGMA busy_timeout=5000');
       const changed = db.query('UPDATE messages SET content=? WHERE session_id=? AND role=? AND content=?')
         .run(text,'army-long-hermes','user','ARMY hermes prompt 001').changes;
       db.close();
@@ -394,6 +393,7 @@ test('reopening native chat rejects its closed visit full-message response and e
       const { Database } = require('bun:sqlite');
       const [path, text] = process.argv.slice(1);
       const db = new Database(path);
+      db.exec('PRAGMA busy_timeout=5000');
       const changed = db.query("UPDATE messages SET content=? WHERE id=(SELECT MIN(id) FROM messages WHERE session_id=? AND role='user')")
         .run(text,'army-long-hermes').changes;
       db.close();
