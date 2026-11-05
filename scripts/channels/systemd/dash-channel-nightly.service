@@ -1,0 +1,8 @@
+[Unit]
+Description=Dash nightly channel rebuild (track channels; re-serve the active one if it moved)
+
+[Service]
+Type=oneshot
+Nice=10
+MemoryMax=4G
+ExecStart=%h/.local/lib/dash/channels/bin/dash-channel nightly

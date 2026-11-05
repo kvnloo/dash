@@ -4,11 +4,11 @@ Source refs: `docs/design/references/` (OMP session Grok screenshots + Zero Andr
 
 ## Main layout
 
-Three swipe panes, top tabs **Bots | Chats | Orchestra**, bottom `@` search dock.
+Three swipe panes, top tabs **Hosts | Chats | Orchestra**, bottom `@` search dock.
 
 | Tab | Content |
 |-----|---------|
-| Bots | Hermes profiles + harness agents |
+| Hosts | Hermes profiles + harness agents |
 | Chats | All conversations (Grok History density) |
 | Orchestra | Product/project orchestration |
 
@@ -23,6 +23,7 @@ Default tab: **Chats**. Compose in header.
 - `REF-grok-drawer` → side density only; Dash uses top tabs, not a Grok drawer
 - `REF-zero-home` / `REF-zero-chizi-grid` / `REF-zero-kit-grid` → Orchestra tile density
 - `REF-zero-chat` → Zero thread chrome (black, no cartoon)
+- Pattern atlas (T3 / ChatGPT / Grok / Conductor / AODL) → [`ai-ui-patterns/`](ai-ui-patterns/README.md)
 
 ## Official designs
 

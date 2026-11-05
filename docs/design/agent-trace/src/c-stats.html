@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>C · Stats · Dash agent-trace prototype</title>
+<style>
+/*__SHARED_CSS__*/
+html { overflow-x: hidden; }
+body { padding: 18px 20px 48px; }
+.wrap { max-width: 1240px; margin: 0 auto; }
+.top h1 { margin: 2px 0 4px; font: 500 30px/1.05 var(--serif); }
+.top .sub { color: var(--tertiary); font-size: 13px; }
+.hero { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+.hero > div { padding: 14px 18px 14px 0; }
+.hero > div + div { padding-left: 18px; border-left: 1px solid var(--hair); }
+.big { font: 500 46px/1 var(--serif); font-variant-numeric: lining-nums tabular-nums; margin: 6px 0 6px; }
+.hero p { margin: 0; color: var(--muted); font-size: 13px; max-width: 34ch; }
+.grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; }
+.card { padding: 14px 16px; min-width: 0; }
+.card h2 { margin: 0 0 2px; font: 600 14px/1.3 var(--sans); }
+.card .d { color: var(--tertiary); font-size: 12px; margin-bottom: 12px; }
+.lane { display: grid; grid-template-columns: 112px minmax(0, 1fr) 96px; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--quiet); }
+.lane:last-of-type { border-bottom: 0; }
+.lane .nm { font-weight: 600; } .lane .nm small { display: block; font: 11px var(--mono); color: var(--tertiary); font-weight: 400; margin-top: 2px; }
+.gauge { position: relative; height: 22px; }
+.gauge .rail { position: absolute; left: 0; right: 0; top: 10px; height: 2px; background: var(--hair2); }
+.gauge .fill { position: absolute; left: 0; top: 7px; height: 8px; border-radius: 2px; }
+.gauge .pace { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed var(--text); }
+.gauge .pace span { position: absolute; top: -14px; transform: translateX(-50%); font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
+.lane .rt { text-align: right; font: 11.5px/1.4 var(--mono); white-space: nowrap; }
+.band { display: inline-block; font: 500 10.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 4px 6px; border-radius: 4px; border: 1px solid currentColor; }
+.advice { margin-top: 12px; padding: 10px 12px; border-left: 2px solid var(--gold); background: rgba(215,185,134,.05); font-size: 13px; color: var(--muted); }
+.advice b { color: var(--text); font-weight: 600; }
+.unmeasured { color: var(--faint); font: 11px var(--mono); }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.bl { display: grid; grid-template-columns: 90px minmax(0, 1fr) 120px; gap: 10px; align-items: center; font-size: 12.5px; padding: 5px 0; }
+.bl .bar { height: 10px; display: flex; border-radius: 2px; overflow: hidden; background: var(--quiet); }
+.bl .bar i { display: block; height: 100%; }
+.bl .r { text-align: right; font: 11.5px var(--mono); color: var(--muted); }
+.need { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 9px 0; border-bottom: 1px solid var(--quiet); }
+.need:last-child { border-bottom: 0; }
+.need .t { font-weight: 600; font-size: 13px; } .need .w { color: var(--tertiary); font-size: 12px; }
+.need .age { font: 11px var(--mono); color: var(--tertiary); white-space: nowrap; }
+.bn { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--quiet); }
+.bn:last-child { border-bottom: 0; }
+.bn .k { font: 500 20px/1 var(--serif); color: var(--tertiary); }
+.bn .t { font-weight: 600; font-size: 13.5px; } .bn .w { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+.bn .ev { font: 11px var(--mono); color: var(--tertiary); margin-top: 4px; }
+.full { grid-column: 1 / -1; }
+.scroll { overflow-x: auto; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .hero { grid-template-columns: 1fr; } .hero > div + div { border-left: 0; border-top: 1px solid var(--hair); padding-left: 0; } .big { font-size: 40px; } }
+@media (max-width: 520px) { body { padding: 12px 10px 40px; } .hero { grid-template-columns: repeat(3, minmax(0, 1fr)); } .hero > div { padding: 10px 8px 10px 0 !important; } .hero > div + div { border-left: 1px solid var(--hair) !important; border-top: 0 !important; padding-left: 10px !important; } .big { font-size: 32px; } .hero p { font-size: 11.5px; } .lane { grid-template-columns: 1fr auto; } .lane .gauge { grid-column: 1 / -1; grid-row: 2; } .bl { grid-template-columns: 70px minmax(0, 1fr) 92px; } .hide-sm { display: none; } td, th { padding: 6px 5px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div class="cap">Dash · prototype C · stats</div>
+  <h1>Where the day went</h1>
+  <div class="sub" id="sub"></div>
+</header>
+<section class="hero" id="hero" aria-label="Headline"></section>
+<div class="grid">
+  <section class="bracket card" aria-label="Lane pace">
+    <h2>Burn vs pace</h2><div class="d">weekly quota used against an even burn to reset. The dashed line is where an even pace would be now.</div>
+    <div id="lanes"></div>
+  </section>
+  <section class="bracket card" aria-label="Waiting on you">
+    <h2>Waiting on you</h2><div class="d" id="needs-d"></div>
+    <div id="needs"></div>
+  </section>
+  <section class="bracket card full" aria-label="Concurrency">
+    <h2>Workers in flight</h2><div class="d">parallel Hermes workers over the day. Red ticks are interruptions, gold diamonds are your messages.</div>
+    <div class="chart" id="conc"></div>
+  </section>
+  <section class="bracket card" aria-label="Roles">
+    <h2>By role</h2><div class="d">outcomes per lane in ROLES-v0 terms. Cells with no wired source say so instead of guessing.</div>
+    <div class="scroll"><table id="roles"><thead><tr><th>Role</th><th class="r">Work</th><th class="r">Done</th><th class="r">Cut</th><th class="r" title="share of finished workers that ran tests, screenshots or other checks">Verified</th><th class="r hide-sm" title="share that pushed or opened a draft PR">PR</th><th class="r">$ / done</th></tr></thead><tbody></tbody></table></div>
+  </section>
+  <section class="bracket card" aria-label="Bottlenecks">
+    <h2>Top bottlenecks</h2><div class="d">ranked by agent time lost or owner time needed</div>
+    <div id="bns"></div>
+  </section>
+  <section class="bracket card" aria-label="Domains">
+    <h2>By area</h2><div class="d">workers per area: done / interrupted / live, then cost</div>
+    <div id="domains"></div>
+  </section>
+  <section class="bracket card" aria-label="Tools">
+    <h2>Tools that cost time</h2><div class="d">total time and failure rate, Hermes workers (omp's Sol lane alongside, 7 days)</div>
+    <div class="scroll"><table id="tools"><thead><tr><th>Tool</th><th class="r">Calls</th><th class="r">Fail</th><th class="r">Total</th><th class="r hide-sm">Max</th></tr></thead><tbody></tbody></table></div>
+    <div id="omp" style="margin-top:12px"></div>
+  </section>
+</div>
+<p class="provenance" id="prov"></p>
+</div>
+<div class="stamp">__BUILD__</div>
+<script id="trace-data" type="application/json">__TRACE_DATA__</script>
+<script>/*__SHARED_JS__*/</script>
+<script>
+(() => {
+const { D, tasks, runs, owner, needs, dur, usd, tok, clock, totalTok, signals, toolStats, summary, el, svg } = TR;
+const all = summary(tasks);
+const exportAt = new Date(D.generated).getTime();
+document.getElementById("sub").textContent = `${clock(all.s)} to ${clock(all.e)} · ${tasks.length} workers in ${runs.length} delegations · snapshot ${clock(exportAt)}`;
+
+// ---------- hero: the three numbers that change what Kevin does next
+const L = D.lanes || {};
+const op = L.claude, sol = L.codex;
+const cut = tasks.filter((t) => t.status === "interrupted");
+const hero = document.getElementById("hero");
+const h = (cap, big, tone, p) => hero.append(el("div", {}, el("div", { class: "cap" }, cap), el("div", { class: "big " + (tone || "") }, big), el("p", {}, p)));
+if (op) h("Opus pace", `${op.pace_ratio.toFixed(1)}x`, op.pace_ratio > 1.2 ? "bad" : op.pace_ratio < 0.8 ? "good" : "", `${op.weekly_used_pct}% used, ${Math.round(op.hours_to_reset)} h to reset.${sol ? ` Sol ${sol.weekly_used_pct}%.` : ""}`);
+h("Interrupted", `${cut.length}/${tasks.length}`, cut.length ? "bad" : "", `never reported back; ${usd(cut.reduce((a, t) => a + (t.cost_usd || 0), 0))} spent on them.`);
+h("Waiting on you", String(needs.length), needs.length ? "gold" : "", `${needs.filter((n) => n.cat === "device").length} need the phone in hand, ${needs.filter((n) => n.cat === "review-pr").length} are draft PRs.`);
+
+function clusters(list) {
+  const s = [...list].sort((a, b) => a.e - b.e), out = [];
+  for (const t of s) { const c = out[out.length - 1]; if (c && t.e - c.e <= 10 * 60e3) { c.items.push(t); c.e = t.e; } else out.push({ s: t.e, e: t.e, items: [t] }); }
+  return out.sort((a, b) => b.items.length - a.items.length);
+}
+
+// ---------- lanes
+const lanes = document.getElementById("lanes");
+const laneRow = (name, sub, x, rightTop, rightSub, tone) => {
+  const g = el("div", { class: "gauge" }, el("div", { class: "rail" }));
+  if (x) {
+    const elapsed = Math.max(0, Math.min(100, 100 * (1 - x.hours_to_reset / 168)));
+    g.append(el("div", { class: "fill", style: `width:${x.weekly_used_pct}%;background:${tone}` }), el("div", { class: "pace", style: `left:${elapsed}%` }, el("span", {}, `even ${Math.round(elapsed)}%`)));
+  }
+  lanes.append(el("div", { class: "lane" }, el("div", { class: "nm" }, name, el("small", {}, sub)), g, el("div", { class: "rt" }, rightTop, el("div", { class: "dim" }, rightSub))));
+};
+const bandTone = (b) => (/throttle|over/.test(b) ? "var(--danger)" : /under/.test(b) ? "var(--info)" : "var(--ok)");
+if (op) laneRow("Opus", "Hermes workers", op, el("span", { class: "band", style: `color:${bandTone(op.band)}` }, op.band), `${op.observed_pct_per_h.toFixed(2)}%/h vs ${op.sustainable_pct_per_h.toFixed(2)}`, bandTone(op.band));
+if (sol) laneRow("Sol", "codex / pi / omp", sol, el("span", { class: "band", style: `color:${bandTone(sol.band)}` }, sol.band), `${sol.observed_pct_per_h.toFixed(2)}%/h vs ${sol.sustainable_pct_per_h.toFixed(2)}`, bandTone(sol.band));
+laneRow("Nous", "Hermes provider", null, el("span", { class: "unmeasured" }, "no live source"), "$153 of $220", "");
+laneRow("Free", "NIM, :free", null, el("span", { class: "unmeasured" }, "not metered"), "scans, triage", "");
+if (op && sol) lanes.append(el("div", { class: "advice" }, el("b", {}, op.pace_ratio > 1.2 && sol.pace_ratio < 0.8 ? "Move mechanical work to Sol. " : "Lanes are on pace. "),
+  `Today Hermes ran ${tasks.filter((t) => t.role === "opus").length} Opus and ${tasks.filter((t) => t.role === "sol").length} Sol workers for ${dur(all.agent)} of agent time (${usd(all.cost)} at API prices for the priced ones). burn-pace at ${clock(new Date(D.lanes_at).getTime())} says: ${op.band} for Opus, ${sol.band} for Sol.`));
+
+// ---------- waiting on you (batched, ranked, one decision each)
+const nd = document.getElementById("needs");
+document.getElementById("needs-d").textContent = `${needs.length} items in ${new Set(needs.map((n) => n.cat)).size} batches, ranked by what only you can do`;
+const grp = {};
+for (const n of needs) (grp[n.cat] ||= []).push(n);
+for (const [cat, list] of Object.entries(grp).sort((a, b) => TR.NEED[a[0]].rank - TR.NEED[b[0]].rank)) {
+  const oldest = Math.min(...list.map((n) => n.at));
+  nd.append(el("div", { class: "need" }, el("span", { class: "diamond", style: "margin-top:5px" }),
+    el("div", {}, el("div", { class: "t" }, `${TR.NEED[cat].text}`, el("span", { class: "gold mono", style: "font-size:12px;margin-left:8px" }, `×${list.length}`)), el("div", { class: "w" }, TR.NEED[cat].why),
+      el("div", { class: "dim mono", style: "font-size:11px;margin-top:4px" }, list.slice(0, 6).map((n) => n.task.label).join(" · ") + (list.length > 6 ? ` +${list.length - 6}` : ""))),
+    el("div", { class: "age" }, `oldest ${dur((exportAt - oldest) / 1000).replace(/ \d+s$/, "")}`)));
+}
+
+// ---------- concurrency chart
+(() => {
+  const box = document.getElementById("conc"), W = box.clientWidth || 800, H = 150, padL = 26, padB = 20;
+  const s0 = all.s, e0 = Math.max(all.e, exportAt), X = (t) => padL + ((t - s0) / (e0 - s0)) * (W - padL - 4);
+  const pts = []; const step = 60e3; let mx = 1;
+  for (let t = s0; t <= e0; t += step) { const n = tasks.filter((q) => q.s <= t && q.e > t).length; pts.push([t, n]); mx = Math.max(mx, n); }
+  const Y = (n) => 8 + (H - padB - 8) * (1 - n / mx);
+  const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": `Up to ${mx} workers in parallel` });
+  for (let n = 0; n <= mx; n += Math.max(1, Math.ceil(mx / 4))) { s.append(svg("line", { x1: padL, x2: W, y1: Y(n), y2: Y(n), stroke: "rgba(236,232,223,.06)" })); const tx = svg("text", { x: padL - 6, y: Y(n) + 3.5, "text-anchor": "end", fill: "#837f74", "font-size": 10, "font-family": "IBM Plex Mono" }); tx.textContent = n; s.append(tx); }
+  for (let t = Math.ceil(s0 / 3600e3) * 3600e3; t < e0; t += 3 * 3600e3) { const tx = svg("text", { x: X(t), y: H - 5, "text-anchor": "middle", fill: "#837f74", "font-size": 10, "font-family": "IBM Plex Mono" }); tx.textContent = clock(t); s.append(tx); }
+  let d = `M${X(pts[0][0])},${Y(0)}`; for (const [t, n] of pts) d += ` L${X(t)},${Y(n)}`; d += ` L${X(pts[pts.length - 1][0])},${Y(0)} Z`;
+  s.append(svg("path", { d, fill: "rgba(129,185,218,.16)", stroke: "#81b9da", "stroke-width": 1.2, "stroke-linejoin": "round" }));
+  for (const t of cut) s.append(svg("line", { x1: X(t.e), x2: X(t.e), y1: Y(0) - 10, y2: Y(0) + 3, stroke: "#e37f65", "stroke-width": 1.6 }));
+  for (const o of owner) if (o.kind === "owner" && o.at >= s0 && o.at <= e0) s.append(svg("rect", { x: X(o.at) - 2.5, y: 2, width: 5, height: 5, fill: "#d7b986", transform: `rotate(45 ${X(o.at)} 4.5)`, opacity: 0.85 }));
+  const big = clusters(cut)[0];
+  if (big) { const tx = svg("text", { x: Math.min(W - 160, X(big.e) + 8), y: Y(0) - 14, fill: "#e37f65", "font-size": 11, "font-family": "IBM Plex Mono" }); tx.textContent = `${big.items.length} cut within ${dur((big.e - big.s) / 1000)}`; s.append(tx); }
+  box.append(s);
+})();
+
+// ---------- roles (ROLES-v0)
+const verifiedShare = (list) => { const fin = list.filter((t) => t.status === "completed"); if (!fin.length) return null; return fin.filter((t) => t.events.some((e) => e.ph === "verify" && e.ok === 1)).length / fin.length; };
+const prShare = (list) => { const fin = list.filter((t) => t.status === "completed"); return fin.length ? fin.filter((t) => t.events.some((e) => e.ph === "pr")).length / fin.length : null; };
+const pct = (v) => (v == null ? el("span", { class: "unmeasured" }, "n/a") : `${Math.round(v * 100)}%`);
+const rb = document.querySelector("#roles tbody");
+const roleRow = (name, sub, list) => { const dn = list.filter((t) => t.status === "completed"), ct = list.filter((t) => t.status === "interrupted"), priced = dn.filter((t) => t.cost_usd);
+  rb.append(el("tr", {}, el("td", {}, name, el("div", { class: "dim mono", style: "font-size:11px" }, sub)), el("td", { class: "num r" }, list.length), el("td", { class: "num r good" }, dn.length), el("td", { class: "num r " + (ct.length ? "bad" : "dim") }, ct.length), el("td", { class: "num r" }, pct(verifiedShare(list))), el("td", { class: "num r hide-sm" }, pct(prShare(list))), el("td", { class: "num r" }, priced.length ? usd(priced.reduce((a, t) => a + t.cost_usd, 0) / priced.length) : el("span", { class: "unmeasured" }, "unpriced")))); };
+roleRow("Opus", "Hermes workers", tasks.filter((t) => t.role === "opus"));
+if (tasks.some((t) => t.role === "sol")) roleRow("Sol", "Hermes workers", tasks.filter((t) => t.role === "sol"));
+const ompM = (D.omp && D.omp.models) || [];
+const solM = ompM.find((m) => /sol/.test(m.model)), jevM = ompM.find((m) => /jev/.test(m.model));
+const nr = (name, sub, work, rest) => rb.append(el("tr", {}, el("td", {}, name, el("div", { class: "dim mono", style: "font-size:11px" }, sub)), el("td", { class: "num r" }, work), ...rest));
+const na = () => el("td", { class: "r unmeasured" }, "no source");
+nr("Sol", "omp sessions, 7 days", solM ? `${solM.requests} req` : "0", [na(), na(), na(), el("td", { class: "r unmeasured hide-sm" }, "no source"), el("td", { class: "num r" }, solM ? usd(solM.cost) + " tot" : "n/a")]);
+nr("Jev", "omp, 7 days", jevM ? `${jevM.requests} picks` : "0", [el("td", { class: "num r dim" }, jevM ? `${jevM.errors} err` : ""), na(), na(), el("td", { class: "r unmeasured hide-sm" }, ""), el("td", { class: "num r" }, jevM ? usd(jevM.cost) : "")]);
+const ownerN = owner.filter((o) => o.kind === "owner").length;
+nr("Kevin", "owner", `${ownerN} msgs`, [el("td", { class: "num r" }, ""), el("td", {}, ""), el("td", { class: "num r gold" }, `${needs.length} wait`), el("td", { class: "hide-sm" }, ""), el("td", { class: "r unmeasured" }, "attention, not $")]);
+
+// ---------- bottlenecks
+const bns = [];
+const cl = clusters(cut)[0];
+if (cl) bns.push({ v: cl.items.reduce((a, t) => a + (t.e - t.s) / 1000, 0), t: `${cl.items.length} workers cut at once`, w: `Between ${clock(cl.s)} and ${clock(cl.e)}, ${cl.items.length} workers lost their turn without reporting. Their partial work is on branches nobody resumed${tasks.some((t) => t.resume_of) ? ` (only ${tasks.filter((t) => t.resume_of).length} resumes today)` : ""}.`, ev: cl.items.map((t) => t.label).join(" · ") });
+const stalls = tasks.flatMap((t) => t.stalls.map((s) => ({ t, s, d: s.e - s.s }))).sort((a, b) => b.d - a.d);
+const stallTotal = stalls.reduce((a, x) => a + x.d, 0);
+if (stalls.length) bns.push({ v: stallTotal, t: `${dur(stallTotal)} of silent waiting`, w: `${stalls.length} gaps of 2.5 min+ where a live worker logged nothing. Longest: ${dur(stalls[0].d)} in ${stalls[0].t.label} at ${clock(stalls[0].t.s + stalls[0].s.s * 1000)}.`, ev: stalls.slice(0, 4).map((x) => `${x.t.label} ${dur(x.d)}`).join(" · ") });
+const ts = toolStats(tasks);
+const slow = ts[0];
+if (slow) bns.push({ v: slow.total * 0.5, t: `${slow.tool} holds ${Math.round((100 * slow.total) / ts.reduce((a, x) => a + x.total, 0))}% of tool time`, w: `${slow.calls.toLocaleString()} calls, ${dur(slow.total)} total, longest ${dur(slow.max)}. Long builds and waits belong on the fleet (fleet-build), not inline.`, ev: ts.slice(1, 4).map((x) => `${x.tool} ${dur(x.total)}`).join(" · ") });
+const flaky = ts.filter((x) => x.calls >= 20).sort((a, b) => b.errors / b.calls - a.errors / a.calls)[0];
+if (flaky) bns.push({ v: flaky.errors * 30, t: `${flaky.tool} fails ${Math.round((100 * flaky.errors) / flaky.calls)}% of the time`, w: `${flaky.errors} of ${flaky.calls} calls failed. Worth a look before the next wave.`, ev: "" });
+const loops = tasks.map((t) => ({ t, g: signals(t) })).filter((x) => x.g.retryLoops > 0);
+if (loops.length) bns.push({ v: loops.length * 120, t: `${loops.length} workers hit retry loops`, w: "Three or more failures of the same tool without a success in between: the worker kept trying the same thing.", ev: loops.slice(0, 5).map((x) => `${x.t.label} ×${x.g.retryLoops}`).join(" · ") });
+const nb = document.getElementById("bns");
+bns.slice(0, 5).forEach((b, i) => nb.append(el("div", { class: "bn" }, el("div", { class: "k" }, i + 1), el("div", {}, el("div", { class: "t" }, b.t), el("div", { class: "w" }, b.w), b.ev ? el("div", { class: "ev" }, b.ev) : null))));
+
+// ---------- domains
+const dm = {};
+for (const t of tasks) { const r = (dm[t.domain] ||= { n: 0, done: 0, cut: 0, live: 0, cost: 0 }); r.n++; r.cost += t.cost_usd || 0; if (t.status === "completed") r.done++; else if (t.status === "interrupted") r.cut++; else r.live++; }
+const mxN = Math.max(...Object.values(dm).map((r) => r.n));
+const dd = document.getElementById("domains");
+for (const [k, r] of Object.entries(dm).sort((a, b) => b[1].cost - a[1].cost)) dd.append(el("div", { class: "bl" }, el("span", {}, k),
+  el("div", { class: "bar", style: `width:${(100 * r.n) / mxN}%` }, el("i", { style: `width:${(100 * r.done) / r.n}%;background:var(--ok)` }), el("i", { style: `width:${(100 * r.cut) / r.n}%;background:var(--danger)` }), el("i", { style: `width:${(100 * r.live) / r.n}%;background:var(--gold)` })),
+  el("span", { class: "r" }, `${r.done}/${r.cut}/${r.live} · ${usd(r.cost)}`)));
+
+// ---------- tools
+const tb = document.querySelector("#tools tbody"), mx = Math.max(...ts.map((x) => x.total));
+for (const s of ts.slice(0, 8)) tb.append(el("tr", {}, el("td", { class: "mono", style: "font-size:12px" }, s.tool), el("td", { class: "num r" }, s.calls.toLocaleString()),
+  el("td", { class: "num r " + (s.errors / s.calls > 0.1 ? "bad" : "dim") }, `${Math.round((100 * s.errors) / s.calls)}%`),
+  el("td", { class: "num r" }, el("span", { class: "meter", style: `width:${Math.max(1, Math.round((70 * s.total) / mx))}px;margin-right:6px` }), dur(s.total)), el("td", { class: "num r hide-sm" }, dur(s.max))));
+if (D.omp) {
+  const o = document.getElementById("omp");
+  o.append(el("div", { class: "cap", style: "margin-bottom:6px" }, "omp · 7 days"));
+  for (const m of D.omp.models.slice(0, 4)) o.append(el("div", { class: "bl" }, el("span", { class: "mono", style: "font-size:11.5px" }, m.model.replace(/-latest$/, "")), el("div", { class: "bar", style: `width:${Math.max(4, (100 * m.requests) / D.omp.models[0].requests)}%` }, el("i", { style: "width:100%;background:var(--info);opacity:.6" })), el("span", { class: "r" }, `${m.requests} req · ${tok(m.tokens)} · ${usd(m.cost)}`)));
+}
+document.getElementById("prov").innerHTML = `<b>Sources</b> Hermes delegation logs + state.db (workers, tokens, cost, your message times); burn-pace --json at ${D.lanes_at}; a read-only copy of omp stats.db (7 days). <b>Privacy</b> ${D.privacy}. <b>Heuristics</b> verified = a finished worker ran at least one passing check (tests, screenshots, browser); needs-you = ${D.heuristics.needs_owner}.`;
+})();
+</script>
+</body>
+</html>

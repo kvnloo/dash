@@ -1,7 +1,14 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readlinkSync, readSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import type { AgentInfo, HarnessInfo, HostInfo } from "../../shared/protocol";
+import { basename, dirname, join } from "node:path";
+import { isCatalogHarness } from "../../shared/catalog";
+import { hermesSessions } from "./hermes-sessions";
+import { listFinishedSessions, nodeFsPort } from "./finished-sessions";
+import { grokDesktopBot, hermesBots, hostBotSources, serviceBots } from "./bots";
+import { z0bridgeHermes } from "./z0bridge-hermes";
+import { agentsviewSessions } from "./agentsview-sessions";
+import { GatewayListSnapshot, isLocalRoute, localRoutingIds } from "./roster-reliability";
+import type { AgentInfo, HarnessInfo, HistoryMessage, HostInfo } from "../../shared/protocol";
 
 export type TailscaleNode = {
   hostName: string;
@@ -10,22 +17,30 @@ export type TailscaleNode = {
   os: string;
   ips: string[];
   self: boolean;
+  lastSeen?: string;
+  rx?: number;
+  tx?: number;
+  relay?: string;
 };
 
 export type OmpTab = {
   id: string;
   cwd: string;
+  sessionId?: string;
+  title?: string;
 };
 
 export type HermesProfileInfo = {
   id: string;
   gateway: "running" | "stopped";
+  sessionId?: string;
 };
 
 export type RosterSignals = {
   hermesProfiles?: HermesProfileInfo[];
   hermesA2A?: { ok: boolean; url: string };
   grokBot?: boolean;
+  remoteAgents?: Record<string, AgentInfo[]>;
 };
 
 const PHONE_OS = new Set(["android", "ios", "ipados", "tvos"]);
@@ -70,6 +85,10 @@ function parseNode(raw: unknown, self: boolean): TailscaleNode | null {
     os: typeof rec.OS === "string" ? rec.OS : "",
     ips,
     self,
+    lastSeen: typeof rec.LastSeen === "string" && Number.isFinite(Date.parse(rec.LastSeen)) ? rec.LastSeen : undefined,
+    rx: typeof rec.RxBytes === "number" ? rec.RxBytes : undefined,
+    tx: typeof rec.TxBytes === "number" ? rec.TxBytes : undefined,
+    relay: typeof rec.Relay === "string" ? rec.Relay : undefined,
   };
 }
 
@@ -105,6 +124,273 @@ export function liveOmpFromDaemonRoot(root: string, alive: (pid: number) => bool
   return tabs.sort((a, b) => a.cwd.localeCompare(b.cwd) || a.id.localeCompare(b.id));
 }
 
+/** Older OMP CLI builds use a home-relative, single-dash session folder. */
+export function ompSessionDirName(cwd: string, home: string): string {
+  const homeDir = home.endsWith("/") ? home.slice(0, -1) : home;
+  const rel = cwd === homeDir || cwd.startsWith(`${homeDir}/`) ? cwd.slice(homeDir.length) : cwd;
+  return rel.replaceAll("/", "-") || "-";
+}
+
+function ompSessionDirectories(sessionRoot: string, cwd: string, home: string): string[] {
+  // Tern's installed OMP uses the full cwd wrapped in double dashes. Both
+  // layouts coexist on disk; retain reads of sessions written by older CLIs.
+  const current = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
+  return [join(sessionRoot, current), join(sessionRoot, ompSessionDirName(cwd, home))];
+}
+
+function latestJsonl(dir: string): string | undefined {
+  if (!existsSync(dir)) return undefined;
+  let latest: string | undefined;
+  let latestMtime = -1;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".jsonl")) continue;
+    const path = join(dir, name);
+    let mtime = 0;
+    try {
+      mtime = statSync(path).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (mtime > latestMtime || (mtime === latestMtime && name > (latest ?? ""))) {
+      latestMtime = mtime;
+      latest = name;
+    }
+  }
+  return latest;
+}
+
+function readOmpSessionFile(path: string, fallbackId: string | undefined): { sessionId: string; title?: string } | null {
+  let sessionId = fallbackId;
+  let title: string | undefined;
+  try {
+    const fd = openSync(path, "r");
+    const header = Buffer.alloc(8192);
+    let text: string;
+    try {
+      text = header.toString("utf8", 0, readSync(fd, header, 0, header.length, 0));
+    } finally {
+      closeSync(fd);
+    }
+    for (const line of text.split("\n")) {
+      if (line.charCodeAt(0) !== 123) continue;
+      let rec: Record<string, unknown>;
+      try {
+        const value: unknown = JSON.parse(line);
+        if (typeof value !== "object" || value === null) continue;
+        rec = value as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (rec.type === "title" && typeof rec.title === "string" && rec.title.trim()) title = rec.title.trim();
+      if (rec.type === "session" && typeof rec.id === "string" && rec.id.length > 0) sessionId = rec.id;
+    }
+  } catch {
+    // filename id is enough to list the live tab
+  }
+  if (!sessionId) return null;
+  return title ? { sessionId, title } : { sessionId };
+}
+
+/** Overlay harness-native session ids from OMP's session store. Never hide a live tab. */
+export function attachOmpSessions(tabs: OmpTab[], sessionRoot: string, home: string): OmpTab[] {
+  return tabs.map((tab) => {
+    if (tab.sessionId) return tab;
+    let path: string | undefined;
+    for (const dir of ompSessionDirectories(sessionRoot, tab.cwd, home)) {
+      const file = latestJsonl(dir);
+      if (file) { path = join(dir, file); break; }
+    }
+    if (!path) return { ...tab, sessionId: tab.id };
+    const fromName = /_([^_/]+)\.jsonl$/.exec(path)?.[1];
+    const found = readOmpSessionFile(path, fromName);
+    if (!found) return { ...tab, sessionId: tab.id };
+    return { ...tab, sessionId: found.sessionId, title: found.title ?? tab.title };
+  });
+}
+
+/** Interactive frontends need not own a worker broker. /proc also links their
+ * exact open session file, avoiding newest-transcript guesses in shared cwds. */
+export function liveOmpFromProcessRoot(root: string, sessionRoot: string, alive: (pid: number) => boolean): OmpTab[] {
+  let names: string[];
+  try { names = readdirSync(root); } catch { return []; }
+  let realSessionRoot: string | undefined;
+  try { realSessionRoot = realpathSync(sessionRoot); } catch { /* no sessions yet */ }
+  const tabs: OmpTab[] = [];
+  for (const name of names) {
+    if (!/^[1-9]\d*$/.test(name)) continue;
+    const proc = join(root, name);
+    let cwd: string;
+    try {
+      if (readFileSync(join(proc, "comm"), "utf8").trim() !== "omp") continue;
+      const argv = readFileSync(join(proc, "cmdline"), "utf8").split("\0").filter(Boolean);
+      if (!argv.length || argv.slice(1).some(arg =>
+        arg.startsWith("__omp_") || arg === "-p" || arg === "--print" ||
+        arg === "--mode" || arg.startsWith("--mode=") || arg === "--help" ||
+        arg === "-h" || arg === "--version" || arg === "-v")) continue;
+      if (!alive(Number(name))) continue;
+      cwd = readlinkSync(join(proc, "cwd"));
+    } catch { continue; }
+    let id = `pid-${name}`;
+    try {
+      const pane = readFileSync(join(proc, "environ"), "utf8").split("\0").find(entry => entry.startsWith("TERN_PANE="))?.slice("TERN_PANE=".length);
+      if (pane && /^\d+$/.test(pane)) id = `tern-${pane}`;
+    } catch { /* pane metadata is optional */ }
+    // Never attach an unrelated latest session if fd inspection is unavailable.
+    let tab: OmpTab = { id, cwd, sessionId: id };
+    let fds: string[] = [];
+    try { fds = readdirSync(join(proc, "fd")); } catch { /* process may exit */ }
+    for (const fd of fds) {
+      try {
+        const path = realpathSync(join(proc, "fd", fd));
+        // Subagent transcripts live one level deeper than the main jsonl.
+        if (!realSessionRoot || dirname(dirname(path)) !== realSessionRoot || !path.endsWith(".jsonl")) continue;
+        const found = readOmpSessionFile(path, /_([^_]+)\.jsonl$/.exec(basename(path))?.[1]);
+        if (found) { tab = { id, cwd, ...found }; break; }
+      } catch { /* handle closed between listing and inspection */ }
+    }
+    tabs.push(tab);
+  }
+  return tabs.sort((a, b) => a.cwd.localeCompare(b.cwd) || a.id.localeCompare(b.id));
+}
+
+export function collectOmpSessions(home: string, sessionRoot: string, processRoot = "/proc", alive = pidAlive): OmpTab[] {
+  const frontends = liveOmpFromProcessRoot(processRoot, sessionRoot, alive);
+  const ownedCwds = new Set(frontends.map(tab => tab.cwd));
+  const brokers = liveOmpFromDaemonRoot(join(home, ".omp", "run", "daemons"), alive)
+    .filter(tab => !ownedCwds.has(tab.cwd));
+  return attachOmpSessions([...frontends, ...brokers], sessionRoot, home);
+}
+
+const SESSION_ID_OK = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function textFromContent(content: unknown): string {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  const parts: string[] = [];
+  for (const block of content) {
+    if (typeof block === "string") {
+      if (block.trim()) parts.push(block);
+      continue;
+    }
+    if (!isRecord(block)) continue;
+    if (block.type === "text" && typeof block.text === "string" && block.text.trim()) {
+      parts.push(block.text);
+    }
+  }
+  return parts.join("\n").trim();
+}
+
+function timestampMs(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const ms = Date.parse(value);
+    if (Number.isFinite(ms)) return ms;
+  }
+  return 0;
+}
+
+/** User/assistant turns only. Thinking, tools, and unknown roles are dropped. */
+export function parseOmpTranscript(text: string): HistoryMessage[] {
+  const out: HistoryMessage[] = [];
+  for (const line of text.split("\n")) {
+    if (line.charCodeAt(0) !== 123) continue;
+    let rec: Record<string, unknown>;
+    try {
+      const value: unknown = JSON.parse(line);
+      if (!isRecord(value)) continue;
+      rec = value;
+    } catch {
+      continue;
+    }
+    if (rec.type !== "message") continue;
+    if (!isRecord(rec.message)) continue;
+    const role = rec.message.role;
+    if (role !== "user" && role !== "assistant") continue;
+    const extracted = textFromContent(rec.message.content);
+    if (!extracted) continue;
+    const id = typeof rec.id === "string" && rec.id.length > 0 ? rec.id : `${role}-${out.length}`;
+    out.push({ id, role, text: extracted, at: timestampMs(rec.timestamp ?? rec.message.timestamp) });
+  }
+  return out;
+}
+
+function jsonlMatchingSession(dir: string, sessionId: string): string | undefined {
+  if (!existsSync(dir)) return undefined;
+  const suffix = `_${sessionId}.jsonl`;
+  let latest: string | undefined;
+  let latestMtime = -1;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(suffix)) continue;
+    const path = join(dir, name);
+    let mtime = 0;
+    try {
+      mtime = statSync(path).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (mtime > latestMtime || (mtime === latestMtime && path > (latest ?? ""))) {
+      latestMtime = mtime;
+      latest = path;
+    }
+  }
+  return latest;
+}
+
+export function findOmpJsonl(sessionRoot: string, sessionId: string, cwd?: string, home?: string): string | undefined {
+  if (!SESSION_ID_OK.test(sessionId)) return undefined;
+  if (cwd !== undefined) {
+    // A live OMP tab identifies its own working directory. Never substitute
+    // a different project's history when its session file has disappeared,
+    // nor when its cwd is blank or HOME is unknown.
+    if (!cwd.trim() || !home) return undefined;
+    for (const dir of ompSessionDirectories(sessionRoot, cwd, home)) {
+      const hit = jsonlMatchingSession(dir, sessionId);
+      if (hit) return hit;
+    }
+    return undefined;
+  }
+  // Older callers without cwd can still resolve an exact native session ID.
+  if (!existsSync(sessionRoot)) return undefined;
+  for (const name of readdirSync(sessionRoot)) {
+    const path = join(sessionRoot, name);
+    let isDir = false;
+    try {
+      isDir = statSync(path).isDirectory();
+    } catch {
+      continue;
+    }
+    if (!isDir) {
+      if (name.endsWith(`_${sessionId}.jsonl`)) return path;
+      continue;
+    }
+    const hit = jsonlMatchingSession(path, sessionId);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** Local OMP jsonl only. Unknown harness ids (including Cursor cloud) return []. */
+export function readLiveTranscript(
+  harness: string,
+  sessionId: string,
+  sessionRoot: string,
+  cwd?: string,
+  home?: string,
+): HistoryMessage[] {
+  if (harness !== "omp") return [];
+  const path = findOmpJsonl(sessionRoot, sessionId, cwd, home);
+  if (!path) return [];
+  try {
+    return parseOmpTranscript(readFileSync(path, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
 export function parseHermesGatewayList(text: string): HermesProfileInfo[] {
   const out: HermesProfileInfo[] = [];
   for (const line of text.split("\n")) {
@@ -135,9 +421,14 @@ export function assembleRoster(input: {
   harnesses: HarnessInfo[];
   selfFallback: { hostname: string; address?: string };
   signals?: RosterSignals;
+  fleetHostNames?: readonly string[];
+  now?: number;
 }): HostInfo[] {
-  const computers = input.nodes.filter((n) => !isPhoneOs(n.os));
-  const hosts: HostInfo[] = computers.map((node) => nodeToHost(node, input));
+  const cutoff = (input.now ?? Date.now()) - 30 * 24 * 60 * 60 * 1000;
+  const nodes = input.nodes.filter(node => !isPhoneOs(node.os) || node.self || node.online ||
+    (node.lastSeen !== undefined && Date.parse(node.lastSeen) >= cutoff) ||
+    input.fleetHostNames?.some(name => name === node.hostName || name === dnsLabel(node.dnsName, node.hostName)));
+  const hosts: HostInfo[] = nodes.map((node) => nodeToHost(node, input));
   if (!hosts.some((h) => h.self)) {
     hosts.unshift(
       selfHost(input.selfFallback.hostname, input.selfFallback.address, input.ompTabs, input.harnesses, input.signals),
@@ -150,29 +441,25 @@ export function assembleRoster(input: {
 function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster>[0]): HostInfo {
   const name = dnsLabel(node.dnsName, node.hostName);
   const v4 = firstV4(node.ips);
-  const agents = node.self
+  const agents = isPhoneOs(node.os) ? [] : node.self
     ? selfAgents(input.ompTabs, input.harnesses, input.signals)
-    : peerAgents(name, node.hostName);
+    : (input.signals?.remoteAgents?.[name] ?? []).map((agent) => ({
+      ...agent,
+      hostId: name,
+      status: node.online ? agent.status : "offline",
+    }));
   return {
     id: name,
-    name,
+    kind: isPhoneOs(node.os) ? "phone" : "computer",
+    lastSeen: node.lastSeen,
+    // MagicDNS labels can be numeric ("0"); keep that routing id but show the OS hostname.
+    name: node.hostName.trim() || name,
     hostname: node.hostName,
     online: node.online,
     self: node.self,
     address: v4,
     agents,
   };
-}
-
-function isGroot(id: string, hostname: string): boolean {
-  return id === "0" || hostname.toLowerCase() === "groot";
-}
-
-function peerAgents(id: string, hostname: string): AgentInfo[] {
-  if (isGroot(id, hostname)) {
-    return [{ id: "hermes", name: "Hermes", kind: "hermes", status: "running", detail: "Mesh node" }];
-  }
-  return [];
 }
 
 function selfHost(
@@ -184,6 +471,7 @@ function selfHost(
 ): HostInfo {
   return {
     id: hostname,
+    kind: "computer",
     name: hostname,
     hostname,
     online: true,
@@ -201,24 +489,31 @@ function hermesProfileAgent(profile: HermesProfileInfo, a2a?: { ok: boolean; url
     status = overlay.ok ? "running" : "offline";
     detail = overlay.url;
   }
-  return {
+  const agent: AgentInfo = {
     id: `hermes:${profile.id}`,
     name: profile.id === "default" ? "Hermes" : profile.id,
     kind: "hermes",
     status,
     detail,
+    profileId: profile.id,
   };
+  if (profile.sessionId) agent.sessionId = profile.sessionId;
+  return agent;
 }
 
 function selfAgents(tabs: OmpTab[], harnesses: HarnessInfo[], signals?: RosterSignals): AgentInfo[] {
-  const agents: AgentInfo[] = tabs.map((tab, index) => ({
-    id: `omp:${tab.id}`,
-    name: tabs.length > 1 ? `OMP ${index + 1}` : "OMP",
-    kind: "omp",
-    status: "running",
-    detail: tab.cwd || "OMP tab",
-    cwd: tab.cwd || undefined,
-  }));
+  const agents: AgentInfo[] = tabs.map((tab, index) => {
+    const agent: AgentInfo = {
+      id: `omp:${tab.id}`,
+      name: tabs.length > 1 ? `OMP ${index + 1}` : "OMP",
+      kind: "omp",
+      status: "running",
+      detail: tab.cwd || "OMP tab",
+      cwd: tab.cwd || undefined,
+    };
+    if (isCatalogHarness("omp")) agent.sessionId = tab.sessionId ?? tab.id;
+    return agent;
+  });
   const listed = new Set(agents.map((a) => a.kind));
   if (!listed.has("omp")) {
     const omp = harnesses.find((h) => h.id === "omp");
@@ -294,26 +589,64 @@ function spawnText(argv: string[], seconds = 1): string {
   }
 }
 
-let hermesListCache = "";
+const gatewayList = new GatewayListSnapshot();
 function refreshHermesList(): void {
-  if (Bun.which("hermes") === null) return;
-  try {
+  gatewayList.refresh((settle) => {
+    if (Bun.which("hermes") === null) {
+      settle(null);
+      return;
+    }
     const proc = Bun.spawn(["hermes", "gateway", "list"], { stdout: "pipe", stderr: "ignore" });
     const timer = setTimeout(() => proc.kill(), 2500);
-    void proc.exited.then(async () => {
+    void proc.exited.then(async (exitCode) => {
       clearTimeout(timer);
-      if (proc.exitCode !== 0) return;
-      const text = await new Response(proc.stdout).text();
-      if (text.trim()) hermesListCache = text;
+      if (exitCode !== 0) {
+        settle(null);
+        return;
+      }
+      try {
+        settle(await new Response(proc.stdout).text());
+      } catch {
+        settle(null);
+      }
     }).catch(() => {
       clearTimeout(timer);
+      settle(null);
     });
-  } catch {
-    return;
-  }
+  });
 }
 
 let rosterCache: { at: number; key: string; hosts: HostInfo[] } | null = null;
+
+/**
+ * The phone addresses this computer by its roster host id: the Tailscale MagicDNS label
+ * (e.g. "0"), which need not equal the OS hostname (e.g. "host-b"). Both name this bridge.
+ */
+export class SelfHost {
+  private ids = new Set<string>();
+  private canonical: string;
+  constructor(private readonly hostname: string) {
+    this.canonical = hostname;
+    this.ids.add(hostname);
+  }
+  /** Learn this computer's names from an assembled roster. */
+  remember(hosts: HostInfo[]): void {
+    const self = hosts.find(h => h.self);
+    if (!self) return;
+    this.ids = localRoutingIds(hosts, this.hostname);
+    this.canonical = self.id;
+  }
+  /** The roster id the phone stores for this computer. */
+  id(): string { return this.canonical; }
+  /** An absent host means "this bridge". */
+  matches(hostId: string | undefined): boolean { return isLocalRoute(hostId, this.ids); }
+}
+
+export function selfHostFrom(hosts: HostInfo[], hostname: string): SelfHost {
+  const self = new SelfHost(hostname);
+  self.remember(hosts);
+  return self;
+}
 const ROSTER_TTL_MS = 4000;
 
 export function readTailscaleStatus(): unknown {
@@ -343,25 +676,51 @@ function grokBotAlive(): boolean {
   return spawnText(["pgrep", "-x", "grok-bot"]).trim().length > 0;
 }
 
+/** A recorded gateway pid counts only while that pid is still a Hermes gateway. */
+function gatewayAlive(pid: number): boolean {
+  if (!pidAlive(pid)) return false;
+  try { return readFileSync(`/proc/${pid}/cmdline`, "utf8").includes("gateway"); } catch { return true; }
+}
+
+function localBots() {
+  const root = process.env.DASH_HERMES_ROOT ?? join(homedir(), ".hermes");
+  return [
+    ...hermesBots(hostBotSources(root, gatewayAlive)),
+    ...serviceBots(spawnText(["systemctl", "--user", "list-units", "--type=service", "--state=running", "--no-legend", "--plain"])),
+    ...(grokBotAlive() ? [grokDesktopBot()] : []),
+  ];
+}
+
 function listedHermesProfiles(profiles: HermesProfileInfo[]): HermesProfileInfo[] {
   return profiles.filter((p) => p.gateway === "running" || p.id === "default" || p.id === "connect-all");
 }
 
 refreshHermesList();
 
-export function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }): HostInfo[] {
+/** Registry membership keeps intentionally retained phones visible while offline. */
+function fleetHostNames(): string[] {
+  try {
+    const registry: unknown = Bun.YAML.parse(readFileSync(process.env.DASH_FLEET_REGISTRY ?? "/workspace/.files-k3s/config/fleet/nodes.yaml", "utf8"));
+    return isRecord(registry) && isRecord(registry.nodes) ? Object.keys(registry.nodes) : [];
+  } catch { return []; }
+}
+
+export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }, remoteAgents?: Record<string, AgentInfo[]>): Promise<HostInfo[]> {
   const key = `${self.hostname}:${self.address ?? ""}:${harnesses.map((h) => `${h.id}:${h.available}`).join(",")}`;
   const now = Date.now();
-  if (rosterCache && rosterCache.key === key && now - rosterCache.at < ROSTER_TTL_MS) return rosterCache.hosts;
+  if (remoteAgents === undefined && rosterCache && rosterCache.key === key && now - rosterCache.at < ROSTER_TTL_MS) return rosterCache.hosts;
   refreshHermesList();
   const nodes = parseTailscaleStatus(readTailscaleStatus());
-  const ompTabs = liveOmpFromDaemonRoot(join(homedir(), ".omp", "run", "daemons"), pidAlive);
+  const home = homedir();
+  const ompTabs = collectOmpSessions(home, join(process.env.PI_CODING_AGENT_DIR ?? join(home, ".omp", "agent"), "sessions"));
   const selfNode = nodes.find((n) => n.self);
   const selfAddress = self.address ?? firstV4(selfNode?.ips ?? []);
-  const hermesProfiles = listedHermesProfiles(parseHermesGatewayList(hermesListCache));
+  const hermesProfiles = listedHermesProfiles(parseHermesGatewayList(gatewayList.read()));
   const a2aUrl = hermesA2AUrl(process.env, selfAddress);
   const hosts = assembleRoster({
     nodes,
+    fleetHostNames: fleetHostNames(),
+    now,
     ompTabs,
     harnesses,
     selfFallback: { hostname: self.hostname, address: selfAddress },
@@ -369,8 +728,26 @@ export function collectRoster(harnesses: HarnessInfo[], self: { hostname: string
       hermesProfiles,
       hermesA2A: { ok: probeAgentCard(a2aUrl), url: a2aUrl },
       grokBot: grokBotAlive(),
+      remoteAgents,
     },
   });
-  rosterCache = { at: now, key, hosts };
+  // z0bridge when it is running; Dash's own read-only SessionDB/native API listing otherwise.
+  const sessions = (await z0bridgeHermes.list()) ?? await hermesSessions.list();
+  const local = hosts.find(h => h.self);
+  if (local) {
+    local.agents.push(...sessions);
+    // Every other harness's persisted chats; live rows for the same session win.
+    const listed = new Set(local.agents.filter(a => a.sessionId).map(a => `${a.kind}:${a.sessionId}`));
+    local.agents.push(...agentsviewSessions(listed));
+    for (const agent of local.agents) if (agent.sessionId) listed.add(`${agent.kind}:${agent.sessionId}`);
+    for (const agent of await listFinishedSessions({ fs: nodeFsPort(), homeDir: home, now })) {
+      const key = `${agent.kind}:${agent.sessionId}`;
+      if (listed.has(key)) continue;
+      listed.add(key);
+      local.agents.push(agent);
+    }
+    local.bots = localBots();
+  }
+  if (remoteAgents === undefined) rosterCache = { at: now, key, hosts };
   return hosts;
 }

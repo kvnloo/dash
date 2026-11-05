@@ -1,0 +1,738 @@
+// Annotation mode: draw over whatever screen is showing, talk, and send it to the
+// agent as one message (composited screenshot + strokes JSON + marked transcript).
+//
+// Entry: Options → Annotate, the UI pill, or an S Pen side-button press. Pen contact alone never enters.
+// No page-global long press: row holds keep their own actions. The tray, frame
+// and preview are siblings outside it so a thumb on the mic never cancels the pen.
+
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { BackHandler, Image, PixelRatio, Platform, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { requireOptionalNativeModule } from "expo-modules-core";
+import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withTiming } from "react-native-reanimated";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { debugNavigationRef } from "../../debug/nav";
+import { haptic } from "../../haptics";
+import { annotationDoc, annotationSendMode, attachmentNames, composeMessage } from "../../lib/annotate/compose";
+import { uploadBytes } from "../../lib/annotate/io";
+import { useRecordedSpeech } from "../../lib/useRecordedSpeech";
+import { appendInkSample, pointerKind, pressureOf, routePointer } from "../../lib/annotate/pointer";
+import { subscribeStylusButton, type StylusButtonSource } from "../../lib/stylus-mode";
+import { recognizeShape, type InkColor, type PointerKind, type StrokePoint, type Tool } from "../../lib/annotate/strokes";
+import { useHandedness } from "../../lib/useHandedness";
+import {
+  addSegment, annotate, clearStrokes, commitStroke, currentSink, enterAnnotation, eraseStrokes, exitAnnotation, finishSend,
+  setAnnotationStatus, setColor, setPenMode, setRecording, setTool, setTypedNote, undoStroke, stylusButton, observeStylusPointer,
+} from "../../store/annotate";
+import { store } from "../../store/app";
+import { colors, radius, space, type } from "../../theme";
+import { PressScale } from "../PressScale";
+import { NAV_CHROME_HEIGHT } from "../golden-nav";
+import { WORKSPACE_HEADER_HEIGHT } from "../WorkspaceHeader";
+import { targetsAt } from "./hit-test";
+import { loadSkia } from "./skia-ready";
+import { useContinuousVoice } from "../ContinuousVoiceRoot";
+import TldrawAnnotateDOM, { type TldrawAnnotateHandle } from "./TldrawAnnotateDOM";
+import { syncTldrawStrokes } from "../../store/annotate";
+import { flowMode, flowTrace } from "../../lib/flow-trace";
+import { executionToken } from "../../lib/bridge-auth";
+import { liveOf, nextGeneration } from "../../store/live";
+import { connectAnnotationDraft } from "../../store/annotation-draft";
+import { attachClosedPenLoop } from "../../lib/annotate/io-core";
+import { updateComposerDraft } from "../../store/composer-drafts";
+
+export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
+/** Strokes whose extent is under this many points are taps (e.g. a pen double-tap). */
+const MIN_EXTENT = 6;
+// The 60dp nav and 52dp settings/perf action row sit above annotation controls.
+// Keep the tray (including the sent toast) one 8dp gap below both.
+const TRAY_TOP_CLEARANCE = NAV_CHROME_HEIGHT + WORKSPACE_HEADER_HEIGHT + space.sm;
+
+type InkModule = typeof import("./InkCanvas");
+type InkStage = "skia-load" | "ink-render" | "capture";
+type InkFailure = { stage: InkStage; detail: string };
+
+class SkiaLoadFailure extends Error {
+  constructor(readonly original: unknown) {
+    super("Skia initialization failed");
+  }
+}
+
+/** Never expose URLs, credentials or more than 160 characters in a phone banner/log. */
+function inkCause(error: unknown): string {
+  const name = error instanceof Error ? error.name || "Error" : "Error";
+  const message = error instanceof Error ? error.message : String(error);
+  return (name + ": " + message)
+    .replace(/(?:https?|wss?|file):\/\/[^\s<>"']+/gi, "[URL]")
+    .replace(/([?&](?:token|access_token|api_key|auth|signature|secret|key)=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .slice(0, 160);
+}
+
+let inkModule: Promise<InkModule> | undefined;
+function loadInk(): Promise<InkModule> {
+  // Synchronous require avoids a split-chunk URL behind the turbo relay.
+  inkModule ??= (async () => {
+    try {
+      await loadSkia();
+    } catch (error) {
+      throw new SkiaLoadFailure(error);
+    }
+    const module: InkModule = require("./InkCanvas");
+    return module;
+  })().catch(error => {
+    inkModule = undefined;
+    throw error;
+  });
+  return inkModule;
+}
+
+class InkBoundary extends Component<{ children: ReactNode; onError(error: Error): void }, { failed: boolean }> {
+  override state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  override componentDidCatch(error: Error) { this.props.onError(error); }
+  override render() { return this.state.failed ? null : this.props.children; }
+}
+
+export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX.Element {
+  const engine = annotate.use(s => s.annotateEngine);
+  const tldraw = useRef<TldrawAnnotateHandle>(null);
+  const active = annotate.use(s => s.active);
+  const annotationStatus = annotate.use(s => s.status);
+  const previousAnnotationStatus = useRef(annotationStatus);
+  const penMode = annotate.use(s => s.penMode);
+  const tool = annotate.use(s => s.tool);
+  const color = annotate.use(s => s.color);
+  const strokes = annotate.use(s => s.drawing.strokes);
+  const [pendingEmptySend, setPendingEmptySend] = useState<boolean | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const [ink, setInk] = useState<InkModule | null>(null);
+  const [inkError, setInkError] = useState<InkFailure>();
+  const [inkAttempt, setInkAttempt] = useState(0);
+  const [penSendPending, setPenSendPending] = useState(false);
+  const penSendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const captureTarget = useRef<View>(null);
+  const webPenSurface = useRef<View>(null);
+  const inkTraceId = useRef("");
+
+  useEffect(() => {
+    if (!flowMode) return;
+    return connectAnnotationDraft().dispose;
+  }, []);
+
+  useEffect(() => {
+    if (!flowMode || Platform.OS !== "android") return;
+    // WP4 supplies this optional uptime reader; do not substitute wall-clock time.
+    const clock = requireOptionalNativeModule<{ getUptimeMillis(): Promise<number> }>("DashStylus");
+    if (clock?.getUptimeMillis) void flowTrace.calibrate(() => clock.getUptimeMillis());
+  }, []);
+
+  useEffect(() => {
+    // DashStylus is unavailable in Expo Go and older APKs; manual mode still works.
+    if (Platform.OS !== "android") return;
+    try {
+      return subscribeStylusButton(requireOptionalNativeModule<StylusButtonSource>("DashStylus"), stylusButton);
+    } catch {
+      // Optional native-module lookup can fail on incompatible dev clients.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "android" || !active) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      // State can change before React removes the subscription.
+      if (!annotate.get().active) return false;
+      exitAnnotation();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [active]);
+
+  const live = useSharedValue<number[]>([]);
+  const activeSv = useSharedValue(false);
+  const penSv = useSharedValue(false);
+  const kindSv = useSharedValue(0);
+  const pointerSv = useSharedValue(-1);
+  const lastStylusUpSv = useSharedValue(0);
+  const [palmShield, setPalmShield] = useState(false);
+  const palmShieldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The canvas blocks fingers only during a stylus stroke and its 250ms tail.
+  // Otherwise pen mode still lets fingers scroll the underlying app.
+  const shieldPalm = useCallback((released: boolean) => {
+    if (palmShieldTimer.current !== null) clearTimeout(palmShieldTimer.current);
+    palmShieldTimer.current = null;
+    setPalmShield(true);
+    if (released) palmShieldTimer.current = setTimeout(() => {
+      palmShieldTimer.current = null;
+      setPalmShield(false);
+    }, 250);
+  }, []);
+  useEffect(() => {
+    if (active && engine === "skia") return;
+    if (palmShieldTimer.current !== null) clearTimeout(palmShieldTimer.current);
+    palmShieldTimer.current = null;
+    setPalmShield(false);
+  }, [active, engine]);
+  useEffect(() => () => {
+    if (palmShieldTimer.current !== null) clearTimeout(palmShieldTimer.current);
+  }, []);
+  useEffect(() => { activeSv.value = active; }, [active, activeSv]);
+  useEffect(() => { penSv.value = penMode; }, [penMode, penSv]);
+  const inkFailed = useCallback((error: unknown, fallbackStage: InkStage) => {
+    const stage = error instanceof SkiaLoadFailure ? "skia-load" : fallbackStage;
+    const detail = inkCause(error instanceof SkiaLoadFailure ? error.original : error);
+    console.info("[dash-ink] " + stage + " " + detail);
+    // Render exceptions must invalidate the fulfilled module, not just the boundary.
+    inkModule = undefined;
+    setInk(null);
+    // Pen-mode preloading can fail after Exit; avoid a stale banner on next entry.
+    if (annotate.get().active) setInkError({ stage, detail });
+  }, []);
+  useEffect(() => {
+    if (active) return;
+    if (penSendTimer.current !== null) clearTimeout(penSendTimer.current);
+    penSendTimer.current = null;
+    setPenSendPending(false);
+    setInkError(undefined);
+  }, [active]);
+  useEffect(() => () => {
+    if (penSendTimer.current !== null) clearTimeout(penSendTimer.current);
+  }, []);
+  useEffect(() => {
+    if (engine !== "skia" || (!active && !penMode) || ink || inkError) return;
+    let cancelled = false;
+    void loadInk().then(module => {
+      if (!cancelled) setInk(module);
+    }).catch(error => {
+      if (!cancelled) inkFailed(error, "ink-render");
+    });
+    return () => { cancelled = true; };
+  }, [engine, active, penMode, ink, inkError, inkAttempt, inkFailed]);
+  const retryInk = useCallback(() => {
+    inkModule = undefined;
+    setInk(null);
+    setInkError(undefined);
+    // A fresh boundary is required even when require returns the same export.
+    setInkAttempt(attempt => attempt + 1);
+  }, []);
+
+  const finish = useCallback((flat: number[], pointerType: number) => {
+    if (flowMode) flowTrace.mark("ink.up", inkTraceId.current);
+    const { width, height } = size;
+    const s = annotate.get();
+    if (!width || !height || flat.length < 8) return;
+    const screenPoints: { x: number; y: number }[] = [];
+    const points: StrokePoint[] = [];
+    for (let i = 0; i + 3 < flat.length; i += 4) {
+      const x = flat[i] ?? 0, y = flat[i + 1] ?? 0;
+      screenPoints.push({ x, y });
+      points.push({ x: x / width, y: y / height, p: flat[i + 2] ?? 0.5, t: flat[i + 3] ?? Date.now() });
+    }
+    const xs = screenPoints.map(p => p.x), ys = screenPoints.map(p => p.y);
+    if (Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) < MIN_EXTENT) return;
+    if (s.tool === "eraser") { eraseStrokes(points); return; }
+    const pointer: PointerKind = pointerKind(pointerType);
+    const shape = s.tool === "pen" ? recognizeShape(points) : null;
+    const first = points[0], last = points.at(-1);
+    const shaped = shape && first && last ? [{ ...first, ...shape.from }, { ...last, ...shape.to }] : points;
+    commitStroke({ tool: shape?.tool ?? s.tool, color: s.color, pointer, points: shaped, targets: targetsAt(screenPoints) });
+    if (__DEV__) console.log("[dash-ink] committed", { pointer, points: shaped.length, width, height });
+    if (flowMode) {
+      flowTrace.mark("ink.submit", inkTraceId.current);
+      const state = store.get();
+      const conversationId = state.activeId;
+      const settings = state.settings;
+      const stroke = annotate.get().drawing.strokes.at(-1);
+      const snapshot = annotate.get().drawing.strokes;
+      const route = debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute() : undefined;
+      const screen = { id: route?.key ?? "unknown", route: route?.name ?? "unknown", width, height };
+      if (stroke && conversationId && settings) void attachClosedPenLoop({
+        stroke, screen, createdAt: Date.now(),
+        updateDraft: change => updateComposerDraft(conversationId, { text: "", attachments: [] }, change),
+        markedPng: async () => {
+          const { composite } = await loadInk();
+          return (await composite(captureTarget, snapshot, screen, INK, colors.bg)).bytes;
+        },
+        uploadPng: (name, bytes) => uploadBytes(settings, name, "image/png", bytes),
+      });
+    }
+    haptic.select();
+  }, [size]);
+
+  const send = useCallback((keep: boolean) => {
+    const draft = annotate.get();
+    if (draft.status === "capturing" || draft.status === "sending") return;
+    if (draft.drawing.strokes.length > 0 && !draft.typed.trim() && !draft.segments.some(segment => segment.text.trim())) {
+      setPendingEmptySend(keep);
+      return;
+    }
+    setPendingEmptySend(null);
+    if (penSendTimer.current !== null) clearTimeout(penSendTimer.current);
+    penSendTimer.current = null;
+    setPenSendPending(false);
+    void sendAnnotation(keep, captureTarget, size, error => inkFailed(error, "capture"));
+  }, [size, inkFailed]);
+  const sendAnyway = useCallback(() => {
+    if (pendingEmptySend === null) return;
+    setPendingEmptySend(null);
+    void sendAnnotation(pendingEmptySend, captureTarget, size, error => inkFailed(error, "capture"));
+  }, [pendingEmptySend, size, inkFailed]);
+  useEffect(() => { if (!active) setPendingEmptySend(null); }, [active]);
+  const sendRef = useRef(send);
+  useEffect(() => { sendRef.current = send; }, [send]);
+  const queuePenSend = useCallback(() => {
+    const state = annotate.get();
+    if (!state.active || state.drawing.strokes.length === 0 || state.status === "capturing" ||
+        state.status === "sending" || penSendTimer.current !== null) return;
+    setPenSendPending(true);
+    penSendTimer.current = setTimeout(() => {
+      penSendTimer.current = null;
+      setPenSendPending(false);
+      // Undo/Clear/Exit during the grace period never sends an empty annotation.
+      if (annotate.get().active && annotate.get().drawing.strokes.length > 0) sendRef.current(false);
+    }, 3000);
+  }, []);
+  const undoPendingSend = useCallback(() => {
+    if (penSendTimer.current !== null) clearTimeout(penSendTimer.current);
+    penSendTimer.current = null;
+    setPenSendPending(false);
+  }, []);
+  const tracePointer = useCallback((pointerType: number, touches: number) => {
+    const kind = pointerKind(pointerType);
+    if (kind === "stylus") observeStylusPointer();
+    if (flowMode) {
+      inkTraceId.current = flowTrace.begin();
+      flowTrace.mark("input.pen", inkTraceId.current);
+      const conversationId = store.get().activeId;
+      if (conversationId && liveOf(conversationId).open) nextGeneration(conversationId);
+    }
+    if (__DEV__) console.log("[dash-ink] raw-down", { pointer: kind, touches });
+  }, []);
+
+  const gesture = useMemo(() => {
+    // A Pan may finalize when a *different* contact lifts on web, dropping the pen.
+    // A Manual gesture ends only after the tracked pointer lifts or is cancelled.
+    const draw = Gesture.Manual()
+      .enabled(engine === "skia" && active && !!ink && !inkError && (Platform.OS !== "web" || !penMode))
+      .onTouchesDown((e, manager) => {
+        // A palm/second finger must never fail an already ACTIVE pen handler.
+        if (pointerSv.value >= 0) return;
+        const point = e.changedTouches?.[0] ?? e.allTouches?.[0];
+        const kind = pointerKind(e.pointerType);
+        // Do not draw or pass a finger through while the pen-up shield is active.
+        if (kind === "touch" && Date.now() - lastStylusUpSv.value < 250) return;
+        // KeyboardDock moves with the IME; only its live rectangle blocks ink.
+        if (!point || point.y >= size.height - Math.max(0, -keyboardHeight.value)) return;
+        // A new pen stroke can begin even if an ignored palm is still in contact.
+        const route = penSv.value && kind === "stylus" ? "draw" : routePointer(kind, penSv.value, e.numberOfTouches);
+        // A resting palm must not fail the handler before the next pen-down.
+        if (!activeSv.value || route === "pass") return;
+        kindSv.value = e.pointerType; pointerSv.value = point.id;
+        live.value = appendInkSample([], point.x, point.y, pressureOf(kind, undefined), Date.now());
+        if (kind === "stylus") runOnJS(shieldPalm)(false);
+        runOnJS(tracePointer)(e.pointerType, e.numberOfTouches);
+        manager.activate();
+      })
+      .onTouchesMove(e => {
+        const point = e.changedTouches?.find(touch => touch.id === pointerSv.value);
+        if (!point || pointerSv.value < 0) return;
+        live.value = appendInkSample(live.value, point.x, point.y, live.value.at(-2) ?? 0.5, Date.now());
+      })
+      .onTouchesUp((e, manager) => {
+        const point = e.changedTouches?.find(touch => touch.id === pointerSv.value);
+        if (!point || pointerSv.value < 0) return;
+        // The tracked raw UP supplies the endpoint; ignore every unrelated lift.
+        const flat = appendInkSample(live.value, point.x, point.y, live.value.at(-2) ?? 0.5, Date.now());
+        if (pointerKind(kindSv.value) === "stylus") {
+          lastStylusUpSv.value = Date.now();
+          runOnJS(shieldPalm)(true);
+        }
+        pointerSv.value = -1;
+        runOnJS(finish)(flat, kindSv.value);
+        manager.end();
+      })
+      .onTouchesCancelled((e, manager) => {
+        // A palm cancellation cannot abort the tracked pen stroke either.
+        if (pointerSv.value >= 0 && e.changedTouches?.some(touch => touch.id === pointerSv.value)) manager.fail();
+      })
+      .onFinalize(() => {
+        // A real system cancellation still releases the palm shield eventually.
+        if (pointerSv.value >= 0 && pointerKind(kindSv.value) === "stylus") {
+          lastStylusUpSv.value = Date.now();
+          runOnJS(shieldPalm)(true);
+        }
+        live.value = []; pointerSv.value = -1;
+      });
+    const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(engine === "skia" && active)
+      .onEnd((e, success) => { if (success && e.y < size.height - Math.max(0, -keyboardHeight.value) && pointerKind(e.pointerType) === "stylus") runOnJS(queuePenSend)(); });
+    return Gesture.Simultaneous(draw, penDoubleTap);
+  }, [engine, active, penMode, ink, inkError, finish, queuePenSend, live, activeSv, penSv, kindSv, pointerSv, lastStylusUpSv, shieldPalm, tracePointer, size.height, keyboardHeight]);
+
+  // RNGH 2.32 web can cancel its pen handler on a new touch/lost pointer capture.
+  // Pen mode uses the original DOM pen stream instead; native stays on Manual.
+  // The capture listener works even while the overlay passes fingers to scrolling.
+  useEffect(() => {
+    if (Platform.OS !== "web" || engine !== "skia" || !active || !penMode || !ink || inkError ||
+        !size.width || !size.height) return;
+    const surface = webPenSurface.current;
+    if (!(surface instanceof HTMLElement)) return;
+    let tracking = false;
+    const localPoint = (event: PointerEvent) => {
+      const rect = surface.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    };
+    const down = (event: PointerEvent) => {
+      if (event.pointerType !== "pen") return;
+      const point = localPoint(event);
+      if (point.x < 0 || point.x >= size.width || point.y < 0 ||
+          point.y >= size.height - Math.max(0, -keyboardHeight.value)) return;
+      event.preventDefault();
+      tracking = true;
+      pointerSv.value = event.pointerId;
+      kindSv.value = 1; // RNGH's PointerType.STYLUS, shared with finish().
+      live.value = appendInkSample([], point.x, point.y, pressureOf("stylus", event.pressure), Date.now());
+      shieldPalm(false);
+      tracePointer(1, 1);
+    };
+    const move = (event: PointerEvent) => {
+      if (!tracking || (event.pointerType !== "pen" && event.pointerId !== pointerSv.value) ||
+          (event.buttons & 1) === 0) return;
+      const point = localPoint(event);
+      live.value = appendInkSample(live.value, point.x, point.y, pressureOf("stylus", event.pressure), Date.now());
+    };
+    const up = (event: PointerEvent) => {
+      if (!tracking || (event.pointerType !== "pen" && event.pointerId !== pointerSv.value)) return;
+      const point = localPoint(event);
+      const samples = appendInkSample(live.value, point.x, point.y, pressureOf("stylus", event.pressure), Date.now());
+      tracking = false;
+      pointerSv.value = -1;
+      lastStylusUpSv.value = Date.now();
+      live.value = [];
+      shieldPalm(true);
+      finish(samples, 1);
+    };
+    // Touch down/up/cancel (and pen lostpointercapture) must not end a stroke:
+    // Chromium still delivers the subsequent pen moves and mouseReleased.
+    surface.addEventListener("pointerdown", down, true);
+    document.addEventListener("pointermove", move, true);
+    document.addEventListener("pointerup", up, true);
+    return () => {
+      surface.removeEventListener("pointerdown", down, true);
+      document.removeEventListener("pointermove", move, true);
+      document.removeEventListener("pointerup", up, true);
+      if (tracking) { live.value = []; pointerSv.value = -1; }
+    };
+  }, [engine, active, penMode, ink, inkError, size.width, size.height, keyboardHeight,
+      live, pointerSv, kindSv, lastStylusUpSv, shieldPalm, tracePointer, finish]);
+
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setSize(prev => (prev.width === width && prev.height === height ? prev : { width, height }));
+    if (__DEV__) console.log("[dash-ink] bounds", { width, height, fontScale: PixelRatio.getFontScale() });
+  }, []);
+
+  // Frame, ink and input cover the entire screen, except the visible keyboard.
+  const frameStyle = useAnimatedStyle(() => ({ bottom: Math.max(0, -keyboardHeight.value) }));
+  const Ink = ink?.InkCanvas;
+  useEffect(() => {
+    const confirmed = annotationStatus === "sent" && previousAnnotationStatus.current !== "sent";
+    previousAnnotationStatus.current = annotationStatus;
+    if (engine !== "tldraw") return;
+    if (confirmed) tldraw.current?.retain(strokes.map(stroke => stroke.id));
+    else if (!active && strokes.length === 0) tldraw.current?.clear(true);
+  }, [engine, active, annotationStatus, strokes]);
+  return (
+    <View style={styles.root}>
+      <GestureDetector gesture={gesture}>
+        <View ref={webPenSurface} style={styles.root} collapsable={false} onLayout={onLayout}>
+          <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
+          {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
+          {engine === "skia" && active && !inkError ? <Animated.View pointerEvents={penMode && !palmShield ? "none" : "auto"} style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
+          {engine === "skia" && active && Ink ? <InkBoundary key={inkAttempt} onError={error => inkFailed(error, "ink-render")}><Animated.View style={[StyleSheet.absoluteFill, frameStyle, { overflow: "hidden" }]} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></Animated.View></InkBoundary> : null}
+          {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active ? "auto" : "none"} {...overlayProps}>
+            <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} tool={tool} color={color} penMode={penMode} mode="screen"
+              onStylusObserved={async () => { observeStylusPointer(); }}
+              onReady={async ms => { console.info("[annotate-tldraw] host-ready", { ms }); }}
+              onDrawing={async drawing => { syncTldrawStrokes(drawing.map(stroke => ({ ...stroke, targets: targetsAt(stroke.points.map(point => ({ x: point.x * size.width, y: point.y * size.height }))) }))); }}
+              onExportDone={async () => { /* WP3 connects the ink export to compositing. */ }}
+              dom={{ style: { flex: 1 }, scrollEnabled: false }} />
+          </Animated.View> : null}
+        </View>
+      </GestureDetector>
+      {active ? <Animated.View pointerEvents="none" style={[styles.frame, frameStyle]} accessibilityLabel="Annotation mode on" {...overlayProps} /> : null}
+      {active ? <Tray onSend={send} onSendAnyway={sendAnyway} onDismissEmpty={() => setPendingEmptySend(null)} pendingEmptySend={pendingEmptySend} onUndoPenSend={undoPendingSend} penSendPending={penSendPending} screenHeight={size.height} tldraw={engine === "tldraw" ? tldraw : undefined} /> : <Toast screenHeight={size.height} />}
+      {active && inkError ? <View style={styles.inkError}>
+        <Text accessibilityRole="alert" style={styles.error}>{"Ink paused (" + inkError.stage + "): " + inkError.detail}</Text>
+        <View style={styles.row}>
+          <Chip label="Retry ink" a11y="Retry ink renderer" onPress={retryInk} />
+          <Chip label="Exit" a11y="Exit annotation" onPress={exitAnnotation} />
+        </View>
+      </View> : null}
+    </View>
+  );
+}
+
+const overlayProps = { testID: "annotation-overlay" };
+
+// Dev-only web hook so a browser harness can feed transcript segments when host STT is unavailable.
+if (__DEV__ && typeof window !== "undefined") Reflect.set(window, "__dashAnnotate", { addSegment, annotate, enterAnnotation });
+if (__DEV__ && flowMode) Reflect.set(globalThis, "__dashFlowTrace", {
+  dump: () => flowTrace.dump(),
+  // Explicit collector request only; never called by a pointer handler.
+  async upload() {
+    const settings = store.get().settings;
+    if (!settings) throw new Error("Pair before collecting traces");
+    const token = await executionToken(settings);
+    const response = await fetch(`http://${settings.address}/debug/trace`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(flowTrace.dump()),
+    });
+    if (!response.ok) throw new Error(`Trace collection failed (${response.status})`);
+  },
+});
+
+async function sendAnnotation(keep: boolean, target: React.RefObject<View | null>, size: { width: number; height: number }, onCaptureFailure: (error: unknown) => void): Promise<void> {
+  const s = annotate.get();
+  if (s.status === "capturing" || s.status === "sending") return;
+  const strokes = s.drawing.strokes;
+  if (strokes.length === 0) { setAnnotationStatus("error", { error: "Draw something first." }); return; }
+  const sink = currentSink();
+  const settings = store.get().settings;
+  if (!sink) { setAnnotationStatus("error", { error: "Open a chat or a voice session to send." }); return; }
+  if (!settings) { setAnnotationStatus("error", { error: "Pair with your computer to send." }); return; }
+  setAnnotationStatus("capturing");
+  try {
+    const route = debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute() : undefined;
+    const screen = { id: route?.key ?? "unknown", route: route?.name ?? "unknown", width: Math.round(size.width), height: Math.round(size.height) };
+    const createdAt = Date.now();
+    if (flowMode) flowTrace.mark("turn.commit", flowTrace.begin());
+    let captured: Awaited<ReturnType<InkModule["composite"]>>;
+    try {
+      const { composite } = await loadInk();
+      captured = await composite(target, strokes, screen, INK, colors.bg);
+    } catch (error) {
+      onCaptureFailure(error);
+      setAnnotationStatus("idle");
+      return;
+    }
+    const { bytes, dataUri } = captured;
+    const text = composeMessage({ strokes, segments: s.segments, screen, typed: s.typed });
+    setAnnotationStatus("sending", { preview: { image: dataUri, text, strokes: strokes.length } });
+    const names = attachmentNames(createdAt);
+    const doc = annotationDoc({ strokes, segments: s.segments, screen, createdAt, typed: s.typed });
+    const [image, json] = await Promise.all([
+      uploadBytes(settings, names.image, "image/png", bytes),
+      uploadBytes(settings, names.json, "application/json", new TextEncoder().encode(JSON.stringify(doc, null, 1))),
+    ]);
+    await sink.send(text, [image, json], annotationSendMode(sink.steerable()));
+    haptic.success();
+    finishSend(keep, { strokes, segments: s.segments, typed: s.typed });
+  } catch (error) {
+    setAnnotationStatus("error", { error: error instanceof Error ? error.message : "Could not send the annotation." });
+  }
+}
+
+const TOOLS: { id: Tool; label: string; a11y: string }[] = [
+  { id: "pen", label: "Pen", a11y: "Pen" },
+  { id: "highlighter", label: "Hi", a11y: "Highlighter" },
+  { id: "arrow", label: "→", a11y: "Arrow" },
+  { id: "box", label: "▢", a11y: "Box" },
+  { id: "circle", label: "◯", a11y: "Circle" },
+  { id: "eraser", label: "Erase", a11y: "Eraser" },
+];
+
+/** Keep the tray in the visible, keyboard-free screen without clipping ink.
+ * Top is the default; the hop control moves it below any strokes at the top.
+ */
+function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; atTop: boolean; screenHeight: number }): React.JSX.Element {
+  const insets = useSafeAreaInsets();
+  const topInset = insets.top + TRAY_TOP_CLEARANCE;
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const progress = useSharedValue(atTop ? 0 : 1);
+  const trayHeight = useSharedValue(0);
+  useEffect(() => {
+    progress.value = withTiming(atTop ? 0 : 1, {
+      duration: 110, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System,
+    });
+  }, [atTop, progress]);
+  // A tall IME can leave no tray room. Ink remains full-screen when it is closed.
+  const room = useDerivedValue(() => Math.max(0, screenHeight - topInset - Math.max(0, -keyboardHeight.value) - space.xs));
+  const clearDock = useAnimatedStyle(() => ({ height: room.value }));
+  const placement = useAnimatedStyle(() => ({
+    transform: [{ translateY: Math.max(0, room.value - trayHeight.value) * progress.value }],
+  }));
+  return (
+    <Animated.View pointerEvents="box-none" style={[styles.trayViewport, { top: topInset, left: insets.left + space.xs, right: insets.right + space.xs }, clearDock]} {...overlayProps}>
+      <Animated.ScrollView testID="annotation-tray" bounces={false} showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="always" style={[styles.tray, placement]} contentContainerStyle={styles.trayContent}
+        onLayout={e => { trayHeight.value = e.nativeEvent.layout.height; }}>
+        {children}
+      </Animated.ScrollView>
+    </Animated.View>
+  );
+}
+
+function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, onUndoPenSend, penSendPending, screenHeight, tldraw }: {
+  onSend(keep: boolean): void;
+  onSendAnyway(): void;
+  onDismissEmpty(): void;
+  pendingEmptySend: boolean | null;
+  onUndoPenSend(): void;
+  penSendPending: boolean;
+  screenHeight: number;
+  tldraw?: React.RefObject<TldrawAnnotateHandle | null>;
+}): React.JSX.Element {
+  const thumb = useHandedness();
+  const s = annotate.use(x => x);
+  const busy = s.status === "capturing" || s.status === "sending";
+  const count = s.drawing.strokes.length;
+  const [noteOpen, setNoteOpen] = useState(false);
+  const noteInput = useRef<TextInput>(null);
+  useEffect(() => { if (noteOpen) noteInput.current?.focus(); }, [noteOpen]);
+  const addNote = () => {
+    onDismissEmpty();
+    setNoteOpen(true);
+    noteInput.current?.focus();
+  };
+  // The tray can hop to the top so it never hides the part of the screen being marked.
+  const [top, setTop] = useState(true);
+  return (
+    <TrayViewport atTop={top} screenHeight={screenHeight}>
+      {penSendPending ? <View style={styles.penSendToast}>
+        <Text style={styles.penSendLabel}>Sending…</Text>
+        <Chip label="Undo" a11y="Undo sending" onPress={onUndoPenSend} />
+      </View> : null}
+      {s.preview && busy ? <Preview image={s.preview.image} text={s.preview.text} label={s.status === "capturing" ? "Capturing…" : `${s.sink ?? "Sending to chat"}…`} /> : null}
+      {s.status === "error" && s.error ? <Text accessibilityRole="alert" style={styles.error}>{s.error}</Text> : null}
+      {s.voiceNote ? <Text testID="annotation-voice-note" style={[styles.hint, { fontSize: 12, color: colors.textMuted }]}>Live voice unavailable: {s.voiceNote.replace(/[.!?]+$/, "")}. Hold Talk or type a note.</Text> : null}
+      <View style={[styles.row, thumb.row]}>
+        {TOOLS.map(t => <Chip key={t.id} label={t.label} a11y={t.a11y} selected={s.tool === t.id} onPress={() => setTool(t.id)} />)}
+        <Swatch color="accent" selected={s.color === "accent"} />
+        <Swatch color="red" selected={s.color === "red"} />
+        <Chip label="Aa" a11y="Type a note" selected={noteOpen || !!s.typed} onPress={() => {
+          if (noteOpen) { noteInput.current?.blur(); setNoteOpen(false); }
+          else addNote();
+        }} />
+      </View>
+      <View style={[styles.row, thumb.row]}>
+        <Chip label="Exit" a11y="Exit annotation" onPress={exitAnnotation} />
+        <Chip label="Undo" a11y="Undo" disabled={tldraw ? count === 0 : s.drawing.past.length === 0} onPress={() => tldraw ? tldraw.current?.undo() : undoStroke()} />
+        {tldraw ? <Chip label="Redo" a11y="Redo" onPress={() => tldraw.current?.redo()} /> : null}
+        <Chip label="Clear" a11y="Clear" disabled={count === 0} onPress={() => tldraw ? tldraw.current?.clear() : clearStrokes()} />
+        <Chip label={s.penMode ? "S Pen ✓" : "S Pen"} a11y="Pen mode: only the S Pen draws, fingers scroll" selected={s.penMode} onPress={() => setPenMode(!s.penMode)} />
+        <HoldToTalk />
+        <Chip label="⇅" a11y={top ? "Move tray to the bottom" : "Move tray to the top"} onPress={() => setTop(!top)} />
+        <Chip label="Keep" a11y="Send and keep drawing" disabled={busy || count === 0} onPress={() => onSend(true)} />
+        <Chip label={busy ? "…" : "Send"} a11y="Send annotation" primary disabled={busy || count === 0} onPress={() => onSend(false)} />
+      </View>
+      {noteOpen ? <TextInput
+        ref={noteInput} testID="annotation-note" accessibilityLabel="Type a note"
+        multiline maxLength={2000} value={s.typed} onChangeText={text => {
+          setTypedNote(text);
+          if (text.trim()) onDismissEmpty();
+        }}
+        placeholder="What should change?" placeholderTextColor={colors.textMuted}
+        selectionColor={colors.gold} textAlignVertical="top" style={styles.noteInput}
+      /> : null}
+      {pendingEmptySend !== null ? <View style={styles.confirm}>
+        <Text accessibilityRole="alert" style={styles.error}>No words captured. Send the marks only?</Text>
+        <View style={[styles.row, thumb.row]}>
+          <Chip label="Send anyway" a11y="Send anyway" onPress={onSendAnyway} />
+          <Chip label="Add note" a11y="Add note" onPress={addNote} />
+        </View>
+      </View> : null}
+      <Text style={styles.hint} numberOfLines={1}>{s.sink ? `→ ${s.sink}` : "Open a chat to send"} · {s.segments.length ? `${s.segments.length} spoken` : s.typed.trim() ? "typed note ready" : "hold Talk or type a note"}{s.penMode ? " · fingers scroll" : ""}</Text>
+    </TrayViewport>
+  );
+}
+
+function Toast({ screenHeight }: { screenHeight: number }): React.JSX.Element | null {
+  const s = annotate.use(x => x);
+  useEffect(() => {
+    if (s.status !== "sent") return;
+    const id = setTimeout(() => setAnnotationStatus("idle"), 3500);
+    return () => clearTimeout(id);
+  }, [s.status]);
+  if (s.status !== "sent" || !s.preview) return null;
+  return <TrayViewport atTop screenHeight={screenHeight}><Preview image={s.preview.image} text={s.preview.text} label={`${(s.sink ?? "Sending to chat").replace(/^Sending to /, "Sent to ")} · ${s.preview.strokes} strokes`} /></TrayViewport>;
+}
+
+function Preview({ image, text, label }: { image: string; text: string; label: string }): React.JSX.Element {
+  return (
+    <View style={styles.preview} accessibilityLabel={`Annotation preview. ${label}`}>
+      <Image source={{ uri: image }} style={styles.thumb} resizeMode="cover" />
+      <View style={styles.previewBody}>
+        <Text style={styles.previewLabel}>{label}</Text>
+        <Text style={styles.previewText} numberOfLines={5}>{text}</Text>
+      </View>
+    </View>
+  );
+}
+
+function Chip({ label, a11y, selected, primary, disabled, onPress }: { label: string; a11y: string; selected?: boolean; primary?: boolean; disabled?: boolean; onPress(): void }): React.JSX.Element {
+  return (
+    <PressScale accessibilityRole="button" accessibilityLabel={a11y} accessibilityState={{ selected: selected === true, disabled: disabled === true }} disabled={disabled}
+      onPress={() => { haptic.select(); onPress(); }} style={[styles.chip, selected && styles.chipOn, primary && styles.primary, disabled && styles.disabled]}>
+      <Text style={[styles.chipText, (selected || primary) && styles.chipTextOn]}>{label}</Text>
+    </PressScale>
+  );
+}
+
+function Swatch({ color, selected }: { color: InkColor; selected: boolean }): React.JSX.Element {
+  return (
+    <PressScale accessibilityRole="radio" accessibilityLabel={color === "red" ? "Red ink" : "Accent ink"} accessibilityState={{ checked: selected }} onPress={() => setColor(color)} style={styles.chip}>
+      <View style={[styles.swatch, { backgroundColor: INK[color] }, selected && styles.swatchOn]} />
+    </PressScale>
+  );
+}
+
+/** Hold to talk: the bridge transcribes the clip; the segment's time span aligns strokes. */
+function HoldToTalk(): React.JSX.Element {
+  const voice = useContinuousVoice();
+  const liveVoice = !["idle", "error", "connecting"].includes(voice.state.phase);
+  const speech = useRecordedSpeech("annotation", (text, start, end) => addSegment({ id: `mic-${start}`, text, start, end, source: "mic" }));
+  const recording = speech.state.phase === "recording";
+  const busy = speech.state.phase === "transcribing";
+  useEffect(() => { setRecording(recording); return () => setRecording(false); }, [recording]);
+  return (
+    <View>
+    <PressScale accessibilityRole="button" accessibilityLabel={liveVoice ? "Continuous voice is active" : "Hold to talk"} disabled={liveVoice} accessibilityState={{ selected: recording, disabled: liveVoice }}
+      onPressIn={() => { if (!busy) void speech.begin(); }} onPressOut={() => void speech.end()} style={[styles.chip, recording && styles.recording]}>
+      <Text style={[styles.chipText, recording && styles.chipTextOn]}>{liveVoice ? "Live mic" : recording ? "● Talk" : busy ? "Transcribing…" : "Talk"}</Text>
+    </PressScale>
+    {speech.state.note && speech.state.phase === "error" ? <Text accessibilityRole="alert" style={styles.error}>{speech.state.note}</Text> : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  inkError: { position: "absolute", top: 80, left: 12, right: 12, padding: 8, backgroundColor: colors.surfaceRaised, borderRadius: radius.sm },
+  penSendToast: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 44, paddingHorizontal: space.sm, borderRadius: radius.sm, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.hair },
+  penSendLabel: { ...type.mono, color: colors.text },
+  frame: { position: "absolute", top: 0, left: 0, right: 0, borderWidth: 2, borderColor: colors.accent, borderRadius: 2 },
+  trayViewport: { position: "absolute", overflow: "hidden" },
+  tray: { flexGrow: 0, flexShrink: 1, maxHeight: "100%", borderRadius: radius.md, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.hair },
+  trayContent: { padding: space.xs, gap: 2 },
+  row: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 2 },
+  chip: { minHeight: 44, minWidth: 44, paddingHorizontal: 6, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
+  chipOn: { backgroundColor: colors.goldLo },
+  primary: { backgroundColor: colors.accent, paddingHorizontal: space.sm },
+  recording: { backgroundColor: "#f0503c" },
+  disabled: { opacity: 0.4 },
+  chipText: { ...type.mono, color: colors.textMuted },
+  chipTextOn: { color: colors.bg },
+  swatch: { width: 18, height: 18, borderRadius: 9 },
+  swatchOn: { borderWidth: 2, borderColor: colors.text },
+  hint: { ...type.mono, fontSize: 10, color: colors.textTertiary, paddingHorizontal: space.sm },
+  error: { ...type.small, color: colors.danger, paddingHorizontal: space.sm },
+  noteInput: { minHeight: 48, maxHeight: 120, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.hair2, backgroundColor: colors.surface, color: colors.text, fontSize: 16 },
+  confirm: { gap: space.xs, paddingVertical: space.xs, borderTopWidth: 1, borderTopColor: colors.hair },
+  preview: { flexDirection: "row", gap: space.sm, padding: space.xs, marginBottom: space.xs, borderRadius: radius.sm, backgroundColor: colors.surfaceRaised },
+  thumb: { width: 72, height: 160, borderRadius: radius.sm, backgroundColor: colors.bg },
+  previewBody: { flex: 1, gap: 2 },
+  previewLabel: { ...type.label, color: colors.accent },
+  previewText: { ...type.mono, fontSize: 10, color: colors.text },
+});

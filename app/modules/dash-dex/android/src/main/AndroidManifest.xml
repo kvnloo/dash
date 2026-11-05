@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <activity android:name="app.dash.dex.DashPadActivity" android:exported="false"
+      android:launchMode="singleTask" android:taskAffinity="app.dash.dex.pad"
+      android:resizeableActivity="true" android:configChanges="keyboard|keyboardHidden|screenSize|smallestScreenSize|screenLayout|density|uiMode|orientation" />
+  </application>
+</manifest>

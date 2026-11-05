@@ -5,6 +5,7 @@ const DEMO_SETTINGS: Settings = {
   address: "100.64.0.1:4747",
   token: "demo-token-not-real",
   harness: "omp",
+  inAppFeedback: true,
 };
 
 const now = Date.now();
@@ -67,7 +68,7 @@ export function applyDemoSeed(): void {
   saveSettings(DEMO_SETTINGS);
   setConnection({
     status: "online",
-    host: "mbp",
+    host: "host-a",
     cwd: "~/workspace/dash",
     harnesses: [
       { id: "omp", name: "OMP", available: true },

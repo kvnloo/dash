@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>A · Event trace · Dash agent-trace prototype</title>
+<style>
+/*__SHARED_CSS__*/
+body { padding: 18px 20px 40px; }
+.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.top h1 { margin: 2px 0 0; font: 500 30px/1.05 var(--serif); }
+.top .sub { color: var(--tertiary); font-size: 13px; margin-top: 4px; }
+select { background: var(--sunk); color: var(--text); border: 1px solid var(--hair2); border-radius: 8px; height: 32px; padding: 0 8px; font: 13px var(--sans); max-width: 100%; }
+.stats { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); border: 1px solid var(--hair); border-radius: 2px; margin-bottom: 14px; }
+.stat { padding: 10px 12px; border-right: 1px solid var(--hair); min-width: 0; }
+.stat:last-child { border-right: 0; }
+.stat .v { font: 500 20px/1.15 var(--mono); font-variant-numeric: tabular-nums; margin-top: 6px; white-space: nowrap; }
+.stat .h { font: 11px/1.3 var(--mono); color: var(--tertiary); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card { padding: 12px 14px; margin-bottom: 14px; }
+.card-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.card-h h2 { margin: 0; font: 600 14px/1.2 var(--sans); }
+.card-h .d { color: var(--tertiary); font-size: 12px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.toolbar .sp { flex: 1; }
+.search { height: 28px; width: 180px; border-radius: 999px; border: 1px solid var(--hair2); background: var(--sunk); color: var(--text); padding: 0 12px; font: 12px var(--sans); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+#mini { display: block; width: 100%; height: 34px; border: 1px solid var(--hair); border-radius: 2px; cursor: pointer; touch-action: none; }
+.axis { position: relative; height: 22px; margin-left: var(--gw); }
+.tl { position: relative; display: grid; grid-template-columns: var(--gw) minmax(0, 1fr); max-height: 58vh; overflow-y: auto; overflow-x: hidden; border-top: 1px solid var(--hair); outline: none; }
+:root { --gw: 196px; }
+.gutter { position: relative; }
+.gl { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 2px; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; cursor: pointer; border: 0; background: none; text-align: left; }
+.gl.group { color: var(--text); font-weight: 600; }
+.gl .chev { width: 12px; color: var(--tertiary); font: 11px var(--mono); }
+.gl .meta { margin-left: auto; font: 11px var(--mono); color: var(--tertiary); }
+.gl[data-sel="true"] { color: var(--gold); }
+.plot { position: relative; min-width: 0; }
+#cv { display: block; width: 100%; touch-action: pan-y; cursor: grab; }
+#cv.drag { cursor: grabbing; }
+#tip { position: fixed; z-index: 5; pointer-events: none; max-width: 300px; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--hair2); background: rgba(16,17,14,.94); box-shadow: 0 12px 30px rgba(0,0,0,.45); font-size: 12px; display: none; }
+#tip .t1 { font-weight: 600; } #tip .t2 { color: var(--muted); margin-top: 3px; } #tip .t3 { font: 11px var(--mono); color: var(--tertiary); margin-top: 5px; }
+.keys { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 11.5px; color: var(--tertiary); }
+.lower { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; }
+.scroll { max-height: 420px; overflow: auto; }
+.ph { display: inline-flex; align-items: center; gap: 5px; font: 11px var(--mono); color: var(--muted); }
+.ph i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.st { font: 500 11px/1 var(--mono); padding: 3px 6px; border-radius: 4px; border: 1px solid var(--hair); white-space: nowrap; }
+.st.completed { color: var(--ok); } .st.interrupted { color: var(--danger); border-color: rgba(227,127,101,.35); } .st.running { color: var(--gold); }
+#drawer h3 { margin: 0 0 2px; font: 500 22px/1.1 var(--serif); }
+.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 12px 0; }
+.facts div .v { font: 500 14px var(--mono); margin-top: 2px; }
+.fsm { margin: 6px 0 12px; }
+.fsm-row { display: grid; grid-template-columns: 86px 1fr 64px; gap: 8px; align-items: center; font-size: 12px; padding: 2px 0; }
+.fsm-row .bar { height: 6px; position: relative; background: var(--quiet); border-radius: 3px; }
+.fsm-row .bar i { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+.sig { display: grid; gap: 6px; font-size: 12.5px; }
+.sig div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--quiet); padding-bottom: 4px; }
+.empty { color: var(--tertiary); font-size: 13px; padding: 16px 0; }
+.more { margin: 8px 0 0; }
+.zoomers { display: none; gap: 6px; }
+@media (max-width: 1100px) { .stats { grid-template-columns: repeat(5, minmax(0, 1fr)); } .stat:nth-child(5) { border-right: 0; } .stat:nth-child(n+6) { border-top: 1px solid var(--hair); } .lower { grid-template-columns: 1fr; } }
+@media (max-width: 700px) {
+  body { padding: 12px 10px 40px; }
+  :root { --gw: 92px; }
+  .stats { grid-template-columns: 1fr 1fr 1fr; }
+  .stat { border-right: 1px solid var(--hair) !important; border-top: 1px solid var(--hair); }
+  .stat:nth-child(-n+3) { border-top: 0; } .stat:nth-child(3n) { border-right: 0 !important; }
+  .stat .v { font-size: 16px; }
+  .gl .meta { display: none; }
+  .search { width: 130px; }
+  .keys { display: none; }
+  .zoomers { display: inline-flex; }
+  .hide-sm { display: none; }
+  td, th { padding: 6px 6px; }
+  .tl { max-height: 52vh; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <div class="cap">Dash · prototype A · event trace</div>
+    <h1>What happened, in order</h1>
+    <div class="sub" id="scope-sub"></div>
+  </div>
+  <label class="cap" style="display:flex;flex-direction:column;gap:5px">Scope
+    <select id="scope" aria-label="Scope"></select>
+  </label>
+</header>
+
+<section class="stats" id="stats" aria-label="Summary"></section>
+
+<section class="bracket card" aria-label="Timeline">
+  <div class="card-h"><h2>Timeline</h2><span class="d">one row per run; open a run to see each worker. Ticks are tool calls coloured by phase.</span></div>
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="Axis"><button data-axis="clock" aria-pressed="false">Clock</button><button data-axis="compress" aria-pressed="true">Compress idle</button></div>
+    <span id="phase-chips" style="display:contents"></span>
+    <button class="chip" id="f-err" aria-pressed="false"><span class="sw" style="background:var(--danger)"></span>Errors</button>
+    <button class="chip" id="f-stall" aria-pressed="true"><span class="sw" style="background:repeating-linear-gradient(135deg,var(--warn) 0 2px,transparent 2px 4px)"></span>Stalls</button>
+    <span class="sp"></span>
+    <span class="zoomers"><button class="chip" id="z-out" aria-label="Zoom out">−</button><button class="chip" id="z-in" aria-label="Zoom in">+</button><button class="chip" id="z-fit">Fit</button></span>
+    <input class="search" id="q" type="search" placeholder="Find tool or worker" aria-label="Find tool or worker">
+    <span class="num dim" id="qn"></span>
+  </div>
+  <canvas id="mini" aria-label="Overview; click to move the view"></canvas>
+  <div class="axis" id="axis"></div>
+  <div class="tl" id="tl" tabindex="0" aria-label="Trace timeline. W S zoom, A D pan, 0 fit, F focus, E next error, X next stall, J K step events, Enter open run">
+    <div class="gutter" id="gutter"></div>
+    <div class="plot"><canvas id="cv"></canvas></div>
+  </div>
+  <div class="keys"><span><span class="kbd">W</span>/<span class="kbd">S</span> zoom</span><span><span class="kbd">A</span>/<span class="kbd">D</span> pan</span><span>drag pan</span><span><span class="kbd">ctrl</span>+wheel zoom</span><span><span class="kbd">0</span> fit</span><span><span class="kbd">F</span> focus worker</span><span><span class="kbd">J</span>/<span class="kbd">K</span> next/prev call</span><span><span class="kbd">E</span> next error</span><span><span class="kbd">X</span> next stall</span><span><span class="kbd">/</span> find</span><span><span class="kbd">Enter</span> open run</span><span><span class="kbd">Esc</span> clear</span></div>
+</section>
+<div id="tip" role="presentation"></div>
+
+<div class="lower">
+  <section class="bracket card" aria-label="Events">
+    <div class="card-h"><h2>Events</h2><span class="d" id="ev-d"></span></div>
+    <div class="scroll" id="ev-wrap"><table id="ev"><thead><tr><th>Time</th><th class="r hide-sm">+</th><th>Worker</th><th>Tool</th><th class="hide-sm">Phase</th><th class="r">Dur</th><th class="r">OK</th></tr></thead><tbody></tbody></table></div>
+    <button class="chip more" id="ev-more" hidden>Show 300 more</button>
+  </section>
+  <aside class="bracket card" id="drawer" aria-label="Selected worker"></aside>
+</div>
+
+<section class="bracket card" aria-label="Workers">
+  <div class="card-h"><h2>Workers</h2><span class="d">sort by any column; cost and tokens come from Hermes session accounting</span></div>
+  <div class="scroll"><table id="tasks"><thead><tr>
+    <th data-sort="label">Worker</th><th data-sort="status">Status</th><th data-sort="s" class="hide-sm">Start</th><th data-sort="dur" class="r">Dur</th><th data-sort="calls" class="r">Calls</th><th data-sort="errors" class="r">Err</th><th data-sort="stall" class="r hide-sm">Stalled</th><th data-sort="tokens" class="r hide-sm">Tokens</th><th data-sort="cost" class="r">Cost</th><th data-sort="needs" class="hide-sm">Needs you</th>
+  </tr></thead><tbody></tbody></table></div>
+</section>
+
+<section class="bracket card" aria-label="Tool aggregates">
+  <div class="card-h"><h2>Tools</h2><span class="d">by total time in this scope</span></div>
+  <div class="scroll"><table id="tools"><thead><tr><th>Tool</th><th class="r">Calls</th><th class="r">Errors</th><th class="r" style="width:220px">Total</th><th class="r hide-sm">Avg</th><th class="r hide-sm">Max</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<p class="provenance" id="prov"></p>
+<div class="stamp">__BUILD__</div>
+
+<script id="trace-data" type="application/json">__TRACE_DATA__</script>
+<script>/*__SHARED_JS__*/</script>
+<script>
+(() => {
+const { D, tasks, runs, owner, dur, usd, tok, clock, clockS, totalTok, states, STATE_COLOR, signals, toolStats, summary, el, store, NEED } = TR;
+const PH_COLORS = { explore: "#81b9da", implement: "#b098cd", verify: "#98cf8b", pr: "#d7b986", delegate: "#b4afa3" };
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// ---------- state
+const S = {
+  scope: store.get("a.scope", "day"),
+  axis: store.get("a.axis", "compress"),
+  phases: new Set(store.get("a.phases", TR.PH)),
+  errOnly: false, stalls: true, q: "",
+  open: new Set(store.get("a.open", ["run-44"])),
+  sel: null, cursor: null, vp: null, evLimit: 300,
+  sort: store.get("a.sort", { k: "s", dir: 1 }),
+};
+
+// ---------- scope
+const multi = runs.filter((r) => r.tasks.length >= 2);
+const scopeSel = document.getElementById("scope");
+scopeSel.append(el("option", { value: "day" }, `Whole day · ${runs.length} runs · ${tasks.length} workers`));
+for (const r of multi) scopeSel.append(el("option", { value: r.id }, `${r.id} · ${clock(r.s)} · ${r.tasks.length} workers`));
+if (![...scopeSel.options].some((o) => o.value === S.scope)) S.scope = "day";
+scopeSel.value = S.scope;
+scopeSel.onchange = () => { S.scope = scopeSel.value; store.set("a.scope", S.scope); S.vp = null; S.sel = null; build(); };
+
+let scopeRuns, scopeTasks, scale, rows, sum;
+
+// ---------- scale (wall clock or idle-compressed; piecewise linear like omp's time-scale)
+function buildScale(list) {
+  const s0 = Math.min(...list.map((t) => t.s)), e0 = Math.max(...list.map((t) => t.e));
+  if (S.axis !== "compress") return { toU: (t) => t, toT: (u) => u, dom: [s0, e0], gaps: [] };
+  const PAD = 60e3, GAP = 12 * 60e3, BRIDGE = 3 * 60e3;
+  const iv = list.map((t) => [t.s - PAD, t.e + PAD]).sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const [a, b] of iv) { const m = merged[merged.length - 1]; if (m && a <= m[1]) m[1] = Math.max(m[1], b); else merged.push([a, b]); }
+  const T = [], U = [], gaps = [];
+  let u = merged[0][0];
+  for (let i = 0; i < merged.length; i++) {
+    const [a, b] = merged[i];
+    if (i > 0) { const prev = merged[i - 1][1]; const g = a - prev; if (g > GAP) { gaps.push({ t0: prev, t1: a, u: u + BRIDGE / 2 }); u += BRIDGE; } else u += g; }
+    T.push(a, b); U.push(u, u + (b - a)); u += b - a;
+  }
+  const map = (x, X, Y) => { if (x <= X[0]) return Y[0] + (x - X[0]); if (x >= X[X.length - 1]) return Y[Y.length - 1] + (x - X[X.length - 1]);
+    let lo = 0, hi = X.length - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (X[m] <= x) lo = m; else hi = m; }
+    const f = X[hi] === X[lo] ? 0 : (x - X[lo]) / (X[hi] - X[lo]); return Y[lo] + f * (Y[hi] - Y[lo]); };
+  return { toU: (t) => map(t, T, U), toT: (x) => map(x, U, T), dom: [U[0], U[U.length - 1]], gaps };
+}
+
+function build() {
+  scopeRuns = S.scope === "day" ? runs : runs.filter((r) => r.id === S.scope);
+  scopeTasks = scopeRuns.flatMap((r) => r.tasks);
+  if (S.scope !== "day") for (const r of scopeRuns) S.open.add(r.id);
+  scale = buildScale(scopeTasks);
+  if (!S.vp) S.vp = { u0: scale.dom[0], u1: scale.dom[1] };
+  sum = summary(scopeTasks);
+  const ownerN = owner.filter((o) => o.kind === "owner" && o.at >= sum.s && o.at <= sum.e).length;
+  document.getElementById("scope-sub").textContent = S.scope === "day"
+    ? `${clock(sum.s)} to ${clock(sum.e)} · ${runs.length} delegations from ${D.orchestrators.length} orchestrator sessions · every tool call Hermes logged`
+    : `${S.scope} · dispatched ${clock(sum.s)} · ${scopeTasks.length} parallel workers`;
+  // stats strip (omp-style: wall split, then counts, then money)
+  const pct = (a, b) => (b > 0 ? `${Math.round((100 * a) / b)}%` : "");
+  const stats = [
+    ["Wall", dur(sum.wall), S.scope === "day" ? `of ${dur(sum.span)} span` : `${clock(sum.s)} to ${clock(sum.e)}`],
+    ["Agent time", dur(sum.agent), `${(sum.agent / Math.max(1, sum.wall)).toFixed(1)}x parallel`],
+    ["Tool time", dur(sum.toolS), `${pct(sum.toolS, sum.agent)} of agent`],
+    ["Stalled", dur(sum.stall), `${pct(sum.stall, sum.agent)} of agent`, sum.stall / Math.max(1, sum.agent) > 0.2 ? "warn" : ""],
+    ["Workers", `${sum.n}`, `${sum.st.interrupted || 0} interrupted · ${sum.st.running || 0} live`, (sum.st.interrupted || 0) ? "bad" : ""],
+    ["Tool calls", sum.calls.toLocaleString(), `${sum.errors} failed (${pct(sum.errors, sum.calls)})`],
+    ["Owner turns", `${ownerN}`, "your messages"],
+    ["Tokens", tok(sum.tokens), "incl. cache reads"],
+    ["Cost", usd(sum.cost), `${scopeTasks.filter((t) => !t.cost_usd).length} unpriced (Sol)`],
+  ];
+  const st = document.getElementById("stats"); st.innerHTML = "";
+  for (const [k, v, h, tone] of stats) st.append(el("div", { class: "stat" }, el("div", { class: "cap" }, k), el("div", { class: "v " + (tone || "") }, v), el("div", { class: "h", title: h }, h)));
+  layoutRows(); renderTasks(); renderTools(); draw(); renderEvents(); renderDrawer();
+  document.getElementById("prov").innerHTML = `<b>Source</b> Hermes delegation logs (${tasks.length} workers, ${D.tool_names.length} tool kinds) + state.db session accounting, exported ${D.generated}. <b>Privacy</b> ${D.privacy}. <b>Heuristics</b> phase: ${D.heuristics.phase}; stall: ${D.heuristics.stall}.`;
+}
+
+// ---------- rows
+const ROW = 18, GROUP = 22, OWN = 22;
+function layoutRows() {
+  rows = [{ kind: "owner", h: OWN }];
+  for (const r of scopeRuns) {
+    rows.push({ kind: "group", run: r, h: GROUP });
+    if (S.open.has(r.id)) for (const t of r.tasks) rows.push({ kind: "task", task: t, run: r, h: ROW });
+  }
+  let y = 0; for (const r of rows) { r.y = y; y += r.h; }
+  const H = y + 4;
+  const g = document.getElementById("gutter"); g.innerHTML = ""; g.style.height = H + "px";
+  for (const r of rows) {
+    let b;
+    if (r.kind === "owner") b = el("div", { class: "gl", style: `top:${r.y}px;height:${r.h}px` }, el("span", { class: "diamond" }), "You", el("span", { class: "meta" }, "turns"));
+    else if (r.kind === "group") {
+      const open = S.open.has(r.run.id);
+      const cut = r.run.tasks.filter((t) => t.status === "interrupted").length;
+      b = el("button", { class: "gl group", style: `top:${r.y}px;height:${r.h}px`, "aria-expanded": open, onclick: () => toggle(r.run.id) },
+        el("span", { class: "chev" }, open ? "▾" : "▸"), r.run.id, el("span", { class: "dim", style: "font-weight:400;font-size:11.5px" }, runDomain(r.run)), el("span", { class: "meta" }, `${r.run.tasks.length}w${cut ? ` · ${cut}✕` : ""}`));
+    } else b = el("button", { class: "gl", style: `top:${r.y}px;height:${r.h}px;padding-left:16px`, "data-sel": S.sel === r.task.id, onclick: () => select(r.task.id) },
+      r.task.label, el("span", { class: "meta" }, r.task.status === "interrupted" ? "✕" : r.task.status === "running" ? "live" : dur((r.task.e - r.task.s) / 1000)));
+    g.append(b);
+  }
+  const cv = document.getElementById("cv"); cv.style.height = H + "px";
+}
+function runDomain(r) { const c = {}; for (const t of r.tasks) c[t.domain] = (c[t.domain] || 0) + 1; return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([k]) => k).slice(0, 2).join("+"); }
+function toggle(id) { if (S.open.has(id)) S.open.delete(id); else S.open.add(id); store.set("a.open", [...S.open]); layoutRows(); draw(); }
+
+// ---------- drawing
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const mini = document.getElementById("mini"), mctx = mini.getContext("2d");
+let hatch;
+function hatchPattern(c) { const p = document.createElement("canvas"); p.width = p.height = 6; const x = p.getContext("2d"); x.strokeStyle = "rgba(231,168,117,.55)"; x.lineWidth = 1.2; x.beginPath(); x.moveTo(-1, 7); x.lineTo(7, -1); x.stroke(); return c.createPattern(p, "repeat"); }
+function visible(e) { if (!S.phases.has(e.ph)) return false; if (S.errOnly && e.ok !== 0) return false; return true; }
+function matchQ(t, e) { if (!S.q) return false; const q = S.q.toLowerCase(); return (e && e.tool.toLowerCase().includes(q)) || t.label.toLowerCase().includes(q) || t.id.toLowerCase().includes(q); }
+
+function draw() {
+  const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  hatch ||= hatchPattern(ctx);
+  const { u0, u1 } = S.vp, k = W / (u1 - u0);
+  const X = (t) => (scale.toU(t) - u0) * k;
+  // gridlines + compressed-gap bridges
+  const ax = document.getElementById("axis"); ax.innerHTML = "";
+  const spanMs = scale.toT(u1) - scale.toT(u0);
+  const steps = [60e3, 300e3, 600e3, 1800e3, 3600e3, 7200e3, 14400e3];
+  const step = steps.find((s) => (spanMs / s) * 1 <= Math.max(3, W / 90)) || steps[steps.length - 1];
+  ctx.strokeStyle = "rgba(236,232,223,.05)"; ctx.lineWidth = 1;
+  for (let t = Math.ceil(scale.toT(u0) / step) * step; t < scale.toT(u1); t += step) {
+    const x = Math.round(X(t)) + 0.5; if (x < 0 || x > W) continue;
+    if (scale.gaps.some((g) => t > g.t0 && t < g.t1)) continue;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    if (scale.gaps.some((g) => Math.abs((g.u - u0) * k - x) < 44)) continue;
+    ax.append(el("span", { class: "num dim", style: `position:absolute;left:${x}px;top:4px;transform:translateX(-50%);font-size:10.5px` }, clock(t)));
+  }
+  for (const g of scale.gaps) {
+    const x = (g.u - u0) * k; if (x < -20 || x > W + 20) continue;
+    ctx.fillStyle = "rgba(9,9,8,.85)"; ctx.fillRect(x - 6, 0, 12, H);
+    ctx.strokeStyle = "rgba(236,232,223,.14)"; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(x - 6.5, 0); ctx.lineTo(x - 6.5, H); ctx.moveTo(x + 6.5, 0); ctx.lineTo(x + 6.5, H); ctx.stroke(); ctx.setLineDash([]);
+    ax.append(el("span", { class: "num faint", style: `position:absolute;left:${x}px;top:4px;transform:translateX(-50%);font-size:10px`, title: `${dur((g.t1 - g.t0) / 1000)} idle, compressed` }, `⋯ ${dur((g.t1 - g.t0) / 1000)}`));
+  }
+  let qn = 0;
+  for (const r of rows) {
+    const y = r.y;
+    if (r.kind === "owner") {
+      ctx.fillStyle = "rgba(215,185,134,.04)"; ctx.fillRect(0, y, W, r.h);
+      for (const o of owner) {
+        if (o.at < sum.s - 60e3 || o.at > sum.e + 60e3) continue;
+        const x = X(o.at); if (x < -4 || x > W + 4) continue;
+        if (o.kind === "owner") { ctx.fillStyle = "#d7b986"; ctx.save(); ctx.translate(x, y + r.h / 2); ctx.rotate(Math.PI / 4); ctx.fillRect(-3, -3, 6, 6); ctx.restore(); }
+        else { ctx.fillStyle = "rgba(180,175,163,.45)"; ctx.fillRect(x - 0.5, y + 6, 1, r.h - 12); }
+      }
+      continue;
+    }
+    if (r.kind === "group") {
+      ctx.fillStyle = "rgba(236,232,223,.025)"; ctx.fillRect(0, y, W, r.h);
+      ctx.strokeStyle = "rgba(236,232,223,.08)"; ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); ctx.stroke();
+      const open = S.open.has(r.run.id);
+      for (const t of r.run.tasks) {
+        const xs = X(t.s), xe = X(t.e);
+        ctx.fillStyle = "rgba(236,232,223,.07)"; ctx.fillRect(xs, y + 5, Math.max(1, xe - xs), r.h - 10);
+        if (!open) for (const e of t.events) { if (!visible(e)) continue; const x = X(t.s + e.t * 1000); if (x < -2 || x > W + 2) continue; ctx.fillStyle = e.ok === 0 ? "#e37f65" : PH_COLORS[e.ph]; ctx.globalAlpha = 0.55; ctx.fillRect(x, y + 7, 1, r.h - 14); }
+        ctx.globalAlpha = 1;
+        if (t.status === "interrupted") drawX(xe, y + r.h / 2, 3.5);
+      }
+      continue;
+    }
+    // task row
+    const t = r.task, xs = X(t.s), xe = X(t.e), mid = y + r.h / 2;
+    if (S.sel === t.id) { ctx.fillStyle = "rgba(215,185,134,.07)"; ctx.fillRect(0, y, W, r.h); }
+    if (xe < -10 || xs > W + 10) continue;
+    ctx.strokeStyle = "rgba(236,232,223,.16)"; ctx.beginPath(); ctx.moveTo(Math.max(xs, -1), mid + 0.5); ctx.lineTo(Math.min(xe, W + 1), mid + 0.5); ctx.stroke();
+    for (const b of t.bands) { const bx = X(t.s + b.s * 1000), bw = X(t.s + b.e * 1000) - bx; ctx.fillStyle = PH_COLORS[b.phase]; ctx.globalAlpha = 0.28; ctx.fillRect(bx, y + r.h - 4, Math.max(1, bw), 2); }
+    ctx.globalAlpha = 1;
+    if (S.stalls) for (const s of t.stalls) { const sx = X(t.s + s.s * 1000), sw = X(t.s + s.e * 1000) - sx; ctx.fillStyle = hatch; ctx.fillRect(sx, y + 4, Math.max(1, sw), r.h - 9); }
+    for (const e of t.events) {
+      if (!visible(e)) continue;
+      const x = X(t.s + e.t * 1000); if (x < -4 || x > W + 4) continue;
+      const w = Math.max(1, X(t.s + (e.t + e.dur) * 1000) - x);
+      ctx.fillStyle = e.ok === 0 ? "#e37f65" : PH_COLORS[e.ph];
+      ctx.fillRect(x, y + 4, Math.min(w, 4000), r.h - 9);
+      if (e.ok === 0) { ctx.fillRect(x - 1, y + 2, 3, 2); }
+      if (matchQ(t, e)) { qn++; ctx.strokeStyle = "#eccd8c"; ctx.strokeRect(x - 1.5, y + 2.5, Math.max(3, w) + 2, r.h - 5); }
+    }
+    // start / end glyphs
+    ctx.fillStyle = t.resume_of ? "#b098cd" : "rgba(180,175,163,.7)"; ctx.beginPath(); ctx.arc(xs, mid, 2.5, 0, 7); ctx.fill();
+    if (t.status === "interrupted") drawX(xe + 4, mid, 3.5);
+    else if (t.status === "running") { ctx.fillStyle = "#d7b986"; ctx.fillRect(xe, y + 3, 2, r.h - 6); }
+    else { ctx.strokeStyle = "#98cf8b"; ctx.beginPath(); ctx.moveTo(xe + 2, mid); ctx.lineTo(xe + 4, mid + 2.5); ctx.lineTo(xe + 8, mid - 3); ctx.stroke(); }
+    if (S.cursor && S.cursor.task === t.id) { const e = t.events[S.cursor.i]; if (e) { const x = X(t.s + e.t * 1000); ctx.strokeStyle = "#eccd8c"; ctx.lineWidth = 1.5; ctx.strokeRect(x - 3, y + 1.5, 6 + Math.max(0, X(t.s + (e.t + e.dur) * 1000) - x), r.h - 3); ctx.lineWidth = 1; } }
+  }
+  document.getElementById("qn").textContent = S.q ? `${qn} hits` : "";
+  drawMini();
+}
+function drawX(x, y, r) { ctx.strokeStyle = "#e37f65"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r); ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r); ctx.stroke(); ctx.lineWidth = 1; }
+function drawMini() {
+  const dpr = devicePixelRatio || 1, W = mini.clientWidth, H = mini.clientHeight;
+  mini.width = W * dpr; mini.height = H * dpr; mctx.setTransform(dpr, 0, 0, dpr, 0, 0); mctx.clearRect(0, 0, W, H);
+  const [d0, d1] = scale.dom, k = W / (d1 - d0);
+  const bins = new Float32Array(Math.ceil(W)), errs = new Float32Array(Math.ceil(W));
+  for (const t of scopeTasks) for (const e of t.events) { const i = Math.floor((scale.toU(t.s + e.t * 1000) - d0) * k); if (i >= 0 && i < bins.length) { bins[i]++; if (e.ok === 0) errs[i]++; } }
+  const mx = Math.max(1, ...bins);
+  for (let i = 0; i < bins.length; i++) { if (!bins[i]) continue; const h = 4 + (H - 8) * Math.sqrt(bins[i] / mx); mctx.fillStyle = "rgba(129,185,218,.55)"; mctx.fillRect(i, H - h, 1, h); if (errs[i]) { mctx.fillStyle = "#e37f65"; mctx.fillRect(i, H - h, 1, 2); } }
+  for (const o of owner) { if (o.kind !== "owner" || o.at < sum.s || o.at > sum.e) continue; const x = (scale.toU(o.at) - d0) * k; mctx.fillStyle = "#d7b986"; mctx.fillRect(x, 1, 1, 4); }
+  const bx = (S.vp.u0 - d0) * k, bw = (S.vp.u1 - S.vp.u0) * k;
+  mctx.fillStyle = "rgba(215,185,134,.08)"; mctx.fillRect(bx, 0, bw, H);
+  mctx.strokeStyle = "#d7b986"; mctx.strokeRect(bx + 0.5, 0.5, Math.max(2, bw - 1), H - 1);
+}
+
+// ---------- viewport
+function clampVp(u0, u1) {
+  const [d0, d1] = scale.dom, min = 20e3;
+  let w = Math.max(min, Math.min(d1 - d0, u1 - u0));
+  u0 = Math.max(d0, Math.min(u0, d1 - w));
+  S.vp = { u0, u1: u0 + w }; draw(); renderEventsSoon();
+}
+function zoom(f, at) { const { u0, u1 } = S.vp; const c = at ?? (u0 + u1) / 2; clampVp(c - (c - u0) * f, c + (u1 - c) * f); }
+function pan(frac) { const w = S.vp.u1 - S.vp.u0; clampVp(S.vp.u0 + w * frac, S.vp.u1 + w * frac); }
+function fit() { clampVp(scale.dom[0], scale.dom[1]); }
+function focusTask(t) { const a = scale.toU(t.s), b = scale.toU(t.e), p = (b - a) * 0.06 + 10e3; clampVp(a - p, b + p); }
+function reveal(t, e) { const u = scale.toU(t.s + e.t * 1000); const { u0, u1 } = S.vp; if (u < u0 || u > u1) { const w = u1 - u0; clampVp(u - w / 2, u + w / 2); } else draw(); }
+
+// pointer: drag pan, ctrl-wheel zoom, hover tooltip, click select
+const tip = document.getElementById("tip");
+let drag = null;
+cv.addEventListener("pointerdown", (ev) => { drag = { x: ev.clientX, u0: S.vp.u0, u1: S.vp.u1, moved: false, id: ev.pointerId }; });
+addEventListener("pointermove", (ev) => {
+  if (drag) { const dx = ev.clientX - drag.x; if (Math.abs(dx) > 3) { drag.moved = true; cv.classList.add("drag"); cv.setPointerCapture?.(drag.id); } if (drag.moved) { const k = (drag.u1 - drag.u0) / cv.clientWidth; clampVp(drag.u0 - dx * k, drag.u1 - dx * k); } }
+  if (ev.target === cv && !drag?.moved) hover(ev); else if (ev.target !== cv) tip.style.display = "none";
+});
+addEventListener("pointerup", (ev) => { if (drag && !drag.moved && ev.target === cv) click(ev); drag = null; cv.classList.remove("drag"); });
+cv.addEventListener("wheel", (ev) => {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) { ev.preventDefault(); const r = cv.getBoundingClientRect(); const at = S.vp.u0 + ((ev.clientX - r.left) / r.width) * (S.vp.u1 - S.vp.u0); zoom(ev.deltaY > 0 ? 1.25 : 0.8, at); }
+  else if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) || ev.shiftKey) { ev.preventDefault(); pan((ev.deltaX || ev.deltaY) / cv.clientWidth); }
+}, { passive: false });
+function hit(ev) {
+  const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+  const row = rows.find((q) => y >= q.y && y < q.y + q.h);
+  const u = S.vp.u0 + (x / r.width) * (S.vp.u1 - S.vp.u0), t = scale.toT(u);
+  return { row, t, x, y };
+}
+function nearestEvent(task, t, px) {
+  const k = cv.clientWidth / (S.vp.u1 - S.vp.u0); let best = null, bd = 1e9;
+  for (let i = 0; i < task.events.length; i++) { const e = task.events[i]; if (!visible(e)) continue; const d = Math.abs((scale.toU(task.s + e.t * 1000) - scale.toU(t)) * k); if (d < bd) { bd = d; best = i; } }
+  return bd <= px ? best : null;
+}
+function hover(ev) {
+  const { row, t } = hit(ev);
+  if (!row || row.kind === "owner") { tip.style.display = "none"; return; }
+  let html;
+  if (row.kind === "group") { const r = row.run, s = summary(r.tasks); html = `<div class="t1">${r.id} · ${r.tasks.length} workers</div><div class="t2">dispatched ${clock(r.s)} · ${dur(s.span)} · ${usd(s.cost)}</div><div class="t3">${s.st.completed || 0} done · ${s.st.interrupted || 0} interrupted · ${s.calls} calls · ${s.errors} failed</div>`; }
+  else {
+    const task = row.task, i = nearestEvent(task, t, 8), e = i != null ? task.events[i] : null;
+    const off = (t - task.s) / 1000;
+    const stall = task.stalls.find((s) => off >= s.s && off <= s.e);
+    html = `<div class="t1">${task.label} <span class="st ${task.status}">${task.status}</span></div>`;
+    if (e) html += `<div class="t2"><span class="ph"><i style="background:${e.ok === 0 ? "#e37f65" : PH_COLORS[e.ph]}"></i>${e.tool}</span> · ${e.ph} · ${dur(e.dur)}${e.ok === 0 ? ' · <span class="bad">failed</span>' : ""}</div><div class="t3">${clockS(task.s + e.t * 1000)} · +${dur(e.t)} into the worker</div>`;
+    else if (stall) html += `<div class="t2 warn">No events for ${dur(stall.e - stall.s)}</div><div class="t3">${clockS(task.s + stall.s * 1000)} to ${clockS(task.s + stall.e * 1000)}</div>`;
+    else html += `<div class="t3">${clockS(t)} · ${task.events.length} calls · ${usd(task.cost_usd)}</div>`;
+  }
+  tip.innerHTML = html; tip.style.display = "block";
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  tip.style.left = Math.min(innerWidth - tw - 8, ev.clientX + 14) + "px";
+  tip.style.top = (ev.clientY - th - 12 < 4 ? ev.clientY + 16 : ev.clientY - th - 12) + "px";
+}
+function click(ev) {
+  const { row, t } = hit(ev);
+  if (!row) return;
+  if (row.kind === "group") { toggle(row.run.id); return; }
+  if (row.kind === "task") { const i = nearestEvent(row.task, t, 8); select(row.task.id, i); }
+}
+function select(id, i) {
+  S.sel = id; S.cursor = i != null ? { task: id, i } : null;
+  layoutRows(); draw(); renderDrawer(); renderEventsSoon(); markTaskRow();
+}
+mini.addEventListener("pointerdown", (ev) => {
+  const move = (e2) => { const r = mini.getBoundingClientRect(); const u = scale.dom[0] + ((e2.clientX - r.left) / r.width) * (scale.dom[1] - scale.dom[0]); const w = S.vp.u1 - S.vp.u0; clampVp(u - w / 2, u + w / 2); };
+  move(ev); mini.setPointerCapture(ev.pointerId); mini.onpointermove = move; mini.onpointerup = () => { mini.onpointermove = null; };
+});
+
+// keyboard (omp's DevTools contract + agent-specific jumps)
+const tl = document.getElementById("tl");
+addEventListener("keydown", (ev) => {
+  if (ev.target.matches("input, select, textarea")) { if (ev.key === "Escape") ev.target.blur(); return; }
+  const k = ev.key;
+  if (k === "/") { ev.preventDefault(); document.getElementById("q").focus(); return; }
+  if (k === "w" || k === "W") zoom(0.7); else if (k === "s" || k === "S") zoom(1 / 0.7);
+  else if (k === "a" || k === "A") pan(-0.2); else if (k === "d" || k === "D") pan(0.2);
+  else if (k === "0") fit();
+  else if (k === "f" || k === "F") { if (S.sel) focusTask(TR.byId[S.sel]); }
+  else if (k === "Escape") { S.sel = null; S.cursor = null; layoutRows(); draw(); renderDrawer(); renderEventsSoon(); markTaskRow(); }
+  else if (k === "j" || k === "k" || k === "e" || k === "E" || k === "x" || k === "X") step(k.toLowerCase());
+  else if (k === "Enter") { const r = scopeRuns.find((r) => r.s >= scale.toT(S.vp.u0)) || scopeRuns[0]; if (S.sel) toggle(TR.byId[S.sel].run); else if (r) toggle(r.id); }
+  else return;
+  ev.preventDefault();
+});
+function step(k) {
+  // flat ordered list of visible events across open tasks (or the selected worker)
+  const list = [];
+  for (const t of (S.sel ? [TR.byId[S.sel]] : scopeTasks)) t.events.forEach((e, i) => { if (visible(e)) list.push({ t, i, at: t.s + e.t * 1000, e }); });
+  list.sort((a, b) => a.at - b.at);
+  if (!list.length) return;
+  const curAt = S.cursor ? TR.byId[S.cursor.task].s + TR.byId[S.cursor.task].events[S.cursor.i].t * 1000 : scale.toT(S.vp.u0);
+  let pick;
+  if (k === "j") pick = list.find((x) => x.at > curAt);
+  else if (k === "k") pick = [...list].reverse().find((x) => x.at < curAt);
+  else if (k === "e") pick = list.find((x) => x.at > curAt && x.e.ok === 0) || list.find((x) => x.e.ok === 0);
+  else if (k === "x") {
+    const st = [];
+    for (const t of (S.sel ? [TR.byId[S.sel]] : scopeTasks)) for (const s of t.stalls) st.push({ t, at: t.s + s.s * 1000, s });
+    st.sort((a, b) => a.at - b.at);
+    const nx = st.find((x) => x.at > curAt + 1000) || st[0];
+    if (nx) { S.open.add(nx.t.run); S.sel = nx.t.id; S.cursor = null; layoutRows(); const a = scale.toU(nx.at), b = scale.toU(nx.t.s + nx.s.e * 1000), p = (b - a) * 0.6 + 30e3; clampVp(a - p, b + p); renderDrawer(); markTaskRow(); scrollRowIntoView(nx.t.id); }
+    return;
+  }
+  if (!pick) return;
+  S.open.add(pick.t.run); S.sel = pick.t.id; S.cursor = { task: pick.t.id, i: pick.i };
+  layoutRows(); reveal(pick.t, pick.e); renderDrawer(); renderEventsSoon(); markTaskRow(); scrollRowIntoView(pick.t.id);
+}
+function scrollRowIntoView(id) { const r = rows.find((x) => x.task && x.task.id === id); if (!r) return; const top = tl.scrollTop, h = tl.clientHeight; if (r.y < top || r.y + r.h > top + h) tl.scrollTop = r.y - h / 3; }
+
+// toolbar
+for (const b of document.querySelectorAll("[data-axis]")) { b.setAttribute("aria-pressed", b.dataset.axis === S.axis); b.onclick = () => { const t0 = scale.toT(S.vp.u0), t1 = scale.toT(S.vp.u1); S.axis = b.dataset.axis; store.set("a.axis", S.axis); for (const x of document.querySelectorAll("[data-axis]")) x.setAttribute("aria-pressed", x === b); scale = buildScale(scopeTasks); S.vp = { u0: scale.toU(t0), u1: scale.toU(t1) }; draw(); }; }
+const pc = document.getElementById("phase-chips");
+for (const p of TR.PH) { const c = el("button", { class: "chip", "aria-pressed": S.phases.has(p) }, el("span", { class: "sw", style: `background:${PH_COLORS[p]}` }), p); c.onclick = () => { if (S.phases.has(p)) S.phases.delete(p); else S.phases.add(p); c.setAttribute("aria-pressed", S.phases.has(p)); store.set("a.phases", [...S.phases]); draw(); renderEventsSoon(); }; pc.append(c); }
+const fe = document.getElementById("f-err"); fe.onclick = () => { S.errOnly = !S.errOnly; fe.setAttribute("aria-pressed", S.errOnly); draw(); renderEventsSoon(); };
+const fs = document.getElementById("f-stall"); fs.onclick = () => { S.stalls = !S.stalls; fs.setAttribute("aria-pressed", S.stalls); draw(); };
+document.getElementById("q").oninput = (ev) => { S.q = ev.target.value.trim(); if (S.q) for (const t of scopeTasks) if (t.events.some((e) => matchQ(t, e))) S.open.add(t.run); layoutRows(); draw(); renderEventsSoon(); };
+document.getElementById("z-in").onclick = () => zoom(0.6); document.getElementById("z-out").onclick = () => zoom(1 / 0.6); document.getElementById("z-fit").onclick = fit;
+
+// ---------- events table (what the viewport shows)
+let evTimer;
+function renderEventsSoon() { clearTimeout(evTimer); evTimer = setTimeout(renderEvents, 60); }
+function renderEvents() {
+  const t0 = scale.toT(S.vp.u0), t1 = scale.toT(S.vp.u1);
+  const list = [];
+  for (const t of (S.sel ? [TR.byId[S.sel]] : scopeTasks)) t.events.forEach((e, i) => { const at = t.s + e.t * 1000; if (at < t0 || at > t1 || !visible(e)) return; if (S.q && !matchQ(t, e)) return; list.push({ t, e, i, at }); });
+  list.sort((a, b) => a.at - b.at);
+  document.getElementById("ev-d").textContent = `${list.length.toLocaleString()} calls in view${S.sel ? ` · ${TR.byId[S.sel].label}` : ""}`;
+  const tb = document.querySelector("#ev tbody"); tb.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  for (const x of list.slice(0, S.evLimit)) {
+    const tr = el("tr", { "data-sel": S.cursor && S.cursor.task === x.t.id && S.cursor.i === x.i },
+      el("td", { class: "num" }, clockS(x.at)), el("td", { class: "num r dim hide-sm" }, `+${dur(x.e.t)}`),
+      el("td", {}, x.t.label), el("td", { class: "mono", style: "font-size:12px" }, x.e.tool),
+      el("td", { class: "hide-sm" }, el("span", { class: "ph" }, el("i", { style: `background:${PH_COLORS[x.e.ph]}` }), x.e.ph)),
+      el("td", { class: "num r" + (x.e.dur > 60 ? " warn" : "") }, x.e.dur >= 1 ? dur(x.e.dur) : `${x.e.dur.toFixed(1)}s`),
+      el("td", { class: "num r " + (x.e.ok === 0 ? "bad" : "dim") }, x.e.ok === 0 ? "fail" : x.e.ok === 1 ? "ok" : "?"));
+    tr.onclick = () => { S.open.add(x.t.run); S.sel = x.t.id; S.cursor = { task: x.t.id, i: x.i }; layoutRows(); reveal(x.t, x.e); renderDrawer(); markTaskRow(); scrollRowIntoView(x.t.id); renderEvents(); };
+    frag.append(tr);
+  }
+  tb.append(frag);
+  if (!list.length) tb.append(el("tr", {}, el("td", { colspan: 7, class: "empty" }, "No calls match in this window. Zoom out (S or 0) or clear a filter.")));
+  const more = document.getElementById("ev-more"); more.hidden = list.length <= S.evLimit; more.onclick = () => { S.evLimit += 300; renderEvents(); };
+}
+
+// ---------- drawer
+function renderDrawer() {
+  const d = document.getElementById("drawer"); d.innerHTML = "";
+  if (!S.sel) {
+    const s = sum, pend = TR.needs.filter((n) => scopeTasks.includes(n.task));
+    d.append(el("div", { class: "cap" }, "Nothing selected"), el("h3", {}, "Pick a worker"),
+      el("p", { class: "muted", style: "font-size:13px" }, "Click a row or a tick, or press J to step through calls. E jumps to the next failure, X to the next stall."),
+      el("div", { class: "cap", style: "margin-top:14px" }, `Waiting on you · ${pend.length}`),
+      ...pend.slice(0, 6).map((n) => el("button", { class: "chip", style: "margin:6px 6px 0 0", onclick: () => { S.open.add(n.task.run); select(n.task.id); focusTask(n.task); scrollRowIntoView(n.task.id); } }, el("span", { class: "diamond" }), `${n.task.label}: ${n.text}`)));
+    return;
+  }
+  const t = TR.byId[S.sel], sg = signals(t), fsm = states(t), total = (t.e - t.s) / 1000;
+  d.append(el("div", { class: "cap" }, `${t.run} · ${t.role} · ${t.model}`), el("h3", {}, t.label), el("span", { class: "st " + t.status }, t.status));
+  const fx = el("div", { class: "facts" });
+  const f = (k, v, cls) => fx.append(el("div", {}, el("div", { class: "cap" }, k), el("div", { class: "v " + (cls || "") }, v)));
+  f("Dispatched", clockS(t.s)); f("Duration", dur(total)); f("Tool calls", t.events.length); f("Failed", `${t.errors} (${Math.round(sg.errRate * 100)}%)`, t.errors ? "bad" : "");
+  f("Stalled", dur(sg.stallS), sg.stallS > total * 0.25 ? "warn" : ""); f("Tool time", dur(sg.toolS));
+  f("Tokens", tok(totalTok(t))); f("Cost", usd(t.cost_usd));
+  d.append(fx);
+  d.append(el("div", { class: "cap" }, "State"));
+  const box = el("div", { class: "fsm" });
+  const agg = {};
+  for (const sgm of fsm.segs) (agg[sgm.state] ||= []).push(sgm);
+  for (const [stt, segs] of Object.entries(agg)) {
+    const bar = el("div", { class: "bar" });
+    for (const sgm of segs) bar.append(el("i", { style: `left:${(100 * sgm.s) / total}%;width:${Math.max(0.6, (100 * (sgm.e - sgm.s)) / total)}%;background:${STATE_COLOR[stt]}` }));
+    box.append(el("div", { class: "fsm-row" }, el("span", {}, stt), bar, el("span", { class: "num r dim" }, dur(segs.reduce((a, x) => a + x.e - x.s, 0)))));
+  }
+  box.append(el("div", { class: "fsm-row" }, el("span", { style: `color:${STATE_COLOR[fsm.end] || "var(--muted)"}` }, fsm.end), el("span", { class: "dim", style: "font-size:11.5px" }, t.status === "interrupted" ? "worker lost its turn lease or was stopped" : t.status === "running" ? "still running at export" : "final report delivered"), el("span", { class: "num r dim" }, clock(t.e))));
+  d.append(box);
+  d.append(el("div", { class: "cap" }, "Signals"));
+  const sig = el("div", { class: "sig", style: "margin:6px 0 12px" });
+  const s = (k, v, tone) => sig.append(el("div", {}, el("span", { class: "muted" }, k), el("span", { class: "num " + (tone || "") }, v)));
+  s("Longest stall", dur(sg.longestStall), sg.longestStall > 600 ? "warn" : "");
+  s("Worst failure streak", `${sg.errorStreak} in a row`, sg.errorStreak >= 3 ? "bad" : "");
+  s("Retry loops (3+ fails, same tool)", String(sg.retryLoops), sg.retryLoops ? "bad" : "");
+  if (t.resume_of) s("Resumes", t.resume_of, ""); 
+  const by = tasks.find((x) => x.resume_of === t.id); if (by) s("Resumed by", by.id, "");
+  d.append(sig);
+  if (t.needs_owner.length) { d.append(el("div", { class: "cap" }, "Needs you")); for (const c of t.needs_owner) if (NEED[c]) d.append(el("div", { style: "margin:6px 0;font-size:13px" }, el("span", { class: "diamond" }), " ", el("b", {}, NEED[c].text), el("div", { class: "dim", style: "font-size:12px;margin-left:14px" }, NEED[c].why))); }
+}
+
+// ---------- workers table
+function renderTasks() {
+  const rowsT = scopeTasks.map((t) => { const sg = signals(t); return { t, label: t.label, status: t.status, s: t.s, dur: (t.e - t.s) / 1000, calls: t.events.length, errors: t.errors, stall: sg.stallS, tokens: totalTok(t), cost: t.cost_usd || 0, needs: t.needs_owner.length }; });
+  const { k, dir } = S.sort;
+  rowsT.sort((a, b) => (a[k] > b[k] ? 1 : a[k] < b[k] ? -1 : 0) * dir);
+  const maxCost = Math.max(...rowsT.map((r) => r.cost), 0.01);
+  for (const th of document.querySelectorAll("#tasks th[data-sort]")) { th.toggleAttribute("aria-sort", th.dataset.sort === k); th.onclick = () => { S.sort = { k: th.dataset.sort, dir: S.sort.k === th.dataset.sort ? -S.sort.dir : -1 }; store.set("a.sort", S.sort); renderTasks(); }; }
+  const tb = document.querySelector("#tasks tbody"); tb.innerHTML = "";
+  for (const r of rowsT) {
+    const tr = el("tr", { "data-id": r.t.id, "data-sel": S.sel === r.t.id },
+      el("td", {}, r.label, el("span", { class: "dim mono", style: "font-size:11px;margin-left:6px" }, r.t.run)),
+      el("td", {}, el("span", { class: "st " + r.status }, r.status)), el("td", { class: "num hide-sm" }, clock(r.s)), el("td", { class: "num r" }, dur(r.dur)),
+      el("td", { class: "num r" }, r.calls), el("td", { class: "num r " + (r.errors ? "bad" : "dim") }, r.errors), el("td", { class: "num r hide-sm " + (r.stall > r.dur * 0.25 ? "warn" : "") }, dur(r.stall)),
+      el("td", { class: "num r hide-sm" }, tok(r.tokens)), el("td", { class: "num r" }, el("span", { class: "meter", style: `width:${Math.round((40 * r.cost) / maxCost)}px;background:var(--gold-lo);margin-right:6px` }), usd(r.t.cost_usd)),
+      el("td", { class: "hide-sm" }, r.t.needs_owner.map((c) => NEED[c] ? el("span", { class: "gold", style: "font-size:12px;margin-right:6px" }, "◆ " + c) : null)));
+    tr.onclick = () => { S.open.add(r.t.run); select(r.t.id); focusTask(r.t); scrollRowIntoView(r.t.id); };
+    tb.append(tr);
+  }
+}
+function markTaskRow() { for (const tr of document.querySelectorAll("#tasks tbody tr")) tr.dataset.sel = tr.dataset.id === S.sel; }
+function renderTools() {
+  const st = toolStats(scopeTasks), mx = Math.max(...st.map((s) => s.total), 1);
+  const tb = document.querySelector("#tools tbody"); tb.innerHTML = "";
+  for (const s of st.slice(0, 14)) tb.append(el("tr", { onclick: () => { const q = document.getElementById("q"); q.value = s.tool; q.dispatchEvent(new Event("input")); } },
+    el("td", { class: "mono", style: "font-size:12px" }, s.tool), el("td", { class: "num r" }, s.calls.toLocaleString()),
+    el("td", { class: "num r " + (s.errors ? "bad" : "dim") }, s.errors ? `${s.errors} (${Math.round((100 * s.errors) / s.calls)}%)` : "0"),
+    el("td", { class: "num r" }, el("span", { class: "meter", style: `width:${Math.max(1, Math.round((120 * s.total) / mx))}px;margin-right:8px` }), dur(s.total)),
+    el("td", { class: "num r hide-sm" }, `${(s.total / s.calls).toFixed(1)}s`), el("td", { class: "num r hide-sm" }, dur(s.max))));
+}
+
+addEventListener("resize", () => draw());
+build();
+// open on the busiest multi-agent run so the first view has structure, not 48 grey bars
+if (S.scope === "day" && !store.get("a.seen", false)) { store.set("a.seen", true); }
+})();
+</script>
+</body>
+</html>

@@ -14,7 +14,7 @@ device / session fabric          <- Dash bridge  (this repo)
         |
         v
 agent fabric                     <- Hermes (not this repo)
-  memory, skills, profiles, kanban, peer run mbp <-> groot
+  memory, skills, profiles, kanban, peer run host-a <-> host-b
         |
         v
 governance                       <- stay off the phone
@@ -45,8 +45,8 @@ Feature checkouts live under `.worktrees/` (gitignored). Each has its own branch
 | Worktree | Branch | Owns | Must not touch |
 |---------|--------|------|----------------|
 | `.worktrees/pair` | `svc/pair` | `PairScreen`, `pair-api`, `pair-crypto`, `sonic-pair`, `bridge/pair-audio.ts`, `bridge/pair-decode.ts`, `/pair/*` | chat UI, AppNav, roster |
-| `.worktrees/bridge-core` | `svc/bridge-core` | `bridge/index.ts` WS, harness spawn, token, reconnect, STT | pairing audio, Bots pane, AppNav |
-| `.worktrees/roster` | `svc/roster` | `bridge/src/roster.ts`, `app/src/lib/roster.ts`, `BotsPane`, `hello.hosts` | pairing, nav pixels |
+| `.worktrees/bridge-core` | `svc/bridge-core` | `bridge/index.ts` WS, harness spawn, token, reconnect, STT | pairing audio, Hosts pane, AppNav |
+| `.worktrees/roster` | `svc/roster` | `bridge/src/roster.ts`, `app/src/lib/roster.ts`, `HostsPane`, `hello.hosts` | pairing, nav pixels |
 | `.worktrees/voice` | `svc/voice` | `VoiceScreen`, `vad`, `speak`, `voice-session`, `voice_*` events | pairing, AppNav |
 | `.worktrees/nav` | `svc/nav` | `AppNav*`, `golden-nav.ts`, nav assets, `docs/design/nav-probe.html` | pairing, bridge |
 | `.worktrees/chat-core` | `svc/chat-core` | Chat, Composer, `store/app.ts` turn pipeline | pairing, roster |
@@ -112,7 +112,7 @@ Merge each into `integrate/device-layer`. Integration owner runs Expo + `dash-pa
 - Skip formatters, `tsc`, and Metro in feature worktrees. Integration owner runs them once.
 - Protocol change: keep `hosts?` and old `hello` working.
 - Native Expo Go cannot run CSS `oklch` / `color-mix` 1:1. Nav web copy is `AppNav.web.tsx`; native stays WebView/CSS or StyleSheet.
-- MagicDNS `mbp` is broken on this laptop. Phone and docs use `100.64.0.1`.
+- MagicDNS `host-a` is broken on this laptop. Phone and docs use `100.64.0.1`.
 
 ## Checkpoint that made this split legal
 

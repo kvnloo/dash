@@ -1,3 +1,5 @@
+import { parseReplyParts } from "../../../shared/reply-parts";
+import type { ReplyPart } from "../../../shared/protocol";
 import { useCallback, useSyncExternalStore } from "react";
 
 // Streaming tokens arrive dozens of times a second per model. Each reply gets
@@ -9,27 +11,37 @@ export interface KeyedStore {
   set(id: string, value: string): void;
   append(id: string, delta: string): void;
   clear(id: string): void;
+  clearPrefix(prefix: string): void;
   subscribe(id: string, listener: () => void): () => void;
 }
 
 export function createKeyedStore(): KeyedStore {
   const values = new Map<string, string>();
   const listeners = new Map<string, Set<() => void>>();
-  const dirty = new Set<string>();
+  // Each dirty id remembers the listeners registered when it was written. A
+  // listener that unsubscribes before the frame is skipped, and one that
+  // subscribes later reads the current value itself (useSyncExternalStore
+  // checks the snapshot on subscribe), so it never inherits an older frame.
+  const dirty = new Map<string, Set<() => void>>();
   let scheduled = false;
 
   const flush = (): void => {
     scheduled = false;
-    const ids = Array.from(dirty);
+    const pending = Array.from(dirty);
     dirty.clear();
-    for (const id of ids) {
-      const set = listeners.get(id);
-      if (set) for (const listener of set) listener();
+    for (const [id, written] of pending) {
+      const live = listeners.get(id);
+      if (!live) continue;
+      for (const listener of written) if (live.has(listener)) listener();
     }
   };
 
   const mark = (id: string): void => {
-    dirty.add(id);
+    const live = listeners.get(id);
+    if (!live || live.size === 0) return;
+    const written = dirty.get(id);
+    if (written) for (const listener of live) written.add(listener);
+    else dirty.set(id, new Set(live));
     if (!scheduled) {
       scheduled = true;
       requestAnimationFrame(flush);
@@ -49,6 +61,9 @@ export function createKeyedStore(): KeyedStore {
     clear(id) {
       if (values.delete(id)) mark(id);
     },
+    clearPrefix(prefix) {
+      for (const id of values.keys()) if (id.startsWith(prefix)) { values.delete(id); mark(id); }
+    },
     subscribe(id, listener) {
       const existing = listeners.get(id);
       const set = existing ?? new Set<() => void>();
@@ -66,6 +81,23 @@ export function createKeyedStore(): KeyedStore {
 export const replyText = createKeyedStore();
 /** One-line activity from an agent ("$ bun test", "read_file src/x.ts"). */
 export const replyStatus = createKeyedStore();
+export const replyParts = createKeyedStore();
+export function partsFor(id: string): ReplyPart[] { try { return parseReplyParts(JSON.parse(replyParts.get(id) || "[]")) ?? []; } catch { return []; } }
+export function appendReplyPart(id: string, part: ReplyPart): void {
+  const parts = partsFor(id);
+  const index = parts.findIndex(item => part.kind === "reasoning" ? item.kind === "reasoning" : "callId" in item && "callId" in part && item.callId === part.callId && (item.kind === part.kind || (part.kind === "tool_detail" && item.kind === "tool_output")));
+  const previous = index >= 0 ? parts[index] : undefined;
+  if (part.kind === "reasoning" && previous?.kind === "reasoning") parts[index] = { kind: "reasoning", text: (previous.text + part.text).slice(-131072) };
+  else if (part.kind === "tool_output" && previous?.kind === "tool_output") parts[index] = { ...part, text: (previous.text + part.text).slice(-1048576), truncated: part.truncated || previous.truncated };
+  else if (part.kind === "tool_detail") {
+    // A detail is a replacement snapshot, not another copy of the output. Keep later deltas after it.
+    for (let i = parts.length - 1; i >= 0; i--) { const item = parts[i]; if (item && "callId" in item && item.callId === part.callId && (item.kind === "tool_output" || item.kind === "tool_detail")) parts.splice(i, 1); }
+    parts.push(part);
+  } else if (index >= 0) parts[index] = part;
+  else parts.push(part);
+  replyParts.set(id, JSON.stringify(parts));
+}
+export const replySummaries = createKeyedStore();
 
 export function useKeyed(store: KeyedStore, id: string): string {
   const subscribe = useCallback(

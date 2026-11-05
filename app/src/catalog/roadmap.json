@@ -1,0 +1,322 @@
+{
+  "id": "dash-roadmap",
+  "title": "Dash roadmap",
+  "updated": "22 Oct \u00b7 receipt snapshot",
+  "items": [
+    {
+      "id": "dash-1",
+      "title": "Left-handed mode",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "Settings \u2192 Display \u00b7 #93",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-2",
+      "title": "Steer instead of queue",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "tap = steer, hold = queue \u00b7 #95",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-3",
+      "title": "Descriptive tool calls",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "#96",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-4",
+      "title": "Fast motion, no bounce",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "#97/#105 + DSH turbo profile 100\u2013120 ms",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-5",
+      "title": "Lab: orb lag, sizing, tile gestures",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "#100 #102 #104",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-6",
+      "title": "Dev-server 500 / easing crash",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "worklet easing fix",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-7",
+      "title": "Turbo live preview",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": ":8098 \u00b7 branch turbo/dash-live-20261021",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-8",
+      "title": "Chat cleanup",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "one indicator, Options tucks switches",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-9",
+      "title": "Big orb in voice mode",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "#108",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-10",
+      "title": "Input bar wraps",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "grows to ~6 lines",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-11",
+      "title": "Subagents in chat",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "tree rows + glyph shimmer; awaiting your look",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-12",
+      "title": "Trace row long-press dropdown",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "not yet seen on phone",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-13",
+      "title": "Trace open lag",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "transform-only morph; not yet seen",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-14",
+      "title": "Mic: keyboard-free STT + Telegram pill",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "Pill and recognizer wiring in preview; STT success unconfirmed",
+      "evidence": "needs your first real tap",
+      "next": "Tap mic, speak, verify transcript insertion without keyboard; switch modes and repeat."
+    },
+    {
+      "id": "dash-15",
+      "title": "Live voice via z0live, Luna backend",
+      "stage": "preview",
+      "area": "Conversation",
+      "detail": "External z0live launch and relay exist; in-Dash audio still missing",
+      "evidence": "relay \u2192 this session; Luna at 19:04",
+      "next": "Implement authenticated in-app media transport; verify voice round trip without leaving Dash."
+    },
+    {
+      "id": "dash-16",
+      "title": "Merge queued messages",
+      "stage": "preview",
+      "area": "Workspace",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "PR #101",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-17",
+      "title": "Do / Not now completion (greened card)",
+      "stage": "preview",
+      "area": "Workspace",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "PR #99",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-18",
+      "title": "Orchestra views that mean something",
+      "stage": "preview",
+      "area": "Workspace",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "PR #98: Fleet / Lineage / Work / Triage",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-19",
+      "title": "Context view",
+      "stage": "preview",
+      "area": "Workspace",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "PR #103",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-20",
+      "title": "S Pen annotation",
+      "stage": "preview",
+      "area": "Workspace",
+      "detail": "Merged into preview; device acceptance still open",
+      "evidence": "PR #110",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-21",
+      "title": "Density dial + per-page filter + Zero card tuck",
+      "stage": "partial",
+      "area": "Controls",
+      "detail": "Partial implementation preserved; MBP gates failed; not merged",
+      "evidence": "about half built",
+      "next": "Finish the preserved work, pass build/test gates and review screenshots before preview."
+    },
+    {
+      "id": "dash-22",
+      "title": "Bot faces per profile + omp/Tern input animation",
+      "stage": "partial",
+      "area": "Controls",
+      "detail": "Partial identity/orb files; unqualified; not merged",
+      "evidence": "research started",
+      "next": "Finish the preserved work, pass build/test gates and review screenshots before preview."
+    },
+    {
+      "id": "dash-23",
+      "title": "Agent popup: harness / approvals / model",
+      "stage": "planned",
+      "area": "Controls",
+      "detail": "Brief/research only; no qualified implementation",
+      "evidence": "No qualified implementation receipt.",
+      "next": "Implement in an isolated branch, then pass tests, Android export and phone review."
+    },
+    {
+      "id": "dash-24",
+      "title": "Trace: intent contract + validation + artifacts",
+      "stage": "planned",
+      "area": "Controls",
+      "detail": "Brief/research only; no qualified implementation",
+      "evidence": "+ live trace feed",
+      "next": "Implement in an isolated branch, then pass tests, Android export and phone review."
+    },
+    {
+      "id": "dash-25",
+      "title": "Attached input bar + peek popup",
+      "stage": "partial",
+      "area": "Controls",
+      "detail": "Partial routing/state edits; unqualified; not merged",
+      "evidence": "Nous 500 at launch",
+      "next": "Finish the preserved work, pass build/test gates and review screenshots before preview."
+    },
+    {
+      "id": "dash-26",
+      "title": "ChatGPT-app fan-out (Turbo lane B)",
+      "stage": "candidate",
+      "area": "Controls",
+      "detail": "Offline candidate + tests reported (#193); live automation/harvest/queue incomplete",
+      "evidence": "dry-run built (z0intelligence #193); needs S22+ online",
+      "next": "Exercise the feature in the installed Dash APK and capture acceptance evidence."
+    },
+    {
+      "id": "dash-27",
+      "title": "Turbo dogfood mode",
+      "stage": "partial",
+      "area": "Controls",
+      "detail": "Partial now-testing plumbing; no confirmed in-app guidance",
+      "evidence": "#107 \u00b7 'Now testing' record built into fan-out",
+      "next": "Finish the preserved work, pass build/test gates and review screenshots before preview."
+    },
+    {
+      "id": "dash-28",
+      "title": "Ideas from the BniWael video",
+      "stage": "planned",
+      "area": "Controls",
+      "detail": "Issue/planning only; no qualified feature",
+      "evidence": "#106 \u00b7 5 slices proposed",
+      "next": "Implement in an isolated branch, then pass tests, Android export and phone review."
+    },
+    {
+      "id": "dash-29",
+      "title": "Night filter on sunrise/sunset",
+      "stage": "planned",
+      "area": "Controls",
+      "detail": "Issue/planning only; no qualified feature",
+      "evidence": "not started",
+      "next": "Implement in an isolated branch, then pass tests, Android export and phone review."
+    },
+    {
+      "id": "dash-30",
+      "title": "Ripple roadmap inside Dash",
+      "stage": "candidate",
+      "area": "Controls",
+      "detail": "Shared Ripple renderer + OpenUI adapter under qualification",
+      "evidence": "Ripple 7159f6f; Dash integration candidate, not yet device-qualified.",
+      "next": "Verify inline render, filters, evidence expansion and no source flash on phone."
+    },
+    {
+      "id": "native-pair",
+      "title": "Native APK \u00b7 secure Hermes onboarding",
+      "stage": "preview",
+      "area": "Connection",
+      "detail": "Enrollment, token mint and bridge introspection confirmed",
+      "evidence": "8686110, 8c32128; 14 focused tests; z0bridge token.mint + introspection receipts.",
+      "next": "Verify a complete message/reply in native Dash and reconnect after network switch."
+    },
+    {
+      "id": "smol",
+      "title": "Luna thinking/tool summaries",
+      "stage": "candidate",
+      "area": "Conversation",
+      "detail": "Real Luna summary passed; bridge rollout pending",
+      "evidence": "34420f9; synthetic Luna request 3341ms; MBP test and typecheck receipts.",
+      "next": "Review and deploy adapter, then confirm summaries in a real native chat."
+    },
+    {
+      "id": "keyboard-rail",
+      "title": "Keyboard-aware quick-scroll rail",
+      "stage": "partial",
+      "area": "Usability",
+      "detail": "Assigned: rail must stop above composer/keyboard",
+      "evidence": "Owner screenshot 25540; isolated keyboard-attach worker.",
+      "next": "Measure rail bounds with keyboard open/closed at phone widths."
+    },
+    {
+      "id": "attach-theme",
+      "title": "Themed attachment chooser",
+      "stage": "partial",
+      "area": "Usability",
+      "detail": "Replace app-owned Android Alert with Dash controls",
+      "evidence": "Owner screenshot 25542; isolated keyboard-attach worker.",
+      "next": "Verify Photos/Files/Cancel preserve drafts and system picker behavior."
+    },
+    {
+      "id": "orb-loop",
+      "title": "Orb loop and phase smoothness",
+      "stage": "partial",
+      "area": "Usability",
+      "detail": "Investigating loop discontinuity and transition jank",
+      "evidence": "Isolated orb-smooth worker; no fix receipt yet.",
+      "next": "Compare frame timing at loop seam and phase changes; verify on device."
+    }
+  ]
+}

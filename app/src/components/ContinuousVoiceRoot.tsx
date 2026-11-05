@@ -1,0 +1,402 @@
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { SafeAreaInsetsContext, useSafeAreaInsets, type EdgeInsets } from "react-native-safe-area-context";
+import { appInsets, VOICE_BAR_ROW, voiceBarPresentation, voiceBarVisible, voiceControlHome, voiceMuteAccessibilityLabel, voiceStatusAccessibilityLabel } from "../lib/voice-bar";
+import { executionToken, voiceAccessToken } from "../lib/bridge-auth";
+import { ContinuousVoice, object, VoiceAccessDenied, type VoiceState } from "../lib/continuous-voice";
+import { protectVoicePeer, VoiceMicReleaseGate, voiceConnectionError, voiceConnectionErrorLine } from "../lib/voice-session";
+import { createVoicePeer } from "../lib/voice-peer";
+import { addSegment, annotate, registerSink } from "../store/annotate";
+import type { Conversation } from "../model";
+import { sendVoiceAnnotation } from "../lib/voice-annotation";
+import { store } from "../store/app";
+import { colors, glass, radius } from "../theme";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { microphone } from "../lib/recorded-speech";
+import { ensureMicPermission, permissionRequestInFlight } from "../lib/mic-permission";
+import { createStore } from "../store/createStore";
+import { VoiceOrbOverlay } from "./VoiceOrbOverlay";
+import { debugUi } from "../debug/ui-store";
+import { attachedHermes, voiceTarget } from "../lib/voice-target";
+import { voicePhase } from "../lib/voice-phase";
+
+/** One logcat line per failed voice stage (phone-watch turns these into incidents). Notes never carry secrets. */
+function voiceTrace(stage: string, note: string | undefined, quiet = false): void {
+  // An annotation auto-start that cannot connect is expected and stays at info; every other failure stays a warning.
+  if (quiet) console.info(`[voice] ${stage} failed: ${note ?? "unknown"}`);
+  else console.warn(`[voice] ${stage} failed: ${note ?? "unknown"}`);
+}
+
+/** A bootstrap broker is never an arbitrary URL; validate before any /v1 request. */
+function trustedVoiceBroker(raw: unknown): { origin: string; fake: boolean } {
+  if (typeof raw !== "string") throw new Error("Voice broker not trusted");
+  try {
+    const url = new URL(raw);
+    const fake = Platform.OS === "web" && process.env.EXPO_PUBLIC_DASH_VOICE_FAKE === "1" &&
+      url.protocol === "http:" && url.hostname === "127.0.0.1";
+    const tailnet = url.protocol === "https:" && url.hostname.endsWith(".ts.net");
+    if ((!tailnet && !fake) || !url.port || url.username || url.password || url.pathname !== "/" ||
+        url.search || url.hash || (raw !== url.origin && raw !== `${url.origin}/`)) {
+      throw new Error("Voice broker not trusted");
+    }
+    return { origin: url.origin, fake };
+  } catch { throw new Error("Voice broker not trusted"); }
+}
+
+const initial: VoiceState = { phase: "idle", muted: false, lines: [] };
+/** True while a full-screen chat window is open: its dock row is then the single home of voice Mute/End. */
+export const voiceWindowOpen = createStore(false);
+const DeviceInsets = createContext<EdgeInsets | null>(null);
+/** Real device safe-area insets (the window's cut-out pill must hug the status band, not the voice bar). */
+export function useDeviceInsets(): EdgeInsets {
+  const device = useContext(DeviceInsets); const app = useSafeAreaInsets(); return device ?? app;
+}
+interface VoiceContext { state: VoiceState; start(opts?: { auto?: boolean }): Promise<void>; stop(): Promise<void>; mute(): void }
+const Context = createContext<VoiceContext | null>(null);
+export function useContinuousVoice(): VoiceContext {
+  const value = useContext(Context); if (!value) throw new Error("Voice root not mounted"); return value;
+}
+
+export function ContinuousVoiceRoot({ children }: { children: ReactNode }): React.JSX.Element {
+  const [state, setState] = useState(initial);
+  useEffect(() => { voicePhase.set(state.phase); return () => voicePhase.set("idle"); }, [state.phase]);
+  const [bindingGeneration, setBindingGeneration] = useState(0);
+  const call = useRef<ContinuousVoice | null>(null);
+  const attached = useRef<Conversation | null>(null);
+  const epoch = useRef(0);
+  const starting = useRef(false);
+  const releaseMic = useRef<(() => void) | undefined>(undefined);
+  const micRelease = useRef(new VoiceMicReleaseGate());
+  const desiredMute = useRef(false);
+  const autoStarted = useRef(false);
+  const pendingFinals = useRef(new Set<string>());
+  const successfulAnnotation = useRef(false);
+  const autoStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const maybeEndAutoRef = useRef<() => void>(() => {});
+  const insets = useSafeAreaInsets();
+  const windowOpen = voiceWindowOpen.use(open => open);
+  const [barRow, setBarRow] = useState(0);
+  const [attempted, setAttempted] = useState(false);
+  // Auto-start belongs to the annotation tray, not the app-wide voice bar or its safe-area inset.
+  const suppressAutoBar = useRef(false);
+  // SYNTHETIC debug-only state for rendered proofs (never set outside the debug controller).
+  const fixture = debugUi.use(s => s.voiceStateFixture ?? null);
+  const start = async (opts?: { auto?: boolean }) => {
+    const automatic = opts?.auto === true;
+    if (starting.current) return;
+    if (call.current && !["idle", "error"].includes(call.current.state.phase)) return;
+    starting.current = true;
+    const beforeWait = epoch.current;
+    // An error is published before ContinuousVoice finishes native teardown.
+    await micRelease.current.wait();
+    if (beforeWait !== epoch.current) return; // End/background already cancelled this attempt.
+    if (automatic) {
+      if (!attempted) suppressAutoBar.current = true;
+    } else {
+      suppressAutoBar.current = false;
+      setAttempted(true);
+    }
+    const reportFailure = (stage: string, reason: string | undefined) => {
+      voiceTrace(stage, reason, automatic);
+      const note = voiceConnectionErrorLine(reason);
+      if (automatic) {
+        setState(initial);
+        annotate.set(s => s.active ? { ...s, voiceNote: note } : s);
+      } else {
+        setState({ ...initial, phase: "error", note });
+      }
+    };
+    desiredMute.current = false;
+    const settings = store.get().settings;
+    // Only a flagged web tester-army export accepts ephemeral fixture tokens.
+    // Keep legacy pairing for the live WebSocket; never persist an identity or change native auth.
+    const fakeIdentity = Platform.OS === "web" && process.env.EXPO_PUBLIC_DASH_VOICE_FAKE === "1"
+      ? window.__dashVoiceArmy : undefined;
+    const identity = settings?.identity ?? (fakeIdentity?.dash && fakeIdentity?.z0live ? fakeIdentity.identity : undefined);
+    // Retry is pinned to the original conversation, even if the user navigated elsewhere.
+    // Conversation mode is usually opened from the main screen, where the open chat is rarely an
+    // attached Hermes chat: bind the most recent attached one instead of refusing before the mic.
+    const retryTarget = state.phase === "error" ? attached.current : null;
+    const conversation = retryTarget
+      ? (attachedHermes(retryTarget, settings?.address) ? retryTarget : undefined)
+      : voiceTarget(store.get().conversations, store.get().activeId, settings?.address);
+    if (!settings || !identity || !conversation?.sessionId || !conversation.profileId) {
+      const note = !identity ? "Pair Dash with z0bridge identity to use voice" : "Open an attached Hermes chat owned by this paired address before starting voice";
+      reportFailure("target", note);
+      starting.current = false;
+      return;
+    }
+    const target = { profile: conversation.profileId, session: conversation.sessionId };
+    // Android's first RECORD_AUDIO dialog pauses MainActivity. Request before the mic lease
+    // or native peer starts, while AppState explicitly treats the dialog as transient.
+    const permitted = await ensureMicPermission().catch(() => false);
+    if (beforeWait !== epoch.current) {
+      starting.current = false;
+      return;
+    }
+    if (!permitted) {
+      reportFailure("permission", voiceConnectionError("permission"));
+      starting.current = false;
+      return;
+    }
+    const release = microphone.acquire("live");
+    if (!release) {
+      reportFailure("mic-lease", `Microphone in use by ${microphone.owner}`);
+      starting.current = false;
+      return;
+    }
+    const releaseWhenStopped = micRelease.current.hold(release);
+    releaseMic.current = releaseWhenStopped;
+    call.current = null;
+    attached.current = conversation;
+    const generation = ++epoch.current;
+    setBindingGeneration(generation);
+    // Frozen for the call: navigating/switching chats never retargets spoken requests.
+    let broker: ReturnType<typeof trustedVoiceBroker> | undefined;
+    const request = async (path: string, body?: unknown): Promise<unknown> => {
+      if (!broker) throw new Error("Voice broker not trusted");
+      if (path === "provider:answer") {
+        if (!object(body) || typeof body.sdp !== "string" || typeof body.secret !== "string") {
+          throw new VoiceAccessDenied(voiceConnectionError("sdp"));
+        }
+        let response: Response;
+        try {
+          response = await fetch(broker.fake ? `${broker.origin}/v1/fake/answer` : "https://api.openai.com/v1/realtime/calls", { method: "POST", headers: { authorization: `Bearer ${body.secret}`, "content-type": "application/sdp" }, body: body.sdp, signal: AbortSignal.timeout(20_000), redirect: "error" });
+        } catch { throw new VoiceAccessDenied(voiceConnectionError("sdp")); }
+        if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(voiceConnectionError("token"));
+        if (!response.ok) throw new VoiceAccessDenied(voiceConnectionError("sdp"));
+        let sdp: string;
+        try { sdp = await response.text(); } catch { throw new VoiceAccessDenied(voiceConnectionError("sdp")); }
+        if (!sdp.startsWith("v=0")) throw new VoiceAccessDenied(voiceConnectionError("sdp"));
+        return sdp;
+      }
+      if (!path.startsWith("/v1/")) throw new Error("Voice broker not trusted");
+      let token: string;
+      try { token = fakeIdentity?.z0live ?? await voiceAccessToken(settings); }
+      catch { throw new VoiceAccessDenied(voiceConnectionError("token")); }
+      const response = await fetch(`${broker.origin}${path}`, { method: body === undefined ? "GET" : "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000), redirect: "error" });
+      if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(voiceConnectionError("token"));
+      if (!response.ok) throw new Error("Voice broker request refused"); return response.json();
+    };
+    // Bootstrap is authenticated independently using the existing Dash identity, not an owner bearer.
+    try {
+      setState({ ...initial, phase: "connecting" });
+      let bootstrapToken: string;
+      try { bootstrapToken = fakeIdentity?.dash ?? await executionToken(settings); }
+      catch { throw new VoiceAccessDenied(voiceConnectionError("token")); }
+      const response = await fetch(`http://${settings.address}/voice/bootstrap`, { method: "POST", headers: { authorization: `Bearer ${bootstrapToken}`, "content-type": "application/json" }, body: JSON.stringify(target), signal: AbortSignal.timeout(8000), redirect: "error" });
+      if (!response.ok) {
+        throw new Error(response.status === 401 || response.status === 403 ? voiceConnectionError("token") :
+          response.status === 404 ? "Bridge lacks native voice" :
+          response.status === 503 ? "Native voice disabled on bridge" : "Voice bootstrap failed");
+      }
+      const bootstrap: unknown = await response.json();
+      if (!object(bootstrap) || bootstrap.profile !== target.profile || bootstrap.session !== target.session || bootstrap.ready !== true || typeof bootstrap.canonicalProfile !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(bootstrap.canonicalProfile)) throw new Error("Voice target not confirmed");
+      broker = trustedVoiceBroker(bootstrap.broker);
+      if (generation !== epoch.current) return;
+      if (AppState.currentState !== "active") throw new Error("Dash is backgrounded");
+      const cursorKey = `dash.voice.inbox.${identity.credentialId}`;
+      const controller = new ContinuousVoice({ request, peer: async (event, ready, lost) => {
+        try { return protectVoicePeer(await createVoicePeer(event, ready, lost)); }
+        catch (error) {
+          throw new VoiceAccessDenied(voiceConnectionError(
+            error instanceof Error && /permission denied/i.test(error.message) ? "permission" : "webrtc",
+          ));
+        }
+      }, changed: next => {
+        if (generation !== epoch.current) return;
+        if (next.phase === "error") {
+          voiceTrace("call", next.note, automatic);
+          if (automatic) {
+            setState(initial);
+            annotate.set(s => s.active ? { ...s, voiceNote: voiceConnectionErrorLine(next.note) } : s);
+          } else {
+            setState({ ...next, note: voiceConnectionErrorLine(next.note) });
+          }
+          return;
+        }
+        setState(next);
+      },
+        captureReleased: () => { releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined; },
+        holdIntent: () => annotate.get().active,
+        finalDrained: turnId => {
+          if (!pendingFinals.current.delete(turnId)) return;
+          successfulAnnotation.current = true;
+          maybeEndAutoRef.current();
+        },
+        cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
+        transcript: (id, text, start, end) => { if (annotate.get().active) addSegment({ id, text, start, end, source: "voice" }); } });
+      call.current = controller;
+      // A Mute tap during authenticated bootstrap must also apply when the native peer arrives.
+      const connecting = controller.start({ ...target, brokerProfile: bootstrap.canonicalProfile });
+      if (desiredMute.current) controller.mute(true);
+      await connecting;
+    } catch (error) {
+      releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined;
+      if (generation === epoch.current) reportFailure("bootstrap", error instanceof Error ? error.message : undefined);
+    }
+    finally { if (generation === epoch.current) starting.current = false; }
+  };
+  const stop = async (options?: { preserveWork?: boolean }) => {
+    if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+    autoStopTimer.current = null;
+    autoStarted.current = false;
+    pendingFinals.current.clear();
+    successfulAnnotation.current = false;
+    epoch.current++; starting.current = false; desiredMute.current = false; suppressAutoBar.current = false;
+    const controller = call.current;
+    call.current = null;
+    attached.current = null;
+    const cleanup = controller?.stop(undefined, { cancelWork: options?.preserveWork !== true });
+    if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
+    setState(initial); await cleanup;
+  };
+  const mute = () => {
+    if (state.phase === "idle" || state.phase === "error") return;
+    const next = !desiredMute.current;
+    desiredMute.current = next;
+    const controller = call.current;
+    if (controller) controller.mute(next);
+    else setState(previous => previous.phase === "connecting" ? { ...previous, muted: next } : previous);
+  };
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", next => { if (next === "background" && !permissionRequestInFlight()) {
+      epoch.current++; starting.current = false;
+      const controller = call.current;
+      void controller?.stop("Mic stopped because Dash left the foreground. Tap Start to resume.");
+      if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
+      if (suppressAutoBar.current) annotate.set(s => s.active ? { ...s, voiceNote: "Voice stopped in background" } : s);
+      setState(previous => ["idle", "error"].includes(previous.phase) ? previous : suppressAutoBar.current ? initial : { ...previous, phase: "error", note: "Mic stopped because Dash left the foreground. Tap Start to resume." });
+    } });
+    return () => {
+      epoch.current++; subscription.remove();
+      if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+      const controller = call.current; void controller?.stop();
+      if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
+    };
+  }, []);
+  // Annotation owns its auto-started call until the exact final was spoken or 90s passed.
+  // Receipt acceptance closes the tray but is never evidence that playback has drained.
+  const annotating = annotate.use(s => s.active);
+  const pendingTurn = annotate.use(s => s.pendingTurn?.id);
+  const latest = useRef({ start, stop, phase: state.phase });
+  latest.current = { start, stop, phase: state.phase };
+  const maybeEndAuto = () => {
+    if (!autoStarted.current || annotate.get().active || pendingFinals.current.size > 0 || annotate.get().pendingTurn) return;
+    const preserveWork = successfulAnnotation.current || annotate.get().status === "sent";
+    if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+    autoStopTimer.current = null;
+    void latest.current.stop({ preserveWork });
+  };
+  maybeEndAutoRef.current = maybeEndAuto;
+  useEffect(() => {
+    const { start: begin, phase } = latest.current;
+    if (annotating) {
+      if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+      autoStopTimer.current = null;
+      if (["idle", "error"].includes(phase) && !starting.current && !autoStarted.current) {
+        autoStarted.current = true;
+        successfulAnnotation.current = false;
+        void begin({ auto: true });
+      }
+    } else if (autoStarted.current) {
+      if (autoStopTimer.current === null) {
+        autoStopTimer.current = setTimeout(() => {
+          autoStopTimer.current = null;
+          // Timeout is a bounded stop, not a reason to cancel a confirmed chat turn.
+          const preserveWork = successfulAnnotation.current || annotate.get().status === "sent" || pendingFinals.current.size > 0 || !!annotate.get().pendingTurn;
+          void latest.current.stop({ preserveWork });
+        }, 90_000);
+      }
+      maybeEndAutoRef.current();
+    }
+  }, [annotating, pendingTurn]);
+  const shown = fixture ?? state;
+  const active = !["idle", "error"].includes(shown.phase);
+  const visible = voiceBarVisible(shown.phase, attempted) && (fixture !== null || !suppressAutoBar.current);
+  const pill = voiceBarPresentation(shown);
+  useEffect(() => {
+    const target = attached.current;
+    if (!active || !target) return;
+    const generation = epoch.current;
+    return registerSink({ label: `Sending to ${target.title || "Hermes"}`, conversationId: target.id, live: true, steerable: () => false,
+      send: async (text, attachments) => {
+        let submittedTurn: string | undefined;
+        try {
+          await sendVoiceAnnotation(target, text, attachments, (id, reply) => {
+            if (generation === epoch.current) call.current?.deliverFinal(`annotation:${id}`, reply);
+          }, "queue", id => {
+            submittedTurn = id;
+            if (generation === epoch.current) pendingFinals.current.add(id);
+          });
+          if (generation === epoch.current) successfulAnnotation.current = true;
+        } catch (error) {
+          if (submittedTurn && generation === epoch.current) pendingFinals.current.delete(submittedTurn);
+          throw error;
+        } finally {
+          maybeEndAutoRef.current();
+        }
+      },
+    });
+  }, [active, bindingGeneration]);
+  // The bar owns a band under the status bar (screens inset below it); it never floats over AppNav or content.
+  // Space stays allocated while a chat window covers the app, so the list underneath never jumps on close.
+  const home = voiceControlHome(visible, windowOpen);
+  return <Context.Provider value={{ state: shown, start, stop, mute }}>
+    <DeviceInsets.Provider value={insets}>
+      <SafeAreaInsetsContext.Provider value={appInsets(insets, visible, barRow)}>{children}</SafeAreaInsetsContext.Provider>
+    </DeviceInsets.Provider>
+    {active ? <VoiceOrbOverlay state={shown} onMute={mute} /> : null}
+    {home === "bar" ? <View testID="voice-mic-bar" style={[styles.bar, { paddingTop: insets.top }]}>
+      <View style={styles.row} onLayout={e => setBarRow(e.nativeEvent.layout.height)}>
+        <View accessible={false} style={[styles.dot, { backgroundColor: pill.phase === "error" ? colors.danger : pill.phase === "connecting" || pill.phase === "muted" ? colors.warn : pill.phase === "live" ? colors.ok : colors.textFaint }]} />
+        <View style={styles.status}>
+          {pill.phase === "error"
+            ? <Text testID="voice-error" accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.errorLabel} numberOfLines={1}>{pill.detail ?? "Voice unavailable"}</Text>
+            : <Text testID="voice-phase" accessible accessibilityLabel={voiceStatusAccessibilityLabel(shown)} accessibilityLiveRegion="polite" style={styles.label} numberOfLines={1}>{pill.label}</Text>}
+        </View>
+        <View style={styles.actions}>
+          {pill.action === "end" ? <Pressable
+            testID="voice-mute"
+            accessibilityRole="button"
+            accessibilityLabel={voiceMuteAccessibilityLabel(shown.muted)}
+            accessibilityState={{ selected: shown.muted }}
+            onPress={mute}
+            style={[styles.button, styles.muteButton]}
+          ><Text style={styles.buttonText}>{pill.muteText}</Text></Pressable> : null}
+          <Pressable
+            testID={pill.phase === "error" ? "voice-retry" : pill.action === "start" ? "voice-start" : "voice-end"}
+            accessibilityRole="button"
+            accessibilityLabel={pill.primaryLabel}
+            onPress={pill.action === "start" ? () => void start() : () => void stop()}
+            style={styles.button}
+          ><Text style={pill.action === "end" ? styles.endText : styles.buttonText}>{pill.primaryText}</Text></Pressable>
+          {pill.phase === "error" ? <Pressable
+            testID="voice-end"
+            accessibilityRole="button"
+            accessibilityLabel="End voice call and dismiss error"
+            onPress={() => void stop()}
+            style={styles.button}
+          ><Text style={styles.endText}>End</Text></Pressable> : null}
+        </View>
+      </View>
+    </View> : null}
+  </Context.Provider>;
+}
+const styles = StyleSheet.create({
+  bar: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: colors.bg, zIndex: 1000 },
+  row: {
+    minHeight: VOICE_BAR_ROW, marginHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 8,
+    paddingLeft: 12, paddingRight: 3, borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: glass.hair2, backgroundColor: glass.fillRaised,
+  },
+  dot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  status: { flex: 1, minWidth: 0, paddingVertical: 4 },
+  label: { color: colors.text, fontSize: 12, fontWeight: "600" },
+  errorLabel: { color: colors.danger, fontSize: 12, fontWeight: "600" },
+  actions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
+  button: { minHeight: 44, minWidth: 56, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
+  muteButton: { backgroundColor: glass.quiet },
+  buttonText: { color: colors.text, fontSize: 12, fontWeight: "600" },
+  endText: { color: colors.danger, fontSize: 12, fontWeight: "600" },
+});
