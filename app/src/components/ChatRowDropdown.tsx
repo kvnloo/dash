@@ -67,7 +67,7 @@ export function ChatRowDropdown({ anchor, title, options, onSelect, onClose }: C
 
 const styles = StyleSheet.create({
   layer: { flex: 1 },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.18)" },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.18)" },
   menu: {
     position: "absolute",
     paddingVertical: space.xs,
