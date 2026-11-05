@@ -139,6 +139,9 @@ test("restored saved-local chat keeps its own draft and Main chat search", async
   await savedRow.click({ noWaitAfter: true });
   await expect(composer(page)).toHaveValue(draft);
   await page.getByRole("button", { name: "Close chat window", exact: true }).click({ noWaitAfter: true });
+  // The closing chat window keeps its Message textbox mounted during exit; wait for it
+  // to unmount so the search query lands in Main's search bar, not the closing composer.
+  await expect(page.getByTestId("chat-window")).toHaveCount(0);
   await expect(page.getByTestId("attached-composer")).toHaveCount(0);
   // First enter the explicit chat-search scope, then verify ordinary discovery
   // also shows the restored saved-local identity rather than silently attaching it.
