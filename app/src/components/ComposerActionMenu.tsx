@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { cancelAnimation, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { DWELL_MS, FORCE_ARM, HOLD_MS, scrubIndex } from "../lib/filter-gesture";
 import { useHandedness } from "../lib/useHandedness";
+import { ComposerActionMenuRow } from "./ComposerActionMenuRow";
+import type { ComposerMenuRowShape } from "../lib/composer-row-submenu";
 import { haptic } from "../haptics";
 import { fade, snappy } from "../motion";
-import { colors, glass, radius, type } from "../theme";
+import { colors, glass, radius } from "../theme";
 
-export type ComposerMenuRow = { id: string; label: string; value: string; run(): void; values?: string[]; index?: number; inspect?(index: number): void };
+export type ComposerMenuRow = ComposerMenuRowShape;
 /** Neutral composer menu primitive. Filter and agent hosts can supply the same row contract. */
 export function ComposerActionMenu({ label, children, rows, open: controlled, onOpenChange, testID }: {
   label: string; children: ReactNode; rows: ComposerMenuRow[];
@@ -21,6 +23,9 @@ export function ComposerActionMenu({ label, children, rows, open: controlled, on
   const change = useRef(onOpenChange); change.current = onOpenChange;
   const setOpen = useCallback((next: boolean) => { setUncontrolled(next); change.current?.(next); }, []);
   const [hover, setHover] = useState(-1);
+  const [submenuRow, setSubmenuRow] = useState<string | null>(null);
+  const closeMenu = useCallback(() => { setSubmenuRow(null); setHover(-1); setOpen(false); }, [setOpen]);
+  useEffect(() => { if (!open) setSubmenuRow(null); }, [open]);
   const bloom = useSharedValue(0);
   const row = useSharedValue(-1);
   const armed = useSharedValue(false);
@@ -67,11 +72,18 @@ export function ComposerActionMenu({ label, children, rows, open: controlled, on
   }, [actions, armed, dwell, meta, row, selection, startX]);
   return <View style={styles.host} testID={testID}>
     {open ? <>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Close ${label}`} onPress={() => { setOpen(false); setHover(-1); }} style={styles.scrim} />
+      <Pressable accessibilityRole="button" accessibilityLabel={`Close ${label}`} onPress={closeMenu} style={styles.scrim} />
       <Animated.View style={[styles.menu, thumb.side === "left" ? styles.right : styles.left, style]} accessibilityLabel={label}>
-        {rows.map((r, index) => ({ r, index })).reverse().map(({ r, index }) => <Pressable key={r.id} accessibilityRole="button" accessibilityLabel={`${r.label}, ${r.value}`} onPress={() => { setOpen(false); r.run(); }} style={[styles.row, hover === index && styles.hover]}>
-          <Text style={styles.label}>{r.label}</Text><Text numberOfLines={1} style={styles.value}>{r.value}</Text>
-        </Pressable>)}
+        {rows.map((r, index) => ({ r, index })).reverse().map(({ r, index }) => <ComposerActionMenuRow
+          key={r.id}
+          row={r}
+          side={thumb.side}
+          expanded={submenuRow === r.id}
+          highlighted={hover === index}
+          onOpenSubmenu={() => setSubmenuRow(r.id)}
+          onDismissSubmenu={() => setSubmenuRow(null)}
+          onCloseMenu={closeMenu}
+        />)}
       </Animated.View>
     </> : null}
     <GestureDetector gesture={gesture}><Animated.View accessible accessibilityRole="button" accessibilityLabel={label} accessibilityHint="Tap to open. Hold, slide to a row, pause, then release." accessibilityState={{ expanded: open }} onAccessibilityTap={actions.toggle} style={styles.button}>{children}</Animated.View></GestureDetector>
@@ -80,7 +92,5 @@ export function ComposerActionMenu({ label, children, rows, open: controlled, on
 const styles = StyleSheet.create({
   host: { position: "relative", zIndex: 20 }, button: { minWidth: 44, minHeight: 44, justifyContent: "center", paddingHorizontal: 8 },
   scrim: { position: "absolute", top: -1800, bottom: 0, left: -600, right: -600 },
-  menu: { position: "absolute", bottom: "100%", width: 300, borderRadius: radius.md, backgroundColor: colors.bg, borderWidth: 1, borderColor: glass.hair, elevation: 12 }, left: { left: 0 }, right: { right: 0 },
-  row: { height: 48, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 12 }, hover: { backgroundColor: glass.fillChipOn },
-  label: { ...type.small, color: colors.text }, value: { ...type.mono, fontSize: 11, color: colors.textMuted, flex: 1, textAlign: "right" },
+  menu: { position: "absolute", bottom: "100%", width: 300, overflow: "visible", borderRadius: radius.md, backgroundColor: colors.bg, borderWidth: 1, borderColor: glass.hair, elevation: 12 }, left: { left: 0 }, right: { right: 0 },
 });
