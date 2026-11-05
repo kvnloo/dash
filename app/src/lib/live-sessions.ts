@@ -41,8 +41,9 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
       c.harness === "omp" && c.sessionId === agent.sessionId &&
       (!c.targetHostId || c.targetHostId === host.id) &&
       panes.some(({ agent: pane }) => pane.id === c.profileId));
-    const paneId = owner?.profileId ?? panes.map(({ agent: pane }) => pane.id).sort()[0];
-    return agent.id === paneId;
+    // Without an owning chat, preserve all candidates so /live rejects the
+    // colliding synthetic ID rather than activating an arbitrary pane.
+    return !owner || agent.id === owner.profileId;
   });
   let changed = false;
   const rows = existing.map(c => {
