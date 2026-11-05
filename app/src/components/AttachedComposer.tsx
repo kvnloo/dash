@@ -1,7 +1,8 @@
-import { useCallback, useEffect, type RefObject } from "react";
+import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
 import type { Conversation } from "../model";
+import { parseSearchQuery } from "../lib/global-search";
 import { Composer } from "./Composer";
 import { haptic } from "../haptics";
 import { bridge, sendChat } from "../net/bridge";
@@ -10,14 +11,14 @@ import {
   beginTurn, changeQueuePreview, conversationBusy, conversationTargetError,
   flushPendingSends, parkUnsentTurn, saveQueuePreview, stopConversation, store,
 } from "../store/app";
-import { updateComposerDraft } from "../store/composer-drafts";
+import { composerDrafts, updateComposerDraft, type ComposerDraft } from "../store/composer-drafts";
 import { onTurnSettled } from "../store/queue";
 
 interface Props {
   conversation: Conversation;
   blurTarget?: RefObject<View | null>;
   onOpen(): void;
-  onSearch(): void;
+  onSearch(query?: string): void;
   onVoice(): void;
   onDetach(): void;
 }
@@ -28,6 +29,23 @@ interface Props {
  */
 export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, onVoice, onDetach }: Props) {
   const online = store.use(state => state.connection.status === "online");
+  const draft = composerDrafts.use(all => all[conversation.id]);
+  const priorDraft = useRef<{ id: string; value: ComposerDraft } | null>(null);
+
+  // Main's search scopes are not agent prompts. Hand them to search without
+  // replacing the exact selected conversation's saved draft.
+  useEffect(() => {
+    const current = draft ?? { text: "", attachments: [] };
+    const previous = priorDraft.current;
+    priorDraft.current = { id: conversation.id, value: current };
+    if (!previous || previous.id !== conversation.id || previous.value.text === current.text) return;
+    const parsed = parseSearchQuery(current.text);
+    if ((parsed.mode !== "slash" && parsed.mode !== "mention") ||
+      parsed.scope === "unknown" || !/^[@/]\w+\s/.test(current.text.trimStart())) return;
+    updateComposerDraft(conversation.id, current, () => previous.value);
+    onSearch(current.text);
+  }, [conversation.id, draft, onSearch]);
+
   const harnessName = store.use(state => state.connection.harnesses.find(harness => harness.id === conversation.harness)?.name) ?? conversation.harness;
   const blocked = conversationTargetError(conversation);
   const busy = conversationBusy(conversation.id);
@@ -79,7 +97,7 @@ export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, o
         <Pressable accessibilityRole="button" accessibilityLabel="Open attached chat" onPress={onOpen} style={styles.action}>
           <Text style={styles.actionText}>Open</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Search chats and tools" onPress={onSearch} style={styles.action}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Search chats and tools" onPress={() => onSearch()} style={styles.action}>
           <Text style={styles.actionText}>Search</Text>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Detach from session" onPress={onDetach} style={styles.action}>
