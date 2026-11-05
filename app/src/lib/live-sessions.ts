@@ -30,12 +30,30 @@ function sessionAgents(hosts: HostInfo[]) {
 }
 /** Successful roster snapshots reconcile, never delete. Missing snapshots do not enter here. */
 export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo[], now: number): Conversation[] {
-  const reported = sessionAgents(hosts);
+  const discovered = sessionAgents(hosts);
+  // A native OMP session can be held by multiple physical panes. Keep one
+  // conversation while retaining its pane's cwd until that pane disappears.
+  const reported = discovered.filter(({ host, agent }) => {
+    if (agent.kind !== "omp") return true;
+    const panes = discovered.filter(({ host: otherHost, agent: other }) =>
+      otherHost.id === host.id && other.kind === "omp" && other.sessionId === agent.sessionId);
+    const owner = existing.find(c =>
+      c.harness === "omp" && c.sessionId === agent.sessionId &&
+      (!c.targetHostId || c.targetHostId === host.id) &&
+      panes.some(({ agent: pane }) => pane.id === c.profileId));
+    const paneId = owner?.profileId ?? panes.map(({ agent: pane }) => pane.id).sort()[0];
+    return agent.id === paneId;
+  });
   let changed = false;
   const rows = existing.map(c => {
     if (!c.sessionId) return c;
     const matches = reported.filter(({ host, agent }) => agent.kind === c.harness && agent.sessionId === c.sessionId && (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
-    const match = matches.length === 1 ? matches[0] : undefined;
+    // When the owning OMP pane exits, rebind this same chat to the surviving
+    // pane, rather than marking it ended or reusing the old working directory.
+    const survivingPanes = c.harness === "omp" && c.profileId?.startsWith("omp:")
+      ? reported.filter(({ host, agent }) => agent.kind === "omp" && agent.sessionId === c.sessionId && (!c.targetHostId || host.id === c.targetHostId))
+      : [];
+    const match = matches.length === 1 ? matches[0] : survivingPanes.length === 1 ? survivingPanes[0] : undefined;
     if (!match) {
       // A bridge-owned ACP session may be running without a native session row.
       // A uniquely identified, online local harness profile plus an in-flight
