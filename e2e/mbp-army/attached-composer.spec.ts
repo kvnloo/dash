@@ -48,6 +48,16 @@ test("attached composer keeps per-session draft across tab, search and reload", 
   await page.getByRole("button", { name: "Return to attached session", exact: true }).click({ noWaitAfter: true });
   await expect(composer(page)).toHaveValue(draft);
 
+  // Typing a Main search scope into the attached field must open search without
+  // replacing the selected chat's durable, unsent draft.
+  await composer(page).fill("/harness OMP");
+  const harnessResult = page.getByRole("button")
+    .filter({ has: page.getByText("OMP", { exact: true }) })
+    .filter({ has: page.getByText("Harness", { exact: true }) });
+  await expect(harnessResult).toBeVisible();
+  await page.getByRole("button", { name: "Return to attached session", exact: true }).click({ noWaitAfter: true });
+  await expect(composer(page)).toHaveValue(draft);
+
   await expect.poll(() => page.evaluate(() => localStorage.getItem("dash.composerDrafts.v1"))).toContain(draft);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("dash.activeId.v1"))).not.toBeNull();
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -130,6 +140,10 @@ test("restored saved-local chat keeps its own draft and Main chat search", async
   await expect(composer(page)).toHaveValue(draft);
   await page.getByRole("button", { name: "Close chat window", exact: true }).click({ noWaitAfter: true });
   await expect(page.getByTestId("attached-composer")).toHaveCount(0);
+  // First enter the explicit chat-search scope, then verify ordinary discovery
+  // also shows the restored saved-local identity rather than silently attaching it.
+  await composer(page).fill("@chats ARMY_H108_SAVED_LOCAL_SEED");
+  await expect(page.getByText("Chat · saved local", { exact: true })).toBeVisible();
   await composer(page).fill("ARMY_H108_SAVED_LOCAL_SEED");
   await expect(page.getByText("Chat · saved local", { exact: true })).toBeVisible();
 });
