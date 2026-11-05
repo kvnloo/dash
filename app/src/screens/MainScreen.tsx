@@ -207,8 +207,11 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   // Only a chat owned by the currently paired bridge can use Main's attached composer.
   // Saved-local, foreign, stale and view-only chats keep Main search available; opening
   // their transcript still restores the draft under its original conversation id.
+  // The Chat window retains Main behind it. Native history and streaming can replace
+  // the selected conversation many times while Chat owns the transcript; Main
+  // must not subscribe to those objects or refresh its backdrop mid-scroll.
   const attached = store.use(s => {
-    if (!s.hydrated || !s.activeId) return undefined;
+    if (!screenFocused || !s.hydrated || !s.activeId) return undefined;
     const chat = s.conversations.find(c => c.id === s.activeId && c.id !== FEEDBACK_CONVERSATION_ID);
     if (!chat || !chat.endpointAddress || chat.endpointAddress !== s.settings?.address || chat.stale || chat.viewOnly) return undefined;
     return chat;
@@ -219,10 +222,11 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
   const noTrigger = composerTrigger(query) === null;
-  const chatScope = parsed.mode === "mention" && parsed.scope === "conversation" && noTrigger;
+  const chatScope = screenFocused && parsed.mode === "mention" && parsed.scope === "conversation" && noTrigger;
   // Plain text: a compact "Chats" section (local top 5, then the bridge's first page).
-  const discoverChats = parsed.mode === "discover" && parsed.text.length >= 2 && noTrigger;
-  const searchActive = (!attached || searchMode) && ((parsed.mode !== "discover" && parsed.scope !== "unknown" && noTrigger) || discoverChats);
+  const discoverChats = screenFocused && parsed.mode === "discover" && parsed.text.length >= 2 && noTrigger;
+  // Search work, including native history paging, belongs to Main only when visible.
+  const searchActive = screenFocused && (!attached || searchMode) && ((parsed.mode !== "discover" && parsed.scope !== "unknown" && noTrigger) || discoverChats);
   const globalActive = searchActive && !chatScope && !discoverChats;
 
   // Bots, products, /live and /harness only: built while that search is on screen.
@@ -437,7 +441,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       <LazyPane focused={index === 0}><HostsPane navigation={navigation} focused={index === 0} /></LazyPane>
     </View>,
     <View key="chats" style={{ width, flex: 1 }}>
-      <ChatsPane navigation={navigation} focused={index === 1 && !searchActive} />
+      <ChatsPane navigation={navigation} focused={screenFocused && index === 1 && !searchActive} />
     </View>,
     <View key="orchestra" style={{ width, flex: 1 }}>
       <LazyPane focused={index === 2}><OrbActivity active={index === 2 && !searchActive && screenFocused && foreground}><OrchestraPane navigation={navigation} focused={index === 2 && !searchActive && screenFocused && foreground} /></OrbActivity></LazyPane>
