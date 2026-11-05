@@ -54,6 +54,11 @@ const toolTurn = (done: () => void, many: boolean) => {
 function generatedReply(prompt: string): string | null {
  if (process.env.ARMY_GENERATED_UI !== '1') return null;
  if (prompt.includes('ARMY_CODE_TSX')) return '```tsx\nconst card = <Panel title="Dash" />;\n```\n\n```jsx\nconst badge = <Badge label="Ready" />;\n```';
+ // kvnloo/ephemeral-ui card.v0 kinds through the openui-lang catalog (#ephemeral-ui cards).
+ const eui = /ARMY_EPHEMERAL_BATCH_(\d)/.exec(prompt);
+ if (eui) { const kinds = String(process.env.ARMY_EPHEMERAL_KINDS ?? '').split(',').filter(Boolean).slice(Number(eui[1]) * 10, Number(eui[1]) * 10 + 10); return '```openui-lang\nroot = Stack([' + kinds.map(k => `EphemeralCard("${k}")`).join(', ') + ']);\n```'; }
+ if (prompt.includes('ARMY_EPHEMERAL_INBOX')) return 'Here is your inbox.\n\n```openui-lang\nroot = EphemeralCard("inbox", "gmail");\n```';
+ if (prompt.includes('ARMY_EPHEMERAL_INVALID')) return '```openui-lang\nroot = EphemeralCard("inbox", "uber");\n```';
  if (prompt.includes('ARMY_OPENUI_INVALID')) return '```openui-lang\nroot = Button("ARMY forbidden action");\n```';
  if (prompt.includes('ARMY_OPENUI_CATALOG')) return '```openui-lang\nroot = Stack([Card("ARMY native overview", [Text("ARMY selectable summary"), Stat("Completed", 7), Progress("Delivery", 0.75), List(["Review evidence"]), Table(["Task", "State"], [["Catalog wiring", "Ready"]]), Callout("success", "ARMY bounded catalog")])]);\n```';
  if (prompt.includes('ARMY_GENUI')) return '```genui\n{"version":1,"components":[{"type":"card","title":"ARMY legacy GenUI","text":"ARMY JSON cards still render"}]}\n```';
