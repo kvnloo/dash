@@ -50,7 +50,7 @@ export function EphemeralCardFooter({ spec, card }: { spec: EphemeralCardSpec; c
       <Text numberOfLines={2} style={styles.sendText}>Send to agent · {card.last.label}</Text>
     </PressScale> : null}
     {card.notice ? <Text role="status" style={styles.meta}>{card.notice}</Text> : null}
-    <Text style={styles.source}>ephemeral-ui · {spec.kind} · {spec.app} · synthetic demo data</Text>
+    <Text style={styles.source}>ephemeral-ui · {spec.kind} · {spec.app} · kit sample data</Text>
   </View>;
 }
 

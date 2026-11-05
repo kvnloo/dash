@@ -20,7 +20,7 @@ test('ephemeral-ui inbox card renders, its control answers in place, and Send to
  await expect(inbox.locator('.eu-card[data-kind="inbox"][data-app="gmail"]')).toBeVisible();
  await expect(inbox.getByText('Invoice #4471 is due Nov 14')).toBeVisible();
  await expect(page.getByText(/EphemeralCard\(/)).toHaveCount(0);
- await expect(page.getByText('ephemeral-ui · inbox · gmail · synthetic demo data', { exact: true })).toBeVisible();
+ await expect(page.getByText('ephemeral-ui · inbox · gmail · kit sample data', { exact: true })).toBeVisible();
  await inbox.getByRole('button', { name: 'Open in Gmail', exact: true }).click();
  await expect(page.getByRole('button', { name: /^Send to agent: / })).toHaveCount(1);
  // The kit's own loop: the user's handoff and the agent acknowledgement stream into the card.
