@@ -54,13 +54,16 @@ async function loadSession(chat: Conversation, logPath: string): Promise<void> {
 test("restored OMP panes sharing a session retain each physical pane cwd through ACP loads", async () => {
   // Roster ordering may differ from the physical pane order.
   const restored = mergeLiveConversations([], [roster([secondary, primary])], 100);
-  expect(restored).toHaveLength(1);
-  expect(restored[0]).toMatchObject({
+  // No chat owns either pane yet; preserve both for synthetic-ID collision detection.
+  expect(restored).toHaveLength(2);
+  const primaryChat = restored.find(chat => chat.profileId === primary.id);
+  if (!primaryChat) throw new Error("Missing primary OMP pane");
+  expect(primaryChat).toMatchObject({
     id: "live:omp:shared-native-session", profileId: primary.id, cwd: primary.cwd,
   });
 
   const owned: Conversation = {
-    ...restored[0]!,
+    ...primaryChat,
     messages: [{ id: "user-1", role: "user", text: "before pane closes", at: 101 }],
   };
   const refreshed = mergeLiveConversations([owned], [roster([secondary, primary])], 102);
