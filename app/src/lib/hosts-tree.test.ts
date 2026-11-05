@@ -59,4 +59,18 @@ describe("hosts tree hierarchy", () => {
     const service = kids(tree).find(node => node.label === "Services")!;
     expect(kids(service).map(node => node.label)).toEqual(["opendots"]);
   });
+
+  test("counts read in the singular for one, and every harness has a proper name", () => {
+    const small: HostInfo = { id: "mbp", name: "mbp", hostname: "mbp", kind: "computer", online: true, address: "100.0.0.2",
+      agents: [{ id: "hermes:default", name: "Hermes default", kind: "hermes", status: "available" },
+        { id: "hermes-session:1", name: "chat", kind: "hermes", status: "available", sessionId: "s1", profileId: "default" },
+        { id: "grok", name: "grok", kind: "grok", status: "available" }, { id: "fx", name: "fx", kind: "fx", status: "available" }] as AgentInfo[],
+      bots: [] } as HostInfo;
+    const host = hostsTree([small], () => {}, () => {}, 0)[0]!;
+    expect(host.meta).toBe("3 harnesses · 1 chat");
+    const hermes = kids(host).find(node => node.label === "Hermes")!;
+    expect(hermes.meta).toBe("1 profile · 1 chat");
+    expect(kids(hermes)[0]!.meta).toBe("1 chat");
+    expect(kids(host).map(node => node.label).sort()).toEqual(["Grok", "Hermes", "fx"]);
+  });
 });
