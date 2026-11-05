@@ -1,0 +1,10 @@
+[   12345.678901] /dev/input/event4: EV_KEY       BTN_STYLUS          DOWN
+[   12345.678950] /dev/input/event4: EV_SYN       SYN_REPORT          00000000
+[   12345.679001] /dev/input/event4: EV_KEY       BTN_STYLUS          00000001
+[   12345.700001] /dev/input/event4: EV_KEY       BTN_STYLUS          UP
+[   12346.000123] /dev/input/event4: EV_KEY       BTN_STYLUS          00000002
+[   12346.005678] /dev/input/event4: EV_KEY       BTN_STYLUS          00000000
+[   12346.020001] /dev/input/event4: EV_KEY       BTN_STYLUS2         DOWN
+[   12346.050999] /dev/input/event4: EV_KEY       KEY_VOLUMEUP        DOWN
+not an event
+[   12346.070123] /dev/input/event4: EV_KEY       BTN_STYLUS2         UP

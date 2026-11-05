@@ -1,138 +1,48 @@
-import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
-import { memo, useCallback, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { HarnessAvatar } from "../../components/HarnessAvatar";
-import { PressScale } from "../../components/PressScale";
-import { haptic } from "../../haptics";
-import { DEMO_ORCHESTRAS, type OrchestraProject } from "../../mock/orchestra";
+import { sessionChats } from "../../lib/session-chats";
+import { shallowArrayEqual } from "../../store/createStore";
+import { memo, useMemo } from "react";
+import { useWindowDimensions } from "react-native";
+import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
+import { OrchestraGraph } from "../../components/OrchestraGraph";
+import { AodlCatalogNetwork } from "../../components/AodlCatalogNetwork";
+import { WorkspaceActions } from "../../components/WorkspaceHeader";
+import { debugUi } from "../../debug/ui-store";
+import { isDebugActive } from "../../debug/expose";
+import { orchestraMotionFixture } from "../../debug/orchestra-fixture";
+import { orchestraMap } from "../../lib/orchestra-map";
+import { useOrchestraEvidence } from "../../lib/useOrchestraEvidence";
+import { inAppFeedbackEnabled } from "../../lib/feedback";
+import { submitInAppFeedback } from "../../lib/feedback-submit";
 import type { ScreenProps } from "../../navigation";
-import { store } from "../../store/app";
-import { colors, radius, space, type } from "../../theme";
-import { timeAgo } from "../../util";
+import { setActive, openAgentConversation, store } from "../../store/app";
 
-const STATUS_COLOR = {
-  active: colors.ok,
-  idle: colors.textMuted,
-  paused: colors.warn,
-} as const;
-
-const Card = memo(function Card({
-  item,
-  harnessNames,
-  onPress,
-}: {
-  item: OrchestraProject;
-  harnessNames: string[];
-  onPress(id: string): void;
-}) {
-  return (
-    <PressScale onPress={() => onPress(item.id)} style={styles.card} accessibilityRole="button">
-      <View style={styles.cardTop}>
-        <View style={styles.cardTitles}>
-          <Text style={styles.name} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text style={styles.sub} numberOfLines={1}>
-            {item.subtitle}
-          </Text>
-        </View>
-        <View
-          style={[styles.statusDot, { backgroundColor: STATUS_COLOR[item.status] }]}
-          accessibilityLabel={item.status}
-        />
-      </View>
-      <View style={styles.agents}>
-        {harnessNames.slice(0, 4).map((name) => (
-          <HarnessAvatar key={name} name={name} size={36} />
-        ))}
-        {harnessNames.length > 4 ? (
-          <View style={styles.more}>
-            <Text style={styles.moreText}>+{harnessNames.length - 4}</Text>
-          </View>
-        ) : null}
-      </View>
-      <View style={styles.footer}>
-        <Text style={styles.meta}>
-          {item.agents.length} agent{item.agents.length === 1 ? "" : "s"} · {item.chatIds.length} chat
-          {item.chatIds.length === 1 ? "" : "s"}
-        </Text>
-        <Text style={styles.time}>{timeAgo(item.updatedAt)}</Text>
-      </View>
-    </PressScale>
-  );
-});
-
-export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
-  const harnesses = store.use((s) => s.connection.harnesses);
-  const conversations = store.use((s) => s.conversations);
-
-  const projects = useMemo(() => {
-    if (conversations.length === 0) return DEMO_ORCHESTRAS;
-    return DEMO_ORCHESTRAS.map((p) => ({
-      ...p,
-      chatIds: conversations.filter((c) => p.agents.includes(c.harness)).map((c) => c.id),
-    }));
-  }, [conversations]);
-
-  const open = useCallback(
-    (id: string) => {
-      haptic.select();
-      navigation.navigate("OrchestraDetail", { orchestraId: id });
-    },
-    [navigation],
-  );
-
-  const renderItem = useCallback(
-    ({ item }: ListRenderItemInfo<OrchestraProject>) => {
-      const harnessNames = item.agents.map((id) => harnesses.find((h) => h.id === id)?.name ?? id);
-      return <Card item={item} harnessNames={harnessNames} onPress={open} />;
-    },
-    [harnesses, open],
-  );
-
-  return (
-    <FlashList
-      data={projects}
-      renderItem={renderItem}
-      keyExtractor={(p) => p.id}
-      contentContainerStyle={styles.list}
-      ListEmptyComponent={
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No orchestras</Text>
-          <Text style={styles.emptySub}>Projects will appear when agents and chats are linked.</Text>
-        </View>
-      }
-    />
-  );
-}
-
-const styles = StyleSheet.create({
-  list: { paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: 120 },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: space.lg,
-    marginBottom: space.md,
-  },
-  cardTop: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
-  cardTitles: { flex: 1, minWidth: 0 },
-  name: { color: colors.text, ...type.heading },
-  sub: { color: colors.textMuted, ...type.small, marginTop: 2, textTransform: "none", letterSpacing: 0 },
-  statusDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
-  agents: { flexDirection: "row", gap: space.sm, marginTop: space.lg },
-  more: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surfaceRaised,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  moreText: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
-  footer: { flexDirection: "row", justifyContent: "space-between", marginTop: space.md },
-  meta: { color: colors.textFaint, fontSize: 12 },
-  time: { color: colors.textFaint, fontSize: 12 },
-  empty: { paddingTop: "35%", paddingHorizontal: space.xl, alignItems: "center" },
-  emptyTitle: { color: colors.text, ...type.heading, marginBottom: space.sm },
-  emptySub: { color: colors.textMuted, ...type.body, textAlign: "center" },
+export const OrchestraPane = memo(function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
+  // Only host sessions matter here; a phone-only chat changing must not re-render this pane.
+  const conversations = store.useSelector(sessionChats, shallowArrayEqual);
+  const settings = store.use(s => s.settings);
+  const hosts = store.use(s => s.connection.hosts);
+  const fixture = debugUi.use(s => s.orchestraFixture);
+  const fixtureOn = isDebugActive() && fixture === true;
+  const { width } = useWindowDimensions();
+  const { snapshot, error } = useOrchestraEvidence(settings);
+  const graph = useMemo(() => fixtureOn ? orchestraMotionFixture() : snapshot ? {
+    nodes: snapshot.nodes.map(n => ({ ...n, thinking: n.state === "live" ? { phase: "thinking" as const } : { phase: "idle" as const } })),
+    edges: snapshot.edges,
+  } : orchestraMap(hosts, conversations), [hosts, conversations, fixtureOn, snapshot]);
+  return <OrchestraGraph graph={graph} width={width} fixture={fixtureOn} error={fixtureOn ? undefined : error} warnings={snapshot?.warnings} canOpen={node => Boolean(node.sessionId && (conversations.some(c => c.sessionId === node.sessionId) || hosts.some(h => `host:${h.id}` === node.hostId && h.self && h.online && h.agents.some(a => a.sessionId === node.sessionId))))} onFeedback={inAppFeedbackEnabled(settings) ? node => {
+    submitInAppFeedback({ kind: "select", text: `Selected orchestra ${node.label}`, selection: { kind: "orchestra", id: node.id, label: node.label } });
+    navigation.navigate("Chat");
+  } : undefined} onOpen={node => {
+    const chat = conversations.find(c => c.sessionId === node.sessionId);
+    if (chat) { setActive(chat.id); navigation.navigate("Chat"); return; }
+    const host = hosts.find(h => `host:${h.id}` === node.hostId);
+    const agent = host?.agents.find(a => a.sessionId === node.sessionId);
+    if (host && agent) {
+      const result = openAgentConversation({ id: agent.id, role: agent.kind, description: agent.detail || "Bridge session", name: agent.name, harness: agent.kind, targetHostId: host.id, profileId: agent.id, sessionId: agent.sessionId, cwd: agent.cwd, online: host.online });
+      if ("conversation" in result) navigation.navigate("Chat");
+    }
+  }} actions={<WorkspaceActions navigation={navigation} />}>
+    <AodlCatalogNetwork />
+    <TraceEntryCard onOpen={() => navigation.navigate("Trace")} />
+  </OrchestraGraph>;
 });

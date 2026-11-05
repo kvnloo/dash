@@ -1,0 +1,37 @@
+import {mkdirSync} from "node:fs";
+import {resolve} from "node:path";
+import {chromium} from "playwright";
+const app=resolve("app");
+const preload=resolve("app/src/components/genui/mobile-preload.ts");
+await Bun.write(preload,`import {mock} from "bun:test";import * as web from ${JSON.stringify(app+"/node_modules/react-native-web/dist/index.js")};mock.module(${JSON.stringify(Bun.resolveSync("react-native",app))},()=>web);mock.module(${JSON.stringify(Bun.resolveSync("react-native-reanimated",app))},()=>({default:{View:web.View},ReduceMotion:{System:0},useSharedValue:value=>({value}),useAnimatedStyle:fn=>fn(),withSpring:value=>value,withTiming:value=>value}));const gesture=new Proxy({},{get:()=>()=>gesture});mock.module(${JSON.stringify(Bun.resolveSync("react-native-gesture-handler",app))},()=>({GestureDetector:({children})=>children,Gesture:{Manual:()=>gesture}}));`);
+const child=Bun.spawn([process.execPath,"--preload",preload,"app/src/components/genui/mobile-preview.tsx"],{stdout:"pipe",stderr:"pipe"});
+const html=await new Response(child.stdout).text();const err=await new Response(child.stderr).text();if(await child.exited)throw Error(err);
+mkdirSync("captures",{recursive:true});
+const built=await Bun.build({entrypoints:["app/src/components/genui/mobile-interactive.tsx"],outdir:"captures",target:"browser",jsx:{runtime:"automatic",importSource:"react"},plugins:[{name:"rn-web",setup(build){build.onResolve({filter:/^react-native$/},()=>({path:app+"/node_modules/react-native-web/dist/index.js"}));}}]});
+if(!built.success)throw Error(String(built.logs));
+const bundle=await built.outputs[0]!.text();
+const browser=await chromium.launch({headless:true,executablePath:process.env.HOME+"/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome",args:["--no-sandbox"]});
+for(const width of [390,412]){
+ const page=await browser.newPage({viewport:{width,height:850}});
+ page.on("pageerror",e=>console.log("BROWSER ERROR",e.message));
+ await page.setContent('<meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:12px;background:#000}</style><div id="root"></div>');
+ await page.addScriptTag({type:"module",content:bundle});
+ await page.getByLabel("Ripple roadmap", {exact:true}).waitFor();
+ const count=async()=>page.getByRole("progressbar").count();
+ if(await count()!==14)throw Error("Needs-work filter mismatch");
+ await page.getByRole("button",{name:"In preview",exact:true}).click();
+ if(await count()!==21)throw Error("Preview filter mismatch");
+ await page.getByRole("button",{name:"All",exact:true}).click();
+ if(await count()!==35)throw Error("All filter mismatch");
+ await page.getByRole("button",{name:/Left-handed mode,/}).click();
+ await page.getByText("NEXT ACCEPTANCE CHECK",{exact:true}).waitFor();
+ await page.screenshot({path:`captures/ripple-expanded-${width}.png`,fullPage:false});
+ await page.getByLabel("Tuck roadmap",{exact:true}).click();
+ if(await count()!==0)throw Error("Tuck failed");
+ await page.getByLabel("Show roadmap",{exact:true}).click();
+ await page.getByRole("button",{name:"Needs work",exact:true}).click();
+ const geometry=await page.evaluate(()=>({viewport:innerWidth,content:document.documentElement.scrollWidth,progress:document.querySelectorAll('[role="progressbar"]').length}));
+ if(geometry.content>geometry.viewport||geometry.progress!==14)throw Error(JSON.stringify(geometry));
+ await page.screenshot({path:`captures/genui-${width}.png`,fullPage:true});console.log(JSON.stringify({...geometry,filterTests:"pass",expand:"pass",tuck:"pass"}));await page.close();
+}
+await browser.close();

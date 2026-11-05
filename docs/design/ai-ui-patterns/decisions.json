@@ -1,0 +1,1978 @@
+{
+  "schemaVersion": 1,
+  "updated": "2026-09-11",
+  "purpose": "Inspectable decision tree. Walk `walk` in order. Each node has exactly one adopted option (what ships) and one target. Kind is derived in tree.ts: lock (adopted===target), fork (lock with two written sources), claimed (adopted!==target and claimedIssue), gap (named in proposedIssues). An agent does not pick a fourth option.",
+  "axioms": [
+    "one-foveal-stream",
+    "four-working-memory-chunks",
+    "encode-not-expose",
+    "alert-then-rest",
+    "measure-not-vibe",
+    "prune-unused-chrome"
+  ],
+  "frontierKb": [
+    "domains/learning-acceleration",
+    "domains/neuroscience",
+    "permanent/perm-20260911-encoding-beats-exposure",
+    "permanent/perm-20260911-plasticity-needs-alert-then-rest",
+    "permanent/perm-20260911-human-agent-synergy-is-the-loop",
+    "permanent/perm-20260911-measure-the-learning-loop"
+  ],
+  "walk": [
+    "product.job",
+    "identity.unit",
+    "chrome.destinations",
+    "chrome.height",
+    "chrome.default-tab",
+    "chrome.expand-affordance",
+    "chrome.compose-entry",
+    "chrome.chat-tab",
+    "chrome.conversations-route",
+    "chrome.dead-header",
+    "search.placement",
+    "search.chips",
+    "search.status-copy",
+    "composer.dock",
+    "composer.ime",
+    "composer.enter",
+    "composer.attach",
+    "composer.plus-semantics",
+    "composer.send-mic",
+    "composer.streaming",
+    "thread.assistant",
+    "thread.user",
+    "stream.status",
+    "stream.blocked",
+    "stream.indicator",
+    "stream.store",
+    "list.entering",
+    "press.language",
+    "nav.tab-press",
+    "haptic.pairing",
+    "haptic.send-weight",
+    "nav.motion",
+    "overlay.bridge",
+    "overlay.voice",
+    "voice.barge-in",
+    "voice.chrome",
+    "motion.reduce",
+    "history.compression",
+    "bots.compression",
+    "list.delete-affordance",
+    "list.pull-refresh",
+    "chat.harness-entry",
+    "orchestra.agent-row",
+    "error.inline",
+    "connection.pill",
+    "a11y.live-regions",
+    "pair.sonic",
+    "settings.keyboard",
+    "gesture.pager-vs-list",
+    "gesture.bridge-vs-list",
+    "attention.multi-stream",
+    "orchestra.source",
+    "live.session"
+  ],
+  "nodes": [
+    {
+      "id": "product.job",
+      "question": "What is the phone for?",
+      "attention": "If the phone hosts the model, identity becomes a model picker and the laptop is optional. That is ChatGPT. Dash's human is directing a laptop fleet with one thumb.",
+      "options": [
+        {
+          "id": "hosted-chat",
+          "label": "Hosted consumer chat",
+          "seenIn": [
+            "chatgpt",
+            "claude",
+            "gemini"
+          ],
+          "verdict": "reject",
+          "because": "Resells tokens. Fifth working-memory chunk is the model name."
+        },
+        {
+          "id": "desktop-orchestrator",
+          "label": "Desktop fleet board",
+          "seenIn": [
+            "t3-code",
+            "conductor",
+            "o8"
+          ],
+          "verdict": "reject",
+          "because": "390px cannot hold project + thread + diff."
+        },
+        {
+          "id": "mobile-remote-agent",
+          "label": "Phone control surface over laptop CLIs",
+          "seenIn": [
+            "dash",
+            "t3-code"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "mobile-remote-agent",
+      "target": "mobile-remote-agent",
+      "wiring": [
+        "docs/design/language.md",
+        "AGENTS.md"
+      ],
+      "pattern": "control-plane-not-executor"
+    },
+    {
+      "id": "identity.unit",
+      "question": "What is a conversation's identity?",
+      "attention": "A model name is not a place. Harness + host is a place the human can retrieve.",
+      "options": [
+        {
+          "id": "model-picker",
+          "label": "GPT-4o / Opus dropdown",
+          "seenIn": [
+            "chatgpt",
+            "claude"
+          ],
+          "verdict": "reject",
+          "because": "Model choice lives in the CLI. Phone identity is who is running."
+        },
+        {
+          "id": "harness-host",
+          "label": "Harness id + host row",
+          "seenIn": [
+            "dash",
+            "t3-code"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "harness-host",
+      "target": "harness-host",
+      "wiring": [
+        "app/src/components/HarnessPicker.tsx",
+        "app/src/screens/panes/BotsPane.tsx"
+      ],
+      "pattern": "byo-harness"
+    },
+    {
+      "id": "chrome.destinations",
+      "question": "Where do the three destinations live?",
+      "attention": "Bottom third is thumb + IME. Destinations are glanceable (peripheral). Labels in a bottom bar steal the composer.",
+      "options": [
+        {
+          "id": "bottom-tabs",
+          "label": "iOS-style tab bar",
+          "seenIn": [
+            "chatgpt",
+            "gemini"
+          ],
+          "verdict": "reject",
+          "because": "Composer already owns the bottom. language.md forbids it."
+        },
+        {
+          "id": "hamburger-drawer",
+          "label": "Grok-style drawer",
+          "seenIn": [
+            "grok"
+          ],
+          "verdict": "reject",
+          "because": "storyboard.md: density only, Dash uses top tabs."
+        },
+        {
+          "id": "top-dots",
+          "label": "Three 4px dots in a 60px bar",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "top-dots",
+      "target": "top-dots",
+      "wiring": [
+        "app/src/components/AppNav.tsx",
+        "app/src/components/golden-nav.ts"
+      ],
+      "pattern": "top-tabs-not-bottom"
+    },
+    {
+      "id": "chrome.height",
+      "question": "How tall is destination chrome?",
+      "attention": "Every px of chrome is a tax on the stream. 80px was an accidental mutation class.",
+      "options": [
+        {
+          "id": "h80",
+          "label": "80px spacer",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Mutation target. NAV_CHROME_HEIGHT is 60."
+        },
+        {
+          "id": "h60",
+          "label": "60px collapsed bar",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "h60",
+      "target": "h60",
+      "wiring": [
+        "app/src/components/golden-nav.ts"
+      ],
+      "pattern": "top-tabs-not-bottom"
+    },
+    {
+      "id": "chrome.default-tab",
+      "question": "What is on screen at cold open?",
+      "attention": "Encode the self-dev loop at cold open. Overnight #29 landed Orchestra (DEFAULT_MAIN_TAB = 2).",
+      "options": [
+        {
+          "id": "remember-last",
+          "label": "Whatever tab was last used",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Cold open becomes nondeterministic. The tree would not converge."
+        },
+        {
+          "id": "chats",
+          "label": "Chats (index 1)",
+          "seenIn": [
+            "dash",
+            "grok"
+          ],
+          "verdict": "reject",
+          "because": "Overnight #29 landed. Retrieval of last thread is not the cold-open job."
+        },
+        {
+          "id": "orchestra",
+          "label": "Orchestra (index 2)",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "adopted",
+          "because": "Overnight #29 / PR #33. DEFAULT_MAIN_TAB = 2. language.md matches."
+        }
+      ],
+      "adopted": "orchestra",
+      "target": "orchestra",
+      "claimedIssue": "#29",
+      "wiring": [
+        "docs/design/language.md",
+        "app/src/lib/home.ts",
+        "app/src/screens/MainScreen.tsx"
+      ],
+      "pattern": "history-date-groups"
+    },
+    {
+      "id": "search.placement",
+      "question": "Where is global search / message?",
+      "attention": "Thumb. The dock is the encode surface for the whole app, not a chat-only composer.",
+      "options": [
+        {
+          "id": "header-search",
+          "label": "Top search field",
+          "seenIn": [
+            "chatgpt"
+          ],
+          "verdict": "reject",
+          "because": "Fights IME and thumb."
+        },
+        {
+          "id": "bottom-dock",
+          "label": "@ dock over KeyboardDock",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "bottom-dock",
+      "target": "bottom-dock",
+      "wiring": [
+        "app/src/screens/MainScreen.tsx",
+        "app/src/components/GlobalSearchBar.tsx"
+      ],
+      "pattern": "bottom-search-dock"
+    },
+    {
+      "id": "search.chips",
+      "question": "When are scope chips visible?",
+      "attention": "Prune. Chips are a fourth chunk only while encoding a scope.",
+      "options": [
+        {
+          "id": "always",
+          "label": "Persistent chip row",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Steals vertical stream space when idle."
+        },
+        {
+          "id": "on-focus",
+          "label": "Only when focused or composing @ /",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "on-focus",
+      "target": "on-focus",
+      "wiring": [
+        "app/src/components/GlobalSearchBar.tsx"
+      ],
+      "pattern": "bottom-search-dock"
+    },
+    {
+      "id": "composer.dock",
+      "question": "How does the composer sit relative to messages?",
+      "attention": "A floating composer covers the last token. That is the last thing the human needs to see.",
+      "options": [
+        {
+          "id": "floating",
+          "label": "FAB / overlap",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "setproduct: most common mobile AI chat bug."
+        },
+        {
+          "id": "docked",
+          "label": "Docked above IME",
+          "seenIn": [
+            "dash",
+            "chatgpt",
+            "grok"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "docked",
+      "target": "docked",
+      "wiring": [
+        "app/src/components/Composer.tsx",
+        "app/src/components/KeyboardDock.tsx"
+      ],
+      "pattern": "docked-composer"
+    },
+    {
+      "id": "composer.ime",
+      "question": "How does the dock follow the Android IME?",
+      "attention": "Covering 'Message Dash' breaks encode. S25 does not resize the window.",
+      "options": [
+        {
+          "id": "padding-insets",
+          "label": "paddingBottom: insets.bottom",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "softwareKeyboardLayoutMode resize is ignored in Expo Go."
+        },
+        {
+          "id": "kav",
+          "label": "RN KeyboardAvoidingView",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "dash-android-ui forbids it on the dock."
+        },
+        {
+          "id": "translate-ime",
+          "label": "KeyboardStickyView / translateY height",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "translate-ime",
+      "target": "translate-ime",
+      "wiring": [
+        "app/src/components/KeyboardDock.tsx",
+        "app/src/components/KeyboardDock.test.ts"
+      ],
+      "pattern": "sticky-ime"
+    },
+    {
+      "id": "composer.enter",
+      "question": "What does Enter do?",
+      "attention": "Phone keyboards insert newline. Desktop Enter sends. Mixing them makes people send half a thought.",
+      "options": [
+        {
+          "id": "always-send",
+          "label": "Enter always sends",
+          "seenIn": [
+            "chatgpt-desktop"
+          ],
+          "verdict": "reject",
+          "because": "Phone users need newline."
+        },
+        {
+          "id": "platform",
+          "label": "Web submit, phone newline",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "platform",
+      "target": "platform",
+      "wiring": [
+        "app/src/components/Composer.tsx"
+      ],
+      "pattern": "docked-composer"
+    },
+    {
+      "id": "composer.attach",
+      "question": "What does the composer + control do?",
+      "attention": "A visible control that does nothing is a lie. It burns a tap and trains distrust.",
+      "options": [
+        {
+          "id": "dead-plus",
+          "label": "Plus icon, no onPress",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "Dead affordance. Inspected in Composer.tsx."
+        },
+        {
+          "id": "hide",
+          "label": "Omit until attach is real",
+          "seenIn": [],
+          "verdict": "target"
+        },
+        {
+          "id": "wire-attach",
+          "label": "Attach image/file into the turn",
+          "seenIn": [
+            "chatgpt",
+            "t3-code"
+          ],
+          "verdict": "later",
+          "because": "Needs protocol. Do not fake it with a no-op."
+        }
+      ],
+      "adopted": "dead-plus",
+      "target": "hide",
+      "wiring": [
+        "app/src/components/Composer.tsx"
+      ],
+      "pattern": "dead-attach-control"
+    },
+    {
+      "id": "composer.send-mic",
+      "question": "How do send and voice share one slot?",
+      "attention": "One trailing control. Empty = speak. Text = send popIn. Two icons at rest is extra chrome.",
+      "options": [
+        {
+          "id": "always-both",
+          "label": "Mic and send always visible",
+          "seenIn": [
+            "chatgpt"
+          ],
+          "verdict": "reject",
+          "because": "Crowds the 48px dock."
+        },
+        {
+          "id": "swap",
+          "label": "Mic when empty, send popIn when text",
+          "seenIn": [
+            "dash",
+            "grok"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "swap",
+      "target": "swap",
+      "wiring": [
+        "app/src/components/Composer.tsx"
+      ],
+      "pattern": "docked-composer"
+    },
+    {
+      "id": "composer.streaming",
+      "question": "What happens to the composer while a turn streams?",
+      "attention": "Stop must be reachable without losing the next encoded thought. Queue is a second slot, not a new thread.",
+      "options": [
+        {
+          "id": "lock",
+          "label": "Disable input until done",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Human encodes faster than some harnesses."
+        },
+        {
+          "id": "stop-and-queue",
+          "label": "Stop square + queue send",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "stop-and-queue",
+      "target": "stop-and-queue",
+      "wiring": [
+        "app/src/components/Composer.tsx",
+        "app/src/store/queue.ts"
+      ],
+      "pattern": "tool-status-line"
+    },
+    {
+      "id": "thread.assistant",
+      "question": "How is assistant text chromed?",
+      "attention": "A second bubble around the stream doubles containers. Grok already solved this.",
+      "options": [
+        {
+          "id": "assistant-bubble",
+          "label": "Both sides bubbled",
+          "seenIn": [
+            "chatgpt"
+          ],
+          "verdict": "reject",
+          "because": "language.md: assistant is plain."
+        },
+        {
+          "id": "plain",
+          "label": "Left-aligned prose / markdown",
+          "seenIn": [
+            "dash",
+            "grok"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "plain",
+      "target": "plain",
+      "wiring": [
+        "app/src/components/MessageRow.tsx",
+        "docs/design/language.md"
+      ],
+      "pattern": "assistant-plain-text"
+    },
+    {
+      "id": "thread.user",
+      "question": "How is user text chromed?",
+      "attention": "User vs assistant must be parseable in a glance. One bubble side is enough.",
+      "options": [
+        {
+          "id": "plain-both",
+          "label": "Both plain",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Turns collapse into one column of prose."
+        },
+        {
+          "id": "user-bubble",
+          "label": "#1f1f1f bubble",
+          "seenIn": [
+            "dash",
+            "grok"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "user-bubble",
+      "target": "user-bubble",
+      "wiring": [
+        "app/src/components/MessageRow.tsx",
+        "app/src/theme.ts"
+      ],
+      "pattern": "user-bubble"
+    },
+    {
+      "id": "stream.status",
+      "question": "How is tool work shown during a turn?",
+      "attention": "Tool JSON is exposure. One line is encoding. numberOfLines={1} is the pin.",
+      "options": [
+        {
+          "id": "accordion",
+          "label": "Expandable tool cards",
+          "seenIn": [
+            "chatgpt",
+            "claude"
+          ],
+          "verdict": "reject",
+          "because": "Steals fovea from the stream on 390px."
+        },
+        {
+          "id": "one-line",
+          "label": "status event, cleared on tool end",
+          "seenIn": [
+            "dash",
+            "codex",
+            "omp"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "one-line",
+      "target": "one-line",
+      "wiring": [
+        "app/src/components/MessageRow.tsx",
+        "bridge/src/harnesses.ts"
+      ],
+      "pattern": "tool-status-line"
+    },
+    {
+      "id": "stream.indicator",
+      "question": "What marks that a model is thinking?",
+      "attention": "Motion must stay 8px. A caret or row bounce is a second stream.",
+      "options": [
+        {
+          "id": "caret",
+          "label": "Blinking block caret",
+          "seenIn": [
+            "chatgpt"
+          ],
+          "verdict": "reject",
+          "because": "Competes with tokens."
+        },
+        {
+          "id": "pulse-dot",
+          "label": "8px PulseDot",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "Overnight #27 deleted PulseDot.tsx."
+        },
+        {
+          "id": "effort-orbs",
+          "label": "AODL effort orbs + runtime cadence",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "adopted",
+          "because": "Issue #27 / PR #31 landed on overnight. visual.json fail-closed."
+        }
+      ],
+      "adopted": "effort-orbs",
+      "target": "effort-orbs",
+      "wiring": [
+        "app/src/components/EffortOrbs.tsx",
+        "app/src/components/MessageRow.tsx"
+      ],
+      "pattern": "effort-orbs",
+      "claimedIssue": "#27"
+    },
+    {
+      "id": "stream.store",
+      "question": "Where do tokens live in client state?",
+      "attention": "Per-token chats-store updates re-render the list. That hitch is an attention failure.",
+      "options": [
+        {
+          "id": "chats-store",
+          "label": "Put tokens in conversations[]",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "AGENTS.md forbids it."
+        },
+        {
+          "id": "keyed-raf",
+          "label": "store/text.ts per-reply rAF",
+          "seenIn": [
+            "dash",
+            "chatgpt"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "keyed-raf",
+      "target": "keyed-raf",
+      "wiring": [
+        "app/src/store/text.ts"
+      ],
+      "pattern": "rAF-stream"
+    },
+    {
+      "id": "list.entering",
+      "question": "Do list rows play enter animations?",
+      "attention": "FlashList recycle remounts. Entering on rows is a hitch during rest/scroll.",
+      "options": [
+        {
+          "id": "row-entering",
+          "label": "entering= on rows",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "dash-motion. Recycle replays the anim."
+        },
+        {
+          "id": "none",
+          "label": "No entering on FlashList rows",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "none",
+      "target": "none",
+      "wiring": [
+        "app/src/screens/panes/ChatsPane.tsx",
+        "app/src/screens/panes/BotsPane.tsx",
+        "app/src/screens/ChatScreen.tsx"
+      ],
+      "pattern": "no-list-entering"
+    },
+    {
+      "id": "press.language",
+      "question": "What is press feedback?",
+      "attention": "Opacity-only press feels cheap. Squash without haptic feels dead. Two languages in one app is noise. Header is unused but still teaches opacity. Pair, Settings, and OrchestraDetail still use pressed && styles.pressed.",
+      "options": [
+        {
+          "id": "opacity",
+          "label": "pressed && opacity/background",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "dash-motion: kill opacity pressed styles."
+        },
+        {
+          "id": "mixed",
+          "label": "PressScale on rows, opacity on Header IconButton",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "adopted",
+          "because": "Header.tsx still uses pressed && styles.pressed."
+        },
+        {
+          "id": "press-scale",
+          "label": "PressScale SNAP transform on every pressable",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "mixed",
+      "target": "press-scale",
+      "wiring": [
+        "app/src/components/PressScale.tsx",
+        "app/src/components/Header.tsx",
+        "app/src/screens/PairScreen.tsx",
+        "app/src/screens/SettingsScreen.tsx",
+        "app/src/screens/OrchestraDetailScreen.tsx"
+      ],
+      "pattern": "press-scale-squash"
+    },
+    {
+      "id": "haptic.pairing",
+      "question": "Where do haptics fire?",
+      "attention": "Haptic is the alert tag for plasticity. It belongs on the action, not inside every squash (rows would buzz on scroll-adjacent presses).",
+      "options": [
+        {
+          "id": "inside-pressscale",
+          "label": "PressScale always haptics",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Rows would vibrate on every press including disabled."
+        },
+        {
+          "id": "call-site",
+          "label": "haptic.tap/select/success/error at the action",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "call-site",
+      "target": "call-site",
+      "wiring": [
+        "app/src/haptics.ts"
+      ],
+      "pattern": "press-scale-squash"
+    },
+    {
+      "id": "nav.motion",
+      "question": "How does the selected destination move?",
+      "attention": "The pill is peripheral. It may gel. It must not glow. Glow is a second highlight competing with the stream.",
+      "options": [
+        {
+          "id": "glow",
+          "label": "GOLD_GLOW overlay",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "dash-motion forbids it on native AppNav."
+        },
+        {
+          "id": "snap-only",
+          "label": "Instant snap, no follow",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Pager drag would leave the indicator behind."
+        },
+        {
+          "id": "gel",
+          "label": "UI-thread spring follow, stretch X squash Y",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "gel",
+      "target": "gel",
+      "wiring": [
+        "app/src/components/AppNav.tsx",
+        "app/src/components/golden-nav.ts"
+      ],
+      "pattern": "gel-nav-pill"
+    },
+    {
+      "id": "overlay.bridge",
+      "question": "How does the human inspect the bridge without leaving Main?",
+      "attention": "Pushing Settings is a context switch. A Modal is a new window. A gel sheet stays in the same place.",
+      "options": [
+        {
+          "id": "push-settings",
+          "label": "Navigate to Settings",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Chevron is glance, not a form."
+        },
+        {
+          "id": "modal",
+          "label": "RN Modal",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "bridge-pull.test.ts: overlay is a gel sheet."
+        },
+        {
+          "id": "gel-sheet",
+          "label": "BridgePull translateY + GEL",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "gel-sheet",
+      "target": "gel-sheet",
+      "wiring": [
+        "app/src/components/BridgePull.tsx",
+        "app/src/components/bridge-pull.ts"
+      ],
+      "pattern": "roster-host-list"
+    },
+    {
+      "id": "overlay.voice",
+      "question": "Is voice a mode or a second product?",
+      "attention": "Full-duplex camera (Gemini Live) is a different job. Dash voice is one spoken turn over the same harness.",
+      "options": [
+        {
+          "id": "inline-dictation",
+          "label": "Mic fills the composer",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Spoken turns need VAD + barge-in. Composer mic is the door, not the room."
+        },
+        {
+          "id": "full-screen-orb",
+          "label": "Voice screen, Grok orb, captions",
+          "seenIn": [
+            "dash",
+            "grok"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "full-screen-orb",
+      "target": "full-screen-orb",
+      "wiring": [
+        "app/src/screens/VoiceScreen.tsx"
+      ],
+      "pattern": "voice-orb"
+    },
+    {
+      "id": "voice.barge-in",
+      "question": "Can the human interrupt TTS?",
+      "attention": "If they cannot interrupt, they wait. That is not conversation. ChatGPT AVM is the ceiling. Dash already stops the speaker on barge-in.",
+      "options": [
+        {
+          "id": "no-barge",
+          "label": "Wait for TTS",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Blocks encode."
+        },
+        {
+          "id": "barge-in",
+          "label": "onBargeIn stops speaker + haptic",
+          "seenIn": [
+            "dash",
+            "chatgpt"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "barge-in",
+      "target": "barge-in",
+      "wiring": [
+        "app/src/screens/VoiceScreen.tsx",
+        "app/src/lib/voice-session.ts"
+      ],
+      "pattern": "voice-orb"
+    },
+    {
+      "id": "motion.reduce",
+      "question": "Does idle motion honor Reduce Motion?",
+      "attention": "Springs and EffortOrbs pass ReduceMotion.System. The Voice orb still loops withTiming forever. That is a vestibular tax.",
+      "options": [
+        {
+          "id": "ignore",
+          "label": "withTiming loops regardless",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "OS setting is the human's rest gate."
+        },
+        {
+          "id": "honor",
+          "label": "ReduceMotion.System on idle loops",
+          "seenIn": [
+            "dash-springs"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "ignore",
+      "target": "honor",
+      "wiring": [
+        "app/src/components/EffortOrbs.tsx",
+        "app/src/screens/VoiceScreen.tsx",
+        "app/src/components/PressScale.tsx"
+      ],
+      "pattern": "reduce-motion-idle"
+    },
+    {
+      "id": "history.compression",
+      "question": "How compressed is a chat row?",
+      "attention": "The list is retrieval, not reading. Date group + 1 line + timeAgo + optional live dot.",
+      "options": [
+        {
+          "id": "two-line-snippet",
+          "label": "Multi-line snippet",
+          "seenIn": [
+            "chatgpt"
+          ],
+          "verdict": "reject",
+          "because": "Turns the list into a transcript."
+        },
+        {
+          "id": "one-line",
+          "label": "numberOfLines={1} preview + streaming dot",
+          "seenIn": [
+            "dash",
+            "grok"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "one-line",
+      "target": "one-line",
+      "wiring": [
+        "app/src/screens/panes/ChatsPane.tsx"
+      ],
+      "pattern": "history-date-groups"
+    },
+    {
+      "id": "bots.compression",
+      "question": "How compressed is a bot row?",
+      "attention": "Presence is a dot. Role + 1-line desc. Online pills are a second label.",
+      "options": [
+        {
+          "id": "online-pill",
+          "label": "Online / Away chips",
+          "seenIn": [
+            "chatgpt"
+          ],
+          "verdict": "reject",
+          "because": "language.md: status dot, never Online pills."
+        },
+        {
+          "id": "dot-and-one-line",
+          "label": "Dot + role + desc",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "dot-and-one-line",
+      "target": "dot-and-one-line",
+      "wiring": [
+        "app/src/screens/panes/BotsPane.tsx"
+      ],
+      "pattern": "status-dot-not-pill"
+    },
+    {
+      "id": "error.inline",
+      "question": "Where do turn failures appear?",
+      "attention": "A toast is peripheral and dies. The error belongs in the turn the human is reading.",
+      "options": [
+        {
+          "id": "toast",
+          "label": "Banner / toast",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Leaves the thread looking fine."
+        },
+        {
+          "id": "inline",
+          "label": "MessageRow error / interrupted copy",
+          "seenIn": [
+            "dash",
+            "chatgpt"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "inline",
+      "target": "inline",
+      "wiring": [
+        "app/src/components/MessageRow.tsx"
+      ],
+      "pattern": "turn-error-inline"
+    },
+    {
+      "id": "connection.pill",
+      "question": "How is bridge liveness shown when healthy?",
+      "attention": "A persistent Connected pill is unused chrome. Prune it.",
+      "options": [
+        {
+          "id": "always",
+          "label": "Always-on status chip",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Axiom prune."
+        },
+        {
+          "id": "only-broken",
+          "label": "ConnectionPill when connecting/offline",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "only-broken",
+      "target": "only-broken",
+      "wiring": [
+        "app/src/components/ConnectionPill.tsx"
+      ],
+      "pattern": "connection-pill-when-offline"
+    },
+    {
+      "id": "pair.sonic",
+      "question": "How does first-run pairing earn trust without a typed token?",
+      "attention": "Typing a token is exposure. Hearing a 6-char code is encoding a short ritual. Manual fields remain as fallback.",
+      "options": [
+        {
+          "id": "token-only",
+          "label": "Paste address + token",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "First-run should not start in Settings."
+        },
+        {
+          "id": "sonic-plus-manual",
+          "label": "Listen 6500ms, then manual",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "sonic-plus-manual",
+      "target": "sonic-plus-manual",
+      "wiring": [
+        "app/src/screens/PairScreen.tsx"
+      ],
+      "pattern": "byo-harness"
+    },
+    {
+      "id": "settings.keyboard",
+      "question": "How do Settings fields avoid the IME?",
+      "attention": "Settings fields live in a scroll, not a dock. KeyboardAvoidingView (Keyboard Controller) is the allowed exception.",
+      "options": [
+        {
+          "id": "dock",
+          "label": "KeyboardDock around settings",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "There is no bottom composer on this screen."
+        },
+        {
+          "id": "avoiding-scroll",
+          "label": "KeyboardAvoidingView behavior padding",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "avoiding-scroll",
+      "target": "avoiding-scroll",
+      "wiring": [
+        "app/src/screens/SettingsScreen.tsx"
+      ],
+      "pattern": "sticky-ime"
+    },
+    {
+      "id": "gesture.pager-vs-list",
+      "question": "How do swipe panes and lists coexist?",
+      "attention": "One axis per gesture. Horizontal = destinations. Vertical = content. Mixing both on one view is a stolen swipe.",
+      "options": [
+        {
+          "id": "nested-horizontal",
+          "label": "Horizontal lists inside pager",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Gesture fight."
+        },
+        {
+          "id": "axis-split",
+          "label": "Pager horizontal, FlashList vertical",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "axis-split",
+      "target": "axis-split",
+      "wiring": [
+        "app/src/components/MainPager.native.tsx",
+        "app/src/screens/MainScreen.tsx"
+      ],
+      "pattern": "top-tabs-not-bottom"
+    },
+    {
+      "id": "attention.multi-stream",
+      "question": "How does the human watch two harnesses at once?",
+      "attention": "One fovea. A second stream must compress to a peripheral mark on the list, not a split view.",
+      "options": [
+        {
+          "id": "split-view",
+          "label": "Two threads on one phone screen",
+          "seenIn": [
+            "conductor"
+          ],
+          "verdict": "reject",
+          "because": "Desktop board. 390px."
+        },
+        {
+          "id": "row-dot-only",
+          "label": "Streaming dot on the Chats row, one open thread",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "adopted",
+          "because": "Shipped. No glanceable fleet of live turns on Main."
+        },
+        {
+          "id": "fleet-marks",
+          "label": "AODL runtimeState marks on Bots/Orchestra while one thread is open",
+          "seenIn": [],
+          "verdict": "target",
+          "because": "Encode which agents are running without opening them. visual.json runtimeStates."
+        }
+      ],
+      "adopted": "row-dot-only",
+      "target": "fleet-marks",
+      "wiring": [
+        "app/src/screens/panes/ChatsPane.tsx"
+      ],
+      "pattern": "fleet-attention-marks"
+    },
+    {
+      "id": "orchestra.source",
+      "question": "What does Orchestra list?",
+      "attention": "Demo tiles are exposure. The AODL network is the encoded mesh.",
+      "options": [
+        {
+          "id": "demo",
+          "label": "DEMO_ORCHESTRAS",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "Issue #19."
+        },
+        {
+          "id": "aodl-network",
+          "label": "Vendored catalog network",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "demo",
+      "target": "aodl-network",
+      "wiring": [
+        "app/src/screens/panes/OrchestraPane.tsx",
+        "app/src/mock/orchestra.ts"
+      ],
+      "pattern": "aodl-orchestra-graph",
+      "claimedIssue": "#19"
+    },
+    {
+      "id": "live.session",
+      "question": "Is a live CLI tab a Chat?",
+      "attention": "Minting an empty thread next to a live OMP session is a second agent. The GUI attaches.",
+      "options": [
+        {
+          "id": "mint",
+          "label": "Phone-started threads only",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "Issue #20."
+        },
+        {
+          "id": "adopt",
+          "label": "hello.hosts sessionId becomes a Chat",
+          "seenIn": [
+            "t3-code",
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "mint",
+      "target": "adopt",
+      "wiring": [
+        "app/src/screens/panes/ChatsPane.tsx"
+      ],
+      "pattern": "live-session-adopt",
+      "claimedIssue": "#20"
+    },
+    {
+      "id": "chrome.expand-affordance",
+      "question": "What does the left nav circle mean?",
+      "attention": "A label that lies spends a tap and trains distrust. Voice is a real destination. Expand is not.",
+      "options": [
+        {
+          "id": "expand-to-voice",
+          "label": "Label Expand, navigate Voice",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "Name ≠ destination. Inspected in AppNav.tsx."
+        },
+        {
+          "id": "voice-labeled",
+          "label": "Label Voice / mic, same navigation",
+          "seenIn": [
+            "grok"
+          ],
+          "verdict": "target"
+        },
+        {
+          "id": "true-expand",
+          "label": "Expand chrome to labeled tabs",
+          "seenIn": [],
+          "verdict": "later",
+          "because": "Would fight 60px collapsed bar."
+        }
+      ],
+      "adopted": "expand-to-voice",
+      "target": "voice-labeled",
+      "wiring": [
+        "app/src/components/AppNav.tsx",
+        "app/src/components/AppNav.web.tsx"
+      ],
+      "pattern": "mislabeled-expand"
+    },
+    {
+      "id": "chrome.compose-entry",
+      "question": "Where does compose live on Main?",
+      "attention": "language.md still says pencil in the header. The phone ships a bottom Message Dash dock. Two written sources. The dock already won the thumb.",
+      "options": [
+        {
+          "id": "header-pencil",
+          "label": "Compose in header pencil",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "No pencil control exists in AppNav."
+        },
+        {
+          "id": "fab",
+          "label": "FAB over the stream",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Covers the last token."
+        },
+        {
+          "id": "dock",
+          "label": "Bottom Message Dash dock",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "dock",
+      "target": "dock",
+      "fork": "language.md still says compose lives in the header (pencil). MainScreen GlobalSearchBar is the product. Until language.md changes, the tree keeps the dock.",
+      "wiring": [
+        "app/src/screens/MainScreen.tsx",
+        "docs/design/language.md"
+      ],
+      "pattern": "bottom-search-dock"
+    },
+    {
+      "id": "chrome.chat-tab",
+      "question": "Which destination dot is selected on Chat and Voice?",
+      "attention": "Opening a thread from Orchestra still lights Chats. Peripheral destination is now a lie.",
+      "options": [
+        {
+          "id": "always-chats",
+          "label": "AppNav tab={1} on Chat and Voice",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "ChatScreen and VoiceScreen hardcode tab 1."
+        },
+        {
+          "id": "origin-or-hide",
+          "label": "Remember origin tab, or hide the pager on Chat/Voice",
+          "seenIn": [],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "always-chats",
+      "target": "origin-or-hide",
+      "wiring": [
+        "app/src/screens/ChatScreen.tsx",
+        "app/src/screens/VoiceScreen.tsx"
+      ],
+      "pattern": "top-tabs-not-bottom"
+    },
+    {
+      "id": "chrome.conversations-route",
+      "question": "Is Conversations first-class or leftover?",
+      "attention": "A stack route with zero navigators is chrome the human cannot retrieve. It still long-press deletes.",
+      "options": [
+        {
+          "id": "zombie",
+          "label": "Registered modal, no navigate callers",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "App.tsx registers Conversations. grep finds no navigate."
+        },
+        {
+          "id": "remove-or-wire",
+          "label": "Delete the screen, or wire from Chats overflow",
+          "seenIn": [],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "zombie",
+      "target": "remove-or-wire",
+      "wiring": [
+        "app/src/screens/ConversationsScreen.tsx",
+        "app/App.tsx",
+        "app/src/navigation.ts"
+      ],
+      "pattern": "unreachable-conversations"
+    },
+    {
+      "id": "chrome.dead-header",
+      "question": "Do Header and TopTabs still ship as a second chrome language?",
+      "attention": "Unused components still teach opacity press and labeled tabs. Recycle them into a screen and the dialect comes back.",
+      "options": [
+        {
+          "id": "keep-unused",
+          "label": "Header.tsx and TopTabs.tsx unused",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "Zero screen imports of Header. AppNav replaced TopTabs."
+        },
+        {
+          "id": "prune",
+          "label": "Delete, or re-home only behind PressScale",
+          "seenIn": [],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "keep-unused",
+      "target": "prune",
+      "wiring": [
+        "app/src/components/Header.tsx",
+        "app/src/components/TopTabs.tsx"
+      ],
+      "pattern": "unused-header"
+    },
+    {
+      "id": "search.status-copy",
+      "question": "How does a search row say a bot is live?",
+      "attention": "Bots pane uses a dot. Search writes Online/Offline. That is a second vocabulary for the same bit.",
+      "options": [
+        {
+          "id": "online-text",
+          "label": "Meta string Online / Offline",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "SearchResultRow. language.md forbids Online pills."
+        },
+        {
+          "id": "dot-only",
+          "label": "Dot, same as BotsPane",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "online-text",
+      "target": "dot-only",
+      "wiring": [
+        "app/src/components/SearchResultRow.tsx",
+        "app/src/screens/panes/BotsPane.tsx"
+      ],
+      "pattern": "status-dot-not-pill"
+    },
+    {
+      "id": "composer.plus-semantics",
+      "question": "What does leading + mean across docks?",
+      "attention": "Same glyph, two verbs. Main inserts @. Chat claims Attach and does nothing. That is a collision plus a lie.",
+      "options": [
+        {
+          "id": "collision",
+          "label": "Mention on Main, dead Attach on Chat",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "GlobalSearchBar vs Composer."
+        },
+        {
+          "id": "one-verb",
+          "label": "Main keeps Mention. Chat hides + until attach is real",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "collision",
+      "target": "one-verb",
+      "wiring": [
+        "app/src/components/Composer.tsx",
+        "app/src/components/GlobalSearchBar.tsx"
+      ],
+      "pattern": "glyph-collision"
+    },
+    {
+      "id": "stream.blocked",
+      "question": "How does the phone show a harness waiting on permission?",
+      "attention": "AODL has runtimeState blocked. Adapters currently bypass approvals. A frozen status line looks like a hang.",
+      "options": [
+        {
+          "id": "frozen-status",
+          "label": "Keep the 1-line status, no distinct blocked chrome",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "Human cannot tell hang from ask."
+        },
+        {
+          "id": "blocked-mark",
+          "label": "AODL blocked encoding in the turn, composer stays",
+          "seenIn": [
+            "t3-code",
+            "claude"
+          ],
+          "verdict": "target"
+        },
+        {
+          "id": "reimplement-tui",
+          "label": "Full permission TUI on the phone",
+          "seenIn": [
+            "claude"
+          ],
+          "verdict": "later",
+          "because": "Laptop owns approvals. Phone surfaces the state."
+        }
+      ],
+      "adopted": "frozen-status",
+      "target": "blocked-mark",
+      "wiring": [
+        "app/src/components/MessageRow.tsx",
+        "bridge/src/harnesses.ts"
+      ],
+      "pattern": "permission-mode-toggle"
+    },
+    {
+      "id": "nav.tab-press",
+      "question": "Do destination tabs use the same squash as nav circles?",
+      "attention": "Circles are PressScale. Tabs are raw Pressable. A third dialect on the most-tapped chrome.",
+      "options": [
+        {
+          "id": "pressable-tabs",
+          "label": "Pressable tabs, PressScale circles",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "AppNav.tsx tabs map."
+        },
+        {
+          "id": "press-scale-tabs",
+          "label": "PressScale on tabs, scale the circle not the pill",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "pressable-tabs",
+      "target": "press-scale-tabs",
+      "wiring": [
+        "app/src/components/AppNav.tsx",
+        "app/src/components/golden-nav.ts"
+      ],
+      "pattern": "press-scale-squash"
+    },
+    {
+      "id": "haptic.send-weight",
+      "question": "What haptic weight is a committed send?",
+      "attention": "tap is for chrome. success is for a completed encode. Queue is a lighter event. Offline is error. One weight for all three blurs the loop.",
+      "options": [
+        {
+          "id": "silent",
+          "label": "No haptic on send",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "dash-motion: scale without haptic feels cheap."
+        },
+        {
+          "id": "all-tap",
+          "label": "haptic.tap on send, queue, and voice utterance",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "adopted",
+          "because": "ChatScreen onSend and sendTurn."
+        },
+        {
+          "id": "weighted",
+          "label": "success on first send, tap on queue, error if offline",
+          "seenIn": [],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "all-tap",
+      "target": "weighted",
+      "wiring": [
+        "app/src/screens/ChatScreen.tsx",
+        "app/src/screens/MainScreen.tsx",
+        "app/src/haptics.ts"
+      ],
+      "pattern": "send-haptic-weight"
+    },
+    {
+      "id": "voice.chrome",
+      "question": "Does Voice have an explicit end or mute?",
+      "attention": "Hands-free VAD is the job. Zero labeled controls means the only escape is AppNav, which still says Expand and lights Chats.",
+      "options": [
+        {
+          "id": "hands-only",
+          "label": "Orb + caption, leave via AppNav, barge-in via speech",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "adopted",
+          "because": "VoiceScreen has no End button. Pressable import is unused."
+        },
+        {
+          "id": "end-and-labels",
+          "label": "End/leave control + live labels; optional tap barge-in",
+          "seenIn": [
+            "chatgpt",
+            "grok"
+          ],
+          "verdict": "target"
+        },
+        {
+          "id": "camera-share",
+          "label": "Gemini Live camera/screen share",
+          "seenIn": [
+            "gemini"
+          ],
+          "verdict": "reject",
+          "because": "Different job."
+        }
+      ],
+      "adopted": "hands-only",
+      "target": "end-and-labels",
+      "wiring": [
+        "app/src/screens/VoiceScreen.tsx",
+        "app/src/lib/voice-session.ts"
+      ],
+      "pattern": "voice-hands-only"
+    },
+    {
+      "id": "list.delete-affordance",
+      "question": "How are chats removed?",
+      "attention": "Long-press without a hint is an expert gesture. Swipe-to-delete fights the vertical list. Either needs a discoverable encode.",
+      "options": [
+        {
+          "id": "hidden-longpress",
+          "label": "350ms long-press, confirm, no hint, no swipe",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "ChatsPane has no accessibilityHint."
+        },
+        {
+          "id": "hint-or-overflow",
+          "label": "Keep long-press with hint, or an overflow on the row",
+          "seenIn": [
+            "grok"
+          ],
+          "verdict": "target"
+        },
+        {
+          "id": "swipe-delete",
+          "label": "Swipe-to-delete",
+          "seenIn": [
+            "chatgpt"
+          ],
+          "verdict": "later",
+          "because": "Competes with vertical scroll. Only if long-press is removed."
+        }
+      ],
+      "adopted": "hidden-longpress",
+      "target": "hint-or-overflow",
+      "wiring": [
+        "app/src/screens/panes/ChatsPane.tsx",
+        "app/src/screens/ConversationsScreen.tsx"
+      ],
+      "pattern": "longpress-delete"
+    },
+    {
+      "id": "list.pull-refresh",
+      "question": "How does the human refresh hosts when the pill is hidden?",
+      "attention": "Healthy bridge is silence. Stale roster with no PTR looks healthy. The pill retry only appears when already broken.",
+      "options": [
+        {
+          "id": "none",
+          "label": "No pull-to-refresh. Pill retry only when offline",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "BotsPane has no RefreshControl."
+        },
+        {
+          "id": "ptr-bots",
+          "label": "PTR on Bots plus existing pill retry",
+          "seenIn": [],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "none",
+      "target": "ptr-bots",
+      "wiring": [
+        "app/src/screens/panes/BotsPane.tsx",
+        "app/src/components/ConnectionPill.tsx"
+      ],
+      "pattern": "pull-to-refresh-roster"
+    },
+    {
+      "id": "chat.harness-entry",
+      "question": "How does the human switch harness mid-thread?",
+      "attention": "HarnessPicker is mounted. The only open path is debugUi.chatHarnessPickerOpen. Identity is therefore unretrievable.",
+      "options": [
+        {
+          "id": "debug-only",
+          "label": "Picker exists, debug-only visible",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "ChatScreen never calls setPickerVisible(true) from UI."
+        },
+        {
+          "id": "title-or-chips",
+          "label": "Title tap or BridgePull harness chips open the picker",
+          "seenIn": [
+            "t3-code"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "debug-only",
+      "target": "title-or-chips",
+      "wiring": [
+        "app/src/screens/ChatScreen.tsx",
+        "app/src/components/HarnessPicker.tsx"
+      ],
+      "pattern": "debug-only-harness-picker"
+    },
+    {
+      "id": "orchestra.agent-row",
+      "question": "What happens when an Orchestra agent has no linked chat?",
+      "attention": "Haptic plus no navigation is a lie. Disabled + hint, or mint/adopt a chat, are the honest options.",
+      "options": [
+        {
+          "id": "silent-tap",
+          "label": "haptic.select then return",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "OrchestraDetailScreen openAgent."
+        },
+        {
+          "id": "disabled-or-mint",
+          "label": "Disabled with hint, or open/mint the harness chat",
+          "seenIn": [],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "silent-tap",
+      "target": "disabled-or-mint",
+      "wiring": [
+        "app/src/screens/OrchestraDetailScreen.tsx"
+      ],
+      "pattern": "silent-tappable"
+    },
+    {
+      "id": "a11y.live-regions",
+      "question": "How are streaming and connection changes announced?",
+      "attention": "Motion-only cues fail VoiceOver/TalkBack. Streaming dots and PulseDot are visual. ConnectionPill has no accessibilityLabel.",
+      "options": [
+        {
+          "id": "visual-only",
+          "label": "Visible dots/text, no live region, pill unlabeled",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "reject",
+          "because": "MessageRow and ConnectionPill."
+        },
+        {
+          "id": "live-and-label",
+          "label": "accessibilityLiveRegion on status; label the pill",
+          "seenIn": [],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "visual-only",
+      "target": "live-and-label",
+      "wiring": [
+        "app/src/components/MessageRow.tsx",
+        "app/src/components/ConnectionPill.tsx",
+        "app/src/screens/panes/ChatsPane.tsx"
+      ],
+      "pattern": "live-region"
+    },
+    {
+      "id": "gesture.bridge-vs-list",
+      "question": "Can a vertical list scroll steal the bridge pull?",
+      "attention": "One vertical axis. Pull is owned by nav chrome (failOffsetX, activeOffsetY). Pulling from the top of Bots/Chats is the residual fight.",
+      "options": [
+        {
+          "id": "list-also-pulls",
+          "label": "PTR or pan from list top opens the sheet",
+          "seenIn": [],
+          "verdict": "reject",
+          "because": "Would fight FlashList and any future PTR."
+        },
+        {
+          "id": "nav-owned",
+          "label": "Pull stays on nav chrome + chevron",
+          "seenIn": [
+            "dash"
+          ],
+          "verdict": "target"
+        }
+      ],
+      "adopted": "nav-owned",
+      "target": "nav-owned",
+      "wiring": [
+        "app/src/components/BridgePull.tsx",
+        "app/src/components/bridge-pull.ts",
+        "app/src/components/AppNav.tsx"
+      ],
+      "pattern": "roster-host-list"
+    }
+  ],
+  "proposedIssues": [
+    {
+      "id": "hide-dead-attach",
+      "title": "Composer: hide the + until attach is a real turn payload",
+      "fromNode": "composer.attach",
+      "priority": "P1",
+      "area": "app",
+      "why": "Visible plus with no onPress is a dead affordance. Target is hide, not a fake picker."
+    },
+    {
+      "id": "unify-plus-verb",
+      "title": "Leading + is Mention on Main and dead Attach on Chat. One glyph, one verb.",
+      "fromNode": "composer.plus-semantics",
+      "priority": "P1",
+      "area": "app",
+      "why": "Same icon, two verbs, one of them a lie."
+    },
+    {
+      "id": "unify-press-language",
+      "title": "One press language: PressScale on Header, Pair, Settings, OrchestraDetail, Conversations",
+      "fromNode": "press.language",
+      "priority": "P1",
+      "area": "app",
+      "why": "dash-motion says every pressable is PressScale. Opacity pressed styles remain on forms."
+    },
+    {
+      "id": "pressscale-tabs",
+      "title": "AppNav tabs must use PressScale, not raw Pressable",
+      "fromNode": "nav.tab-press",
+      "priority": "P2",
+      "area": "app",
+      "why": "Circles squash. Tabs do not. Third dialect on the destination chrome."
+    },
+    {
+      "id": "reduce-motion-idle",
+      "title": "PulseDot and Voice orb must honor ReduceMotion.System",
+      "fromNode": "motion.reduce",
+      "priority": "P1",
+      "area": "app",
+      "why": "Idle loops withTiming forever. Springs already honor the OS. These two do not."
+    },
+    {
+      "id": "fleet-attention-marks",
+      "title": "Bots/Orchestra: AODL runtimeState marks for agents streaming while another thread is open",
+      "fromNode": "attention.multi-stream",
+      "priority": "P1",
+      "area": "app",
+      "why": "One fovea. A second live harness is currently only a 6px dot on a Chats row the human may not be looking at."
+    },
+    {
+      "id": "blocked-permission-chrome",
+      "title": "Surface harness blocked / permission-needed as AODL blocked, not a frozen status line",
+      "fromNode": "stream.blocked",
+      "priority": "P2",
+      "area": "app",
+      "why": "T3 has full-access vs supervised. Dash adapters bypass. When a turn is blocked the phone has no distinct chrome."
+    },
+    {
+      "id": "relabel-expand-voice",
+      "title": "Left nav circle: label Voice, not Expand",
+      "fromNode": "chrome.expand-affordance",
+      "priority": "P1",
+      "area": "app",
+      "why": "accessibilityLabel Expand navigates to Voice."
+    },
+    {
+      "id": "chat-nav-origin-tab",
+      "title": "Chat and Voice must not hardcode AppNav tab={1}",
+      "fromNode": "chrome.chat-tab",
+      "priority": "P2",
+      "area": "app",
+      "why": "Opening a thread from Orchestra still lights Chats."
+    },
+    {
+      "id": "remove-or-wire-conversations",
+      "title": "Remove Conversations screen or give it a navigator",
+      "fromNode": "chrome.conversations-route",
+      "priority": "P2",
+      "area": "app",
+      "why": "Stack zombie. Duplicate of ChatsPane."
+    },
+    {
+      "id": "prune-dead-header",
+      "title": "Delete unused Header.tsx and TopTabs.tsx, or re-home behind PressScale",
+      "fromNode": "chrome.dead-header",
+      "priority": "P2",
+      "area": "app",
+      "why": "Unused chrome still teaches opacity press and labeled tabs."
+    },
+    {
+      "id": "search-dot-not-online",
+      "title": "Search bot rows: status dot, never Online/Offline text",
+      "fromNode": "search.status-copy",
+      "priority": "P2",
+      "area": "app",
+      "why": "Bots pane already compressed this. Search undoes it."
+    },
+    {
+      "id": "send-haptic-weight",
+      "title": "Send uses success; queue uses tap; offline uses error",
+      "fromNode": "haptic.send-weight",
+      "priority": "P3",
+      "area": "app",
+      "why": "ChatScreen fires tap for send and queue. Encode vs chrome should not share a weight."
+    },
+    {
+      "id": "voice-end-control",
+      "title": "Voice: labeled End/leave and live region; optional tap barge-in",
+      "fromNode": "voice.chrome",
+      "priority": "P2",
+      "area": "app",
+      "why": "Hands-free is correct. Zero labeled controls is not. Escape today is a mislabeled Expand."
+    },
+    {
+      "id": "longpress-delete-hint",
+      "title": "Chats long-press delete needs an accessibilityHint (or overflow)",
+      "fromNode": "list.delete-affordance",
+      "priority": "P2",
+      "area": "app",
+      "why": "350ms with no hint is undiscoverable. Do not add swipe until long-press is gone."
+    },
+    {
+      "id": "bots-pull-refresh",
+      "title": "Bots pane: pull-to-refresh roster, keep pill retry when broken",
+      "fromNode": "list.pull-refresh",
+      "priority": "P2",
+      "area": "app",
+      "why": "Healthy-looking stale hosts have no encode path."
+    },
+    {
+      "id": "harness-picker-entry",
+      "title": "Chat: open HarnessPicker from title tap or BridgePull chips",
+      "fromNode": "chat.harness-entry",
+      "priority": "P1",
+      "area": "app",
+      "why": "Identity is debug-only. Switching harness mid-thread is a real job."
+    },
+    {
+      "id": "orchestra-silent-agent",
+      "title": "OrchestraDetail agent row: disable + hint, or mint/adopt a chat",
+      "fromNode": "orchestra.agent-row",
+      "priority": "P1",
+      "area": "app",
+      "why": "haptic.select then no-op when no linked chat."
+    },
+    {
+      "id": "live-regions",
+      "title": "Announce streaming status and ConnectionPill; label the pill",
+      "fromNode": "a11y.live-regions",
+      "priority": "P2",
+      "area": "app",
+      "why": "Motion-only cues fail TalkBack. Pill has no accessibilityLabel."
+    }
+  ],
+  "docs": [
+    "synergy.md",
+    "attention.md",
+    "inventory.md",
+    "dash-map.md"
+  ]
+}

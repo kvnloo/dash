@@ -1,14 +1,16 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { approvalArgs } from "./argv-policy";
+import { decodeGatewayReply, decodePeerReply, sameOriginGatewayEndpoint, verifyNativeHermesSession } from "./hermes-reply-guard";
 
-// Send a Dash hermes turn over gateway JSON-RPC A2A or the hermes peer API.
-// CLI (`hermes chat -q`) is fallback only when those HTTP surfaces are down.
+// Discovery may select another transport. A send never retries on another path.
 
 export type HermesTurnInput = {
   text: string;
   cwd: string;
   sessionId?: string;
+  profileId?: string;
 };
 
 export type HermesPath = "gateway" | "peer" | "cli";
@@ -44,7 +46,7 @@ export type PeerRequest = {
 };
 
 export type HermesSessionResult =
-  | { path: "gateway" | "peer"; text: string; sessionId?: string }
+  | { path: "gateway" | "peer" | "api"; text: string; sessionId?: string }
   | { path: "cli"; reason: string };
 
 const DEFAULT_A2A_PORT = "9900";
@@ -127,7 +129,7 @@ export function jsonRpcEndpoint(card: unknown, fallbackOrigin: string): string |
   return `${trimSlash(fallbackOrigin)}/`;
 }
 
-export function hermesCliArgv(input: HermesTurnInput): string[] {
+export function hermesCliArgv(input: HermesTurnInput, env?: EnvMap): string[] {
   return [
     "chat",
     "-q",
@@ -135,6 +137,7 @@ export function hermesCliArgv(input: HermesTurnInput): string[] {
     "-Q",
     "--in",
     input.cwd,
+    ...approvalArgs("hermes", env),
     ...(input.sessionId ? ["--resume", input.sessionId] : []),
   ];
 }
@@ -250,10 +253,10 @@ function parseJsonText(text: string): unknown {
   }
 }
 
-type FetchFn = typeof globalThis.fetch;
+export type HermesFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 async function fetchJson(
-  fetchFn: FetchFn,
+  fetchFn: HermesFetch,
   url: string,
   init: RequestInit,
   timeoutMs: number,
@@ -261,13 +264,13 @@ async function fetchJson(
 ): Promise<{ ok: boolean; status: number; body: unknown }> {
   const timeout = AbortSignal.timeout(timeoutMs);
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
-  const response = await fetchFn(url, { ...init, signal: combined });
+  const response = await fetchFn(url, { ...init, redirect: "error", signal: combined });
   const text = await response.text();
   return { ok: response.ok, status: response.status, body: text ? parseJsonText(text) : undefined };
 }
 
 
-const HERMES_ENV_KEYS = /^(A2A_|HERMES_A2A_|HERMES_PEER_)/;
+const HERMES_ENV_KEYS = /^(A2A_|HERMES_A2A_|HERMES_PEER_|API_SERVER_)/;
 
 export function parseHermesEnvFile(text: string): EnvMap {
   const env: EnvMap = {};
@@ -306,11 +309,16 @@ function loadHermesEnvFile(path: string): EnvMap {
   }
 }
 
+
+const activeNativeSessions = new Set<string>();
+
 export async function runHermesSession(options: {
   input: HermesTurnInput;
+  /** Already resolved against the host's profile database. Never phone supplied. */
+  api?: { url: string; key: string };
   env?: EnvMap;
   envFile?: string;
-  fetch?: FetchFn;
+  fetch?: HermesFetch;
   log: LogFn;
   signal?: AbortSignal;
 }): Promise<HermesSessionResult> {
@@ -318,105 +326,103 @@ export async function runHermesSession(options: {
   const home = override.HERMES_HOME?.trim() || join(homedir(), ".hermes");
   const env = mergeEnv(loadHermesEnvFile(options.envFile ?? join(home, ".env")), override);
   const fetchFn = options.fetch ?? globalThis.fetch;
+  if (options.api) {
+    const sessionId = options.input.sessionId;
+    if (!sessionId) throw new Error("Hermes API requires an existing session.");
+    const identityKey = `${options.api.url}:${sessionId}`;
+    if (activeNativeSessions.has(identityKey)) throw new Error("A Dash turn is already running in this Hermes session.");
+    activeNativeSessions.add(identityKey);
+    try {
+      const request = buildPeerRequest({ origin: options.api.url, sessionId, text: options.input.text, token: options.api.key });
+      const identity = await fetchJson(fetchFn, `${options.api.url}/api/sessions/${encodeURIComponent(sessionId)}`, { method: "GET", headers: request.headers }, CARD_TIMEOUT_MS, options.signal);
+      if (!identity.ok) throw new Error("Hermes API identity HTTP " + identity.status + ". No send attempted.");
+      verifyNativeHermesSession(identity.body, { sessionId, cwd: options.input.cwd, profileId: options.input.profileId });
+      options.signal?.throwIfAborted();
+      const sent = await fetchJson(fetchFn, request.url, { method: request.method, headers: request.headers, body: JSON.stringify(request.body) }, SEND_TIMEOUT_MS, options.signal);
+      options.signal?.throwIfAborted();
+      if (!sent.ok) throw new Error(`Hermes API HTTP ${sent.status}. No fallback attempted; the host may still own this session.`);
+      if (sent.status === 202) throw new Error("Hermes queued this turn with its live owner. Refresh history; do not resend.");
+      const reply = decodePeerReply(sent.body, sessionId);
+      options.log("hermes.path", { path: "api" });
+      return { path: "api", text: reply.text, sessionId: reply.sessionId };
+    } finally { activeNativeSessions.delete(identityKey); }
+  }
   const origin = gatewayOrigin(env);
   const token = a2aBearerToken(env);
 
-  let gatewayDown = false;
+  options.signal?.throwIfAborted();
+  let cardResponse: Awaited<ReturnType<typeof fetchJson>> | undefined;
+  let reason = "gateway_unavailable";
   try {
-    const cardResponse = await fetchJson(
+    cardResponse = await fetchJson(
       fetchFn,
       agentCardUrl(origin),
       { method: "GET" },
       CARD_TIMEOUT_MS,
       options.signal,
     );
-    if (cardResponse.ok) {
-      const endpoint = jsonRpcEndpoint(cardResponse.body, origin);
-      if (endpoint) {
-        const request = buildGatewayRequest({
-          endpoint,
-          text: options.input.text,
-          sessionId: options.input.sessionId,
-          token,
-        });
-        const sent = await fetchJson(
-          fetchFn,
-          request.url,
-          { method: request.method, headers: request.headers, body: JSON.stringify(request.body) },
-          SEND_TIMEOUT_MS,
-          options.signal,
-        );
-        if (sent.ok) {
-          const text = extractA2AText(sent.body);
-          const sessionId = extractA2ASessionId(sent.body) ?? options.input.sessionId;
-          options.log("hermes.path", { path: "gateway", origin });
-          return { path: "gateway", text, sessionId };
-        }
-        options.log("hermes.path", {
-          path: "gateway",
-          origin,
-          status: sent.status,
-          reason: sent.status === 401 || sent.status === 403 ? "unauthorized" : "http_error",
-        });
-      } else {
-        options.log("hermes.path", { path: "gateway", origin, reason: "not_jsonrpc" });
-      }
-    } else {
-      options.log("hermes.path", {
-        path: "gateway",
-        origin,
-        status: cardResponse.status,
-        reason: "card_http_error",
-      });
-    }
   } catch (error) {
-    gatewayDown = isUnreachable(error) || (error instanceof DOMException && error.name === "TimeoutError");
-    options.log("hermes.path", {
-      path: "gateway",
-      origin,
-      reason: gatewayDown ? "gateway_down" : "gateway_error",
-    });
+    options.signal?.throwIfAborted();
+    if (!isUnreachable(error)) throw error;
+    reason = "gateway_down";
   }
+  options.signal?.throwIfAborted();
+  if (cardResponse && !cardResponse.ok && ![404, 405, 501, 502, 503, 504].includes(cardResponse.status)) {
+    throw new Error(`Hermes gateway discovery HTTP ${cardResponse.status}.`);
+  }
+  if (cardResponse?.ok && !isRecord(cardResponse.body)) {
+    throw new Error("Hermes gateway returned a malformed agent card. No fallback attempted.");
+  }
+  const advertised = cardResponse?.ok ? jsonRpcEndpoint(cardResponse.body, origin) : undefined;
+  const endpoint = advertised ? sameOriginGatewayEndpoint(advertised, origin) : undefined;
+  if (endpoint) {
+    const request = buildGatewayRequest({ endpoint, text: options.input.text, sessionId: options.input.sessionId, token });
+    const sent = await fetchJson(fetchFn, request.url,
+      { method: request.method, headers: request.headers, body: JSON.stringify(request.body) },
+      SEND_TIMEOUT_MS, options.signal);
+    options.signal?.throwIfAborted();
+    if (!sent.ok) throw new Error(`Hermes gateway HTTP ${sent.status}. Send outcome may be unknown; no fallback attempted.`);
+    if (sent.status === 202) throw new Error("Hermes gateway accepted a queued turn; confirm completion in history before retrying.");
+    const reply = decodeGatewayReply(sent.body, request.body.id, options.input.sessionId);
+    options.log("hermes.path", { path: "gateway", origin });
+    return { path: "gateway", text: reply.text, sessionId: reply.sessionId };
+  }
+  options.log("hermes.path", { path: "gateway", origin, reason });
 
   const peer = peerOrigin(env);
-  if (peer) {
-    const sessionId = options.input.sessionId ?? "dash";
-    try {
-      const request = buildPeerRequest({
-        origin: peer,
-        sessionId,
-        text: options.input.text,
-        token: peerBearerToken(env),
-      });
-      const sent = await fetchJson(
-        fetchFn,
-        request.url,
-        { method: request.method, headers: request.headers, body: JSON.stringify(request.body) },
-        SEND_TIMEOUT_MS,
-        options.signal,
-      );
-      if (sent.ok) {
-        const text = extractA2AText(sent.body);
-        const nextSession = extractA2ASessionId(sent.body) ?? sessionId;
-        options.log("hermes.path", { path: "peer", origin: peer });
-        return { path: "peer", text, sessionId: nextSession };
-      }
-      options.log("hermes.path", {
-        path: "peer",
-        origin: peer,
-        status: sent.status,
-        reason: sent.status === 401 || sent.status === 403 ? "unauthorized" : "http_error",
-      });
-    } catch (error) {
-      options.log("hermes.path", {
-        path: "peer",
-        origin: peer,
-        reason: isUnreachable(error) ? "peer_down" : "peer_error",
-      });
-    }
+  // A failed discovery never admitted the turn. With no resumable peer session,
+  // only explicit CLI opt-in can bypass the peer; never create a shared session.
+  const cliBeforeAdmission =
+    !cardResponse?.ok && !options.input.sessionId && env.DASH_HERMES_CLI_FALLBACK === "1";
+  if (peer && !cliBeforeAdmission) {
+    const sessionId = options.input.sessionId;
+    if (!sessionId) throw new Error("Hermes peer requires an existing sessionId; session creation is unavailable.");
+    options.signal?.throwIfAborted();
+    const request = buildPeerRequest({
+      origin: peer,
+      sessionId,
+      text: options.input.text,
+      token: peerBearerToken(env),
+    });
+    const sent = await fetchJson(
+      fetchFn,
+      request.url,
+      { method: request.method, headers: request.headers, body: JSON.stringify(request.body) },
+      SEND_TIMEOUT_MS,
+      options.signal,
+    );
+    options.signal?.throwIfAborted();
+    if (!sent.ok) throw new Error(`Hermes peer HTTP ${sent.status}. Send outcome may be unknown; no fallback attempted.`);
+    if (sent.status === 202) throw new Error("Hermes peer accepted a queued turn. Refresh history; do not resend.");
+    const reply = decodePeerReply(sent.body, sessionId);
+    options.log("hermes.path", { path: "peer", origin: peer });
+    return { path: "peer", text: reply.text, sessionId: reply.sessionId };
   }
 
-  const reason = gatewayDown ? "gateway_down" : "gateway_unavailable";
+  options.signal?.throwIfAborted();
+  if (env.DASH_HERMES_CLI_FALLBACK !== "1") {
+    throw new Error("Hermes gateway unavailable and CLI fallback is disabled. Set DASH_HERMES_CLI_FALLBACK=1 to opt in before sending.");
+  }
   options.log("hermes.path", { path: "cli", reason });
   return { path: "cli", reason };
 }
