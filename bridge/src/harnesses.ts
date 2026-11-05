@@ -12,8 +12,6 @@ export interface TurnInput {
   /** Prompt text. Attachment paths are already listed in it (see src/attachments.ts). */
   text: string;
   cwd: string;
-  /** Explicit ACP session/set_model choice; never inferred from a host label. */
-  model?: string;
   sessionId?: string;
   profileId?: string;
   /** Files the phone attached, stored on this host. ACP turns also get native blocks. */
