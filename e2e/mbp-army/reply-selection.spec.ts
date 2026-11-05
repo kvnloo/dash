@@ -9,6 +9,15 @@ async function selectAgentMessage(page: Page, phrase: string) {
   // Target that real gesture surface to avoid triggering the browser's text selection.
   const trigger = page.getByTestId('reply-selection-trigger').filter({ has: reply }).first();
   await expect(trigger).toBeVisible();
+  // The held press must start after the turn settles: the streaming-to-final row swap
+  // and follow-scroll can move or remount the Pressable mid-hold and cancel the long press.
+  await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0, { timeout: 20000 });
+  await expect.poll(async () => {
+    const a = await trigger.boundingBox();
+    await page.waitForTimeout(150);
+    const b = await trigger.boundingBox();
+    return !!a && !!b && a.x === b.x && a.y === b.y && a.height === b.height;
+  }, { timeout: 10000 }).toBe(true);
   // Playwright hover scrolls the Pressable into the viewport before the pointer is held.
   // Match the 900 ms hold already proven by send-longpress.spec.ts.
   await trigger.hover();
