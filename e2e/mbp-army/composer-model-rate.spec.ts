@@ -54,7 +54,7 @@ test("composer model edit applies ACP set_model before prompting and rejects uns
   await page.getByTestId("composer-model-input").fill("army-unsupported");
   await page.getByRole("button", { name: "Apply model" }).click({ noWaitAfter: true });
   await send(page, "ARMY_H120 must not run unsupported model");
-  await expect(page.getByText(/harness did not accept the selected model/i)).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId("transcript-viewport").getByText(/harness did not accept the selected model/i)).toBeVisible({ timeout: 15000 });
   const after = (await readFile(turnsPath, "utf8")).trim().split("\n");
   expect(after.filter(line => line.includes('"event":"start"'))).toHaveLength(
     turns.filter(line => line.includes('"event":"start"')).length,
