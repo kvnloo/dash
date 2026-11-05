@@ -101,6 +101,8 @@
                "chat host info sheet shows resources without replacing session identity"]},
     {"id": "phone-hosts", "title": "Hosts lists online and recently offline phones, retaining fleet phones and hiding stale ghosts",
      "tests": ["Hosts lists phones without offering harnesses and hides stale unregistered phones"]},
+    {"id": "hosts-tree-hierarchy", "title": "Expanding a computer host shows Host > Harness > Profile > Chat, one kind per level",
+     "tests": ["expanding a computer host shows harnesses, then Hermes profiles, then chats, one kind per level"]},
     {"id": "claude-remote-live-history", "title": "Open routed Claude chat follows live remote JSONL over the turn SSH route",
      "tests": ["follows live remote JSONL in the open chat without reopening"]},
     {"id": "annotate-tldraw-send", "title": "Send confirmation retains newer ink without restoring submitted marks",
