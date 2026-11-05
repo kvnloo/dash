@@ -1,5 +1,5 @@
 import { memo, useContext, useEffect, useMemo, type ReactNode } from "react";
-import { Pressable, StyleSheet, type PressableProps, type ViewStyle } from "react-native";
+import { Platform, Pressable, StyleSheet, type PressableProps, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   ReduceMotion,
@@ -16,6 +16,8 @@ const spring = { ...press, reduceMotion: ReduceMotion.System };
 
 export type PressScaleProps = PressableProps & {
   scaleTo?: number;
+  /** Web chat rows need direct Pressability events while the ancestor pager handles swipes. */
+  webPressable?: boolean;
   children?: ReactNode;
 };
 
@@ -36,6 +38,7 @@ function childLayout(style: PressableProps["style"]): ViewStyle | undefined {
 /** UI-thread press squash. Use instead of opacity pressed styles. */
 export const PressScale = memo(function PressScale({
   scaleTo = PRESS_SCALE.row,
+  webPressable = false,
   style,
   onPress,
   onLongPress,
@@ -64,14 +67,17 @@ export const PressScale = memo(function PressScale({
   // A press released by unmount (view switch) must not keep animating a dead view.
   useEffect(() => () => cancelAnimation(scale), [scale]);
   const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  return (
-    <GestureDetector gesture={gesture}><Pressable
+  const pressable = (
+    <Pressable
       disabled={disabled}
       {...rest}
       style={style}
       onPress={e => { if (!swiping?.value) onPress?.(e); }}
       onLongPress={e => { if (!swiping?.value) onLongPress?.(e); }}
       onPressIn={(e) => {
+        // Without the web Manual recognizer, this is the next real pointer down.
+        // Clear the pager swipe latch before the row can receive its next tap.
+        if (Platform.OS === "web" && webPressable && swiping) swiping.value = false;
         onPressIn?.(e);
       }}
       onPressOut={(e) => {
@@ -79,8 +85,13 @@ export const PressScale = memo(function PressScale({
       }}
     >
       <Animated.View style={[styles.fill, childLayout(style), anim]}>{children}</Animated.View>
-    </Pressable></GestureDetector>
+    </Pressable>
   );
+  // Gesture.Manual on web can defer/cancel Pressable press-in until release;
+  // a hold timer started there never fires. Keep the native gesture unchanged.
+  return Platform.OS === "web" && webPressable
+    ? pressable
+    : <GestureDetector gesture={gesture}>{pressable}</GestureDetector>;
 });
 
 const styles = StyleSheet.create({

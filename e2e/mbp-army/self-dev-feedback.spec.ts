@@ -32,6 +32,7 @@ test('cold open shows Orchestra and a typed feedback steer keeps its named threa
 test('chat row long press requires an explicit feedback choice before steering', async ({ page, bridge }) => {
   await openChat(page, bridge);
   await page.getByRole('button', { name: 'Close chat window', exact: true }).click({ noWaitAfter: true });
+  await expect(page.getByTestId('chat-window')).toHaveCount(0);
 
   const row = chatRow(page);
   const box = await row.boundingBox();
@@ -43,6 +44,7 @@ test('chat row long press requires an explicit feedback choice before steering',
 
   const menu = page.getByTestId('chat-row-actions-menu');
   await expect(menu).toBeVisible();
+  await expect(menu.getByRole('button')).toHaveCount(3);
   await expect(menu.getByRole('button', { name: 'Open chat: New chat', exact: true })).toBeVisible();
   await expect(menu.getByRole('button', { name: 'Delete chat from this phone: New chat', exact: true })).toBeVisible();
   const feedback = menu.getByRole('button', { name: 'Send feedback about chat: New chat', exact: true });

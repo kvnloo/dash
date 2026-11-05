@@ -153,6 +153,8 @@ const Row = memo(function Row({
   const activityShimmer = activityShimmerEnabled(thinking.phase, connectionStatus, stale);
   const webHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const held = useRef(false);
+  const webHoldStart = useRef<{ x: number; y: number } | null>(null);
+  const webHoldCanceled = useRef(false);
   const clearWebHold = () => {
     if (webHoldTimer.current !== null) {
       clearTimeout(webHoldTimer.current);
@@ -163,27 +165,47 @@ const Row = memo(function Row({
     if (webHoldTimer.current !== null) clearTimeout(webHoldTimer.current);
   }, []);
   const triggerLongPress = (x: number, y: number) => {
-    if (held.current) return;
+    if (held.current || webHoldCanceled.current) return;
     held.current = true;
     clearWebHold();
     onLongPress(item.id, { x, y });
   };
   return (
     <PressScale
+      webPressable
       onPress={(event) => {
-        if (!held.current) pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress);
+        if (!held.current && !webHoldCanceled.current) pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress);
       }}
       onPressIn={(event) => {
         held.current = false;
+        webHoldCanceled.current = false;
+        webHoldStart.current = null;
         clearWebHold();
         if (Platform.OS === "web") {
           const { pageX, pageY } = event.nativeEvent;
-          // RN Web's gesture-handler manual recognizer can swallow Pressable.onLongPress.
-          // Preserve native Pressable semantics; detect the same hold on web.
+          webHoldStart.current = { x: pageX, y: pageY };
+          // Direct web Pressability starts the hold on pointer down, not on release.
           webHoldTimer.current = setTimeout(() => triggerLongPress(pageX, pageY), 350);
         }
       }}
-      onPressOut={clearWebHold}
+      onPointerMove={(event) => {
+        if (Platform.OS !== "web" || !webHoldStart.current) return;
+        const { pageX, pageY } = event.nativeEvent;
+        if (Math.abs(pageX - webHoldStart.current.x) > 10 || Math.abs(pageY - webHoldStart.current.y) > 10) {
+          webHoldCanceled.current = true;
+          clearWebHold();
+        }
+      }}
+      onPointerCancel={() => {
+        if (Platform.OS !== "web") return;
+        webHoldCanceled.current = true;
+        webHoldStart.current = null;
+        clearWebHold();
+      }}
+      onPressOut={() => {
+        clearWebHold();
+        webHoldStart.current = null;
+      }}
       onLongPress={(event) => triggerLongPress(event.nativeEvent.pageX, event.nativeEvent.pageY)}
       delayLongPress={350}
       style={[styles.row, active && !stale && styles.rowActive]}
