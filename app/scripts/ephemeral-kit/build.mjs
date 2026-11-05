@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { synthesize } from "./synthetic.mjs";
 
 export const KIT_REV = "63e06b29ffb0d7c5b9d482abebc0312335897321";
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +33,10 @@ const DATA = { apps: "apps.json", themes: "themes.json", trace: "trace-fixture.j
 // JSON: "<" only occurs inside strings, so \u003c is exact. JS/CSS must simply never close the element.
 const safeJSON = s => s.replace(/</g, "\\u003c");
 const safe = s => { if (/<\/(script|style)|<!--/i.test(s)) throw new Error("kit source would close its element"); return s; };
-const data = Object.fromEntries(Object.entries(DATA).map(([key, f]) => [key, safeJSON(JSON.stringify(f) + ":" + JSON.stringify(JSON.parse(readFileSync(join(kit, "data", f), "utf8"))))]));
+// The kit's trace and intent fixtures are sanitized real measurements; Dash vendors synthetic data in their shape.
+const SYNTHETIC = new Set(["trace", "intent"]);
+const read = (key, f) => { const json = JSON.parse(readFileSync(join(kit, "data", f), "utf8")); return SYNTHETIC.has(key) ? synthesize(key, json) : json; };
+const data = Object.fromEntries(Object.entries(DATA).map(([key, f]) => [key, safeJSON(JSON.stringify(f) + ":" + JSON.stringify(read(key, f)))]));
 // Host-only shims: the kit fetches data/*.json and persists its theme; here both stay in the page.
 const shim = `window.__EUI_SPEC=/*EUI_SPEC*/null;(function(){var D=JSON.parse(document.getElementById("eui-data").textContent);window.fetch=function(u){var k=String(u).split("/").pop().split("?")[0];return D[k]?Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve(JSON.parse(JSON.stringify(D[k])))}}):Promise.resolve({ok:false,status:404,json:function(){return Promise.reject(new Error("offline"))}})};var m={};var s={getItem:function(k){return Object.prototype.hasOwnProperty.call(m,k)?m[k]:null},setItem:function(k,v){m[k]=String(v)},removeItem:function(k){delete m[k]}};try{window.localStorage.getItem("x")}catch(e){Object.defineProperty(window,"localStorage",{value:s,configurable:true})}})();`;
 const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'";
