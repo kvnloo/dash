@@ -51,7 +51,8 @@ test('chat row long press requires an explicit feedback choice before steering',
   await expect(feedback).toBeVisible();
   await expect(page.getByText('Dash feedback', { exact: true })).toHaveCount(0);
   await feedback.click({ noWaitAfter: true });
-  await expect(page.getByText('Dash feedback', { exact: true })).toBeVisible();
+  // The feedback chat opens in its window while its row also lists it; assert the opened window.
+  await expect(page.getByRole('heading', { name: 'Dash feedback', exact: true })).toBeVisible();
   await expect(page.getByText(/ARMY_REPLY: You are the Dash secondmate/).first()).toBeVisible({ timeout: 20000 });
 });
 
