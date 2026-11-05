@@ -339,6 +339,7 @@ test('reopening native chat rejects its closed visit older page and displays the
       const { Database } = require('bun:sqlite');
       const [path, text] = process.argv.slice(1);
       const db = new Database(path);
+      db.exec('PRAGMA busy_timeout=5000');
       const changed = db.query('UPDATE messages SET content=? WHERE session_id=? AND role=? AND content=?')
         .run(text,'army-long-hermes','user','ARMY hermes prompt 001').changes;
       db.close();
@@ -397,9 +398,11 @@ test('reopening native chat rejects its closed visit full-message response and e
         .run(text,'army-long-hermes').changes;
       db.close();
       process.exit(changed === 1 ? 0 : 1);
-    `, join(bridge.dir, '.hermes', 'state.db'), text], { stdio: 'ignore' });
+    `, join(bridge.dir, '.hermes', 'state.db'), text], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    writer.stderr?.on('data', chunk => { stderr += String(chunk); });
     const [code] = await once(writer, 'exit');
-    expect(code).toBe(0);
+    expect(code, `Native SQLite writer failed: ${stderr || 'no stderr'}`).toBe(0);
   };
   try {
     await writeNative(oldText);
