@@ -21,7 +21,6 @@ import { homedir, hostname } from "node:os";
 import { basename, join } from "node:path";
 import {
   CHATS_FEATURE,
-  MODEL_SELECTION_FEATURE,
   PROTOCOL_VERSION,
   chatKey,
   parseClientMessage,
@@ -190,10 +189,6 @@ class Turn implements Sink {
   private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
 
   start(input: TurnInput, remote?: RemoteHost): void {
-    if (input.model && !remote && ((this.harness.id === "hermes" && input.sessionId) || process.env.DASH_ENABLE_LEGACY_CLI === "1")) {
-      this.endWithout("Model switching requires an ACP-controlled session on this host; no prompt was submitted.");
-      return;
-    }
     if (input.mode === "steer" && (this.harness.id !== "hermes" || !input.sessionId)) { this.endWithout("Steer requires a gateway-hosted Hermes session."); return; }
     // A spoken turn is transcribed before it starts, so a cancel can arrive
     // while there is no process to kill yet.
@@ -956,7 +951,7 @@ const server = Bun.serve<SocketData>({
         cwd: DEFAULT_CWD,
         harnesses,
         hosts: await selfRoster(harnesses, tailscaleIp ?? undefined),
-        features: [CHATS_FEATURE, MODEL_SELECTION_FEATURE],
+        features: [CHATS_FEATURE],
         routes: remoteRouteIds(),
         voice: { stt: voice.stt.ok, nativeVoice: voice.nativeVoice },
       });
@@ -1018,7 +1013,7 @@ const server = Bun.serve<SocketData>({
             ws.data.turns.add(message.id);
             turns.set(message.id, turn);
             if (message.summariesEnabled) turn.enableSummaries();
-            turn.start({ text: message.text, mode: message.mode, model: message.model, cwd: message.cwd ?? "", sessionId: message.sessionId, profileId: message.profileId }, remote);
+            turn.start({ text: message.text, mode: message.mode, cwd: message.cwd ?? "", sessionId: message.sessionId, profileId: message.profileId }, remote);
             break;
           }
           if (!(await isSelfHost(message.hostId))) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
@@ -1054,7 +1049,7 @@ const server = Bun.serve<SocketData>({
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
           if (message.summariesEnabled) turn.enableSummaries();
-          turn.start({ text: promptWithAttachments(message.text, files), mode: message.mode, model: message.model, cwd, sessionId: message.sessionId, profileId: message.profileId, ...(files.length ? { attachments: files } : {}) });
+          turn.start({ text: promptWithAttachments(message.text, files), mode: message.mode, cwd, sessionId: message.sessionId, profileId: message.profileId, ...(files.length ? { attachments: files } : {}) });
           break;
         }
         case "voice_begin": {
