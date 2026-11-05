@@ -13,7 +13,11 @@ export function queuedParts(conversation: Conversation): QueuedPart[] {
 }
 
 export function queueMergeError(conversation: Conversation): string | undefined {
-  return queuedParts(conversation).flatMap(part => part.user.attachments ?? []).length > MAX_ATTACHMENTS_PER_TURN
+  const pending = queuedParts(conversation);
+  if (new Set(pending.map(part => part.assistant.requestedModel ?? "")).size > 1) {
+    return "Queued turns request different models; turn off combined delivery to preserve each model choice.";
+  }
+  return pending.flatMap(part => part.user.attachments ?? []).length > MAX_ATTACHMENTS_PER_TURN
     ? "Over 8 attachments: remove messages or turn off combined delivery." : undefined;
 }
 
