@@ -77,6 +77,18 @@ export function dropHistory(conversationId: string): void {
   });
 }
 
+/** Start a new focused visit before the old rail can paint; late cleanup cannot revoke a newer visit. */
+export function beginHistoryVisit(conversationId: string): symbol {
+  dropHistory(conversationId);
+  const owner = Symbol();
+  visitOwners.set(conversationId, owner);
+  return owner;
+}
+
+export function endHistoryVisit(conversationId: string, owner: symbol): void {
+  if (visitOwners.get(conversationId) === owner) dropHistory(conversationId);
+}
+
 /** Keep OLDER_MAX messages: the oldest go first, the unlisted before the listed. */
 function capOlder(older: Message[], unlisted: Message[]): Pick<HistoryPagesState, "older" | "unlisted"> {
   const excess = older.length + unlisted.length - OLDER_MAX;
@@ -91,14 +103,30 @@ function freshOf(state: HistoryPagesState, page: readonly Message[], shown: Read
   return page.filter(m => !known.has(m.id) && !shown.has(m.id));
 }
 
+/** The bridge may return a refreshed native row at the same id and cursor.
+ * Keep an expanded full message only when it still matches the fresh truncated prefix.
+ * Otherwise the new source, not a stale listed/unlisted copy, owns that id.
+ */
+function refreshLoaded(state: HistoryPagesState, page: readonly Message[]): Pick<HistoryPagesState, "older" | "unlisted"> {
+  const byId = new Map(page.map(message => [message.id, message]));
+  const refresh = (loaded: readonly Message[]): Message[] => loaded.map(message => {
+    const fresh = byId.get(message.id);
+    if (!fresh) return message;
+    return fresh.truncated && !message.truncated && message.text.startsWith(fresh.text) ? message : fresh;
+  });
+  return { older: refresh(state.older), unlisted: refresh(state.unlisted) };
+}
+
 /** Prepend one older page to the list, dropping ids already shown. */
 export function prependOlder(state: HistoryPagesState, page: readonly Message[], shown: ReadonlySet<string>, before: string | null): HistoryPagesState {
-  return { ...state, ...capOlder([...freshOf(state, page, shown), ...state.older], state.unlisted), before, loading: false, error: undefined };
+  const refreshed = refreshLoaded(state, page);
+  return { ...state, ...capOlder([...freshOf(state, page, shown), ...refreshed.older], refreshed.unlisted), before, loading: false, error: undefined };
 }
 
 /** Prepend one older page behind the list, for the prompt rail alone. */
 export function prependUnlisted(state: HistoryPagesState, page: readonly Message[], shown: ReadonlySet<string>, before: string | null): HistoryPagesState {
-  return { ...state, ...capOlder(state.older, [...freshOf(state, page, shown), ...state.unlisted]), before, error: undefined };
+  const refreshed = refreshLoaded(state, page);
+  return { ...state, ...capOlder(refreshed.older, [...freshOf(state, page, shown), ...refreshed.unlisted]), before, error: undefined };
 }
 
 /** The unlisted messages from the one with id `firstId` on join the list. */
@@ -156,7 +184,7 @@ const fillPages = new Map<string, Promise<PageOutcome>>();
  * Fetch the next older page. `listed`: it is the owner's own scroll-up (a skeleton is drawn for it and
  * the page joins the list); otherwise it is the background fill's, which joins the unlisted rows.
  */
-async function fetchOlder(conversation: Conversation, limit: number, listed: boolean): Promise<PageOutcome> {
+async function fetchOlder(conversation: Conversation, limit: number, listed: boolean, onSourcePage?: (messages: HistoryMessage[]) => void): Promise<PageOutcome> {
   const state = historyState(conversation.id);
   const settings = deps.settings();
   if (!settings || state.loading || typeof state.before !== "string") return "skipped";
@@ -175,6 +203,7 @@ async function fetchOlder(conversation: Conversation, limit: number, listed: boo
     if (listed) patch(conversation.id, s => ({ ...s, loading: false, error: result.notModified || result.aborted ? undefined : "Could not load older messages." }));
     return "failed";
   }
+  onSourcePage?.(result.value.messages);
   const current = deps.conversation(conversation.id) ?? conversation;
   const shown = new Set(current.messages.map(m => m.id));
   const page = historyToMessages(result.value.messages, conversation.id, conversation.harness === "hermes");
@@ -187,7 +216,7 @@ async function fetchOlder(conversation: Conversation, limit: number, listed: boo
  * The reader reached the top of the list: the next page joins it. Rows the fill already paged in
  * join first, with no request; otherwise it is fetched. No-op while loading or when nothing is older.
  */
-export async function loadOlder(conversation: Conversation): Promise<void> {
+export async function loadOlder(conversation: Conversation, onSourcePage?: (messages: HistoryMessage[]) => void): Promise<void> {
   const visit = historyVisit(conversation.id);
   // A background page is in flight: let it land (it joins the unlisted rows), then take from them.
   await fillPages.get(conversation.id);
@@ -195,7 +224,7 @@ export async function loadOlder(conversation: Conversation): Promise<void> {
   const unlisted = historyState(conversation.id).unlisted;
   const next = unlisted[Math.max(0, unlisted.length - HISTORY_PAGE)];
   if (next) { listUnlisted(conversation.id, next.id); return; }
-  await fetchOlder(conversation, HISTORY_PAGE, true);
+  await fetchOlder(conversation, HISTORY_PAGE, true, onSourcePage);
 }
 
 /**
@@ -208,7 +237,7 @@ export async function loadOlder(conversation: Conversation): Promise<void> {
  * blip does not leave the rail partial; the caller starts the fill again when the bridge comes back
  * after it gave up. It runs until `open()` turns false, the chat starts, or OLDER_MAX rows are loaded.
  */
-export async function fillOlder(conversation: Conversation, open: () => boolean): Promise<void> {
+export async function fillOlder(conversation: Conversation, open: () => boolean, onSourcePage?: (messages: HistoryMessage[]) => void): Promise<void> {
   const visit = historyVisit(conversation.id);
   let failures = 0;
   while (open() && visitOwners.get(conversation.id) === visit) {
@@ -218,7 +247,7 @@ export async function fillOlder(conversation: Conversation, open: () => boolean)
     // The owner's own page (scroll-up) is in flight: let it land, then carry on behind it.
     if (state.loading) { await sleep(FILL_WAIT_MS); continue; }
     const before = state.before;
-    const page = fetchOlder(conversation, HISTORY_FILL_PAGE, false);
+    const page = fetchOlder(conversation, HISTORY_FILL_PAGE, false, onSourcePage);
     fillPages.set(conversation.id, page);
     let outcome: PageOutcome;
     try { outcome = await page; } finally { if (fillPages.get(conversation.id) === page) fillPages.delete(conversation.id); }
@@ -235,7 +264,7 @@ const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(r
 export const PRIME_MAX_PAGES = 4;
 
 /** The first page for a chat the websocket cannot serve (view-only kinds). */
-export async function loadNewest(conversation: Conversation, apply: (messages: HistoryMessage[]) => void): Promise<void> {
+export async function loadNewest(conversation: Conversation, apply: (messages: HistoryMessage[]) => void, onSourcePage?: (messages: HistoryMessage[]) => void): Promise<void> {
   const state = historyState(conversation.id);
   const settings = deps.settings();
   if (!settings || state.loading) return;
@@ -251,8 +280,11 @@ export async function loadNewest(conversation: Conversation, apply: (messages: H
     patch(conversation.id, s => ({ ...s, loading: false, error: result.notModified || result.aborted ? undefined : "Could not load this chat from the bridge." }));
     return;
   }
-  const current = deps.conversation(conversation.id);
-  if (current?.messages === conversation.messages) {
+  // Even if the conversation window moved while HTTP was in flight, native ids in
+  // its current window must take the host's latest source text rather than a cached copy.
+  const unchangedWindow = deps.conversation(conversation.id)?.messages === conversation.messages;
+  onSourcePage?.(result.value.messages);
+  if (unchangedWindow) {
     apply(result.value.messages);
     patch(conversation.id, s => ({ ...s, loading: false, before: result.value.before }));
   } else patch(conversation.id, s => ({ ...s, loading: false }));
@@ -277,7 +309,7 @@ export async function fetchFullText(conversation: Conversation, messageId: strin
  * Find the older-page cursor for a chat opened from its cached window (no ws reply this visit).
  * Server keysets and native ids determine membership; retained phone clocks cannot discard a page.
  */
-export async function primeCursor(conversation: Conversation): Promise<void> {
+export async function primeCursor(conversation: Conversation, onSourcePage?: (messages: HistoryMessage[]) => void): Promise<void> {
   const state = historyState(conversation.id);
   const settings = deps.settings();
   if (!settings || state.loading || state.before !== undefined || !conversation.sessionId || !conversation.targetHostId) return;
@@ -300,6 +332,9 @@ export async function primeCursor(conversation: Conversation): Promise<void> {
       patch(conversation.id, s => ({ ...s, loading: false }));
       return;
     }
+    // The cached newest window may contain an id that the bridge has rewritten.
+    // Refresh it before filtering ids used only to find the older-page cursor.
+    onSourcePage?.(result.value.messages);
     const page = historyToMessages(result.value.messages, conversation.id, conversation.harness === "hermes").filter(message => !shown.has(message.id));
     const next = result.value.before;
     if (page.length > 0 || next === null || n === PRIME_MAX_PAGES - 1) {
