@@ -176,6 +176,7 @@ test.describe("Main background during transcript paging", () => {
       const viewport = page.getByTestId("transcript-viewport");
       const newest = new RegExp(`^ARMY answer ${String(LONG_CHAT_PROMPTS).padStart(3, "0")} `);
       await expect(viewport.getByText(newest).first()).toBeVisible({ timeout: 30000 });
+      await expect(page.getByTestId("desk-shell")).toHaveCount(0);
       await expect(page.getByTestId("attached-composer")).toHaveCount(0);
 
       const fromBottom = () => viewport.evaluate(element => {
