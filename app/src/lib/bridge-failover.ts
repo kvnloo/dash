@@ -15,6 +15,12 @@ export function endpointsOf(settings: Settings): BridgeEndpoint[] {
   return list.some(e => e.address === settings.address) ? list : [...list, current(settings)];
 }
 
+/** Prefer the open chat's owning endpoint over the primary, so recovery unblocks Send. */
+export function recoveryEndpoint(settings: Settings, chatAddress?: string): BridgeEndpoint | undefined {
+  const endpoints = endpointsOf(settings);
+  return endpoints.find(endpoint => endpoint.address === chatAddress) ?? endpoints[0];
+}
+
 /** Make `endpoint` the bridge in use. The list and its order are kept. */
 export function activate(settings: Settings, endpoint: BridgeEndpoint): Settings {
   const list = settings.endpoints?.length ? settings.endpoints : [current(settings)];
