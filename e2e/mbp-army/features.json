@@ -352,6 +352,7 @@
     "live voice reload guard: fake peer needs TURBO-C08 integration; native S25 call proof remains outstanding",
     "live preview chip: old -> new build marker, auto-reload and Metro switch (dev client only: needs a Metro serving a build manifest; none exists in the web export)",
     "live voice five-second WebRTC disconnected grace (native Android ICE state; device only, not simulated in the web army)",
-    "live voice loudspeaker routing (native, device only)"
+    "live voice loudspeaker routing (native, device only)",
+    "S Pen side-button entry (native, needs the rebuilt APK)"
   ]
 }
