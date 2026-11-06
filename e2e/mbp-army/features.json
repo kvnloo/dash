@@ -126,6 +126,8 @@
      "tests": ["desk panels collapse, resize and keep both across a reload"]},
     {"id": "dex-desk-keyboard-mouse", "title": "Desk keyboard and mouse: Ctrl+K quick switch, Ctrl+1..9 panels, right-click chat row menu",
      "tests": ["desk keyboard: Ctrl+K quick switch opens a chat, Ctrl+1..9 jump to panels, right-click opens the row menu"]},
+    {"id": "dex-desk-close-route-ownership", "title": "A closing desk chat window cannot pop a newly focused chat or return to Pair",
+      "tests": ["desk closing window removes only its own route when quick switch opens a newer chat"]},
     {"id": "dex-desk-degraded", "title": "Desk mode with the phone queue unreachable, annotation still works",
      "tests": ["desk mode degrades when the phone queue is unreachable and keeps annotation working"]},
     {"id": "dex-desk-override", "title": "Desk layout override: ?desk= URL param and Settings choice",
