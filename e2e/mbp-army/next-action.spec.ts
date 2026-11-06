@@ -96,6 +96,19 @@ test('Next up opens the exact completed background reply without sending and pre
   await page.screenshot({ path: info.outputPath('draft-preserved.png') });
 });
 
+test('first send after opening an archived Claude chat reaches the real bridge once', async ({ page, bridge }) => {
+  await page.clock.install();
+  await pair(page, bridge);
+  const row = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: 'ARMY archived Claude Code chat' });
+  await expect(row).toHaveCount(1);
+  await row.click({ noWaitAfter: true });
+  await expect(page.getByTestId('chat-window')).toBeVisible();
+  await send(page, 'ARMY_HOLD first archived Claude send must not be lost');
+  await expect(composer(page)).toHaveValue('');
+  await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
+  await expect.poll(() => turnEvents(bridge.dir)).toBe(1);
+});
+
 test('Next up Later survives reload, Skip dismisses only one completion, and a newer reply in that chat returns', async ({ page, bridge }) => {
   await page.clock.install();
   await pair(page, bridge);
