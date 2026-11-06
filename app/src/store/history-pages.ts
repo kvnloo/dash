@@ -282,9 +282,9 @@ export async function loadNewest(conversation: Conversation, apply: (messages: H
   }
   // Even if the conversation window moved while HTTP was in flight, native ids in
   // its current window must take the host's latest source text rather than a cached copy.
+  const unchangedWindow = deps.conversation(conversation.id)?.messages === conversation.messages;
   onSourcePage?.(result.value.messages);
-  const current = deps.conversation(conversation.id);
-  if (current?.messages === conversation.messages) {
+  if (unchangedWindow) {
     apply(result.value.messages);
     patch(conversation.id, s => ({ ...s, loading: false, before: result.value.before }));
   } else patch(conversation.id, s => ({ ...s, loading: false }));
