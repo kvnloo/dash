@@ -9,7 +9,7 @@ import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts,
 import { fetchRosterIfChanged } from "../lib/roster";
 import { executionToken, socketUrl } from "../lib/bridge-auth";
 import { visibleHarnesses } from "../lib/hidden-harnesses";
-import { activate, endpointsOf, pickEndpoint, probeBridge } from "../lib/bridge-failover";
+import { activate, endpointsOf, pickEndpoint, probeBridge, recoveryEndpoint } from "../lib/bridge-failover";
 import { shouldRequestHistory } from "../lib/live-sessions";
 import { headerSocket } from "../lib/native-socket";
 import { isPongFrame, reattachStreamingTurns, startSocketKeepalive } from "./socket-keepalive";
@@ -36,6 +36,10 @@ import {
 } from "../store/app";
 
 const BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
+/** Preserve the selected bridge through short process restarts before probing failover. */
+const RECONNECT_GRACE_MS = 6000;
+/** Revisit the open chat's bridge (or the primary) while using a fallback. */
+const RECOVERY_POLL_MS = 3000;
 /** Newest history page size when the bridge pages history (chats.v1). */
 const HISTORY_HEAD = 50;
 const DELTA_FLUSH_MS = 32;
@@ -54,6 +58,9 @@ class Bridge {
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private connectTimer: ReturnType<typeof setTimeout> | undefined;
   private rosterTimer: ReturnType<typeof setInterval> | undefined;
+  private recoveryTimer: ReturnType<typeof setInterval> | undefined;
+  private outageStartedAt: number | undefined;
+  private recovering = false;
   private stopKeepalive: (() => void) | undefined;
   private pending = new Map<string, { text: string; seq: number }[]>();
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -79,7 +86,7 @@ class Bridge {
       this.appState = next;
       // Coming back to the foreground: don't wait out the backoff.
       if (next === "active" && wasBackground && this.settings && !this.isOpen()) this.connectNow();
-      else if (next === "active" && wasBackground) void this.returnToPrimary();
+      else if (next === "active" && wasBackground) void this.returnToPreferred();
     });
   }
 
@@ -117,12 +124,14 @@ class Bridge {
       return;
     }
     this.attempt = 0;
+    this.outageStartedAt = undefined;
     this.teardownSocket();
     this.connectNow();
   }
 
   stop(): void {
     this.settings = null;
+    this.outageStartedAt = undefined;
     this.clearTimers();
     this.teardownSocket();
     setConnection({ status: "idle", error: undefined });
@@ -225,20 +234,25 @@ class Bridge {
     this.clearTimers();
     this.flushDeltas();
     if (!this.settings) return;
+    this.outageStartedAt ??= Date.now();
     setConnection({ status: "offline", error: reason });
-    if (this.failover && !this.probing && this.appState === "active" && endpointsOf(this.settings).length > 1) {
+    if (this.failover && !this.probing && this.appState === "active" &&
+      endpointsOf(this.settings).length > 1 &&
+      Date.now() - this.outageStartedAt >= RECONNECT_GRACE_MS) {
       void this.failOver(this.settings, this.connectEpoch);
       return;
     }
     this.scheduleRetry();
   }
 
-  /** Health-probe the paired bridges in order and move to the first one that answers. */
+  /** Wait out a short restart, then require a failed health probe before failover. */
   private async failOver(settings: Settings, epoch: number): Promise<void> {
     this.probing = true;
-    let pick: Awaited<ReturnType<typeof pickEndpoint>>;
+    let pick: Awaited<ReturnType<typeof pickEndpoint>> = undefined;
     try {
-      pick = await pickEndpoint(settings, address => probeBridge(address), settings.address);
+      if (!(await probeBridge(settings.address))) {
+        pick = await pickEndpoint(settings, address => probeBridge(address), settings.address);
+      }
     } finally {
       this.probing = false;
     }
@@ -247,26 +261,42 @@ class Bridge {
       console.warn(`[dash.failover] ${settings.address} -> ${pick.address}`);
       const next = activate(settings, pick);
       this.settings = next;
+      this.outageStartedAt = undefined;
       saveSettings(next);
       this.attempt = 0;
       void this.connectNow();
       return;
     }
+    // The original answered the probe or no fallback answered: keep retrying in place.
     this.scheduleRetry();
   }
 
-  /** On a fallback bridge and back in the foreground: return to the primary when it answers and nothing streams. */
-  private async returnToPrimary(): Promise<void> {
+  /** Return to the open chat's owner (else the primary) without interrupting an active turn. */
+  private async returnToPreferred(): Promise<void> {
     const settings = this.settings;
-    if (!settings || this.probing || !this.isOpen()) return;
-    const primary = endpointsOf(settings)[0];
-    if (!primary || primary.address === settings.address || streamingTurns().length > 0) return;
+    if (!settings || this.probing || this.recovering || !this.isOpen() || this.appState !== "active") return;
+    const state = store.get();
+    const chatAddress = state.conversations.find(c => c.id === state.activeId)?.endpointAddress;
+    const preferred = recoveryEndpoint(settings, chatAddress);
+    if (!preferred || preferred.address === settings.address || streamingTurns().length > 0) return;
     const epoch = this.connectEpoch;
-    if (!(await probeBridge(primary.address))) return;
-    if (this.settings !== settings || this.connectEpoch !== epoch || streamingTurns().length > 0) return;
-    console.warn(`[dash.failover] back to primary ${primary.address}`);
-    const next = activate(settings, primary);
+    this.recovering = true;
+    let healthy = false;
+    try {
+      healthy = await probeBridge(preferred.address);
+    } finally {
+      this.recovering = false;
+    }
+    if (!healthy || this.settings !== settings || this.connectEpoch !== epoch ||
+      !this.isOpen() || this.appState !== "active" || streamingTurns().length > 0) return;
+    // Do not switch to an obsolete chat target if the owner changed chats mid-probe.
+    const now = store.get();
+    const currentChat = now.conversations.find(c => c.id === now.activeId)?.endpointAddress;
+    if (recoveryEndpoint(settings, currentChat)?.address !== preferred.address) return;
+    console.warn(`[dash.failover] recovered ${preferred.address}`);
+    const next = activate(settings, preferred);
     this.settings = next;
+    this.outageStartedAt = undefined;
     saveSettings(next);
     this.attempt = 0;
     void this.connectNow();
@@ -312,6 +342,7 @@ class Bridge {
         clearTimeout(this.connectTimer);
         this.connectTimer = undefined;
         this.attempt = 0;
+        this.outageStartedAt = undefined;
         // Only an authenticated hello admits this endpoint for automatic failover.
         this.failover = true;
         this.chats = message.features?.includes(CHATS_FEATURE) === true;
@@ -330,6 +361,9 @@ class Bridge {
         void this.refreshRoster();
         clearInterval(this.rosterTimer);
         this.rosterTimer = setInterval(() => { if (this.appState === "active") void this.refreshRoster(); }, 10000);
+        clearInterval(this.recoveryTimer);
+        this.recoveryTimer = setInterval(() => { if (this.appState === "active") void this.returnToPreferred(); }, RECOVERY_POLL_MS);
+        void this.returnToPreferred();
         if (this.ws) reattachStreamingTurns(this.ws, streamingTurns());
         this.send({ type: "gate_list" });
         flushPendingSends(sendChat);
@@ -453,9 +487,11 @@ class Bridge {
     clearTimeout(this.retryTimer);
     clearTimeout(this.connectTimer);
     clearInterval(this.rosterTimer);
+    clearInterval(this.recoveryTimer);
     this.stopKeepalive?.();
     this.stopKeepalive = undefined;
     this.rosterTimer = undefined;
+    this.recoveryTimer = undefined;
     this.retryTimer = undefined;
     this.connectTimer = undefined;
   }
