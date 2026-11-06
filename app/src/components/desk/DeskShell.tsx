@@ -60,7 +60,8 @@ export function DeskShell({ children }: { children: ReactNode }) {
   return <View style={styles.root} onLayout={onRoot} testID={on ? "desk-shell" : undefined}>
     {on ? <DeskRail onQuick={() => setQuick(true)} /> : null}
     {on ? <DeskChatsColumn /> : null}
-    <View style={styles.center} onLayout={onCenter} testID={on ? "desk-center" : undefined}>
+    {/* Never measure the centre column in phone mode: hidden Main/Chats updates can relayout it. */}
+    <View style={styles.center} onLayout={on ? onCenter : undefined} testID={on ? "desk-center" : undefined}>
       <PaneSizeProvider size={on && center ? center : null}>{children}</PaneSizeProvider>
     </View>
     {on ? <DeskSideColumn /> : null}
