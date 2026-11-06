@@ -128,6 +128,8 @@
      "tests": ["desk mode degrades when the phone queue is unreachable and keeps annotation working"]},
     {"id": "dex-desk-override", "title": "Desk layout override: ?desk= URL param and Settings choice",
      "tests": ["desk override: ?desk=off keeps the phone layout in a 1920-wide window", "desk override: the Settings choice forces desk on a narrower window, persists, and a URL override still wins"]},
+    {"id": "phone-transcript-wheel-isolation", "title": "At 390 px, DeX remains off and background Main cannot reset a reader paging upward through a long chat",
+     "tests": ["Main does not remount a hidden attached composer or reset an upward wheel during long-chat history paging"]},
     {"id": "dex-desk-phone-regression", "title": "Phone width keeps the phone layout with desk mode present",
      "tests": ["phone width 480x780 keeps the phone layout (no desk shell)"]},
     {"id": "dex-desk-oneui9-signal", "title": "One UI 9 DeX (launcher-integrated, Android desktop windowing) signal lowers the desk threshold without the legacy desktopmode service",
