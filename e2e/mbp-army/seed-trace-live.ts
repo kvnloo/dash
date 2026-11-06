@@ -3,6 +3,8 @@ import { Database } from 'bun:sqlite';
 const path = process.argv[2];
 if (!path) throw new Error('isolated state DB required');
 const db = new Database(path);
+// The isolated bridge may hold a write lock while it projects the same DB.
+db.exec('PRAGMA busy_timeout=5000');
 try {
   db.exec('ALTER TABLE sessions ADD COLUMN last_activity_description TEXT');
   db.query('UPDATE sessions SET last_activity_at=?, last_activity_description=? WHERE id=?').run(Date.now() / 1000, 'streaming', 'army-fixture-session');
