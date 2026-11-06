@@ -156,7 +156,7 @@ test('desk closing window removes only its own route when quick switch opens a n
   // Ctrl+K opens a fresh Chat screen, not only Main's attached composer.
   // The older fade must not pop this new route or send us to Pair (/connect).
   await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeVisible();
-  await expect(page.getByTestId('attached-composer')).not.toBeVisible();
+  await expect(page.getByTestId('transcript-viewport')).toBeVisible();
   await expect(composer(page)).toBeVisible();
   await expect(page.getByText('ARMY_REPLY: desk close keeps next chat').first()).toBeVisible();
   await page.getByRole('button', { name: 'Back', exact: true }).click({ noWaitAfter: true });
