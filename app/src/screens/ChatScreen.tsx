@@ -288,7 +288,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
 
   const { thinking, caption, external, observed, streamingMessage } = useLiveThinking(conversation);
   useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
-  const workers = useSessionWorkers(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
+  const workers = useSessionWorkers(settings, online && (!conversation?.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)), harnessId, conversation?.profileId, conversation?.sessionId);
   const [chatOptions, setChatOptions] = useState(false);
   const context = useContextView(settings, online && (!conversation?.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)), harnessId, conversation?.profileId, conversation?.sessionId, thinking.phase !== "idle");
   const latestAssistant = [...messages].reverse().find((message): message is AssistantMessage => message.role === "assistant");
