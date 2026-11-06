@@ -109,12 +109,33 @@ function freshOf(state: HistoryPagesState, page: readonly Message[], shown: Read
  */
 function refreshLoaded(state: HistoryPagesState, page: readonly Message[]): Pick<HistoryPagesState, "older" | "unlisted"> {
   const byId = new Map(page.map(message => [message.id, message]));
-  const refresh = (loaded: readonly Message[]): Message[] => loaded.map(message => {
-    const fresh = byId.get(message.id);
-    if (!fresh) return message;
-    return fresh.truncated && !message.truncated && message.text.startsWith(fresh.text) ? message : fresh;
-  });
+  const refresh = (loaded: Message[]): Message[] => {
+    let changed = false;
+    const messages = loaded.map(message => {
+      const fresh = byId.get(message.id);
+      if (!fresh || fresh.role !== message.role ||
+        (fresh.text === message.text && fresh.truncated === message.truncated) ||
+        (fresh.truncated && !message.truncated && message.text.startsWith(fresh.text))) return message;
+      changed = true;
+      return fresh;
+    });
+    return changed ? messages : loaded;
+  };
   return { older: refresh(state.older), unlisted: refresh(state.unlisted) };
+}
+
+/** The same native id can be in a listed page, a rail-only page, or the
+ * conversation window. A fresh authenticated source page must supersede every
+ * loaded copy, even when the cursor and message id are unchanged.
+ */
+function reconcileLoadedSource(conversation: Conversation, rows: HistoryMessage[]): void {
+  if (conversation.harness !== "hermes" || rows.length === 0) return;
+  const page = historyToMessages(rows, conversation.id, true);
+  patch(conversation.id, state => {
+    const refreshed = refreshLoaded(state, page);
+    return refreshed.older === state.older && refreshed.unlisted === state.unlisted
+      ? state : { ...state, ...refreshed };
+  });
 }
 
 /** Prepend one older page to the list, dropping ids already shown. */
@@ -270,7 +291,10 @@ export async function loadNewest(conversation: Conversation, apply: (messages: H
   if (!settings || state.loading) return;
   if (!ownsHistoryRequest(conversation, settings)) return;
   const pending = beginLoading(conversation.id);
-  const result = await deps.api.history(settings, { key: conversationKey(conversation), limit: HISTORY_PAGE });
+  // The WS window and the phone cache can contain more than 50 native rows.
+  // Refresh all of that window, not just the last page (prompt 1/30 is row 1/60).
+  const limit = conversation.harness === "hermes" ? HISTORY_FILL_PAGE : HISTORY_PAGE;
+  const result = await deps.api.history(settings, { key: conversationKey(conversation), limit });
   if (!releaseLoading(conversation.id, pending)) return;
   if (!ownsHistoryRequest(conversation, settings)) {
     patch(conversation.id, s => ({ ...s, loading: false }));
@@ -284,10 +308,13 @@ export async function loadNewest(conversation: Conversation, apply: (messages: H
   // its current window must take the host's latest source text rather than a cached copy.
   const unchangedWindow = deps.conversation(conversation.id)?.messages === conversation.messages;
   onSourcePage?.(result.value.messages);
-  if (unchangedWindow) {
-    apply(result.value.messages);
-    patch(conversation.id, s => ({ ...s, loading: false, before: result.value.before }));
-  } else patch(conversation.id, s => ({ ...s, loading: false }));
+  reconcileLoadedSource(conversation, result.value.messages);
+  if (unchangedWindow) apply(result.value.messages);
+  // A concurrent WS update may replace the cached window while HTTP is in flight.
+  // Its shorter cursor is not a reason to discard the authenticated source page's
+  // older cursor; otherwise the rail never fetches the rewritten oldest prompts.
+  patch(conversation.id, s => ({ ...s, loading: false,
+    before: olderLoaded(s) > 0 ? s.before : result.value.before }));
 }
 
 /** Replace a truncated message's text with the full text from the bridge. */
@@ -295,11 +322,23 @@ export async function fetchFullText(conversation: Conversation, messageId: strin
   const settings = deps.settings();
   if (!settings) return undefined;
   if (!ownsHistoryRequest(conversation, settings)) return undefined;
-  const visit = historyVisit(conversation.id);
+  // Only a focused visit may request an expansion. A closed visit must not
+  // mint a replacement owner while its old response is still in flight.
+  const visit = visitOwners.get(conversation.id);
+  if (!visit) return undefined;
   const result = await deps.api.message(settings, { key: conversationKey(conversation), id: messageId });
   if (visitOwners.get(conversation.id) !== visit || !ownsHistoryRequest(conversation, settings)) return undefined;
   if (!result.ok) return undefined;
-  const text = result.value.text;
+  const full = historyToMessages([result.value], conversation.id, conversation.harness === "hermes")[0];
+  const loaded = historyState(conversation.id);
+  const source = deps.conversation(conversation.id)?.messages.find(message => message.id === messageId)
+    ?? loaded.older.find(message => message.id === messageId)
+    ?? loaded.unlisted.find(message => message.id === messageId);
+  // Rewriting a native row keeps its id. Reject a full-body response produced
+  // for the prior text even when this visit's source has already been refreshed.
+  if (!full || full.id !== messageId || !source || source.role !== full.role ||
+    !full.text.startsWith(source.text)) return undefined;
+  const text = full.text;
   patch(conversation.id, s => s.older.some(m => m.id === messageId)
     ? { ...s, older: s.older.map(m => m.id === messageId ? { ...m, text, truncated: undefined } : m) } : s);
   return text;
