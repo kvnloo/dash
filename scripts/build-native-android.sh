@@ -16,17 +16,16 @@ check_apk_inclusion() {
     return 1
   fi
 
-  # Dex strings contain JVM class descriptors, including the L...; delimiters.
+  # Dex strings contain JVM class descriptors, including the L...; delimiters. Dotted names
+  # ('app.dash.x.Y') are absent from d8 output: every build receipt from 10-22 on shows 0 hits
+  # while the descriptors above are present, so they cannot gate inclusion.
   local -a required_classes=(
     'Lapp/dash/dex/DashDexModule;'
     'Lapp/dash/dex/DashPadActivity;'
-    'app.dash.dex.DashDexModule'
     'Lapp/dash/cutout/DashCutoutModule;'
     'Lapp/dash/share/DashShareModule;'
     'Lcom/oney/WebRTCModule/WebRTCModule;'
     'Lorg/webrtc/PeerConnectionFactory;'
-    'app.dash.cutout.DashCutoutModule'
-    'app.dash.share.DashShareModule'
   )
   if [ -d app/modules/dash-audio-route ]; then
     required_classes+=('Lapp/dash/audio/DashAudioRouteModule;')
