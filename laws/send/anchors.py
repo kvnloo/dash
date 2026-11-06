@@ -34,9 +34,9 @@ REMOTE = "bridge/src/remote-hosts.ts"
 
 # (laws, model def, file, exact text, expected count)
 ANCHORS = [
-    ("S1-S3", "g_long (Chats)", CHATS, "const longPress = useCallback((id: string) => { haptic.select(); setMenuFor(id); }, []);", 1),
+    ("S1-S3", "g_long (Chats)", CHATS, "haptic.select();\n    setMenuFor({ id, title, ...anchor });", 1),
     ("S1-S3", "g_step GDismiss", CHATS, "const closeMenu = useCallback(() => setMenuFor(null), []);", 1),
-    ("S2-S4", "g_pick (Chats)", CHATS, "setMenuFor(null);\n    if (id) runChatRowMenu(choice, id, { open: (rowId) => open(rowId), feedback: onFeedback, remove });", 1),
+    ("S2-S4", "g_pick (Chats)", CHATS, "const id = menuFor?.id;\n    setMenuFor(null);\n    if (!id) return;", 1),
     ("S3", "g_offers (Chats)", ROW, '...(feedbackOn ? [{ id: "feedback",', 1),
     ("S2-S4", "g_run", ROW, 'case "open": handlers.open(id); return true;', 1),
     ("S2-S4", "g_run", ROW, 'case "feedback": handlers.feedback(id); return true;', 1),
