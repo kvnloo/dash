@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from "react";
+import { useIsFocused } from "@react-navigation/native";
 import type { Conversation } from "../model";
 import { applyHistoryPage, store } from "../store/app";
 import { chatIndexStore } from "../store/chat-index-store";
@@ -16,14 +17,17 @@ const FILL_DELAY_MS = 400;
  * those rows are not in the list, so the paging never moves what the reader is looking at.
  */
 export function useHistoryPages(conversation: Conversation | undefined): HistoryPagesState & { loadOlder(): void; canLoadOlder: boolean } {
-  const id = conversation?.id;
+  // Navigation can keep ChatScreen mounted after closing its window. Treat blur as the end
+  // of the history visit even when the same conversation id is reopened later.
+  const focused = useIsFocused();
+  const id = focused ? conversation?.id : undefined;
   const state = historyPages.use(all => (id ? all[id] : undefined)) ?? NONE;
   const chats = chatIndexStore.use(s => s.mode === "chats");
   // The websocket serves catalog chats it still lists; view-only and ended chats read over HTTP.
   const httpOnly = conversation?.viewOnly === true || (chats && conversation?.stale === true);
   const empty = (conversation?.messages.length ?? 0) === 0;
   useEffect(() => {
-    if (!conversation || !httpOnly || !empty) return;
+    if (!id || !conversation || !httpOnly || !empty) return;
     void loadNewest(conversation, messages => applyHistoryPage(conversation.id, messages));
     // Only on open: a view-only chat is loaded once per visit.
   }, [id, httpOnly]);
@@ -31,7 +35,7 @@ export function useHistoryPages(conversation: Conversation | undefined): History
   const settled = !empty && Boolean(conversation?.sessionId);
   useEffect(() => {
     // Opened from its cached window (no ws reply this visit): find where older pages start.
-    if (!chats || hasCursor || !settled || !conversation) return;
+    if (!id || !chats || hasCursor || !settled || !conversation) return;
     const timer = setTimeout(() => void primeCursor(conversation), 600);
     return () => clearTimeout(timer);
   }, [id, chats, hasCursor, settled]);
@@ -41,13 +45,13 @@ export function useHistoryPages(conversation: Conversation | undefined): History
   const paged = typeof state.before === "string";
   const online = store.use(s => s.connection.status === "online");
   useEffect(() => {
-    if (!conversation || !paged) return;
+    if (!id || !conversation || !paged) return;
     let open = true;
     const timer = setTimeout(() => void fillOlder(conversation, () => open), FILL_DELAY_MS);
     return () => { open = false; clearTimeout(timer); };
   }, [id, paged, online]);
   // Older pages are memory only; leaving a chat for another frees them.
   useEffect(() => () => { if (id) dropHistory(id); }, [id]);
-  const loadOlder = useCallback(() => { if (conversation) void loadOlderPage(conversation); }, [conversation]);
+  const loadOlder = useCallback(() => { if (id && conversation) void loadOlderPage(conversation); }, [id, conversation]);
   return { ...state, loadOlder, canLoadOlder: state.unlisted.length > 0 || typeof state.before === "string" };
 }

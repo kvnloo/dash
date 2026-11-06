@@ -91,14 +91,30 @@ function freshOf(state: HistoryPagesState, page: readonly Message[], shown: Read
   return page.filter(m => !known.has(m.id) && !shown.has(m.id));
 }
 
+/** The bridge may return a refreshed native row at the same id and cursor.
+ * Keep an expanded full message only when it still matches the fresh truncated prefix.
+ * Otherwise the new source, not a stale listed/unlisted copy, owns that id.
+ */
+function refreshLoaded(state: HistoryPagesState, page: readonly Message[]): Pick<HistoryPagesState, "older" | "unlisted"> {
+  const byId = new Map(page.map(message => [message.id, message]));
+  const refresh = (loaded: readonly Message[]): Message[] => loaded.map(message => {
+    const fresh = byId.get(message.id);
+    if (!fresh) return message;
+    return fresh.truncated && !message.truncated && message.text.startsWith(fresh.text) ? message : fresh;
+  });
+  return { older: refresh(state.older), unlisted: refresh(state.unlisted) };
+}
+
 /** Prepend one older page to the list, dropping ids already shown. */
 export function prependOlder(state: HistoryPagesState, page: readonly Message[], shown: ReadonlySet<string>, before: string | null): HistoryPagesState {
-  return { ...state, ...capOlder([...freshOf(state, page, shown), ...state.older], state.unlisted), before, loading: false, error: undefined };
+  const refreshed = refreshLoaded(state, page);
+  return { ...state, ...capOlder([...freshOf(state, page, shown), ...refreshed.older], refreshed.unlisted), before, loading: false, error: undefined };
 }
 
 /** Prepend one older page behind the list, for the prompt rail alone. */
 export function prependUnlisted(state: HistoryPagesState, page: readonly Message[], shown: ReadonlySet<string>, before: string | null): HistoryPagesState {
-  return { ...state, ...capOlder(state.older, [...freshOf(state, page, shown), ...state.unlisted]), before, error: undefined };
+  const refreshed = refreshLoaded(state, page);
+  return { ...state, ...capOlder(refreshed.older, [...freshOf(state, page, shown), ...refreshed.unlisted]), before, error: undefined };
 }
 
 /** The unlisted messages from the one with id `firstId` on join the list. */
