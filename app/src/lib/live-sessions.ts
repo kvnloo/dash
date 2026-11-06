@@ -23,10 +23,9 @@ export function conversationPreview(c: Conversation): string {
 /** Bucket key for harness+session lookups. Profile and host are compared inside a bucket. */
 function sessionBucket(harness: string, sessionId: string): string { return `${harness}\u0000${sessionId}`; }
 
-/** OMP pane ids are liveness handles; ACP resumes the host's persisted session. */
+/** Physical OMP pane identities remain distinct until a chat owns one. */
 function rosterOwnerKey(harness: string, sessionId: string, hostId: string, profileId: string): string {
-  const profile = harness === "omp" && profileId.startsWith("omp:") ? "omp:" : profileId;
-  return `${harness}\u0000${sessionId}\u0000${hostId}\u0000${profile}`;
+  return `${harness}\u0000${sessionId}\u0000${hostId}\u0000${profileId}`;
 }
 
 export function findLiveConversation(conversations: Conversation[], agent: { harness: string; sessionId?: string; targetHostId?: string; profileId?: string }): Conversation | undefined {
@@ -83,9 +82,32 @@ export interface MergeLiveOptions {
   routes?: readonly string[];
 }
 
-/** Successful roster snapshots reconcile, never delete. Missing snapshots do not enter here. O(C + R). */
+/** Successful roster snapshots reconcile, never delete. Missing snapshots do not enter here. */
 export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo[], now: number, options: MergeLiveOptions = {}): Conversation[] {
-  const reported = sessionAgents(hosts);
+  const discovered = sessionAgents(hosts);
+  // Same-session OMP panes can have different working directories. Collapse
+  // only a physical pane already owned by a chat at this endpoint and host.
+  const ownerPaneByHostSession = new Map<string, string>();
+  for (const conversation of existing) {
+    if (conversation.harness !== "omp" || !conversation.sessionId ||
+      !conversation.profileId?.startsWith("omp:") ||
+      // Newly discovered, unopened duplicates do not establish ownership.
+      (conversation.openedAt === undefined && conversation.messages.length === 0) ||
+      (options.endpointAddress !== undefined && conversation.endpointAddress !== options.endpointAddress)) continue;
+    const ownedPane = discovered.find(({ host, agent }) =>
+      agent.kind === "omp" && agent.sessionId === conversation.sessionId &&
+      agent.id === conversation.profileId &&
+      (!conversation.targetHostId || host.id === conversation.targetHostId));
+    if (!ownedPane) continue;
+    const key = `${ownedPane.host.id}\u0000${conversation.sessionId}`;
+    if (!ownerPaneByHostSession.has(key)) ownerPaneByHostSession.set(key, ownedPane.agent.id);
+  }
+  // With no explicit owner, keep every colliding pane so lookups fail closed.
+  const reported = discovered.filter(({ host, agent }) => {
+    if (agent.kind !== "omp") return true;
+    const owner = ownerPaneByHostSession.get(`${host.id}\u0000${agent.sessionId}`);
+    return !owner || owner === agent.id;
+  });
   const bySession = new Map<string, { host: HostInfo; agent: AgentInfo }[]>();
   for (const entry of reported) {
     if (!entry.agent.sessionId) continue;
@@ -103,10 +125,11 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     // native route, even when that route reports the same session string.
     const unownedSaved = c.stale === true && !c.targetHostId && !c.profileId;
     const matches = unownedSaved ? [] : bucket.filter(({ host, agent }) => (!c.targetHostId || host.id === c.targetHostId) && (!c.profileId || c.profileId === agent.id));
-    const survivingPane = matches.length === 0 && c.harness === "omp" && c.profileId?.startsWith("omp:") && c.targetHostId
-      ? bucket.find(({ host, agent }) => host.id === c.targetHostId && agent.id.startsWith("omp:"))
-      : undefined;
-    const match = matches.length === 1 ? matches[0] : survivingPane;
+    const survivingPanes = matches.length === 0 && c.harness === "omp" && c.profileId?.startsWith("omp:") && c.targetHostId
+      ? bucket.filter(({ host, agent }) => host.id === c.targetHostId && agent.id.startsWith("omp:"))
+      : [];
+    // Rebind the same chat only when one physical OMP pane survives.
+    const match = matches.length === 1 ? matches[0] : survivingPanes.length === 1 ? survivingPanes[0] : undefined;
     if (!match) {
       owned.add(rosterOwnerKey(c.harness, c.sessionId, c.targetHostId ?? "", c.profileId ?? ""));
       // A bridge-owned ACP session may be running without a native session row.
@@ -149,7 +172,7 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
     owned.add(rosterOwnerKey(c.harness, c.sessionId, host.id, agent.id));
     const title = c.harness === "hermes" ? agent.name : c.title;
     const updatedAt = agent.lastActivityAt ?? c.updatedAt;
-    if (c.stale === false && title === c.title && updatedAt === c.updatedAt && c.messageCount === agent.messageCount && c.targetHostId === host.id && c.profileId === agent.id && c.openIn === agent.openIn && (!agent.model || c.sessionModel?.model === agent.model && c.sessionModel.sessionId === agent.sessionId)) return c;
+    if (c.stale === false && title === c.title && updatedAt === c.updatedAt && c.messageCount === agent.messageCount && c.targetHostId === host.id && c.profileId === agent.id && c.cwd === (agent.cwd ?? c.cwd) && c.openIn === agent.openIn && (!agent.model || c.sessionModel?.model === agent.model && c.sessionModel.sessionId === agent.sessionId)) return c;
     changed = true;
     return { ...c, ...(agent.model && agent.sessionId ? { sessionModel: { sessionId: agent.sessionId, model: agent.model } } : {}), stale: false, targetHostId: host.id, profileId: agent.id, profileName: agent.profileId, title, updatedAt, messageCount: agent.messageCount, cwd: agent.cwd ?? c.cwd, openIn: agent.openIn };
   });

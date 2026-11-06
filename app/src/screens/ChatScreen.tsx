@@ -11,7 +11,8 @@ import { useComposerStreamRate } from "../hooks/useComposerStreamRate";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef, type ViewToken } from "@shopify/flash-list";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AppState, BackHandler, Platform, StyleSheet, Text, View, Pressable, useWindowDimensions } from "react-native";
+import { AppState, BackHandler, Platform, StyleSheet, Text, View, Pressable } from "react-native";
+import { usePaneDimensions } from "../lib/pane-size";
 import Animated from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 import { ComposerActionMenu, type ComposerMenuRow } from "../components/ComposerActionMenu";
@@ -79,6 +80,7 @@ import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
 import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptOffset } from "../lib/prompt-navigation";
+import { scheduleLatestIfFollowing, shouldFollowLatest } from "../lib/transcript-scroll";
 import { railTurns, type RailTurn } from "../lib/rail-turns";
 import { enterAnnotation, registerSink } from "../store/annotate";
 import { sharedDrafts, consumeSharedDraft } from "../store/shared-drafts";
@@ -116,6 +118,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // and when a page lands; those scrolls must not detach following, or a chat opens away from its latest
   // message on a slow device.
   const userScrollAt = useRef(Number.NEGATIVE_INFINITY);
+  // An upward wheel keeps ownership until a new downward wheel, touch, key or Latest action.
+  // A layout-driven scroll event within USER_SCROLL_MS must not re-enable following.
+  const upwardWheel = useRef(false);
   const [following, setFollowing] = useState(true);
   const setFollow = useCallback((next: boolean) => {
     followRef.current = next;
@@ -139,9 +144,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       if (event.type === "pointermove" && event instanceof PointerEvent && event.buttons === 0) return;
       if ((event.type === "pointerdown" || event.type === "touchstart") && target?.closest('button, a, [role="button"], [role="link"], [role="switch"], [role="tab"]')) return;
       userScrollAt.current = Date.now();
-      // A genuine upward wheel should beat the next streamed chunk, including over links/buttons.
-      if (event instanceof WheelEvent && event.deltaY < 0 && Math.abs(event.deltaY) > Math.abs(event.deltaX)
-        && followRef.current && previousOffset.current > 1 && scrollMax.current > 1) setFollow(false);
+      if (event.type === "pointerdown" || event.type === "touchstart" || event instanceof KeyboardEvent) upwardWheel.current = false;
+      // FlashList can still be measuring after a window opens. Its previous offset may be 0,
+      // even though the owner is looking at a long, scrollable transcript.
+      if (event instanceof WheelEvent && Math.abs(event.deltaY) > Math.abs(event.deltaX) && event.deltaY !== 0) {
+        upwardWheel.current = event.deltaY < 0;
+        if (upwardWheel.current && followRef.current && scrollMax.current > 1) setFollow(false);
+      }
     };
     const events = ["wheel", "touchstart", "touchmove", "pointerdown", "pointermove", "keydown"];
     for (const type of events) element.addEventListener(type, mark, { capture: true, passive: true });
@@ -159,7 +168,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     return () => listener.remove();
   }, []);
   const scrollToNewest = useCallback(() => {
-    if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+    // A frame queued before the owner's wheel must not scroll the transcript back to Latest.
+    scheduleLatestIfFollowing(
+      () => followRef.current,
+      () => listRef.current?.scrollToEnd({ animated: false }),
+      callback => { requestAnimationFrame(callback); },
+    );
   }, []);
   const debugPicker = debugUi.use((s) => s.chatHarnessPickerOpen);
   const debugAttachments = debugUi.use((s) => s.chatComposerAttachments);
@@ -208,7 +222,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, [history.unlisted, visibleMessages]);
   const railMessages = useMemo(() => mergeOlderHistory(visibleMessages, railOnly), [railOnly, visibleMessages]);
   const anchors = useMemo(() => railTurns(railMessages), [railMessages]);
-  useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
+  useEffect(() => { upwardWheel.current = false; setFollow(true); }, [conversation?.id, setFollow]);
   const jumpedTo = useRef<string | null>(null);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(settleTimer.current), []);
@@ -425,7 +439,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const windowOrigin = route.params?.window;
   const windowed = windowOrigin !== undefined;
   const morph = useWindowMorph(windowOrigin, windowed);
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = usePaneDimensions();
   const [navOpen, setNavOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -642,7 +656,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onStartReached={history.canLoadOlder ? history.loadOlder : undefined}
           onStartReachedThreshold={0.5}
           ListHeaderComponent={history.loading ? <SkeletonRow /> : null}
-          onScrollBeginDrag={() => { dragging.current = true; }}
+          onScrollBeginDrag={() => { dragging.current = true; upwardWheel.current = false; }}
           onScroll={event => {
             const { contentSize, layoutMeasurement, contentOffset } = event.nativeEvent;
             scrollMax.current = Math.max(0, contentSize.height - layoutMeasurement.height);
@@ -652,7 +666,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
             const byOwner = dragging.current || (Platform.OS === "web" && Date.now() - userScrollAt.current < USER_SCROLL_MS);
             const atLatest = followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y);
             if (!moved || !byOwner) return;
-            setFollow(atLatest);
+            setFollow(shouldFollowLatest(atLatest, upwardWheel.current));
           }}
           scrollEventThrottle={16}
           onContentSizeChange={scrollToNewest}
@@ -671,7 +685,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         /></BlurTargetView>
         <PromptRail anchors={anchors} following={following} live={Boolean(streamingMessage)} onJump={jumpPrompt}
           onContinue={prompt => { const anchor = anchors[prompt]; if (anchor) navigation.setParams({ draft: `Continue from prompt ${prompt + 1}: ${anchor.text.split("\n")[0]}\nResult: ${anchor.summary}\n\n` }); }}
-          onLatest={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
+          onLatest={() => { dragging.current = false; upwardWheel.current = false; setFollow(true); scrollToNewest(); }} />
         </View>
       </KeyboardInsetView>}
       <KeyboardDock style={windowed ? styles.windowDock : undefined}>

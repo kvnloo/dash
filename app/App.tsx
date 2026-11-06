@@ -34,6 +34,7 @@ import { LabScreen } from "./src/screens/LabScreen";
 import { RoadmapProjectScreen, RoadmapScreen, RoadmapTaskScreen } from "./src/screens/RoadmapScreen";
 import { DebugHost } from "./src/debug/DebugHost";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
+import { DeskShell } from "./src/components/desk/DeskShell";
 import { isDebugActive } from "./src/debug/expose";
 import { debugNavigationRef, flushPendingDebugNavigation } from "./src/debug/nav";
 import { clearDebugPersistence, applyDebugSeed } from "./src/debug/seed";
@@ -136,7 +137,7 @@ export default function App() {
               linking={Platform.OS === "web" ? linking : undefined}
               onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); stageLinks.flush(); appRoutes.flush(); flushNotificationTarget(); }}
             >
-            <ContinuousVoiceRoot><AnnotationRoot>
+            <ContinuousVoiceRoot><AnnotationRoot><DeskShell>
               <Stack.Navigator
                 initialRouteName={isDebugActive() || hasSettings ? "Main" : "Pair"}
                 // Native-stack duration is iOS-only (and ignored for modal presentations).
@@ -157,7 +158,7 @@ export default function App() {
                 <Stack.Screen name="Roadmap" component={RoadmapScreen} />
                 <Stack.Screen name="RoadmapProject" component={RoadmapProjectScreen} />
                 <Stack.Screen name="RoadmapTask" component={RoadmapTaskScreen} />
-              </Stack.Navigator>
+              </Stack.Navigator></DeskShell>
               <BridgePullOverlay />
               <NativeEvents />
             </AnnotationRoot></ContinuousVoiceRoot>

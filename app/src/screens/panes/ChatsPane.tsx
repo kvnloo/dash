@@ -3,6 +3,7 @@ import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform, StyleSheet, Text, View } from "react-native";
+import type { NavigationProp } from "@react-navigation/native";
 import { chatKey, type ChatSummary, type HostInfo } from "../../../../shared/protocol";
 import type { WindowOrigin } from "../../lib/chat-window";
 import { threadAppearance } from "../../components/thread-appearance";
@@ -27,7 +28,8 @@ import { NEXT_ACTION_LATER_MS } from "../../lib/next-action-card";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { usePagedChats } from "../../hooks/usePagedChats";
 import type { AssistantMessage, ConnectionStatus, Conversation } from "../../model";
-import type { ScreenProps } from "../../navigation";
+import type { RootStackParamList } from "../../navigation";
+import { useDeskActive } from "../../lib/desk";
 import { clearEndedConversations, deleteConversation, openChat, setActive, store } from "../../store/app";
 import { summaryByKey } from "../../store/chat-index-store";
 import { composerDrafts } from "../../store/composer-drafts";
@@ -170,75 +172,92 @@ const Row = memo(function Row({
     clearWebHold();
     onLongPress(item.id, { x, y });
   };
+  // Desk mode (DeX / wide window): mouse hover and right-click open the same row menu as a long-press.
+  const desk = useDeskActive();
+  const [hovered, setHovered] = useState(false);
+  const frame = useRef<View>(null);
+  const menuRef = useRef(onLongPress);
+  menuRef.current = onLongPress;
+  useEffect(() => {
+    const element: unknown = frame.current;
+    if (!desk || Platform.OS !== "web" || typeof HTMLElement === "undefined" || !(element instanceof HTMLElement)) return;
+    const contextMenu = (event: MouseEvent) => { event.preventDefault(); menuRef.current(item.id, { x: event.pageX, y: event.pageY }); };
+    element.addEventListener("contextmenu", contextMenu);
+    return () => element.removeEventListener("contextmenu", contextMenu);
+  }, [desk, item.id]);
   return (
-    <PressScale
-      webPressable
-      onPress={(event) => {
-        if (!held.current && !webHoldCanceled.current) pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress);
-      }}
-      onPressIn={(event) => {
-        held.current = false;
-        webHoldCanceled.current = false;
-        webHoldStart.current = null;
-        clearWebHold();
-        if (Platform.OS === "web") {
-          const { pageX, pageY } = event.nativeEvent;
-          webHoldStart.current = { x: pageX, y: pageY };
-          // Direct web Pressability starts the hold on pointer down, not on release.
-          webHoldTimer.current = setTimeout(() => triggerLongPress(pageX, pageY), 350);
-        }
-      }}
-      onPointerMove={(event) => {
-        if (Platform.OS !== "web" || !webHoldStart.current) return;
-        const { pageX, pageY } = event.nativeEvent;
-        if (Math.abs(pageX - webHoldStart.current.x) > 10 || Math.abs(pageY - webHoldStart.current.y) > 10) {
-          webHoldCanceled.current = true;
+    <View ref={frame} collapsable={false}>
+      <PressScale
+        webPressable
+        onPress={(event) => {
+          if (!held.current && !webHoldCanceled.current) pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress);
+        }}
+        onPressIn={(event) => {
+          held.current = false;
+          webHoldCanceled.current = false;
+          webHoldStart.current = null;
           clearWebHold();
-        }
-      }}
-      onPointerCancel={() => {
-        if (Platform.OS !== "web") return;
-        webHoldCanceled.current = true;
-        webHoldStart.current = null;
-        clearWebHold();
-      }}
-      onPressOut={() => {
-        clearWebHold();
-        webHoldStart.current = null;
-      }}
-      onLongPress={(event) => triggerLongPress(event.nativeEvent.pageX, event.nativeEvent.pageY)}
-      delayLongPress={350}
-      style={[styles.row, active && !stale && styles.rowActive]}
-      accessibilityRole="button"
-      testID={`chat-row-${item.id.startsWith("remote:") ? item.id.slice(7) : item.id}`}
-    >
-      <AgentOrb size={28} thinking={thinking} label={`${item.harnessName} · ${thinking.tool ?? thinking.phase}`} />
-      <View style={styles.rowMain}>
-        <View style={styles.rowTop}>
-          <Text style={[styles.rowTitle, stale && styles.stale]} numberOfLines={1}>
-            {content.title}
+          if (Platform.OS === "web") {
+            const { pageX, pageY } = event.nativeEvent;
+            webHoldStart.current = { x: pageX, y: pageY };
+            // Direct web Pressability starts the hold on pointer down, not on release.
+            webHoldTimer.current = setTimeout(() => triggerLongPress(pageX, pageY), 350);
+          }
+        }}
+        onPointerMove={(event) => {
+          if (Platform.OS !== "web" || !webHoldStart.current) return;
+          const { pageX, pageY } = event.nativeEvent;
+          if (Math.abs(pageX - webHoldStart.current.x) > 10 || Math.abs(pageY - webHoldStart.current.y) > 10) {
+            webHoldCanceled.current = true;
+            clearWebHold();
+          }
+        }}
+        onPointerCancel={() => {
+          if (Platform.OS !== "web") return;
+          webHoldCanceled.current = true;
+          webHoldStart.current = null;
+          clearWebHold();
+        }}
+        onPressOut={() => {
+          clearWebHold();
+          webHoldStart.current = null;
+        }}
+        onLongPress={(event) => triggerLongPress(event.nativeEvent.pageX, event.nativeEvent.pageY)}
+        delayLongPress={350}
+        onHoverIn={desk ? () => setHovered(true) : undefined}
+        onHoverOut={desk ? () => setHovered(false) : undefined}
+        style={[styles.row, active && !stale && styles.rowActive, desk && hovered && styles.rowHover]}
+        accessibilityRole="button"
+        testID={`chat-row-${item.id.startsWith("remote:") ? item.id.slice(7) : item.id}`}
+      >
+        <AgentOrb size={28} thinking={thinking} label={`${item.harnessName} · ${thinking.tool ?? thinking.phase}`} />
+        <View style={styles.rowMain}>
+          <View style={styles.rowTop}>
+            <Text style={[styles.rowTitle, stale && styles.stale]} numberOfLines={1}>
+              {content.title}
+            </Text>
+            {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
+            {item.viewOnly ? <Text style={styles.badge} accessibilityLabel="View only">view only</Text> : null}
+            {saved ? <Text style={styles.badge} accessibilityLabel="Saved local history">saved local</Text> : null}
+            <Text style={styles.rowTime} numberOfLines={1}>{stale ? "ended" : item.openIn ? `${item.openIn} · ${timeAgo(item.updatedAt)}` : timeAgo(item.updatedAt)}</Text>
+          </View>
+          <View style={styles.rowMeta}>
+            <Text style={styles.rowFolder} numberOfLines={1} accessibilityLabel={content.folderPath ? `Working folder: ${content.folderPath}` : content.folder}>
+              {content.folder}
+            </Text>
+            {activityShimmer ? <View style={styles.rowActivityHighlight}>
+              <ShimmerText text={content.activity} size={12} family="sans-serif" dim={colors.textMuted} bright={colors.text} />
+            </View> : <Text style={[styles.rowActivity, content.needsAttention && styles.attention]} numberOfLines={1}>
+              {content.activity}
+            </Text>}
+          </View>
+          <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
+            {content.outcomeLabel ? `${content.outcomeLabel} · ` : ""}{content.outcome}
           </Text>
-          {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
-          {item.viewOnly ? <Text style={styles.badge} accessibilityLabel="View only">view only</Text> : null}
-          {saved ? <Text style={styles.badge} accessibilityLabel="Saved local history">saved local</Text> : null}
-          <Text style={styles.rowTime} numberOfLines={1}>{stale ? "ended" : item.openIn ? `${item.openIn} · ${timeAgo(item.updatedAt)}` : timeAgo(item.updatedAt)}</Text>
         </View>
-        <View style={styles.rowMeta}>
-          <Text style={styles.rowFolder} numberOfLines={1} accessibilityLabel={content.folderPath ? `Working folder: ${content.folderPath}` : content.folder}>
-            {content.folder}
-          </Text>
-          {activityShimmer ? <View style={styles.rowActivityHighlight}>
-            <ShimmerText text={content.activity} size={12} family="sans-serif" dim={colors.textMuted} bright={colors.text} />
-          </View> : <Text style={[styles.rowActivity, content.needsAttention && styles.attention]} numberOfLines={1}>
-            {content.activity}
-          </Text>}
-        </View>
-        <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
-          {content.outcomeLabel ? `${content.outcomeLabel} · ` : ""}{content.outcome}
-        </Text>
-      </View>
-      <View style={styles.hairline} />
-    </PressScale>
+        <View style={styles.hairline} />
+      </PressScale>
+    </View>
   );
 }, (a, b) => a.item === b.item && a.saved === b.saved && a.live === b.live && a.active === b.active && a.connectionStatus === b.connectionStatus && a.onPress === b.onPress && a.onLongPress === b.onLongPress);
 
@@ -291,7 +310,7 @@ function startOfToday(): number {
 const NO_ENTRIES: readonly ConversationEntry[] = [];
 const NO_LIST = emptyList();
 
-export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Main">, "navigation"> & { focused?: boolean }) {
+export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: { navigation: NavigationProp<RootStackParamList>; focused?: boolean }) {
   const thumb = useHandedness();
   const screenFocused = useIsFocused();
   const conversations = store.use((s) => s.conversations);
@@ -597,6 +616,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   rowActive: { backgroundColor: "rgba(215,185,134,.035)" },
+  rowHover: { backgroundColor: "rgba(236,232,223,.05)" },
   stale: { color: colors.textTertiary },
   liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.gold },
   badge: { color: colors.textTertiary, ...type.mono, fontSize: 10, textTransform: "none", letterSpacing: 0 },
