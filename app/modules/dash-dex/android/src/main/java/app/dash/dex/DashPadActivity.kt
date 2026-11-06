@@ -5,7 +5,6 @@ import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
-import expo.modules.ReactActivityDelegateWrapper
 import java.lang.ref.WeakReference
 
 /** Uses the application's existing ReactHost, never a second React runtime. */
@@ -18,7 +17,7 @@ class DashPadActivity : ReactActivity() {
 
   override fun getMainComponentName() = "DashPad"
   override fun createReactActivityDelegate(): ReactActivityDelegate =
-    ReactActivityDelegateWrapper(this, true, DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled))
+    DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(null)

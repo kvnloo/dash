@@ -9,7 +9,7 @@ android {
   defaultConfig { versionCode 1; versionName '1.0.0' }
 }
 dependencies {
-  // DashPadActivity extends ReactActivity and wraps expo's ReactActivityDelegateWrapper.
+  // DashPadActivity extends ReactActivity. No project(':expo') here: :expo already
+  // depends on every autolinked module, so depending back on it is a Gradle task cycle.
   implementation 'com.facebook.react:react-android'
-  implementation project(':expo')
 }
