@@ -7,5 +7,5 @@ export default defineConfig({
  reporter: [['./startup-reporter.ts'], ['list'], ['html', { outputFolder: process.env.ARMY_HTML || '../../artifacts/mbp-army/html', open: 'never' }], ['json', { outputFile: process.env.ARMY_JSON || '../../artifacts/mbp-army/results.json' }]],
  use: { headless: false, viewport: { width: 480, height: 780 },
   launchOptions: { args: ['--ozone-platform=wayland', '--disable-dev-shm-usage'], slowMo: Number(process.env.ARMY_SLOWMO || 30) },
-  screenshot: 'only-on-failure', trace: 'on', video: 'on', actionTimeout: 12000, navigationTimeout: 120000 },
+  screenshot: 'only-on-failure', trace: 'retain-on-failure', video: 'retain-on-failure', actionTimeout: 12000, navigationTimeout: 120000 },
 });

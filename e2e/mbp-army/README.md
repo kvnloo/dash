@@ -28,7 +28,9 @@ python3 e2e/mbp-army/run.py qualification-eight 8
 python3 e2e/mbp-army/run.py baseline-one 1
 ```
 
-Start at eight workers, back off when environment errors or thermal-throttle deltas appear. Keep result names distinct; never overwrite a failure run. Full parallelism is explicit, retries are zero, video/trace are always on, failure screenshots are automatic, and every test also captures final.png. Safe seeded exploratory workers cover 390 and 800 px widths.
+Start at eight workers, back off when environment errors or thermal-throttle deltas appear. Keep result names distinct; never overwrite a failure run. Full parallelism is explicit, retries are zero, video and traces are retained only for failures, failure screenshots are automatic, and every test also captures final.png. Safe seeded exploratory workers cover 390 and 800 px widths.
+
+Run `bun test e2e/mbp-army/retention.test.ts` through `fleet-build` to check the recording policy. Failure-only retention reduces persistent artifacts from passing tests, but still records each test while it runs. It does not bound failed-run history, HTML report copies, final screenshots, or temporary browser profiles. Those require separate lifecycle handling.
 
 The suite is run by the existing `playwright/test` export in Playwright 1.64.1; no new test dependency is needed.
 
