@@ -161,7 +161,9 @@ export function createChatsHttpHandler(options: ChatsHttpOptions) {
     const archiveBefore = query.before && !decodeCursor(query.before)?.remote ? query.before : undefined;
     const value = live ?? await client.history({ ...target, limit: query.limit, ...(archiveBefore ? { before: archiveBefore } : {}), self: { id: self.id, name: self.name } }, request.signal);
     const page: HistoryPage = { messages: value.messages, before: value.before };
-    return json(page, 200, query.before ? { "Cache-Control": "private, max-age=300" } : {});
+    // Native Hermes rows are rewritten in place under the same id and keyset cursor, so an
+    // older-page URL is not immutable: a cached copy replays a closed visit's text on reopen.
+    return json(page);
   }
 
   async function message(request: Request, url: URL): Promise<Response> {
