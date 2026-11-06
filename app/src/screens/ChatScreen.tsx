@@ -73,7 +73,7 @@ import type { OrbState } from "../lib/orb-phase";
 import { useContinuousVoice, useDeviceInsets, voiceWindowOpen } from "../components/ContinuousVoiceRoot";
 import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { useSessionActivity } from "../lib/session-activity";
-import { screenBack } from "../lib/screen-back";
+import { ownRoutePopAction, screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
 import { focusVoiceOrbOverlay } from "../components/VoiceOrbOverlay";
 import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
@@ -453,15 +453,23 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     voiceWindowOpen.set(true);
     return () => voiceWindowOpen.set(false);
   }, [windowed]);
+  const closeStarted = useRef(false);
   const closeWindow = useCallback(() => {
+    // A fade can settle after a different chat gains focus; never pop that newer route.
+    if (closeStarted.current) return;
+    closeStarted.current = true;
     // Presentation only: no cancel, stop, voice end or conversation change happens here.
-    morph.close(() => screenBack(navigation));
-  }, [morph, navigation]);
+    morph.close(() => {
+      const action = ownRoutePopAction(navigation.getState(), route.key);
+      if (action) navigation.dispatch(action);
+    });
+  }, [morph, navigation, route.key]);
   const layers = useRef({ menuOpen, treeOpen, navOpen });
   layers.current = { menuOpen, treeOpen, navOpen };
   useEffect(() => {
     if (!windowed) return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (!navigation.isFocused()) return false;
       switch (backTarget(layers.current)) {
         case "menu": setMenuOpen(false); break;
         case "tree": setTreeOpen(false); break;
@@ -471,7 +479,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       return true;
     });
     return () => sub.remove();
-  }, [windowed, closeWindow]);
+  }, [windowed, closeWindow, navigation]);
   const selfHost = connection.hosts.find(host => host.self);
   // Authoritative per-session model/provider/lineage: the host's existing authenticated context
   // reading (Hermes state.db), bound to this exact session. Debug fixture is synthetic, web-only.
