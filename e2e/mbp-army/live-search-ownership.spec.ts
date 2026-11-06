@@ -105,8 +105,13 @@ test('live search restores the paired OMP owner after local deletion without ope
   if (!box) throw Error('The native live chat row must have a visible long-press target');
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  const deleteAction = page.getByRole('button', { name: new RegExp(`^Delete ${liveTitle} from this phone(?:, \\d+ of \\d+)?$`) });
-  try { await expect(deleteAction).toBeVisible(); } finally { await page.mouse.up(); }
+  const menu = page.getByTestId('chat-row-actions-menu');
+  const deleteAction = menu.getByRole('button', { name: 'Delete chat from this phone: ' + liveTitle, exact: true });
+  try {
+   await expect(menu).toBeVisible();
+   await expect(deleteAction).toBeVisible();
+  } finally { await page.mouse.up(); }
+  await expect(menu).toBeVisible();
   page.once('dialog', dialog => {
    expect(dialog.message()).toBe('Delete chat?\n\nThis removes it from this phone only.');
    void dialog.accept();

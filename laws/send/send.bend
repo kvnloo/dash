@@ -113,7 +113,8 @@ def g_if(ok: Bool, e: GEffect) -> GEffect:
     case False{}:
       GNothing{}
 
-# Long-press. Chats: longPress = haptic.select(); setMenuFor(id).
+# Long-press. Chats: longPress = haptic.select(); setMenuFor({ id, title, ...anchor })
+# (an id whose row is gone has no title and opens nothing).
 # Search: onLongPress={feedbackOn ? onRowMenu : undefined}.
 def g_long(s: GSurface, fb: Bool, m: GMenu) -> GOut:
   match s:

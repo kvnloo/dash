@@ -14,6 +14,8 @@ scheme = "dash-e2e" if e2e else "dash"
 assert manifest.attrib["package"] == package, manifest.attrib["package"]
 permissions = {node.attrib.get(android + "name") for node in manifest.findall("uses-permission")}
 assert "android.permission.POST_NOTIFICATIONS" in permissions
+for permission in ("android.permission.RECORD_AUDIO", "android.permission.MODIFY_AUDIO_SETTINGS"):
+    assert permission in permissions, permission
 activities = manifest.findall("application/activity")
 main = next(node for node in activities if node.attrib[android + "name"].endswith("MainActivity"))
 assert main.attrib[android + "exported"] == "true"
@@ -29,6 +31,10 @@ assert pad.attrib.get(android + "launchMode") == "singleTask"
 assert required_changes <= set(pad.attrib.get(android + "configChanges", "").split("|"))
 metadata = {node.attrib.get(android + "name"): node.attrib.get(android + "value") for node in manifest.findall("application/meta-data")}
 assert metadata.get("com.samsung.android.multidisplay.keep_process_alive") == "true"
+assert metadata.get("com.samsung.android.keepalive.density") == "true"
+assert metadata.get("com.sec.android.support.multiwindow") == "true"
+assert {"keyboard", "keyboardHidden", "navigation", "screenSize"} <= set(main.attrib.get(android + "configChanges", "").split("|"))
+assert any(node.attrib.get(android + "minWidth") == "360dp" for node in main.findall("layout"))
 assert all(node.attrib.get(android + "reqTouchScreen") != "finger" for node in manifest.iter())
 assert all(node.attrib.get(android + "required") == "false" for node in manifest.findall("uses-feature") if node.attrib.get(android + "name") == "android.hardware.touchscreen")
 filters = main.findall("intent-filter")
@@ -48,5 +54,5 @@ if release:
     assert application.attrib.get(android + "usesCleartextTraffic") == "true"
 else:
     assert application.attrib.get(android + "debuggable") == "true"
-result = {"package": package, "variant": "release" if release else "debug", "debuggable": not release, "cleartext": application.attrib.get(android + "usesCleartextTraffic"), "share_actions": ["SEND", "SEND_MULTIPLE"], "mime": "*/*", "schemes": sorted(s for s in schemes if s), "post_notifications_permission": True}
+result = {"package": package, "variant": "release" if release else "debug", "debuggable": not release, "cleartext": application.attrib.get(android + "usesCleartextTraffic"), "share_actions": ["SEND", "SEND_MULTIPLE"], "mime": "*/*", "schemes": sorted(s for s in schemes if s), "post_notifications_permission": True, "record_audio_permission": True, "modify_audio_settings_permission": True}
 print(json.dumps(result, indent=2))

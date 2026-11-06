@@ -1,8 +1,9 @@
 import { sessionChats } from "../../lib/session-chats";
 import { shallowArrayEqual } from "../../store/createStore";
 import { memo, useMemo } from "react";
-import { useWindowDimensions } from "react-native";
+import { usePaneDimensions } from "../../lib/pane-size";
 import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
+import { useTraceFeed } from "../../trace/useTraceFeed";
 import { OrchestraGraph } from "../../components/OrchestraGraph";
 import { AodlCatalogNetwork } from "../../components/AodlCatalogNetwork";
 import { WorkspaceActions } from "../../components/WorkspaceHeader";
@@ -23,8 +24,10 @@ export const OrchestraPane = memo(function OrchestraPane({ navigation, focused }
   const hosts = store.use(s => s.connection.hosts);
   const fixture = debugUi.use(s => s.orchestraFixture);
   const fixtureOn = isDebugActive() && fixture === true;
-  const { width } = useWindowDimensions();
+  const { width } = usePaneDimensions();
   const { snapshot, error } = useOrchestraEvidence(settings, focused);
+  // The entry card must load its own authenticated bridge data, not wait for a visit to Trace.
+  useTraceFeed(settings, focused);
   const graph = useMemo(() => fixtureOn ? orchestraMotionFixture() : snapshot ? {
     nodes: snapshot.nodes.map(n => ({ ...n, thinking: n.state === "live" ? { phase: "thinking" as const } : { phase: "idle" as const } })),
     edges: snapshot.edges,

@@ -19,7 +19,7 @@ jobs:
   test:
     name: test (tester army + O15 gate)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
@@ -37,13 +37,23 @@ jobs:
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'app/bun.lock', 'bridge/bun.lock') }}
       - name: Install locked root and bridge dependencies; public app without private renderer
         run: bun install --frozen-lockfile && bun scripts/install-public-ci.ts && bun install --frozen-lockfile --cwd bridge
+      # The Azure apt mirror intermittently crawls (33-36 min for ffmpeg + Chromium deps on
+      # da2e19f0 and df87bcbe), timing the army out at 45 min; reuse the downloaded .debs.
+      - uses: actions/cache@v4
+        with:
+          path: ~/apt-debs
+          key: ${{ runner.os }}-army-apt-debs-v1
       - name: Headless Chromium, bridge sandbox and audio decoder
         run: |
+          echo 'Binary::apt::APT::Keep-Downloaded-Packages "true"; APT::Keep-Downloaded-Packages "true"; Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/99army-keep-debs
+          sudo rm -f /etc/apt/apt.conf.d/docker-clean
+          mkdir -p ~/apt-debs && sudo cp ~/apt-debs/*.deb /var/cache/apt/archives/ 2>/dev/null || true
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends bubblewrap ffmpeg
           # Ubuntu 24.04 restricts unprivileged user namespaces; the army isolates each bridge with bwrap.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 node node_modules/playwright/cli.js install --with-deps chromium
+          cp /var/cache/apt/archives/*.deb ~/apt-debs/ 2>/dev/null || true
       - name: O15 checker evidence rules (laws/release)
         run: python3 -m unittest laws/release/test_check.py -v
       - name: Tester army on ${{ env.SHA }}

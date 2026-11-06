@@ -9,11 +9,11 @@ import { haptic } from "../haptics";
 import { fetchSessionWorkers, type Worker } from "../lib/session-workers";
 
 /** Poll the session's live workers every 3 s while foregrounded. */
-export function useSessionWorkers(settings: Settings | null, online: boolean, profile?: string, session?: string): Worker[] {
-  const key = JSON.stringify([settings?.address, profile, session]);
+export function useSessionWorkers(settings: Settings | null, online: boolean, harness?: string, profile?: string, session?: string): Worker[] {
+  const key = JSON.stringify([settings?.address, harness, profile, session]);
   const [sample, setSample] = useState<{ key: string; workers: Worker[] }>();
   useEffect(() => {
-    if (!settings || !online || !profile || !session) return;
+    if (!settings || !online || !harness || !session) return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController | undefined;
@@ -23,14 +23,14 @@ export function useSessionWorkers(settings: Settings | null, online: boolean, pr
       controller = new AbortController();
       const timeout = setTimeout(() => controller?.abort(), 2500);
       try {
-        const workers = await fetchSessionWorkers(settings, profile, session, controller.signal);
+        const workers = await fetchSessionWorkers(settings, { harness, ...(profile ? { profile } : {}), session }, controller.signal);
         if (!disposed) setSample({ key, workers });
-      } catch { /* Offline or bridge without /hermes/workers: keep the last list until the next poll. */ }
+      } catch { /* Offline or bridge without a workers route: keep the last list until the next poll. */ }
       finally { clearTimeout(timeout); if (!disposed) timer = setTimeout(poll, 3000); }
     };
     void poll();
     return () => { disposed = true; clearTimeout(timer); controller?.abort(); };
-  }, [settings, online, profile, session, key]);
+  }, [settings, online, harness, profile, session, key]);
   return online && sample?.key === key ? sample.workers : [];
 }
 

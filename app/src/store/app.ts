@@ -566,6 +566,11 @@ export function setThinkingSummaries(id: string, enabled: boolean): void {
   updateConversation(id, c => ({ ...c, summariesEnabled: enabled }));
 }
 
+/** Save only the preference for future turns; existing queued turns retain their exact choice. */
+export function setConversationModel(id: string, model: string | undefined): void {
+  updateConversation(id, c => ({ ...c, modelOverride: model }));
+}
+
 function updateConversation(id: string, fn: (c: Conversation) => Conversation): void {
   store.set((s) => {
     const index = s.conversations.findIndex((c) => c.id === id);
@@ -601,7 +606,7 @@ function updateMessage(
 export function beginTurn(
   conversationId: string,
   text: string,
-  opts?: { pending?: boolean; attachments?: ChatAttachment[]; mode?: "steer" | "queue" },
+  opts?: { pending?: boolean; attachments?: ChatAttachment[]; mode?: "steer" | "queue"; preserveTitle?: boolean },
 ): { turnId: string; messageId: string } {
   const turnId = newId();
   const messageId = newId();
@@ -618,8 +623,8 @@ export function beginTurn(
   };
   updateConversation(conversationId, (c) => ({
     ...c,
-    title: c.messages.length === 0 && !c.sessionId ? titleFrom(text || opts?.attachments?.[0]?.name || "") : c.title,
-    messages: [...c.messages, user, assistant],
+    title: c.messages.length === 0 && !c.sessionId && !opts?.preserveTitle ? titleFrom(text || opts?.attachments?.[0]?.name || "") : c.title,
+    messages: [...c.messages, user, c.modelOverride ? { ...assistant, requestedModel: c.modelOverride } : assistant],
     queuePreview: opts?.pending && c.queuePreview !== undefined ? `${c.queuePreview}\n\n${text}` : c.queuePreview,
     updatedAt: now,
   }));

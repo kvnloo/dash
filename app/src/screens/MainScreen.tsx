@@ -5,12 +5,15 @@ import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Animated, { useSharedValue } from "react-native-reanimated";
-import { Alert, AppState, InteractionManager, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Alert, AppState, InteractionManager, Pressable, StyleSheet, Text, View } from "react-native";
+import { usePaneDimensions } from "../lib/pane-size";
+import { useDeskActive } from "../lib/desk";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
 import { OrbActivity } from "../components/OrbMotion";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
+import { AttachedComposer } from "../components/AttachedComposer";
 import { KeyboardDock } from "../components/KeyboardDock";
 import { AppNav, type AppNavHandle } from "../components/AppNav";
 import { SearchResultRow } from "../components/SearchResultRow";
@@ -149,7 +152,9 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
     setForeground(AppState.currentState === "active");
     return () => listener.remove();
   }, []);
-  const { width } = useWindowDimensions();
+  const { width } = usePaneDimensions();
+  // Desk mode: the shell owns Hosts and Chats; this centre pane is the Orchestra graph.
+  const desk = useDeskActive();
   const blurTarget = useRef<View>(null);
   const pagerRef = useRef<MainPagerRef>(null);
   const navRef = useRef<AppNavHandle>(null);
@@ -203,13 +208,29 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const hosts = store.use((s) => s.connection.hosts);
   const cwd = store.use((s) => s.connection.cwd);
   const settings = store.use((s) => s.settings);
+  // Only a chat owned by the currently paired bridge can use Main's attached composer.
+  // Saved-local, foreign, stale and view-only chats keep Main search available; opening
+  // their transcript still restores the draft under its original conversation id.
+  // The Chat window retains Main behind it. Native history and streaming can replace
+  // the selected conversation many times while Chat owns the transcript; Main
+  // must not subscribe to those objects or refresh its backdrop mid-scroll.
+  const attached = store.use(s => {
+    if (!screenFocused || !s.hydrated || !s.activeId) return undefined;
+    const chat = s.conversations.find(c => c.id === s.activeId && c.id !== FEEDBACK_CONVERSATION_ID);
+    if (!chat || !chat.endpointAddress || chat.endpointAddress !== s.settings?.address || chat.stale || chat.viewOnly) return undefined;
+    return chat;
+  });
+  const [searchMode, setSearchMode] = useState(false);
+  // Returning from another screen shows the selected chat, not an old search query.
+  useEffect(() => { if (screenFocused) setSearchMode(false); }, [screenFocused]);
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
   const noTrigger = composerTrigger(query) === null;
-  const chatScope = parsed.mode === "mention" && parsed.scope === "conversation" && noTrigger;
+  const chatScope = screenFocused && parsed.mode === "mention" && parsed.scope === "conversation" && noTrigger;
   // Plain text: a compact "Chats" section (local top 5, then the bridge's first page).
-  const discoverChats = parsed.mode === "discover" && parsed.text.length >= 2 && noTrigger;
-  const searchActive = (parsed.mode !== "discover" && parsed.scope !== "unknown" && noTrigger) || discoverChats;
+  const discoverChats = screenFocused && parsed.mode === "discover" && parsed.text.length >= 2 && noTrigger;
+  // Search work, including native history paging, belongs to Main only when visible.
+  const searchActive = screenFocused && (!attached || searchMode) && ((parsed.mode !== "discover" && parsed.scope !== "unknown" && noTrigger) || discoverChats);
   const globalActive = searchActive && !chatScope && !discoverChats;
 
   // Bots, products, /live and /harness only: built while that search is on screen.
@@ -424,7 +445,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       <LazyPane focused={index === 0}><HostsPane navigation={navigation} focused={index === 0} /></LazyPane>
     </View>,
     <View key="chats" style={{ width, flex: 1 }}>
-      <ChatsPane navigation={navigation} focused={index === 1 && !searchActive} />
+      <ChatsPane navigation={navigation} focused={screenFocused && index === 1 && !searchActive} />
     </View>,
     <View key="orchestra" style={{ width, flex: 1 }}>
       <LazyPane focused={index === 2}><OrbActivity active={index === 2 && !searchActive && screenFocused && foreground}><OrchestraPane navigation={navigation} focused={index === 2 && !searchActive && screenFocused && foreground} /></OrbActivity></LazyPane>
@@ -433,7 +454,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
-      <AppNav
+      {desk ? null : <AppNav
         ref={navRef}
         navigation={navigation}
         tab={index}
@@ -441,8 +462,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
         onTab={(next) => {
           pagerRef.current?.setPage(next);
         }}
-      />
-      <WorkspaceHeader navigation={navigation} tab={index} titleOnly={index === 2} />
+      />}
+      {desk ? null : <WorkspaceHeader navigation={navigation} tab={index} titleOnly={index === 2} />}
       <ConnectionPill />
       <BlurTargetView ref={blurTarget} style={styles.body}>
         {searchActive ? (
@@ -470,6 +491,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               }
             />
           </>
+        ) : desk ? (
+          <View testID="desk-orchestra" style={styles.pager}><OrchestraPane navigation={navigation} focused={!searchActive && screenFocused && foreground} /></View>
         ) : (
           <Animated.View style={styles.pager} collapsable={false}>
             <MainPager
@@ -489,31 +512,54 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
       <BottomActionSheet open={rowMenu !== null} title={rowMenu?.title || "Result"} options={rowMenuOptions} onSelect={onRowMenuSelect} onClose={closeRowMenu} />
       <KeyboardDock style={styles.searchDock}>
-        <GlobalSearchBar
-          value={query}
-          blurTarget={blurTarget}
-          onChange={setQuery}
-          onScope={onScope}
-          dock="bottom"
-          placeholder={`Message ${harnessName}`}
-          onVoice={() => {
-            // Voice keeps the explicitly attached chat; never retarget via a new feedback chat.
-            navigation.navigate("Voice", { autostart: true });
-          }}
-          onSend={(text) => {
-            if (feedbackOn) {
-              haptic.select();
-              submitInAppFeedback({ kind: "typed", text });
-              navigation.navigate("Chat");
-              setQuery("");
-              return;
-            }
-            const harness = settings?.harness ?? harnesses[0]?.id;
-            if (!harness) return;
-            openHarness(harness, text);
-            setQuery("");
-          }}
-        />
+        {attached && screenFocused && !searchMode ? (
+          <AttachedComposer
+            key={attached.id}
+            conversation={attached}
+            blurTarget={blurTarget}
+            onOpen={() => navigation.navigate("Chat")}
+            onSearch={(searchQuery) => {
+              if (searchQuery !== undefined) setQuery(searchQuery);
+              setSearchMode(true);
+            }}
+            onVoice={() => navigation.navigate("Voice", { autostart: true })}
+            onDetach={() => setActive(null)}
+          />
+        ) : (
+          <>
+            {attached && screenFocused ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Return to attached session"
+                onPress={() => setSearchMode(false)} style={styles.resumeAttached}>
+                <Text numberOfLines={1} style={styles.resumeText}>Return to {attached.title || attached.harness}</Text>
+              </Pressable>
+            ) : null}
+            <GlobalSearchBar
+              value={query}
+              blurTarget={blurTarget}
+              onChange={setQuery}
+              onScope={onScope}
+              dock="bottom"
+              placeholder={`Message ${harnessName}`}
+              onVoice={() => {
+                // Voice keeps the explicitly attached chat; never retarget via a new feedback chat.
+                navigation.navigate("Voice", { autostart: true });
+              }}
+              onSend={(text) => {
+                if (feedbackOn) {
+                  haptic.select();
+                  submitInAppFeedback({ kind: "typed", text });
+                  navigation.navigate("Chat");
+                  setQuery("");
+                  return;
+                }
+                const harness = settings?.harness ?? harnesses[0]?.id;
+                if (!harness) return;
+                openHarness(harness, text);
+                setQuery("");
+              }}
+            />
+          </>
+        )}
       </KeyboardDock>
     </View>
   );
@@ -526,6 +572,8 @@ const styles = StyleSheet.create({
   searchDock: {
     backgroundColor: "transparent",
   },
+  resumeAttached: { minHeight: 44, justifyContent: "center", paddingHorizontal: space.lg, backgroundColor: colors.bg },
+  resumeText: { color: colors.gold, ...type.small },
   sectionHeader: { color: colors.textMuted, ...type.label, paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.xs },
   more: { minHeight: 44, justifyContent: "center", paddingHorizontal: space.lg },
   moreText: { color: colors.gold, ...type.label },

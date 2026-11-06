@@ -95,6 +95,21 @@ if(process.env.ARMY_ARCHIVE_CLAUDE==='1'){
  const installId='a1b2c3d4e5f60718293a4b5c6d7e8f90';
  await seedAgentsview({id:'11111111-2222-4333-8444-555555555555',machine:installId,installId,title:'ARMY archived Claude Code chat',cwd:process.env.DASH_CWD||'',transcript:[['user','ARMY archived Claude Code chat'],['assistant','ARMY older model answer'],['user','ARMY next question'],['assistant','ARMY earlier answer from '+installId],['user','ARMY pending follow-up']]});
 }
+// Subagents of a Claude Code chat exist only as tool calls in its transcript (DF-046): a finished Task,
+// an unrelated Bash call and 33 unfinished Agent spawns, the newest titled only by a long prompt.
+if(process.env.ARMY_TRANSCRIPT_WORKERS==='1'){
+ const {join}=await import('node:path');const {mkdirSync,writeFileSync}=await import('node:fs');
+ const home=process.env.HOME;if(!home||!home.includes('dash-army-'))throw Error('isolated HOME required');
+ const dir=join(home,'.claude','projects','-army');mkdirSync(dir,{recursive:true});
+ const t0=Date.now()-600_000;const at=(s:number)=>new Date(t0+s*1000).toISOString();
+ const use=(s:number,block:Record<string,unknown>)=>({type:'assistant',timestamp:at(s),message:{role:'assistant',content:[{type:'tool_use',...block}]}});
+ const rows:unknown[]=[use(0,{id:'army-task-done',name:'Task',input:{description:'ARMY finished task',prompt:'ARMY finished prompt'}}),
+  {type:'user',timestamp:at(5),message:{role:'user',content:[{type:'tool_result',tool_use_id:'army-task-done',content:'ARMY finished result body'}]}},
+  use(6,{id:'army-bash',name:'Bash',input:{command:'echo ARMY unrelated tool'}})];
+ for(let n=0;n<32;n++)rows.push(use(10+n,{id:'army-spawn-'+n,name:'Agent',input:{description:'ARMY spawn '+String(n).padStart(2,'0'),prompt:'ARMY spawn prompt body'}}));
+ rows.push(use(60,{id:'army-spawn-long',name:'Agent',input:{prompt:'ARMY newest spawn has only a prompt and it runs well past sixty SECRET-PROMPT-TAIL'}}));
+ writeFileSync(join(dir,'11111111-2222-4333-8444-555555555555.jsonl'),rows.map(r=>JSON.stringify(r)).join('\n')+'\n');
+}
 if(process.env.ARMY_LONG_CLAUDE){
  // A long chat as Hermes and Claude Code write them: every prompt is followed by several tool-step
  // rows and one final answer, so the newest 50 rows (the first page) hold only a handful of prompts.

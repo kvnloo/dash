@@ -40,3 +40,33 @@ test.describe('subagent strip',()=>{
   await expect(page.getByText('chat 2 · 1 live',{exact:true})).toHaveCount(1);
  });
 });
+
+test.describe('transcript subagents',()=>{
+ test.use({bridgeOptions:{archiveClaude:true,transcriptWorkers:true},viewport:{width:390,height:844}});
+ test('a Claude Code chat shows subagents derived from its transcript tool calls, capped at 32, titles cut at 60',async({page,bridge})=>{
+  await pair(page,bridge);
+  const row=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({hasText:'ARMY archived Claude Code chat'});
+  await expect(row).toHaveCount(1,{timeout:30000});
+  await row.click({noWaitAfter:true});
+  const chat=page.getByTestId('chat-window');
+  await expect(chat).toBeVisible();
+
+  // 33 unfinished Agent spawns cap at the 32 newest; the finished Task and the Bash call never count.
+  const strip=page.getByRole('button',{name:'32 subagents working',exact:true});
+  await expect(strip).toBeVisible({timeout:20000});
+  // The newest spawn has no description: its title is the first 60 code points of the prompt, nothing more.
+  await expect(strip).toContainText('ARMY newest spawn has only a prompt and it runs well past si · Agent');
+  await expect(strip).toContainText('+31');
+  await expect(page.getByText(/SECRET-PROMPT-TAIL/)).toHaveCount(0);
+  const box=await strip.boundingBox();
+  if(!box)throw Error('strip has no box');
+  expect(box.x+box.width).toBeLessThanOrEqual(390);
+
+  await strip.click({noWaitAfter:true});
+  await expect(page.getByRole('treeitem',{name:/ARMY spawn 31/})).toBeVisible();
+  await expect(page.getByRole('treeitem',{name:/ARMY spawn 01/})).toHaveCount(1);
+  await expect(page.getByRole('treeitem',{name:/ARMY spawn 00/})).toHaveCount(0);
+  await expect(chat.getByText('ARMY finished task')).toHaveCount(0);
+  await expect(chat.getByText(/ARMY unrelated tool|ARMY spawn prompt body|ARMY finished result body/)).toHaveCount(0);
+ });
+});

@@ -16,19 +16,20 @@ test('long-press on a chat row opens the row menu and sends nothing',async({page
  const before=turnLines(bridge.logs()).length;
  await row.hover();
  await page.mouse.down();await page.waitForTimeout(900);await page.mouse.up();
- const sheet=page.getByTestId('bottom-action-sheet');
- await expect(sheet).toBeVisible();
- await expect(sheet.getByText('Open',{exact:true})).toBeVisible();
- await expect(sheet.getByText('Send feedback about this chat',{exact:true})).toBeVisible();
- await expect(sheet.getByText('Delete from this phone',{exact:true})).toBeVisible();
+ const menu=page.getByTestId('chat-row-actions-menu');
+ await expect(menu).toBeVisible();
+ await expect(menu.getByRole('button')).toHaveCount(3);
+ await expect(menu.getByTestId('chat-row-action-open')).toHaveAccessibleName(/^Open chat: .*ARMY native fixture/);
+ await expect(menu.getByTestId('chat-row-action-send-feedback')).toHaveAccessibleName(/^Send feedback about chat: .*ARMY native fixture/);
+ await expect(menu.getByTestId('chat-row-action-delete-local')).toHaveAccessibleName(/^Delete chat from this phone: .*ARMY native fixture/);
  await page.screenshot({path:info.outputPath('longpress-menu.png')});
  // Nothing opened, nothing sent: no chat window, no feedback chat, no turn on the bridge.
  await expect(page.getByTestId('chat-window')).toHaveCount(0);
  await expect(page.getByText('Dash feedback',{exact:true})).toHaveCount(0);
  await page.waitForTimeout(2500);
  expect(turnLines(bridge.logs()).slice(before)).toEqual([]);
- await page.getByTestId('bottom-action-sheet-close').click({noWaitAfter:true});
- await expect(sheet).toHaveCount(0);
+ await page.getByTestId('chat-row-actions-backdrop').click({position:{x:4,y:4},noWaitAfter:true});
+ await expect(menu).toHaveCount(0);
  await expect(page.getByTestId('chat-window')).toHaveCount(0);
  await page.waitForTimeout(1000);
  expect(turnLines(bridge.logs()).slice(before)).toEqual([]);
@@ -46,7 +47,7 @@ test('swiping from a chat row never opens it and the next single tap opens that 
  await page.mouse.move(box.x+box.width*.1,y,{steps:12});await page.mouse.up();
  await expect(page.getByRole('tab').nth(2)).toHaveAttribute('aria-selected','true');
  await expect(page.getByTestId('chat-window')).toHaveCount(0);
- await expect(page.getByTestId('bottom-action-sheet')).toHaveCount(0);
+ await expect(page.getByTestId('chat-row-actions-menu')).toHaveCount(0);
  await page.getByRole('tab').nth(1).click({noWaitAfter:true});
  await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected','true');
  await row.click({noWaitAfter:true});

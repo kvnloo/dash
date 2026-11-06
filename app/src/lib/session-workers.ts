@@ -20,11 +20,22 @@ export function parseWorkers(value: unknown): Worker[] {
   return out;
 }
 
+/** Which chat to poll: Hermes chats by profile (state.db children), Claude/Codex/OMP by harness (transcript tool calls). */
+export type WorkerSource = { harness: string; profile?: string; session: string };
+
+export function workersPath(source: WorkerSource): string | undefined {
+  if (source.harness === "hermes") return source.profile ? `/hermes/workers?profile=${encodeURIComponent(source.profile)}&session=${encodeURIComponent(source.session)}` : undefined;
+  if (source.harness === "claude" || source.harness === "codex" || source.harness === "omp") return `/chat/workers?harness=${source.harness}&session=${encodeURIComponent(source.session)}`;
+  return undefined;
+}
+
 /** Fetch only this chat's status, using the same scoped credential as its socket. */
-export async function fetchSessionWorkers(settings: Settings, profile: string, session: string, signal: AbortSignal): Promise<Worker[]> {
+export async function fetchSessionWorkers(settings: Settings, source: WorkerSource, signal: AbortSignal): Promise<Worker[]> {
+  const path = workersPath(source);
+  if (!path) return [];
   const token = await executionToken(settings);
   signal.throwIfAborted();
-  const response = await fetch(`http://${settings.address}/hermes/workers?profile=${encodeURIComponent(profile)}&session=${encodeURIComponent(session)}`, {
+  const response = await fetch(`http://${settings.address}${path}`, {
     headers: { Authorization: `Bearer ${token}` }, signal,
   });
   if (!response.ok) throw new Error(`Worker status unavailable (HTTP ${response.status})`);

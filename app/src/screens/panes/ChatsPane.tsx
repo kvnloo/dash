@@ -2,7 +2,8 @@ import { useIsFocused } from "@react-navigation/native";
 import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, StyleSheet, Text, View } from "react-native";
+import type { NavigationProp } from "@react-navigation/native";
 import { chatKey, type ChatSummary, type HostInfo } from "../../../../shared/protocol";
 import type { WindowOrigin } from "../../lib/chat-window";
 import { threadAppearance } from "../../components/thread-appearance";
@@ -14,8 +15,9 @@ import { conversationThinking, type Thinking } from "../../lib/thinking";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
 import { chatRow } from "../../lib/chat-row";
-import { chatRowActions, chatRowMenu, pressRow, runChatRowMenu } from "../../lib/chat-row-actions";
-import { BottomActionSheet } from "../../components/BottomActionSheet";
+import { chatRowActions, pressRow } from "../../lib/chat-row-actions";
+import { chatRowMenu, type RowMenuOptionId } from "../../lib/chat-row-menu";
+import { ChatRowDropdown } from "../../components/ChatRowDropdown";
 import { NextActionCard } from "../../components/NextActionCard";
 import { ChatListControls } from "../../components/ChatListControls";
 import { DEFAULT_CHAT_FILTERS, filterChatRows, historyNeeded, projectPath, type ChatFilters } from "../../lib/chat-filters";
@@ -26,7 +28,8 @@ import { NEXT_ACTION_LATER_MS } from "../../lib/next-action-card";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { usePagedChats } from "../../hooks/usePagedChats";
 import type { AssistantMessage, ConnectionStatus, Conversation } from "../../model";
-import type { ScreenProps } from "../../navigation";
+import type { RootStackParamList } from "../../navigation";
+import { useDeskActive } from "../../lib/desk";
 import { clearEndedConversations, deleteConversation, openChat, setActive, store } from "../../store/app";
 import { summaryByKey } from "../../store/chat-index-store";
 import { composerDrafts } from "../../store/composer-drafts";
@@ -55,6 +58,13 @@ interface ChatRowModel {
   viewOnly: boolean;
   /** Host name when the chat is not on the paired computer. */
   hostName?: string;
+}
+
+interface RowMenuAnchor {
+  id: string;
+  title: string;
+  x: number;
+  y: number;
 }
 
 const localModels = new WeakMap<Conversation, { harnessName: string; connectionStatus: ConnectionStatus; model: ChatRowModel }>();
@@ -136,49 +146,118 @@ const Row = memo(function Row({
   live?: boolean;
   saved?: boolean;
   onPress(id: string, origin?: WindowOrigin): void;
-  onLongPress(id: string): void;
+  onLongPress(id: string, anchor: { x: number; y: number }): void;
 }) {
   const appearance = threadAppearance({ stale: item.stale, live });
   const stale = appearance.stale;
   const thinking = item.thinking;
   const content = item.content;
   const activityShimmer = activityShimmerEnabled(thinking.phase, connectionStatus, stale);
+  const webHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const webHoldStart = useRef<{ x: number; y: number } | null>(null);
+  const webHoldCanceled = useRef(false);
+  const clearWebHold = () => {
+    if (webHoldTimer.current !== null) {
+      clearTimeout(webHoldTimer.current);
+      webHoldTimer.current = null;
+    }
+  };
+  useEffect(() => () => {
+    if (webHoldTimer.current !== null) clearTimeout(webHoldTimer.current);
+  }, []);
+  const triggerLongPress = (x: number, y: number) => {
+    if (held.current || webHoldCanceled.current) return;
+    held.current = true;
+    clearWebHold();
+    onLongPress(item.id, { x, y });
+  };
+  // Desk mode (DeX / wide window): mouse hover and right-click open the same row menu as a long-press.
+  const desk = useDeskActive();
+  const [hovered, setHovered] = useState(false);
+  const frame = useRef<View>(null);
+  const menuRef = useRef(onLongPress);
+  menuRef.current = onLongPress;
+  useEffect(() => {
+    const element: unknown = frame.current;
+    if (!desk || Platform.OS !== "web" || typeof HTMLElement === "undefined" || !(element instanceof HTMLElement)) return;
+    const contextMenu = (event: MouseEvent) => { event.preventDefault(); menuRef.current(item.id, { x: event.pageX, y: event.pageY }); };
+    element.addEventListener("contextmenu", contextMenu);
+    return () => element.removeEventListener("contextmenu", contextMenu);
+  }, [desk, item.id]);
   return (
-    <PressScale
-      onPress={(event) => pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress)}
-      onLongPress={() => onLongPress(item.id)}
-      delayLongPress={350}
-      style={[styles.row, active && !stale && styles.rowActive]}
-      accessibilityRole="button"
-      testID={`chat-row-${item.id.startsWith("remote:") ? item.id.slice(7) : item.id}`}
-    >
-      <AgentOrb size={28} thinking={thinking} label={`${item.harnessName} · ${thinking.tool ?? thinking.phase}`} />
-      <View style={styles.rowMain}>
-        <View style={styles.rowTop}>
-          <Text style={[styles.rowTitle, stale && styles.stale]} numberOfLines={1}>
-            {content.title}
+    <View ref={frame} collapsable={false}>
+      <PressScale
+        webPressable
+        onPress={(event) => {
+          if (!held.current && !webHoldCanceled.current) pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress);
+        }}
+        onPressIn={(event) => {
+          held.current = false;
+          webHoldCanceled.current = false;
+          webHoldStart.current = null;
+          clearWebHold();
+          if (Platform.OS === "web") {
+            const { pageX, pageY } = event.nativeEvent;
+            webHoldStart.current = { x: pageX, y: pageY };
+            // Direct web Pressability starts the hold on pointer down, not on release.
+            webHoldTimer.current = setTimeout(() => triggerLongPress(pageX, pageY), 350);
+          }
+        }}
+        onPointerMove={(event) => {
+          if (Platform.OS !== "web" || !webHoldStart.current) return;
+          const { pageX, pageY } = event.nativeEvent;
+          if (Math.abs(pageX - webHoldStart.current.x) > 10 || Math.abs(pageY - webHoldStart.current.y) > 10) {
+            webHoldCanceled.current = true;
+            clearWebHold();
+          }
+        }}
+        onPointerCancel={() => {
+          if (Platform.OS !== "web") return;
+          webHoldCanceled.current = true;
+          webHoldStart.current = null;
+          clearWebHold();
+        }}
+        onPressOut={() => {
+          clearWebHold();
+          webHoldStart.current = null;
+        }}
+        onLongPress={(event) => triggerLongPress(event.nativeEvent.pageX, event.nativeEvent.pageY)}
+        delayLongPress={350}
+        onHoverIn={desk ? () => setHovered(true) : undefined}
+        onHoverOut={desk ? () => setHovered(false) : undefined}
+        style={[styles.row, active && !stale && styles.rowActive, desk && hovered && styles.rowHover]}
+        accessibilityRole="button"
+        testID={`chat-row-${item.id.startsWith("remote:") ? item.id.slice(7) : item.id}`}
+      >
+        <AgentOrb size={28} thinking={thinking} label={`${item.harnessName} · ${thinking.tool ?? thinking.phase}`} />
+        <View style={styles.rowMain}>
+          <View style={styles.rowTop}>
+            <Text style={[styles.rowTitle, stale && styles.stale]} numberOfLines={1}>
+              {content.title}
+            </Text>
+            {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
+            {item.viewOnly ? <Text style={styles.badge} accessibilityLabel="View only">view only</Text> : null}
+            {saved ? <Text style={styles.badge} accessibilityLabel="Saved local history">saved local</Text> : null}
+            <Text style={styles.rowTime} numberOfLines={1}>{stale ? "ended" : item.openIn ? `${item.openIn} · ${timeAgo(item.updatedAt)}` : timeAgo(item.updatedAt)}</Text>
+          </View>
+          <View style={styles.rowMeta}>
+            <Text style={styles.rowFolder} numberOfLines={1} accessibilityLabel={content.folderPath ? `Working folder: ${content.folderPath}` : content.folder}>
+              {content.folder}
+            </Text>
+            {activityShimmer ? <View style={styles.rowActivityHighlight}>
+              <ShimmerText text={content.activity} size={12} family="sans-serif" dim={colors.textMuted} bright={colors.text} />
+            </View> : <Text style={[styles.rowActivity, content.needsAttention && styles.attention]} numberOfLines={1}>
+              {content.activity}
+            </Text>}
+          </View>
+          <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
+            {content.outcomeLabel ? `${content.outcomeLabel} · ` : ""}{content.outcome}
           </Text>
-          {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
-          {item.viewOnly ? <Text style={styles.badge} accessibilityLabel="View only">view only</Text> : null}
-          {saved ? <Text style={styles.badge} accessibilityLabel="Saved local history">saved local</Text> : null}
-          <Text style={styles.rowTime} numberOfLines={1}>{stale ? "ended" : item.openIn ? `${item.openIn} · ${timeAgo(item.updatedAt)}` : timeAgo(item.updatedAt)}</Text>
         </View>
-        <View style={styles.rowMeta}>
-          <Text style={styles.rowFolder} numberOfLines={1} accessibilityLabel={content.folderPath ? `Working folder: ${content.folderPath}` : content.folder}>
-            {content.folder}
-          </Text>
-          {activityShimmer ? <View style={styles.rowActivityHighlight}>
-            <ShimmerText text={content.activity} size={12} family="sans-serif" dim={colors.textMuted} bright={colors.text} />
-          </View> : <Text style={[styles.rowActivity, content.needsAttention && styles.attention]} numberOfLines={1}>
-            {content.activity}
-          </Text>}
-        </View>
-        <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
-          {content.outcomeLabel ? `${content.outcomeLabel} · ` : ""}{content.outcome}
-        </Text>
-      </View>
-      <View style={styles.hairline} />
-    </PressScale>
+        <View style={styles.hairline} />
+      </PressScale>
+    </View>
   );
 }, (a, b) => a.item === b.item && a.saved === b.saved && a.live === b.live && a.active === b.active && a.connectionStatus === b.connectionStatus && a.onPress === b.onPress && a.onLongPress === b.onLongPress);
 
@@ -193,7 +272,7 @@ const LocalChatRow = memo(function LocalChatRow({ id, harnessName, connectionSta
   active: boolean;
   live: boolean;
   onPress(id: string, origin?: WindowOrigin): void;
-  onLongPress(id: string): void;
+  onLongPress(id: string, anchor: { x: number; y: number }): void;
 }) {
   const conversation = store.use((s) => conversationById(s.conversations, id));
   const address = store.use(s => s.settings?.address);
@@ -231,7 +310,7 @@ function startOfToday(): number {
 const NO_ENTRIES: readonly ConversationEntry[] = [];
 const NO_LIST = emptyList();
 
-export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Main">, "navigation"> & { focused?: boolean }) {
+export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: { navigation: NavigationProp<RootStackParamList>; focused?: boolean }) {
   const thumb = useHandedness();
   const screenFocused = useIsFocused();
   const conversations = store.use((s) => s.conversations);
@@ -392,16 +471,39 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
 
   const feedbackOn = inAppFeedbackEnabled(store.use((s) => s.settings));
   // Long-press only opens the row menu; every action (including feedback, which sends) is an explicit choice.
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-  const longPress = useCallback((id: string) => { haptic.select(); setMenuFor(id); }, []);
+  const [menuFor, setMenuFor] = useState<RowMenuAnchor | null>(null);
+  const longPress = useCallback((id: string, anchor: { x: number; y: number }) => {
+    const title = id.startsWith("remote:")
+      ? summaryByKey(id.slice(7))?.title
+      : store.get().conversations.find(c => c.id === id)?.title;
+    if (!title) return;
+    haptic.select();
+    setMenuFor({ id, title, ...anchor });
+  }, []);
   const closeMenu = useCallback(() => setMenuFor(null), []);
-  const menuTitle = menuFor ? (menuFor.startsWith("remote:") ? summaryByKey(menuFor.slice(7))?.title : store.get().conversations.find(c => c.id === menuFor)?.title) ?? "" : "";
-  const menu = useMemo(() => chatRowMenu(feedbackOn, menuTitle), [feedbackOn, menuTitle]);
-  const onMenu = useCallback((choice: string) => {
-    const id = menuFor;
+  // Preserve the three existing row actions; the menu model provides stable identities
+  // and accessible names, while the dropdown is anchored at the pressed row.
+  const menu = useMemo(() => menuFor
+    ? chatRowMenu(
+      { id: menuFor.id, title: menuFor.title, live: false, hasSession: false },
+      { feedbackOn, canOpenWindow: false },
+    )
+    : [], [feedbackOn, menuFor]);
+  const onMenu = useCallback((choice: RowMenuOptionId) => {
+    const id = menuFor?.id;
     setMenuFor(null);
-    if (id) runChatRowMenu(choice, id, { open: (rowId) => open(rowId), feedback: onFeedback, remove });
-  }, [menuFor, open, onFeedback, remove]);
+    if (!id) return;
+    // A recycled/deleted row cannot dispatch an old selection.
+    if (id.startsWith("remote:")) {
+      if (!summaryByKey(id.slice(7))) return;
+    } else if (!store.get().conversations.some(c => c.id === id)) return;
+    switch (choice) {
+      case "open": open(id); return;
+      case "send-feedback": if (feedbackOn) onFeedback(id); return;
+      case "delete-local": remove(id); return;
+      default: return;
+    }
+  }, [feedbackOn, menuFor, onFeedback, open, remove]);
 
   const renderItem = useCallback(
     ({ item: row }: ListRenderItemInfo<ChatListRow | undefined>) => {
@@ -463,7 +565,7 @@ export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }
           <Text style={styles.clearEndedText}>Clear ended</Text>
         </PressScale>
       )}
-      <BottomActionSheet open={menuFor !== null} title={menu.title} options={menu.options} onSelect={onMenu} onClose={closeMenu} />
+      <ChatRowDropdown anchor={menuFor} title={menuFor?.title ?? ""} options={menu} onSelect={onMenu} onClose={closeMenu} />
       <FlashList
         key={listLifecycleKey}
         data={items}
@@ -514,6 +616,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   rowActive: { backgroundColor: "rgba(215,185,134,.035)" },
+  rowHover: { backgroundColor: "rgba(236,232,223,.05)" },
   stale: { color: colors.textTertiary },
   liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.gold },
   badge: { color: colors.textTertiary, ...type.mono, fontSize: 10, textTransform: "none", letterSpacing: 0 },

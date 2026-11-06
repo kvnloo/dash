@@ -1,5 +1,44 @@
 # Android development build
 
+## S Pen side button (native DashStylus)
+
+The `DashStylus` Expo module watches **only Dash's own Android window**.
+Touch and generic-motion/hover events are always forwarded to the original
+`Window.Callback`. Stylus or eraser events with
+`BUTTON_STYLUS_PRIMARY` generate `button: { pressed: boolean }` only on
+state transitions. The existing JS reducer toggles Annotate on the rising
+edge; release, a held button and repeated frames never toggle it. The module
+also exposes `getUptimeMillis()` from `SystemClock.uptimeMillis()` for flow
+trace calibration. It cannot intercept a system-wide S Pen/Air Command event.
+
+**Rebuild and deliberately install a native APK** to obtain this module.
+The turbo follower's native fingerprint does not hash `app/modules/*`; a
+Metro reload, Fast Refresh or OTA cannot add Kotlin to an older APK.
+The native build runs `:dash-stylus:testDebugUnitTest` and saves XML/HTML
+reports under `.native-receipts/dash-stylus/`, plus APK module checks.
+Neither those tests nor dex counts prove S Pen behavior; O15 still requires
+a green tester-army receipt for the exact head before any build/install.
+Native-only side-button entry is the owner's explicit exception to the
+AGENTS.md Expo Go compatibility rule: the JS module lookup remains optional.
+Expo Go and older APKs retain the **Annotate pill** and
+**Options → Annotate** manual entry.
+
+**Owner acceptance — Galaxy S25 Ultra only (S22+ has no S Pen):**
+
+- Install the O15-approved newly rebuilt `app.dash.mobile` APK. Check that
+  manual Annotate entry and exit still work.
+- Hover the S Pen over Dash and press the side button: Annotate enters once.
+  Keep it pressed while hovering or touching: no repeat toggle. Release:
+  no toggle. Press again after release: exit once.
+- Repeat while the pen is in contact; include eraser tool where possible.
+  Verify normal touch, hovering and drawing are not consumed.
+- Check the Samsung Air Command interaction enabled and disabled. If Android
+  consumes the press before it reaches Dash's window, document that device
+  limitation rather than claiming global interception.
+- Background, foreground, destroy/reopen the app and verify observer cleanup
+  and fresh entry. No phone acceptance is claimed by the build or web army.
+
+
 ## DeX WP2 (device spike pending)
 
 The local `dash-dex` Expo module registers `DashDex` and a non-exported
@@ -32,6 +71,48 @@ host only, not phone installation or testing. Shared-host, multi-resume,
 display-density and One UI behavior remain unverified on devices. L2 overlays
 are deferred until a failed, owner-authorized L1 spike; no overlay permission,
 MediaProjection, Presentation or native mirror pump is included.
+
+## DeX desk mode (#554)
+
+Desk mode is the multi-pane dashboard Dash shows in Samsung DeX or any wide
+window (`app/src/components/desk/`, decision in `app/src/lib/desk.ts`):
+left rail (tablist, Ctrl+1..9), Chats column, the stack navigator as the
+centre pane (Orchestra graph, or the open chat), and side panels for Needs
+you, Hosts (live `/hosts/stats` plus 24 h `/hosts/utilization`), the k3s
+phone queue (`/phones/queue`, read by the bridge from `DASH_PHONE_QUEUE_URL`),
+workers, traces and the build chip. Columns resize by dragging their edge,
+panels collapse from their header; both persist in AsyncStorage
+(`dash.desk.v1`). Ctrl+K opens the quick switch; right-click on a chat row
+opens the long-press menu. The phone layout is unchanged below the threshold.
+
+Decision order: `?desk=on|off|auto` (web, per page load) > Settings "Desk
+layout" > auto. Auto turns on at a root width >= 1100 dp, or >= 960 dp with
+a desktop signal (DeX mode from `DashDex`, or a native mouse/touchpad).
+
+Targets: the S25 Ultra (One UI 9, Android 17) is the primary DeX device, the
+S22+ (One UI 8) second. One UI 9 has DeX, but built into the Samsung launcher
+(`com.honeyspace.dexservice`, Wireless DeX tile, `dex_policy` service) on top
+of Android desktop windowing; the standalone `desktopmode.uiservice` /
+`desktoplauncher` packages are gone and `getSystemService("desktopmode")` is
+absent on both phones (read-only adb, 2026-10-28). So detection
+(`DexDetector.kt`, no Pad opt-in needed) works from the window/display side:
+MainActivity on a non-default display, desk `uiMode` on external displays or
+the activity, Samsung's display category, a freeform window smaller than its
+display on a display >= 600 dp (desktop windowing), a public external
+presentation display that is on, mouse/touchpad presence and `screenWidthDp`.
+The Samsung paths (`semDesktopModeEnabled`, `desktopmode`, Knox broadcast) are
+optional, guarded fallbacks. The freeform/external signals set `desktop` /
+`desktopSource` only: they lower the desk threshold and never change `mode`,
+so they cannot open the Pad or move a window. The Build panel shows the live
+decision (`Desk <reason> · <width> wide · DeX signal <source>`).
+`with-dex.js` adds `com.samsung.android.keepalive.density`,
+`com.sec.android.support.multiwindow`, keyboard/navigation/screenSize
+config changes and a freeform `<layout>` (default 1280x800 dp, min 360x480).
+These native changes only reach a phone in a NEW APK (O15 receipt first);
+JS-only desk mode works in the existing APK by width alone. Keyboard
+shortcuts are web-only for now: React Native has no global hardware-key
+hook, so native Ctrl+K / Ctrl+N need a key-event bridge in `DashDex`
+(not built). Native desk mode is NOT TESTED on a device.
 
 Dash's installed Android package is `app.dash.mobile`. Expo Go and web still run, but do not register Dash as a share destination or enable native notifications.
 
@@ -243,6 +324,38 @@ turn rather than creating a duplicate. A local pre-submit "queued" label is not 
 acknowledgement. Only a started/final receipt clears the draft. The final reply is
 queued into the same realtime peer at a silent turn boundary. Process-kill recovery
 of the annotation drawing is not implemented by this change.
+
+### Android live voice loudspeaker routing (native, device only)
+
+The optional local Expo module `DashAudioRoute` sets Android
+`MODE_IN_COMMUNICATION` after WebRTC microphone capture and selects the
+built-in loudspeaker when no wired, USB, Bluetooth or BLE headset is connected.
+Android 12+ uses `setCommunicationDevice`; older Android versions use
+`setSpeakerphoneOn`. An audio-device callback releases the speaker override
+when a headset connects and reapplies it when the headset disconnects. End
+closes the peer and clears the route, restoring `MODE_NORMAL`.
+
+`app/app.json` declares `RECORD_AUDIO` and `MODIFY_AUDIO_SETTINGS`; the
+merged-manifest checker requires both. `requireOptionalNativeModule` allows an
+older APK without this module to keep WebRTC's previous routing behavior.
+Expo Go cannot run the native WebRTC voice peer, and the optional module does
+not change that restriction.
+
+**A new APK is required.** Metro only updates JavaScript, not Kotlin modules,
+permissions or native autolinking. The turbo follower's native fingerprint
+does **not** hash `app/modules/*`, so a successful turbo reload does not mean
+this module has reached the installed APK. Follow O15: install only after the
+exact-head tester-army release gate is green.
+
+S25 Ultra owner checklist with a rebuilt, reviewed APK and a live voice grant:
+1. Without a headset, start a live call and hear a spoken reply clearly from
+   the **loudspeaker**, not the earpiece.
+2. Connect a wired or Bluetooth headset during the call; playback moves to it.
+   Disconnect it; playback returns to the loudspeaker.
+3. Tap **End**; ordinary media audio and its normal volume behavior return.
+4. Inspect `adb shell dumpsys audio | grep -i -A3 communication` during the
+   call, with a headset, and after End. This is device-only verification;
+   the web tester army cannot prove Android audio routing.
 
 Rollout order: review/grant voice scope; deploy the tested isolated broker change and
 its introspection config with an idle-checked restart; enable/deploy bridge bootstrap;

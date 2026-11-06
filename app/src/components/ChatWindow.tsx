@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
-import { PixelRatio, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { PixelRatio, Pressable, StyleSheet, Text, View } from "react-native";
+import { usePaneDimensions } from "../lib/pane-size";
 import Animated, { ReduceMotion, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 import { haptic } from "../haptics";
@@ -37,7 +38,7 @@ import { HostStatsRow } from "./HostStatsRow";
  * frame; only transform and opacity run, on the UI thread, from the source row.
  */
 export function useWindowMorph(origin: WindowOrigin | undefined, enabled: boolean) {
-  const { height } = useWindowDimensions();
+  const { height } = usePaneDimensions();
   const from = useMemo(() => morphFrom(origin, height), [origin, height]);
   const reduced = useReducedMotion();
   const progress = useSharedValue(enabled ? 0 : 1);
@@ -202,7 +203,7 @@ export function WindowDock({ identity, title, options, onAnnotate, treeOpen, onT
   children: ReactNode;
 }) {
   const thumb = useHandedness();
-  const { width } = useWindowDimensions();
+  const { width } = usePaneDimensions();
   // Monospace advance ≈ 0.6em; the system font scale grows it. Reserve the Options trigger, the X,
   // the chevron and paddings. Text also ellipsizes as a backstop.
   const budget = Math.max(10, Math.floor((width - OPTIONS_RESERVE - ANNOTATE_RESERVE - CLOSE_HIT - 2 * space.sm - 40) / (BADGE_FONT * 0.6 * PixelRatio.getFontScale())));

@@ -85,7 +85,11 @@ test.describe(`restored OMP panes share one native session${differentCwd?' acros
   const calls=(await readFile(join(bridge.dir,'army-acp-calls.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line));
   expect(calls.map(call=>call.method)).toEqual(['session/load','session/load']);
   expect(calls.map(call=>call.sessionId)).toEqual(['army-fixture-session','army-fixture-session']);
-  expect(calls.map(call=>call.cwd)).toEqual([primary?.cwd,secondary?.cwd]);
+  // Roster order decides which pane the restored chat binds first (see
+  // live-sessions-cwd.test.ts); each load must use a real pane cwd and the
+  // load after the primary pane closes must use the surviving pane's cwd.
+  expect([primary?.cwd,secondary?.cwd]).toContain(calls[0].cwd);
+  expect(calls[1].cwd).toBe(secondary?.cwd);
  });
 });
 }

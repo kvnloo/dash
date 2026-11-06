@@ -21,6 +21,7 @@ import { homedir, hostname } from "node:os";
 import { basename, join } from "node:path";
 import {
   CHATS_FEATURE,
+  MODEL_SELECTION_FEATURE,
   PROTOCOL_VERSION,
   chatKey,
   parseClientMessage,
@@ -52,6 +53,7 @@ import { liveArgv } from "./src/hermes-live";
 import { sendGatewayMessage } from "./src/hermes-steer";
 import { sessionPhaseHttp } from "./src/hermes-phase";
 import { sessionWorkersHttp } from "./src/hermes-workers";
+import { chatWorkersHttp, liveTranscriptWorkers, transcriptRoots } from "./src/raw-tool-events";
 import { z0liveStateHttp } from "./src/z0live-state";
 import { voiceBootstrap } from "./src/voice-bootstrap";
 import { createVoiceStatusHttpHandler, voiceStatus } from "./src/voice-status";
@@ -95,6 +97,7 @@ import { createSupervisionHttpHandler } from "./src/supervision-http";
 import { createPostureHttpHandler } from "./src/posture-http";
 import { createOrchestraHttpHandler } from "./src/orchestra-http";
 import { createHostsHttpHandler } from "./src/hosts-http";
+import { createPhoneQueueHttpHandler } from "./src/phone-queue-http";
 import { createRoadmapHttpHandler } from "./src/roadmap-http";
 import { createPmHttpHandler } from "./src/pm-http";
 import { createBridgeHealthHttpHandler, DRAIN_MESSAGE } from "./src/health";
@@ -189,6 +192,10 @@ class Turn implements Sink {
   private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
 
   start(input: TurnInput, remote?: RemoteHost): void {
+    if (input.model && !remote && ((this.harness.id === "hermes" && input.sessionId) || process.env.DASH_ENABLE_LEGACY_CLI === "1")) {
+      this.endWithout("Model switching requires an ACP-controlled session on this host; no prompt was submitted.");
+      return;
+    }
     if (input.mode === "steer" && (this.harness.id !== "hermes" || !input.sessionId)) { this.endWithout("Steer requires a gateway-hosted Hermes session."); return; }
     // A spoken turn is transcribed before it starts, so a cancel can arrive
     // while there is no process to kill yet.
@@ -836,6 +843,7 @@ const contextCompaction = compactionEnabled();
 const handleContext = contextHttp({ sessions: hermesSessions, compaction: contextCompaction });
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleHosts = createHostsHttpHandler({ authorize, hostId: () => SELF.id() });
+const handlePhoneQueue = createPhoneQueueHttpHandler({ authorize });
 const handleRoadmap = createRoadmapHttpHandler({ authorize });
 const handlePm = createPmHttpHandler({ authorize });
 const handleVoiceStatus = createVoiceStatusHttpHandler({ authorize });
@@ -899,6 +907,8 @@ const server = Bun.serve<SocketData>({
       const triage = await handleTriage(request); if (triage) return cors(triage);
       const hosts = await handleHosts(request);
       if (hosts) return cors(hosts);
+      const phoneQueue = await handlePhoneQueue(request);
+      if (phoneQueue) return cors(phoneQueue);
       const orchestra = await handleOrchestra(request);
       if (orchestra) return cors(orchestra);
       const roadmap = await handleRoadmap(request);
@@ -919,6 +929,8 @@ const server = Bun.serve<SocketData>({
       if (phase) return cors(phase);
       const workers = sessionWorkersHttp(request, await authorize(request), (profile, session) => hermesSessions.workers(profile, session));
       if (workers) return cors(workers);
+      const chatWorkers = chatWorkersHttp(request, await authorize(request), (harness, session) => liveTranscriptWorkers(harness, session, transcriptRoots(process.env, homedir())));
+      if (chatWorkers) return cors(chatWorkers);
       const z0live = z0liveStateHttp(request, await authorize(request));
       if (z0live) return cors(z0live);
       const suggestions = await handleSuggestions(request);
@@ -951,7 +963,7 @@ const server = Bun.serve<SocketData>({
         cwd: DEFAULT_CWD,
         harnesses,
         hosts: await selfRoster(harnesses, tailscaleIp ?? undefined),
-        features: [CHATS_FEATURE],
+        features: [CHATS_FEATURE, MODEL_SELECTION_FEATURE],
         routes: remoteRouteIds(),
         voice: { stt: voice.stt.ok, nativeVoice: voice.nativeVoice },
       });
@@ -1013,7 +1025,7 @@ const server = Bun.serve<SocketData>({
             ws.data.turns.add(message.id);
             turns.set(message.id, turn);
             if (message.summariesEnabled) turn.enableSummaries();
-            turn.start({ text: message.text, mode: message.mode, cwd: message.cwd ?? "", sessionId: message.sessionId, profileId: message.profileId }, remote);
+            turn.start({ text: message.text, mode: message.mode, model: message.model, cwd: message.cwd ?? "", sessionId: message.sessionId, profileId: message.profileId }, remote);
             break;
           }
           if (!(await isSelfHost(message.hostId))) return rejectTurn(ws, message.id, "Remote routing unavailable; connect to that host's authenticated bridge.");
@@ -1049,7 +1061,7 @@ const server = Bun.serve<SocketData>({
           ws.data.turns.add(message.id);
           turns.set(message.id, turn);
           if (message.summariesEnabled) turn.enableSummaries();
-          turn.start({ text: promptWithAttachments(message.text, files), mode: message.mode, cwd, sessionId: message.sessionId, profileId: message.profileId, ...(files.length ? { attachments: files } : {}) });
+          turn.start({ text: promptWithAttachments(message.text, files), mode: message.mode, model: message.model, cwd, sessionId: message.sessionId, profileId: message.profileId, ...(files.length ? { attachments: files } : {}) });
           break;
         }
         case "voice_begin": {

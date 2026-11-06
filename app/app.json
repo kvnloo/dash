@@ -38,7 +38,8 @@
       "predictiveBackGestureEnabled": true,
       "usesCleartextTraffic": true,
       "permissions": [
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
