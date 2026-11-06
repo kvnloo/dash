@@ -8,3 +8,8 @@ android {
   namespace 'app.dash.dex'
   defaultConfig { versionCode 1; versionName '1.0.0' }
 }
+dependencies {
+  // DashPadActivity extends ReactActivity and wraps expo's ReactActivityDelegateWrapper.
+  implementation 'com.facebook.react:react-android'
+  implementation project(':expo')
+}
