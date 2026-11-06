@@ -8,6 +8,8 @@ test('reopening a native chat refreshes source text for the same message id', as
   const oldPrompt = 'ARMY hermes prompt 001';
   const currentPrompt = 'ARMY reopened current prompt 001';
   try {
+    // Phone-width rail: keep this regression on the same 390px surface that failed.
+    await page.setViewportSize({ width: 390, height: 844 });
     await pair(page, bridge);
     const row = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]')
       .filter({ has: page.getByText(LONG_HERMES_TITLE, { exact: true }) });
