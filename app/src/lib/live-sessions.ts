@@ -82,7 +82,7 @@ export interface MergeLiveOptions {
   routes?: readonly string[];
 }
 
-/** Successful roster snapshots reconcile, never delete. Missing snapshots do not enter here. O(C + R). */
+/** Successful roster snapshots reconcile, never delete. Missing snapshots do not enter here. */
 export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo[], now: number, options: MergeLiveOptions = {}): Conversation[] {
   const discovered = sessionAgents(hosts);
   // Same-session OMP panes can have different working directories. Collapse
@@ -91,6 +91,8 @@ export function mergeLiveConversations(existing: Conversation[], hosts: HostInfo
   for (const conversation of existing) {
     if (conversation.harness !== "omp" || !conversation.sessionId ||
       !conversation.profileId?.startsWith("omp:") ||
+      // Newly discovered, unopened duplicates do not establish ownership.
+      (conversation.openedAt === undefined && conversation.messages.length === 0) ||
       (options.endpointAddress !== undefined && conversation.endpointAddress !== options.endpointAddress)) continue;
     const ownedPane = discovered.find(({ host, agent }) =>
       agent.kind === "omp" && agent.sessionId === conversation.sessionId &&
