@@ -1,4 +1,5 @@
 import { useNavigation, type NavigationProp } from "@react-navigation/native";
+import { StackActions } from "@react-navigation/routers";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import type { RootStackParamList } from "../../navigation";
@@ -198,7 +199,12 @@ function QuickSwitch({ onClose }: { onClose(): void }) {
   const items = useMemo((): QuickItem[] => {
     const chats = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt).map((c): QuickItem => ({
       key: `chat:${c.id}`, label: c.title || "Untitled chat", detail: `Chat · ${c.harness}`,
-      run: () => { setActive(c.id); navigation.navigate("Chat"); },
+      run: () => {
+        setActive(c.id);
+        // Closing desk windows keep their route until the fade completes.
+        // Push a new chat route so the old window's close cannot pop it.
+        navigation.dispatch(StackActions.push("Chat"));
+      },
     }));
     const panels = DESK_PANELS.map((p, i): QuickItem => ({ key: `panel:${p.id}`, label: p.label, detail: `Panel · Ctrl+${i + 1}`, run: () => open(p.id) }));
     const screens: QuickItem[] = [

@@ -149,10 +149,14 @@ test('desk closing window removes only its own route when quick switch opens a n
   const quick = page.getByRole('textbox', { name: 'Quick switch', exact: true });
   await expect(quick).toBeFocused();
   await quick.fill('desk close keeps next chat');
+  await expect(page.getByTestId('quick-switch-item').first()).toContainText('desk close keeps next chat');
   await quick.press('Enter');
   await expect(quick).toHaveCount(0);
 
+  // Ctrl+K opens a fresh Chat screen, not only Main's attached composer.
   // The older fade must not pop this new route or send us to Pair (/connect).
+  await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeVisible();
+  await expect(page.getByTestId('transcript-viewport')).toBeVisible();
   await expect(composer(page)).toBeVisible();
   await expect(page.getByText('ARMY_REPLY: desk close keeps next chat').first()).toBeVisible();
   await page.getByRole('button', { name: 'Back', exact: true }).click({ noWaitAfter: true });
