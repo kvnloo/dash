@@ -11,7 +11,8 @@ import { useComposerStreamRate } from "../hooks/useComposerStreamRate";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef, type ViewToken } from "@shopify/flash-list";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AppState, BackHandler, Platform, StyleSheet, Text, View, Pressable, useWindowDimensions } from "react-native";
+import { AppState, BackHandler, Platform, StyleSheet, Text, View, Pressable } from "react-native";
+import { usePaneDimensions } from "../lib/pane-size";
 import Animated from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 import { ComposerActionMenu, type ComposerMenuRow } from "../components/ComposerActionMenu";
@@ -425,7 +426,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const windowOrigin = route.params?.window;
   const windowed = windowOrigin !== undefined;
   const morph = useWindowMorph(windowOrigin, windowed);
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = usePaneDimensions();
   const [navOpen, setNavOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);

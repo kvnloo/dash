@@ -5,7 +5,9 @@ import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Animated, { useSharedValue } from "react-native-reanimated";
-import { Alert, AppState, InteractionManager, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Alert, AppState, InteractionManager, Pressable, StyleSheet, Text, View } from "react-native";
+import { usePaneDimensions } from "../lib/pane-size";
+import { useDeskActive } from "../lib/desk";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
 import { OrbActivity } from "../components/OrbMotion";
@@ -150,7 +152,9 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
     setForeground(AppState.currentState === "active");
     return () => listener.remove();
   }, []);
-  const { width } = useWindowDimensions();
+  const { width } = usePaneDimensions();
+  // Desk mode: the shell owns Hosts and Chats; this centre pane is the Orchestra graph.
+  const desk = useDeskActive();
   const blurTarget = useRef<View>(null);
   const pagerRef = useRef<MainPagerRef>(null);
   const navRef = useRef<AppNavHandle>(null);
@@ -450,7 +454,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
-      <AppNav
+      {desk ? null : <AppNav
         ref={navRef}
         navigation={navigation}
         tab={index}
@@ -458,8 +462,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
         onTab={(next) => {
           pagerRef.current?.setPage(next);
         }}
-      />
-      <WorkspaceHeader navigation={navigation} tab={index} titleOnly={index === 2} />
+      />}
+      {desk ? null : <WorkspaceHeader navigation={navigation} tab={index} titleOnly={index === 2} />}
       <ConnectionPill />
       <BlurTargetView ref={blurTarget} style={styles.body}>
         {searchActive ? (
@@ -487,6 +491,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               }
             />
           </>
+        ) : desk ? (
+          <View testID="desk-orchestra" style={styles.pager}><OrchestraPane navigation={navigation} /></View>
         ) : (
           <Animated.View style={styles.pager} collapsable={false}>
             <MainPager
