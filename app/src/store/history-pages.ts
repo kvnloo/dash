@@ -77,9 +77,11 @@ export function dropHistory(conversationId: string): void {
   });
 }
 
-/** Start a new focused visit before the old rail can paint; late cleanup cannot revoke a newer visit. */
+/** Start a focused visit without discarding a WS cursor that arrived before focus.
+ * A still-owned previous visit must be revoked before its replacement begins.
+ */
 export function beginHistoryVisit(conversationId: string): symbol {
-  dropHistory(conversationId);
+  if (visitOwners.has(conversationId)) dropHistory(conversationId);
   const owner = Symbol();
   visitOwners.set(conversationId, owner);
   return owner;
@@ -291,10 +293,10 @@ export async function loadNewest(conversation: Conversation, apply: (messages: H
   if (!settings || state.loading) return;
   if (!ownsHistoryRequest(conversation, settings)) return;
   const pending = beginLoading(conversation.id);
-  // The WS window and the phone cache can contain more than 50 native rows.
-  // Refresh all of that window, not just the last page (prompt 1/30 is row 1/60).
-  const limit = conversation.harness === "hermes" ? HISTORY_FILL_PAGE : HISTORY_PAGE;
-  const result = await deps.api.history(settings, { key: conversationKey(conversation), limit });
+  // Keep the newest page at 50 rows: a 200-row head would consume the older
+  // cursor and bypass the next page (and its visit ownership). Older pages
+  // also reconcile rewritten native ids into cached, listed and rail-only rows.
+  const result = await deps.api.history(settings, { key: conversationKey(conversation), limit: HISTORY_PAGE });
   if (!releaseLoading(conversation.id, pending)) return;
   if (!ownsHistoryRequest(conversation, settings)) {
     patch(conversation.id, s => ({ ...s, loading: false }));
@@ -326,18 +328,28 @@ export async function fetchFullText(conversation: Conversation, messageId: strin
   // mint a replacement owner while its old response is still in flight.
   const visit = visitOwners.get(conversation.id);
   if (!visit) return undefined;
+  const sourceFor = (): Message | undefined => {
+    const loaded = historyState(conversation.id);
+    return deps.conversation(conversation.id)?.messages.find(message => message.id === messageId)
+      ?? loaded.older.find(message => message.id === messageId)
+      ?? loaded.unlisted.find(message => message.id === messageId);
+  };
+  const requestedSource = sourceFor();
+  if (!requestedSource) return undefined;
+  const requestedText = requestedSource.text;
+  const requestedRole = requestedSource.role;
+  const requestedTruncated = requestedSource.truncated;
   const result = await deps.api.message(settings, { key: conversationKey(conversation), id: messageId });
   if (visitOwners.get(conversation.id) !== visit || !ownsHistoryRequest(conversation, settings)) return undefined;
   if (!result.ok) return undefined;
   const full = historyToMessages([result.value], conversation.id, conversation.harness === "hermes")[0];
-  const loaded = historyState(conversation.id);
-  const source = deps.conversation(conversation.id)?.messages.find(message => message.id === messageId)
-    ?? loaded.older.find(message => message.id === messageId)
-    ?? loaded.unlisted.find(message => message.id === messageId);
-  // Rewriting a native row keeps its id. Reject a full-body response produced
-  // for the prior text even when this visit's source has already been refreshed.
+  const source = sourceFor();
+  // Source rewrites preserve native ids. The response belongs to the source
+  // captured when this request began, not a later same-id replacement.
+  // Truncated previews are not guaranteed to be literal full-text prefixes.
   if (!full || full.id !== messageId || !source || source.role !== full.role ||
-    !full.text.startsWith(source.text)) return undefined;
+    source.role !== requestedRole || source.text !== requestedText ||
+    source.truncated !== requestedTruncated) return undefined;
   const text = full.text;
   patch(conversation.id, s => s.older.some(m => m.id === messageId)
     ? { ...s, older: s.older.map(m => m.id === messageId ? { ...m, text, truncated: undefined } : m) } : s);
