@@ -61,8 +61,12 @@ function patch(conversationId: string, fn: (s: HistoryPagesState) => HistoryPage
 
 /** The newest page arrived (ws reply or first HTTP page): remember where older pages start. */
 export function setHistoryCursor(conversationId: string, before: string | null | undefined): void {
-  // Once older pages are loaded their cursor is further back; a refreshed newest page keeps it.
-  patch(conversationId, s => olderLoaded(s) > 0 || s.before === before ? s : { ...s, before, error: undefined });
+  // A WebSocket head can report the end of its own window while a fresh HTTP
+  // head still has an older page to reconcile. Do not lose that keyset cursor
+  // before the current visit can fetch its same-id native source rows.
+  patch(conversationId, s => olderLoaded(s) > 0 ||
+    (typeof s.before === "string" && before === null) || s.before === before
+    ? s : { ...s, before, error: undefined });
 }
 
 export function dropHistory(conversationId: string): void {
@@ -312,11 +316,13 @@ export async function loadNewest(conversation: Conversation, apply: (messages: H
   onSourcePage?.(result.value.messages);
   reconcileLoadedSource(conversation, result.value.messages);
   if (unchangedWindow) apply(result.value.messages);
-  // A concurrent WS update may replace the cached window while HTTP is in flight.
-  // Its shorter cursor is not a reason to discard the authenticated source page's
-  // older cursor; otherwise the rail never fetches the rewritten oldest prompts.
+  // A fresh HTTP head owns its next-page cursor until that page has been
+  // reconciled. A previously complete (null) rail can contain cached same-id
+  // rows from a closed visit; it must not suppress the reopened source page.
+  // Keep a deeper cursor only when this visit is already paging behind the head.
   patch(conversation.id, s => ({ ...s, loading: false,
-    before: olderLoaded(s) > 0 ? s.before : result.value.before }));
+    before: olderLoaded(s) > 0 && typeof s.before === "string"
+      ? s.before : result.value.before }));
 }
 
 /** Replace a truncated message's text with the full text from the bridge. */
