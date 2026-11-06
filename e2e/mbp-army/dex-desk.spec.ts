@@ -186,13 +186,13 @@ test('desk keyboard: Ctrl+K quick switch opens a chat, Ctrl+1..9 jump to panels,
   const sentBefore = (bridge.logs().match(/quick switch target/g) ?? []).length;
   await chatRow(page).hover();
   await chatRow(page).click({ button: 'right', noWaitAfter: true });
-  const sheet = page.getByTestId('bottom-action-sheet');
-  await expect(sheet).toBeVisible();
-  await expect(sheet).toContainText('quick switch target');
-  await expect(sheet.getByText('Open', { exact: true })).toBeVisible();
-  await expect(sheet.getByText('Delete from this phone', { exact: true })).toBeVisible();
+  // Same anchored row menu as a long-press (send-longpress.spec.ts), not a bottom sheet.
+  const menu = page.getByTestId('chat-row-actions-menu');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByTestId('chat-row-action-open')).toHaveAccessibleName(/^Open chat: .*quick switch target/);
+  await expect(menu.getByTestId('chat-row-action-delete-local')).toHaveAccessibleName(/^Delete chat from this phone: .*quick switch target/);
   await shot(page, 'desk-row-menu.png', info);
-  await page.getByTestId('bottom-action-sheet-option-open').click({ noWaitAfter: true });
+  await menu.getByTestId('chat-row-action-open').click({ noWaitAfter: true });
   await expect(page.getByTestId('chat-window')).toBeVisible();
   expect((bridge.logs().match(/quick switch target/g) ?? []).length).toBe(sentBefore);
 });
@@ -271,7 +271,7 @@ test('phone width 480x780 keeps the phone layout (no desk shell)', async ({ page
   await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected', 'true');
   // No hover/right-click menu on the phone layout.
   await chatRow(page).click({ button: 'right', noWaitAfter: true });
-  await expect(page.getByTestId('bottom-action-sheet')).toHaveCount(0);
+  await expect(page.getByTestId('chat-row-actions-menu')).toHaveCount(0);
   await shot(page, 'phone-480x780.png', info);
 });
 
