@@ -69,8 +69,15 @@ export function useHistoryPages(conversation: Conversation | undefined): History
   const nativeRefresh = conversation?.harness === "hermes" && Boolean(conversation.sessionId && conversation.targetHostId);
   useEffect(() => {
     if (!id || !conversation || (!nativeRefresh && !(httpOnly && empty))) return;
-    void loadNewest(conversation, messages => applyHistoryPage(conversation.id, messages),
-      messages => refreshNativeWindow(conversation, messages));
+    let active = true;
+    const refresh = (messages: HistoryMessage[]) => refreshNativeWindow(conversation, messages);
+    void loadNewest(conversation, messages => applyHistoryPage(conversation.id, messages), refresh)
+      .then(() => {
+        // A concurrent ws transcript update can make the newest HTTP snapshot ineligible
+        // to replace the window. Still find the older cursor for this same open visit.
+        if (active && nativeRefresh) void primeCursor(conversation, refresh);
+      });
+    return () => { active = false; };
   }, [id, httpOnly, empty, nativeRefresh]);
   const hasCursor = state.before !== undefined;
   const settled = !empty && Boolean(conversation?.sessionId);
