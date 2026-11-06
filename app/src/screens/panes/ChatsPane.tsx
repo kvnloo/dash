@@ -175,6 +175,7 @@ const Row = memo(function Row({
   // Desk mode (DeX / wide window): mouse hover and right-click open the same row menu as a long-press.
   const desk = useDeskActive();
   const [hovered, setHovered] = useState(false);
+  const frame = useRef<View>(null);
   const menuRef = useRef(onLongPress);
   menuRef.current = onLongPress;
   useEffect(() => {
@@ -185,76 +186,78 @@ const Row = memo(function Row({
     return () => element.removeEventListener("contextmenu", contextMenu);
   }, [desk, item.id]);
   return (
-    <PressScale
-      webPressable
-      onPress={(event) => {
-        if (!held.current && !webHoldCanceled.current) pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress);
-      }}
-      onPressIn={(event) => {
-        held.current = false;
-        webHoldCanceled.current = false;
-        webHoldStart.current = null;
-        clearWebHold();
-        if (Platform.OS === "web") {
-          const { pageX, pageY } = event.nativeEvent;
-          webHoldStart.current = { x: pageX, y: pageY };
-          // Direct web Pressability starts the hold on pointer down, not on release.
-          webHoldTimer.current = setTimeout(() => triggerLongPress(pageX, pageY), 350);
-        }
-      }}
-      onPointerMove={(event) => {
-        if (Platform.OS !== "web" || !webHoldStart.current) return;
-        const { pageX, pageY } = event.nativeEvent;
-        if (Math.abs(pageX - webHoldStart.current.x) > 10 || Math.abs(pageY - webHoldStart.current.y) > 10) {
-          webHoldCanceled.current = true;
+    <View ref={frame} collapsable={false}>
+      <PressScale
+        webPressable
+        onPress={(event) => {
+          if (!held.current && !webHoldCanceled.current) pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress);
+        }}
+        onPressIn={(event) => {
+          held.current = false;
+          webHoldCanceled.current = false;
+          webHoldStart.current = null;
           clearWebHold();
-        }
-      }}
-      onPointerCancel={() => {
-        if (Platform.OS !== "web") return;
-        webHoldCanceled.current = true;
-        webHoldStart.current = null;
-        clearWebHold();
-      }}
-      onPressOut={() => {
-        clearWebHold();
-        webHoldStart.current = null;
-      }}
-      onLongPress={(event) => triggerLongPress(event.nativeEvent.pageX, event.nativeEvent.pageY)}
-      delayLongPress={350}
-      onHoverIn={desk ? () => setHovered(true) : undefined}
-      onHoverOut={desk ? () => setHovered(false) : undefined}
-      style={[styles.row, active && !stale && styles.rowActive, desk && hovered && styles.rowHover]}
-      accessibilityRole="button"
-      testID={`chat-row-${item.id.startsWith("remote:") ? item.id.slice(7) : item.id}`}
-    >
-      <AgentOrb size={28} thinking={thinking} label={`${item.harnessName} · ${thinking.tool ?? thinking.phase}`} />
-      <View style={styles.rowMain}>
-        <View style={styles.rowTop}>
-          <Text style={[styles.rowTitle, stale && styles.stale]} numberOfLines={1}>
-            {content.title}
+          if (Platform.OS === "web") {
+            const { pageX, pageY } = event.nativeEvent;
+            webHoldStart.current = { x: pageX, y: pageY };
+            // Direct web Pressability starts the hold on pointer down, not on release.
+            webHoldTimer.current = setTimeout(() => triggerLongPress(pageX, pageY), 350);
+          }
+        }}
+        onPointerMove={(event) => {
+          if (Platform.OS !== "web" || !webHoldStart.current) return;
+          const { pageX, pageY } = event.nativeEvent;
+          if (Math.abs(pageX - webHoldStart.current.x) > 10 || Math.abs(pageY - webHoldStart.current.y) > 10) {
+            webHoldCanceled.current = true;
+            clearWebHold();
+          }
+        }}
+        onPointerCancel={() => {
+          if (Platform.OS !== "web") return;
+          webHoldCanceled.current = true;
+          webHoldStart.current = null;
+          clearWebHold();
+        }}
+        onPressOut={() => {
+          clearWebHold();
+          webHoldStart.current = null;
+        }}
+        onLongPress={(event) => triggerLongPress(event.nativeEvent.pageX, event.nativeEvent.pageY)}
+        delayLongPress={350}
+        onHoverIn={desk ? () => setHovered(true) : undefined}
+        onHoverOut={desk ? () => setHovered(false) : undefined}
+        style={[styles.row, active && !stale && styles.rowActive, desk && hovered && styles.rowHover]}
+        accessibilityRole="button"
+        testID={`chat-row-${item.id.startsWith("remote:") ? item.id.slice(7) : item.id}`}
+      >
+        <AgentOrb size={28} thinking={thinking} label={`${item.harnessName} · ${thinking.tool ?? thinking.phase}`} />
+        <View style={styles.rowMain}>
+          <View style={styles.rowTop}>
+            <Text style={[styles.rowTitle, stale && styles.stale]} numberOfLines={1}>
+              {content.title}
+            </Text>
+            {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
+            {item.viewOnly ? <Text style={styles.badge} accessibilityLabel="View only">view only</Text> : null}
+            {saved ? <Text style={styles.badge} accessibilityLabel="Saved local history">saved local</Text> : null}
+            <Text style={styles.rowTime} numberOfLines={1}>{stale ? "ended" : item.openIn ? `${item.openIn} · ${timeAgo(item.updatedAt)}` : timeAgo(item.updatedAt)}</Text>
+          </View>
+          <View style={styles.rowMeta}>
+            <Text style={styles.rowFolder} numberOfLines={1} accessibilityLabel={content.folderPath ? `Working folder: ${content.folderPath}` : content.folder}>
+              {content.folder}
+            </Text>
+            {activityShimmer ? <View style={styles.rowActivityHighlight}>
+              <ShimmerText text={content.activity} size={12} family="sans-serif" dim={colors.textMuted} bright={colors.text} />
+            </View> : <Text style={[styles.rowActivity, content.needsAttention && styles.attention]} numberOfLines={1}>
+              {content.activity}
+            </Text>}
+          </View>
+          <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
+            {content.outcomeLabel ? `${content.outcomeLabel} · ` : ""}{content.outcome}
           </Text>
-          {appearance.live && connectionStatus === "online" ? <View accessibilityLabel="Live on host" style={styles.liveDot} /> : null}
-          {item.viewOnly ? <Text style={styles.badge} accessibilityLabel="View only">view only</Text> : null}
-          {saved ? <Text style={styles.badge} accessibilityLabel="Saved local history">saved local</Text> : null}
-          <Text style={styles.rowTime} numberOfLines={1}>{stale ? "ended" : item.openIn ? `${item.openIn} · ${timeAgo(item.updatedAt)}` : timeAgo(item.updatedAt)}</Text>
         </View>
-        <View style={styles.rowMeta}>
-          <Text style={styles.rowFolder} numberOfLines={1} accessibilityLabel={content.folderPath ? `Working folder: ${content.folderPath}` : content.folder}>
-            {content.folder}
-          </Text>
-          {activityShimmer ? <View style={styles.rowActivityHighlight}>
-            <ShimmerText text={content.activity} size={12} family="sans-serif" dim={colors.textMuted} bright={colors.text} />
-          </View> : <Text style={[styles.rowActivity, content.needsAttention && styles.attention]} numberOfLines={1}>
-            {content.activity}
-          </Text>}
-        </View>
-        <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
-          {content.outcomeLabel ? `${content.outcomeLabel} · ` : ""}{content.outcome}
-        </Text>
-      </View>
-      <View style={styles.hairline} />
-    </PressScale>
+        <View style={styles.hairline} />
+      </PressScale>
+    </View>
   );
 }, (a, b) => a.item === b.item && a.saved === b.saved && a.live === b.live && a.active === b.active && a.connectionStatus === b.connectionStatus && a.onPress === b.onPress && a.onLongPress === b.onLongPress);
 

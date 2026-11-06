@@ -492,7 +492,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             />
           </>
         ) : desk ? (
-          <View testID="desk-orchestra" style={styles.pager}><OrchestraPane navigation={navigation} /></View>
+          <View testID="desk-orchestra" style={styles.pager}><OrchestraPane navigation={navigation} focused={!searchActive && screenFocused && foreground} /></View>
         ) : (
           <Animated.View style={styles.pager} collapsable={false}>
             <MainPager
