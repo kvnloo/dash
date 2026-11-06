@@ -136,6 +136,31 @@ test('desk panels collapse, resize and keep both across a reload', async ({ page
   await expect(page.getByTestId('desk-panel-body-hosts')).toBeVisible();
 });
 
+test('desk closing window removes only its own route when quick switch opens a newer chat', async ({ page, bridge }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  // openChat uses the real Create new chat -> Back -> row flow from the failing journey.
+  await openChat(page, bridge);
+  await send(page, 'desk close keeps next chat');
+  await expect(page.getByText('ARMY_REPLY: desk close keeps next chat').first()).toBeVisible();
+
+  // Open another chat through the real desk keyboard while the previous fade may be pending.
+  await page.getByRole('button', { name: 'Close chat window', exact: true }).click({ noWaitAfter: true });
+  await page.keyboard.press('Control+k');
+  const quick = page.getByRole('textbox', { name: 'Quick switch', exact: true });
+  await expect(quick).toBeFocused();
+  await quick.fill('desk close keeps next chat');
+  await quick.press('Enter');
+  await expect(quick).toHaveCount(0);
+
+  // The older fade must not pop this new route or send us to Pair (/connect).
+  await expect(composer(page)).toBeVisible();
+  await expect(page.getByText('ARMY_REPLY: desk close keeps next chat').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Back', exact: true }).click({ noWaitAfter: true });
+  await expect(page.getByTestId('desk-orchestra')).toBeVisible();
+  await expect(page.getByTestId('chat-window')).toHaveCount(0);
+  await expect(page.getByPlaceholder('100.64.0.1', { exact: true })).toHaveCount(0);
+});
+
 test('desk keyboard: Ctrl+K quick switch opens a chat, Ctrl+1..9 jump to panels, right-click opens the row menu', async ({ page, bridge }, info) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await openChat(page, bridge);
