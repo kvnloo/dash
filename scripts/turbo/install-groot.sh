@@ -42,12 +42,13 @@ CH="$HOME/.local/lib/dash/channels"
 [[ -e "$H/toolchain" ]] || ln -s "$CH/toolchain" "$H/toolchain"
 [[ -f "$H/native-baseline" ]] || cp "$CH/native-baseline" "$H/native-baseline"
 if [[ ! -f "$CONF/channels.env" ]]; then
+  : "${DASH_CHANNEL_PUBLIC_URL:?set DASH_CHANNEL_PUBLIC_URL to this host's tailnet Metro URL (http://<tailnet-ip>:8213)}"
   cat >"$CONF/channels.env" <<ENV
 # Second dash-channel instance: the live-follow turbo Metro (systemd: dash-metro-turbo.service on 18213, relay 8213).
 DASH_CHANNELS_HOME=$H
 DASH_CHANNEL_METRO_UNIT=dash-metro-turbo.service
 DASH_CHANNEL_METRO_PORT=18213
-DASH_CHANNEL_PUBLIC_URL=http://100.113.138.100:8213
+DASH_CHANNEL_PUBLIC_URL=$DASH_CHANNEL_PUBLIC_URL
 DASH_RELEASES_DIR=/mnt/zer0models/releases/dash
 DASH_CHANNEL_HEALTH_TIMEOUT=420
 DASH_CHANNEL_POST_SWITCH='printf "{\\"at\\":\\"%s\\",\\"sha\\":\\"%s\\",\\"prev\\":\\"%s\\",\\"kind\\":\\"follow\\"}\\n" "\$(date -Is)" "\$DASH_SWITCH_SHA" "\$DASH_SWITCH_PREVIOUS" >> /mnt/zer0models/workspace/zer0/data/operations/dash-turbo/turbo-live-served.jsonl'

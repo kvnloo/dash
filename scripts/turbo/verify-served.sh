@@ -10,7 +10,7 @@
 # the Android bundle named by launchAsset (HTTP code, size, contains the sha the app bakes in) and
 # every async chunk URL in that bundle. Exit 0 only when all pass.
 set -Eeuo pipefail
-HOST="${DASH_METRO_HOST:-100.113.138.100}"
+HOST="${DASH_METRO_HOST:-}"
 PORT=8213
 REF="${TURBO_FOLLOW_REF:-integ/rc3-roadmap-resume-20261027}"
 WANT=""
@@ -24,6 +24,7 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown argument $1" >&2; exit 2;;
   esac
 done
+[[ -n "$HOST" ]] || { echo "set DASH_METRO_HOST or pass --host (this host's tailnet address)" >&2; exit 2; }
 BASE="http://$HOST:$PORT"
 fail=0
 say() { printf '%s\n' "$*"; }

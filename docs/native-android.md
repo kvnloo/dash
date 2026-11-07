@@ -210,7 +210,7 @@ credential; it is independently removable with `z0bridge revoke CRED --scope z0l
 No Lawnchair token or owner bearer belongs in Dash. No grants are applied by builds.
 
 The bootstrap returns `broker` (override with `DASH_Z0LIVE_BROKER`; default
-`https://0.taila30dc.ts.net:8791`). The app validates it with `new URL()` and
+`https://<host>.<tailnet>.ts.net:8791`). The app validates it with `new URL()` and
 permits only an HTTPS `.ts.net` hostname with an explicit port and no credentials,
 path, query or fragment. All `/v1/*` calls use that origin. Only web tester-army
 builds with `EXPO_PUBLIC_DASH_VOICE_FAKE=1` also allow

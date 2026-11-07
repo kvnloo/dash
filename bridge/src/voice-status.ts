@@ -13,7 +13,7 @@ export interface VoiceStatus {
 /** Return only the broker origin, never credentials, paths, or query parameters. */
 function publicBroker(): string {
   try {
-    const url = new URL(process.env.DASH_Z0LIVE_BROKER ?? "https://0.taila30dc.ts.net:8791");
+    const url = new URL(process.env.DASH_Z0LIVE_BROKER ?? "");
     if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) return "";
     return url.origin;
   } catch {

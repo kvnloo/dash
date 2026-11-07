@@ -24,5 +24,7 @@ export async function voiceBootstrap(request: Request, identityAuthorized: boole
   if (!record(body) || Object.keys(body).some(k => k !== "profile" && k !== "session") || typeof body.profile !== "string" || body.profile.length > 300 || !/^(hermes:session:[^:]+:[^:]+|hermes:[A-Za-z0-9_-]{1,64}|[A-Za-z0-9_-]{1,64})$/.test(body.profile) || typeof body.session !== "string" || !/^[A-Za-z0-9_-]{8,200}$/.test(body.session)) return json({ error: "Attach an exact known Hermes profile/session" }, 400);
   const target = resolveTarget(body.profile, body.session);
   if (!target) return json({ error: "Attach an exact known Hermes profile/session" }, 400);
-  return json({ ready: true, profile: body.profile, canonicalProfile: target.profile, session: body.session, broker: process.env.DASH_Z0LIVE_BROKER ?? "https://0.taila30dc.ts.net:8791", audience: "z0live", requiredScope: "z0live:voice", backgroundMicrophone: false });
+  const broker = process.env.DASH_Z0LIVE_BROKER;
+  if (!broker) return json({ error: "voice broker not configured (DASH_Z0LIVE_BROKER)" }, 503);
+  return json({ ready: true, profile: body.profile, canonicalProfile: target.profile, session: body.session, broker, audience: "z0live", requiredScope: "z0live:voice", backgroundMicrophone: false });
 }
