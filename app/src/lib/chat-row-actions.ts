@@ -12,10 +12,30 @@ export function pressRow(position: RowPressPosition, height: number, id: string,
   onPress(id, Number.isFinite(y) && y >= 0 && Number.isFinite(height) && height > 0 ? { y, height } : undefined);
 }
 
+/** A row's geometry is a transient animation handoff, never URL or history state. */
+const DEFAULT_ORIGIN: WindowOrigin = { y: 0, height: 0 };
+let rowWindowOrigin: WindowOrigin | undefined;
+
+function validOrigin(value: unknown): value is WindowOrigin {
+  return typeof value === "object" && value !== null
+    && "y" in value && typeof value.y === "number" && Number.isFinite(value.y) && value.y >= 0
+    && "height" in value && typeof value.height === "number" && Number.isFinite(value.height) && value.height >= 0;
+}
+
+/** The Chat screen and Stack presentation both read the same in-memory handoff. */
+export function resolveChatWindowOrigin(routeWindow: unknown): WindowOrigin | undefined {
+  return rowWindowOrigin ?? (validOrigin(routeWindow) ? routeWindow : undefined);
+}
+
+/** A closing window must not discard a newer row's handoff. */
+export function releaseChatWindowOrigin(origin: WindowOrigin | undefined): void {
+  if (rowWindowOrigin === origin) rowWindowOrigin = undefined;
+}
+
 export interface ChatRowDeps {
   select(): void;
   setActive(id: string): void;
-  navigate(route: "Chat", params: { window: WindowOrigin }): void;
+  navigate(route: "Chat", params?: undefined): void;
   confirm(title: string, message: string, action: string, run: () => void): void;
   remove(id: string): void;
 }
@@ -26,7 +46,8 @@ export function chatRowActions(deps: ChatRowDeps) {
     open(id: string, origin?: WindowOrigin): void {
       deps.select();
       deps.setActive(id);
-      deps.navigate("Chat", { window: origin ?? { y: 0, height: 0 } });
+      rowWindowOrigin = validOrigin(origin) ? origin : DEFAULT_ORIGIN;
+      deps.navigate("Chat");
     },
     remove(id: string): void {
       deps.confirm("Delete chat?", "This removes it from this phone only.", "Delete", () => deps.remove(id));
