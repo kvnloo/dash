@@ -46,7 +46,7 @@ export function chatRowActions(deps: ChatRowDeps) {
     open(id: string, origin?: WindowOrigin): void {
       deps.select();
       deps.setActive(id);
-      rowWindowOrigin = validOrigin(origin) ? origin : DEFAULT_ORIGIN;
+      rowWindowOrigin = validOrigin(origin) ? { y: origin.y, height: origin.height } : { ...DEFAULT_ORIGIN };
       deps.navigate("Chat");
     },
     remove(id: string): void {
