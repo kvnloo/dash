@@ -80,7 +80,7 @@ import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
 import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptOffset } from "../lib/prompt-navigation";
-import { scheduleLatestIfFollowing, shouldFollowLatest } from "../lib/transcript-scroll";
+import { clampedShrinkRestore, scheduleLatestIfFollowing, shouldFollowLatest, type TranscriptExtent } from "../lib/transcript-scroll";
 import { railTurns, type RailTurn } from "../lib/rail-turns";
 import { enterAnnotation, registerSink } from "../store/annotate";
 import { sharedDrafts, consumeSharedDraft } from "../store/shared-drafts";
@@ -111,6 +111,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const followRef = useRef(true);
   const dragging = useRef(false);
   const previousOffset = useRef(0);
+  const previousExtent = useRef<TranscriptExtent | null>(null);
   /** The furthest the transcript can scroll, as of its last scroll event. */
   const scrollMax = useRef(Number.POSITIVE_INFINITY);
   // Web: when the owner last scrolled the transcript themselves (wheel, touch, pointer, keys). Web has no
@@ -222,7 +223,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, [history.unlisted, visibleMessages]);
   const railMessages = useMemo(() => mergeOlderHistory(visibleMessages, railOnly), [railOnly, visibleMessages]);
   const anchors = useMemo(() => railTurns(railMessages), [railMessages]);
-  useEffect(() => { upwardWheel.current = false; setFollow(true); }, [conversation?.id, setFollow]);
+  useEffect(() => { upwardWheel.current = false; previousExtent.current = null; setFollow(true); }, [conversation?.id, setFollow]);
   const jumpedTo = useRef<string | null>(null);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(settleTimer.current), []);
@@ -668,6 +669,17 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onScroll={event => {
             const { contentSize, layoutMeasurement, contentOffset } = event.nativeEvent;
             scrollMax.current = Math.max(0, contentSize.height - layoutMeasurement.height);
+            const extent = { contentHeight: contentSize.height, viewportHeight: layoutMeasurement.height, offset: contentOffset.y };
+            const restore = Platform.OS === "web" && previousExtent.current
+              ? clampedShrinkRestore(previousExtent.current, extent, upwardWheel.current, followRef.current) : null;
+            if (restore !== null) {
+              // Keep the reader's pre-shrink distance from the bottom; skip the clamped event entirely.
+              previousExtent.current = { ...extent, offset: restore };
+              previousOffset.current = restore;
+              listRef.current?.scrollToOffset({ offset: restore, animated: false });
+              return;
+            }
+            previousExtent.current = extent;
             const moved = Math.abs(contentOffset.y - previousOffset.current) > 1;
             previousOffset.current = contentOffset.y;
             // Programmatic following may move the viewport; only owner scrolls detach it.
