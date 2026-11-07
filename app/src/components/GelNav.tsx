@@ -36,7 +36,7 @@ import {
   indicatorTranslateX,
 } from "./golden-nav";
 import { toMain } from "../lib/main-nav";
-import { annotate } from "../store/annotate";
+import { annotate, toggleAnnotation } from "../store/annotate";
 
 const RIPPLE = { color: "transparent" as const };
 
@@ -172,8 +172,7 @@ export const AppNav = memo(
             scaleTo={PRESS_SCALE.nav}
             onPress={() => {
               haptic.tap();
-              // Switching modes keeps unsent ink; Discard in the tray is explicit.
-              annotate.set(s => ({ ...s, active: !s.active, penMode: true }));
+              toggleAnnotation();
             }}
             style={styles.modePill}
           >

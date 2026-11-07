@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { ShimmerText } from "./ShimmerText";
 import { Tree } from "./Tree";
@@ -6,50 +6,32 @@ import type { TreeNode } from "../lib/tree";
 import type { Settings } from "../model";
 import { colors, fonts } from "../theme";
 import { haptic } from "../haptics";
-
-/** One delegated worker, as reported by the bridge's /hermes/workers (status only, never transcript). */
-export type Worker = { id: string; title: string; phase: string; tool?: string; startedAt: number; lastActivityAt: number };
-
-export function parseWorkers(value: unknown): Worker[] {
-  if (typeof value !== "object" || value === null || !("workers" in value) || !Array.isArray(value.workers)) return [];
-  const out: Worker[] = [];
-  for (const w of value.workers) {
-    if (typeof w !== "object" || w === null) continue;
-    const id = "id" in w && typeof w.id === "string" ? w.id : undefined;
-    const title = "title" in w && typeof w.title === "string" ? w.title : undefined;
-    const phase = "phase" in w && typeof w.phase === "string" ? w.phase : "thinking";
-    const tool = "tool" in w && typeof w.tool === "string" ? w.tool : undefined;
-    const startedAt = "startedAt" in w && typeof w.startedAt === "number" ? w.startedAt : 0;
-    const lastActivityAt = "lastActivityAt" in w && typeof w.lastActivityAt === "number" ? w.lastActivityAt : 0;
-    if (id && title) out.push({ id, title, phase, ...(tool ? { tool } : {}), startedAt, lastActivityAt });
-  }
-  return out;
-}
+import { fetchSessionWorkers, type Worker } from "../lib/session-workers";
 
 /** Poll the session's live workers every 3 s while foregrounded. */
 export function useSessionWorkers(settings: Settings | null, online: boolean, profile?: string, session?: string): Worker[] {
-  const [workers, setWorkers] = useState<Worker[]>([]);
+  const key = JSON.stringify([settings?.address, profile, session]);
+  const [sample, setSample] = useState<{ key: string; workers: Worker[] }>();
   useEffect(() => {
-    if (!settings || !online || !profile || !session) { setWorkers([]); return; }
+    if (!settings || !online || !profile || !session) return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
+    let controller: AbortController | undefined;
     const poll = async () => {
       if (disposed) return;
-      if (AppState.currentState !== "active") { timer = setTimeout(poll, 3000); return; }
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
+      if (AppState.currentState === "background" || AppState.currentState === "inactive") { timer = setTimeout(poll, 3000); return; }
+      controller = new AbortController();
+      const timeout = setTimeout(() => controller?.abort(), 2500);
       try {
-        const response = await fetch(`http://${settings.address}/hermes/workers?profile=${encodeURIComponent(profile)}&session=${encodeURIComponent(session)}`, {
-          headers: { Authorization: `Bearer ${settings.token}` }, signal: controller.signal,
-        });
-        if (!disposed && response.ok) setWorkers(parseWorkers(await response.json()));
+        const workers = await fetchSessionWorkers(settings, profile, session, controller.signal);
+        if (!disposed) setSample({ key, workers });
       } catch { /* Offline or bridge without /hermes/workers: keep the last list until the next poll. */ }
       finally { clearTimeout(timeout); if (!disposed) timer = setTimeout(poll, 3000); }
     };
     void poll();
-    return () => { disposed = true; clearTimeout(timer); };
-  }, [settings, online, profile, session]);
-  return workers;
+    return () => { disposed = true; clearTimeout(timer); controller?.abort(); };
+  }, [settings, online, profile, session, key]);
+  return online && sample?.key === key ? sample.workers : [];
 }
 
 function age(ms: number): string {

@@ -27,3 +27,4 @@ orchestrate/dash/status.md
 .repair-receipts/
 artifacts/army/
 artifacts/mbp-army/
+__pycache__/

@@ -1,0 +1,102 @@
+{
+ "index-phone": {
+  "errors": [],
+  "sw": 412,
+  "cw": 412,
+  "sh": 952,
+  "rowH": 999,
+  "labW": 0,
+  "plotScroll": 0,
+  "overflow_x": false
+ },
+ "index-desktop": {
+  "errors": [],
+  "sw": 1440,
+  "cw": 1440,
+  "sh": 900,
+  "rowH": 999,
+  "labW": 0,
+  "plotScroll": 0,
+  "overflow_x": false
+ },
+ "a-trace-phone": {
+  "errors": [],
+  "sw": 412,
+  "cw": 412,
+  "sh": 2946,
+  "rowH": 44,
+  "labW": 114,
+  "plotScroll": 1708,
+  "overflow_x": false
+ },
+ "a-trace-desktop": {
+  "errors": [],
+  "sw": 1440,
+  "cw": 1440,
+  "sh": 2565,
+  "rowH": 44,
+  "labW": 240,
+  "plotScroll": 1000,
+  "overflow_x": false
+ },
+ "b-lanes-phone": {
+  "errors": [],
+  "sw": 412,
+  "cw": 412,
+  "sh": 2222,
+  "rowH": 54,
+  "labW": 114,
+  "plotScroll": 605,
+  "overflow_x": false
+ },
+ "b-lanes-desktop": {
+  "errors": [],
+  "sw": 1440,
+  "cw": 1440,
+  "sh": 1699,
+  "rowH": 54,
+  "labW": 240,
+  "plotScroll": 1001,
+  "overflow_x": false
+ },
+ "c-stats-phone": {
+  "errors": [],
+  "sw": 412,
+  "cw": 412,
+  "sh": 2580,
+  "rowH": 999,
+  "labW": 0,
+  "plotScroll": 0,
+  "overflow_x": false
+ },
+ "c-stats-desktop": {
+  "errors": [],
+  "sw": 1440,
+  "cw": 1440,
+  "sh": 1764,
+  "rowH": 999,
+  "labW": 0,
+  "plotScroll": 0,
+  "overflow_x": false
+ },
+ "d-pocket-phone": {
+  "errors": [],
+  "sw": 412,
+  "cw": 412,
+  "sh": 2955,
+  "rowH": 999,
+  "labW": 0,
+  "plotScroll": 0,
+  "overflow_x": false
+ },
+ "d-pocket-desktop": {
+  "errors": [],
+  "sw": 1440,
+  "cw": 1440,
+  "sh": 1872,
+  "rowH": 999,
+  "labW": 0,
+  "plotScroll": 0,
+  "overflow_x": false
+ }
+}

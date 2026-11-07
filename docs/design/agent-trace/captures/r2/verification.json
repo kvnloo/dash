@@ -1,0 +1,31 @@
+{
+  "browser": "isolated Playwright headless Chromium",
+  "screenshots": [
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/a-trace-phone-top.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/a-trace-phone-middle.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/a-trace-phone-expanded.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/a-trace-desktop.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/b-lanes-phone-top.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/b-lanes-phone-middle.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/b-lanes-phone-expanded.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/b-lanes-desktop.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/c-stats-phone-top.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/c-stats-phone-middle.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/c-stats-phone-expanded.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/c-stats-desktop.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/d-pocket-phone-top.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/d-pocket-phone-middle.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/d-pocket-phone-expanded.png",
+    "/mnt/zer0models/workspace/zer0/products/dash/.worktrees/agent-trace/docs/design/agent-trace/captures/r2/d-pocket-desktop.png"
+  ],
+  "checks": [
+    "a-trace: 200; no phone overflow; controls >=44px; human labels",
+    "b-lanes: 200; no phone overflow; controls >=44px; human labels",
+    "c-stats: 200; no phone overflow; controls >=44px; human labels",
+    "d-pocket: 200; no phone overflow; controls >=44px; human labels",
+    "Feedback: Agree, Disagree, Ask, Do it, Not now persist across reload; text escaped; JSON download parsed; POST readback matched exact IDs; failed delivery retried with same ID; endpoint reply rendered",
+    "Keyboard: J, E, X, Escape; project search and empty result",
+    "Handoffs: 7-worker batch; zoom; horizontal pan; minimap; replay/scrub/pause"
+  ],
+  "console_errors": []
+}

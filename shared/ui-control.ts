@@ -15,11 +15,11 @@ export const UI_CONTROL_LIMITS = {
   ttlMaxMs: 30_000,
 };
 
-export type UiControlRoute = "Lab" | "Trace" | "Orchestra" | "Settings" | "Bots" | "Chat";
+export type UiControlRoute = "Lab" | "Trace" | "Orchestra" | "Settings" | "Bots" | "Hosts" | "Chat";
 
-/** The five deep-link AppRoute names plus the Chat screen, with exact case. */
+/** The deep-link AppRoute names (including the legacy Bots alias) plus the Chat screen, with exact case. */
 export const UI_CONTROL_ROUTES: readonly UiControlRoute[] = [
-  "Lab", "Trace", "Orchestra", "Settings", "Bots", "Chat",
+  "Lab", "Trace", "Orchestra", "Settings", "Bots", "Hosts", "Chat",
 ];
 
 export type UiControlTarget = { testID: string } | { x: number; y: number };

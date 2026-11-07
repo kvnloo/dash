@@ -91,7 +91,7 @@ while a turn runs. All of them are clients of one gateway FIFO per session.
    Anything else is `standalone`.
 3. **Gateway-hosted (`live`): send now, into that gateway.** Also for a `local`
    session with no lease (an open TUI or Desktop). The bridge shows "Open in CLI on
-   groot · sending into the live session" when a lease exists. The bridge runs
+   host-b · sending into the live session" when a lease exists. The bridge runs
    `bridge/src/hermes-live.py`, bootstrapped with `hermes --print-runtime-command`.
    `DASH_HERMES_SOURCE` selects the Hermes source tree (default
    `/workspace/hermes-home/hermes-agent`). Text travels only on stdin.
@@ -111,7 +111,7 @@ while a turn runs. All of them are clients of one gateway FIFO per session.
    Accepted queued or running work remains at the gateway. Do not resend it.
 4. **Standalone owner: the reply waits.** Only a process that runs its own agent
    (no serving gateway, no link to it) keeps the ordered handoff: a `status` event
-   with `handoff: { state: "queued" }` ("Open in CLI on groot · reply queued until
+   with `handoff: { state: "queued" }` ("Open in CLI on host-b · reply queued until
    it closes"), nothing written, a 2 s poll, `handoff: { state: "sending" }` once it
    exits. Stop cancels before anything is sent; a wait over 12 h ends with an
    explicit "not sent" error; a bridge restart drops queued replies, sending nothing.
@@ -178,7 +178,7 @@ DASH_PROOF_TARGETS='[{"sessionId":"local-…","tmux":"dashproof","pane":"tui:cli
 bun scripts/verify-hermes-gateway-live.ts
 ```
 
-Observed 2026-10-21 on groot (gateway pid 351541 serving `clean`): CLI-leased
+Observed 2026-10-21 on host-b (gateway pid 351541 serving `clean`): CLI-leased
 session idle and mid-turn, TUI session idle and mid-turn; all `transport: gateway`,
 exit 0, reply `pong` in the bridge stream and as the session's newest assistant
 row, no handoff queued, no foreign text; the TUI's newest reply became `pong`

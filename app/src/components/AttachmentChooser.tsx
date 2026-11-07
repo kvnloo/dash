@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Feather } from "@expo/vector-icons";
-import { AccessibilityInfo, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, findNodeHandle, useWindowDimensions } from "react-native";
+import { AccessibilityInfo, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, findNodeHandle, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHandedness } from "../lib/useHandedness";
+import { measureAnchor, type AnchorRect } from "../lib/anchor";
 import { LIMIT_LABEL } from "../lib/attachments";
 import { colors, radius, space, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 import { PressScale } from "./PressScale";
 
-export interface AttachmentAnchor { x: number; y: number; width: number; height: number }
+export type AttachmentAnchor = AnchorRect;
 
 /** The same raised glass / themed rows as HarnessPicker, anchored to the paperclip. */
 export function AttachmentChooser({ anchor, onClose, onPick }: {
@@ -27,10 +28,21 @@ export function AttachmentChooser({ anchor, onClose, onPick }: {
   const window = useWindowDimensions();
   const measuredWindow = useRef({ width: window.width, height: window.height });
   const insets = useSafeAreaInsets();
+  // The anchor is a screen rectangle; the sheet is placed inside this overlay. Take the overlay's own
+  // screen origin and height instead of assuming it fills the window from (0, 0): edge-to-edge
+  // Modals and the navigation bar make window.height and the overlay disagree.
+  const overlay = useRef<View>(null);
+  const [frame, setFrame] = useState<{ x: number; y: number; height: number } | null>(null);
+  const placeOverlay = useCallback((event: LayoutChangeEvent) => {
+    const { height } = event.nativeEvent.layout;
+    void measureAnchor(overlay.current).then(rect => setFrame({ x: rect?.x ?? 0, y: rect?.y ?? 0, height }));
+  }, []);
+  const anchorX = anchor.x - (frame?.x ?? 0);
+  const anchorY = anchor.y - (frame?.y ?? 0);
   const width = Math.min(300, window.width - insets.left - insets.right - 24);
   const left = Math.max(insets.left + 12, Math.min(window.width - insets.right - width - 12,
-    thumb.side === "left" ? anchor.x : anchor.x + anchor.width - width));
-  const bottom = Math.max(insets.bottom + 12, window.height - anchor.y + 8);
+    thumb.side === "left" ? anchorX : anchorX + anchor.width - width));
+  const bottom = Math.max(insets.bottom + 12, (frame?.height ?? window.height) - anchorY + 8);
   const focusTitle = () => {
     if (Platform.OS === "web") return;
     const node = findNodeHandle(titleRef.current);
@@ -41,9 +53,9 @@ export function AttachmentChooser({ anchor, onClose, onPick }: {
     if (window.width !== measuredWindow.current.width || window.height !== measuredWindow.current.height) onClose();
   }, [window.width, window.height, onClose]);
   return <Modal transparent visible={pendingPick === null} animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose} onShow={focusTitle} onDismiss={() => { if (pendingPick) onPick(pendingPick); }}>
-    <View style={styles.overlay}>
+    <View ref={overlay} collapsable={false} style={styles.overlay} onLayout={placeOverlay}>
       <Pressable style={StyleSheet.absoluteFill} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" onPress={onClose} />
-      <GlassSurface testID="attachment-sheet" variant="raised" accessibilityLabel="Attachment chooser" accessibilityViewIsModal borderRadius={radius.md} style={[styles.sheet, { left, bottom, width }]} contentStyle={{ maxHeight: Math.max(44, anchor.y - insets.top - 16) }}>
+      <GlassSurface testID="attachment-sheet" variant="raised" accessibilityLabel="Attachment chooser" accessibilityViewIsModal borderRadius={radius.md} style={[styles.sheet, { left, bottom, width, opacity: frame ? 1 : 0 }]} contentStyle={{ maxHeight: Math.max(44, anchorY - insets.top - 16) }}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
           <Text ref={titleRef} style={styles.title} accessibilityRole="header" accessibilityLabel="Attachment chooser">Attach</Text>
           <Text style={styles.hint}>Up to {LIMIT_LABEL} per file, sent to the paired computer over Tailscale.</Text>

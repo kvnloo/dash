@@ -1,21 +1,20 @@
-import { useIsFocused } from "@react-navigation/native";
 import { memo, useMemo } from "react";
 import { Text, View } from "react-native";
-import Animated, { useAnimatedStyle, useReducedMotion } from "react-native-reanimated";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 import { orbDotCount, orbMotion, orbPixels, type OrbSize, type OrbState } from "../lib/orb-phase";
 import { colors, fonts } from "../theme";
-import { useOrbMotion } from "./OrbMotion";
+import { useAmbientRunning, useOrbMotion } from "./OrbMotion";
 
 /** Static dot geometry, compositor transforms only: no picture recording or React frame loop. */
 export const AgentOrb = memo(function AgentOrb({ thinking, size = 64, caption = false, label, animated = true }: {
   thinking: OrbState; size?: OrbSize; caption?: boolean; label?: string; animated?: boolean;
 }) {
-  const { clock, active } = useOrbMotion();
-  const reduced = useReducedMotion();
-  const focused = useIsFocused();
+  const { clock } = useOrbMotion();
+  // Root-mounted voice overlays have no screen navigation context; this hook is safe there.
+  const ambientRunning = useAmbientRunning();
   const m = orbMotion(thinking.phase);
-  const running = focused && active && animated && !reduced && m.animated;
+  const running = ambientRunning && animated && m.animated;
   const color = thinking.phase === "waiting-approval" ? colors.warn : colors.text;
   const px = orbPixels(size);
   const n = orbDotCount(size);

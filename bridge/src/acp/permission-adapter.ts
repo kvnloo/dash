@@ -63,6 +63,8 @@ export type AcpPermissionAdapterOptions = {
   send: (response: AcpPermissionResponse) => void;
   /** Feed a visible permission resolution, not a generic Thinking state. */
   resolved: (resolution: AcpPermissionResolution) => void;
+  /** True while at least one owner permission decision is pending. */
+  pendingChanged?: (pending: boolean) => void;
   /** Injectable for deterministic fake-clock tests. */
   schedule?: (callback: () => void, milliseconds: number) => () => void;
   timeoutMs?: number;
@@ -74,7 +76,7 @@ const CANCELLED: AcpPermissionOutcome = { outcome: "cancelled" };
 const LABELS: Record<AcpPermissionKind, string> = {
   allow_once: "Allow once",
   allow_always: "Always allow",
-  reject_once: "Deny once",
+  reject_once: "Reject",
   reject_always: "Always deny",
 };
 
@@ -188,6 +190,7 @@ export class AcpPermissionAdapter {
       if (finished) return;
       finished = true;
       this.pending.delete(key);
+      this.options.pendingChanged?.(this.pending.size > 0);
       stopTimer?.();
       try { unregister?.(); } catch { /* the permission still settles safely */ }
       const optionId = outcome.outcome === "selected" ? outcome.optionId : undefined;
@@ -199,6 +202,7 @@ export class AcpPermissionAdapter {
     };
 
     this.pending.set(key, reason => finish(CANCELLED, reason ?? "denied"));
+    this.options.pendingChanged?.(true);
     try {
       const rawTimeout = this.options.timeoutMs;
       const timeoutMs = typeof rawTimeout === "number" && Number.isFinite(rawTimeout)

@@ -9,7 +9,7 @@ The inspectable tree is [`decisions.json`](decisions.json). The case study is [`
 ## Axioms (do not skip)
 
 1. **One foveal stream.** Streaming tokens occupy attention. Status, tools, and chrome must live in parafovea (one line) or periphery (4px dots). A tool accordion, blinking caret, or gold glow overlay fights the stream.
-2. **Four chunks.** Miller-ish working memory. Three destinations (Bots, Chats, Orchestra) plus one composer. Scope chips stay hidden until focused. A persistent model picker is a fifth chunk we refuse.
+2. **Four chunks.** Miller-ish working memory. Three destinations (Hosts, Chats, Orchestra) plus one composer. Scope chips stay hidden until focused. A persistent model picker is a fifth chunk we refuse.
 3. **Encode, do not expose.** A Chats row is a 1-line preview, not the transcript. Opening the row is retrieval. List dump is familiarity, not encoding (`encoding-beats-exposure`).
 4. **Alert, then rest.** Press squash + haptic is the alert tag. Lists do not `entering=`. Streaming does not bounce the row. The 8px PulseDot is the only idle motion in a thread.
 5. **Measure, do not vibe.** Geometry and wiring are pinned (`golden-nav.ts`, `KeyboardDock.test.ts`, `motion.test.ts`). A screenshot without a pin is not a decision.
@@ -37,7 +37,7 @@ Nav chrome is **60px**. Header is **52px**. Composer minHeight **48px**. Those n
 | Signal | Bits | Where |
 |--------|------|-------|
 | Destination | 3 dots, not labels in the pill | AppNav |
-| Presence | 6px `--ok` / `--faint` | Bots, Orchestra |
+| Presence | 6px `--ok` / `--faint` | Hosts, Orchestra |
 | Live work | 1-line status + 8px pulse | MessageRow |
 | History | date group + 1 preview + timeAgo | ChatsPane |
 | Search scope | chips only on focus | GlobalSearchBar |
@@ -61,7 +61,7 @@ Headline lies and silent affordances:
 - HarnessPicker is debug-only. Conversations is a stack zombie. Header/TopTabs are unused.
 - Long-press delete has no hint. Orchestra agent rows haptic then no-op.
 - PulseDot and Voice orb ignore Reduce Motion. Pair/Settings still use opacity press.
-- Search writes Online/Offline. Bots uses a dot.
+- Search writes Online/Offline. Hosts uses a dot.
 - No fleet marks. No blocked chrome. No Voice End control.
 
 Forks (two written sources, tree keeps shipped):

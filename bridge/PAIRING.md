@@ -24,6 +24,8 @@ Pair routes allow 12 requests per socket address per minute. Forwarded headers d
 
 For an isolated local verification server, explicitly set both `DASH_ALLOW_LOOPBACK=1` and `DASH_HOST=127.0.0.1`. `::1` is also allowed. This opt-in does not permit wildcard or LAN bindings. Use a disposable process and credential directory for tests. Do not change the running `dash-pair` service.
 
+ACP turn deadlines are configurable in milliseconds. `DASH_TURN_TIMEOUT_MS` is the absolute wall-clock ceiling (default `600000`, capped at one hour by the ACP client) for local, Hermes-ACP, and remote turns. `DASH_ACP_STALL_MS` is the maximum inactivity gap between complete ACP adapter frames (default `120000`, capped at one hour); every frame refreshes it. Pending owner permission requests pause only the stall deadline and have their own 60-second limit. The absolute ceiling continues during permission requests. Either deadline reports `ACP turn timed out`.
+
 Run the security checks from the repository root:
 
 ```sh

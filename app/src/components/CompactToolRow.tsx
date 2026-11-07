@@ -6,20 +6,25 @@ export interface CompactToolRowProps {
   model: CompactToolRowModel;
   /** The caller owns the full/retained tool details and selected call identity. */
   onExpand(): void;
+  testID?: string;
+  /** Set on a coalesced row that lists its calls inline; omit on a row that opens details. */
+  expanded?: boolean;
 }
 
-/** Unmounted by design: Hermes integrates this row into MessageRow/ReplyBlocks. */
-export function CompactToolRow({ model, onExpand }: CompactToolRowProps) {
+/** One dense line per tool call (or per run of adjacent identical calls); ReplyBlocks lists them. */
+export function CompactToolRow({ model, onExpand, testID, expanded }: CompactToolRowProps) {
   const statusColor = model.status === "error" ? colors.danger
     : model.status === "running" ? colors.warn : colors.ok;
 
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityLabel={model.accessibilityLabel}
-      accessibilityHint="Open tool call details"
+      accessibilityHint={expanded === undefined ? "Open tool call details" : "Show each call"}
+      accessibilityState={expanded === undefined ? undefined : { expanded }}
       onPress={onExpand}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
       <Text numberOfLines={1} ellipsizeMode="middle" style={styles.line}>
@@ -38,9 +43,9 @@ export function CompactToolRow({ model, onExpand }: CompactToolRowProps) {
 }
 
 const styles = StyleSheet.create({
-  // The visible row is dense; 8 DIP hit slop on both vertical sides gives 44 DIP.
+  // The visible row is dense; 6 DIP hit slop on both vertical sides gives 44 DIP.
   row: {
-    minHeight: 28,
+    minHeight: 32,
     justifyContent: "center",
     paddingHorizontal: space.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,

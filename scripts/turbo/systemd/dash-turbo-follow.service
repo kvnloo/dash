@@ -1,0 +1,11 @@
+[Unit]
+Description=Dash turbo follower: build and serve the tracked integ head on Metro 18213 (health-gated, auto-rollback)
+After=network-online.target
+
+[Service]
+Type=oneshot
+Nice=10
+MemoryMax=4G
+Environment=DASH_CHANNEL_CONF_DIR=%h/.config/dash-turbo-live
+ExecStart=%h/.local/lib/dash/channels/bin/dash-channel follow
+TimeoutStartSec=30min

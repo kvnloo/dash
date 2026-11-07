@@ -32,7 +32,10 @@ export async function transcribeRecording(settings: BridgeSettings, audio: Array
   const text = typeof body === "object" && body !== null ? Reflect.get(body, "text") : undefined;
   if (!res.ok || typeof text !== "string") {
     const error = typeof body === "object" && body !== null ? Reflect.get(body, "error") : undefined;
-    throw new Error(typeof error === "string" ? error : `Transcription failed (${res.status}).`);
+    const reason = typeof body === "object" && body !== null ? Reflect.get(body, "reason") : undefined;
+    const detail = typeof body === "object" && body !== null ? Reflect.get(body, "detail") : undefined;
+    const bridgeReason = [reason, detail, error].find(value => typeof value === "string" && value.trim());
+    throw new Error(typeof bridgeReason === "string" ? bridgeReason : `Transcription failed (${res.status}).`);
   }
   return text;
 }
@@ -80,7 +83,7 @@ export interface CircleDraftRequest {
   stroke: Stroke;
   screen: ScreenInfo;
   /** A composited, marked, full-screen PNG. Do not pass an unmarked screenshot. */
-  markedPng: Uint8Array;
+  markedPng: Uint8Array | (() => Promise<Uint8Array>);
   /** Only text visible inside the circled rectangle is added to the draft. */
   visibleText?: readonly VisibleTextBox[];
   createdAt: number;
@@ -112,7 +115,8 @@ export async function attachClosedPenLoop(request: CircleDraftRequest): Promise<
   if (!inserted) return full ? "full" : "ignored";
 
   try {
-    const cropped = await (request.crop ?? cropMarkedPng)(request.markedPng, request.screen, region);
+    const markedPng = typeof request.markedPng === "function" ? await request.markedPng() : request.markedPng;
+    const cropped = await (request.crop ?? cropMarkedPng)(markedPng, request.screen, region);
     if (!cropped.bytes.byteLength || !cropped.dataUri.startsWith("data:image/png;base64,")) {
       throw new Error("Could not create the cropped PNG.");
     }

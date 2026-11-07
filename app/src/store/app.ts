@@ -5,6 +5,7 @@ import { hostDisplayName } from "../../../shared/host-display";
 import { appendReplyPart, partsFor, replyParts } from "./text";
 import type { DetailMode } from "../lib/reply-details";
 import { CHATS_FEATURE, type ChatAttachment, type ChatSummary, type ClientMessage, type HistoryMessage, type TurnEvent } from "../../../shared/protocol";
+import { isCatalogHarness } from "../../../shared/catalog";
 import {
   newId,
   parseConversation,
@@ -16,13 +17,15 @@ import {
   type Message,
   type Settings,
 } from "../model";
-import { adoptSummary, hydrateLiveConversation, mergeHistoryWindow, mergeLiveConversations, resumableWithoutRoster, shouldRequestHistory } from "../lib/live-sessions";
-import { historyState, setHistoryCursor } from "./history-pages";
+import { adoptSummary, hydrateLiveConversation, mergeHistoryWindow, mergeLiveConversations, mergeTranscriptMessages, resumableWithoutRoster, shouldRequestHistory } from "../lib/live-sessions";
+import { historyState, olderLoaded, setHistoryCursor } from "./history-pages";
 import { conversationKey } from "../lib/chat-index";
 import { pruneArchive } from "./prune-archive";
 import { createStore } from "./createStore";
+import { bindChatIndex, sameChatEndpoint } from "./chat-index-store";
 import { dequeue, enqueue, notifyTurnSettled } from "./queue";
 import { nextPendingSend, parkMessage } from "./offline-send";
+import { clearNextActionPreferences } from "./next-action-preferences";
 import { combineQueued, mergedQueue, queuedParts, reorderQueued, queueMergeError } from "../lib/pending-queue";
 import { replyText, replySummaries, replyStatus } from "./text";
 import { appendActivity } from "../lib/message-details";
@@ -79,21 +82,27 @@ let lastActiveId: string | null | undefined;
 function persistenceFailure(): void {
   console.error("[dash.persistence] storage_operation_failed");
 }
+function saveConversations(): void {
+  saveTimer = undefined;
+  const { conversations, activeId } = store.get();
+  // View-only chats are transient: they are read from the bridge and never written to the phone.
+  const snapshots = conversations.filter(chat => !chat.viewOnly).map(chat => !hasHostHistory(chat) && chat.messages.some(message => message.role === "assistant" && message.state === "streaming")
+    ? { ...chat, messages: chat.messages.map(message => message.role === "assistant" && message.state === "streaming"
+      ? { ...message, parts: partsFor(message.turnId).length ? partsFor(message.turnId) : message.parts, text: replyText.get(message.turnId) || message.text, seq: Math.max(message.seq, liveSequences.get(message.turnId) ?? 0) } : message) }
+    : chat);
+  void persistence.save(snapshots).catch(persistenceFailure);
+  if (lastActiveId !== activeId) {
+    void AsyncStorage.setItem(KEYS.activeId, activeId ?? "").then(() => { lastActiveId = activeId; }, persistenceFailure);
+  }
+}
 function scheduleSave(): void {
   if (!store.get().hydrated) return;
-  saveTimer ??= setTimeout(() => {
-    saveTimer = undefined;
-    const { conversations, activeId } = store.get();
-    // View-only chats are transient: they are read from the bridge and never written to the phone.
-    const snapshots = conversations.filter(chat => !chat.viewOnly).map(chat => !hasHostHistory(chat) && chat.messages.some(message => message.role === "assistant" && message.state === "streaming")
-      ? { ...chat, messages: chat.messages.map(message => message.role === "assistant" && message.state === "streaming"
-        ? { ...message, parts: partsFor(message.turnId).length ? partsFor(message.turnId) : message.parts, text: replyText.get(message.turnId) || message.text, seq: Math.max(message.seq, liveSequences.get(message.turnId) ?? 0) } : message) }
-      : chat);
-    void persistence.save(snapshots).catch(persistenceFailure);
-    if (lastActiveId !== activeId) {
-      void AsyncStorage.setItem(KEYS.activeId, activeId ?? "").then(() => { lastActiveId = activeId; }, persistenceFailure);
-    }
-  }, 400);
+  saveTimer ??= setTimeout(saveConversations, 400);
+}
+function saveSettledReply(): void {
+  if (!store.get().hydrated) return;
+  clearTimeout(saveTimer);
+  saveConversations();
 }
 
 export async function hydrate(): Promise<void> {
@@ -103,6 +112,11 @@ export async function hydrate(): Promise<void> {
     AsyncStorage.getItem(KEYS.activeId).catch(() => null),
   ]);
   const settings = parseSettings(safeJson(settingsText));
+  if (settings && !settings.chatIndexScope) {
+    settings.chatIndexScope = newId();
+    void AsyncStorage.setItem(KEYS.settings, JSON.stringify(settings));
+  }
+  bindChatIndex(settings);
   const activeId = activeIdText || null;
   let conversations: Conversation[] = [];
   let indexed = false;
@@ -118,8 +132,11 @@ export async function hydrate(): Promise<void> {
       for (const id of needed) {
         const stub = conversations.find(chat => chat.id === id);
         if (!stub) continue;
-        const loaded = await persistence.loadOne(stub);
-        conversations = conversations.map(chat => chat.id === id ? loaded : chat);
+        let loaded: Conversation;
+        try { loaded = await persistence.loadOne(stub); }
+        catch { persistenceFailure(); continue; }
+        const full = id === activeId ? loaded : await persistence.cached(loaded);
+        conversations = conversations.map(chat => chat.id === id ? full : chat);
         persistence.markLoaded(id);
       }
     } else {
@@ -196,6 +213,9 @@ function safeJson(text: string | null | undefined): unknown {
 // ---- settings / connection -------------------------------------------------
 
 export function saveSettings(settings: Settings): void {
+  const previous = store.get().settings;
+  settings = { ...settings, chatIndexScope: sameChatEndpoint(previous, settings) && previous?.chatIndexScope ? previous.chatIndexScope : newId() };
+  bindChatIndex(settings);
   store.set((s) => ({ ...s, settings }));
   void AsyncStorage.setItem(KEYS.settings, JSON.stringify(settings));
 }
@@ -225,7 +245,7 @@ export function setConnection(patch: Partial<Connection>): void {
       connection.cwd === was.cwd && connection.harnesses === was.harnesses && connection.error === was.error;
     if (patch.hosts === undefined) return unchanged ? s : { ...s, connection };
     // chats.v1: only running or host-held sessions become conversations; the paged list has the rest.
-    const conversations = mergeLiveConversations(s.conversations, connection.hosts, Date.now(), { adopt: chatsEnabled(connection) ? "live" : "all", routes: connection.routes });
+    const conversations = mergeLiveConversations(s.conversations, connection.hosts, Date.now(), { endpointAddress: s.settings?.address, adopt: chatsEnabled(connection) ? "live" : "all", routes: connection.routes });
     conversationsChanged = conversations !== s.conversations;
     if (!conversationsChanged) return unchanged ? s : { ...s, connection };
     return { ...s, connection, conversations };
@@ -262,6 +282,7 @@ export async function forgetEverything(send: (message: ClientMessage) => boolean
     activeId: null,
     connection: { status: "idle", harnesses: [], hosts: [] },
   }));
+  await clearNextActionPreferences();
 }
 
 // ---- conversations ---------------------------------------------------------
@@ -275,7 +296,7 @@ export function setLiveHistoryRequester(fn: LiveHistoryRequest | undefined): voi
 
 /**
  * The roster id for a host id a bridge reported. An older bridge names itself by OS hostname
- * ("groot") while the roster keys the same computer by its MagicDNS label ("0").
+ * ("host-b") while the roster keys the same computer by its MagicDNS label ("0").
  */
 export function rosterHostId(hostId: string | undefined, connection: Pick<Connection, "hosts" | "host">): string | undefined {
   if (!hostId || connection.hosts.some(h => h.id === hostId)) return hostId;
@@ -286,10 +307,13 @@ export function rosterHostId(hostId: string | undefined, connection: Pick<Connec
 
 export function applyLiveHistory(harness: string, sessionId: string, messages: HistoryMessage[], hostId?: string, profileId?: string): void {
   const host = rosterHostId(hostId, store.get().connection);
-  const candidates = store.get().conversations.filter(c => c.harness === harness && c.sessionId === sessionId && (!host || c.targetHostId === host) && (!profileId || c.profileId === profileId));
+  const candidates = store.get().conversations.filter(c => c.endpointAddress !== undefined && c.endpointAddress === store.get().settings?.address && c.harness === harness && c.sessionId === sessionId && (!host || c.targetHostId === host) && (!profileId || c.profileId === profileId));
   const conv = candidates.length === 1 ? candidates[0] : undefined;
   if (!conv) return;
-  updateConversation(conv.id, (c) => hydrateLiveConversation(c, messages));
+  // Once older pages are loaded, a refreshed newest window merges (as a ws history reply does), so the
+  // rows that slid out of it stay in the scrollback.
+  const merge = olderLoaded(historyState(conv.id)) > 0;
+  updateConversation(conv.id, (c) => merge ? mergeHistoryWindow(c, messages) : hydrateLiveConversation(c, messages));
 }
 
 /** A ws history reply matched to its request: no harness/session guessing. */
@@ -302,7 +326,7 @@ export function applyLiveHistoryTo(conversationId: string, messages: HistoryMess
  * refreshed window merges instead of replacing: messages that slid out of the newest window stay.
  */
 export function applyHistoryReply(conversationId: string, messages: HistoryMessage[], before: string | null | undefined): void {
-  if (historyState(conversationId).older.length > 0) updateConversation(conversationId, c => mergeHistoryWindow(c, messages));
+  if (olderLoaded(historyState(conversationId)) > 0) updateConversation(conversationId, c => mergeHistoryWindow(c, messages));
   else applyLiveHistoryTo(conversationId, messages);
   // An old bridge never sends `before`: older pages stay unavailable.
   setHistoryCursor(conversationId, before);
@@ -336,28 +360,40 @@ export function setActive(id: string | null): void {
   if (!id) return;
   const current = store.get().conversations.find((c) => c.id === id);
   if (current && (!persistence.isLoaded(current.id) || (current.messages.length === 0 && current.sessionId))) {
-    void loadTranscript(current).catch(persistenceFailure);
+    // Hydration changes transcript identity but is not competing user work. Capture
+    // the network snapshot only after the durable/cache load has settled.
+    void loadTranscript(current).catch(persistenceFailure).then(() => requestActiveHistory(id));
+    return;
   }
-  if (!current || !shouldRequestHistory(current) || !current.sessionId) return;
-  if (conversationTargetError(current)) return;
+  requestActiveHistory(id);
+}
+
+function requestActiveHistory(id: string): void {
+  const state = store.get();
+  if (state.activeId !== id) return;
+  const current = state.conversations.find(c => c.id === id);
+  if (!current || !shouldRequestHistory(current) || !current.sessionId || conversationTargetError(current)) return;
   requestLiveHistory?.({ conversationId: current.id, harness: current.harness, sessionId: current.sessionId, cwd: current.cwd, hostId: current.targetHostId, profileId: current.profileId });
 }
 
 /** Read a conversation's durable transcript (if the index hydrated it as a stub) and its cache. */
 async function loadTranscript(current: Conversation): Promise<void> {
   const loaded = await persistence.loadOne(current);
-  const full = loaded.messages.length === 0 && loaded.sessionId ? await persistence.cached(loaded) : loaded;
+  const full = await persistence.cached(loaded);
+  let applied = false;
   store.set(state => ({ ...state, conversations: state.conversations.map(chat => {
-    if (chat.id !== current.id) return chat;
-    if (chat === current) return full;
-    const ids = new Set(chat.messages.map(message => message.id));
-    const older = full.messages.filter(message => !ids.has(message.id));
-    return older.length ? { ...chat, messages: [...older, ...chat.messages] } : chat;
+    if (chat.id !== current.id || chat.sessionId !== current.sessionId || chat.harness !== current.harness ||
+      chat.profileId !== current.profileId || chat.targetHostId !== current.targetHostId || chat.endpointAddress !== current.endpointAddress) return chat;
+    applied = true;
+    return chat === current ? full : { ...chat, messages: mergeTranscriptMessages(full.messages, chat.messages) };
   }) }));
+  if (!applied) return;
   persistence.markLoaded(current.id);
-  for (const message of full.messages) {
+  const messages = store.get().conversations.find(chat => chat.id === current.id)?.messages ?? [];
+  for (const message of messages) {
     if (message.role === "assistant" && message.state === "streaming" && !replyText.get(message.turnId)) replyText.set(message.turnId, message.text);
   }
+  scheduleSave();
 }
 
 /**
@@ -366,13 +402,15 @@ async function loadTranscript(current: Conversation): Promise<void> {
  */
 export function openChat(summary: ChatSummary): Conversation {
   const { conversations } = store.get();
-  const existing = conversations.find(c => conversationKey(c) === summary.key);
+  const existing = conversations.find(c => c.endpointAddress === store.get().settings?.address && conversationKey(c) === summary.key);
   if (existing) {
+    const updated = summary.model ? { ...existing, sessionModel: { sessionId: summary.sessionId, model: summary.model } } : existing;
+    if (updated !== existing) store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id === existing.id ? updated : c) }));
     setActive(existing.id);
-    return existing;
+    return updated;
   }
-  let conversation = adoptSummary(summary, Date.now());
-  if (conversations.some(c => c.id === conversation.id)) conversation = { ...conversation, id: `${conversation.id}:${summary.hostId}` };
+  let conversation = { ...adoptSummary(summary, Date.now(), store.get().connection.hosts.find(host => host.self)?.id), endpointAddress: store.get().settings?.address };
+  if (conversations.some(c => c.id === conversation.id)) conversation = { ...conversation, id: `${conversation.id}:endpoint:${encodeURIComponent(conversation.endpointAddress ?? "")}` };
   store.set(s => ({ ...s, conversations: [conversation, ...s.conversations] }));
   persistence.markLoaded(conversation.id);
   setActive(conversation.id);
@@ -381,9 +419,14 @@ export function openChat(summary: ChatSummary): Conversation {
 
 /** Open a conversation a search listed (e.g. a /live row) that the store may not hold yet. */
 export function openListedConversation(conversation: Conversation): Conversation {
-  const existing = store.get().conversations.find(c => c.id === conversation.id);
+  // Saved search hits retain their original provenance, including unowned legacy rows.
+  if (store.get().conversations.includes(conversation)) { setActive(conversation.id); return conversation; }
+  const endpointAddress = store.get().settings?.address;
+  const scopedId = `${conversation.id}:endpoint:${encodeURIComponent(endpointAddress ?? "")}`;
+  const existing = store.get().conversations.find(c => (c.id === conversation.id || c.id === scopedId) && c.endpointAddress === endpointAddress);
   if (existing) { setActive(existing.id); return existing; }
-  const adopted: Conversation = { ...conversation, openedAt: conversation.openedAt ?? Date.now() };
+  const id = store.get().conversations.some(c => c.id === conversation.id) ? scopedId : conversation.id;
+  const adopted: Conversation = { ...conversation, id, endpointAddress, openedAt: conversation.openedAt ?? Date.now() };
   store.set(s => ({ ...s, conversations: [adopted, ...s.conversations] }));
   persistence.markLoaded(adopted.id);
   setActive(adopted.id);
@@ -408,7 +451,7 @@ export async function migrateArchive(options: { legacy: boolean; pause?: () => P
   // The live store decides, at the moment of each removal: an opened, active or written-to chat stays.
   const prunable = (s: AppState, id: string) => {
     const c = s.conversations.find(chat => chat.id === id);
-    return !c || (c.id !== s.activeId && c.openedAt === undefined && c.messages.length === 0);
+    return !c || (c.endpointAddress !== undefined && c.endpointAddress === s.settings?.address && c.id !== s.activeId && c.openedAt === undefined && c.messages.length === 0);
   };
   const result = await pruneArchive({ storage: AsyncStorage, activeId: store.get().activeId, legacy: options.legacy, pause: options.pause, stillPrunable: id => prunable(store.get(), id) });
   if (result.status !== "done") return;
@@ -426,8 +469,10 @@ export async function migrateArchive(options: { legacy: boolean; pause?: () => P
 }
 
 export function createConversation(harness: string, opts?: { id?: string; title?: string; targetHostId?: string; profileId?: string; sessionId?: string; cwd?: string }): Conversation {
+  const endpointAddress = store.get().settings?.address;
+  const scopedId = opts?.id ? `${opts.id}:endpoint:${encodeURIComponent(endpointAddress ?? "")}` : undefined;
   if (opts?.id) {
-    const existing = store.get().conversations.find((c) => c.id === opts.id);
+    const existing = store.get().conversations.find(c => (c.id === opts.id || c.id === scopedId) && c.endpointAddress === endpointAddress);
     if (existing) {
       setActive(existing.id);
       return existing;
@@ -435,7 +480,8 @@ export function createConversation(harness: string, opts?: { id?: string; title?
   }
   const now = Date.now();
   const conversation: Conversation = {
-    id: opts?.id ?? newId(),
+    id: opts?.id && store.get().conversations.some(c => c.id === opts.id) ? scopedId! : opts?.id ?? newId(),
+    endpointAddress,
     harness,
     title: opts?.title ?? "New chat",
     createdAt: now,
@@ -451,13 +497,17 @@ export function createConversation(harness: string, opts?: { id?: string; title?
   return conversation;
 }
 
-export function conversationTargetError(target: Pick<Conversation, "targetHostId" | "profileId" | "harness" | "sessionId" | "stale"> & { viewOnly?: boolean }): string | undefined {
+export function conversationTargetError(target: Pick<Conversation, "targetHostId" | "profileId" | "harness" | "sessionId" | "stale"> & { viewOnly?: boolean; endpointAddress?: string; messages?: Message[] }): string | undefined {
   if (target.viewOnly) return "View only: Dash can read this chat but cannot send to it.";
-  if (target.stale) return "This chat has ended on the host. Its saved history is still on this phone.";
-  if (!target.targetHostId) return undefined;
+  if (target.messages && !target.endpointAddress) return "This saved chat has no verified bridge address. Keep its history and drafts; open the session again from the paired computer's Chats list, or start a new chat.";
+  if (target.messages && target.endpointAddress !== store.get().settings?.address) return `This chat belongs to ${target.endpointAddress}. Select that address in Settings to resume; your history and queued drafts stay here.`;
   const { connection } = store.get();
   // A chat recorded on another computer that the paired bridge continues there (hello `routes`).
-  if (target.sessionId && connection.status === "online" && connection.routes?.includes(target.targetHostId)) return undefined;
+  if (target.sessionId && target.targetHostId && connection.status === "online" && connection.routes?.includes(target.targetHostId)) return undefined;
+  if (target.sessionId && !target.targetHostId && !target.profileId && target.stale)
+    return "This saved session has no verified host. Keep its history and drafts. Open it again from the paired computer's Chats list, or start a new chat.";
+  if (target.stale) return "This chat has ended on the host. Its saved history is still on this phone.";
+  if (!target.targetHostId) return undefined;
   const host = connection.hosts.find((h) => h.id === target.targetHostId);
   if (!host || !host.online) return "This target host is unavailable. Reconnect to that computer.";
   if (!host.self) return `The paired bridge cannot route to remote host ${host.name}. Pair with that computer to chat.`;
@@ -479,7 +529,7 @@ export function openAgentConversation(profile: AgentTarget): { conversation: Con
   const error = conversationTargetError(profile);
   if (error) return { error };
   if (!profile.targetHostId || !profile.profileId) return { error: "This agent has no target identity. Refresh the roster." };
-  const existing = store.get().conversations.find((c) => c.harness === profile.harness && c.targetHostId === profile.targetHostId && c.profileId === profile.profileId && c.sessionId === profile.sessionId && c.cwd === profile.cwd);
+  const existing = store.get().conversations.find(c => c.endpointAddress === store.get().settings?.address && c.harness === profile.harness && c.targetHostId === profile.targetHostId && c.profileId === profile.profileId && c.sessionId === profile.sessionId && c.cwd === profile.cwd);
   if (existing) {
     setActive(existing.id);
     return { conversation: store.get().conversations.find(c => c.id === existing.id) ?? existing };
@@ -514,6 +564,11 @@ export function setConversationHarness(id: string, harness: string): void {
 
 export function setThinkingSummaries(id: string, enabled: boolean): void {
   updateConversation(id, c => ({ ...c, summariesEnabled: enabled }));
+}
+
+/** Save only the preference for future turns; existing queued turns retain their exact choice. */
+export function setConversationModel(id: string, model: string | undefined): void {
+  updateConversation(id, c => ({ ...c, modelOverride: model }));
 }
 
 function updateConversation(id: string, fn: (c: Conversation) => Conversation): void {
@@ -569,7 +624,7 @@ export function beginTurn(
   updateConversation(conversationId, (c) => ({
     ...c,
     title: c.messages.length === 0 && !c.sessionId ? titleFrom(text || opts?.attachments?.[0]?.name || "") : c.title,
-    messages: [...c.messages, user, assistant],
+    messages: [...c.messages, user, c.modelOverride ? { ...assistant, requestedModel: c.modelOverride } : assistant],
     queuePreview: opts?.pending && c.queuePreview !== undefined ? `${c.queuePreview}\n\n${text}` : c.queuePreview,
     updatedAt: now,
   }));
@@ -611,6 +666,7 @@ export function rejectUnavailableTurn(turnId: string): boolean {
 export function streamingTurns(): { id: string; seq: number }[] {
   const out: { id: string; seq: number }[] = [];
   for (const c of store.get().conversations) {
+    if (!c.endpointAddress || c.endpointAddress !== store.get().settings?.address) continue;
     for (const m of c.messages) {
       if (m.role === "assistant" && m.state === "streaming") out.push({ id: m.turnId, seq: Math.max(m.seq, liveSequences.get(m.turnId) ?? 0) });
     }
@@ -618,14 +674,22 @@ export function streamingTurns(): { id: string; seq: number }[] {
   return out;
 }
 
-/** Apply a batch of coalesced deltas: turnId -> appended text and last seq. */
-export function applyDeltas(batch: Map<string, { text: string; seq: number }>): void {
-  for (const [turnId, { text, seq }] of batch) {
+/** Reject stale frames against the applied watermark before coalescing their text. */
+export function applyDeltas(batch: ReadonlyMap<string, readonly { text: string; seq: number }[]>): void {
+  for (const [turnId, deltas] of batch) {
     const where = locateTurn(turnId);
     if (!where) continue;
     const message = store.get().conversations.find((c) => c.id === where.conversationId)?.messages.find((m) => m.id === where.messageId);
     if (message?.role !== "assistant" || message.state !== "streaming") continue;
-    if (seq <= Math.max(message.seq, liveSequences.get(turnId) ?? 0)) continue;
+    const applied = Math.max(message.seq, liveSequences.get(turnId) ?? 0);
+    let seq = applied;
+    let text = "";
+    for (const delta of deltas) {
+      if (delta.seq <= seq) continue;
+      text += delta.text;
+      seq = delta.seq;
+    }
+    if (seq === applied) continue;
     if (!replyText.get(turnId) && message.text) replyText.set(turnId, message.text);
     replyText.append(turnId, text);
     liveSequences.set(turnId, seq);
@@ -661,9 +725,21 @@ export function applyTurnEvent(
   if (!where) return;
   switch (event.type) {
     case "session":
-      // Host-resolved identity: native API turns, and Hermes sessions the bridge names
-      // (new ACP chats land in a host profile), so the roster row merges into this chat.
-      updateConversation(where.conversationId, (c) => ({ ...c, sessionId: event.sessionId, ...(event.transport === "api" || event.profileId?.startsWith("hermes:session:") ? { profileId: event.profileId ?? c.profileId, targetHostId: rosterHostId(event.hostId, store.get().connection) ?? c.targetHostId, stale: false } : {}) }));
+      updateConversation(where.conversationId, c => {
+        const { connection, settings } = store.get();
+        const host = rosterHostId(event.hostId, connection);
+        const native = event.transport === "api" || event.profileId?.startsWith("hermes:session:");
+        // The unscoped ACP request ran on the paired bridge. Its confirmed self host,
+        // not a live process lease, owns continuation after the executor exits.
+        const selfHost = connection.hosts.find(candidate => candidate.self && candidate.id === host);
+        const genericProfile = selfHost?.agents.find(agent => agent.id === `harness:${c.harness}` && agent.kind === c.harness);
+        const paired = !c.targetHostId && !c.profileId && c.endpointAddress === settings?.address &&
+          event.harnessId === c.harness && (event.transport === "acp" || event.transport === "legacy") &&
+          selfHost !== undefined && (isCatalogHarness(c.harness) || event.transport === "acp" && genericProfile !== undefined);
+        return { ...c, sessionId: event.sessionId,
+          ...(native ? { profileId: event.profileId ?? c.profileId, targetHostId: host ?? c.targetHostId, stale: false }
+            : paired ? { targetHostId: host, ...(!isCatalogHarness(c.harness) ? { profileId: genericProfile!.id } : {}), stale: false } : {}) };
+      });
       updateMessage(where.conversationId, where.messageId, (m) => (event.seq <= m.seq ? m : { ...m, seq: event.seq }));
       return;
     case "status":
@@ -710,6 +786,7 @@ export function applyTurnEvent(
       });
       notifyTurnSettled(where.conversationId);
       if (checkpointed) releaseSettledReply(where.conversationId, where.messageId);
+      if (checkpointed) saveSettledReply();
       return;
     }
     case "error": {
@@ -774,18 +851,23 @@ export function conversationBusy(conversationId: string): boolean {
 export function stopConversation(conversationId: string, cancel: (turnId: string) => void): void {
   const running: string[] = [];
   const stopped: AssistantMessage[] = [];
-  updateConversation(conversationId, (c) => ({
-    ...c,
-    queuePreview: undefined,
-    queueWaitForIdle: false,
-    messages: c.messages.map((m) => {
+  const stoppedAt = Date.now();
+  updateConversation(conversationId, (c) => {
+    const messages = c.messages.map<Message>((m) => {
       if (m.role !== "assistant" || (m.state !== "streaming" && m.state !== "pending")) return m;
       if (m.state === "streaming") running.push(m.turnId);
       stopped.push(m);
       liveSequences.delete(m.turnId);
-      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", endedAt: Date.now(), status: "Stopped" };
-    }),
-  }));
+      return { ...m, parts: partsFor(m.turnId).length ? partsFor(m.turnId) : m.parts, text: replyText.get(m.turnId) || m.text, state: "interrupted", endedAt: stoppedAt, status: "Stopped" };
+    });
+    return {
+      ...c,
+      queuePreview: undefined,
+      queueWaitForIdle: false,
+      messages,
+      updatedAt: stopped.length > 0 ? stoppedAt : c.updatedAt,
+    };
+  });
   while (dequeue(conversationId)) { /* Drain canceled turns before settlement listeners run. */ }
   for (const turnId of running) cancel(turnId);
   notifyTurnSettled(conversationId);
@@ -890,6 +972,7 @@ export function takeQueuedForSteer(id: string): { text: string; attachments: Cha
 export function flushPendingSends(send: ChatSender): number {
   let sent = 0;
   for (const snapshot of store.get().conversations) {
+    if (!snapshot.endpointAddress || snapshot.endpointAddress !== store.get().settings?.address) continue;
     if (snapshot.queueWaitForIdle || snapshot.queuePreview !== undefined || !nextPendingSend(snapshot)) continue;
     if (snapshot.deliverQueuedAsOne !== false && queueMergeError(snapshot)) continue;
     if (snapshot.deliverQueuedAsOne !== false) updateConversation(snapshot.id, combineQueued);

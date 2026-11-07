@@ -3,7 +3,7 @@
 // that computer's own ACP adapter (`dash-acp`, bridge/bin) through stdio, exactly like a local
 // adapter: the session, its files and its credentials never leave the computer that owns them.
 //
-//   DASH_REMOTE_HOSTS="mbp" | "mbp=ssh-alias,other"   AgentsView machine names this bridge may
+//   DASH_REMOTE_HOSTS="host-a" | "host-a=ssh-alias,other"   AgentsView machine names this bridge may
 //                                                      route turns to (=ssh destination, default
 //                                                      the same name). Unset: no remote routing.
 //   DASH_REMOTE_SHELL="ssh -T -o BatchMode=yes"        the transport; it gets `<dest> <command>`.
@@ -22,9 +22,12 @@ export interface RemoteHost {
   dest: string;
 }
 
-/** The chat-index host id for an AgentsView machine name (shared with chat-index/agentsview-src). */
+/**
+ * The chat-index host id for an AgentsView machine name (shared with chat-index/agentsview-src).
+ * Keep the full name: accepted remote names are already safe, and truncating them aliases routes.
+ */
 export function machineHostId(raw: string): string {
-  return `machine:${raw.trim().replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 56) || "unknown"}`;
+  return `machine:${raw.trim().replace(/[^A-Za-z0-9._-]/g, "-") || "unknown"}`;
 }
 
 const NAME = /^[A-Za-z0-9._-]{1,64}$/;
@@ -66,7 +69,12 @@ const quote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
  * command is one quoted string, so it means the same in sh, bash, zsh and fish.
  */
 export function remoteAcpCommand(host: RemoteHost, harness: string, cwd: string, env: Record<string, string | undefined> = process.env): string[] {
-  const shell = (env.DASH_REMOTE_SHELL?.trim() || "ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30").split(/\s+/);
   const launcher = env.DASH_REMOTE_ACP?.trim() || "dash-acp";
-  return [...shell, host.dest, [launcher, harness, "--cwd", quote(cwd)].join(" ")];
+  return remoteShellCommand(host, [launcher, harness, "--cwd", quote(cwd)].join(" "), env);
+}
+
+/** Shared SSH destination and transport for turns and read-only history. */
+export function remoteShellCommand(host: RemoteHost, command: string, env: Record<string, string | undefined> = process.env): string[] {
+  const shell = (env.DASH_REMOTE_SHELL?.trim() || "ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30").split(/\s+/);
+  return [...shell, host.dest, command];
 }

@@ -1,13 +1,17 @@
+import { useIsFocused } from "@react-navigation/native";
 import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
+import { mergeOlderHistory } from "../lib/live-sessions";
+import { replyObservationKey } from "../lib/next-action";
 import { useHandedness } from "../lib/useHandedness";
 import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
-import { setThinkingSummaries } from "../store/app";
+import { setThinkingSummaries, setConversationModel } from "../store/app";
+import { useComposerStreamRate } from "../hooks/useComposerStreamRate";
 import { ScreenHeader } from "../components/ScreenHeader";
-import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BackHandler, Platform, StyleSheet, Text, View, Pressable, useWindowDimensions } from "react-native";
+import { FlashList, type FlashListRef, type ViewToken } from "@shopify/flash-list";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AppState, BackHandler, Platform, StyleSheet, Text, View, Pressable, useWindowDimensions } from "react-native";
 import Animated from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 import { ComposerActionMenu, type ComposerMenuRow } from "../components/ComposerActionMenu";
@@ -25,7 +29,7 @@ import { AppNav } from "../components/AppNav";
 import { MessageRow } from "../components/MessageRow";
 import { SkeletonRow } from "../components/SkeletonRow";
 import { useHistoryPages } from "../hooks/useHistoryPages";
-import { fetchFullText } from "../store/history-pages";
+import { fetchFullText, listUnlisted } from "../store/history-pages";
 import { LiveSurface } from "../components/LiveSurface";
 import { PressScale } from "../components/PressScale";
 import { isDebugActive } from "../debug/expose";
@@ -33,10 +37,12 @@ import { debugUi } from "../debug/ui-store";
 import { haptic } from "../haptics";
 import { canSteer, type SendMode } from "../lib/composer-mode";
 import type { ChatAttachment } from "../../../shared/protocol";
-import type { Message } from "../model";
+import type { AssistantMessage, Message } from "../model";
 import type { ScreenProps } from "../navigation";
-import { bridge, openLiveSurface, sendChat, sendLiveTurn } from "../net/bridge";
+import { bridge, openLiveSurface, permissionRequests, sendChat, sendLiveTurn } from "../net/bridge";
+import { PermissionCard } from "../components/PermissionCard";
 import { EMPTY_LIVE, liveOf, liveStore, setLiveOpen } from "../store/live";
+import { markConversationReplySeen } from "../store/next-action-preferences";
 import {
   applyTurnEvent,
   beginTurn,
@@ -68,15 +74,21 @@ import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
+import { focusVoiceOrbOverlay } from "../components/VoiceOrbOverlay";
 import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
 import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptOffset } from "../lib/prompt-navigation";
-import { railTurns } from "../lib/rail-turns";
+import { railTurns, type RailTurn } from "../lib/rail-turns";
 import { enterAnnotation, registerSink } from "../store/annotate";
 import { sharedDrafts, consumeSharedDraft } from "../store/shared-drafts";
 
 const EMPTY: Message[] = [];
+/** A scroll this soon after the owner's own input is theirs (web smooth wheel scrolling runs on after the event). */
+const USER_SCROLL_MS = 1000;
+/** How long a rail jump keeps re-aiming at its prompt while the rows it passed over are measured. */
+const JUMP_SETTLE_MS = 3000;
+const REPLY_VIEWABILITY = { viewAreaCoveragePercentThreshold: 10, minimumViewTime: 0 };
 
 function keyExtractor(item: Message): string {
   return item.id;
@@ -97,8 +109,55 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const followRef = useRef(true);
   const dragging = useRef(false);
   const previousOffset = useRef(0);
+  /** The furthest the transcript can scroll, as of its last scroll event. */
+  const scrollMax = useRef(Number.POSITIVE_INFINITY);
+  // Web: when the owner last scrolled the transcript themselves (wheel, touch, pointer, keys). Web has no
+  // onScrollBeginDrag, and the list also scrolls itself while it measures rows (startRenderingFromBottom)
+  // and when a page lands; those scrolls must not detach following, or a chat opens away from its latest
+  // message on a slow device.
+  const userScrollAt = useRef(Number.NEGATIVE_INFINITY);
   const [following, setFollowing] = useState(true);
-  const setFollow = useCallback((next: boolean) => { followRef.current = next; setFollowing(next); }, []);
+  const setFollow = useCallback((next: boolean) => {
+    followRef.current = next;
+    setFollowing(next);
+    // Resuming Latest invalidates older input; it must not own the list's settling scroll.
+    if (next) userScrollAt.current = Number.NEGATIVE_INFINITY;
+  }, []);
+  // A ref callback (React 19 cleanup), so a remounted viewport (live surface closed) listens again.
+  const viewportRef = useCallback((node: View | null) => {
+    const element: unknown = node;
+    if (Platform.OS !== "web" || typeof HTMLElement === "undefined" || !(element instanceof HTMLElement)) return;
+    const mark = (event: Event) => {
+      // Only scrolling keys count; control clicks, text editing, and idle mouse motion do not.
+      const target = event.target instanceof Element ? event.target : null;
+      if (event instanceof KeyboardEvent && (
+        !["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key) ||
+        event.altKey || event.ctrlKey || event.metaKey ||
+        target?.closest('input, textarea, [contenteditable="true"]') ||
+        (event.key === " " && target?.closest('button, [role="button"], [role="switch"], [role="tab"]'))
+      )) return;
+      if (event.type === "pointermove" && event instanceof PointerEvent && event.buttons === 0) return;
+      if ((event.type === "pointerdown" || event.type === "touchstart") && target?.closest('button, a, [role="button"], [role="link"], [role="switch"], [role="tab"]')) return;
+      userScrollAt.current = Date.now();
+      // A genuine upward wheel should beat the next streamed chunk, including over links/buttons.
+      if (event instanceof WheelEvent && event.deltaY < 0 && Math.abs(event.deltaY) > Math.abs(event.deltaX)
+        && followRef.current && previousOffset.current > 1 && scrollMax.current > 1) setFollow(false);
+    };
+    const events = ["wheel", "touchstart", "touchmove", "pointerdown", "pointermove", "keydown"];
+    for (const type of events) element.addEventListener(type, mark, { capture: true, passive: true });
+    return () => { for (const type of events) element.removeEventListener(type, mark, { capture: true }); };
+  }, [setFollow]);
+  const focused = useIsFocused();
+  const [appActive, setAppActive] = useState(AppState.currentState === "active");
+  const [viewedMessageIds, setViewedMessageIds] = useState<ReadonlySet<string>>(() => new Set());
+  const onViewableMessages = useCallback(({ viewableItems }: { viewableItems: ViewToken<Message>[] }) => {
+    const ids = new Set(viewableItems.filter(item => item.isViewable).map(item => item.item.id));
+    setViewedMessageIds(current => current.size === ids.size && [...ids].every(id => current.has(id)) ? current : ids);
+  }, []);
+  useEffect(() => {
+    const listener = AppState.addEventListener("change", state => setAppActive(state === "active"));
+    return () => listener.remove();
+  }, []);
   const scrollToNewest = useCallback(() => {
     if (followRef.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
   }, []);
@@ -125,9 +184,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     const queued = new Set(conversation ? queuedParts(conversation).flatMap(part => [part.user.id, part.assistant.id]) : []);
     const current = messages.filter(message => !queued.has(message.id));
     if (!older.length) return current;
-    const shown = new Set(current.map(message => message.id));
-    return [...older.filter(message => !shown.has(message.id)), ...current];
+    return mergeOlderHistory(current, older);
   }, [messages, conversation, older]);
+  const visibleRows = useRef(visibleMessages);
+  useLayoutEffect(() => { visibleRows.current = visibleMessages; }, [visibleMessages]);
   // A view-only chat is transient: closing it drops it from the phone.
   const viewOnlyId = conversation?.viewOnly ? conversation.id : undefined;
   useEffect(() => () => { if (viewOnlyId) releaseViewOnly(viewOnlyId); }, [viewOnlyId]);
@@ -136,21 +196,79 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     const target = conversation;
     void fetchFullText(target, messageId).then(text => { if (text !== undefined) replaceMessageText(target.id, messageId, text); });
   }, [conversation]);
-  const anchors = useMemo(() => railTurns(visibleMessages), [visibleMessages]);
+  // The prompt rail stands for the whole chat: its prompts come from the rows the list shows and from the
+  // older rows paged in behind them for the rail alone (`unlisted`). Those are not list rows (rows added above
+  // a reader who has scrolled up move what they are reading); they join the list when the reader scrolls to
+  // the top, or when they jump to one of their prompts.
+  const railOnly = useMemo(() => {
+    if (!history.unlisted.length) return history.unlisted;
+    // The chat's own window can grow over rows that were paged in meanwhile: a row is on the rail once.
+    const listed = new Set(visibleMessages.map(message => message.id));
+    return history.unlisted.filter(message => !listed.has(message.id));
+  }, [history.unlisted, visibleMessages]);
+  const railMessages = useMemo(() => mergeOlderHistory(visibleMessages, railOnly), [railOnly, visibleMessages]);
+  const anchors = useMemo(() => railTurns(railMessages), [railMessages]);
   useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
+  const jumpedTo = useRef<string | null>(null);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(settleTimer.current), []);
+  const scrollToPrompt = useCallback((anchor: RailTurn): boolean => {
+    clearTimeout(settleTimer.current);
+    const index = visibleRows.current.findIndex(message => message.id === anchor.id);
+    if (index < 0) return false;
+    const at = { ...anchor, index };
+    const offset = promptOffset([at], 0, index => listRef.current?.getLayout(index));
+    if (offset !== null) listRef.current?.scrollToOffset({ offset, animated: false });
+    else void listRef.current?.scrollToIndex({ index: at.index, animated: false, viewPosition: 0 });
+    // The rows between were placed by estimate: as they are measured the prompt moves away from where the
+    // jump aimed. Re-aim at it until it holds still, unless the owner scrolls or resumes following meanwhile.
+    const startedAt = Date.now();
+    let still = 0;
+    const settle = () => {
+      if (followRef.current || dragging.current || userScrollAt.current > startedAt || Date.now() - startedAt > JUMP_SETTLE_MS) return;
+      const index = visibleRows.current.findIndex(message => message.id === anchor.id);
+      if (index < 0) return;
+      const layout = listRef.current?.getLayout(index);
+      if (layout) {
+        const target = Math.max(0, Math.min(layout.y, scrollMax.current));
+        if (Math.abs(target - previousOffset.current) > 4) {
+          still = 0;
+          listRef.current?.scrollToOffset({ offset: target, animated: false });
+        } else if (++still >= 3) return;
+      }
+      settleTimer.current = setTimeout(settle, 100);
+    };
+    settleTimer.current = setTimeout(settle, 100);
+    return true;
+  }, []);
   const jumpPrompt = useCallback((prompt: number) => {
     const anchor = anchors[prompt];
-    if (!anchor) return;
+    if (!anchor || !conversation) return;
     dragging.current = false;
     setFollow(false);
-    const offset = promptOffset(anchors, prompt, index => listRef.current?.getLayout(index));
-    if (offset !== null) listRef.current?.scrollToOffset({ offset, animated: false });
-    else void listRef.current?.scrollToIndex({ index: anchor.index, animated: false, viewPosition: 0 });
-  }, [anchors, setFollow]);
+    if (scrollToPrompt(anchor)) return;
+    // This source id is still rail-only: list it and the intervening source rows first.
+    jumpedTo.current = anchor.id;
+    listUnlisted(conversation.id, anchor.id);
+  }, [anchors, conversation, scrollToPrompt, setFollow]);
+  useEffect(() => {
+    const id = jumpedTo.current;
+    if (!id) return;
+    const anchor = anchors.find(a => a.id === id);
+    if (!anchor) { jumpedTo.current = null; return; }
+    if (!visibleMessages.some(message => message.id === id)) return;
+    // The rows just listed are laid out on the next frame.
+    const timer = setTimeout(() => {
+      if (jumpedTo.current !== id) return;
+      jumpedTo.current = null;
+      scrollToPrompt(anchor);
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [anchors, visibleMessages, scrollToPrompt]);
   const harnessId = conversation?.harness ?? settings?.harness ?? "omp";
   const harness = connection.harnesses.find((h) => h.id === harnessId);
   const harnessName = harness?.name ?? harnessId;
-  const online = connection.status === "online";
+  const online = connection.status === "online" && (!conversation || conversation.endpointAddress === settings?.address);
   const targetError = conversation ? conversationTargetError(conversation) : undefined;
   const live = liveStore.use((all) => (conversation ? all[conversation.id] ?? EMPTY_LIVE : EMPTY_LIVE));
   const liveOn = harnessId === "hermes" && live.open;
@@ -173,17 +291,37 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const workers = useSessionWorkers(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
   const [chatOptions, setChatOptions] = useState(false);
   const context = useContextView(settings, online && (!conversation?.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)), harnessId, conversation?.profileId, conversation?.sessionId, thinking.phase !== "idle");
-  const latestAssistant = [...messages].reverse().find(message => message.role === "assistant");
+  const latestAssistant = [...messages].reverse().find((message): message is AssistantMessage => message.role === "assistant");
+  const { rateLabel, rateRecent } = useComposerStreamRate(latestAssistant?.turnId, latestAssistant?.state === "streaming");
+  const permissionRecords = permissionRequests.state.use(s => s.records);
+  // Open requests, plus the settled ones of the latest turn so the owner sees the host's outcome.
+  const permissionCards = conversation ? Object.values(permissionRecords).filter(record => record.conversationId === conversation.id &&
+    (record.phase === "pending" || record.phase === "deciding" || record.turnId === latestAssistant?.turnId)) : [];
   const voice = useContinuousVoice();
   const voiceActive = !["idle", "error"].includes(voice.state.phase);
   // Broker liveness/another client's call is not evidence that Dash's mic is live.
   const voiceCall: OrbState | undefined = voiceActive ? { phase: voice.state.phase === "hearing" ? "listening" : voice.state.phase === "error" ? "idle" : voice.state.phase } : undefined;
   const onVoice = () => {
-    // A live call already shows its one Mute/End home (window dock row, else the app-wide bar).
-    if (voiceActive) return;
+    // A running call stays put: focus its hero orb instead of doing nothing.
+    if (voiceActive) { focusVoiceOrbOverlay(); return; }
     void voice.start();
   };
 
+  const latestCompletedAssistant = messages.findLast((message): message is AssistantMessage => message.role === "assistant" && message.state === "done");
+  useEffect(() => {
+    if (
+      !focused ||
+      !appActive ||
+      !latestCompletedAssistant ||
+      !viewedMessageIds.has(latestCompletedAssistant.id) ||
+      !following ||
+      liveOn ||
+      !conversation ||
+      !settings?.chatIndexScope ||
+      conversation.endpointAddress !== settings.address
+    ) return;
+    markConversationReplySeen(settings.chatIndexScope, conversation.id, replyObservationKey(latestCompletedAssistant));
+  }, [appActive, conversation, focused, following, latestCompletedAssistant, liveOn, settings, viewedMessageIds]);
   const sendTurn = useCallback(
     (text: string, attachments: ChatAttachment[], active = conversation ?? createConversation(harnessId), mode: SendMode = "queue") => {
       const { turnId } = beginTurn(active.id, text, { attachments, mode });
@@ -235,7 +373,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   steerableRef.current = canSteer(harnessId, conversation?.sessionId, thinking.phase, liveOn);
   useEffect(() => {
     if (!conversation) return;
-    return registerSink({ label: `${harnessName} chat`, steerable: () => steerableRef.current, send: (text, attachments, mode) => {
+    return registerSink({ label: `Sending to ${conversation.title || harnessName}`, conversationId: conversation.id, steerable: () => steerableRef.current, send: (text, attachments, mode) => {
       if (liveOn) setLiveOpen(conversation.id, false);
       return sendVoiceAnnotation(conversation, text, attachments, () => {}, mode);
     } });
@@ -257,11 +395,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, [online, conversation?.id, flushQueue]);
 
   useEffect(() => {
-    if (conversation?.queueWaitForIdle && observed?.observed && observed.phase === "idle") {
+    if (online && conversation?.queueWaitForIdle && observed?.observed && observed.phase === "idle") {
       setQueueWaiting(conversation.id, false);
       flushQueue(conversation.id);
     }
-  }, [conversation?.id, conversation?.queueWaitForIdle, observed?.observed, observed?.phase, flushQueue]);
+  }, [online, conversation?.id, conversation?.queueWaitForIdle, observed?.observed, observed?.phase, flushQueue]);
 
   const onStop = useCallback(() => {
     if (conversation) stopConversation(conversation.id, (id) => { bridge.send({ type: "cancel", id }); });
@@ -330,12 +468,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const identity = useMemo((): IdentityInput => ({
     // A chat-index host (`machine:<name>`) that the roster does not list: show the machine name.
     hostName: conversation?.targetHostId ? connection.hosts.find(host => host.id === conversation.targetHostId)?.name ?? conversation.targetHostId.replace(/^machine:/, "") : selfHost?.name ?? (connection.host || undefined),
+    hostId: conversation?.targetHostId ?? selfHost?.id,
     harnessName,
     profile: conversation?.profileName ?? conversation?.profileId,
     sessionId: conversation?.sessionId,
+    // Summary/roster model is exact-session metadata; a fresh context reading takes precedence.
+    ...(conversation?.sessionModel?.sessionId === conversation?.sessionId && conversation?.sessionModel
+      ? { model: conversation.sessionModel.model } : {}),
     // Never a default name: unknown unless the host reported it for this exact session.
     ...hostIdentity(hostReading ?? undefined, conversation?.sessionId, observedAt),
-  }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, connection.hosts, connection.host, selfHost?.name, harnessName, hostReading, observedAt]);
+  }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, conversation?.sessionModel, connection.hosts, connection.host, selfHost?.id, selfHost?.name, harnessName, hostReading, observedAt]);
   const queuedCount = conversation ? queuedParts(conversation).length : 0;
   const detailMode = conversation?.detailMode ?? "Compact";
   const menuRows = useMemo((): ComposerMenuRow[] => {
@@ -352,9 +494,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     if (conversation) rows.push({ id: "summaries", label: "Thinking summaries", value: conversation.summariesEnabled ? "On · next turn" : "Off", run: () => setThinkingSummaries(conversation.id, !conversation.summariesEnabled) });
     rows.push({ id: "annotate", label: "Annotate", value: "S Pen or finger", run: () => enterAnnotation() });
     if (approvalCount > 0) rows.push({ id: "approvals", label: "Approvals", value: `${approvalCount} pending${approvalDryRun ? " · preview" : ""} ›`, run: () => navigation.navigate("Approvals") });
-    rows.push({ id: "harness", label: "Harness", value: `${harnessName} · Change…`, run: () => setPickerVisible(true) });
+    rows.push({
+      id: "harness", label: "Harness", value: `${harnessName} · Change…`, run: () => setPickerVisible(true),
+      // Holding the row lists the harnesses this bridge can run; tapping it still opens the full picker.
+      options: connection.harnesses.filter(h => h.available).map(h => ({ id: h.id, label: h.name, selected: h.id === harnessId, run: () => onSelectHarness(h.id) })),
+    });
     return rows;
-  }, [harnessId, conversation, liveOn, toggleLive, detailMode, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible]);
+  }, [harnessId, conversation, liveOn, toggleLive, detailMode, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible, connection.harnesses, onSelectHarness]);
 
   const dockBody = <>
     <WorkersStrip workers={workers} />
@@ -378,6 +524,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
     </View>
     </> : null}
+    {permissionCards.map(record => <PermissionCard key={record.turnId + "/" + record.requestId} requestId={record.requestId} turnId={record.turnId}
+      options={record.options} deadlineAt={record.deadlineAt} phase={record.phase} onChoose={optionId => permissionRequests.decide(record, optionId)} />)}
     {conversation && !liveOn ? <QueuedStack conversation={conversation} canSteer={online && !targetError && canSteer(harnessId, conversation.sessionId, thinking.phase, liveOn)} onSteer={() => { const payload = takeQueuedForSteer(conversation.id); if (payload) sendTurn(payload.text, payload.attachments, conversation, "steer"); }} /> : null}
     <Composer
       draftKey={conversation?.id}
@@ -394,6 +542,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       onQueuePreviewChange={text => { if (conversation) changeQueuePreview(conversation.id, text); }}
       onSaveQueuePreview={() => { if (conversation) saveQueuePreview(conversation.id); }}
       harness={harnessId}
+      model={identity.model}
+      modelOverride={conversation?.modelOverride}
+      rateLabel={rateLabel}
+      rateRecent={rateRecent}
+      onChooseHarness={() => { haptic.select(); setPickerVisible(true); }}
+      onChangeModel={next => {
+        const active = conversation ?? createConversation(harnessId);
+        setConversationModel(active.id, next);
+      }}
       blurTarget={liveOn ? undefined : blurTarget}
       cwd={conversation?.cwd}
       placeholder={liveOn ? (live.askHermes ? "Ask Hermes through the live surface" : "Live surface · quick reply") : composerPlaceholder({
@@ -437,7 +594,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     <OrbActivity active={false}>
     <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
       {windowed ? <>
-        <WindowPill geometry={pill} title={conversation?.title || harnessName} thinking={thinking}
+        <WindowPill geometry={pill} title={conversation?.title || harnessName}
           status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
           primary={pillPrimary({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
           open={navOpen} onToggle={() => setNavOpen(value => !value)} />
@@ -468,7 +625,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       </View> : null}
       {liveOn && conversation ? <KeyboardInsetView style={styles.body}><LiveSurface conversationId={conversation.id} /></KeyboardInsetView> : <KeyboardInsetView style={styles.body} onOpen={scrollToNewest}>
         {/* Absolute overlays must use the unpadded list viewport, not the IME inset box. */}
-        <View style={styles.viewport} testID="transcript-viewport">
+        <View ref={viewportRef} style={styles.viewport} testID="transcript-viewport">
         <BlurTargetView ref={blurTarget} style={styles.body}><FlashList
           ref={listRef}
           data={visibleMessages}
@@ -479,6 +636,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           </View> : <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
+          onViewableItemsChanged={onViewableMessages}
+          viewabilityConfig={REPLY_VIEWABILITY}
           maintainVisibleContentPosition={{ startRenderingFromBottom: true }}
           onStartReached={history.canLoadOlder ? history.loadOlder : undefined}
           onStartReachedThreshold={0.5}
@@ -486,12 +645,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onScrollBeginDrag={() => { dragging.current = true; }}
           onScroll={event => {
             const { contentSize, layoutMeasurement, contentOffset } = event.nativeEvent;
+            scrollMax.current = Math.max(0, contentSize.height - layoutMeasurement.height);
             const moved = Math.abs(contentOffset.y - previousOffset.current) > 1;
             previousOffset.current = contentOffset.y;
-            // Web wheel scrolling has no onScrollBeginDrag. A content resize alone
-            // must not detach following before onContentSizeChange can scroll.
-            if (!moved || (!dragging.current && Platform.OS !== "web")) return;
-            setFollow(followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y));
+            // Programmatic following may move the viewport; only owner scrolls detach it.
+            const byOwner = dragging.current || (Platform.OS === "web" && Date.now() - userScrollAt.current < USER_SCROLL_MS);
+            const atLatest = followsLatest(contentSize.height, layoutMeasurement.height, contentOffset.y);
+            if (!moved || !byOwner) return;
+            setFollow(atLatest);
           }}
           scrollEventThrottle={16}
           onContentSizeChange={scrollToNewest}
@@ -518,6 +679,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           identity={identity}
           title={conversation?.title || harnessName}
           options={optionsTrigger}
+          onAnnotate={enterAnnotation}
           treeOpen={treeOpen}
           onTree={setTreeOpen}
           onClose={closeWindow}

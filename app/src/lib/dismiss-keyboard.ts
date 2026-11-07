@@ -1,6 +1,10 @@
 import { Keyboard, Platform } from "react-native";
 
-/** Let the translated dock settle before measuring an anchored popup. */
+/**
+ * Resolves when the IME reports hidden. React Native sends keyboardDidHide as soon as the root insets
+ * change, which is the START of the hide animation: the dock is still travelling down afterwards, so a
+ * popup anchored to it must still wait for it to stop (see settledAnchor in lib/anchor).
+ */
 export function dismissKeyboard(): Promise<void> {
   if (Platform.OS === "web" || !Keyboard.isVisible()) {
     Keyboard.dismiss();

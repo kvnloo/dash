@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseCommands, type CommandSuggestion } from "../../../shared/suggestions";
 import type { Sink, TurnInput } from "../harnesses";
+import { AcpPermissionAdapter, type AcpPermissionBrokerPort } from "./permission-adapter";
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -39,13 +40,34 @@ export function acpPromptBlocks(input: Pick<TurnInput, "text" | "attachments">, 
   return blocks;
 }
 
+/** Only a closed set of diagnostic templates may cross from an agent onto the phone. */
+export function acpRequestFailure(error: unknown, phase: string): string {
+  const code = record(error) && typeof error.code === "number" && Number.isFinite(error.code) ? error.code : "unknown";
+  const detail = record(error) && record(error.data) && typeof error.data.details === "string" ? error.data.details : "";
+  const model = /^Could not restore model ([\w./:-]{1,80})$/.exec(detail)?.[1];
+  const data = record(error) && record(error.data) ? error.data : {};
+  const status = typeof data.http_status === "number" ? data.http_status : undefined;
+  const text = [detail, typeof data.message === "string" ? data.message : "", record(error) && typeof error.message === "string" ? error.message : ""].join(" ");
+  // Only the fixed sentences below reach the phone, never the provider's own text.
+  const outOfUsage = status === 402 || /payment required|balance exhausted|out of (usage|credits)|usage limit|quota exceeded|insufficient (credit|balance|quota)/i.test(text);
+  const rateLimited = status === 429 || /rate.?limit|too many requests/i.test(text);
+  const hint = model ? `could not restore model ${model}; the host may have lost provider login`
+    : outOfUsage ? "the agent's provider account is out of usage or credits on this host"
+    : rateLimited ? "the agent's provider is rate limiting this host; try again shortly"
+    : "check host authentication and agent diagnostics";
+  return `ACP request failed during ${phase} (code ${code}); ${hint}`;
+}
+
 type Pending = { resolve(value: unknown): void; reject(error: Error): void };
 /**
  * `cwd` is the session's working directory, sent to the agent. `spawnCwd` is where the adapter
  * process starts when `cwd` is on another computer (the command then reaches that computer).
- * `timeoutMs` defaults to and is normally capped at 2 minutes; a caller may pass up to an hour.
+ * `timeoutMs` is the absolute ceiling (default 10 minutes, capped at one hour).
+ * `DASH_ACP_STALL_MS` bounds silence between adapter frames (default 2 minutes).
  */
-export type AcpOptions = { command: string[]; cwd: string; spawnCwd?: string; timeoutMs?: number; sink: Sink; env?: Record<string, string>; onUsage?(session: string, update: unknown): void };
+export type AcpOptions = { command: string[]; cwd: string; spawnCwd?: string; timeoutMs?: number; sink: Sink; env?: Record<string, string>; onUsage?(session: string, update: unknown): void;
+  /** Routes session/request_permission to the owner. Absent: every request is cancelled (fail closed). */
+  permissions?: { principalId: string; turnId: string; broker: AcpPermissionBrokerPort } };
 
 /** One owned stdio connection. Client capabilities are deliberately empty. */
 export class AcpClient {
@@ -69,7 +91,9 @@ export class AcpClient {
     return this.catalogs.get(this.sessionId ?? "") ?? [];
   }
   private failure?: Error;
-  private timer: ReturnType<typeof setTimeout>;
+  private stallTimer?: ReturnType<typeof setTimeout>;
+  private ceilingTimer?: ReturnType<typeof setTimeout>;
+  private permissionPending = false;
   private exit: Promise<void>;
   private closing?: Promise<void>;
   exited = false;
@@ -79,8 +103,19 @@ export class AcpClient {
   get exitCode(): number | null { return this.proc.exitCode; }
   get exitSignal(): NodeJS.Signals | null { return this.proc.signalCode; }
 
+  private permissions: AcpPermissionAdapter;
+
   constructor(private options: AcpOptions) {
     if (options.command.length === 0) throw new Error("ACP executable unavailable");
+    this.permissions = new AcpPermissionAdapter({
+      activeSessionId: () => this.sessionId,
+      principalId: options.permissions?.principalId ?? "",
+      turnId: options.permissions?.turnId ?? "",
+      broker: options.permissions?.broker,
+      send: response => this.send(response),
+      resolved: () => this.options.sink.status("Thinking"),
+      pendingChanged: pending => this.setPermissionPending(pending),
+    });
     this.proc = spawn("nice", ["-n", "10", ...options.command], {
       cwd: options.spawnCwd ?? options.cwd,
       detached: true,
@@ -115,11 +150,50 @@ export class AcpClient {
         if (line.trim()) this.receive(line);
       }
     });
-    const timeoutMs = Math.min(Math.max(options.timeoutMs ?? 120_000, 1), 60 * 60_000);
-    this.timer = setTimeout(() => {
-      this.fail(new Error("ACP turn timed out"));
-      this.kill("SIGKILL");
-    }, timeoutMs);
+  }
+
+  private setPermissionPending(pending: boolean): void {
+    this.permissionPending = pending;
+    if (pending) {
+      clearTimeout(this.stallTimer);
+      this.stallTimer = undefined;
+    } else {
+      this.armStallTimer();
+    }
+  }
+
+  private armStallTimer(): void {
+    clearTimeout(this.stallTimer);
+    this.stallTimer = undefined;
+    if (!this.used || this.failure || this.permissionPending) return;
+    const raw = Number(process.env.DASH_ACP_STALL_MS);
+    const ms = Number.isFinite(raw) && raw > 0
+      ? Math.min(Math.max(Math.trunc(raw), 1), 60 * 60_000)
+      : 120_000;
+    this.stallTimer = setTimeout(() => this.timeOut(), ms);
+  }
+
+  private startTimers(): void {
+    if (this.failure) return;
+    this.armStallTimer();
+    const raw = this.options.timeoutMs;
+    const ms = typeof raw === "number" && Number.isFinite(raw)
+      ? Math.min(Math.max(Math.trunc(raw), 1), 60 * 60_000)
+      : 10 * 60_000;
+    this.ceilingTimer = setTimeout(() => this.timeOut(), ms);
+  }
+
+  private stopTimers(): void {
+    clearTimeout(this.stallTimer);
+    clearTimeout(this.ceilingTimer);
+    this.stallTimer = undefined;
+    this.ceilingTimer = undefined;
+  }
+
+  private timeOut(): void {
+    this.stopTimers();
+    this.fail(new Error("ACP turn timed out"));
+    this.kill("SIGKILL");
   }
 
   private kill(signal: NodeJS.Signals): void {
@@ -148,6 +222,8 @@ export class AcpClient {
   }
 
   private receive(line: string): void {
+    // A complete frame is proof of adapter activity, even during long thinking/tool steps.
+    this.armStallTimer();
     let message: unknown;
     try { message = JSON.parse(line); }
     catch { this.fail(new Error("ACP invalid JSON frame")); return; }
@@ -157,10 +233,7 @@ export class AcpClient {
     }
     if (typeof message.method === "string") {
       if (message.id !== undefined) {
-        if (message.method === "session/request_permission") {
-          this.send({ jsonrpc: "2.0", id: message.id, result: { outcome: { outcome: "cancelled" } } });
-          this.options.sink.status("Thinking");
-        } else {
+        if (!this.permissions.receive(message)) {
           this.send({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Client capability unavailable" } });
         }
       } else if (message.method === "session/update" && record(message.params)) {
@@ -201,8 +274,7 @@ export class AcpClient {
     if (!pending) return;
     this.pending.delete(message.id);
     if (message.error !== undefined) {
-      const code = record(message.error) && typeof message.error.code === "number" ? message.error.code : "unknown";
-      pending.reject(new Error(`ACP request failed (code ${code}); check host authentication and agent diagnostics`));
+      pending.reject(new Error(acpRequestFailure(message.error, this.phase)));
     } else if ("result" in message) pending.resolve(message.result);
     else pending.reject(new Error("ACP response missing result"));
   }
@@ -210,6 +282,7 @@ export class AcpClient {
   async turn(input: TurnInput): Promise<string> {
     if (this.used) throw new Error("ACP connection already used");
     this.used = true;
+    this.startTimers();
     this.phase = "initialize";
     const initialized = await this.request("initialize", {
       protocolVersion: 1,
@@ -250,7 +323,18 @@ export class AcpClient {
         this.commandReady = undefined;
       }
       if (!this.catalogs.has(this.sessionId)) throw new Error("The harness did not advertise commands over ACP.");
+      this.stopTimers();
       return "metadata";
+    }
+    // Apply the exact selected model before any prompt. An unsupported model/method must
+    // reject this turn rather than silently run the host default.
+    if (input.model) {
+      this.phase = "session/set_model";
+      try {
+        await this.request("session/set_model", { sessionId: this.sessionId, modelId: input.model });
+      } catch {
+        throw new Error("The harness did not accept the selected model. No prompt was submitted.");
+      }
     }
     this.options.sink.session(this.sessionId);
     this.prompting = true;
@@ -263,6 +347,7 @@ export class AcpClient {
     if (!record(result) || typeof result.stopReason !== "string") throw new Error("ACP prompt missing stop reason");
     if (result.stopReason === "cancelled") throw new Error("ACP turn cancelled");
     this.phase = "complete";
+    this.stopTimers();
     return result.stopReason;
   }
 
@@ -278,8 +363,9 @@ export class AcpClient {
   }
 
   private async shutdown(): Promise<void> {
-    clearTimeout(this.timer);
+    this.stopTimers();
     this.fail(new Error("ACP connection closed"));
+    this.permissions.cleanup();
     this.proc.stdin.end();
     this.kill("SIGTERM");
     let force: ReturnType<typeof setTimeout> | undefined;

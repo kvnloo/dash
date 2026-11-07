@@ -115,8 +115,8 @@ const { createRoot } = await import("react-dom/client");
 /** Two hosts, 30 sessions, delegation and repo edges: every view renders cards and wires. */
 function graph() {
   const nodes: Record<string, unknown>[] = [
-    { id: "host:a", hostId: "host:a", label: "groot", kind: "host", state: "idle", online: true, thinking: { phase: "idle" } },
-    { id: "host:b", hostId: "host:b", label: "mbp", kind: "host", state: "idle", online: true, thinking: { phase: "idle" } },
+    { id: "host:a", hostId: "host:a", label: "host-b", kind: "host", state: "idle", online: true, thinking: { phase: "idle" } },
+    { id: "host:b", hostId: "host:b", label: "host-a", kind: "host", state: "idle", online: true, thinking: { phase: "idle" } },
     { id: "repo:dash", hostId: "host:a", label: "dash", kind: "repo", state: "idle", thinking: { phase: "idle" } },
   ];
   const edges: Record<string, unknown>[] = [];

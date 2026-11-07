@@ -4,6 +4,23 @@ import {hostname} from 'node:os';
 
 test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({path:info.outputPath('final.png')});});
 
+test.describe('Claude Code session model identity',()=>{
+ test.use({bridgeOptions:{archiveClaude:true}});
+ test('fixture Claude session model shows in the chat header',async({page,bridge})=>{
+  await pair(page,bridge);
+  const row=page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({hasText:'ARMY archived Claude Code chat'});
+  await expect(row).toHaveCount(1,{timeout:30000});
+  await row.click({noWaitAfter:true});
+  const badge=page.getByTestId('chat-window-badge');
+  await expect(badge).toBeVisible();
+  await expect(badge).toContainText('claude-opus-5-5');
+  await expect(badge).toHaveAttribute('aria-label',/session 11111111-2222-4333-8444-555555555555, model claude-opus-5-5, reported by host/);
+  await expect(badge).not.toContainText('model unknown');
+  await expect(badge).not.toContainText('not-an-assistant-model');
+  await expect(badge).not.toContainText('claude-older-model');
+ });
+});
+
 test('pairing, Chats tab, open and close real chat window',async({page,bridge})=>{
  await openChat(page,bridge);
  await expect(page.getByTestId('chat-window-badge')).toContainText(hostname()); // the bridge host, on any machine
@@ -12,6 +29,30 @@ test('pairing, Chats tab, open and close real chat window',async({page,bridge})=
  await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected','true');
  await chatRow(page).click({noWaitAfter:true});
  await expect(composer(page)).toBeInViewport();
+});
+
+test('main input names the selected agent with default feedback enabled and after reload',async({page,bridge},info)=>{
+ await openChat(page,bridge);
+ await chooseHarness(page,'Hermes');
+ await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});
+ // Logical viewports at 3x scale for the reported 1080x2340 and 1440x3120 phones.
+ for (const viewport of [{width:360,height:780},{width:480,height:1040}]) {
+  await page.setViewportSize(viewport);
+  await expect(composer(page)).toHaveAttribute('placeholder','Message Hermes');
+  await expect(composer(page)).toBeInViewport();
+  await page.screenshot({path:info.outputPath(`main-input-hermes-${viewport.width}.png`)});
+ }
+ // Reopen the owned chat in its window (a brand-new chat opens full screen, with a different header).
+ await chatRow(page).click({noWaitAfter:true});
+ await expect(page.getByTestId('chat-window')).toBeVisible();
+ await chooseHarness(page,'OMP');
+ await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});
+ await expect(composer(page)).toHaveAttribute('placeholder','Message OMP');
+ await page.reload({waitUntil:'domcontentloaded'});
+ await expect(composer(page)).toHaveAttribute('placeholder','Message OMP',{timeout:25000});
+ // Selecting an agent and editing placeholder copy must not submit feedback or start a turn.
+ await expect(page.getByText('Dash feedback',{exact:true})).toHaveCount(0);
+ expect(bridge.logs()).not.toContain('turn.start');
 });
 
 test('composer typing, Send and streamed ACP reply',async({page,bridge,metrics})=>{
@@ -88,6 +129,117 @@ test('context gauge opens a readable card inside the viewport',async({page,bridg
  await expect(card).toBeVisible();await expect(card).toBeInViewport({ratio:1});
  await expect(card.getByText(/This harness has no native context snapshot/)).toBeVisible();
  await closeContextCard(page,gauge);
+});
+
+// Hold the gauge long enough for onLongPress (350 ms) and let go. The mouse stays where it went down.
+async function holdGauge(page:any,gauge:any){
+ const box=await gauge.boundingBox();if(!box)throw Error('Context gauge has no box');
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.waitForTimeout(650);await page.mouse.up();
+ return box as {x:number;y:number;width:number;height:number};
+}
+
+test('context gauge long-press opens a small grid peek just above the gauge',async({page,bridge},info)=>{
+ await page.setViewportSize({width:390,height:780});
+ await openChat(page,bridge);await send(page,'context grid peek journey');
+ await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+ const gauge=page.getByRole('button',{name:/^Context window,/});
+ const g=await holdGauge(page,gauge);
+ const peek=page.getByLabel('Context grid peek',{exact:true});
+ await expect(peek).toBeVisible();await expect(peek).toBeInViewport({ratio:1});
+ // A long press is not a tap: the card did not open.
+ await expect(page.getByLabel('Context window details',{exact:true})).toHaveCount(0);
+ // Anchored: its bottom edge is a few pixels over the gauge's top edge and the gauge sits under it.
+ const p=await peek.boundingBox();if(!p)throw Error('Context grid peek has no box');
+ const gap=g.y-(p.y+p.height);
+ expect(gap,'peek bottom edge to gauge top edge').toBeGreaterThanOrEqual(0);expect(gap).toBeLessThanOrEqual(24);
+ expect(g.x+g.width/2).toBeGreaterThan(p.x);expect(g.x+g.width/2).toBeLessThan(p.x+p.width);
+ // Small: 20 columns of 7 px cells, well under half the screen.
+ expect(p.width).toBeLessThan(220);expect(p.height).toBeLessThan(170);
+ // The fixture harness has no native snapshot: nothing is claimed, every cell is free.
+ await expect(peek.getByText('Context unknown',{exact:true})).toBeVisible();
+ const cells=peek.getByLabel('Context grid cells',{exact:true});
+ await expect(cells.locator('rect')).toHaveCount(200);await expect(cells.locator('rect[fill="none"]')).toHaveCount(200);
+ const cell=await cells.boundingBox();if(!cell)throw Error('grid has no box');
+ expect(cell.width).toBeCloseTo(20*7+19,0);expect(cell.height).toBeCloseTo(10*7+9,0);
+ await page.screenshot({path:info.outputPath('context-grid-peek-390.png')});
+ // Tapping outside dismisses it and opens nothing.
+ await page.getByRole('button',{name:'Dismiss context preview',exact:true}).click({noWaitAfter:true,position:{x:8,y:8}});
+ await expect(peek).toHaveCount(0);await expect(page.getByLabel('Context window details',{exact:true})).toHaveCount(0);
+ // Tapping the peek opens the full card.
+ await holdGauge(page,gauge);await expect(peek).toBeVisible();
+ await peek.click({noWaitAfter:true});
+ const card=page.getByLabel('Context window details',{exact:true});
+ await expect(card).toBeVisible();await expect(card).toBeInViewport({ratio:1});await expect(peek).toHaveCount(0);
+ await closeContextCard(page,gauge);
+ // A plain tap on the gauge is unchanged: the card, no peek.
+ await gauge.click({noWaitAfter:true});await expect(card).toBeVisible();await expect(peek).toHaveCount(0);
+ await closeContextCard(page,gauge);
+});
+
+test('context card shows the grid instead of the bar',async({page,bridge},info)=>{
+ await page.setViewportSize({width:390,height:780});
+ await openChat(page,bridge);await send(page,'context grid card journey');
+ await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+ const gauge=page.getByRole('button',{name:/^Context window,/});
+ await gauge.click({noWaitAfter:true});
+ const card=page.getByLabel('Context window details',{exact:true});
+ await expect(card).toBeVisible();await expect(card).toBeInViewport({ratio:1});
+ const grid=card.getByLabel('Context grid',{exact:true});
+ await expect(grid).toBeVisible();
+ // 20 x 10 cells, all free without a snapshot, as tall as a grid and not the old 8 px bar.
+ await expect(grid.locator('rect')).toHaveCount(200);await expect(grid.locator('rect[fill="none"]')).toHaveCount(200);
+ const c=await card.boundingBox();const b=await grid.boundingBox();if(!c||!b)throw Error('card or grid has no box');
+ expect(b.width,'grid spans the card').toBeGreaterThan(c.width-40);expect(b.height).toBeGreaterThan(100);
+ await expect(card.getByText(/This harness has no native context snapshot/)).toBeVisible();
+ await page.screenshot({path:info.outputPath('context-card-grid-390.png')});
+ await closeContextCard(page,gauge);
+});
+
+// RC3 defect: the card's "Dismiss usage details" backdrop covered the gauge, so the gauge could not be pressed again.
+test('context gauge stays pressable while its card is open: pressing it closes the card',async({page,bridge})=>{
+ await openChat(page,bridge);await send(page,'context gauge pressable journey');
+ await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+ const gauge=page.getByRole('button',{name:/^Context window,/});
+ const card=page.getByLabel('Context window details',{exact:true});
+ for(let i=0;i<2;i++){
+  await gauge.click({noWaitAfter:true});await expect(card).toBeVisible();
+  // The card is open and the gauge is still the thing under the pointer, not the backdrop.
+  await gauge.click({noWaitAfter:true});await expect(card).toHaveCount(0);
+ }
+});
+
+test('an agent-reported context reading fills the grid in the peek and the card',async({page,bridge},info)=>{
+ await page.setViewportSize({width:390,height:780});
+ await openChat(page,bridge);await send(page,'ARMY_USAGE grid fill');
+ await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+ // The fixture agent reports 85000 of 200000 tokens (usage_update): 1000 tokens a cell, 85 of 200 cells.
+ const gauge=page.getByRole('button',{name:/^Context window,/});
+ await gauge.click({noWaitAfter:true});
+ const card=page.getByLabel('Context window details',{exact:true});
+ await expect(card).toBeVisible();
+ await expect(card.getByText('Context ~43%',{exact:true})).toBeVisible({timeout:20000});
+ const grid=card.getByLabel('Context grid',{exact:true});
+ await expect(grid.locator('rect')).toHaveCount(200);
+ await expect(grid.locator('rect[fill="none"]')).toHaveCount(115);
+ // The legend: the one reported category, Free space and the Autocompact buffer with tokens and percent.
+ await expect(card.getByLabel('Used, estimated 85.0k tokens, 43%',{exact:true})).toBeVisible();
+ await expect(card.getByText('~85.0k tokens (43%)',{exact:true})).toBeVisible();
+ await expect(card.getByLabel('Free space, 115.0k tokens, 57%',{exact:true})).toBeVisible();
+ await expect(card.getByText('~115.0k tokens (57%)',{exact:true})).toBeVisible();
+ // No compaction threshold was reported, so the buffer is unknown, not zero.
+ await expect(card.getByLabel('Autocompact buffer, unknown',{exact:true})).toBeVisible();
+ await page.screenshot({path:info.outputPath('context-card-filled-390.png')});
+ await closeContextCard(page,gauge);
+ await expect(page.getByRole('button',{name:'Context window, approximately 43 percent',exact:true})).toBeVisible();
+ await holdGauge(page,gauge);
+ const peek=page.getByLabel('Context grid peek',{exact:true});
+ await expect(peek).toBeVisible();await expect(peek).toBeInViewport({ratio:1});
+ await expect(peek.getByText('~43% · 85k / 200k',{exact:true})).toBeVisible();
+ const cells=peek.getByLabel('Context grid cells',{exact:true});
+ await expect(cells.locator('rect')).toHaveCount(200);await expect(cells.locator('rect[fill="none"]')).toHaveCount(115);
+ await page.screenshot({path:info.outputPath('context-grid-peek-filled-390.png')});
+ await page.getByRole('button',{name:'Dismiss context preview',exact:true}).click({noWaitAfter:true,position:{x:8,y:8}});
+ await expect(peek).toHaveCount(0);
 });
 
 test('prompt rail mouse scrub, Jump and Latest on real transcript',async({page,bridge})=>{
@@ -202,6 +354,31 @@ for(const width of [390,800])test('safe exploratory controls and context hit tar
 
 test.describe('ephemeral ACP regression',()=>{
  test.use({persistSession:false});
+ test('conditional roster polls finish while an ephemeral turn stays queueable and stoppable',async({page,bridge})=>{
+  const failedPolls:string[]=[];
+  page.on('requestfailed',request=>{
+   if(new URL(request.url()).pathname==='/roster') failedPolls.push(request.failure()?.errorText??'unknown failure');
+  });
+  await openChat(page,bridge);await send(page,'ARMY_HANG conditional roster lifecycle');
+  await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
+  for(let poll=0;poll<2;poll++){
+   const response=await page.waitForResponse(response=>new URL(response.url()).pathname==='/roster'&&response.status()===304,{timeout:25000});
+   // A received header is not a completed poll: the browser must deliver its empty body too.
+   let completed=false;
+   void response.finished().then(error=>{completed=error===null;});
+   await expect.poll(()=>completed,{timeout:5000,message:'conditional roster response must finish without an aborted cache load'}).toBe(true);
+   await composer(page).fill('queued draft survives conditional roster '+poll);
+   await expect(page.getByRole('button',{name:'Queue',exact:true})).toBeEnabled();
+   await expect(page.getByText('This chat has ended on the host. Its saved history is still on this phone.',{exact:true})).toHaveCount(0);
+  }
+  expect(failedPolls).toEqual([]);
+  // With a sendable draft the primary action is Queue; Stop is the running-and-empty action.
+  await composer(page).fill('');
+  await page.getByRole('button',{name:'Stop',exact:true}).click({noWaitAfter:true});
+  // Stopped: a fresh draft is Send again, not Queue.
+  await composer(page).fill('after stop');
+  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled();
+ });
  test('a missing roster row must not terminate a bridge-owned running turn',async({page,bridge})=>{
   await openChat(page,bridge);await send(page,'ARMY_HANG ephemeral ACP regression');
   await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();

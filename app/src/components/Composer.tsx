@@ -1,4 +1,6 @@
 import { isUsageCommand } from "../lib/composer-command";
+import { MODEL_ID } from "../../../shared/protocol";
+import { ComposerStatChips } from "./ComposerStatChips";
 import { ContextCard, ContextGauge, type ContextControl } from "./ContextCard";
 import { Feather } from "@expo/vector-icons";
 import { AgentOrb } from "./AgentOrb";
@@ -8,9 +10,10 @@ import { MicButton } from "./MicButton";
 import { useRecordedSpeech } from "../lib/useRecordedSpeech";
 import { insertAtCursor, type Selection } from "../lib/mic-gesture";
 import { type RefObject, memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Image, Keyboard, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AttachmentChooser, type AttachmentAnchor } from "./AttachmentChooser";
 import { dismissKeyboard } from "../lib/dismiss-keyboard";
+import { followAnchor, settledAnchor } from "../lib/anchor";
 import type { ChatAttachment } from "../../../shared/protocol";
 import * as Clipboard from "expo-clipboard";
 import { clipboardInsertion } from "../lib/clipboard-paste";
@@ -51,6 +54,14 @@ interface Props {
   onQueuePreviewChange?(text: string): void;
   onSaveQueuePreview?(): void;
   harness?: string;
+  /** Exact-session host report. Never inferred from a default provider. */
+  model?: string;
+  /** Explicit user preference, not confirmation of host application. */
+  modelOverride?: string;
+  rateLabel?: string | null;
+  rateRecent?: boolean;
+  onChooseHarness?(): void;
+  onChangeModel?(model: string | undefined): void;
   cwd?: string;
   blurTarget?: RefObject<View | null>;
   /** Debug fixtures only: chips to show on first render. */
@@ -66,8 +77,11 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ draftKey, context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
+export const Composer = memo(function Composer({ draftKey, context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, model, modelOverride, rateLabel, rateRecent = false, onChooseHarness, onChangeModel, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
   const thumb = useHandedness();
+  const [modelOpen, setModelOpen] = useState(false);
+  const [modelDraft, setModelDraft] = useState("");
+  const validModel = modelDraft.trim() === "" || MODEL_ID.test(modelDraft.trim());
   const [choice, setChoice] = useState<SendMode>("steer");
   useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
   const sendMode = composerMode(steerBusy, choice);
@@ -228,11 +242,20 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
     const request = ++attachRequest.current;
     await dismissKeyboard();
     if (!mounted.current || request !== attachRequest.current) return;
-    // Measure after the dock has returned from the IME; draft text and selection stay intact.
-    requestAnimationFrame(() => attachRef.current?.measureInWindow((x, y, width, height) => {
-      if (mounted.current && request === attachRequest.current) setAttachAnchor({ x, y, width, height });
-    }));
+    // IME visibility can already be false while the dock is still closing.
+    // Wait for quiet geometry, preserving the draft and selection.
+    const rect = await settledAnchor(() => attachRef.current, () => mounted.current && request === attachRequest.current);
+    if (rect && mounted.current && request === attachRequest.current) setAttachAnchor(rect);
   }, []);
+  // The chooser is a snapshot taken from a view that can still be moving (an IME that finishes
+  // hiding late, a window settling). Keep it on the paperclip for as long as it is open.
+  const attachOpen = attachAnchor !== null;
+  useLayoutEffect(() => {
+    if (!attachAnchor) return;
+    // Arm before the chooser's first paint. The opening measurement can already be stale by commit
+    // while the dock is moving, so the first animation frame must refresh it too.
+    return followAnchor(() => attachRef.current, attachAnchor, rect => { if (mounted.current) setAttachAnchor(rect); });
+  }, [attachOpen]);
   useEffect(() => {
     if (disabled || editingQueue) { attachRequest.current++; setAttachAnchor(null); }
   }, [disabled, editingQueue]);
@@ -276,6 +299,24 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
       {speechBusy ? <PressScale accessibilityRole="button" accessibilityLabel="Stop dictation" onPress={() => void speech.end()} style={styles.modeToggle}><Text style={styles.chipName}>Stop</Text></PressScale> : null}
       {speech.state.phase === "error" ? <PressScale accessibilityRole="button" accessibilityLabel="Retry dictation" onPress={onDictate} style={styles.modeToggle}><Text style={styles.chipName}>Retry</Text></PressScale> : null}
     </View> : null}
+    {!editingQueue ? <View testID="composer-model-harness-controls" style={styles.configRow}>
+      {harness && onChooseHarness ? <PressScale
+        testID="composer-harness-button"
+        accessibilityRole="button"
+        accessibilityLabel={`Change harness, current ${harness}`}
+        onPress={onChooseHarness}
+        style={styles.configChip}
+      ><Text numberOfLines={1} style={styles.configText}>{harness} · Change</Text></PressScale> : null}
+      {onChangeModel ? <PressScale
+        testID="composer-model-button"
+        accessibilityRole="button"
+        accessibilityLabel={modelOverride ? `Edit model, requested ${modelOverride}` : model ? `Edit model, host reported ${model}` : "Edit model, host default"}
+        accessibilityHint="Choose a model for future turns; the host must accept it before prompting."
+        onPress={() => { setModelDraft(modelOverride ?? ""); setModelOpen(true); }}
+        style={[styles.configChip, styles.modelControl]}
+      ><Text numberOfLines={1} style={styles.configText}>{modelOverride ? `Requested · ${modelOverride}` : model ? `Model · ${model}` : "Model · Host default"}</Text></PressScale> : null}
+      <ComposerStatChips rateLabel={rateLabel} streaming={streaming} recent={rateRecent} />
+    </View> : null}
     <View testID="composer-field" style={[styles.field, editingQueue && styles.previewField]}>
       <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={onTextChange} onFocus={() => setFieldFocused(true)} onBlur={() => setFieldFocused(false)} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
       <View testID="composer-controls" style={[styles.controls, { flexDirection: "row", justifyContent: "flex-start" }, editingQueue && thumb.align]}>
@@ -285,11 +326,40 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
           : <PressScale accessibilityRole="button" accessibilityLabel={streaming && !steerBusy ? "Queue" : sendMode.action} accessibilityHint={sendMode.label} onPress={submit} disabled={!canSend} style={styles.hit}><View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View></PressScale>}
         {context ? <ContextGauge control={context} /> : null}
         <View ref={attachRef} collapsable={false}><PressScale accessibilityRole="button" accessibilityLabel="Attach file" accessibilityState={{ expanded: attachAnchor !== null }} onPress={onAttach} disabled={disabled || editingQueue} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale></View>
-        <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onTap={speechBusy ? onDictate : voiceCall ? onVoice : undefined} accessibilityLabel={speechBusy ? "Stop dictation" : voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
+        <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onTap={speechBusy ? onDictate : voiceCall ? onVoice : undefined} accessibilityLabel={speechBusy ? "Stop dictation" : voiceCall ? `Live call, ${voiceCall.phase}. Show voice orb` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
 
       </View>
     </View>
   </GlassSurface>
+  <Modal visible={modelOpen} transparent animationType="none" onRequestClose={() => setModelOpen(false)}>
+    <View style={styles.modelBackdrop}>
+      <View testID="composer-model-editor" style={styles.modelSheet} accessibilityViewIsModal>
+        <Text accessibilityRole="header" style={styles.modelTitle}>Model for next turn</Text>
+        <TextInput
+          testID="composer-model-input"
+          accessibilityLabel="Model ID"
+          value={modelDraft}
+          onChangeText={setModelDraft}
+          placeholder="provider/model-id"
+          placeholderTextColor={colors.textFaint}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardAppearance="dark"
+          style={styles.modelInput}
+        />
+        <Text style={styles.modelNote}>Leave empty for host default. The paired harness must accept this model; unsupported choices fail before the prompt.</Text>
+        {!validModel ? <Text accessibilityRole="alert" style={styles.modelError}>Use a model identifier without spaces or control characters.</Text> : null}
+        <View style={styles.modelActions}>
+          <PressScale accessibilityRole="button" accessibilityLabel="Cancel model edit" onPress={() => setModelOpen(false)} style={styles.modelAction}><Text style={styles.configText}>Cancel</Text></PressScale>
+          <PressScale accessibilityRole="button" accessibilityLabel="Apply model" disabled={!validModel} onPress={() => {
+            if (!validModel) return;
+            onChangeModel?.(modelDraft.trim() || undefined);
+            setModelOpen(false);
+          }} style={[styles.modelAction, !validModel && styles.disabled]}><Text style={styles.configText}>Apply model</Text></PressScale>
+        </View>
+      </View>
+    </View>
+  </Modal>
   {attachAnchor ? <AttachmentChooser anchor={attachAnchor} onClose={() => setAttachAnchor(null)} onPick={kind => {
     setAttachAnchor(null);
     Keyboard.dismiss();
@@ -318,6 +388,18 @@ const AttachmentChip = memo(function AttachmentChip({ draft, onRemove }: { draft
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 12, paddingTop: 8, gap: 8 },
   sheet: { paddingHorizontal: 8 },
+  configRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, paddingHorizontal: 4, paddingTop: 4 },
+  configChip: { minHeight: 44, minWidth: 44, maxWidth: 112, paddingHorizontal: 8, justifyContent: "center", borderRadius: radius.pill, backgroundColor: glass.fillChipOn, borderWidth: 1, borderColor: glass.hair },
+  modelControl: { maxWidth: 142, flexShrink: 1 },
+  configText: { ...type.mono, color: colors.text, fontSize: 12 },
+  modelBackdrop: { flex: 1, justifyContent: "center", paddingHorizontal: 20, backgroundColor: "rgba(0,0,0,0.8)" },
+  modelSheet: { backgroundColor: colors.surfaceRaised, borderRadius: radius.card, borderWidth: 1, borderColor: glass.hair, padding: 20, gap: 16 },
+  modelTitle: { ...type.heading, color: colors.text },
+  modelInput: { minHeight: 48, borderRadius: radius.sm, borderColor: glass.hair, borderWidth: 1, color: colors.text, ...type.body, paddingHorizontal: 12 },
+  modelNote: { ...type.small, color: colors.textMuted },
+  modelError: { ...type.small, color: colors.danger },
+  modelActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
+  modelAction: { minHeight: 44, paddingHorizontal: 16, justifyContent: "center", alignItems: "center", borderRadius: radius.pill, borderColor: glass.hair, borderWidth: 1 },
   field: { flexDirection: "column", alignItems: "stretch", minHeight: 96 },
   previewField: { flexDirection: "column", alignItems: "stretch" },
   previewInput: { flex: 0, minHeight: 168, maxHeight: 192 },

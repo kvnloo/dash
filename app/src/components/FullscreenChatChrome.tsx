@@ -9,8 +9,7 @@ import {
   fullscreenPillState,
   type FullscreenCloseSide,
 } from "../lib/a11y-fullscreen-chat-chrome";
-import { CLOSE_GLYPH, PILL_HIT, type PillGeometry, type PillGlyph } from "../lib/chat-window";
-import type { OrbState } from "../lib/orb-phase";
+import { CLOSE_GLYPH, PILL_HIT, pillLensPath, type PillGeometry, type PillGlyph } from "../lib/chat-window";
 import { colors, glass, type } from "../theme";
 import { AgentOrb } from "./AgentOrb";
 
@@ -38,19 +37,14 @@ export function FullscreenChatChrome({
   const hole = geometry.hole;
   const r = geometry.height / 2;
   const hitPad = Math.max(0, (PILL_HIT - geometry.height) / 2);
-  const phase: OrbState["phase"] = primary?.glyph === "tool"
-    ? "tool"
-    : primary?.glyph === "activity" ? "thinking" : "idle";
 
   // The very same even-odd cutout outline and reserved status slot as WindowPill.
   // With no hardware cutout the pill becomes an ordinary safe-area glass capsule.
   const outline = `M${r} 0H${geometry.width - r}A${r} ${r} 0 0 1 ${geometry.width - r} ${geometry.height}H${r}A${r} ${r} 0 0 1 ${r} 0Z`;
-  const lens = hole
-    ? `M${hole.left} ${r}a${hole.width / 2} ${hole.width / 2} 0 1 0 ${hole.width} 0a${hole.width / 2} ${hole.width / 2} 0 1 0 ${-hole.width} 0Z`
-    : "";
+  const lens = pillLensPath(hole);
   const name = title.trim() || "Chat";
   const leading = <>
-    <AgentOrb size={14} thinking={{ phase }} label={name} animated={false} />
+    <AgentOrb size={14} thinking={{ phase: "idle" }} label={name} animated={false} />
     <Text testID="chat-fullscreen-pill-title" style={styles.pillTitle} numberOfLines={1} maxFontSizeMultiplier={1.15}>{name}</Text>
   </>;
   const trailing = primary ? <View testID="chat-fullscreen-pill-status" style={styles.statusSlot}>
@@ -78,7 +72,7 @@ export function FullscreenChatChrome({
           <Path d={outline + lens} fill={glass.fillRaised} fillRule="evenodd" stroke={glass.hair2} strokeWidth={StyleSheet.hairlineWidth} />
         </Svg>
         <View accessible={false} importantForAccessibility="no-hide-descendants" style={[styles.pillSide, { width: Math.max(0, hole.left - 16), flexShrink: 0 }]}>{leading}</View>
-        <View testID="chat-fullscreen-pill-hole" pointerEvents="none" style={{ width: hole.width }} />
+        <View testID="chat-fullscreen-pill-hole" pointerEvents="none" style={{ width: hole.width, height: hole.height }} />
         <View accessible={false} importantForAccessibility="no-hide-descendants" style={[styles.pillSide, styles.pillSideEnd]}>{trailing}</View>
       </> : <>
         <View accessible={false} importantForAccessibility="no-hide-descendants" style={styles.pillSide}>{leading}</View>

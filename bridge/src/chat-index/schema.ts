@@ -4,14 +4,15 @@ import type { Database } from "bun:sqlite";
 // 2: AgentsView's install id is a self machine; local rows move from machine:<id> to self.
 // 3: synced rows drop AgentsView's `<machine>~` id prefix (native session ids), so a chat on a
 //    DASH_REMOTE_HOSTS machine can be resumed there.
-export const SCHEMA_VERSION = 3;
+// 4: persist the session-reported model.
+export const SCHEMA_VERSION = 4;
 
 const DDL = `
 create table if not exists meta(k text primary key, v text);
 create table if not exists chats(
   key text primary key, origin text not null, kind text not null, session_id text not null,
   host_id text not null, host_name text not null, profile_id text, agent_id text,
-  title text not null, cwd text, started_at int not null, last_activity_at int not null,
+  title text not null, cwd text, model text, started_at int not null, last_activity_at int not null,
   message_count int not null, chatable int not null, src_id text not null, gone int not null default 0);
 create index if not exists chats_activity on chats(gone, last_activity_at desc, key);
 create index if not exists chats_kind on chats(gone, kind, last_activity_at desc, key);

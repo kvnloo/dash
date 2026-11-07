@@ -1,4 +1,4 @@
-// Bots pane model. A bot is a deployed messaging identity (a Hermes gateway profile on
+// Hosts pane bot model. A bot is a deployed messaging identity (a Hermes gateway profile on
 // Telegram/Discord, OpenDots, GrokBot) reported by the host in `HostInfo.bots`. Harnesses and
 // sessions are not bots; see docs/design/language.md#glossary.
 import type { BotChannel, BotInfo, HostInfo } from "../../../shared/protocol";
@@ -42,6 +42,10 @@ export function botsRows(hosts: readonly HostInfo[], collapsed: ReadonlySet<stri
     const closed = collapsed.has(host.id);
     rows.push({ kind: "host", id: `host:${host.id}`, host, count: bots ? bots.length : null, collapsed: closed });
     if (closed) continue;
+    if (host.kind === "phone") {
+      rows.push({ kind: "note", id: `note:${host.id}`, text: "No harnesses on a phone" });
+      continue;
+    }
     if (!bots) {
       rows.push({ kind: "note", id: `note:${host.id}`, text: host.online ? "This host's bridge does not report bots yet." : "Offline" });
       continue;
@@ -80,9 +84,10 @@ export function parseCollapsed(raw: string | null): Set<string> {
 
 /** The chat target for a bot, when the host lists the agent behind it. */
 export function botTarget(host: HostInfo, bot: BotInfo): AgentTarget | undefined {
-  if (!bot.agentId) return undefined;
+  if (host.kind === "phone" || !bot.agentId) return undefined;
   const agent = host.agents.find(a => a.id === bot.agentId);
   return agent ? profileFromAgent(host, agent) : undefined;
 }
 
+// Keep the legacy key so existing collapsed hosts survive the UI rename.
 export const COLLAPSED_KEY = "dash.bots.collapsed.v1";

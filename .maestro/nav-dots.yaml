@@ -11,7 +11,7 @@ tags:
     timeout: 15000
 - tapOn: "Chats"
 - waitForAnimationToEnd
-- assertVisible: "Bots"
+- assertVisible: "Hosts"
 - assertVisible: "Chats"
 - assertVisible: "Orchestra"
 - assertVisible: "Primary mobile workspace"

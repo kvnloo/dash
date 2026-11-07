@@ -1,5 +1,38 @@
 # Android development build
 
+## DeX WP2 (device spike pending)
+
+The local `dash-dex` Expo module registers `DashDex` and a non-exported
+`DashPadActivity`, using the application's existing ReactHost. `DashPad` is a
+placeholder, not a mirror or annotation implementation. The optional native
+adapter requires both `EXPO_PUBLIC_DASH_TURBO=1` and `EXPO_PUBLIC_DASH_DEX=1`.
+Expo Go and older APKs report unavailable. Commands reject activity-launch
+failures instead of claiming attachment. Private Samsung confirmations without
+a public desktop display ID cannot move MainActivity.
+
+Detection prefers MainActivity's display (not the Pad's currentActivity), public
+desk-mode displays, Samsung's category, guarded reflection, then Knox broadcasts.
+Display, configuration and activity callbacks refresh `dexState`. Runtime
+orientation unlock applies only to MainActivity on an external display and
+restores the original orientation on return. app.json stays portrait.
+`plugins/with-dex.js` applies the resize/config-change and keep-alive metadata;
+the merged-manifest checker and APK class inclusion check require the results.
+
+Explicit web developer simulation:
+`window.__dashDex.simulate({mode: "dual", tv: {w: 1920, h: 1080}})` shows the
+real Dash tree beside the placeholder Pad. Touchpad closes the Pad;
+`simulate({mode: "off"})` restores the ordinary layout without remounting Dash
+or starting another voice root. This is not native availability; web stays
+unchanged until simulation is explicitly called. The army journey includes a
+real chat send after exit.
+
+O15 still requires green CI army evidence for the exact SHA before the native
+build script runs. This WP2 task explicitly authorizes compilation on the build
+host only, not phone installation or testing. Shared-host, multi-resume,
+display-density and One UI behavior remain unverified on devices. L2 overlays
+are deferred until a failed, owner-authorized L1 spike; no overlay permission,
+MediaProjection, Presentation or native mirror pump is included.
+
 Dash's installed Android package is `app.dash.mobile`. Expo Go and web still run, but do not register Dash as a share destination or enable native notifications.
 
 ## Build on the MBP
@@ -15,6 +48,48 @@ Run from the repository root. Do not run installs, prebuild, Gradle or test suit
 The output is `.native-receipts/dash-native-arm64.apk`. It is a debug-signed development-client APK for arm64 Android phones, not a Play Store release. It requires an available Metro server for its JavaScript. The script runs app typechecking, the app/bridge/shared unit suite, the existing mutation gate, native receiver tests, prebuild and Gradle. It also records the merged manifest and APK signature/checksum. Fleet's source snapshot has no Git metadata, so the script initializes an ephemeral Git inventory for the real-workspace inventory test.
 
 `@kvnloo/aodl-views` remains pinned to the existing Git revision. A worker without private repository credentials can use a local mirror bundle containing that exact revision. Put the bundle at `.native-build-inputs/aodl.bundle` for the fleet transfer, but never commit it. The build script uses a job-scoped Git URL rewrite, not a global credential change.
+
+## Is my dev client current?
+
+Metro serves new JavaScript to old Android dev clients, but cannot install native code.
+`react-native-webrtc` was added on 2026-10-22. A dev client installed
+before that change can show `WebRTC could not load` on every live call.
+
+On the connected S25/S22+, inspect **the installed APK**, not the Metro source.
+Run from the Dash repository root (the first `pm path` entry is `base.apk`):
+
+```sh
+adb shell pm path app.dash.mobile
+apk_on_phone=$(adb shell pm path app.dash.mobile | sed -n '1s/^package://p' | tr -d '\r')
+apk_copy="$(mktemp -d)/dash-installed.apk"
+adb pull "$apk_on_phone" "$apk_copy" &&
+  bash scripts/build-native-android.sh --check-apk "$apk_copy"
+```
+
+`--check-apk` checks the existing dex for `WebRTCModule` and
+`PeerConnectionFactory`, and checks for the **exact**
+`lib/arm64-v8a/libjingle_peerconnection_so.so` path. It also checks the existing
+required Dash classes; when the local `dash-audio-route` or `dash-stylus` Expo
+module directory exists, their native class is required too. Any missing
+component exits non-zero and names it. This is for Dash's single-APK arm64
+dev build; an Android split-APK installation requires separate inspection.
+Inspect-only mode runs no build, O15 release gate, dependency install or signing.
+
+If it fails, obtain an O15-approved native rebuild and reinstall the dev
+client; a Metro reload cannot repair an old APK. A pass proves packaged classes
+and the native library, **not** live voice readiness or device operation.
+
+Device smoke (requires the approved install, configured bridge, broker and
+voice scope): run `adb logcat -c`, then in a separate terminal run:
+
+```sh
+adb logcat -s ReactNativeJS
+```
+
+In Dash on the phone, open an attached Hermes chat, tap Live voice, grant mic
+permission, speak, confirm speaker playback, and stop the call. Inspect the
+`[voice]` log lines for setup, teardown and errors, especially
+`WebRTC could not load`. Do not treat this manual check as O15 army evidence.
 
 ## Keep turbo and QA live
 
@@ -39,6 +114,42 @@ adb -s <S25-serial> shell am start -W \
 The APK includes `expo-dev-client`, plus turbo's SDK `expo-intent-launcher` and `react-native-view-shot` native modules. Existing bridge pairing and `:4747` are unchanged. No bridge token goes in the launch URL.
 
 JavaScript/TypeScript and styling changes use Metro Fast Refresh. Native module, native dependency, app config/plugin, permission or manifest changes require another prebuild/APK installation. A Metro bundle resolving successfully does not prove native launch or Fast Refresh on the phone. The rollout owner must install, open the URL, verify a real edit appears, and inspect device/Metro errors before calling it live. Workers must not restart the protected stable/preview services or drive the daily phone.
+
+### Live follow (what keeps the phone current)
+
+Three Metro servers run on the dev host, each behind a tailnet-only relay: `:8212` the installed dev client's JavaScript, `:8213` **turbo** and `:8214` the release channel (`dash-channel`, currently `rc3-roadmap`).
+
+- `:8213` follows `integ/rc3-roadmap-resume-20261027` (`TURBO_FOLLOW_REF`). `dash-turbo-follow.timer` runs `dash-channel follow` every 30 s: one `git ls-remote`, and only when the head moved it builds an immutable release, restarts Metro on it, compiles the Android bundle as a health gate and rolls back if that fails. A head that failed is not retried until the head moves. Install or remove with `scripts/turbo/install-groot.sh [--uninstall]`.
+- `:8214` is rebuilt by `dash-channel nightly` (timer override: every 10 min) and re-served when the tracked branch moved.
+- Every release writes `app/src/lib/build-info.json`; the bundle bakes it in (what the app runs) and `app.config.js` republishes it in the manifest (what Metro serves). The chip in the top-right shows `abc1234 · 3m old`, or `abc1234 → def5678` when the server moved on. Tap reloads (or hides when current); long-press offers Reload now, Switch Metro (turbo :8213 / channel :8214) and the auto-reload toggle. Auto-reload fires when you return to the app, or after 30 s without a touch with the keyboard closed, once per served build.
+- Latency from a push to the new bundle on `:8213` is the 30 s tick plus a few seconds to build, restart and compile. Check what a Metro serves the way the phone fetches it: `scripts/turbo/verify-served.sh [--port 8213|8214]`.
+- A phone that predates the chip needs one reload (or `DASH_CHANNEL_CONF_DIR=~/.config/dash-turbo-live dash-channel open <adb-serial>` while the phone is idle) to start auto-updating. `scripts/adb-tailscale.sh` explains why Wireless debugging needs `ADB_PORT`.
+
+Before loading a newer build, the app checks the exact advertised launch asset again.
+A build that stops serving HTTP 200 while an update waits is not reloaded.
+After network and preference writes finish, the app persists drafts, including edits
+made during those waits. It then checks the target and automatic-reload eligibility
+again without another asynchronous wait. Resumed interaction cancels an idle reload.
+Changing the launch asset URL requires a new health check, even for the same SHA.
+
+`verify-served.sh` requires the expected SHA in both the Expo manifest and the
+downloaded launch bundle. A matching release directory does not establish identity.
+Missing or mismatched identity fails the check, including older bundles without
+baked build metadata.
+
+Channel switches, promotions, explicit rollbacks and automatic re-serving require
+a green, complete O15 army receipt for the target commit before release state
+changes. `--force` only bypasses the native fingerprint check, never O15 approval.
+The former receipt opt-out is no longer used. A missing receipt holds the update;
+copy the genuine army receipt and report into the configured receipt store.
+
+Native baselines use `v4:` and include `app.config.js`/`app.config.ts`, installed
+native package versions, local native sources and config plugins. Older baseline
+versions do not establish this compatibility. After a verified native build and
+installation, record the baseline for that installed release with
+`dash-channel baseline <channel>`. Do not reset a baseline merely to clear a
+mismatch. Chat-only JavaScript, module documentation and generated native caches
+do not require a new native baseline.
 
 ## Notifications
 
@@ -82,14 +193,37 @@ Stop closes tracks/peer before best-effort broker cancellation/end. Leaving Dash
 the Android background stops the mic. There is no microphone foreground service,
 background-capture promise, platform-TTS fallback, or Expo Go/web implementation.
 
-The bridge's `/voice/bootstrap` is online identity-authenticated, native-only metadata
-for an exact known attached Hermes profile/session, enabled with `DASH_NATIVE_VOICE=1`.
-It does not mint a bearer and does not turn `dash:chat` into voice permission. The app
-separately mints an in-memory access token with `aud=z0live`, exactly `z0live:voice`,
-from its existing device-bound SecureStore enrollment. An absent grant fails closed.
+On Android, dictation and live voice now check or request `RECORD_AUDIO` before acquiring the microphone or preparing the recorder. Android's permission sheet briefly pauses `MainActivity`; Dash ignores that permission-dialog background event for the request and 1.5 seconds after it settles, while ordinary Home/background events still stop an active call. Denial shows the existing microphone-permission error, and a later retry checks again. Device acceptance remains pending: run `adb shell pm revoke app.dash.mobile android.permission.RECORD_AUDIO`, confirm that a single first dictation tap requests permission then records/transcribes after Allow, that first Live start passes the microphone stage, and that pressing Home during a running call stops the mic. A web army pass cannot verify the native dialog.
+
+The bridge's `/voice/bootstrap` is online identity-authenticated metadata for an
+exact known attached Hermes profile/session. Voice is enabled unless
+`DASH_NATIVE_VOICE=0`; the endpoint rejects browser Origin headers and legacy
+bearers. It accepts raw profile IDs, `hermes:<profile>`, or the roster ID
+`hermes:session:<profile>:<session>`, echoes the submitted `profile`, and
+returns `canonicalProfile` for the broker's Hermes target.
+It does not mint a bearer or turn `dash:chat` into voice permission. The app
+separately mints an in-memory access token with `aud=z0live`, exactly
+`z0live:voice`, from its existing device-bound SecureStore enrollment.
+An absent grant fails closed.
 The parent must review an explicit additional voice grant for the S25's native Dash
 credential; it is independently removable with `z0bridge revoke CRED --scope z0live:voice`.
 No Lawnchair token or owner bearer belongs in Dash. No grants are applied by builds.
+
+The bootstrap returns `broker` (override with `DASH_Z0LIVE_BROKER`; default
+`https://<host>.<tailnet>.ts.net:8791`). The app validates it with `new URL()` and
+permits only an HTTPS `.ts.net` hostname with an explicit port and no credentials,
+path, query or fragment. All `/v1/*` calls use that origin. Only web tester-army
+builds with `EXPO_PUBLIC_DASH_VOICE_FAKE=1` also allow
+`http://127.0.0.1:<port>` and route `provider:answer` to
+`<broker>/v1/fake/answer`; normal builds use OpenAI's fixed SDP endpoint.
+The broker receives the resolved `canonicalProfile`; typed-turn comparison
+keeps the original conversation agent ID.
+
+**Still blocked outside Dash:** the deployed broker rejects Dash identity tokens
+and the S25 Dash credential lacks `z0live:voice`. The host must deploy the
+reviewed broker identity/introspection change and the owner must grant the
+scope before physical calls can work. Bootstrap army evidence is not broker
+deployment or native mic/playback acceptance.
 
 The matching isolated z0live change requires `Z0LIVE_IDENTITY=1`, loopback identity
 URL `http://127.0.0.1:4789`, and `Z0LIVE_IDENTITY_CREDENTIAL_FILE` pointing to a 0600

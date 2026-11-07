@@ -9,6 +9,7 @@ import { replyText, useKeyed } from "../store/text";
 import { colors, fonts, glass, radius, space, type } from "../theme";
 import { messageThinking, type Thinking } from "../lib/thinking";
 import { splitThinking } from "../lib/message-details";
+import { collapseActivity } from "../lib/activity-lines";
 import { AgentOrb } from "./AgentOrb";
 import { ThinkingSummaryChip } from "./ThinkingSummaryChip";
 import { Markdown } from "./Markdown";
@@ -60,19 +61,21 @@ export const MessageRow = memo(function MessageRow({
       }} />
       <AssistantBody key={message.id} message={message} harnessId={harnessId} detailMode={detailMode} />
       {thinking && thinking.phase !== "idle" ? <View style={styles.statusRow}><AgentOrb size={20} thinking={thinking} /><Text style={styles.statusText}>working · {thinking.tool ?? "terminal"}</Text></View> : null}
-      {!message.parts?.length && detailMode !== "Hide" && (message.activity?.length || (message.state === "done" && message.status)) ? <Disclosure key={`${message.id}:activity`} label={`Activity · ${message.activity?.length ?? 1} ${(message.activity?.length ?? 1) === 1 ? "update" : "updates"}`} text={(message.activity ?? [message.status ?? ""]).join("\n")} /> : null}
+      {!message.parts?.length && detailMode !== "Hide" && (message.activity?.length || (message.state === "done" && message.status)) ? <Disclosure key={`${message.id}:activity`} lines={message.activity ?? [message.status ?? ""]} /> : null}
     </View>
   );
 });
 
-function Disclosure({ label, text }: { label: string; text: string }) {
+/** Activity: one quiet row with the update count (the live status row above it already names the latest); opened, each distinct status once with its count. */
+function Disclosure({ lines }: { lines: string[] }) {
   const [open, setOpen] = useState(false);
-  return <View style={styles.disclosure}>
-    <PressScale accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} aria-expanded={open} onPress={() => setOpen(!open)} style={styles.disclosureButton}>
-      <Feather name={open ? "chevron-down" : "chevron-right"} size={14} color={colors.textMuted} />
-      <Text numberOfLines={1} style={styles.disclosureLabel}>{label} · {text.split("\n")[0]}</Text>
+  const label = `Activity · ${lines.length} ${lines.length === 1 ? "update" : "updates"}`;
+  return <View testID="reply-activity" style={styles.disclosure}>
+    <PressScale testID="reply-activity-toggle" accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} aria-expanded={open} onPress={() => setOpen(!open)} hitSlop={{ top: 6, bottom: 6 }} style={styles.disclosureButton}>
+      <Feather name={open ? "chevron-down" : "chevron-right"} size={12} color={colors.textTertiary} />
+      <Text numberOfLines={1} style={styles.disclosureLabel}>{label}</Text>
     </PressScale>
-    {open ? <Text selectable style={styles.detailText}>{text}</Text> : null}
+    {open ? <Text testID="reply-activity-lines" selectable style={styles.detailText}>{collapseActivity(lines).join("\n")}</Text> : null}
   </View>;
 }
 function Answer({ text, turnId, detailMode, streaming = false }: { text: string; turnId: string; detailMode: DetailMode; streaming?: boolean }) {
@@ -181,10 +184,10 @@ function HostFiles({ text }: { text: string }) {
 }
 
 const styles = StyleSheet.create({
-  disclosure: { borderLeftWidth: 1, borderColor: colors.hair, marginTop: 2 },
-  disclosureButton: { flexDirection: "row", alignItems: "center", minHeight: 44, gap: 6, paddingHorizontal: 6 },
-  disclosureLabel: { ...type.small, color: colors.textMuted, flexShrink: 1 },
-  detailText: { ...type.mono, color: colors.textMuted, padding: 8 },
+  disclosure: { marginTop: space.xs },
+  disclosureButton: { flexDirection: "row", alignItems: "center", justifyContent: "flex-start", height: 32, gap: 6 },
+  disclosureLabel: { ...type.mono, fontSize: 11, color: colors.textTertiary, flexShrink: 1 },
+  detailText: { ...type.mono, fontSize: 11, lineHeight: 16, color: colors.textMuted, marginLeft: 5, paddingLeft: 12, borderLeftWidth: 1, borderColor: colors.hair },
   sentFiles: { gap: 6 },
   sentFilesSpaced: { marginBottom: 8 },
   sentFile: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 260 },

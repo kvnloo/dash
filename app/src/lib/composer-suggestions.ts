@@ -58,6 +58,7 @@ export function composerSuggestions(trigger: ComposerTrigger, inventory: Suggest
     if (add({ id: `chat:${chat.id}`, label, detail, insert: `@${chat.sessionId?.trim() ? chat.sessionId : chat.id}` })) return rows;
   }
   for (const host of hosts) {
+    if (host.kind === "phone") continue;
     for (const bot of host.bots ?? []) if (add({ id: `bot:${host.id}:${bot.id}`, label: `@${bot.name}`, detail: `${host.name} · bot`, insert: `@${bot.name}` })) return rows;
     for (const agent of host.agents) if (add({ id: `agent:${host.id}:${agent.id}`, label: `@${agent.name}`, detail: `${host.name} · ${agent.kind}`, insert: `@${agent.name}` })) return rows;
   }

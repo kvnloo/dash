@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { isCatalogHarness } from "../../shared/catalog";
 import { hermesSessions } from "./hermes-sessions";
+import { listFinishedSessions, nodeFsPort } from "./finished-sessions";
 import { grokDesktopBot, hermesBots, hostBotSources, serviceBots } from "./bots";
 import { z0bridgeHermes } from "./z0bridge-hermes";
 import { agentsviewSessions } from "./agentsview-sessions";
@@ -16,6 +17,10 @@ export type TailscaleNode = {
   os: string;
   ips: string[];
   self: boolean;
+  lastSeen?: string;
+  rx?: number;
+  tx?: number;
+  relay?: string;
 };
 
 export type OmpTab = {
@@ -80,6 +85,10 @@ function parseNode(raw: unknown, self: boolean): TailscaleNode | null {
     os: typeof rec.OS === "string" ? rec.OS : "",
     ips,
     self,
+    lastSeen: typeof rec.LastSeen === "string" && Number.isFinite(Date.parse(rec.LastSeen)) ? rec.LastSeen : undefined,
+    rx: typeof rec.RxBytes === "number" ? rec.RxBytes : undefined,
+    tx: typeof rec.TxBytes === "number" ? rec.TxBytes : undefined,
+    relay: typeof rec.Relay === "string" ? rec.Relay : undefined,
   };
 }
 
@@ -333,14 +342,18 @@ function jsonlMatchingSession(dir: string, sessionId: string): string | undefine
 
 export function findOmpJsonl(sessionRoot: string, sessionId: string, cwd?: string, home?: string): string | undefined {
   if (!SESSION_ID_OK.test(sessionId)) return undefined;
-  if (cwd && home) {
+  if (cwd !== undefined) {
+    // A live OMP tab identifies its own working directory. Never substitute
+    // a different project's history when its session file has disappeared,
+    // nor when its cwd is blank or HOME is unknown.
+    if (!cwd.trim() || !home) return undefined;
     for (const dir of ompSessionDirectories(sessionRoot, cwd, home)) {
       const hit = jsonlMatchingSession(dir, sessionId);
       if (hit) return hit;
     }
-    // A scoped live OMP tab must never read another project's transcript.
     return undefined;
   }
+  // Older callers without cwd can still resolve an exact native session ID.
   if (!existsSync(sessionRoot)) return undefined;
   for (const name of readdirSync(sessionRoot)) {
     const path = join(sessionRoot, name);
@@ -408,9 +421,14 @@ export function assembleRoster(input: {
   harnesses: HarnessInfo[];
   selfFallback: { hostname: string; address?: string };
   signals?: RosterSignals;
+  fleetHostNames?: readonly string[];
+  now?: number;
 }): HostInfo[] {
-  const computers = input.nodes.filter((n) => !isPhoneOs(n.os));
-  const hosts: HostInfo[] = computers.map((node) => nodeToHost(node, input));
+  const cutoff = (input.now ?? Date.now()) - 30 * 24 * 60 * 60 * 1000;
+  const nodes = input.nodes.filter(node => !isPhoneOs(node.os) || node.self || node.online ||
+    (node.lastSeen !== undefined && Date.parse(node.lastSeen) >= cutoff) ||
+    input.fleetHostNames?.some(name => name === node.hostName || name === dnsLabel(node.dnsName, node.hostName)));
+  const hosts: HostInfo[] = nodes.map((node) => nodeToHost(node, input));
   if (!hosts.some((h) => h.self)) {
     hosts.unshift(
       selfHost(input.selfFallback.hostname, input.selfFallback.address, input.ompTabs, input.harnesses, input.signals),
@@ -423,7 +441,7 @@ export function assembleRoster(input: {
 function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster>[0]): HostInfo {
   const name = dnsLabel(node.dnsName, node.hostName);
   const v4 = firstV4(node.ips);
-  const agents = node.self
+  const agents = isPhoneOs(node.os) ? [] : node.self
     ? selfAgents(input.ompTabs, input.harnesses, input.signals)
     : (input.signals?.remoteAgents?.[name] ?? []).map((agent) => ({
       ...agent,
@@ -432,6 +450,8 @@ function nodeToHost(node: TailscaleNode, input: Parameters<typeof assembleRoster
     }));
   return {
     id: name,
+    kind: isPhoneOs(node.os) ? "phone" : "computer",
+    lastSeen: node.lastSeen,
     // MagicDNS labels can be numeric ("0"); keep that routing id but show the OS hostname.
     name: node.hostName.trim() || name,
     hostname: node.hostName,
@@ -451,6 +471,7 @@ function selfHost(
 ): HostInfo {
   return {
     id: hostname,
+    kind: "computer",
     name: hostname,
     hostname,
     online: true,
@@ -599,7 +620,7 @@ let rosterCache: { at: number; key: string; hosts: HostInfo[] } | null = null;
 
 /**
  * The phone addresses this computer by its roster host id: the Tailscale MagicDNS label
- * (e.g. "0"), which need not equal the OS hostname (e.g. "groot"). Both name this bridge.
+ * (e.g. "0"), which need not equal the OS hostname (e.g. "host-b"). Both name this bridge.
  */
 export class SelfHost {
   private ids = new Set<string>();
@@ -676,10 +697,18 @@ function listedHermesProfiles(profiles: HermesProfileInfo[]): HermesProfileInfo[
 
 refreshHermesList();
 
-export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }): Promise<HostInfo[]> {
+/** Registry membership keeps intentionally retained phones visible while offline. */
+function fleetHostNames(): string[] {
+  try {
+    const registry: unknown = Bun.YAML.parse(readFileSync(process.env.DASH_FLEET_REGISTRY ?? "/workspace/.files-k3s/config/fleet/nodes.yaml", "utf8"));
+    return isRecord(registry) && isRecord(registry.nodes) ? Object.keys(registry.nodes) : [];
+  } catch { return []; }
+}
+
+export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: string; address?: string }, remoteAgents?: Record<string, AgentInfo[]>): Promise<HostInfo[]> {
   const key = `${self.hostname}:${self.address ?? ""}:${harnesses.map((h) => `${h.id}:${h.available}`).join(",")}`;
   const now = Date.now();
-  if (rosterCache && rosterCache.key === key && now - rosterCache.at < ROSTER_TTL_MS) return rosterCache.hosts;
+  if (remoteAgents === undefined && rosterCache && rosterCache.key === key && now - rosterCache.at < ROSTER_TTL_MS) return rosterCache.hosts;
   refreshHermesList();
   const nodes = parseTailscaleStatus(readTailscaleStatus());
   const home = homedir();
@@ -690,6 +719,8 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
   const a2aUrl = hermesA2AUrl(process.env, selfAddress);
   const hosts = assembleRoster({
     nodes,
+    fleetHostNames: fleetHostNames(),
+    now,
     ompTabs,
     harnesses,
     selfFallback: { hostname: self.hostname, address: selfAddress },
@@ -697,6 +728,7 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
       hermesProfiles,
       hermesA2A: { ok: probeAgentCard(a2aUrl), url: a2aUrl },
       grokBot: grokBotAlive(),
+      remoteAgents,
     },
   });
   // z0bridge when it is running; Dash's own read-only SessionDB/native API listing otherwise.
@@ -707,8 +739,15 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
     // Every other harness's persisted chats; live rows for the same session win.
     const listed = new Set(local.agents.filter(a => a.sessionId).map(a => `${a.kind}:${a.sessionId}`));
     local.agents.push(...agentsviewSessions(listed));
+    for (const agent of local.agents) if (agent.sessionId) listed.add(`${agent.kind}:${agent.sessionId}`);
+    for (const agent of await listFinishedSessions({ fs: nodeFsPort(), homeDir: home, now })) {
+      const key = `${agent.kind}:${agent.sessionId}`;
+      if (listed.has(key)) continue;
+      listed.add(key);
+      local.agents.push(agent);
+    }
     local.bots = localBots();
   }
-  rosterCache = { at: now, key, hosts };
+  if (remoteAgents === undefined) rosterCache = { at: now, key, hosts };
   return hosts;
 }

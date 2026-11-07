@@ -57,9 +57,9 @@ export const DEMO_AGENT_TARGETS: AgentTarget[] = [
     online: true,
   },
   {
-    id: "hermes-groot",
+    id: "hermes-host-b",
     harness: "hermes",
-    name: "groot",
+    name: "host-b",
     role: "Mesh peer · node 0",
     description: "Chiefstaff mesh — Zero context and Hermes desktop",
     online: true,

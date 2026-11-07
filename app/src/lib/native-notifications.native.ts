@@ -3,15 +3,20 @@ import Constants, { ExecutionEnvironment } from "expo-constants";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { AppState, Platform } from "react-native";
 import { notificationState } from "../store/notifications";
+import { store } from "../store/app";
+import { executionToken } from "./bridge-auth";
+import { createNoticePostureReader, nativeNoticeAllowed, notificationChannels } from "./notice-posture";
+import { route } from "../../../shared/interaction-policy";
 import { notificationLink, parseNotificationTarget, shouldNotify, type DashNotice, type NotificationTarget } from "./notification-policy";
 
 const KEY = "dash.notifications.enabled.v1";
-const CHANNEL = "dash-updates";
+const readNoticePosture = createNoticePostureReader({ now: Date.now, token: executionToken, fetch: (url, init) => fetch(url, init) });
 let loaded: Promise<typeof import("expo-notifications") | null> | undefined;
 function api() {
   loaded ??= (async () => {
     if (Platform.OS !== "android" || Constants.executionEnvironment === ExecutionEnvironment.StoreClient || !requireOptionalNativeModule("ExpoNotificationScheduler")) return null;
-    return require("expo-notifications") as typeof import("expo-notifications");
+    const notifications: typeof import("expo-notifications") = require("expo-notifications");
+    return notifications;
   })();
   return loaded;
 }
@@ -21,11 +26,8 @@ function failure(error: unknown) {
 async function channel() {
   const notifications = await api();
   if (!notifications) return null;
-  await notifications.setNotificationChannelAsync(CHANNEL, {
-    name: "Replies, reports and action needed", importance: notifications.AndroidImportance.DEFAULT,
-    sound: null, enableVibrate: false, showBadge: false,
-    lockscreenVisibility: notifications.AndroidNotificationVisibility.PRIVATE,
-  });
+  const channels = notificationChannels(notifications.AndroidImportance, notifications.AndroidNotificationVisibility.PRIVATE);
+  for (const config of Object.values(channels)) await notifications.setNotificationChannelAsync(config.id, config);
   return notifications;
 }
 export async function refreshNotificationPermission(): Promise<void> {
@@ -82,12 +84,16 @@ export async function disableNativeNotifications(): Promise<void> {
 export async function postNativeNotice(notice: DashNotice): Promise<void> {
   if (!shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get(), report: notice.report })) return;
   try {
-    const notifications = await api();
+    const decision = await readNoticePosture(store.get().settings);
+    const routed = route(decision, { cls: notice.class ?? (notice.target.kind === "approvals" ? "decision" : "report"), producer: "dash-notify" }, new Date().toISOString());
+    if (!nativeNoticeAllowed(decision, routed)) return;
+    const notifications = await channel();
     if (!notifications || !shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get(), report: notice.report })) return;
+    const channels = notificationChannels(notifications.AndroidImportance, notifications.AndroidNotificationVisibility.PRIVATE);
     await notifications.scheduleNotificationAsync({ identifier: notice.key,
       content: { title: notice.title, body: notice.body, sound: false, autoDismiss: true,
         data: { url: notificationLink(notice.target), ...(notice.report ? { report: true } : {}) } },
-      trigger: { channelId: CHANNEL },
+      trigger: { channelId: channels[routed.channel].id },
     });
   } catch (error) { failure(error); }
 }

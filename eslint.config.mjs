@@ -4,7 +4,7 @@ import typescript from "@typescript-eslint/eslint-plugin";
 // Deliberately small correctness baseline; type safety is gated separately by tsc.
 export default [
   { plugins: { "@typescript-eslint": typescript } },
-  { ignores: ["**/node_modules/**", "**/.expo/**", "**/dist/**", "**/build/**", "**/coverage/**", "**/*.bak*", "server/**"] },
+  { ignores: ["**/node_modules/**", "**/.expo/**", "**/.native-receipts/**", "**/dist/**", "**/build/**", "**/coverage/**", "**/*.bak*", "server/**"] },
   {
     files: ["app/**/*.{ts,tsx}", "bridge/**/*.ts", "shared/**/*.ts", "scripts/**/*.{ts,mjs}", "*.{ts,mjs}"],
     languageOptions: { parser, parserOptions: { ecmaVersion: "latest", sourceType: "module", ecmaFeatures: { jsx: true } } },

@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { PanResponder, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import type { Conversation } from "../model";
 import { queuedParts, queueMergeError, type QueuedPart } from "../lib/pending-queue";
 import { useHandedness } from "../lib/useHandedness";
 import { cancelQueuePreview, editQueued, moveQueued, previewQueued, removeQueued, setDeliverQueuedAsOne } from "../store/app";
-import { MOTION_MS } from "../motion";
 import { colors, glass, radius, type } from "../theme";
+import { statusIn } from "./motion-enter";
 import { PressScale } from "./PressScale";
 
 interface Props { conversation: Conversation; canSteer: boolean; onSteer(): void }
@@ -18,7 +18,7 @@ export function QueuedStack({ conversation, canSteer, onSteer }: Props) {
   if (!parts.length) return null;
   const preview = conversation.queuePreview !== undefined;
   const mergeError = queueMergeError(conversation);
-  return <Animated.View entering={FadeIn.duration(MOTION_MS.exit)} style={styles.stack}>
+  return <Animated.View entering={statusIn} style={styles.stack}>
     <View style={[styles.header, thumb.row]}>
       <PressScale accessibilityRole="button" accessibilityLabel={`${parts.length} queued`} accessibilityState={{ expanded }} onPress={() => setExpanded(value => !value)} style={styles.hit}><Text style={styles.title}>{parts.length} queued {expanded ? "⌃" : "⌄"}</Text></PressScale>
       <View style={[styles.actions, thumb.row]}>

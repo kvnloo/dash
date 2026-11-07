@@ -1,14 +1,17 @@
 import { BlurTargetView } from "expo-blur";
+import { useIsFocused } from "@react-navigation/native";
 import { Canvas } from "../components/Canvas";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Animated, { useSharedValue } from "react-native-reanimated";
-import { Alert, InteractionManager, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Alert, AppState, InteractionManager, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MainPager, type MainPagerRef } from "../components/MainPager";
+import { OrbActivity } from "../components/OrbMotion";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
+import { AttachedComposer } from "../components/AttachedComposer";
 import { KeyboardDock } from "../components/KeyboardDock";
 import { AppNav, type AppNavHandle } from "../components/AppNav";
 import { SearchResultRow } from "../components/SearchResultRow";
@@ -36,7 +39,7 @@ import type { ScreenProps } from "../navigation";
 import { createConversation, openAgentConversation, openChat, openListedConversation, saveSettings, setActive, store } from "../store/app";
 import type { Conversation } from "../model";
 import { colors, space, type } from "../theme";
-import { BotsPane } from "./panes/BotsPane";
+import { HostsPane } from "./panes/HostsPane";
 import { ChatsPane } from "./panes/ChatsPane";
 import { OrchestraPane } from "./panes/OrchestraPane";
 
@@ -140,6 +143,13 @@ function chatDraftForResult(item: SearchResult): string | undefined {
 
 export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
+  const screenFocused = useIsFocused();
+  const [foreground, setForeground] = useState(AppState.currentState === "active");
+  useEffect(() => {
+    const listener = AppState.addEventListener("change", state => setForeground(state === "active"));
+    setForeground(AppState.currentState === "active");
+    return () => listener.remove();
+  }, []);
   const { width } = useWindowDimensions();
   const blurTarget = useRef<View>(null);
   const pagerRef = useRef<MainPagerRef>(null);
@@ -194,13 +204,25 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const hosts = store.use((s) => s.connection.hosts);
   const cwd = store.use((s) => s.connection.cwd);
   const settings = store.use((s) => s.settings);
+  // Only a chat owned by the currently paired bridge can use Main's attached composer.
+  // Saved-local, foreign, stale and view-only chats keep Main search available; opening
+  // their transcript still restores the draft under its original conversation id.
+  const attached = store.use(s => {
+    if (!s.hydrated || !s.activeId) return undefined;
+    const chat = s.conversations.find(c => c.id === s.activeId && c.id !== FEEDBACK_CONVERSATION_ID);
+    if (!chat || !chat.endpointAddress || chat.endpointAddress !== s.settings?.address || chat.stale || chat.viewOnly) return undefined;
+    return chat;
+  });
+  const [searchMode, setSearchMode] = useState(false);
+  // Returning from another screen shows the selected chat, not an old search query.
+  useEffect(() => { if (screenFocused) setSearchMode(false); }, [screenFocused]);
 
   const parsed = useMemo(() => parseSearchQuery(query), [query]);
   const noTrigger = composerTrigger(query) === null;
   const chatScope = parsed.mode === "mention" && parsed.scope === "conversation" && noTrigger;
   // Plain text: a compact "Chats" section (local top 5, then the bridge's first page).
   const discoverChats = parsed.mode === "discover" && parsed.text.length >= 2 && noTrigger;
-  const searchActive = (parsed.mode !== "discover" && parsed.scope !== "unknown" && noTrigger) || discoverChats;
+  const searchActive = (!attached || searchMode) && ((parsed.mode !== "discover" && parsed.scope !== "unknown" && noTrigger) || discoverChats);
   const globalActive = searchActive && !chatScope && !discoverChats;
 
   // Bots, products, /live and /harness only: built while that search is on screen.
@@ -211,8 +233,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
     [hosts, cwd, globalActive],
   );
   const results = useMemo(
-    () => (globalActive && conversations ? visibleSearchResults(runGlobalSearch({ query, conversations, harnesses, hosts, cwd, products }), query) : NO_RESULTS),
-    [globalActive, query, conversations, harnesses, hosts, cwd, products],
+    () => (globalActive && conversations ? visibleSearchResults(runGlobalSearch({ query, conversations, harnesses, hosts, cwd, products, endpointAddress: settings?.address }), query) : NO_RESULTS),
+    [globalActive, query, conversations, harnesses, hosts, cwd, products, settings?.address],
   );
   const chatSearch = useChatSearch(chatScope ? parsed.text : discoverChats ? parsed.text : "", {
     enabled: chatScope || discoverChats,
@@ -240,7 +262,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       if (!harnessId) return;
       haptic.select();
       if (settings) saveSettings({ ...settings, harness: harnessId });
-      const existing = store.get().conversations.find((c) => c.harness === harnessId && !c.targetHostId && !c.sessionId);
+      const address = store.get().settings?.address;
+      const existing = address ? store.get().conversations.find((c) => c.endpointAddress === address && c.harness === harnessId && !c.targetHostId && !c.sessionId) : undefined;
       if (existing) setActive(existing.id);
       else createConversation(harnessId);
       navigation.navigate("Chat", draft ? { draft } : undefined);
@@ -309,6 +332,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   );
 
   const feedbackOn = inAppFeedbackEnabled(settings);
+  const harnessId = settings?.harness ?? harnesses[0]?.id ?? "omp";
+  const harnessName = harnesses.find((h) => h.id === harnessId)?.name ?? harnessId;
 
   const onFeedbackResult = useCallback(
     (item: SearchResult) => {
@@ -408,16 +433,16 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   // Stable pager children: a MainScreen render (typing, search state) must not cascade into the
   // three panes; each pane subscribes to the store slices it needs on its own.
   const pages = useMemo(() => [
-    <View key="bots" style={{ width, flex: 1 }}>
-      <LazyPane focused={index === 0}><BotsPane navigation={navigation} /></LazyPane>
+    <View key="hosts" style={{ width, flex: 1 }}>
+      <LazyPane focused={index === 0}><HostsPane navigation={navigation} focused={index === 0} /></LazyPane>
     </View>,
     <View key="chats" style={{ width, flex: 1 }}>
       <ChatsPane navigation={navigation} focused={index === 1 && !searchActive} />
     </View>,
     <View key="orchestra" style={{ width, flex: 1 }}>
-      <LazyPane focused={index === 2}><OrchestraPane navigation={navigation} /></LazyPane>
+      <LazyPane focused={index === 2}><OrbActivity active={index === 2 && !searchActive && screenFocused && foreground}><OrchestraPane navigation={navigation} focused={index === 2 && !searchActive && screenFocused && foreground} /></OrbActivity></LazyPane>
     </View>,
-  ], [navigation, index, searchActive, width]);
+  ], [navigation, index, searchActive, screenFocused, foreground, width]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
@@ -477,31 +502,54 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
       <BottomActionSheet open={rowMenu !== null} title={rowMenu?.title || "Result"} options={rowMenuOptions} onSelect={onRowMenuSelect} onClose={closeRowMenu} />
       <KeyboardDock style={styles.searchDock}>
-        <GlobalSearchBar
-          value={query}
-          blurTarget={blurTarget}
-          onChange={setQuery}
-          onScope={onScope}
-          dock="bottom"
-          placeholder={feedbackOn ? "Feedback for Dash" : "Search or message Dash"}
-          onVoice={() => {
-            // Voice keeps the explicitly attached chat; never retarget via a new feedback chat.
-            navigation.navigate("Voice");
-          }}
-          onSend={(text) => {
-            if (feedbackOn) {
-              haptic.select();
-              submitInAppFeedback({ kind: "typed", text });
-              navigation.navigate("Chat");
-              setQuery("");
-              return;
-            }
-            const harness = settings?.harness ?? harnesses[0]?.id;
-            if (!harness) return;
-            openHarness(harness, text);
-            setQuery("");
-          }}
-        />
+        {attached && screenFocused && !searchMode ? (
+          <AttachedComposer
+            key={attached.id}
+            conversation={attached}
+            blurTarget={blurTarget}
+            onOpen={() => navigation.navigate("Chat")}
+            onSearch={(searchQuery) => {
+              if (searchQuery !== undefined) setQuery(searchQuery);
+              setSearchMode(true);
+            }}
+            onVoice={() => navigation.navigate("Voice", { autostart: true })}
+            onDetach={() => setActive(null)}
+          />
+        ) : (
+          <>
+            {attached && screenFocused ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Return to attached session"
+                onPress={() => setSearchMode(false)} style={styles.resumeAttached}>
+                <Text numberOfLines={1} style={styles.resumeText}>Return to {attached.title || attached.harness}</Text>
+              </Pressable>
+            ) : null}
+            <GlobalSearchBar
+              value={query}
+              blurTarget={blurTarget}
+              onChange={setQuery}
+              onScope={onScope}
+              dock="bottom"
+              placeholder={`Message ${harnessName}`}
+              onVoice={() => {
+                // Voice keeps the explicitly attached chat; never retarget via a new feedback chat.
+                navigation.navigate("Voice", { autostart: true });
+              }}
+              onSend={(text) => {
+                if (feedbackOn) {
+                  haptic.select();
+                  submitInAppFeedback({ kind: "typed", text });
+                  navigation.navigate("Chat");
+                  setQuery("");
+                  return;
+                }
+                const harness = settings?.harness ?? harnesses[0]?.id;
+                if (!harness) return;
+                openHarness(harness, text);
+                setQuery("");
+              }}
+            />
+          </>
+        )}
       </KeyboardDock>
     </View>
   );
@@ -514,6 +562,8 @@ const styles = StyleSheet.create({
   searchDock: {
     backgroundColor: "transparent",
   },
+  resumeAttached: { minHeight: 44, justifyContent: "center", paddingHorizontal: space.lg, backgroundColor: colors.bg },
+  resumeText: { color: colors.gold, ...type.small },
   sectionHeader: { color: colors.textMuted, ...type.label, paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.xs },
   more: { minHeight: 44, justifyContent: "center", paddingHorizontal: space.lg },
   moreText: { color: colors.gold, ...type.label },

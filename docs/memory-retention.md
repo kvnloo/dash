@@ -8,6 +8,24 @@ also release reply caches. Summary cleanup includes blocks older than the saved
 64-block window. A stale completion must not evict still-streaming content or
 explicitly loaded post-completion details.
 
+## Bridge terminal retention
+
+Finishing turns remain addressable while terminal summaries are pending. The
+ten-minute replay TTL and 50-settled-turn cap begin only after `done`. Running and
+summary-pending turns do not consume that cap. Expiry checks the turn instance
+before deleting, so a later turn reusing its ID is not removed.
+
+The real bridge regression `e2e/mbp-army/terminal-retention.spec.ts` holds local
+summary HTTP requests to the production deadline, applies cap pressure with 50
+real rejected turns, and explicitly reconnects a subscriber. The old bridge
+returned `lost`; the corrected bridge replayed its reply and terminal `done`.
+It also checks legitimate settled-turn eviction. This does not qualify the
+ten-minute TTL, ID-reuse expiry timing, or automatic app post-error reattachment.
+The app excludes `error` replies from its reconnect selection; bridge retention
+alone does not establish that separate consumer behavior.
+
+## Native reply rendering
+
 `BotFace` also uses an independently transformed native View for its eyes. Driving
 an SVG `G` with Reanimated `animatedProps` is unsafe with the installed Fabric
 synchronous-props path: Android logs `RetryableMountingLayerException` because

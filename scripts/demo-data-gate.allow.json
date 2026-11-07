@@ -1,0 +1,14 @@
+{
+  "allowedImporters": [
+    "app/App.tsx",
+    "app/src/components/ChatWindow.tsx",
+    "app/src/components/ContinuousVoiceRoot.tsx",
+    "app/src/components/NativeEvents.tsx",
+    "app/src/components/annotate/AnnotationRoot.tsx",
+    "app/src/lib/notification-routing.ts",
+    "app/src/net/bridge.ts",
+    "app/src/screens/ChatScreen.tsx",
+    "app/src/screens/MainScreen.tsx",
+    "app/src/screens/panes/OrchestraPane.tsx"
+  ]
+}

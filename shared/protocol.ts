@@ -3,6 +3,7 @@
 // Imported by both `bridge/` and `app/`, so it must stay dependency-free.
 
 import { isGateItem, parseGateDecision, type GateItem, type GateDecision } from "./gate";
+import { parsePermissionDecision, parsePermissionRequest, parsePermissionResolution, type PermissionDecision, type PermissionRequest, type PermissionResolution } from "./permission";
 import { parseLiveClientMessage, parseLiveServerMessage, type LiveClientMessage, type LiveServerMessage } from "./live";
 import { parseReplyPart, parseReplyParts, type ReplyPart } from "./reply-parts";
 export type { ReplyPart } from "./reply-parts";
@@ -11,7 +12,15 @@ export const PROTOCOL_VERSION = 1;
 
 export const NOTICE_TITLE_MAX = 80;
 export const NOTICE_BODY_MAX = 600;
-export interface NoticeInput { title: string; body: string; url?: string }
+export interface NoticeInput { title: string; body: string; url?: string; class?: "critical" | "decision" | "report" | "digest"; not_before?: string }
+
+function isNoticeTime(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!match || !match[1] || Number(match[2]) > 23 || Number(match[3]) > 59 || Number(match[4]) > 59) return false;
+  const day = new Date(`${match[1]}T00:00:00Z`);
+  return Number.isFinite(Date.parse(value)) && Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === match[1];
+}
 export type NoticeMessage = NoticeInput & { type: "notice"; id: string };
 
 /** Reports are additive v1 events, never approvals or turn events. */
@@ -23,7 +32,11 @@ export function parseNoticeInput(raw: unknown): NoticeInput | null {
     try { const url = new URL(raw.url); if (url.protocol !== "dash:" || !url.hostname || url.username || url.password) return null; }
     catch { return null; }
   }
-  return { title: raw.title, body: raw.body, ...(str(raw.url) ? { url: raw.url } : {}) };
+  const cls = raw.class;
+  if (cls !== undefined && cls !== "critical" && cls !== "decision" && cls !== "report" && cls !== "digest") return null;
+  if (raw.not_before !== undefined && !isNoticeTime(raw.not_before)) return null;
+  return { title: raw.title, body: raw.body, ...(str(raw.url) ? { url: raw.url } : {}),
+    ...(cls !== undefined ? { class: cls } : {}), ...(isNoticeTime(raw.not_before) ? { not_before: raw.not_before } : {}) };
 }
 
 export interface HarnessInfo {
@@ -49,11 +62,15 @@ export interface AgentInfo {
   lastActivityAt?: number;
   messageCount?: number;
   source?: string;
+  /** Last assistant model reported by the session store, not a harness default. */
+  model?: string;
   /** A live host surface (e.g. "CLI") holds this persisted chat open. Dash replies wait for it. */
   openIn?: string;
 }
 
 export const CHATS_FEATURE = "chats.v1";
+/** Old bridges silently discard unknown chat fields; require this before sending model overrides. */
+export const MODEL_SELECTION_FEATURE = "model-selection.v1";
 
 export type ChatOrigin = "live" | "hermes" | "agentsview";
 
@@ -83,6 +100,7 @@ export interface ChatSummary {
   /** Dash can send turns: isCatalogHarness(kind) && hostId === self. Else view-only. */
   chatable: boolean;
   running?: boolean;
+  model?: string;
   openIn?: string;
 }
 
@@ -150,9 +168,48 @@ export interface BotInfo {
   detail?: string;
 }
 
-/** A machine on the tailnet (this laptop, groot/0, …). */
+/** Live local-host evidence, served separately from the ETag-hashed roster. */
+export interface HostStats {
+  hostId: string;
+  sampledAt: number;
+  cpuCount: number;
+  /** Missing until two CPU counter readings exist; never a load-based estimate. */
+  cpuPct?: number;
+  memory?: { usedBytes: number; totalBytes: number };
+  disk?: { path: string; usedBytes: number; totalBytes: number };
+  load?: { one: number; five: number; fifteen: number };
+  gpus?: { name: string; usagePct?: number; usedBytes?: number; totalBytes?: number; temperatureC?: number }[];
+  temperatureC?: number;
+  battery?: { percent: number; status: string; temperatureC?: number };
+}
+
+function statsNumber(value: unknown): value is number { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
+function statsPercent(value: unknown): value is number { return statsNumber(value) && value <= 100; }
+function statsBytes(value: unknown): boolean {
+  return isRecord(value) && statsNumber(value.usedBytes) && statsNumber(value.totalBytes) && value.totalBytes > 0 && value.usedBytes <= value.totalBytes;
+}
+function isHostStats(value: unknown): value is HostStats {
+  if (!isRecord(value) || !str(value.hostId) || !statsNumber(value.sampledAt) || !statsNumber(value.cpuCount) || !Number.isInteger(value.cpuCount) || value.cpuCount < 1) return false;
+  if (value.cpuPct !== undefined && !statsPercent(value.cpuPct)) return false;
+  if (value.memory !== undefined && !statsBytes(value.memory)) return false;
+  if (value.disk !== undefined && (!statsBytes(value.disk) || !isRecord(value.disk) || !str(value.disk.path))) return false;
+  if (value.load !== undefined && (!isRecord(value.load) || !statsNumber(value.load.one) || !statsNumber(value.load.five) || !statsNumber(value.load.fifteen))) return false;
+  if (value.temperatureC !== undefined && !statsNumber(value.temperatureC)) return false;
+  if (value.battery !== undefined && (!isRecord(value.battery) || !statsPercent(value.battery.percent) || !str(value.battery.status) || (value.battery.temperatureC !== undefined && !statsNumber(value.battery.temperatureC)))) return false;
+  if (value.gpus !== undefined && (!Array.isArray(value.gpus) || !value.gpus.every((gpu: unknown) => isRecord(gpu) && str(gpu.name)
+    && (gpu.usagePct === undefined || statsPercent(gpu.usagePct)) && (gpu.usedBytes === undefined || statsNumber(gpu.usedBytes))
+    && (gpu.totalBytes === undefined || statsNumber(gpu.totalBytes)) && (gpu.temperatureC === undefined || statsNumber(gpu.temperatureC))))) return false;
+  return true;
+}
+export function parseHostStats(value: unknown): HostStats | null { return isHostStats(value) ? value : null; }
+
+/** A machine on the tailnet (this laptop, host-b/0, …). */
 export interface HostInfo {
   id: string;
+  /** Optional for compatibility with older bridges. */
+  kind?: "computer" | "phone";
+  /** Tailscale last-seen timestamp (ISO 8601). */
+  lastSeen?: string;
   name: string;
   hostname: string;
   online: boolean;
@@ -189,9 +246,14 @@ export type GateServerMessage =
   | { type: "gate_status"; id: string; message: string }
   | { type: "gate_error"; message: string };
 
+/** A host-recognized model identifier, not a shell command or freeform prompt. */
+export const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$/;
+
 export type ClientMessage =
   | GateClientMessage
   | LiveClientMessage
+  /** The owner's choice on an ACP permission request (shared/permission.ts). */
+  | PermissionDecision
   /** Phone "forget everything": clear the bridge's notice replay ring. Old bridges ignore it. */
   | { type: "notices_clear" }
   | {
@@ -203,6 +265,8 @@ export type ClientMessage =
       id: string;
       harness: string;
       text: string;
+      /** Explicit choice for this turn; omitted means the host chooses. */
+      model?: string;
       /** Harness-native session id from a previous `session` event, for multi-turn. */
       sessionId?: string;
       hostId?: string;
@@ -285,6 +349,8 @@ export type ServerMessage =
   | NoticeMessage
   | GateServerMessage
   | LiveServerMessage
+  | PermissionRequest
+  | PermissionResolution
   | {
       type: "hello";
       version: number;
@@ -300,6 +366,8 @@ export type ServerMessage =
        * Claude Code / Codex chats this bridge continues on that computer. Old bridges omit this.
        */
       routes?: string[];
+      /** Optional; legacy bridges omit voice readiness. */
+      voice?: { stt: boolean; nativeVoice: boolean };
     }
   /** Reply to `attach` for a turn the bridge no longer knows about. */
   | { type: "lost"; id: string }
@@ -373,6 +441,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
     case "live_turn":
     case "live_intent":
     case "live_receipts": return parseLiveClientMessage(raw);
+    case "permission_decision": return parsePermissionDecision(raw);
     case "chat": {
       const attachments = parseChatAttachments(raw.attachments);
       if (raw.mode !== undefined && raw.mode !== "steer" && raw.mode !== "queue") return null;
@@ -380,6 +449,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
         str(raw.id) &&
         str(raw.harness) &&
         str(raw.text) &&
+        (raw.model === undefined || (str(raw.model) && MODEL_ID.test(raw.model))) &&
         optStr(raw.hostId) && optStr(raw.profileId) &&
         optStr(raw.sessionId) &&
         optStr(raw.cwd) &&
@@ -393,6 +463,7 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
           id: raw.id,
           harness: raw.harness,
           text: raw.text,
+          ...(str(raw.model) && MODEL_ID.test(raw.model) ? { model: raw.model } : {}),
           sessionId: raw.sessionId,
           hostId: raw.hostId,
           profileId: raw.profileId,
@@ -468,6 +539,7 @@ function isAgentInfo(value: unknown): value is AgentInfo {
   if (value.sessionId !== undefined && !str(value.sessionId)) return false;
   if (!optStr(value.profileId) || !optStr(value.hostId) || !optStr(value.source)) return false;
   if (value.lastActivityAt !== undefined && !num(value.lastActivityAt)) return false;
+  if (!optStr(value.model)) return false;
   if (value.openIn !== undefined && !str(value.openIn)) return false;
   if (value.messageCount !== undefined && !num(value.messageCount)) return false;
   return true;
@@ -504,6 +576,8 @@ function isHostInfo(value: unknown): value is HostInfo {
     str(value.id) &&
     str(value.name) &&
     str(value.hostname) &&
+    (value.kind === undefined || value.kind === "computer" || value.kind === "phone") &&
+    (value.lastSeen === undefined || (str(value.lastSeen) && Number.isFinite(Date.parse(value.lastSeen)))) &&
     typeof value.online === "boolean" &&
     typeof value.self === "boolean" &&
     (value.address === undefined || str(value.address)) &&
@@ -524,6 +598,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     case "live_event":
     case "live_receipts":
     case "live_error": return parseLiveServerMessage(raw);
+    case "permission_request": return parsePermissionRequest(raw);
+    case "permission_resolved": return parsePermissionResolution(raw);
     case "gate_snapshot": return Array.isArray(raw.items) && raw.items.every(isGateItem) && typeof raw.dry_run === "boolean" ? { type: "gate_snapshot", items: raw.items, dry_run: raw.dry_run, owner_decisions: raw.owner_decisions === true } : null;
     case "gate_status": return str(raw.id) && str(raw.message) ? { type: "gate_status", id: raw.id, message: raw.message } : null;
     case "gate_error": return str(raw.message) ? { type: "gate_error", message: raw.message } : null;
@@ -533,7 +609,9 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
         str(raw.host) &&
         str(raw.cwd) &&
         Array.isArray(raw.harnesses) &&
-        raw.harnesses.every(isHarnessInfo)
+        raw.harnesses.every(isHarnessInfo) &&
+        (raw.voice === undefined || (isRecord(raw.voice) &&
+          typeof raw.voice.stt === "boolean" && typeof raw.voice.nativeVoice === "boolean"))
       ) {
         return {
           type: "hello",
@@ -544,6 +622,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
           hosts: parseHosts(raw.hosts),
           features: Array.isArray(raw.features) && raw.features.length <= 32 && raw.features.every(str) ? raw.features : undefined,
           routes: Array.isArray(raw.routes) && raw.routes.length <= 32 && raw.routes.every(str) ? raw.routes : undefined,
+          voice: isRecord(raw.voice) && typeof raw.voice.stt === "boolean" && typeof raw.voice.nativeVoice === "boolean"
+            ? { stt: raw.voice.stt, nativeVoice: raw.voice.nativeVoice } : undefined,
         };
       }
       return null;
@@ -786,13 +866,14 @@ export function parseChatSummary(value: unknown): ChatSummary | null {
   if (!str(v.key) || !str(v.kind) || !str(v.sessionId) || !str(v.hostId) || !str(v.hostName) || !str(v.title)) return null;
   if (!num(v.startedAt) || !num(v.lastActivityAt) || !num(v.messageCount) || typeof v.chatable !== "boolean") return null;
   const origin = ORIGINS.find(o => o === v.origin);
-  if (!origin || !optStr(v.profileId) || !optStr(v.agentId) || !optStr(v.cwd) || !optStr(v.openIn)) return null;
+  if (!origin || !optStr(v.profileId) || !optStr(v.agentId) || !optStr(v.cwd) || !optStr(v.openIn) || !optStr(v.model)) return null;
   if (v.running !== undefined && typeof v.running !== "boolean") return null;
   return {
     key: v.key, kind: v.kind, sessionId: v.sessionId, hostId: v.hostId, hostName: v.hostName,
     ...(str(v.profileId) ? { profileId: v.profileId } : {}), ...(str(v.agentId) ? { agentId: v.agentId } : {}),
     title: v.title, ...(str(v.cwd) ? { cwd: v.cwd } : {}), startedAt: v.startedAt, lastActivityAt: v.lastActivityAt,
     messageCount: v.messageCount, origin, chatable: v.chatable,
+    ...(str(v.model) ? { model: v.model } : {}),
     ...(typeof v.running === "boolean" ? { running: v.running } : {}), ...(str(v.openIn) ? { openIn: v.openIn } : {}),
   };
 }

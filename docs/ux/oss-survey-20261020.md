@@ -97,4 +97,4 @@ The supplied owner screenshots show about three horizontal chrome bands above th
 
 ## Boundaries
 
-This is a source survey and a host-rendered Expo web qualification, not a proof that every candidate runs in Expo Go. Native haptics, touch scrubbing on Android/iOS, keyboard behavior and a real model turn still need a reachable device/bridge. Local bridge doctor failed at port 4747, so this pass did not create a replacement bridge or contact groot. See the result and screenshot qualification receipt for executed checks.
+This is a source survey and a host-rendered Expo web qualification, not a proof that every candidate runs in Expo Go. Native haptics, touch scrubbing on Android/iOS, keyboard behavior and a real model turn still need a reachable device/bridge. Local bridge doctor failed at port 4747, so this pass did not create a replacement bridge or contact host-b. See the result and screenshot qualification receipt for executed checks.

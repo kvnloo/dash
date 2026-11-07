@@ -47,7 +47,7 @@ export function NativeEvents() {
     const unsubscribeGate = approvals.subscribe(() => {
       const state = approvals.get();
       const next = new Set(state.items.filter(actionable).map(i => i.id));
-      if (gateLoaded) for (const id of next) if (!gateIds.has(id)) void postNativeNotice({ key: `approval:${id}`, title: "Action needed", body: "Open Dash to review an approval.", target: { kind: "approvals" } });
+      if (gateLoaded) for (const id of next) if (!gateIds.has(id)) void postNativeNotice({ key: `approval:${id}`, class: "decision", title: "Action needed", body: "Open Dash to review an approval.", target: { kind: "approvals" } });
       gateIds = next; gateLoaded = state.loaded;
     });
     const urls = Linking.addEventListener("url", ({ url }) => { if (isShareLink(url)) consume(); });

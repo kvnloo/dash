@@ -8,7 +8,7 @@ The implementation follows [zeros-night.md](zeros-night.md). No bridge, protocol
 | --- | --- |
 | Main / Chats | Visible top tab labels and centred gold selection dot. Header compose and bridge controls. Cormorant date groups, mono counts and times, static source-catalog harness orbs. Ended sessions are tertiary and cannot show a live dot. |
 | Focused search | The `@` is inside a 52 px glass pill. Focus opens `@bot`, `@chat`, and `@file` chips above it. The file shortcut uses the existing `/file` search route; search parsing did not change. |
-| Bots | Serif host sections, mono addresses and paths, source-catalog identity orbs, truthful adjacent status dots. Unavailable agents remain readable. |
+| Hosts | Serif host sections, mono addresses and paths, source-catalog identity orbs, truthful adjacent status dots. Unavailable agents remain readable. |
 | Orchestra / detail | Full-width 14 px glass cards, editorial project names, mono host/path metadata. Unknown topology says “Topology not reported” instead of occupying a large empty diagram. Existing declared topology rendering stays intact. |
 | Chat / streaming | Compact serif title and back/harness controls. Plain assistant text, strong-glass user bubbles, 4 px running status dot. Composer has a single-line input and one attach / mic / send-or-stop row. |
 | Pair | Editorial title, glass fields, a shared garden-style gold gradient primary button and ghost secondary actions. Enrollment requirements are unchanged. |

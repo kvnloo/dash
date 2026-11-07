@@ -1,5 +1,5 @@
 // Temporary AgentsView and Hermes databases for chat-index tests. The subset
-// schemas mirror the columns, indexes and FTS layout the bridge reads on groot.
+// schemas mirror the columns, indexes and FTS layout the bridge reads on host-b.
 import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -89,7 +89,7 @@ export class HermesFixture {
 }
 
 export function engineConfig(dir: string, over: Partial<EngineConfig> = {}): EngineConfig {
-  return { role: "primary", sidecarPath: join(dir, "sidecar.db"), hermesRoot: join(dir, "hermes"), archiveHead: 10, selfMachines: ["groot"], manual: true, ...over };
+  return { role: "primary", sidecarPath: join(dir, "sidecar.db"), hermesRoot: join(dir, "hermes"), archiveHead: 10, selfMachines: ["host-b"], manual: true, ...over };
 }
 
 /** Fixture-driven tests push bulk ingest through a lane; deadlines are tested with explicit small timeouts. */

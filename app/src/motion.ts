@@ -21,12 +21,69 @@ export const press = { duration: dsh(70, 60) };
 export const GEL = snappy;
 export const SNAP = snappy;
 
+/**
+ * Spring constants for the same response as `criticalProgress`: a critically damped spring
+ * (damping ratio exactly 1, no overshoot) that reaches its target at omega * t = 9 by `durationMs`.
+ * Dash renders it with `withTiming(…, { duration, easing: criticalProgress })` so the deadline is
+ * hard; these numbers are for other z0 apps and spring APIs that need the same feel.
+ */
+export function criticalSpring(durationMs: number) {
+  "worklet";
+  const omega = 9000 / durationMs;
+  return { mass: 1, stiffness: omega * omega, damping: 2 * omega, overshootClamping: true } as const;
+}
+export function dampingRatio(spring: { mass: number; stiffness: number; damping: number }): number {
+  "worklet";
+  return spring.damping / (2 * Math.sqrt(spring.stiffness * spring.mass));
+}
+export const SPRING = {
+  snappy: criticalSpring(snappy.duration),
+  settle: criticalSpring(settle.duration),
+} as const;
+
+/**
+ * Distance-based duration: a longer move takes longer, but sub-linearly (square root) and never past
+ * `far`. Zero distance gets `near`; a move of `span` or more gets `far`. Monotone and bounded.
+ */
+export function distanceDuration(distance: number, near: number, far: number, span: number): number {
+  "worklet";
+  if (!(span > 0) || !Number.isFinite(distance)) return near;
+  const fraction = Math.min(1, Math.abs(distance) / span);
+  return Math.round(near + (far - near) * Math.sqrt(fraction));
+}
+
+/** One page keeps `nav`; a jump across four or more pages takes the full release budget (`settle`). */
+export function pageDuration(pages: number): number {
+  "worklet";
+  return distanceDuration(Math.max(0, Math.abs(pages) - 1), nav.duration, Math.max(nav.duration, settle.duration), 3);
+}
+
+/** Window open morph: a row near the centre opens in `fade` time, a far row in `settle` time. */
+export function morphDuration(travel: number, windowHeight: number): number {
+  "worklet";
+  return distanceDuration(travel, fade.duration, settle.duration, windowHeight / 2);
+}
+
+/**
+ * Reduce motion: spatial motion (translate, scale, height) is removed, and the state change stays
+ * visible as an opacity crossfade in `fade` time. Opacity is not motion, so it is never skipped.
+ */
+export const REDUCED_MOTION = { spatial: "jump", opacity: "crossfade" } as const;
+export const crossfade = { duration: fade.duration };
+
+/** Press feedback under reduce motion is no scale at all, not an instant scale jump. */
+export function pressScaleFor(scaleTo: number, reduced: boolean): number {
+  "worklet";
+  return reduced ? 1 : scaleTo;
+}
+
 /** Signed velocity in the same units as distance. Bounded, monotone settle. */
 export function navDuration(distance: number, velocity: number, reduced = false): number {
   "worklet";
   if (reduced) return 0;
+  const base = pageDuration(distance);
   const toward = distance * velocity > 0;
-  return toward ? Math.max(80, Math.min(nav.duration, Math.abs(distance / velocity) * 1000)) : nav.duration;
+  return toward ? Math.max(80, Math.min(base, Math.abs(distance / velocity) * 1000)) : base;
 }
 
 /** Monotone Hermite settle; preserves release velocity unless it would overshoot. */
@@ -61,5 +118,7 @@ export const PRESS_SCALE = {
 export const MOTION_MS = {
   enter: dsh(150, 0),
   exit: dsh(120, 0),
+  /** Status surfaces (connection pill, queued stack) fade even in turbo; opacity is not motion. */
+  crossfade: fade.duration,
   stagger: 0,
 } as const;

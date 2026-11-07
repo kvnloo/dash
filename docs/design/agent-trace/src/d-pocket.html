@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>D · Pocket · Dash agent-trace prototype</title>
+<style>
+/*__SHARED_CSS__*/
+html { overflow-x: hidden; }
+body { padding: 0 0 96px; background: radial-gradient(120% 60% at 50% -10%, rgba(215,185,134,.07), transparent 60%), var(--bg); }
+.col { max-width: 460px; margin: 0 auto; padding: 0 14px; }
+.head { position: sticky; top: 0; z-index: 3; padding: 12px 14px 10px; margin: 0 -14px; backdrop-filter: blur(16px) saturate(1.6); -webkit-backdrop-filter: blur(16px) saturate(1.6); background: rgba(12,12,10,.72); border-bottom: 1px solid var(--hair); }
+.head .row1 { display: flex; justify-content: space-between; align-items: baseline; }
+.head h1 { margin: 0; font: 500 26px/1.1 var(--serif); }
+.pulse { display: flex; gap: 14px; margin-top: 6px; font: 12px var(--mono); color: var(--muted); flex-wrap: wrap; }
+.pulse b { color: var(--text); font-weight: 500; }
+section { margin-top: 18px; scroll-margin-top: 92px; }
+.sh { display: flex; justify-content: space-between; align-items: baseline; margin: 0 2px 8px; }
+.sh h2 { margin: 0; font: 600 15px/1.2 var(--sans); }
+.glass { border: 1px solid var(--hair); border-top-color: rgba(255,255,255,.14); border-radius: 14px; background: rgba(24,26,23,.46); box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.worker { display: block; width: 100%; text-align: left; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; }
+.worker .r1 { display: flex; align-items: center; gap: 8px; }
+.worker .nm { font: 600 15px/1.2 var(--sans); }
+.state { margin-left: auto; font: 500 11px/1 var(--mono); padding: 4px 7px; border-radius: 999px; border: 1px solid currentColor; }
+.worker .r2 { display: flex; gap: 4px 12px; margin-top: 6px; font: 12px var(--mono); color: var(--tertiary); flex-wrap: wrap; }
+.worker .r2 span { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.strip { position: relative; height: 16px; margin-top: 9px; border-radius: 3px; background: rgba(236,232,223,.05); overflow: hidden; }
+.strip i { position: absolute; top: 3px; bottom: 3px; width: 2px; border-radius: 1px; }
+.strip .now { position: absolute; right: 0; top: 0; bottom: 0; width: 2px; background: var(--text); }
+.needgrp { width: 100%; text-align: left; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 58px; padding: 10px 14px; margin-bottom: 8px; cursor: pointer; }
+.needgrp .t { font: 600 15px/1.25 var(--sans); } .needgrp .w { font-size: 12px; color: var(--tertiary); margin-top: 2px; }
+.needgrp .n { font: 500 20px/1 var(--mono); color: var(--gold); font-variant-numeric: tabular-nums; }
+.needlist { margin: -2px 0 10px 32px; display: none; }
+.needlist.open { display: block; }
+.needlist .it { display: flex; justify-content: space-between; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--quiet); font-size: 13px; }
+.needlist .it span:last-child { font: 11px var(--mono); color: var(--tertiary); }
+.today { padding: 14px; }
+.hours { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; align-items: end; height: 92px; }
+.hours .h { display: flex; flex-direction: column-reverse; gap: 2px; align-items: center; }
+.hours .h i { width: 7px; height: 7px; border-radius: 50%; }
+.hours .h i.cut { background: var(--danger); } .hours .h i.done { background: var(--ok); opacity: .85; } .hours .h i.live { background: var(--gold); box-shadow: 0 0 0 2px rgba(215,185,134,.2); }
+.hlab { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); margin-top: 6px; font: 9.5px var(--mono); color: var(--faint); }
+.hlab span { text-align: center; }
+.kv { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 14px; border-top: 1px solid var(--hair); }
+.kv div { padding: 10px 0 0; }
+.kv .v { font: 500 19px/1 var(--mono); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.spend { padding: 14px; }
+.lanebar { margin: 10px 0 14px; }
+.lanebar .lb { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+.lanebar .g { position: relative; height: 10px; border-radius: 5px; background: rgba(236,232,223,.07); }
+.lanebar .g i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; }
+.lanebar .g b { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 1.5px dashed var(--text); }
+.runcard { padding: 12px 14px; }
+.mini { display: grid; gap: 5px; margin-top: 10px; }
+.mini .ln { position: relative; height: 7px; background: rgba(236,232,223,.04); border-radius: 2px; }
+.mini .ln i { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+.dock { position: fixed; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 4; display: flex; gap: 2px; padding: 5px; border-radius: 999px; border: 1px solid var(--hair2); border-top-color: rgba(255,255,255,.22); background: rgba(20,22,19,.7); backdrop-filter: blur(22px) saturate(1.7); -webkit-backdrop-filter: blur(22px) saturate(1.7); box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.dock a { min-width: 66px; height: 44px; display: grid; place-items: center; border-radius: 999px; color: var(--tertiary); text-decoration: none; font: 600 12px/1 var(--sans); position: relative; }
+.dock a[aria-current="true"] { color: var(--text); background: rgba(236,232,223,.08); }
+.dock a .bdg { position: absolute; top: 4px; right: 8px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--gold); color: var(--bg); font: 600 10px/16px var(--mono); }
+.sheet-bg { position: fixed; inset: 0; z-index: 5; background: rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity .24s; }
+.sheet { position: fixed; left: 50%; bottom: 0; z-index: 6; width: min(460px, 100%); transform: translate(-50%, 100%); transition: transform .42s cubic-bezier(.32,.72,0,1); border-radius: 18px 18px 0 0; border: 1px solid var(--hair2); border-bottom: 0; background: rgba(18,20,17,.96); backdrop-filter: blur(24px); padding: 8px 16px 24px; max-height: 82dvh; overflow-y: auto; }
+.open-sheet .sheet { transform: translate(-50%, 0); } .open-sheet .sheet-bg { opacity: 1; pointer-events: auto; }
+.grab { width: 38px; height: 4px; border-radius: 2px; background: var(--hair2); margin: 4px auto 12px; }
+.sheet h3 { margin: 0; font: 500 26px/1.1 var(--serif); }
+.timeline-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) 54px; gap: 8px; align-items: center; font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--quiet); }
+.ctrls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+.ctrls button { height: 48px; border-radius: 12px; border: 1px solid var(--hair2); background: var(--glass); color: var(--muted); font: 600 14px var(--sans); }
+.ctrls button[disabled] { opacity: .55; }
+.note { font-size: 11.5px; color: var(--faint); margin-top: 8px; }
+.side { display: none; }
+@media (min-width: 980px) {
+  body { display: grid; grid-template-columns: minmax(0, 1fr) 460px minmax(0, 1fr); }
+  .col { grid-column: 2; width: 460px; border-left: 1px solid var(--hair); border-right: 1px solid var(--hair); min-height: 100dvh; }
+  .side { display: block; grid-column: 3; padding: 28px; color: var(--tertiary); font-size: 13px; max-width: 360px; }
+  .side b { color: var(--muted); }
+}
+</style>
+</head>
+<body>
+<div class="col">
+  <header class="head">
+    <div class="row1"><h1>Agents</h1><span class="cap" id="snap"></span></div>
+    <div class="pulse" id="pulse"></div>
+  </header>
+  <section id="now"><div class="sh"><h2>Working now</h2><span class="cap" id="now-n"></span></div><div id="workers"></div></section>
+  <section id="needs"><div class="sh"><h2>Needs you</h2><span class="cap" id="need-n"></span></div><div id="needgrps"></div></section>
+  <section id="today"><div class="sh"><h2>Today</h2><span class="cap">each dot is a worker, by start hour</span></div><div class="glass today" id="todaybox"></div></section>
+  <section id="last"><div class="sh"><h2>Last big run</h2><span class="cap" id="last-n"></span></div><div class="glass runcard" id="runcard"></div></section>
+  <section id="spend"><div class="sh"><h2>Spend</h2><span class="cap">weekly quota vs even pace</span></div><div class="glass spend" id="spendbox"></div></section>
+  <p class="provenance" id="prov" style="margin-top:18px"></p>
+</div>
+<aside class="side"><div class="cap" style="margin-bottom:10px">Prototype D · pocket</div><p><b>The bet:</b> on the phone you never read a trace. You glance: is anything stuck, does anything need me, is the week on budget. One thumb reaches every control in the dock.</p><p>Tap a worker for its state history. Tap a group under <b>Needs you</b> to see who is waiting. Controls in the sheet are proposals and do nothing here.</p><p>This is a snapshot of real data, not a live feed.</p></aside>
+<nav class="dock" aria-label="Sections"><a href="#now" aria-current="true">Now</a><a href="#needs">Needs<span class="bdg" id="bdg"></span></a><a href="#today">Today</a><a href="#spend">Spend</a></nav>
+<div class="sheet-bg" id="sheet-bg"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Worker detail"></div>
+<div class="stamp">__BUILD__</div>
+<script id="trace-data" type="application/json">__TRACE_DATA__</script>
+<script>/*__SHARED_JS__*/</script>
+<script>
+(() => {
+const { D, tasks, runs, owner, needs, NEED, dur, usd, tok, clock, clockS, totalTok, states, STATE_COLOR, signals, summary, el } = TR;
+const PH_COLORS = { explore: "#81b9da", implement: "#b098cd", verify: "#98cf8b", pr: "#d7b986", delegate: "#b4afa3" };
+const snap = new Date(D.generated).getTime();
+const all = summary(tasks);
+document.getElementById("snap").textContent = `snapshot ${clock(snap)}`;
+const live = tasks.filter((t) => t.status === "running").sort((a, b) => b.s - a.s);
+const op = D.lanes && D.lanes.claude;
+const pulse = document.getElementById("pulse");
+pulse.append(el("span", {}, el("b", {}, live.length), " working"), el("span", { class: "gold" }, el("b", { class: "gold" }, needs.length), " need you"), op ? el("span", { class: op.pace_ratio > 1.2 ? "bad" : "" }, "Opus ", el("b", { class: op.pace_ratio > 1.2 ? "bad" : "" }, `${op.pace_ratio.toFixed(1)}x`), " pace") : null);
+document.getElementById("bdg").textContent = needs.length;
+
+// ---------- working now: state first, then what it's doing, then how long since it last did anything
+document.getElementById("now-n").textContent = `${live.length} live`;
+const wbox = document.getElementById("workers");
+for (const t of live) {
+  const last = t.events[t.events.length - 1];
+  const quiet = last ? (t.e - (t.s + (last.t + last.dur) * 1000)) / 1000 : (t.e - t.s) / 1000;
+  const stalled = quiet > 150;
+  const stateTxt = stalled ? `quiet ${dur(quiet)}` : (states(t).segs.slice(-1)[0] || {}).state || "Running";
+  const color = stalled ? "var(--warn)" : "var(--gold)";
+  const strip = el("div", { class: "strip", "aria-hidden": "true" });
+  const win = 30 * 60, endOff = (t.e - t.s) / 1000;
+  for (const e of t.events) { const a = endOff - e.t; if (a > win) continue; strip.append(el("i", { style: `right:${(100 * a) / win}%;background:${e.ok === 0 ? "#e37f65" : PH_COLORS[e.ph]}` })); }
+  strip.append(el("span", { class: "now" }));
+  const b = el("button", { class: "glass worker", "aria-label": `${t.label}, ${stateTxt}, running ${dur(endOff)}` },
+    el("div", { class: "r1" }, el("span", { class: "nm" }, t.label), el("span", { class: "dim mono", style: "font-size:11px" }, t.run), el("span", { class: "state", style: `color:${color}` }, stateTxt)),
+    el("div", { class: "r2" }, el("span", {}, `${dur(endOff)} in`), el("span", {}, `${t.events.length} calls`), last ? el("span", {}, `last: ${last.tool}`) : null, el("span", {}, usd(t.cost_usd))),
+    strip, el("div", { class: "r2", style: "margin-top:4px;justify-content:space-between;font-size:10px" }, el("span", {}, "−30m"), el("span", {}, "now")));
+  b.onclick = () => openSheet(t);
+  wbox.append(b);
+}
+if (!live.length) wbox.append(el("div", { class: "glass", style: "padding:14px;color:var(--tertiary)" }, "Nothing running. The last run ended at " + clock(all.e) + "."));
+
+// ---------- needs you, batched by the kind of decision
+const grp = {};
+for (const n of needs) (grp[n.cat] ||= []).push(n);
+document.getElementById("need-n").textContent = `${needs.length} items · ${Object.keys(grp).length} kinds`;
+const gbox = document.getElementById("needgrps");
+for (const [cat, list] of Object.entries(grp).sort((a, b) => NEED[a[0]].rank - NEED[b[0]].rank)) {
+  const lst = el("div", { class: "needlist", id: `nl-${cat}` });
+  for (const n of list) { const it = el("div", { class: "it" }, el("span", {}, n.task.label, el("span", { class: "dim mono", style: "font-size:11px;margin-left:6px" }, n.task.run)), el("span", {}, `${dur((snap - n.at) / 1000).replace(/ \d+s$/, "")} ago`)); it.onclick = () => openSheet(n.task); lst.append(it); }
+  const b = el("button", { class: "glass needgrp", "aria-expanded": "false", "aria-controls": `nl-${cat}` }, el("span", { class: "diamond" }), el("div", {}, el("div", { class: "t" }, NEED[cat].text), el("div", { class: "w" }, NEED[cat].why)), el("span", { class: "n" }, list.length));
+  b.onclick = () => { const o = lst.classList.toggle("open"); b.setAttribute("aria-expanded", o); };
+  gbox.append(b, lst);
+}
+
+// ---------- today: dot matrix by start hour (outcome colour), then four numbers
+const tb = document.getElementById("todaybox");
+const hours = el("div", { class: "hours", role: "img", "aria-label": `${tasks.length} workers today` });
+const day0 = new Date(all.s); day0.setHours(0, 0, 0, 0);
+for (let h = 0; h < 24; h++) {
+  const col = el("div", { class: "h" });
+  for (const t of tasks.filter((q) => new Date(q.s).getHours() === h && q.s - day0.getTime() < 86400e3)) col.append(el("i", { class: t.status === "completed" ? "done" : t.status === "interrupted" ? "cut" : "live", title: `${t.label} ${clock(t.s)} ${t.status}` }));
+  hours.append(col);
+}
+const hl = el("div", { class: "hlab" }); for (let h = 0; h < 24; h++) hl.append(el("span", {}, h % 6 === 0 ? String(h).padStart(2, "0") : ""));
+const kv = el("div", { class: "kv" });
+const k = (c, v, cls) => kv.append(el("div", {}, el("div", { class: "cap" }, c), el("div", { class: "v " + (cls || "") }, v)));
+k("Workers", tasks.length); k("Done", all.st.completed, "good"); k("Cut", all.st.interrupted, "bad"); k("Cost", usd(all.cost));
+tb.append(hours, hl, kv, el("div", { class: "note" }, `${dur(all.agent)} of agent time in ${dur(all.wall)} of wall time: ${(all.agent / all.wall).toFixed(1)} workers on average.`));
+
+// ---------- last big run, as a thumbnail of prototype B
+const big = [...runs].filter((r) => r.tasks.length >= 3).sort((a, b) => b.s - a.s)[0];
+if (big) {
+  const s = summary(big.tasks);
+  document.getElementById("last-n").textContent = `${big.id} · ${clock(big.s)}`;
+  const rc = document.getElementById("runcard");
+  rc.append(el("div", { style: "display:flex;justify-content:space-between;font-size:13px" }, el("span", {}, `${big.tasks.length} workers · ${dur(s.span)}`), el("span", { class: "mono" }, `${usd(s.cost)}`)));
+  const mini = el("div", { class: "mini" });
+  for (const t of [...big.tasks].sort((a, b) => a.e - b.e)) {
+    const ln = el("div", { class: "ln", title: t.label });
+    const L = (x) => (100 * (x - big.s)) / (big.e - big.s);
+    ln.append(el("i", { style: `left:${L(t.s)}%;width:${L(t.e) - L(t.s)}%;background:${t.status === "interrupted" ? "rgba(227,127,101,.75)" : t.status === "running" ? "rgba(215,185,134,.8)" : "rgba(152,207,139,.6)"}` }));
+    mini.append(ln);
+  }
+  rc.append(mini, el("div", { class: "note" }, `${s.st.interrupted || 0} interrupted, ${big.tasks.filter((t) => t.needs_owner.length).length} waiting on you. Full replay is prototype B.`));
+}
+
+// ---------- spend: quota vs even pace, one bar per lane
+const sb = document.getElementById("spendbox");
+for (const [name, key, color] of [["Opus", "claude", "var(--danger)"], ["Sol", "codex", "var(--info)"]]) {
+  const x = D.lanes && D.lanes[key]; if (!x) continue;
+  const even = 100 * (1 - x.hours_to_reset / 168);
+  sb.append(el("div", { class: "lanebar" }, el("div", { class: "lb" }, el("span", {}, el("b", {}, name), el("span", { class: "dim", style: "margin-left:8px;font-size:12px" }, x.band)), el("span", { class: "mono", style: "font-size:12px" }, `${x.weekly_used_pct}% · ${Math.round(x.hours_to_reset)}h left`)),
+    el("div", { class: "g" }, el("i", { style: `width:${x.weekly_used_pct}%;background:${x.pace_ratio > 1.2 ? color : "var(--ok)"}` }), el("b", { style: `left:${even}%`, title: `even pace ${Math.round(even)}%` }))));
+}
+if (op) sb.append(el("div", { class: "note", style: "color:var(--muted);font-size:12.5px" }, op.pace_ratio > 1.2 ? "Opus is burning faster than the week allows. New mechanical work should go to Sol." : "Lanes on pace."));
+
+// ---------- sheet: one worker
+const sheet = document.getElementById("sheet");
+function openSheet(t) {
+  const fsm = states(t), total = (t.e - t.s) / 1000, sg = signals(t);
+  sheet.innerHTML = "";
+  sheet.append(el("div", { class: "grab" }), el("div", { class: "cap" }, `${t.run} · ${t.model}`), el("h3", {}, t.label),
+    el("div", { class: "pulse", style: "margin:8px 0 14px" }, el("span", {}, el("b", {}, dur(total)), " total"), el("span", {}, el("b", {}, t.events.length), " calls"), el("span", { class: t.errors ? "bad" : "" }, el("b", {}, t.errors), " failed"), el("span", {}, el("b", {}, usd(t.cost_usd)))));
+  const strip = el("div", { class: "strip", style: "height:22px" });
+  for (const e of t.events) strip.append(el("i", { style: `left:${(100 * e.t) / total}%;background:${e.ok === 0 ? "#e37f65" : PH_COLORS[e.ph]}` }));
+  for (const s of t.stalls) strip.append(el("i", { style: `left:${(100 * s.s) / total}%;width:${(100 * (s.e - s.s)) / total}%;background:repeating-linear-gradient(135deg,rgba(231,168,117,.6) 0 2px,transparent 2px 4px)` }));
+  sheet.append(strip, el("div", { class: "cap", style: "margin:16px 0 4px" }, "State history"));
+  for (const sgm of fsm.segs.filter((x) => x.e - x.s >= 30 || x.state === "Dispatched" || x.state === "Resumed").slice(-9)) sheet.append(el("div", { class: "timeline-row" }, el("span", { style: `color:${STATE_COLOR[sgm.state]}` }, sgm.state), el("span", { class: "dim mono", style: "font-size:11.5px" }, clockS(t.s + sgm.s * 1000)), el("span", { class: "num r dim" }, dur(sgm.e - sgm.s))));
+  sheet.append(el("div", { class: "timeline-row" }, el("span", { style: `color:${t.status === "running" ? "var(--gold)" : STATE_COLOR[fsm.end]}` }, t.status === "running" ? "Live" : fsm.end), el("span", { class: "dim mono", style: "font-size:11.5px" }, t.status === "running" ? `at snapshot ${clockS(t.e)}` : clockS(t.e)), el("span", {})));
+  if (sg.longestStall > 150 || sg.retryLoops) sheet.append(el("div", { class: "note", style: "color:var(--warn);font-size:12.5px" }, `Longest quiet stretch ${dur(sg.longestStall)}${sg.retryLoops ? ` · ${sg.retryLoops} retry loops` : ""}`));
+  for (const c of t.needs_owner) if (NEED[c]) sheet.append(el("div", { style: "margin-top:12px;font-size:14px" }, el("span", { class: "diamond" }), " ", el("b", {}, NEED[c].text), el("div", { class: "dim", style: "font-size:12px;margin-left:16px" }, NEED[c].why)));
+  sheet.append(el("div", { class: "ctrls" }, el("button", { disabled: true }, t.status === "running" ? "Steer" : t.status === "interrupted" ? "Resume" : "Open report"), el("button", { disabled: true }, t.status === "running" ? "Stop" : "Open evidence")),
+    el("div", { class: "note" }, "Proposed controls: they would go through the Dash approvals gate. Disabled in this prototype."));
+  document.body.classList.add("open-sheet");
+  sheet.focus?.();
+}
+const close = () => document.body.classList.remove("open-sheet");
+document.getElementById("sheet-bg").onclick = close;
+addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+let y0 = null; sheet.addEventListener("touchstart", (e) => { y0 = e.touches[0].clientY; }, { passive: true }); sheet.addEventListener("touchend", (e) => { if (y0 != null && e.changedTouches[0].clientY - y0 > 70 && sheet.scrollTop <= 0) close(); y0 = null; });
+
+// dock: highlight the section in view
+const links = [...document.querySelectorAll(".dock a")];
+const io = new IntersectionObserver((ents) => { for (const en of ents) if (en.isIntersecting) for (const a of links) a.setAttribute("aria-current", a.getAttribute("href") === "#" + en.target.id); }, { rootMargin: "-40% 0px -55% 0px" });
+for (const id of ["now", "needs", "today", "spend"]) io.observe(document.getElementById(id));
+document.getElementById("prov").innerHTML = `<b>Source</b> Hermes delegation logs + state.db, burn-pace --json, exported ${D.generated}. Live workers are the ones still running at export. <b>Privacy</b> synthetic labels; counts, times and tool names only.`;
+})();
+</script>
+</body>
+</html>

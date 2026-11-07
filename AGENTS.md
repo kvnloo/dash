@@ -1,5 +1,7 @@
 # Dash: notes for agents and contributors
 
+**Testing Dash (every agent and harness):** test only via `.claude/skills/verify-dash/SKILL.md`, the e2e tester army (`e2e/mbp-army`). Never native_journeys, ad-hoc scripts, unit tests or the owner's phone as proof, and never call a feature working unless an army spec drove it. This overrides the Verification pyramid and `.cursor/skills/verify-dash` below.
+
 Dash is a phone app (Expo, Android + iOS) that chats with free-tier models in
 parallel and with the coding agents on your own computer over Tailscale.
 
@@ -59,8 +61,9 @@ AI-native work is untrusted until it is proven.
 
 1. **Tester army** — `bun run test` (`scripts/army.sh`, specs in `e2e/mbp-army`). This is the only test suite. A new behaviour gets an army journey and a `features.json` entry, never a unit test.
 2. **Release law O15** — `laws/release/`. No green, complete army receipt for the exact commit: no APK, install, promotion or merge (see the O15 section above).
-3. **Typecheck / lint** — `bun run typecheck`, `bun run lint`.
-4. **Device** — web army evidence is not native acceptance (IME, voice, permissions); say so instead of claiming it.
+3. **Formal laws** — read `.claude/skills/formal-verify-dash/SKILL.md`. The Bend laws in `laws/` (send path S1-S15 in `laws/send/`, release O15 in `laws/release/`) are proven and mutation-tested on every PR and every push to an integration branch (`.github/workflows/laws.yml`). A failing proof or a surviving mutant blocks the merge. Never weaken a law to get a pass.
+4. **Typecheck / lint** — `bun run typecheck`, `bun run lint`.
+5. **Device** — web army evidence is not native acceptance (IME, voice, permissions); say so instead of claiming it.
 
 ## Layout
 

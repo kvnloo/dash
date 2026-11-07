@@ -68,7 +68,7 @@ export function applyDemoSeed(): void {
   saveSettings(DEMO_SETTINGS);
   setConnection({
     status: "online",
-    host: "mbp",
+    host: "host-a",
     cwd: "~/workspace/dash",
     harnesses: [
       { id: "omp", name: "OMP", available: true },

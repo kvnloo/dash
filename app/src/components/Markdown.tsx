@@ -12,6 +12,7 @@ import { store } from "../store/app";
 import { haptic } from "../haptics";
 import { readableReplyText, replyToSelection, selectedReplyText, type SelectionRange } from "./selection-quote";
 import { prepareGenerativeMarkdown } from "../lib/generative-stream";
+import { flowMode } from "../lib/flow-trace";
 
 class TranscriptRenderer extends Renderer {
   onIntent?: (intent: LiveIntent) => boolean;
@@ -21,7 +22,7 @@ class TranscriptRenderer extends Renderer {
   }
   override link(children: string | ReactNode[], href: string, style?: TextStyle): ReactNode {
     if (isImageRef(href)) return <InlineImage key={this.getKey()} href={href} label="Image" />;
-    return <Text key={this.getKey()} selectable={Platform.OS !== "android"} accessibilityRole="link" style={style} onPress={() => {
+    return <Text key={this.getKey()} selectable={Platform.OS === "ios"} accessibilityRole="link" style={style} onPress={() => {
       if (/^https?:\/\//i.test(href)) void Linking.openURL(href);
     }}>{children}</Text>;
   }
@@ -88,12 +89,13 @@ export const Markdown = memo(function Markdown({ text, onIntent, streaming = fal
   const [pendingSelection, setPendingSelection] = useState<PendingReplySelection | null>(null);
   const [range, setRange] = useState<SelectionRange | null>(null);
   // Unfinished UI fences are buffered before Markdown can expose model source.
-  const prepared = useMemo(() => prepareGenerativeMarkdown(text), [text]);
-  // Android routes the long press to Dash's selection sheet; other platforms retain OS selection.
-  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: Platform.OS !== "android" }); renderer.onIntent = onIntent; renderer.streaming = streaming; return renderer; }, [prepared, onIntent, streaming]);
+  const prepared = useMemo(() => prepareGenerativeMarkdown(text, flowMode), [text]);
+  // Android and web use the quote-selection sheet; iOS keeps native text selection.
+  // Browser-native selection can cancel the Pressable long press before the sheet opens.
+  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: Platform.OS === "ios" }); renderer.onIntent = onIntent; renderer.streaming = streaming; return renderer; }, [prepared, onIntent, streaming]);
   const nodes = useMarkdown(prepared, { renderer, styles, colorScheme: "dark" });
   const onLongPress = () => {
-    if (Platform.OS !== "android" || annotate.get().active) return;
+    if (Platform.OS === "ios" || annotate.get().active) return;
     const state = store.get();
     if (!state.activeId || !state.conversations.some(c => c.id === state.activeId)) return;
     const source = readableReplyText(text);
@@ -115,7 +117,7 @@ export const Markdown = memo(function Markdown({ text, onIntent, streaming = fal
   };
   // Hook only, not the library's nested FlatList. FlashList owns vertical scroll.
   return <View>
-    <Pressable accessible={false} delayLongPress={350} onLongPress={onLongPress}><View>{nodes}</View></Pressable>
+    <Pressable testID="reply-selection-trigger" accessible={false} delayLongPress={350} onLongPress={onLongPress}><View>{nodes}</View></Pressable>
     {pendingSelection ? <ReplySelectionSheet source={pendingSelection.source} selection={range} onSelection={setRange} onCancel={cancelSelection} onReply={onReply} /> : null}
   </View>;
 });

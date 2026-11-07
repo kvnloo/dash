@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View, type LayoutChangeEvent } from "react-nativ
 import * as Clipboard from "expo-clipboard";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  FadeIn,
   ReduceMotion,
   cancelAnimation,
   runOnJS,
@@ -26,6 +27,8 @@ import { InteractiveTile } from "../InteractiveTile";
 import { PressScale } from "../PressScale";
 import { colors, fonts, radius, space, type } from "../../theme";
 import { LivePulse, tc } from "./tokens";
+import { traceVerdict } from "../../../../shared/trace-evidence";
+import { rowActionsFor, rowClipboardText } from "../../trace/row-actions";
 
 export type RowVariant = "bars" | "density" | "compact";
 export type RowRect = { x: number; y: number; width: number; height: number };
@@ -77,7 +80,7 @@ export function buildItems(rows: TraceRow[], variant: RowVariant, opts: { lanes:
  *  - tap a row (label or plot): onOpenRow with the row's window rect for the expand
  */
 export const TraceTimeline = memo(function TraceTimeline({
-  snapshot, rows, variant = "bars", lanes = true, groups = true, onOpenRow, onScrub, scrollRef, selectedKey, testID = "trace-timeline",
+  snapshot, rows, variant = "bars", lanes = true, groups = true, onOpenRow, onScrub, scrollRef, selectedKey, freshKeys, testID = "trace-timeline",
 }: {
   snapshot: TraceSnapshot;
   rows: TraceRow[];
@@ -88,6 +91,8 @@ export const TraceTimeline = memo(function TraceTimeline({
   onScrub?(s: ScrubState): void;
   scrollRef?: ExternalGesture;
   selectedKey?: string | null;
+  /** Rows that arrived in the latest live poll; marked "new" in the label column. */
+  freshKeys?: readonly string[];
   testID?: string;
 }) {
   const reduced = useReducedMotion();
@@ -168,26 +173,27 @@ export const TraceTimeline = memo(function TraceTimeline({
     const mid = (start + end) / 2;
     tx.value = withTiming(txForTime(mid, span, w, z, 0.5), { ...snappy, reduceMotion: ReduceMotion.System });
   }, [items, span, tx, viewW, zoom]);
-  const rowActions = useMemo(() => [
-    { id: "open", label: "Open details", hint: "tap" },
-    { id: "zoom", label: "Zoom to this run", hint: "time" },
-    { id: "copy", label: "Copy summary", hint: "clip" },
-  ] as const, []);
+  const menuLen = useSharedValue(0);
   const runAction = useCallback((itemArg: number, actionIndex: number) => {
     const itemIndex = itemArg >= 0 ? itemArg : menuItem.current;
     const it = items[itemIndex];
-    const action = rowActions[actionIndex];
     setMenu(null); setHovered(-1);
-    if (!it || it.kind !== "row" || !action) return;
+    if (!it || it.kind !== "row") return;
+    const action = rowActionsFor(it.row)[actionIndex];
+    if (!action) return;
     haptic.tap();
     if (action.id === "open") openIndex(itemIndex);
     else if (action.id === "zoom") zoomToRow(itemIndex);
     else {
-      const m = summarizeRow(it.row);
-      void Clipboard.setStringAsync(`${it.row.project} · ${it.row.goal}\n${m.workers} workers · ${m.calls} calls · ${m.errors} errors${m.cut ? ` · ${m.cut} cut` : ""}${m.live ? " · live" : ""}`);
+      const text = rowClipboardText(it.row, action.id);
+      if (text) void Clipboard.setStringAsync(text);
     }
-  }, [items, openIndex, rowActions, zoomToRow]);
-  const openMenu = useCallback((itemIndex: number, top: number) => { haptic.tap(); menuItem.current = itemIndex; setHovered(-1); setMenu({ item: itemIndex, top }); }, []);
+  }, [items, openIndex, zoomToRow]);
+  const openMenu = useCallback((itemIndex: number, top: number) => {
+    haptic.tap(); menuItem.current = itemIndex; setHovered(-1); setMenu({ item: itemIndex, top });
+    const it = items[itemIndex];
+    menuLen.value = it && it.kind === "row" ? rowActionsFor(it.row).length : 0;
+  }, [items, menuLen]);
   const hover = useCallback((i: number) => { if (i >= 0) haptic.select(); setHovered(i); }, []);
 
   /** [top, height, isRow] per item: a small array the UI-thread tap handler can copy cheaply. */
@@ -261,7 +267,7 @@ export const TraceTimeline = memo(function TraceTimeline({
     .onUpdate((e) => {
       if (menuMode.value === 1) {
         const i = Math.floor((e.y - menuTop.value) / MENU_ROW_H);
-        const next = i >= 0 && i < rowActions.length ? i : -1;
+        const next = i >= 0 && i < menuLen.value ? i : -1;
         if (next !== hoverIdx.value) { hoverIdx.value = next; runOnJS(hover)(next); }
         return;
       }
@@ -314,7 +320,7 @@ export const TraceTimeline = memo(function TraceTimeline({
           if (it.kind === "lane") return <View key={i} style={[styles.laneLabel, { height: it.h }]}><Text style={styles.laneText} numberOfLines={1}>{it.lane === "cuts" ? "cut moments" : `your messages · ${snapshot.owner.length}`}</Text></View>;
           if (it.kind === "group") return <GroupLabel key={i} group={it.group} n={it.n} h={it.h} />;
           return (
-            <RowLabel key={i} row={it.row} h={it.h} selected={selectedKey === it.row.key} variant={variant}
+            <RowLabel key={i} row={it.row} h={it.h} selected={selectedKey === it.row.key} fresh={freshKeys?.includes(it.row.key) ?? false} variant={variant}
               refCb={(r) => { labelRefs.current.set(it.row.key, r); }} onPress={onOpenRow ? () => openIndex(i) : undefined} />
           );
         })}
@@ -358,15 +364,15 @@ export const TraceTimeline = memo(function TraceTimeline({
       </GestureDetector>
       {menu ? <>
         <Pressable accessibilityLabel="Close row menu" onPress={() => { setMenu(null); setHovered(-1); }} style={StyleSheet.absoluteFill} />
-        <View accessibilityRole="menu" style={[styles.rowMenu, { top: menu.top + 4 }]}>
+        <Animated.View accessibilityRole="menu" testID="trace-row-menu" entering={reduced ? undefined : FadeIn.duration(120)} style={[styles.rowMenu, { top: menu.top + 4 }]}>
           {(() => { const it = items[menu.item]; return it && it.kind === "row" ? <Text style={styles.rowMenuTitle} numberOfLines={1}>{it.row.goal}</Text> : null; })()}
-          {rowActions.map((a, k) => (
+          {(() => { const it = items[menu.item]; return it && it.kind === "row" ? rowActionsFor(it.row) : []; })().map((a, k) => (
             <Pressable key={a.id} accessibilityRole="menuitem" onPress={() => runAction(menu.item, k)}
               style={[styles.rowMenuItem, hovered === k && styles.rowMenuItemOn]}>
               <Text style={[styles.rowMenuText, hovered === k && styles.rowMenuTextOn]}>{a.label}</Text>
             </Pressable>
           ))}
-        </View>
+        </Animated.View>
       </> : null}
     </View>
   );
@@ -398,18 +404,18 @@ function GroupLabel({ group, n, h }: { group: RowGroup; n: number; h: number }) 
   );
 }
 
-const RowLabel = memo(function RowLabel({ row, h, selected, onPress, refCb, variant }: { row: TraceRow; h: number; selected: boolean; onPress?(): void; refCb(r: View | null): void; variant: RowVariant }) {
+const RowLabel = memo(function RowLabel({ row, h, selected, fresh, onPress, refCb, variant }: { row: TraceRow; h: number; selected: boolean; fresh: boolean; onPress?(): void; refCb(r: View | null): void; variant: RowVariant }) {
   const sum = summarizeRow(row);
   const dim = row.group === "earlier";
   return (
     <View ref={refCb} collapsable={false} style={{ height: h }}>
       <InteractiveTile title={row.key} summary={`${row.key}. ${rowMeta(sum)}`} onOpen={onPress} style={[styles.rowLabel, selected && styles.rowSel]} testID={`row-${row.key}`}>
         <View style={[styles.rowLabelInner, dim && { opacity: 0.55 }]}>
-          <Text style={styles.project} numberOfLines={1}>{row.project}{sum.workers > 1 ? <Text style={styles.count}>  ×{sum.workers}</Text> : null}</Text>
+          <Text style={styles.project} numberOfLines={1}><Text accessibilityLabel={`Contract ${traceVerdict(row.evidence)}`}>{traceVerdict(row.evidence) === "met" ? "✓" : traceVerdict(row.evidence) === "failed" ? "×" : traceVerdict(row.evidence) === "partly" ? "◐" : "?"} </Text>{fresh ? <Text style={{ color: tc.live }}>new · </Text> : null}{row.project}{sum.workers > 1 ? <Text style={styles.count}>  ×{sum.workers}</Text> : null}</Text>
           {variant === "compact" ? null : <Text style={styles.goal} numberOfLines={1}>{row.goal}</Text>}
           {sum.cut || sum.asks ? (
             <Text style={styles.meta} numberOfLines={1}>
-              {sum.cut ? <Text style={{ color: tc.cut }}>{sum.cut} cut</Text> : null}{sum.cut && sum.asks ? " · " : null}{sum.asks ? <Text style={{ color: tc.ask }}>{sum.asks} need{sum.asks === 1 ? "s" : ""} OK</Text> : null}
+              {sum.cut ? <Text style={{ color: tc.cut }}>{sum.cut} cut</Text> : null}{sum.cut && sum.asks ? " · " : null}{sum.asks ? <Text style={{ color: tc.ask }}>{sum.asks} need{sum.asks === 1 ? "s" : ""} your OK</Text> : null}
             </Text>
           ) : null}
         </View>
@@ -463,6 +469,7 @@ const PlotRow = memo(function PlotRow({ index, item, span, now, variant, maxDens
 function WorkerBar({ w, lane, span, variant, max, step }: { w: TraceWorker; lane: number; span: number; variant: RowVariant; max: number; step: number }) {
   const live = w.status === "running";
   const left = `${(w.s / span) * 100}%` as const;
+  if (w.status === "unknown") return <View accessibilityLabel="Source timestamp · duration unknown" style={{ position: "absolute", left, top: 10 + lane * step, width: 4, height: 4, backgroundColor: tc.faint }} />;
   const width = `${(Math.max(60, w.e - w.s) / span) * 100}%` as const;
   if (variant === "compact") {
     return <View style={[styles.line, { left, width, top: 10 + lane * step, backgroundColor: live ? tc.live : w.status === "interrupted" ? tc.cut : tc.tick }]} />;
@@ -511,9 +518,9 @@ function EndNote({ w, span, now, y, below }: { w: TraceWorker; span: number; now
       </View>
     );
   }
-  const text = w.asks.length ? `needs OK: ${askWord(w.asks[0] ?? "")}` : w.status === "interrupted" && !w.resumed ? "cut" : null;
+  const text = w.status === "unknown" ? "unknown" : w.asks.length ? `needs OK: ${askWord(w.asks[0] ?? "")}` : w.status === "interrupted" && !w.resumed ? "cut" : null;
   if (!text) return null;
-  const color = w.asks.length ? tc.ask : tc.cut;
+  const color = w.status === "unknown" ? tc.text3 : w.asks.length ? tc.ask : tc.cut;
   const nearNow = now - w.e < 2400;
   const pos = nearNow ? { right: `${(1 - w.e / span) * 100}%` as const, top: below, marginRight: 0, justifyContent: "flex-end" as const } : [styles.noteLeft, { left, top: y - 3 }];
   return (

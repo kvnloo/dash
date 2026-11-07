@@ -4,6 +4,9 @@ import {
   parseChatListQuery, parseChatSearchQuery, parseHistoryQuery, type ChatPage, type ChatSearchHit, type ChatSearchPage, type ChatSummary,
   type HistoryPage,
 } from "../../../shared/protocol";
+import { decodeCursor } from "../../../shared/protocol";
+import { remoteHostFor } from "../remote-hosts";
+import { remoteClaudeHistory } from "../remote-history";
 import { AbortedError, BusyError, RpcError, type ChatIndexClient } from "./client";
 import { filterHash, hash, normalizeQuery, queryHash, SELF_HOST } from "./query";
 import { msgCursor, readSearchCursor, titleCursor, withEmitted, type MsgPositions } from "./worker";
@@ -16,7 +19,7 @@ export interface ChatsHttpOptions {
   authorize(request: Request): Promise<boolean>;
   client: ChatIndexClient;
   self(): SelfIdentity;
-  /** Live rows (running, openIn) on this host, already keyed with chatKey. A few dozen at most. */
+  /** Roster-only rows across hosts, already keyed with chatKey (including native-store fallbacks). */
   live(): ChatSummary[];
 }
 
@@ -32,7 +35,7 @@ export function overlayLive(items: ChatSummary[], live: ChatSummary[]): ChatSumm
     const hit = byKey.get(item.key);
     if (!hit) return item;
     byKey.delete(item.key);
-    return { ...item, ...(hit.running ? { running: true } : {}), ...(hit.openIn ? { openIn: hit.openIn } : {}), lastActivityAt: Math.max(item.lastActivityAt, hit.lastActivityAt) };
+    return { ...item, ...(hit.model ? { model: hit.model } : {}), ...(hit.running ? { running: true } : {}), ...(hit.openIn ? { openIn: hit.openIn } : {}), lastActivityAt: Math.max(item.lastActivityAt, hit.lastActivityAt) };
   });
   return [...merged, ...byKey.values()].sort((a, b) => b.lastActivityAt - a.lastActivityAt || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
@@ -69,7 +72,7 @@ export function createChatsHttpHandler(options: ChatsHttpOptions) {
     const self = options.self();
     const fh = filterHash(query);
     const value = await client.list({ limit: query.limit, ...(query.cursor ? { cursor: query.cursor } : {}), fh, kinds: query.kinds, hosts: query.hosts.map(h => internalHost(self, h)), chatable: query.chatable, self: { id: self.id, name: self.name } }, request.signal);
-    const live = options.live().filter(row => (!query.kinds.length || query.kinds.includes(row.kind)) && (!query.hosts.length || query.hosts.some(h => self.matches(h))) && (!query.chatable || row.chatable));
+    const live = options.live().filter(row => (!query.kinds.length || query.kinds.includes(row.kind)) && (!query.hosts.length || query.hosts.some(h => h === row.hostId || (row.hostId === self.id && self.matches(h)))) && (!query.chatable || row.chatable));
     const liveKeys = new Set(live.map(row => row.key));
     // Page 1 carries the live overlay; later pages skip those keys so each chat appears once.
     const items = query.cursor ? value.items.filter(item => !liveKeys.has(item.key)) : overlayLive(value.items, live);
@@ -150,7 +153,13 @@ export function createChatsHttpHandler(options: ChatsHttpOptions) {
       if (!self.matches(host) && !host.startsWith("machine:")) return fail(404, "not_found");
       target = { kind: query.kind ?? "", sessionId: query.sessionId ?? "", host: internalHost(self, host), ...(query.profile ? { profile: query.profile } : {}) };
     }
-    const value = await client.history({ ...target, limit: query.limit, ...(query.before ? { before: query.before } : {}), self: { id: self.id, name: self.name } }, request.signal);
+    const keyed = query.key ? /^(machine:[^:]+):claude:([A-Za-z0-9_-]+)$/.exec(query.key) : undefined;
+    const host = remoteHostFor(keyed?.[1] ?? (query.kind === "claude" ? query.host : undefined));
+    const session = keyed?.[2] ?? query.sessionId;
+    const live = host && session ? await remoteClaudeHistory(host, session, query.limit, query.before) : undefined;
+    // Native byte cursors cannot be interpreted as archive ordinals after a failed SSH read.
+    const archiveBefore = query.before && !decodeCursor(query.before)?.remote ? query.before : undefined;
+    const value = live ?? await client.history({ ...target, limit: query.limit, ...(archiveBefore ? { before: archiveBefore } : {}), self: { id: self.id, name: self.name } }, request.signal);
     const page: HistoryPage = { messages: value.messages, before: value.before };
     return json(page, 200, query.before ? { "Cache-Control": "private, max-age=300" } : {});
   }

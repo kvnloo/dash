@@ -272,7 +272,7 @@
       "dash": {
         "status": "shipped",
         "where": "AppNav / golden-nav.ts",
-        "note": "Bots | Chats | Orchestra. White dots, not underline, not pill fill, not a bottom bar."
+        "note": "Hosts | Chats | Orchestra. White dots, not underline, not pill fill, not a bottom bar."
       },
       "summary": "Three swipe panes, 60px chrome, gold pill on native.",
       "sources": ["docs/design/language.md"]
@@ -463,7 +463,7 @@
       "frontierDomains": ["frameworks"],
       "dash": {
         "status": "shipped",
-        "where": "BotsPane + bridge/src/roster.ts",
+        "where": "HostsPane + bridge/src/roster.ts",
         "note": "Dots, never Online pills. Cursor host may be empty. Issue #8 claimed."
       },
       "summary": "Tailnet machines and live agents as rows, not a desktop board.",
@@ -607,7 +607,7 @@
       "frontierDomains": [],
       "dash": {
         "status": "shipped",
-        "where": "BotsPane / Orchestra cards",
+        "where": "HostsPane / Orchestra cards",
         "note": "--ok / --faint / --warn. AODL runtimeStates are the richer vocabulary."
       },
       "summary": "Presence is a 6px dot. Consumer Online/Away pills are out.",
@@ -687,7 +687,7 @@
       "frontierDomains": ["neuroscience"],
       "dash": {
         "status": "shipped",
-        "where": "ChatsPane BotsPane ChatScreen OrchestraPane",
+        "where": "ChatsPane HostsPane ChatScreen OrchestraPane",
         "note": "Recycle remounts would replay enter hitch."
       },
       "summary": "Rest phase of the synergy loop. Scroll is not a stage.",
@@ -736,7 +736,7 @@
       "dash": {
         "status": "gap",
         "where": "ChatsPane streaming dot only",
-        "note": "One open thread. Other live harnesses need AODL runtimeState on Bots/Orchestra."
+        "note": "One open thread. Other live harnesses need AODL runtimeState on Hosts/Orchestra."
       },
       "summary": "One fovea. Other agents compress to peripheral marks, never a split view.",
       "sources": ["docs/design/ai-ui-patterns/attention.md"]
@@ -863,11 +863,11 @@
       "frontierDomains": [],
       "dash": {
         "status": "gap",
-        "where": "BotsPane",
+        "where": "HostsPane",
         "note": "No RefreshControl. Pill retry only when already broken."
       },
       "summary": "A healthy-looking stale roster has no encode path.",
-      "sources": ["app/src/screens/panes/BotsPane.tsx"]
+      "sources": ["app/src/screens/panes/HostsPane.tsx"]
     },
     {
       "id": "debug-only-harness-picker",

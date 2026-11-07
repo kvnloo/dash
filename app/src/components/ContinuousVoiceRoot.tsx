@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaInsetsContext, useSafeAreaInsets, type EdgeInsets } from "react-native-safe-area-context";
 import { appInsets, VOICE_BAR_ROW, voiceBarPresentation, voiceBarVisible, voiceControlHome, voiceMuteAccessibilityLabel, voiceStatusAccessibilityLabel } from "../lib/voice-bar";
 import { executionToken, voiceAccessToken } from "../lib/bridge-auth";
@@ -13,23 +13,33 @@ import { store } from "../store/app";
 import { colors, glass, radius } from "../theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { microphone } from "../lib/recorded-speech";
+import { ensureMicPermission, permissionRequestInFlight } from "../lib/mic-permission";
 import { createStore } from "../store/createStore";
+import { VoiceOrbOverlay } from "./VoiceOrbOverlay";
 import { debugUi } from "../debug/ui-store";
-import { voiceTarget } from "../lib/voice-target";
+import { attachedHermes, voiceTarget } from "../lib/voice-target";
+import { voicePhase } from "../lib/voice-phase";
 
 /** One logcat line per failed voice stage (phone-watch turns these into incidents). Notes never carry secrets. */
-function voiceTrace(stage: string, note: string | undefined): void { console.warn(`[voice] ${stage} failed: ${note ?? "unknown"}`); }
+function voiceTrace(stage: string, note: string | undefined, quiet = false): void {
+  // An annotation auto-start that cannot connect is expected and stays at info; every other failure stays a warning.
+  if (quiet) console.info(`[voice] ${stage} failed: ${note ?? "unknown"}`);
+  else console.warn(`[voice] ${stage} failed: ${note ?? "unknown"}`);
+}
 
 /** A bootstrap broker is never an arbitrary URL; validate before any /v1 request. */
-function trustedVoiceBroker(raw: unknown): string {
+function trustedVoiceBroker(raw: unknown): { origin: string; fake: boolean } {
   if (typeof raw !== "string") throw new Error("Voice broker not trusted");
   try {
     const url = new URL(raw);
-    if (url.protocol !== "https:" || !url.hostname.endsWith(".ts.net") || !url.port || url.username || url.password ||
-        url.pathname !== "/" || url.search || url.hash || (raw !== url.origin && raw !== `${url.origin}/`)) {
+    const fake = Platform.OS === "web" && process.env.EXPO_PUBLIC_DASH_VOICE_FAKE === "1" &&
+      url.protocol === "http:" && url.hostname === "127.0.0.1";
+    const tailnet = url.protocol === "https:" && url.hostname.endsWith(".ts.net");
+    if ((!tailnet && !fake) || !url.port || url.username || url.password || url.pathname !== "/" ||
+        url.search || url.hash || (raw !== url.origin && raw !== `${url.origin}/`)) {
       throw new Error("Voice broker not trusted");
     }
-    return url.origin;
+    return { origin: url.origin, fake };
   } catch { throw new Error("Voice broker not trusted"); }
 }
 
@@ -41,7 +51,7 @@ const DeviceInsets = createContext<EdgeInsets | null>(null);
 export function useDeviceInsets(): EdgeInsets {
   const device = useContext(DeviceInsets); const app = useSafeAreaInsets(); return device ?? app;
 }
-interface VoiceContext { state: VoiceState; start(): Promise<void>; stop(): Promise<void>; mute(): void }
+interface VoiceContext { state: VoiceState; start(opts?: { auto?: boolean }): Promise<void>; stop(): Promise<void>; mute(): void }
 const Context = createContext<VoiceContext | null>(null);
 export function useContinuousVoice(): VoiceContext {
   const value = useContext(Context); if (!value) throw new Error("Voice root not mounted"); return value;
@@ -49,6 +59,7 @@ export function useContinuousVoice(): VoiceContext {
 
 export function ContinuousVoiceRoot({ children }: { children: ReactNode }): React.JSX.Element {
   const [state, setState] = useState(initial);
+  useEffect(() => { voicePhase.set(state.phase); return () => voicePhase.set("idle"); }, [state.phase]);
   const [bindingGeneration, setBindingGeneration] = useState(0);
   const call = useRef<ContinuousVoice | null>(null);
   const attached = useRef<Conversation | null>(null);
@@ -57,13 +68,21 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const releaseMic = useRef<(() => void) | undefined>(undefined);
   const micRelease = useRef(new VoiceMicReleaseGate());
   const desiredMute = useRef(false);
+  const autoStarted = useRef(false);
+  const pendingFinals = useRef(new Set<string>());
+  const successfulAnnotation = useRef(false);
+  const autoStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const maybeEndAutoRef = useRef<() => void>(() => {});
   const insets = useSafeAreaInsets();
   const windowOpen = voiceWindowOpen.use(open => open);
   const [barRow, setBarRow] = useState(0);
   const [attempted, setAttempted] = useState(false);
+  // Auto-start belongs to the annotation tray, not the app-wide voice bar or its safe-area inset.
+  const suppressAutoBar = useRef(false);
   // SYNTHETIC debug-only state for rendered proofs (never set outside the debug controller).
   const fixture = debugUi.use(s => s.voiceStateFixture ?? null);
-  const start = async () => {
+  const start = async (opts?: { auto?: boolean }) => {
+    const automatic = opts?.auto === true;
     if (starting.current) return;
     if (call.current && !["idle", "error"].includes(call.current.state.phase)) return;
     starting.current = true;
@@ -71,26 +90,58 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     // An error is published before ContinuousVoice finishes native teardown.
     await micRelease.current.wait();
     if (beforeWait !== epoch.current) return; // End/background already cancelled this attempt.
-    setAttempted(true);
+    if (automatic) {
+      if (!attempted) suppressAutoBar.current = true;
+    } else {
+      suppressAutoBar.current = false;
+      setAttempted(true);
+    }
+    const reportFailure = (stage: string, reason: string | undefined) => {
+      voiceTrace(stage, reason, automatic);
+      const note = voiceConnectionErrorLine(reason);
+      if (automatic) {
+        setState(initial);
+        annotate.set(s => s.active ? { ...s, voiceNote: note } : s);
+      } else {
+        setState({ ...initial, phase: "error", note });
+      }
+    };
     desiredMute.current = false;
     const settings = store.get().settings;
+    // Only a flagged web tester-army export accepts ephemeral fixture tokens.
+    // Keep legacy pairing for the live WebSocket; never persist an identity or change native auth.
+    const fakeIdentity = Platform.OS === "web" && process.env.EXPO_PUBLIC_DASH_VOICE_FAKE === "1"
+      ? window.__dashVoiceArmy : undefined;
+    const identity = settings?.identity ?? (fakeIdentity?.dash && fakeIdentity?.z0live ? fakeIdentity.identity : undefined);
     // Retry is pinned to the original conversation, even if the user navigated elsewhere.
     // Conversation mode is usually opened from the main screen, where the open chat is rarely an
     // attached Hermes chat: bind the most recent attached one instead of refusing before the mic.
-    const conversation = (state.phase === "error" ? attached.current : null) ??
-      voiceTarget(store.get().conversations, store.get().activeId);
-    if (!settings?.identity || !conversation?.sessionId || !conversation.profileId) {
-      const note = !settings?.identity ? "Pair Dash with z0bridge identity to use voice" : "Open a Hermes chat once, then start voice";
-      voiceTrace("target", note);
-      setState({ ...initial, phase: "error", note });
+    const retryTarget = state.phase === "error" ? attached.current : null;
+    const conversation = retryTarget
+      ? (attachedHermes(retryTarget, settings?.address) ? retryTarget : undefined)
+      : voiceTarget(store.get().conversations, store.get().activeId, settings?.address);
+    if (!settings || !identity || !conversation?.sessionId || !conversation.profileId) {
+      const note = !identity ? "Pair Dash with z0bridge identity to use voice" : "Open an attached Hermes chat owned by this paired address before starting voice";
+      reportFailure("target", note);
       starting.current = false;
       return;
     }
     const target = { profile: conversation.profileId, session: conversation.sessionId };
+    // Android's first RECORD_AUDIO dialog pauses MainActivity. Request before the mic lease
+    // or native peer starts, while AppState explicitly treats the dialog as transient.
+    const permitted = await ensureMicPermission().catch(() => false);
+    if (beforeWait !== epoch.current) {
+      starting.current = false;
+      return;
+    }
+    if (!permitted) {
+      reportFailure("permission", voiceConnectionError("permission"));
+      starting.current = false;
+      return;
+    }
     const release = microphone.acquire("live");
     if (!release) {
-      voiceTrace("mic-lease", `in use by ${microphone.owner}`);
-      setState({ ...initial, phase: "error", note: `Microphone in use by ${microphone.owner}` });
+      reportFailure("mic-lease", `Microphone in use by ${microphone.owner}`);
       starting.current = false;
       return;
     }
@@ -101,15 +152,16 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const generation = ++epoch.current;
     setBindingGeneration(generation);
     // Frozen for the call: navigating/switching chats never retargets spoken requests.
-    let broker: string | undefined;
+    let broker: ReturnType<typeof trustedVoiceBroker> | undefined;
     const request = async (path: string, body?: unknown): Promise<unknown> => {
+      if (!broker) throw new Error("Voice broker not trusted");
       if (path === "provider:answer") {
         if (!object(body) || typeof body.sdp !== "string" || typeof body.secret !== "string") {
           throw new VoiceAccessDenied(voiceConnectionError("sdp"));
         }
         let response: Response;
         try {
-          response = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", headers: { authorization: `Bearer ${body.secret}`, "content-type": "application/sdp" }, body: body.sdp, signal: AbortSignal.timeout(20_000), redirect: "error" });
+          response = await fetch(broker.fake ? `${broker.origin}/v1/fake/answer` : "https://api.openai.com/v1/realtime/calls", { method: "POST", headers: { authorization: `Bearer ${body.secret}`, "content-type": "application/sdp" }, body: body.sdp, signal: AbortSignal.timeout(20_000), redirect: "error" });
         } catch { throw new VoiceAccessDenied(voiceConnectionError("sdp")); }
         if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(voiceConnectionError("token"));
         if (!response.ok) throw new VoiceAccessDenied(voiceConnectionError("sdp"));
@@ -118,11 +170,11 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
         if (!sdp.startsWith("v=0")) throw new VoiceAccessDenied(voiceConnectionError("sdp"));
         return sdp;
       }
+      if (!path.startsWith("/v1/")) throw new Error("Voice broker not trusted");
       let token: string;
-      try { token = await voiceAccessToken(settings); }
+      try { token = fakeIdentity?.z0live ?? await voiceAccessToken(settings); }
       catch { throw new VoiceAccessDenied(voiceConnectionError("token")); }
-      if (!broker) throw new Error("Voice broker not trusted");
-      const response = await fetch(`${broker}${path}`, { method: body === undefined ? "GET" : "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000), redirect: "error" });
+      const response = await fetch(`${broker.origin}${path}`, { method: body === undefined ? "GET" : "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000), redirect: "error" });
       if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(voiceConnectionError("token"));
       if (!response.ok) throw new Error("Voice broker request refused"); return response.json();
     };
@@ -130,7 +182,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     try {
       setState({ ...initial, phase: "connecting" });
       let bootstrapToken: string;
-      try { bootstrapToken = await executionToken(settings); }
+      try { bootstrapToken = fakeIdentity?.dash ?? await executionToken(settings); }
       catch { throw new VoiceAccessDenied(voiceConnectionError("token")); }
       const response = await fetch(`http://${settings.address}/voice/bootstrap`, { method: "POST", headers: { authorization: `Bearer ${bootstrapToken}`, "content-type": "application/json" }, body: JSON.stringify(target), signal: AbortSignal.timeout(8000), redirect: "error" });
       if (!response.ok) {
@@ -139,11 +191,11 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
           response.status === 503 ? "Native voice disabled on bridge" : "Voice bootstrap failed");
       }
       const bootstrap: unknown = await response.json();
-      if (!object(bootstrap) || bootstrap.profile !== target.profile || bootstrap.session !== target.session || bootstrap.ready !== true) throw new Error("Voice target not confirmed");
+      if (!object(bootstrap) || bootstrap.profile !== target.profile || bootstrap.session !== target.session || bootstrap.ready !== true || typeof bootstrap.canonicalProfile !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(bootstrap.canonicalProfile)) throw new Error("Voice target not confirmed");
       broker = trustedVoiceBroker(bootstrap.broker);
       if (generation !== epoch.current) return;
       if (AppState.currentState !== "active") throw new Error("Dash is backgrounded");
-      const cursorKey = `dash.voice.inbox.${settings.identity.credentialId}`;
+      const cursorKey = `dash.voice.inbox.${identity.credentialId}`;
       const controller = new ContinuousVoice({ request, peer: async (event, ready, lost) => {
         try { return protectVoicePeer(await createVoicePeer(event, ready, lost)); }
         catch (error) {
@@ -153,31 +205,49 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
         }
       }, changed: next => {
         if (generation !== epoch.current) return;
-        if (next.phase === "error") voiceTrace("call", next.note);
-        setState(next.phase === "error" ? { ...next, note: voiceConnectionErrorLine(next.note) } : next);
+        if (next.phase === "error") {
+          voiceTrace("call", next.note, automatic);
+          if (automatic) {
+            setState(initial);
+            annotate.set(s => s.active ? { ...s, voiceNote: voiceConnectionErrorLine(next.note) } : s);
+          } else {
+            setState({ ...next, note: voiceConnectionErrorLine(next.note) });
+          }
+          return;
+        }
+        setState(next);
       },
         captureReleased: () => { releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined; },
         holdIntent: () => annotate.get().active,
+        finalDrained: turnId => {
+          if (!pendingFinals.current.delete(turnId)) return;
+          successfulAnnotation.current = true;
+          maybeEndAutoRef.current();
+        },
         cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
         transcript: (id, text, start, end) => { if (annotate.get().active) addSegment({ id, text, start, end, source: "voice" }); } });
       call.current = controller;
       // A Mute tap during authenticated bootstrap must also apply when the native peer arrives.
-      const connecting = controller.start(target);
+      const connecting = controller.start({ ...target, brokerProfile: bootstrap.canonicalProfile });
       if (desiredMute.current) controller.mute(true);
       await connecting;
     } catch (error) {
       releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined;
-      voiceTrace("bootstrap", error instanceof Error ? error.message : undefined);
-      if (generation === epoch.current) setState({ ...initial, phase: "error", note: voiceConnectionErrorLine(error instanceof Error ? error.message : undefined) });
+      if (generation === epoch.current) reportFailure("bootstrap", error instanceof Error ? error.message : undefined);
     }
     finally { if (generation === epoch.current) starting.current = false; }
   };
-  const stop = async () => {
-    epoch.current++; starting.current = false; desiredMute.current = false;
+  const stop = async (options?: { preserveWork?: boolean }) => {
+    if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+    autoStopTimer.current = null;
+    autoStarted.current = false;
+    pendingFinals.current.clear();
+    successfulAnnotation.current = false;
+    epoch.current++; starting.current = false; desiredMute.current = false; suppressAutoBar.current = false;
     const controller = call.current;
     call.current = null;
     attached.current = null;
-    const cleanup = controller?.stop();
+    const cleanup = controller?.stop(undefined, { cancelWork: options?.preserveWork !== true });
     if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
     setState(initial); await cleanup;
   };
@@ -190,42 +260,83 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     else setState(previous => previous.phase === "connecting" ? { ...previous, muted: next } : previous);
   };
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", next => { if (next === "background") {
+    const subscription = AppState.addEventListener("change", next => { if (next === "background" && !permissionRequestInFlight()) {
       epoch.current++; starting.current = false;
       const controller = call.current;
       void controller?.stop("Mic stopped because Dash left the foreground. Tap Start to resume.");
       if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
-      setState(previous => ["idle", "error"].includes(previous.phase) ? previous : { ...previous, phase: "error", note: "Mic stopped because Dash left the foreground. Tap Start to resume." });
+      if (suppressAutoBar.current) annotate.set(s => s.active ? { ...s, voiceNote: "Voice stopped in background" } : s);
+      setState(previous => ["idle", "error"].includes(previous.phase) ? previous : suppressAutoBar.current ? initial : { ...previous, phase: "error", note: "Mic stopped because Dash left the foreground. Tap Start to resume." });
     } });
     return () => {
-      epoch.current++; subscription.remove(); const controller = call.current; void controller?.stop();
+      epoch.current++; subscription.remove();
+      if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+      const controller = call.current; void controller?.stop();
       if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
     };
   }, []);
-  // Annotation is a spoken mode: entering it turns conversation voice on; leaving it ends only a call it started.
+  // Annotation owns its auto-started call until the exact final was spoken or 90s passed.
+  // Receipt acceptance closes the tray but is never evidence that playback has drained.
   const annotating = annotate.use(s => s.active);
+  const pendingTurn = annotate.use(s => s.pendingTurn?.id);
   const latest = useRef({ start, stop, phase: state.phase });
   latest.current = { start, stop, phase: state.phase };
-  const autoStarted = useRef(false);
+  const maybeEndAuto = () => {
+    if (!autoStarted.current || annotate.get().active || pendingFinals.current.size > 0 || annotate.get().pendingTurn) return;
+    const preserveWork = successfulAnnotation.current || annotate.get().status === "sent";
+    if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+    autoStopTimer.current = null;
+    void latest.current.stop({ preserveWork });
+  };
+  maybeEndAutoRef.current = maybeEndAuto;
   useEffect(() => {
-    const { start: begin, stop: end, phase } = latest.current;
+    const { start: begin, phase } = latest.current;
     if (annotating) {
-      if (["idle", "error"].includes(phase) && !starting.current) { autoStarted.current = true; void begin(); }
+      if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);
+      autoStopTimer.current = null;
+      if (["idle", "error"].includes(phase) && !starting.current && !autoStarted.current) {
+        autoStarted.current = true;
+        successfulAnnotation.current = false;
+        void begin({ auto: true });
+      }
     } else if (autoStarted.current) {
-      autoStarted.current = false;
-      void end();
+      if (autoStopTimer.current === null) {
+        autoStopTimer.current = setTimeout(() => {
+          autoStopTimer.current = null;
+          // Timeout is a bounded stop, not a reason to cancel a confirmed chat turn.
+          const preserveWork = successfulAnnotation.current || annotate.get().status === "sent" || pendingFinals.current.size > 0 || !!annotate.get().pendingTurn;
+          void latest.current.stop({ preserveWork });
+        }, 90_000);
+      }
+      maybeEndAutoRef.current();
     }
-  }, [annotating]);
+  }, [annotating, pendingTurn]);
   const shown = fixture ?? state;
   const active = !["idle", "error"].includes(shown.phase);
-  const visible = voiceBarVisible(shown.phase, attempted);
+  const visible = voiceBarVisible(shown.phase, attempted) && (fixture !== null || !suppressAutoBar.current);
   const pill = voiceBarPresentation(shown);
   useEffect(() => {
     const target = attached.current;
     if (!active || !target) return;
     const generation = epoch.current;
-    return registerSink({ label: "attached voice conversation", live: true, steerable: () => false,
-      send: (text, attachments) => sendVoiceAnnotation(target, text, attachments, (id, reply) => { if (generation === epoch.current) call.current?.deliverFinal(`annotation:${id}`, reply); }),
+    return registerSink({ label: `Sending to ${target.title || "Hermes"}`, conversationId: target.id, live: true, steerable: () => false,
+      send: async (text, attachments) => {
+        let submittedTurn: string | undefined;
+        try {
+          await sendVoiceAnnotation(target, text, attachments, (id, reply) => {
+            if (generation === epoch.current) call.current?.deliverFinal(`annotation:${id}`, reply);
+          }, "queue", id => {
+            submittedTurn = id;
+            if (generation === epoch.current) pendingFinals.current.add(id);
+          });
+          if (generation === epoch.current) successfulAnnotation.current = true;
+        } catch (error) {
+          if (submittedTurn && generation === epoch.current) pendingFinals.current.delete(submittedTurn);
+          throw error;
+        } finally {
+          maybeEndAutoRef.current();
+        }
+      },
     });
   }, [active, bindingGeneration]);
   // The bar owns a band under the status bar (screens inset below it); it never floats over AppNav or content.
@@ -235,6 +346,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     <DeviceInsets.Provider value={insets}>
       <SafeAreaInsetsContext.Provider value={appInsets(insets, visible, barRow)}>{children}</SafeAreaInsetsContext.Provider>
     </DeviceInsets.Provider>
+    {active ? <VoiceOrbOverlay state={shown} onMute={mute} /> : null}
     {home === "bar" ? <View testID="voice-mic-bar" style={[styles.bar, { paddingTop: insets.top }]}>
       <View style={styles.row} onLayout={e => setBarRow(e.nativeEvent.layout.height)}>
         <View accessible={false} style={[styles.dot, { backgroundColor: pill.phase === "error" ? colors.danger : pill.phase === "connecting" || pill.phase === "muted" ? colors.warn : pill.phase === "live" ? colors.ok : colors.textFaint }]} />

@@ -1,7 +1,7 @@
 import { parseReplyParts } from "../../shared/reply-parts";
 import type { ReplyPart } from "../../shared/protocol";
 import type { DetailMode } from "./lib/reply-details";
-import { parseChatAttachments, type ChatAttachment, type HarnessInfo, type HostInfo } from "../../shared/protocol";
+import { MODEL_ID, parseChatAttachments, type ChatAttachment, type HarnessInfo, type HostInfo } from "../../shared/protocol";
 
 import { parseSummary, type SummaryInfo } from "../../shared/thinking-summary";
 import { unwrapHermesHistoryText } from "./lib/history-display";
@@ -16,6 +16,8 @@ export interface Settings {
   /** `host:port` of the bridge, no scheme. */
   address: string;
   token: string;
+  /** Random cache namespace, rotated when the active endpoint/account changes. */
+  chatIndexScope?: string;
   /** Harness id to use for new chats. */
   harness: string;
   /** Optional working directory override sent with every turn. */
@@ -59,6 +61,8 @@ export interface UserMessage {
   role: "user";
   text: string;
   at: number;
+  /** This row came from a native history snapshot, not the phone clock. */
+  native?: true;
   /** Files uploaded to the bridge with this message. */
   attachments?: ChatAttachment[];
   /** Host history cut this text; the full text loads on demand. */
@@ -80,6 +84,8 @@ export interface AssistantMessage {
   /** Actual bridge tool/thinking statuses, retained for collapsed activity details. */
   activity?: string[];
   parts?: ReplyPart[];
+  /** Observed native rows already represented by this richer phone reply (display alignment only). */
+  nativeProjection?: { userId: string; replyIds: string[] };
   /**
    * The host holds this session open elsewhere (CLI/TUI). `queued`: nothing sent yet;
    * `sending`: the owner closed and the reply is going out. Never shown as work.
@@ -89,6 +95,8 @@ export interface AssistantMessage {
   error?: string;
   /** Host history cut this text; the full text loads on demand. */
   truncated?: boolean;
+  /** The model requested when this turn was queued; stable through replay. */
+  requestedModel?: string;
   /** Bridge turn id; used to re-attach after a reconnect. */
   turnId: string;
   /** Last event sequence number applied. */
@@ -98,6 +106,8 @@ export interface AssistantMessage {
 export type Message = UserMessage | AssistantMessage;
 
 export interface Conversation {
+  /** Configured paired bridge address. Missing legacy provenance must never be inferred. */
+  endpointAddress?: string;
   /** Default on, including chats saved before this preference existed. */
   deliverQueuedAsOne?: boolean;
   /** A durable merge preview pauses automatic delivery until saved or canceled. */
@@ -117,6 +127,10 @@ export interface Conversation {
   targetHostId?: string;
   profileId?: string;
   profileName?: string;
+  /** User-requested ACP model for future turns; not proof the host applied it. */
+  modelOverride?: string;
+  /** Model from a host summary/roster, bound to the reported session. */
+  sessionModel?: { sessionId: string; model: string };
   messageCount?: number;
   /** Live host surface holding this chat open (e.g. "CLI"); replies wait for it. */
   openIn?: string;
@@ -128,6 +142,8 @@ export interface Conversation {
   viewOnly?: boolean;
   /** Short last-message text kept in the conversation index while the transcript is not loaded. */
   preview?: string;
+  /** Latest reply identity in the light index, so attention does not load every transcript. */
+  latestReply?: Pick<AssistantMessage, "id" | "turnId" | "at" | "state">;
   messages: Message[];
 }
 
@@ -161,6 +177,7 @@ export function parseSettings(raw: unknown): Settings | null {
   const endpoints = parseEndpoints(raw.endpoints);
   return {
     ...(identity ? { identity } : {}),
+    ...(typeof raw.chatIndexScope === "string" && /^[a-z0-9-]{16,80}$/.test(raw.chatIndexScope) ? { chatIndexScope: raw.chatIndexScope } : {}),
     address: raw.address,
     token: raw.token,
     harness: raw.harness,
@@ -191,6 +208,13 @@ function optionalId(value: unknown): string | undefined {
   return nonBlank(value) ? value : undefined;
 }
 
+function nativeProjection(raw: unknown): AssistantMessage["nativeProjection"] {
+  if (!isRecord(raw) || !nonBlank(raw.userId) || raw.userId.length > 1024 ||
+    !Array.isArray(raw.replyIds) || raw.replyIds.length > 600 ||
+    !raw.replyIds.every((id): id is string => nonBlank(id) && id.length <= 1024)) return undefined;
+  return { userId: raw.userId, replyIds: raw.replyIds };
+}
+
 function parseMessage(raw: unknown): Message | null {
   if (!isRecord(raw) || !nonBlank(raw.id) || typeof raw.text !== "string" || !finite(raw.at)) {
     return null;
@@ -199,7 +223,7 @@ function parseMessage(raw: unknown): Message | null {
     // A present-but-malformed upload list drops the row rather than replaying it as text-only.
     const attachments = parseChatAttachments(raw.attachments);
     if (attachments === null) return null;
-    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(attachments?.length ? { attachments } : {}), ...(raw.truncated === true ? { truncated: true } : {}), delivery: raw.delivery === "steering" || raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" || raw.delivery === "failed" ? raw.delivery : undefined, deliveryAt: finite(raw.deliveryAt) ? raw.deliveryAt : undefined, deliveryNote: typeof raw.deliveryNote === "string" ? raw.deliveryNote : undefined };
+    return { id: raw.id, role: "user", text: raw.text, at: raw.at, ...(raw.native === true ? { native: true } : {}), ...(attachments?.length ? { attachments } : {}), ...(raw.truncated === true ? { truncated: true } : {}), delivery: raw.delivery === "steering" || raw.delivery === "steered" || raw.delivery === "queued" || raw.delivery === "started" || raw.delivery === "failed" ? raw.delivery : undefined, deliveryAt: finite(raw.deliveryAt) ? raw.deliveryAt : undefined, deliveryNote: typeof raw.deliveryNote === "string" ? raw.deliveryNote : undefined };
   }
   if (raw.role === "assistant" && isAssistantState(raw.state) && nonBlank(raw.turnId)) {
     // A corrupt sequence would make re-attach resume from a nonsensical offset.
@@ -217,10 +241,12 @@ function parseMessage(raw: unknown): Message | null {
       parts: parseReplyParts(raw.parts),
       summaries: Array.isArray(raw.summaries) ? raw.summaries.flatMap(item => { const summary = parseSummary(item); return summary ? [summary] : []; }).slice(-64) : undefined,
       activity: Array.isArray(raw.activity) ? raw.activity.filter((item): item is string => typeof item === "string").slice(-32) : undefined,
+      nativeProjection: nativeProjection(raw.nativeProjection),
       handoff: raw.handoff === "queued" || raw.handoff === "sending" ? raw.handoff : undefined,
       error: typeof raw.error === "string" ? raw.error : undefined,
       ...(raw.truncated === true ? { truncated: true } : {}),
       turnId: raw.turnId,
+      requestedModel: typeof raw.requestedModel === "string" && MODEL_ID.test(raw.requestedModel) ? raw.requestedModel : undefined,
       seq: typeof raw.seq === "number" ? raw.seq : 0,
     };
   }
@@ -261,6 +287,7 @@ export function parseConversation(raw: unknown): Conversation | null {
     : messages;
   return {
     id: raw.id,
+    endpointAddress: typeof raw.endpointAddress === "string" && raw.endpointAddress.trim() ? raw.endpointAddress : undefined,
     harness: raw.harness,
     detailMode: raw.detailMode === "Hide" || raw.detailMode === "Compact" || raw.detailMode === "Full" ? raw.detailMode : undefined,
     title: raw.title,
@@ -271,6 +298,9 @@ export function parseConversation(raw: unknown): Conversation | null {
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     sessionId: optionalId(raw.sessionId),
+    modelOverride: typeof raw.modelOverride === "string" && MODEL_ID.test(raw.modelOverride) ? raw.modelOverride : undefined,
+    sessionModel: isRecord(raw.sessionModel) && nonBlank(raw.sessionModel.sessionId) && nonBlank(raw.sessionModel.model)
+      ? { sessionId: raw.sessionModel.sessionId, model: raw.sessionModel.model } : undefined,
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
     targetHostId: optionalId(raw.targetHostId),
     profileId: optionalId(raw.profileId),
@@ -279,6 +309,9 @@ export function parseConversation(raw: unknown): Conversation | null {
     stale: raw.stale === true,
     ...(typeof raw.openedAt === "number" ? { openedAt: raw.openedAt } : {}),
     ...(typeof raw.preview === "string" && raw.preview ? { preview: raw.preview.slice(0, 200) } : {}),
+    latestReply: isRecord(raw.latestReply) && nonBlank(raw.latestReply.id) && nonBlank(raw.latestReply.turnId) &&
+      finite(raw.latestReply.at) && isAssistantState(raw.latestReply.state)
+      ? { id: raw.latestReply.id, turnId: raw.latestReply.turnId, at: raw.latestReply.at, state: raw.latestReply.state } : undefined,
     messages: displayedMessages,
   };
 }

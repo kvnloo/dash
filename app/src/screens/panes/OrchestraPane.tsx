@@ -3,6 +3,7 @@ import { shallowArrayEqual } from "../../store/createStore";
 import { memo, useMemo } from "react";
 import { useWindowDimensions } from "react-native";
 import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
+import { useTraceFeed } from "../../trace/useTraceFeed";
 import { OrchestraGraph } from "../../components/OrchestraGraph";
 import { AodlCatalogNetwork } from "../../components/AodlCatalogNetwork";
 import { WorkspaceActions } from "../../components/WorkspaceHeader";
@@ -16,7 +17,7 @@ import { submitInAppFeedback } from "../../lib/feedback-submit";
 import type { ScreenProps } from "../../navigation";
 import { setActive, openAgentConversation, store } from "../../store/app";
 
-export const OrchestraPane = memo(function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigation">) {
+export const OrchestraPane = memo(function OrchestraPane({ navigation, focused }: Pick<ScreenProps<"Main">, "navigation"> & { focused: boolean }) {
   // Only host sessions matter here; a phone-only chat changing must not re-render this pane.
   const conversations = store.useSelector(sessionChats, shallowArrayEqual);
   const settings = store.use(s => s.settings);
@@ -24,12 +25,14 @@ export const OrchestraPane = memo(function OrchestraPane({ navigation }: Pick<Sc
   const fixture = debugUi.use(s => s.orchestraFixture);
   const fixtureOn = isDebugActive() && fixture === true;
   const { width } = useWindowDimensions();
-  const { snapshot, error } = useOrchestraEvidence(settings);
+  const { snapshot, error } = useOrchestraEvidence(settings, focused);
+  // The entry card must load its own authenticated bridge data, not wait for a visit to Trace.
+  useTraceFeed(settings, focused);
   const graph = useMemo(() => fixtureOn ? orchestraMotionFixture() : snapshot ? {
     nodes: snapshot.nodes.map(n => ({ ...n, thinking: n.state === "live" ? { phase: "thinking" as const } : { phase: "idle" as const } })),
     edges: snapshot.edges,
   } : orchestraMap(hosts, conversations), [hosts, conversations, fixtureOn, snapshot]);
-  return <OrchestraGraph graph={graph} width={width} fixture={fixtureOn} error={fixtureOn ? undefined : error} warnings={snapshot?.warnings} canOpen={node => Boolean(node.sessionId && (conversations.some(c => c.sessionId === node.sessionId) || hosts.some(h => `host:${h.id}` === node.hostId && h.self && h.online && h.agents.some(a => a.sessionId === node.sessionId))))} onFeedback={inAppFeedbackEnabled(settings) ? node => {
+  return <OrchestraGraph triageHeader={<TraceEntryCard onOpen={() => navigation.navigate("Trace")} />} graph={graph} width={width} fixture={fixtureOn} error={fixtureOn ? undefined : error} warnings={snapshot?.warnings} canOpen={node => Boolean(node.sessionId && (conversations.some(c => c.sessionId === node.sessionId) || hosts.some(h => `host:${h.id}` === node.hostId && h.self && h.online && h.agents.some(a => a.sessionId === node.sessionId))))} onFeedback={inAppFeedbackEnabled(settings) ? node => {
     submitInAppFeedback({ kind: "select", text: `Selected orchestra ${node.label}`, selection: { kind: "orchestra", id: node.id, label: node.label } });
     navigation.navigate("Chat");
   } : undefined} onOpen={node => {

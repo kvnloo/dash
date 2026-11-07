@@ -25,6 +25,7 @@ export async function workspaceFiles(cwd: string): Promise<string[]> {
 
 export function createSuggestionsHttpHandler(options: {
   token: string; cwd: string;
+  authorize?: (request: Request) => Promise<boolean>;
   commands?: typeof harnessCommands; files?: typeof workspaceFiles;
 }) {
   const cache = new Map<string, { at: number; value: Promise<SuggestionInventory> }>();
@@ -32,7 +33,13 @@ export function createSuggestionsHttpHandler(options: {
     const url = new URL(request.url);
     if (url.pathname !== "/suggestions") return null;
     const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "cache-control": "no-store" } });
-    if (!secretMatches(bearerToken(request), options.token)) return json({ error: "unauthorized" }, 401);
+    let authorized = false;
+    try {
+      authorized = options.authorize
+        ? await options.authorize(request) === true
+        : secretMatches(bearerToken(request), options.token);
+    } catch { /* Failed identity checks deny access. */ }
+    if (!authorized) return json({ error: "unauthorized" }, 401);
     if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
     const harness = url.searchParams.get("harness") ?? "hermes";
     if (!/^[a-z][a-z0-9-]{0,30}$/.test(harness)) return json({ error: "invalid harness" }, 400);

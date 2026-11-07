@@ -18,13 +18,18 @@ export const OWNER_FILTER = `+ifnull(is_automated,0) = 0 and parent_session_id i
   and session_kind <> 'non-interactive' and entrypoint not like 'sdk%'
   and (+user_message_count >= 2 or +message_count >= 10) and agent <> 'hermes'`;
 
+function fields(db: Database): string {
+  const hasModel = db.query<{ name: string }, []>("pragma table_info(messages)").all().some(column => column.name === "model");
+  return `${FIELDS}, ${hasModel ? "(select nullif(trim(m.model), '') from messages m where m.session_id = sessions.id and m.role = 'assistant' and nullif(trim(m.model), '') is not null order by m.ordinal desc limit 1)" : "NULL"} as model`;
+}
+
 const FIELDS = `id, agent, project, cwd, machine,
   substr(coalesce(nullif(display_name,''), nullif(session_name,''), first_message),1,400) as title,
   started_at, ended_at, message_count`;
 
 export interface AvSessionRow {
   id: string; agent: string; project: string | null; cwd: string | null; machine: string | null; title: string | null;
-  started_at: string | null; ended_at: string | null; message_count: number; ok?: number;
+  started_at: string | null; ended_at: string | null; message_count: number; model?: string | null; ok?: number;
 }
 
 export function openAgentsview(path: string): Database {
@@ -69,6 +74,7 @@ export function avChatRow(row: AvSessionRow, self: MachineNames): NewChatRow {
   const title = redact(firstLine(row.title)) || firstLine(row.project) || row.agent;
   const routed = host.host_id !== SELF_HOST && REMOTE_HARNESSES.includes(row.agent) && self.routable?.has((row.machine ?? "").trim().toLowerCase()) === true;
   const r = {
+    model: row.model ?? null,
     origin: "agentsview" as const, kind: row.agent, session_id: sessionId, ...host, profile_id: null,
     agent_id: `${AGENTSVIEW_PREFIX}${row.agent}:${sessionId}`, title, cwd: row.cwd || null,
     started_at: stamp(row.started_at), last_activity_at: stamp(row.ended_at) || stamp(row.started_at),
@@ -86,7 +92,7 @@ const indexHint = (db: Database) => (hasEndedIndex(db) ? "indexed by idx_session
 export function ingestBatch(db: Database, sidecar: Sidecar, self: MachineNames): { read: number; changed: number } {
   const maxEnded = sidecar.meta("av.maxEnded") ?? "";
   const maxId = sidecar.meta("av.maxId") ?? "";
-  const rows = db.query<AvSessionRow, [string, string, number]>(`select ${FIELDS} from sessions ${indexHint(db)}
+  const rows = db.query<AvSessionRow, [string, string, number]>(`select ${fields(db)} from sessions ${indexHint(db)}
     where (ended_at > ?1 or (ended_at = ?1 and id > ?2)) and ${OWNER_FILTER}
     order by ended_at asc, id asc limit ?3`).all(maxEnded, maxId, AV_BATCH);
   const changed = sidecar.upsert(rows.map(row => avChatRow(row, self)));
@@ -102,11 +108,11 @@ export function ingestBatch(db: Database, sidecar: Sidecar, self: MachineNames):
 export function reconcilePage(db: Database, sidecar: Sidecar, self: MachineNames, seen: Set<string>, after: { e: string; i: string } | null | "nulls"): { next: { e: string; i: string } | null | "nulls" | "done"; changed: number } {
   let rows: AvSessionRow[];
   if (after === "nulls") {
-    rows = db.query<AvSessionRow, []>(`select ${FIELDS}, (${OWNER_FILTER}) as ok from sessions where ended_at is null`).all();
+    rows = db.query<AvSessionRow, []>(`select ${fields(db)}, (${OWNER_FILTER}) as ok from sessions where ended_at is null`).all();
   } else {
     const e = after?.e ?? "￿";
     const i = after?.i ?? "";
-    rows = db.query<AvSessionRow, [string, string, number]>(`select ${FIELDS}, (${OWNER_FILTER}) as ok from sessions ${indexHint(db)}
+    rows = db.query<AvSessionRow, [string, string, number]>(`select ${fields(db)}, (${OWNER_FILTER}) as ok from sessions ${indexHint(db)}
       where ended_at is not null and (ended_at < ?1 or (ended_at = ?1 and id > ?2)) order by ended_at desc, id asc limit ?3`).all(e, i, AV_BATCH);
   }
   const keep = rows.filter(row => row.ok === 1).map(row => avChatRow(row, self));
@@ -119,7 +125,7 @@ export function reconcilePage(db: Database, sidecar: Sidecar, self: MachineNames
 
 /** Cold-start list straight from AgentsView, (ended_at desc, id asc) keyset, while the sidecar builds. */
 export function coldList(db: Database, self: MachineNames, after: { e: string; i: string } | undefined, limit: number): { rows: NewChatRow[]; raw: AvSessionRow[] } {
-  const raw = db.query<AvSessionRow, [string, string, number]>(`select ${FIELDS} from sessions ${indexHint(db)}
+  const raw = db.query<AvSessionRow, [string, string, number]>(`select ${fields(db)} from sessions ${indexHint(db)}
     where ended_at is not null and (ended_at < ?1 or (ended_at = ?1 and id > ?2)) and ${OWNER_FILTER}
     order by ended_at desc, id asc limit ?3`).all(after?.e ?? "￿", after?.i ?? "", limit);
   return { rows: raw.map(row => avChatRow(row, self)), raw };
@@ -134,7 +140,7 @@ export const HISTORY_FILTER = "deleted_at is null and agent <> 'hermes'";
 
 /** Find one history-readable session by native id when the sidecar does not list it. */
 export function lookupSession(db: Database, kind: string, sessionId: string): AvSessionRow | undefined {
-  return db.query<AvSessionRow, [string, string, string]>(`select ${FIELDS} from sessions where id in (?1, ?2) and agent = ?3 and ${HISTORY_FILTER} limit 1`)
+  return db.query<AvSessionRow, [string, string, string]>(`select ${fields(db)} from sessions where id in (?1, ?2) and agent = ?3 and ${HISTORY_FILTER} limit 1`)
     .get(`${kind}:${sessionId}`, sessionId, kind) ?? undefined;
 }
 
