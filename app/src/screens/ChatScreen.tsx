@@ -19,6 +19,7 @@ import { ComposerActionMenu, type ComposerMenuRow } from "../components/Composer
 import { OrbActivity } from "../components/OrbMotion";
 import { WindowDock, WindowPill, useDisplayCutout, useWindowMorph } from "../components/ChatWindow";
 import { backTarget, hostIdentity, pillGeometry, pillPrimary, pillReserve, pillStatus, surfaceValue, type IdentityInput } from "../lib/chat-window";
+import { releaseChatWindowOrigin, resolveChatWindowOrigin } from "../lib/chat-row-actions";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../components/Composer";
 import { composerPlaceholder } from "./composer-placeholder";
@@ -437,9 +438,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   );
 
   // Window presentation: opened from the Chats list over the retained workspace.
-  const windowOrigin = route.params?.window;
+  const windowOrigin = resolveChatWindowOrigin(route.params?.window);
   const windowed = windowOrigin !== undefined;
-  const morph = useWindowMorph(windowOrigin, windowed);
+  // A legacy URL may supply a string (e.g. "[object Object]"), not a row rect.
+  const morph = useWindowMorph(windowOrigin ?? { y: 0, height: 0 }, windowed);
+  useEffect(() => {
+    if (!windowed) return;
+    return () => releaseChatWindowOrigin(windowOrigin);
+  }, [windowed, windowOrigin]);
   const { width: windowWidth, height: windowHeight } = usePaneDimensions();
   const [navOpen, setNavOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
