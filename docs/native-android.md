@@ -22,7 +22,7 @@ After integrating in a separate worktree, install its app dependencies and serve
 
 ```sh
 CI=false EXPO_PUBLIC_DASH_TURBO=1 \
-  REACT_NATIVE_PACKAGER_HOSTNAME=100.113.138.100 \
+  REACT_NATIVE_PACKAGER_HOSTNAME=<tailnet-ip> \
   /home/kvn/.bun/bin/bun x expo start --dev-client --host lan --port 8098
 ```
 

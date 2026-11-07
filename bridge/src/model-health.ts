@@ -1,7 +1,7 @@
 import type { ModelHealth } from "../../shared/model-roles";
 import { record } from "../../shared/model-roles";
 const observed = new Map<string, { at: number; health: ModelHealth }>();
-export const tinyBaseUrl = () => process.env.DASH_TINY_URL ?? "http://100.113.138.100:11530/v1";
+export const tinyBaseUrl = () => process.env.DASH_TINY_URL ?? "http://127.0.0.1:11530/v1";
 export function noteModelHealth(model: string, health: ModelHealth): void { observed.set(model, { at: Date.now(), health }); }
 /** Health is reachability/configuration, not a guarantee of generation speed or quality. */
 export async function modelHealth(model: string): Promise<ModelHealth> {

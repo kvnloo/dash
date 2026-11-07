@@ -42,7 +42,7 @@ launch, cancel or retry an agent turn. Identity JWTs are never accepted from
 ## Owner-only switch, not executed by this PR
 
 Identity-only z0bridge currently listens at loopback `http://127.0.0.1:4789`
-and tailnet `http://100.113.138.100:4788`. It does not provide Hermes ACP on
+and tailnet `http://<tailnet-ip>:4788`. It does not provide Hermes ACP on
 `:4787`. Enabling full z0bridge there is a separate owner decision.
 
 When ready, the owner would create a separate least-privilege verifier enrollment
@@ -80,7 +80,7 @@ z0bridge pair --app dash --kind client --name <device-name> \
 ```
 
 Do not print that file or its code. Open it privately in native Dash, enter the
-Dash bridge's address (normally `100.113.138.100:4747`, NOT the identity port),
+Dash bridge's address (normally `<tailnet-ip>:4747`, NOT the identity port),
 and press Confirm z0bridge pairing. No automatic discovery/port switch occurs.
 The existing pairing continues working on every other client.
 

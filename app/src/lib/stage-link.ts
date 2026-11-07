@@ -1,6 +1,6 @@
 /**
  * artifact-stage links (kvnloo/artifact-stage): an ephemeral review served by
- * the host, e.g. `http://100.113.138.100:41873/#t=<review token>`.
+ * the host, e.g. `http://<tailnet-ip>:41873/#t=<review token>`.
  *
  * The token in the fragment is a per-review token. It dies with that review's
  * server and is never the Dash bootstrap credential. Accepted hosts are

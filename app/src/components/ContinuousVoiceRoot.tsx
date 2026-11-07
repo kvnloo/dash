@@ -20,6 +20,19 @@ import { voiceTarget } from "../lib/voice-target";
 /** One logcat line per failed voice stage (phone-watch turns these into incidents). Notes never carry secrets. */
 function voiceTrace(stage: string, note: string | undefined): void { console.warn(`[voice] ${stage} failed: ${note ?? "unknown"}`); }
 
+/** A bootstrap broker is never an arbitrary URL; validate before any /v1 request. */
+function trustedVoiceBroker(raw: unknown): string {
+  if (typeof raw !== "string") throw new Error("Voice broker not trusted");
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" || !url.hostname.endsWith(".ts.net") || !url.port || url.username || url.password ||
+        url.pathname !== "/" || url.search || url.hash || (raw !== url.origin && raw !== `${url.origin}/`)) {
+      throw new Error("Voice broker not trusted");
+    }
+    return url.origin;
+  } catch { throw new Error("Voice broker not trusted"); }
+}
+
 const initial: VoiceState = { phase: "idle", muted: false, lines: [] };
 /** True while a full-screen chat window is open: its dock row is then the single home of voice Mute/End. */
 export const voiceWindowOpen = createStore(false);
@@ -88,6 +101,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const generation = ++epoch.current;
     setBindingGeneration(generation);
     // Frozen for the call: navigating/switching chats never retargets spoken requests.
+    let broker: string | undefined;
     const request = async (path: string, body?: unknown): Promise<unknown> => {
       if (path === "provider:answer") {
         if (!object(body) || typeof body.sdp !== "string" || typeof body.secret !== "string") {
@@ -107,7 +121,8 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       let token: string;
       try { token = await voiceAccessToken(settings); }
       catch { throw new VoiceAccessDenied(voiceConnectionError("token")); }
-      const response = await fetch(`https://0.taila30dc.ts.net:8791${path}`, { method: body === undefined ? "GET" : "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000), redirect: "error" });
+      if (!broker) throw new Error("Voice broker not trusted");
+      const response = await fetch(`${broker}${path}`, { method: body === undefined ? "GET" : "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30_000), redirect: "error" });
       if (response.status === 401 || response.status === 403) throw new VoiceAccessDenied(voiceConnectionError("token"));
       if (!response.ok) throw new Error("Voice broker request refused"); return response.json();
     };
@@ -125,6 +140,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       }
       const bootstrap: unknown = await response.json();
       if (!object(bootstrap) || bootstrap.profile !== target.profile || bootstrap.session !== target.session || bootstrap.ready !== true) throw new Error("Voice target not confirmed");
+      broker = trustedVoiceBroker(bootstrap.broker);
       if (generation !== epoch.current) return;
       if (AppState.currentState !== "active") throw new Error("Dash is backgrounded");
       const cursorKey = `dash.voice.inbox.${settings.identity.credentialId}`;

@@ -38,7 +38,8 @@ latency or correctness. Cloud OAuth health is unknown; the app never infers that
 an OMP account is unavailable just because Dash lacks an API key.
 
 The tiny default is the actual groot llama.cpp router model `local/qwen3-4b-q4km`
-on `http://100.113.138.100:11530/v1`; `DASH_TINY_URL` overrides the base URL. The
+on port 11530 (`/v1`). The code default is loopback `http://127.0.0.1:11530/v1`; on groot
+`DASH_TINY_URL` (private bridge env) points it at the host's tailnet address. The
 older cognition serving.json advertised Qwen3.5 on localhost:11500, but that
 endpoint was offline during qualification. The active router was verified with
 GET /v1/models and its `z0-farm-llama.service` definition, without restarting it.

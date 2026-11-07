@@ -267,7 +267,7 @@ was unbound again after the proof. Counts/IDs naturally change as the owner chat
    owner's existing credentials and approval-gate modes:
 
    ```sh
-   DASH_HOST=100.113.138.100 DASH_PORT=4747 \
+   DASH_HOST=<tailnet-ip> DASH_PORT=4747 \
    DASH_GATE_ENABLED=1 DASH_GATE_LIVE=0 DASH_GATE_OWNER_DECISIONS=1 \
    DASH_CREDENTIAL_DIR=/home/kvn/.dash \
    DASH_HERMES_APIS='{"clean":{"url":"http://127.0.0.1:8643","keyFile":"/mnt/zer0models/workspace/zer0/products/garden_room/data/voice/.hermes-api-key"}}' \
