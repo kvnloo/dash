@@ -1,0 +1,23 @@
+#!/usr/bin/env bun
+// dash-acp <harness> [--cwd DIR]: run this computer's ACP adapter for <harness> on stdio.
+// A Dash bridge on another computer runs it over SSH to continue a Claude Code or Codex chat
+// that was recorded here (bridge/src/remote-hosts.ts). Same adapter resolution as the bridge.
+import { acpCommand } from "../src/acp/supervisor";
+
+const args = process.argv.slice(2);
+const harness = args[0] ?? "";
+const at = args.indexOf("--cwd");
+const cwd = at >= 0 ? args[at + 1] : undefined;
+const command = /^[a-z]{1,16}$/.test(harness) ? acpCommand(harness) : null;
+if (!command) {
+  process.stderr.write(`dash-acp: no ACP adapter for "${harness}" on this computer\n`);
+  process.exit(127);
+}
+let dir = process.cwd();
+if (cwd) {
+  try { process.chdir(cwd); dir = cwd; }
+  catch { process.stderr.write(`dash-acp: not a directory here: ${cwd}\n`); process.exit(2); }
+}
+const child = Bun.spawn(command, { cwd: dir, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) process.on(signal, () => child.kill(signal));
+process.exitCode = await child.exited;

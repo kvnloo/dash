@@ -2,86 +2,108 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, integrate/device-layer]
   push:
-    branches: [main, integrate/device-layer]
+    branches: [main, preview, nightly, dev, 'integrate/**', 'integ/**']
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
 jobs:
-  typecheck-and-lint:
+  # The test suite IS the e2e tester army (O15, laws/release). It runs on the exact
+  # head commit, writes the army receipt, and the O15 gate then decides the merge.
+  test:
+    name: test (tester army + O15 gate)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        package: [app, bridge, server]
+    timeout-minutes: 45
+    env:
+      SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
-      
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-      
-      - name: Install dependencies (${{ matrix.package }})
-        working-directory: ./${{ matrix.package }}
-        run: bun install
-      
-      - name: Typecheck (${{ matrix.package }})
-        working-directory: ./${{ matrix.package }}
-        run: bun run tsc --noEmit || true
-        continue-on-error: true
-      
-      - name: Lint (${{ matrix.package }})
-        working-directory: ./${{ matrix.package }}
+          bun-version: 1.4.3
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'app/bun.lock', 'bridge/bun.lock') }}
+      - name: Install locked root and bridge dependencies; public app without private renderer
+        run: bun install --frozen-lockfile && bun scripts/install-public-ci.ts && bun install --frozen-lockfile --cwd bridge
+      - name: Headless Chromium and the bridge sandbox (bubblewrap)
         run: |
-          if [ -f "package.json" ] && grep -q '"lint"' package.json; then
-            bun run lint || true
-          else
-            echo "No lint script found, skipping"
-          fi
-        continue-on-error: true
-
-  install-root:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: oven-sh/setup-bun@v2
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends bubblewrap
+          # Ubuntu 24.04 restricts unprivileged user namespaces; the army isolates each bridge with bwrap.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 node node_modules/playwright/cli.js install --with-deps chromium
+      - name: O15 checker evidence rules (laws/release)
+        run: python3 -m unittest laws/release/test_check.py -v
+      - name: Tester army on ${{ env.SHA }}
+        env:
+          DASH_ARMY_RECEIPTS: ${{ runner.temp }}/army-receipts
+          ARMY_WORKERS: "2"
+        run: bash scripts/army.sh
+      - name: Army receipt (canonical O15 evidence for this commit)
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          bun-version: latest
-      
-      - name: Install root dependencies
-        run: bun install
-      
-      - name: Check shared/protocol.ts
-        run: |
-          if [ -f "shared/protocol.ts" ]; then
-            echo "✓ shared/protocol.ts exists"
-          else
-            echo "✗ shared/protocol.ts missing"
-            exit 1
-          fi
-
-  unit-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+          name: army-receipt-${{ env.SHA }}
+          path: ${{ runner.temp }}/army-receipts/${{ env.SHA }}/
+          if-no-files-found: ignore
+          retention-days: 90
+      - name: Army evidence (report, traces, screenshots)
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          bun-version: latest
-      - name: Install app and bridge
-        run: bun install --cwd app && bun install --cwd bridge
-      - name: Unit tests
-        run: bun test app/src bridge/src shared scripts/mutate.test.ts
+          name: army-evidence-${{ env.SHA }}
+          path: |
+            artifacts/army/${{ env.SHA }}/html
+            artifacts/army/${{ env.SHA }}/test-results
+            artifacts/army/${{ env.SHA }}/web-export.log
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: O15 release gate (merge)
+        if: always()
+        run: python3 laws/release/check.py --action merge --sha "$SHA" --receipts "$RUNNER_TEMP/army-receipts"
 
-  mutation:
-    needs: unit-tests
+  checks:
+    name: ${{ matrix.gate }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [typecheck, lint]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-      - name: Install app and bridge
-        run: bun install --cwd app && bun install --cwd bridge
-      - name: Mutation tests
-        run: bun scripts/mutate.ts --threshold 80 --max 200
+          bun-version: 1.4.3
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'app/bun.lock', 'bridge/bun.lock') }}
+      - name: Install locked root and bridge dependencies; public app without private renderer
+        run: bun install --frozen-lockfile && bun scripts/install-public-ci.ts && bun install --frozen-lockfile --cwd bridge
+      - name: Typecheck app, bridge, shared and scripts
+        if: matrix.gate == 'typecheck'
+        run: bun run typecheck
+      - name: Lint
+        if: matrix.gate == 'lint'
+        run: bun run lint
 
+  required-gates:
+    if: always()
+    needs: [test, checks]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject failed, cancelled or skipped gates
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+          GATE_RESULT: ${{ needs.checks.result }}
+        run: test "$TEST_RESULT" = success && test "$GATE_RESULT" = success

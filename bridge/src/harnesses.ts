@@ -1,19 +1,29 @@
 // One adapter per agent CLI. Each adapter knows two things: how to build the
 // argv for a turn, and how to turn the CLI's stdout into protocol events.
 
+import type { ReplyPart, AcpStatus } from "../../shared/protocol";
+import { PartEmitter, contentText } from "./reply-parts";
 import { hermesCliArgv } from "./hermes-session";
+import { approvalArgs, type ApprovalEnv } from "./argv-policy";
+import { parseHarnessJsonLine } from "./turn-safety";
 
 export interface TurnInput {
+  mode?: "steer" | "queue";
+  /** Prompt text. Attachment paths are already listed in it (see src/attachments.ts). */
   text: string;
   cwd: string;
   sessionId?: string;
+  profileId?: string;
+  /** Files the phone attached, stored on this host. ACP turns also get native blocks. */
+  attachments?: readonly { path: string; name: string; mime: string; size: number }[];
 }
 
 export interface Sink {
+  part?(part: ReplyPart): void;
   session(sessionId: string): void;
   delta(text: string): void;
   /** Short line describing what the agent is doing right now. Empty string clears it. */
-  status(text: string): void;
+  status(text: string, acp?: AcpStatus): void;
   error(message: string): void;
 }
 
@@ -28,7 +38,7 @@ export interface Harness {
   id: string;
   name: string;
   bin: string;
-  argv(input: TurnInput): string[];
+  argv(input: TurnInput, env?: ApprovalEnv): string[];
   parser(sink: Sink): TurnParser;
 }
 
@@ -40,14 +50,14 @@ function str(value: unknown): value is string {
   return typeof value === "string";
 }
 
-function parseJsonLine(line: string): Record<string, unknown> | null {
-  if (line.charCodeAt(0) !== 123 /* { */) return null;
-  try {
-    const value: unknown = JSON.parse(line);
-    return isRecord(value) ? value : null;
-  } catch {
+function parseJsonLine(line: string, sink?: Sink): Record<string, unknown> | null {
+  const parsed = parseHarnessJsonLine(line);
+  if (!parsed) return null;
+  if (!parsed.ok) {
+    sink?.error(parsed.error);
     return null;
   }
+  return parsed.value;
 }
 
 const STATUS_MAX = 100;
@@ -71,9 +81,11 @@ function describeTool(name: string, args: unknown): string {
 
 // omp and pi share Pi's `--mode json` event stream (session, text_delta, tools).
 function sessionNdjsonParser(sink: Sink): TurnParser {
+  const outputs = new Map<string, string>();
+  const parts = new PartEmitter(part => sink.part?.(part));
   return {
     line(line) {
-      const ev = parseJsonLine(line);
+      const ev = parseJsonLine(line, sink);
       if (!ev) return;
       switch (ev.type) {
         case "session":
@@ -82,12 +94,29 @@ function sessionNdjsonParser(sink: Sink): TurnParser {
         case "message_update": {
           const e = ev.assistantMessageEvent;
           if (isRecord(e) && e.type === "text_delta" && str(e.delta)) sink.delta(e.delta);
+          if (isRecord(e) && e.type === "thinking_delta") parts.reasoning(e.delta);
           break;
         }
         case "tool_execution_start":
+          if (str(ev.toolCallId) && str(ev.toolName)) parts.start(ev.toolCallId, ev.toolName, ev.args);
           if (str(ev.toolName)) sink.status(describeTool(ev.toolName, ev.args));
           break;
+        case "tool_execution_update":
+          // Pi updates carry a cumulative partialResult; emit only its new suffix.
+          if (str(ev.toolCallId)) {
+            const text = contentText(ev.partialResult);
+            const previous = outputs.get(ev.toolCallId) ?? "";
+            parts.output(ev.toolCallId, text.startsWith(previous) ? text.slice(previous.length) : text);
+            outputs.set(ev.toolCallId, text);
+          }
+          break;
         case "tool_execution_end":
+          if (str(ev.toolCallId)) {
+            const text = contentText(ev.result);
+            const previous = outputs.get(ev.toolCallId) ?? "";
+            parts.output(ev.toolCallId, text.startsWith(previous) ? text.slice(previous.length) : text, true);
+            parts.finish(ev.toolCallId, ev.isError === true);
+          }
           sink.status("");
           break;
       }
@@ -101,13 +130,12 @@ const omp: Harness = {
   id: "omp",
   name: "OMP",
   bin: "omp",
-  argv({ text, cwd, sessionId }) {
+  argv({ text, cwd, sessionId }, env) {
     return [
       "-p",
       "--mode",
       "json",
-      "--auto-approve",
-      "--allow-home",
+      ...approvalArgs("omp", env),
       "--cwd",
       cwd,
       ...(sessionId ? ["--resume", sessionId] : []),
@@ -122,16 +150,19 @@ const codex: Harness = {
   id: "codex",
   name: "Codex",
   bin: "codex",
-  argv({ text, cwd, sessionId }) {
+  argv({ text, cwd, sessionId }, env) {
     return sessionId
-      ? ["exec", "resume", "--json", "--skip-git-repo-check", sessionId, text]
-      : ["exec", "--json", "--skip-git-repo-check", "-C", cwd, "-s", "workspace-write", text];
+      ? [...approvalArgs("codex", env), "exec", "resume", "--json", "--skip-git-repo-check", sessionId, text]
+      : [...approvalArgs("codex", env), "exec", "--json", "--skip-git-repo-check", "-C", cwd, text];
   },
   parser(sink) {
     let emitted = false;
+    const parts = new PartEmitter(part => sink.part?.(part));
+    const outputs = new Map<string, string>();
+    const started = new Set<string>();
     return {
       line(line) {
-        const ev = parseJsonLine(line);
+        const ev = parseJsonLine(line, sink);
         if (!ev) return;
         if (ev.type === "thread.started" && str(ev.thread_id)) {
           sink.session(ev.thread_id);
@@ -139,6 +170,24 @@ const codex: Harness = {
         }
         const item = ev.item;
         if (!isRecord(item)) return;
+        if (str(item.id)) {
+          if (item.type === "reasoning" && ev.type === "item.completed") parts.reasoning(item.text);
+          if (["command_execution", "mcp_tool_call", "web_search", "file_change"].includes(String(item.type))) {
+            if (!started.has(item.id)) {
+              parts.start(item.id, str(item.tool) ? item.tool : String(item.type), item.command ?? item.arguments ?? item.query ?? item.changes);
+              started.add(item.id);
+            }
+            if (str(item.aggregated_output)) {
+              const previous = outputs.get(item.id) ?? "";
+              parts.output(item.id, item.aggregated_output.startsWith(previous) ? item.aggregated_output.slice(previous.length) : item.aggregated_output, ev.type === "item.completed");
+              outputs.set(item.id, item.aggregated_output);
+            }
+            if (ev.type === "item.completed") {
+              if (item.result !== undefined) parts.output(item.id, item.result, true);
+              parts.finish(item.id, item.status === "failed" || (typeof item.exit_code === "number" && item.exit_code !== 0));
+            }
+          }
+        }
         if (ev.type === "item.started" || ev.type === "item.updated") {
           switch (item.type) {
             case "command_execution":
@@ -170,9 +219,11 @@ const codex: Harness = {
 // grok and claude both speak the Anthropic Messages wire format over NDJSON.
 function anthropicStreamParser(sink: Sink): TurnParser {
   let sawDelta = false;
+  const parts = new PartEmitter(part => sink.part?.(part));
+  let sawThought = false;
   return {
     line(line) {
-      const ev = parseJsonLine(line);
+      const ev = parseJsonLine(line, sink);
       if (!ev) return;
       switch (ev.type) {
         case "system":
@@ -183,6 +234,7 @@ function anthropicStreamParser(sink: Sink): TurnParser {
           if (!isRecord(e)) return;
           if (e.type === "content_block_delta") {
             const d = e.delta;
+            if (isRecord(d) && d.type === "thinking_delta") { sawThought = true; parts.reasoning(d.thinking); }
             if (isRecord(d) && d.type === "text_delta" && str(d.text)) {
               sawDelta = true;
               sink.delta(d.text);
@@ -198,7 +250,9 @@ function anthropicStreamParser(sink: Sink): TurnParser {
           if (!isRecord(m) || !Array.isArray(m.content)) return;
           for (const block of m.content) {
             if (!isRecord(block)) continue;
+            if (block.type === "thinking" && !sawThought) parts.reasoning(block.thinking);
             if (block.type === "tool_use" && str(block.name)) {
+              if (str(block.id)) parts.start(block.id, block.name, block.input);
               sink.status(describeTool(block.name, block.input));
             } else if (block.type === "text" && str(block.text) && !sawDelta) {
               // CLI built without partial-message support: fall back to whole messages.
@@ -208,6 +262,9 @@ function anthropicStreamParser(sink: Sink): TurnParser {
           break;
         }
         case "user":
+          if (isRecord(ev.message) && Array.isArray(ev.message.content)) for (const block of ev.message.content) {
+            if (isRecord(block) && block.type === "tool_result" && str(block.tool_use_id)) { parts.output(block.tool_use_id, block.content, true); parts.finish(block.tool_use_id, block.is_error === true); }
+          }
           // Tool results come back as user messages; the tool is finished.
           sink.status("");
           break;
@@ -226,14 +283,14 @@ const grok: Harness = {
   id: "grok",
   name: "Grok",
   bin: "grok",
-  argv({ text, cwd, sessionId }) {
+  argv({ text, cwd, sessionId }, env) {
     return [
       "-p",
       text,
       "--output-format",
       "streaming-messages-json",
       "--include-partial-messages",
-      "--always-approve",
+      ...approvalArgs("grok", env),
       "--cwd",
       cwd,
       ...(sessionId ? ["--resume", sessionId] : []),
@@ -246,7 +303,7 @@ const claude: Harness = {
   id: "claude",
   name: "Claude Code",
   bin: "claude",
-  argv({ text, sessionId }) {
+  argv({ text, sessionId }, env) {
     return [
       "-p",
       text,
@@ -254,8 +311,7 @@ const claude: Harness = {
       "stream-json",
       "--verbose",
       "--include-partial-messages",
-      "--permission-mode",
-      "bypassPermissions",
+      ...approvalArgs("claude", env),
       ...(sessionId ? ["--resume", sessionId] : []),
     ];
   },
@@ -290,17 +346,16 @@ const hermes: Harness = {
   },
 };
 
-// pi: Earendil CLI. `--mode json` is the documented event stream; `--approve`
-// trusts project-local files in non-interactive mode. cwd comes from spawn.
+// pi: Earendil CLI. cwd comes from spawn.
 const pi: Harness = {
   id: "pi",
   name: "Pi",
   bin: "pi",
-  argv({ text, sessionId }) {
+  argv({ text, sessionId }, env) {
     return [
       "--mode",
       "json",
-      "--approve",
+      ...approvalArgs("pi", env),
       ...(sessionId ? ["--session", sessionId] : []),
       "--",
       text,
@@ -310,7 +365,6 @@ const pi: Harness = {
 };
 
 // fx: `fx ask --json` emits one object with session_id, output, final_output.
-// --full-access matches the other laptop adapters (approvals already bypassed).
 function fxAskParser(sink: Sink): TurnParser {
   const lines: string[] = [];
   return {
@@ -320,7 +374,7 @@ function fxAskParser(sink: Sink): TurnParser {
     end() {
       const raw = lines.join("\n").trim();
       if (!raw) return;
-      const ev = parseJsonLine(raw);
+      const ev = parseJsonLine(raw, sink);
       if (!ev) return;
       if (str(ev.session_id)) sink.session(ev.session_id);
       const text =
@@ -338,11 +392,11 @@ const fx: Harness = {
   id: "fx",
   name: "fx",
   bin: "fx",
-  argv({ text, sessionId }) {
+  argv({ text, sessionId }, env) {
     return [
       "ask",
       "--json",
-      "--full-access",
+      ...approvalArgs("fx", env),
       ...(sessionId ? ["--resume-id", sessionId] : []),
       "--",
       text,

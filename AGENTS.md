@@ -3,23 +3,64 @@
 Dash is a phone app (Expo, Android + iOS) that chats with free-tier models in
 parallel and with the coding agents on your own computer over Tailscale.
 
+## Release law O15: tester army or nothing ships
+
+Read this before you build, install, promote or merge Dash.
+
+- The test suite is the e2e tester army: `bun run test` (`scripts/army.sh`, specs in `e2e/mbp-army`). It writes a receipt for the exact commit.
+- No green, complete army receipt for that exact commit: no APK, no phone install, no channel/OTA promotion, no merge. `laws/release/check.py` decides; `scripts/build-native-android.sh`, `scripts/phone-install.sh`, CI and `promote-preview.yml` call it and exit non-zero before anything is built, signed or installed.
+- The law and its proof are in `laws/release/` (Bend, O15). Do not weaken a law, edit the army, or hand-write a receipt to get a pass; the checker rejects all three.
+- Ad-hoc harnesses and one-off proof scripts never count. Put a new journey in `e2e/mbp-army/army.spec.ts` and its feature in `features.json`.
+
 ## Autodevelop
 
 If you are an agent told to autodevelop, donate a coding pass, or pick the
 next issue: read `.cursor/skills/autodevelop/SKILL.md` and run that loop.
-Do not invent a parallel process. Workers open PRs; they never merge `main`.
+Do not invent a parallel process. Workers open PRs; they never merge `main`
+or `dev`.
+
+## Verified OSS Loop
+
+Dash is onboarded to [Verified OSS Loop](https://github.com/kvnloo/verified-oss-loop)
+(`SPEC.md` v0.1, kit revision in `.verified-oss-loop/inventory.yml`). Scheme:
+**rolling**. This is the contribution contract, not a second product loop.
+
+```bash
+python3 .verified-oss-loop/rollout.py show
+```
+
+| Channel | Role |
+|---|---|
+| `preview` | Day-pass feature PR target. Automerge after required checks. |
+| `nightly` | Overnight AI and OMP fast-forward. `overnight/critical-path-*` lands here. |
+| `dev` | Gated integration. Workers never merge. |
+| `main` | Production. Maintainer merge only. Never force-push. |
+
+Workers branch from `origin/nightly` (`worker_base`). Day-pass PRs target
+`preview` (`feature_target`). Unattended overnight PRs target `nightly`. Do not
+open a pile of PRs at `main` unless a human named that base.
+
+Claims are 24h leases (`claimed` / `claimable`). Every PR binds an evidence
+receipt (`head_revision` must be this PR's SHA). Receipt CI runs on
+`preview` and `nightly` only so existing `main` PRs are not retroactively failed.
+
+| Layer | Command |
+|---|---|
+| Test suite (tester army, O15) | `bun run test` |
+| Runtime | `.cursor/skills/verify-dash` (`bun scripts/verify-dash/control-dash.ts`) |
+
+Kit skills live in `skills/`. Dash-owned skills stay in `.cursor/skills/`
+(autodevelop, tdd, verify-dash, dash-*). Prefer `.cursor/skills/` when both
+exist. Re-running `oss-onboard` must not overwrite `source: local` skills.
 
 ## Verification
 
-AI-native work is untrusted until it is proven. Pyramid:
+AI-native work is untrusted until it is proven.
 
-1. **Unit** — `bun test app/src bridge/src shared` (or `bun test` at the repo root).
-2. **TDD** — `.cursor/skills/tdd/SKILL.md`. Fail, then pass. Pin numbers that lock UI geometry.
-3. **Mutation** — `bun scripts/mutate.ts` on `golden-nav.ts`, `bridge-pull.ts`, `motion.ts`, `shared/protocol.ts`, `bridge/src/roster.ts`. Score must stay ≥ 80. This is how an accidental `NAV_CHROME_HEIGHT = 80` dies in CI instead of shipping.
-4. **Runtime** — `.cursor/skills/verify-dash` against live `dash-pair`.
-5. **Device** — Maestro in `.maestro/` for pixels the unit suite cannot see.
-
-Do not skip mutation because the unit tests are green. Surviving mutants are missing assertions.
+1. **Tester army** — `bun run test` (`scripts/army.sh`, specs in `e2e/mbp-army`). This is the only test suite. A new behaviour gets an army journey and a `features.json` entry, never a unit test.
+2. **Release law O15** — `laws/release/`. No green, complete army receipt for the exact commit: no APK, install, promotion or merge (see the O15 section above).
+3. **Typecheck / lint** — `bun run typecheck`, `bun run lint`.
+4. **Device** — web army evidence is not native acceptance (IME, voice, permissions); say so instead of claiming it.
 
 ## Layout
 
@@ -53,3 +94,10 @@ If you need a protocol change, add it to `shared/protocol.ts` with a parser upda
 - No new dependencies for things under 100 lines.
 - Pure black UI, system font, one accent. Match the existing components before adding new ones.
 - Streaming text goes through `app/src/store/text.ts` (per-reply subscriptions, rAF-coalesced). Never put per-token updates in the chats store.
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.

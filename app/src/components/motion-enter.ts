@@ -4,28 +4,20 @@ import {
   FadeOut,
   ZoomIn,
   ZoomOut,
+  ReduceMotion,
 } from "react-native-reanimated";
-import { MOTION_MS, SNAP } from "../motion";
+import { MOTION_MS, entranceDelay } from "../motion";
 
-export const enterUp = FadeInUp.springify()
-  .mass(SNAP.mass)
-  .stiffness(SNAP.stiffness)
-  .damping(SNAP.damping);
+export const enterUp = FadeInUp.duration(MOTION_MS.enter).reduceMotion(ReduceMotion.System);
 
-export const enterDown = FadeInDown.springify()
-  .mass(SNAP.mass)
-  .stiffness(SNAP.stiffness)
-  .damping(SNAP.damping);
+export const enterDown = FadeInDown.duration(MOTION_MS.enter).reduceMotion(ReduceMotion.System);
 
-export const popIn = ZoomIn.springify()
-  .mass(SNAP.mass)
-  .stiffness(SNAP.stiffness)
-  .damping(SNAP.damping);
+export const popIn = ZoomIn.duration(MOTION_MS.enter).reduceMotion(ReduceMotion.System);
 
-export const popOut = ZoomOut.duration(MOTION_MS.exit);
-export const fadeOut = FadeOut.duration(MOTION_MS.exit);
+export const popOut = ZoomOut.duration(MOTION_MS.exit).reduceMotion(ReduceMotion.System);
+export const fadeOut = FadeOut.duration(MOTION_MS.exit).reduceMotion(ReduceMotion.System);
 
 export function staggerUp(index: number) {
-  return enterUp.delay(index * MOTION_MS.stagger);
+  return enterUp.delay(entranceDelay(index));
 }
 

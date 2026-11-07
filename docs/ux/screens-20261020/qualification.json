@@ -1,0 +1,18 @@
+{
+  "sourceHead": "10536f17a4c6f40a7dc3ede1378b78a7e8cb4d2c",
+  "sourceHash": "e9e2e0c933af1645a2b065382811c1c4456254557efdf39bb78906db26466ecc",
+  "viewport": "412x915",
+  "assertions": [
+    "Markdown rendered",
+    "code copy matches",
+    "activity collapsed and expandable",
+    "44px rail and latest hits",
+    "scrub to prompt 7 with preview",
+    "stream preserves reading position",
+    "latest resumes follow",
+    "stream follows bottom",
+    "wheel detaches follow",
+    "390/412/640 layout"
+  ],
+  "errors": []
+}

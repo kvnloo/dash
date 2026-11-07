@@ -1,0 +1,921 @@
+{
+  "schemaVersion": 1,
+  "updated": "2026-09-11",
+  "caseStudy": "docs/design/ai-ui-patterns/synergy.md",
+  "purpose": "Fail-closed AI UI pattern catalog. AODL ids are canonical. Unknown ids must not appear.",
+  "links": {
+    "aodlCatalog": "https://github.com/kvnloo/aodl/blob/main/harnesses/catalog.json",
+    "aodlVisual": "https://github.com/kvnloo/aodl/blob/main/encodings/visual.json",
+    "frontierKb": "https://github.com/kvnloo/frontier-kb",
+    "dashLanguage": "docs/design/language.md"
+  },
+  "aodl": {
+    "executors": ["hermes", "omp", "grok", "codex", "claude", "pi", "fx"],
+    "notSpawnTargets": ["o8", "firstmate"],
+    "topologies": ["solo", "paired", "council", "hierarchy", "mesh", "ring", "star", "swarm", "cluster", "parallel", "pipeline", "supervisor"],
+    "efforts": ["min", "standard", "high", "max", "unknown"],
+    "operatingModes": ["copilot", "overnight", "continuous", "tournament", "batch", "unknown"],
+    "runtimeStates": ["claimed", "running", "paused", "stale", "blocked", "unknown"]
+  },
+  "surfaces": [
+    { "id": "desktop-ide", "label": "Editor with an agent sidecar" },
+    { "id": "desktop-orchestrator", "label": "Fleet board over local CLIs" },
+    { "id": "desktop-chat", "label": "Centered chat column with a history rail" },
+    { "id": "harness-tui", "label": "Terminal executor" },
+    { "id": "mobile-chat", "label": "Single-column consumer chat" },
+    { "id": "mobile-remote-agent", "label": "Phone as control surface for laptop agents" },
+    { "id": "voice-overlay", "label": "Full-screen spoken turn" }
+  ],
+  "products": [
+    {
+      "id": "dash",
+      "name": "Dash",
+      "surfaces": ["mobile-remote-agent", "mobile-chat", "voice-overlay"],
+      "aodlIds": ["omp", "codex", "grok", "claude", "hermes", "pi", "fx"],
+      "frontier": null,
+      "sources": ["https://github.com/kvnloo/dash"]
+    },
+    {
+      "id": "t3-code",
+      "name": "T3 Code",
+      "surfaces": ["desktop-orchestrator", "mobile-remote-agent", "desktop-chat"],
+      "aodlIds": [],
+      "frontier": null,
+      "sources": ["https://t3.codes/", "https://github.com/pingdotgg/t3code"]
+    },
+    {
+      "id": "conductor",
+      "name": "Conductor",
+      "surfaces": ["desktop-orchestrator"],
+      "aodlIds": [],
+      "frontier": null,
+      "sources": ["https://www.conductor.build/"]
+    },
+    {
+      "id": "cursor-3",
+      "name": "Cursor 3 (Glass)",
+      "surfaces": ["desktop-ide", "desktop-orchestrator"],
+      "aodlIds": [],
+      "frontier": ["cursor"],
+      "sources": ["https://www.wired.com/story/cusor-launches-coding-agent-openai-anthropic/"]
+    },
+    {
+      "id": "chatgpt",
+      "name": "ChatGPT",
+      "surfaces": ["desktop-chat", "mobile-chat", "voice-overlay"],
+      "aodlIds": [],
+      "frontier": [],
+      "sources": ["https://thebestblogever.co/artificial-intelligence/chatgpt-design-system-architecture"]
+    },
+    {
+      "id": "grok",
+      "name": "Grok",
+      "surfaces": ["desktop-chat", "mobile-chat", "voice-overlay", "harness-tui"],
+      "aodlIds": ["grok"],
+      "frontier": ["grok"],
+      "sources": ["docs/design/language.md"]
+    },
+    {
+      "id": "claude",
+      "name": "Claude / Claude Code",
+      "surfaces": ["desktop-chat", "mobile-chat", "harness-tui", "desktop-ide"],
+      "aodlIds": ["claude"],
+      "frontier": ["claude-code"],
+      "sources": ["https://code.claude.com/docs/en/overview"]
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "surfaces": ["harness-tui", "desktop-orchestrator", "mobile-remote-agent"],
+      "aodlIds": ["codex"],
+      "frontier": ["codex"],
+      "sources": ["https://github.com/openai/codex"]
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini Live",
+      "surfaces": ["mobile-chat", "voice-overlay"],
+      "aodlIds": [],
+      "frontier": [],
+      "sources": ["https://tech-insider.org/chatgpt-voice-vs-grok-voice-vs-gemini-live-2026/"]
+    },
+    {
+      "id": "perplexity",
+      "name": "Perplexity",
+      "surfaces": ["desktop-chat", "mobile-chat"],
+      "aodlIds": [],
+      "frontier": [],
+      "sources": ["https://www.setproduct.com/blog/ai-chat-interface-ui-design"]
+    },
+    {
+      "id": "o8",
+      "name": "o8",
+      "surfaces": ["desktop-orchestrator"],
+      "aodlIds": ["o8"],
+      "frontier": ["o8"],
+      "sources": ["https://o8.run"]
+    },
+    {
+      "id": "omp",
+      "name": "OMP",
+      "surfaces": ["harness-tui"],
+      "aodlIds": ["omp"],
+      "frontier": ["omp"],
+      "sources": ["https://omp.sh/"]
+    },
+    {
+      "id": "hermes",
+      "name": "Hermes Agent",
+      "surfaces": ["harness-tui"],
+      "aodlIds": ["hermes"],
+      "frontier": ["hermes"],
+      "sources": ["https://hermes-agent.nousresearch.com/docs"]
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "surfaces": ["harness-tui", "desktop-orchestrator"],
+      "aodlIds": [],
+      "frontier": ["opencode"],
+      "sources": ["https://t3.codes/"]
+    },
+    {
+      "id": "reality-ai",
+      "name": "Reality AI (task assistant)",
+      "surfaces": ["mobile-chat"],
+      "aodlIds": [],
+      "frontier": [],
+      "sources": ["https://apps.apple.com/rs/app/reality-ai/id6743640212"]
+    }
+  ],
+  "patterns": [
+    {
+      "id": "docked-composer",
+      "name": "Docked composer",
+      "category": "composer",
+      "surfaces": ["mobile-chat", "mobile-remote-agent", "desktop-chat"],
+      "products": ["dash", "chatgpt", "grok", "claude", "t3-code"],
+      "aodl": { "topologies": ["solo"], "operatingModes": ["copilot"], "runtimeStates": ["running"] },
+      "frontierDomains": ["tool-use"],
+      "dash": {
+        "status": "shipped",
+        "where": "app/src/components/Composer.tsx + KeyboardDock",
+        "note": "Pinned to KeyboardStickyView. Floating composers are a fail."
+      },
+      "summary": "Composer sticks to the keyboard / bottom chrome. Never overlaps the last token.",
+      "sources": ["https://www.setproduct.com/blog/ai-chat-interface-ui-design"]
+    },
+    {
+      "id": "sticky-ime",
+      "name": "IME-sticky dock",
+      "category": "composer",
+      "surfaces": ["mobile-chat", "mobile-remote-agent"],
+      "products": ["dash", "chatgpt", "grok"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "shipped",
+        "where": "KeyboardDock / KeyboardStickyView",
+        "note": "S25 is edge-to-edge. softwareKeyboardLayoutMode resize does not lift the UI."
+      },
+      "summary": "Android IME must push the composer. Window resize is not a substitute.",
+      "sources": [".cursor/skills/verify-dash/SKILL.md"]
+    },
+    {
+      "id": "floating-composer",
+      "name": "Floating composer",
+      "category": "composer",
+      "surfaces": ["mobile-chat"],
+      "products": [],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "reject",
+        "where": null,
+        "note": "Covers the last streaming line. Common chatbot bug."
+      },
+      "summary": "FAB or overlapping input over the message stream.",
+      "sources": ["https://www.setproduct.com/blog/ai-chat-interface-ui-design"]
+    },
+    {
+      "id": "slash-live-attach",
+      "name": "Slash scope for live sessions",
+      "category": "composer",
+      "surfaces": ["mobile-remote-agent", "desktop-orchestrator"],
+      "products": ["dash", "t3-code"],
+      "aodl": { "topologies": ["solo"], "operatingModes": ["copilot"], "runtimeStates": ["running"] },
+      "frontierDomains": ["frameworks"],
+      "dash": {
+        "status": "in-flight",
+        "where": "Composer /live (PR #32)",
+        "note": "Lists running catalog-harness sessions on the paired host."
+      },
+      "summary": "Composer search attaches to a live CLI session instead of minting a thread.",
+      "sources": ["https://github.com/kvnloo/dash/issues/28"]
+    },
+    {
+      "id": "assistant-plain-text",
+      "name": "Assistant as plain text",
+      "category": "thread",
+      "surfaces": ["mobile-chat", "mobile-remote-agent", "desktop-chat"],
+      "products": ["dash", "grok"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "shipped",
+        "where": "ChatScreen / MessageRow",
+        "note": "Grok rule. No assistant bubble."
+      },
+      "summary": "Model text is left-aligned prose. User stays in a bubble.",
+      "sources": ["docs/design/language.md"]
+    },
+    {
+      "id": "user-bubble",
+      "name": "User bubble",
+      "category": "thread",
+      "surfaces": ["mobile-chat", "mobile-remote-agent"],
+      "products": ["dash", "grok", "chatgpt", "claude"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "shipped",
+        "where": "theme.ts colors.bubble #1f1f1f",
+        "note": "Tighter bottom-right radius."
+      },
+      "summary": "User turns are solid dark bubbles on pure black.",
+      "sources": ["docs/design/language.md"]
+    },
+    {
+      "id": "history-date-groups",
+      "name": "Date-grouped history",
+      "category": "layout",
+      "surfaces": ["mobile-chat", "mobile-remote-agent"],
+      "products": ["dash", "grok"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["learning-acceleration"],
+      "dash": {
+        "status": "shipped",
+        "where": "ChatsPane",
+        "note": "Today / Yesterday sections, circular avatars, 1-line preview."
+      },
+      "summary": "Conversation list grouped by day, Grok History density.",
+      "sources": ["docs/design/storyboard.md"]
+    },
+    {
+      "id": "top-tabs-not-bottom",
+      "name": "Top tabs with dots",
+      "category": "layout",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": ["cluster"], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "shipped",
+        "where": "AppNav / golden-nav.ts",
+        "note": "Bots | Chats | Orchestra. White dots, not underline, not pill fill, not a bottom bar."
+      },
+      "summary": "Three swipe panes, 60px chrome, gold pill on native.",
+      "sources": ["docs/design/language.md"]
+    },
+    {
+      "id": "bottom-tab-bar",
+      "name": "Bottom tab bar",
+      "category": "layout",
+      "surfaces": ["mobile-chat"],
+      "products": ["chatgpt", "gemini"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "reject",
+        "where": null,
+        "note": "Language forbids a bottom tab bar. Search dock already occupies the bottom."
+      },
+      "summary": "Consumer chat apps put History / Chats / Apps on a bottom bar.",
+      "sources": ["https://thebestblogever.co/artificial-intelligence/chatgpt-design-system-architecture"]
+    },
+    {
+      "id": "three-pane-desktop",
+      "name": "Project / thread / chat three-pane",
+      "category": "layout",
+      "surfaces": ["desktop-orchestrator", "desktop-chat"],
+      "products": ["t3-code", "claude", "chatgpt", "perplexity"],
+      "aodl": { "topologies": ["star"], "operatingModes": ["copilot"], "runtimeStates": ["running"] },
+      "frontierDomains": ["frameworks"],
+      "dash": {
+        "status": "reject",
+        "where": null,
+        "note": "390px. History is a swipe pane, not a persistent rail."
+      },
+      "summary": "Sidebar of projects, middle thread list, right chat + optional diff.",
+      "sources": ["https://betterstack.com/community/guides/ai/t3-code/"]
+    },
+    {
+      "id": "bottom-search-dock",
+      "name": "Bottom @ search dock",
+      "category": "layout",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": ["mesh"], "operatingModes": ["copilot"], "runtimeStates": [] },
+      "frontierDomains": ["tool-use"],
+      "dash": {
+        "status": "shipped",
+        "where": "MainScreen search dock",
+        "note": "Scope chips only when focused: @bot @chat @file."
+      },
+      "summary": "Global search lives in the dock, not a hamburger drawer.",
+      "sources": ["docs/design/language.md"]
+    },
+    {
+      "id": "thinking-cursor",
+      "name": "Blinking stream cursor",
+      "category": "streaming",
+      "surfaces": ["desktop-chat", "mobile-chat"],
+      "products": ["chatgpt"],
+      "aodl": { "topologies": [], "operatingModes": ["copilot"], "runtimeStates": ["running"] },
+      "frontierDomains": ["ai-ml"],
+      "dash": {
+        "status": "reject",
+        "where": null,
+        "note": "Dash uses status line + effort orbs, not a ChatGPT caret."
+      },
+      "summary": "Inline pulsating caret while tokens commit on rAF.",
+      "sources": ["https://thebestblogever.co/artificial-intelligence/chatgpt-design-system-architecture"]
+    },
+    {
+      "id": "effort-orbs",
+      "name": "AODL effort orbs",
+      "category": "streaming",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": ["copilot", "overnight"], "runtimeStates": ["running"] },
+      "frontierDomains": ["ai-ml"],
+      "dash": {
+        "status": "in-flight",
+        "where": "EffortOrbs vs PulseDot (PR #31)",
+        "note": "Orbit count from visual.json efforts. Unknown effort fails closed."
+      },
+      "summary": "Thinking indicator is catalog visual state, not a generic pulse.",
+      "sources": ["https://github.com/kvnloo/aodl/blob/main/encodings/visual.json"]
+    },
+    {
+      "id": "tool-status-line",
+      "name": "One-line tool status",
+      "category": "streaming",
+      "surfaces": ["mobile-remote-agent", "harness-tui", "desktop-orchestrator"],
+      "products": ["dash", "omp", "claude", "codex", "t3-code"],
+      "aodl": { "topologies": ["solo"], "operatingModes": ["copilot"], "runtimeStates": ["running"] },
+      "frontierDomains": ["tool-use"],
+      "dash": {
+        "status": "shipped",
+        "where": "protocol status events + MessageRow",
+        "note": "Empty string clears. Do not grow a tool accordion on the phone."
+      },
+      "summary": "Tool start is a short status. Tool end clears it. Prose resumes after a break.",
+      "sources": ["bridge/src/harnesses.ts"]
+    },
+    {
+      "id": "rAF-stream",
+      "name": "rAF-coalesced streaming text",
+      "category": "streaming",
+      "surfaces": ["mobile-remote-agent", "desktop-chat"],
+      "products": ["dash", "chatgpt"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": ["running"] },
+      "frontierDomains": ["ai-ml"],
+      "dash": {
+        "status": "shipped",
+        "where": "app/src/store/text.ts",
+        "note": "Never put per-token updates in the chats store. Bridge batches at 40ms."
+      },
+      "summary": "High token rates must not thrash layout. Commit on animation frames.",
+      "sources": ["AGENTS.md"]
+    },
+    {
+      "id": "turn-error-inline",
+      "name": "Structured turn error",
+      "category": "errors",
+      "surfaces": ["mobile-remote-agent", "desktop-orchestrator"],
+      "products": ["dash", "t3-code", "chatgpt"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": ["blocked"] },
+      "frontierDomains": ["tool-use"],
+      "dash": {
+        "status": "in-flight",
+        "where": "protocol error + done; bridge turn-safety (PR #34)",
+        "note": "Hang is 124, cancel is 130, malformed JSON is an error event. Other sessions stay up."
+      },
+      "summary": "Failure is a chat error, not a crashed control plane.",
+      "sources": ["https://github.com/kvnloo/dash/issues/4"]
+    },
+    {
+      "id": "voice-orb",
+      "name": "Voice orb overlay",
+      "category": "voice",
+      "surfaces": ["voice-overlay"],
+      "products": ["dash", "grok", "chatgpt", "gemini"],
+      "aodl": { "topologies": ["solo"], "operatingModes": ["copilot"], "runtimeStates": ["running"] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "shipped",
+        "where": "VoiceScreen, 190px orb, Say something…",
+        "note": "Grok Voice ref. STT is on the laptop. Gemini camera share is out of scope."
+      },
+      "summary": "Full-screen spoken turn. Caption tracks idle / listening / thinking / speaking.",
+      "sources": ["docs/design/storyboard.md"]
+    },
+    {
+      "id": "live-session-adopt",
+      "name": "Adopt a live harness session as a chat",
+      "category": "roster",
+      "surfaces": ["mobile-remote-agent", "desktop-orchestrator"],
+      "products": ["dash", "t3-code", "codex", "omp"],
+      "aodl": { "topologies": ["solo", "paired"], "operatingModes": ["copilot", "overnight"], "runtimeStates": ["running"] },
+      "frontierDomains": ["frameworks"],
+      "dash": {
+        "status": "in-flight",
+        "where": "hello.hosts merge + Chats (PR #23)",
+        "note": "Unknown harness ids stay out. Do not mint a second empty thread."
+      },
+      "summary": "The GUI attaches to the CLI session. It is not a second agent.",
+      "sources": ["https://github.com/kvnloo/dash/issues/20"]
+    },
+    {
+      "id": "live-transcript-hydrate",
+      "name": "Hydrate transcript on open",
+      "category": "thread",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash", "t3-code"],
+      "aodl": { "topologies": ["solo"], "operatingModes": ["copilot"], "runtimeStates": ["running"] },
+      "frontierDomains": ["tool-use"],
+      "dash": {
+        "status": "in-flight",
+        "where": "ChatScreen open live row (PR #30)",
+        "note": "OMP jsonl fills the empty thread so send continues the same sessionId."
+      },
+      "summary": "Opening a live row shows history, not a blank composer.",
+      "sources": ["https://github.com/kvnloo/dash/issues/26"]
+    },
+    {
+      "id": "roster-host-list",
+      "name": "Host roster with status dots",
+      "category": "roster",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": ["mesh", "star"], "operatingModes": ["copilot"], "runtimeStates": ["running", "paused", "unknown"] },
+      "frontierDomains": ["frameworks"],
+      "dash": {
+        "status": "shipped",
+        "where": "BotsPane + bridge/src/roster.ts",
+        "note": "Dots, never Online pills. Cursor host may be empty. Issue #8 claimed."
+      },
+      "summary": "Tailnet machines and live agents as rows, not a desktop board.",
+      "sources": ["docs/orchestration.md"]
+    },
+    {
+      "id": "worktree-per-thread-board",
+      "name": "Worktree-per-thread board",
+      "category": "orchestra",
+      "surfaces": ["desktop-orchestrator"],
+      "products": ["conductor", "cursor-3", "t3-code", "o8"],
+      "aodl": { "topologies": ["parallel", "swarm", "supervisor"], "operatingModes": ["overnight", "tournament"], "runtimeStates": ["running", "claimed"] },
+      "frontierDomains": ["frameworks"],
+      "dash": {
+        "status": "reject",
+        "where": null,
+        "note": "Isolation is a laptop concern (OMP worktrees, firstmate). Phone shows Orchestra cards, not a merge board."
+      },
+      "summary": "Each agent task gets an isolated git worktree and a card on a desktop board.",
+      "sources": ["https://www.conductor.build/"]
+    },
+    {
+      "id": "aodl-orchestra-graph",
+      "name": "AODL network as Orchestra",
+      "category": "orchestra",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": ["mesh", "hierarchy", "star"], "operatingModes": ["continuous"], "runtimeStates": ["running", "paused"] },
+      "frontierDomains": ["frameworks"],
+      "dash": {
+        "status": "in-flight",
+        "where": "OrchestraPane (PR #24). Main still uses DEMO_ORCHESTRAS.",
+        "note": "Vendored catalog network ids. Visual.json avatars are #21."
+      },
+      "summary": "Orchestra lists aodl/dash/frontier-kb/hermes-keel, not fake demo tiles.",
+      "sources": ["https://github.com/kvnloo/dash/issues/19"]
+    },
+    {
+      "id": "inline-diff-review",
+      "name": "Inline / split diff review",
+      "category": "review",
+      "surfaces": ["desktop-orchestrator", "desktop-ide"],
+      "products": ["t3-code", "codex", "cursor-3", "conductor"],
+      "aodl": { "topologies": ["paired"], "operatingModes": ["copilot"], "runtimeStates": ["paused"] },
+      "frontierDomains": ["tool-use"],
+      "dash": {
+        "status": "gap",
+        "where": null,
+        "note": "Later: deep-link a PR. Do not render a split diff on the S25."
+      },
+      "summary": "Turn-by-turn file diffs next to the chat. Desktop only.",
+      "sources": ["https://betterstack.com/community/guides/ai/t3-code/"]
+    },
+    {
+      "id": "one-button-pr",
+      "name": "One-button commit and PR",
+      "category": "review",
+      "surfaces": ["desktop-orchestrator"],
+      "products": ["t3-code"],
+      "aodl": { "topologies": ["pipeline"], "operatingModes": ["batch"], "runtimeStates": ["claimed"] },
+      "frontierDomains": ["frameworks"],
+      "dash": {
+        "status": "gap",
+        "where": null,
+        "note": "Laptop agents already open PRs. Phone is the remote, not GitHub."
+      },
+      "summary": "Thread writes to its own branch. One control commits, pushes, opens the PR.",
+      "sources": ["https://t3.codes/"]
+    },
+    {
+      "id": "byo-harness",
+      "name": "Bring your own harness subscription",
+      "category": "identity",
+      "surfaces": ["desktop-orchestrator", "mobile-remote-agent"],
+      "products": ["dash", "t3-code"],
+      "aodl": { "topologies": ["mesh"], "operatingModes": ["copilot"], "runtimeStates": [] },
+      "frontierDomains": ["tokenomics", "frameworks"],
+      "dash": {
+        "status": "shipped",
+        "where": "hello.harnesses + ethos #15",
+        "note": "Missing binaries stay available:false. o8 and firstmate are not spawn targets."
+      },
+      "summary": "The GUI does not resell tokens. It orchestrates CLIs the laptop already has.",
+      "sources": ["https://github.com/kvnloo/dash/issues/15"]
+    },
+    {
+      "id": "visual-json-avatar",
+      "name": "Catalog visual cores as avatars",
+      "category": "identity",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["ai-ml"],
+      "dash": {
+        "status": "in-flight",
+        "where": "HarnessAvatar (PR #25)",
+        "note": "OpenAvatar is a separate product. Letter-in-circle is the main fallback today."
+      },
+      "summary": "Avatar hue and silhouette come from visual.json, not the first letter.",
+      "sources": ["https://github.com/kvnloo/aodl/blob/main/encodings/visual.json"]
+    },
+    {
+      "id": "model-picker-as-identity",
+      "name": "Hosted model picker as identity",
+      "category": "identity",
+      "surfaces": ["desktop-chat", "mobile-chat"],
+      "products": ["chatgpt", "claude", "grok", "gemini"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["tokenomics"],
+      "dash": {
+        "status": "reject",
+        "where": null,
+        "note": "Dash identity is harness + host. Model choice lives in the CLI."
+      },
+      "summary": "ChatGPT-style GPT-4o / Opus dropdown as the primary identity.",
+      "sources": ["https://thebestblogever.co/artificial-intelligence/chatgpt-design-system-architecture"]
+    },
+    {
+      "id": "permission-mode-toggle",
+      "name": "Full-access vs supervised",
+      "category": "review",
+      "surfaces": ["desktop-orchestrator", "harness-tui"],
+      "products": ["t3-code", "claude", "codex"],
+      "aodl": { "topologies": ["solo"], "operatingModes": ["copilot"], "runtimeStates": ["blocked"] },
+      "frontierDomains": ["tool-use"],
+      "dash": {
+        "status": "gap",
+        "where": null,
+        "note": "Laptop adapters currently bypass approvals. Phone should surface blocked, not re-implement the TUI."
+      },
+      "summary": "Runtime toggle between auto-approve and permission prompts.",
+      "sources": ["https://mintlify.wiki/pingdotgg/t3code/guides/web-interface"]
+    },
+    {
+      "id": "status-dot-not-pill",
+      "name": "Status dot, never Online pill",
+      "category": "roster",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": ["running", "paused", "unknown"] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "shipped",
+        "where": "BotsPane / Orchestra cards",
+        "note": "--ok / --faint / --warn. AODL runtimeStates are the richer vocabulary."
+      },
+      "summary": "Presence is a 6px dot. Consumer Online/Away pills are out.",
+      "sources": ["docs/design/language.md"]
+    },
+    {
+      "id": "control-plane-not-executor",
+      "name": "Control plane is not an executor",
+      "category": "orchestra",
+      "surfaces": ["desktop-orchestrator", "mobile-remote-agent"],
+      "products": ["dash", "t3-code", "o8", "conductor"],
+      "aodl": { "topologies": ["supervisor", "star"], "operatingModes": ["continuous"], "runtimeStates": [] },
+      "frontierDomains": ["frameworks"],
+      "dash": {
+        "status": "shipped",
+        "where": "shared catalog + hello.harnesses",
+        "note": "o8 is a control room. firstmate is a distro. Neither is a Dash spawn target."
+      },
+      "summary": "AODL kind split: executor vs control-room vs distro. Fail closed on unknown ids.",
+      "sources": ["https://github.com/kvnloo/aodl/blob/main/encodings/visual.json", "https://github.com/kvnloo/aodl/blob/main/harnesses/catalog.json"]
+    },
+    {
+      "id": "dead-attach-control",
+      "name": "Dead attach affordance",
+      "category": "composer",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "Composer.tsx plus icon",
+        "note": "No onPress. Target is hide until protocol attach exists."
+      },
+      "summary": "A visible + that does nothing trains distrust. Hide it.",
+      "sources": ["app/src/components/Composer.tsx"]
+    },
+    {
+      "id": "press-scale-squash",
+      "name": "PressScale squash, not opacity",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "PressScale vs Header IconButton",
+        "note": "Rows use SNAP squash. Header still uses pressed background."
+      },
+      "summary": "One press language. Transform only. Haptic at the action, not inside PressScale.",
+      "sources": [".cursor/skills/dash-motion/SKILL.md"]
+    },
+    {
+      "id": "gel-nav-pill",
+      "name": "Gel nav pill without glow overlay",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "shipped",
+        "where": "AppNav + golden-nav.ts",
+        "note": "UI-thread follow, stretch X squash Y. No GOLD_GLOW on native."
+      },
+      "summary": "Peripheral destination marker. Motion is gel, not a second highlight.",
+      "sources": ["app/src/components/golden-nav.ts"]
+    },
+    {
+      "id": "no-list-entering",
+      "name": "No entering animations on FlashList rows",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "shipped",
+        "where": "ChatsPane BotsPane ChatScreen OrchestraPane",
+        "note": "Recycle remounts would replay enter hitch."
+      },
+      "summary": "Rest phase of the synergy loop. Scroll is not a stage.",
+      "sources": [".cursor/skills/dash-motion/SKILL.md"]
+    },
+    {
+      "id": "reduce-motion-idle",
+      "name": "Idle loops honor Reduce Motion",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent", "voice-overlay"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": ["running"] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "PulseDot.tsx VoiceScreen.tsx",
+        "note": "Springs honor ReduceMotion.System. Idle withTiming loops do not."
+      },
+      "summary": "The rest gate is an OS setting. Idle motion must obey it.",
+      "sources": ["app/src/components/PulseDot.tsx"]
+    },
+    {
+      "id": "connection-pill-when-offline",
+      "name": "Connection chrome only when broken",
+      "category": "errors",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": ["stale"] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "shipped",
+        "where": "ConnectionPill.tsx",
+        "note": "Hidden when online or idle. Tap retries."
+      },
+      "summary": "Prune unused chrome. Healthy bridge is silence.",
+      "sources": ["app/src/components/ConnectionPill.tsx"]
+    },
+    {
+      "id": "fleet-attention-marks",
+      "name": "Peripheral marks for other live agents",
+      "category": "roster",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash", "t3-code", "conductor"],
+      "aodl": { "topologies": ["parallel", "mesh"], "operatingModes": ["overnight"], "runtimeStates": ["running", "blocked"] },
+      "frontierDomains": ["tool-use"],
+      "dash": {
+        "status": "gap",
+        "where": "ChatsPane streaming dot only",
+        "note": "One open thread. Other live harnesses need AODL runtimeState on Bots/Orchestra."
+      },
+      "summary": "One fovea. Other agents compress to peripheral marks, never a split view.",
+      "sources": ["docs/design/ai-ui-patterns/attention.md"]
+    },
+    {
+      "id": "mislabeled-expand",
+      "name": "Expand control that opens Voice",
+      "category": "identity",
+      "surfaces": ["mobile-remote-agent", "voice-overlay"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "AppNav left circle",
+        "note": "accessibilityLabel Expand navigates to Voice. Target is a Voice label."
+      },
+      "summary": "A lying label spends a tap and trains distrust.",
+      "sources": ["app/src/components/AppNav.tsx"]
+    },
+    {
+      "id": "unreachable-conversations",
+      "name": "Stack route with no navigator",
+      "category": "layout",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "ConversationsScreen + App.tsx",
+        "note": "Registered modal. Zero navigate callers. Duplicate of ChatsPane."
+      },
+      "summary": "Chrome the human cannot retrieve is unused chrome. Prune or wire.",
+      "sources": ["app/App.tsx"]
+    },
+    {
+      "id": "unused-header",
+      "name": "Unused Header and TopTabs",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "Header.tsx TopTabs.tsx",
+        "note": "Zero screen imports. Still teach opacity press and labeled tabs."
+      },
+      "summary": "Dead components keep a second chrome language alive.",
+      "sources": ["app/src/components/Header.tsx"]
+    },
+    {
+      "id": "glyph-collision",
+      "name": "Same + glyph, two verbs",
+      "category": "composer",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "GlobalSearchBar Mention vs Composer Attach",
+        "note": "Main inserts @. Chat claims Attach and does nothing."
+      },
+      "summary": "One glyph must mean one verb. Hide Chat + until attach is real.",
+      "sources": ["app/src/components/Composer.tsx", "app/src/components/GlobalSearchBar.tsx"]
+    },
+    {
+      "id": "send-haptic-weight",
+      "name": "Weighted send haptic",
+      "category": "motion",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "ChatScreen sendTurn / onSend",
+        "note": "tap is used for send, queue, and voice utterance."
+      },
+      "summary": "success tags a completed encode. tap is chrome. error is offline.",
+      "sources": ["app/src/screens/ChatScreen.tsx"]
+    },
+    {
+      "id": "voice-hands-only",
+      "name": "Voice stage with no End control",
+      "category": "voice",
+      "surfaces": ["voice-overlay"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "VoiceScreen",
+        "note": "VAD barge-in works. Escape is AppNav. Unused Pressable import."
+      },
+      "summary": "Hands-free is the job. A labeled leave control is still required.",
+      "sources": ["app/src/screens/VoiceScreen.tsx"]
+    },
+    {
+      "id": "longpress-delete",
+      "name": "Long-press delete without hint",
+      "category": "layout",
+      "surfaces": ["mobile-chat", "mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["learning-acceleration"],
+      "dash": {
+        "status": "gap",
+        "where": "ChatsPane",
+        "note": "350ms confirm. No accessibilityHint. Do not add swipe until this is gone."
+      },
+      "summary": "An expert gesture is not an encode path unless it is hinted.",
+      "sources": ["app/src/screens/panes/ChatsPane.tsx"]
+    },
+    {
+      "id": "pull-to-refresh-roster",
+      "name": "Pull-to-refresh hosts",
+      "category": "roster",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash", "t3-code"],
+      "aodl": { "topologies": ["mesh"], "operatingModes": [], "runtimeStates": ["stale"] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "BotsPane",
+        "note": "No RefreshControl. Pill retry only when already broken."
+      },
+      "summary": "A healthy-looking stale roster has no encode path.",
+      "sources": ["app/src/screens/panes/BotsPane.tsx"]
+    },
+    {
+      "id": "debug-only-harness-picker",
+      "name": "Harness picker opened only from debug",
+      "category": "identity",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": ["solo"], "operatingModes": ["copilot"], "runtimeStates": [] },
+      "frontierDomains": ["frameworks"],
+      "dash": {
+        "status": "gap",
+        "where": "ChatScreen HarnessPicker",
+        "note": "Mounted. Visible via debugUi.chatHarnessPickerOpen only."
+      },
+      "summary": "Identity must be retrievable. Debug is not a UI.",
+      "sources": ["app/src/screens/ChatScreen.tsx"]
+    },
+    {
+      "id": "silent-tappable",
+      "name": "Tappable row that no-ops",
+      "category": "orchestra",
+      "surfaces": ["mobile-remote-agent"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": [] },
+      "frontierDomains": ["neuroscience"],
+      "dash": {
+        "status": "gap",
+        "where": "OrchestraDetailScreen openAgent",
+        "note": "haptic.select then return when no linked chat."
+      },
+      "summary": "Haptic without navigation is a lie. Disable or mint.",
+      "sources": ["app/src/screens/OrchestraDetailScreen.tsx"]
+    },
+    {
+      "id": "live-region",
+      "name": "Announce streaming and connection",
+      "category": "errors",
+      "surfaces": ["mobile-remote-agent", "voice-overlay"],
+      "products": ["dash"],
+      "aodl": { "topologies": [], "operatingModes": [], "runtimeStates": ["running", "stale"] },
+      "frontierDomains": [],
+      "dash": {
+        "status": "gap",
+        "where": "MessageRow ConnectionPill",
+        "note": "No accessibilityLiveRegion. Pill has no accessibilityLabel."
+      },
+      "summary": "Motion-only cues fail TalkBack. Status is a live region.",
+      "sources": ["app/src/components/ConnectionPill.tsx"]
+    }
+  ]
+}
