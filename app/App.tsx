@@ -2,7 +2,7 @@ import { TileDetailProvider } from "./src/components/InteractiveTile";
 import { DensityProvider } from "./src/components/Density";
 import { TileGestureProvider } from "./src/components/TileGestures";
 import { OrbMotionProvider } from "./src/components/OrbMotion";
-import { DarkTheme, NavigationContainer, type Theme } from "@react-navigation/native";
+import { DarkTheme, getPathFromState, NavigationContainer, type Theme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
@@ -17,6 +17,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BridgePullOverlay, BridgePullProvider } from "./src/components/BridgePull";
 import type { RootStackParamList } from "./src/navigation";
 import { createDeepLinkRouter } from "./src/lib/deep-link";
+import { resolveChatWindowOrigin } from "./src/lib/chat-row-actions";
 import { bridge } from "./src/net/bridge";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { ApprovalsScreen } from "./src/screens/ApprovalsScreen";
@@ -63,7 +64,18 @@ const linking = {
       ArtifactStage: "stage",
       Trace: "trace",
       Lab: "lab",
+      Chat: "Chat",
     },
+  },
+  // Never persist the row's animation geometry in a web URL, including old Chat routes.
+  getPathFromState: (...args: Parameters<typeof getPathFromState>): string => {
+    const path = getPathFromState(...args);
+    const [pathname, query] = path.split("?", 2);
+    if (pathname !== "/Chat" || !query) return path;
+    const params = new URLSearchParams(query);
+    params.delete("window");
+    const next = params.toString();
+    return next ? `${pathname}?${next}` : pathname;
   },
 };
 
@@ -148,7 +160,7 @@ export default function App() {
                 <Stack.Screen name="Approvals" component={ApprovalsScreen} />
                 <Stack.Screen name="Notices" component={NoticesScreen} />
                 <Stack.Screen name="ArtifactStage" component={ArtifactStageScreen} />
-                <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => route.params?.window ? CHAT_WINDOW : {}} />
+                <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => resolveChatWindowOrigin(route.params?.window) ? CHAT_WINDOW : {}} />
                 <Stack.Screen name="OrchestraDetail" component={OrchestraDetailScreen} />
                 <Stack.Screen name="Voice" component={VoiceScreen} options={{ presentation: "fullScreenModal" }} />
                 <Stack.Screen name="Pair" component={PairScreen} />
