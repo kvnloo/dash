@@ -130,8 +130,10 @@ for (const owner of ['legacy', 'foreign', 'current']) {
       return chat.id;
     }, { owner });
     await page.reload();
-    const close = page.getByRole('button', { name: 'Close chat window', exact: true });
-    if (await close.isVisible()) await close.click();
+    // Row window geometry is never restored from the URL (#649): a reloaded Chat is full-screen.
+    const back = page.getByRole('button', { name: 'Back', exact: true });
+    await expect(back).toBeVisible();
+    await back.click();
     await composer(page).fill('/harness OMP');
     await page.getByRole('button').filter({ has: page.getByText('OMP', { exact: true }) }).filter({ has: page.getByText('Harness', { exact: true }) }).click();
     await expect(page.getByRole('heading', { name: 'New chat', exact: true })).toBeVisible();

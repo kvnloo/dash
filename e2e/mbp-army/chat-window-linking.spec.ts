@@ -27,6 +27,10 @@ test('chat row navigation never serializes its window rect and survives reload',
 
 test('legacy string window deep link degrades to full screen and row reopens', async ({ page, bridge }) => {
   await openChat(page, bridge);
+  // An unsent new chat is re-keyed by the bridge on reload; one real turn pins the row id.
+  const prompt = 'ARMY_WINPARAM_1106 legacy window';
+  await send(page, prompt);
+  await expect(page.getByText(`ARMY_STREAM_BEGIN ARMY_REPLY: ${prompt}`, { exact: true })).toBeVisible();
   await page.goto(`${web}/Chat?window=%5Bobject%20Object%5D`, { waitUntil: 'domcontentloaded' });
   // A legacy URL can supply a string, but it cannot be treated as a window origin.
   await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeVisible();
