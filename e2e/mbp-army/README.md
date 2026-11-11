@@ -32,6 +32,20 @@ Start at eight workers, back off when environment errors or thermal-throttle del
 
 Run `bun test e2e/mbp-army/retention.test.ts` through `fleet-build` to check the recording policy. Failure-only retention reduces persistent artifacts from passing tests, but still records each test while it runs. It does not bound failed-run history, HTML report copies, final screenshots, or temporary browser profiles. Those require separate lifecycle handling.
 
+For a bounded browser comparison, run this from a disposable fleet snapshot only. It creates synthetic cases beside the suite and preserves the evidence without cleanup. Never run it in the live army checkout.
+
+```bash
+fleet-build --node mbp --light --local-data --wait 1800 \
+  --src-include e2e/mbp-army --src-include package.json --src-include bun.lock \
+  --fetch e2e --out /tmp/army-retention-evidence -- sh -c '
+    export PLAYWRIGHT_BROWSERS_PATH="$PWD/.retention-browsers"
+    bun install --frozen-lockfile &&
+    bun node_modules/playwright/cli.js install chromium --only-shell &&
+    python3 e2e/mbp-army/verify-retention.py'
+```
+
+The script first proves that the original policy fails the regression and the fixed policy passes. It then runs two passing cases and one deliberate failure twice per policy, with headless Chromium and no app or bridge. It checks that failed cases retain diagnostics and passing cases do not. `e2e/retention-proof-*/summary.json` records file sizes, elapsed time, and retained bytes per second, including HTML copies. This measures synthetic artifact retention, not live Dash growth or host writes.
+
 The suite is run by the existing `playwright/test` export in Playwright 1.64.1; no new test dependency is needed.
 
 ## Performance
