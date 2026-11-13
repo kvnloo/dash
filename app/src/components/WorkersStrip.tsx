@@ -6,6 +6,7 @@ import type { TreeNode } from "../lib/tree";
 import type { Settings } from "../model";
 import { colors, fonts } from "../theme";
 import { haptic } from "../haptics";
+import { hermesBotIdentity } from "../lib/bot-identity";
 
 /** One delegated worker, as reported by the bridge's /hermes/workers (status only, never transcript). */
 export type Worker = { id: string; title: string; phase: string; tool?: string; startedAt: number; lastActivityAt: number };
@@ -58,7 +59,7 @@ function age(ms: number): string {
 }
 
 /** Compressed in-chat view of how many subagents are working and on what. Orchestra keeps the full graph. */
-export function WorkersStrip({ workers }: { workers: Worker[] }): React.JSX.Element | null {
+export function WorkersStrip({ workers, profile }: { workers: Worker[]; profile?: string }): React.JSX.Element | null {
   const [open, setOpen] = useState(false);
   if (workers.length === 0) return null;
   const first = workers[0];
@@ -74,6 +75,8 @@ export function WorkersStrip({ workers }: { workers: Worker[] }): React.JSX.Elem
       </Pressable>
       {open ? <Tree inline label="Subagents" nodes={workers.map((w): TreeNode => ({
         id: `worker:${w.id}`, kind: "bot", label: w.title, shimmer: true,
+        botIdentity: hermesBotIdentity(profile),
+        thinking: { phase: w.tool ? "tool" : w.phase === "streaming" ? "streaming" : "thinking" },
         meta: `${doing(w)} · ${age(now - w.startedAt)}`, status: "running",
       }))} /> : null}
     </View>

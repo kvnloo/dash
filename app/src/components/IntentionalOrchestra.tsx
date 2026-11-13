@@ -9,6 +9,8 @@ import { PressScale } from "./PressScale";
 import { InteractiveTile } from "./InteractiveTile";
 import { Tree } from "./Tree";
 import type { TreeNode } from "../lib/tree";
+import { chatBotIdentity } from "../lib/bot-identity";
+import { AgentOrb } from "./AgentOrb";
 
 const kindColor = { chat: colors.gold, subagent: colors.orchestraSubagent, repo: colors.gold, host: colors.textMuted };
 const stateColor = { idle: colors.textMuted, live: colors.information, "needs-you": colors.warn, failing: colors.danger, done: colors.textMuted };
@@ -45,7 +47,7 @@ export function OrchestraGraph({ graph, width: _width, children: _children, acti
   function card(node: MapNode, compact = false) {
     const dim = !matchesFilter(node, current, filter) || node.online === false;
     return <InteractiveTile key={node.id} title={node.label} summary={`${node.kind}: ${node.label}, ${node.state}. ${node.reason || ""}`} onOpen={() => setFocusId(node.id)} extraActions={onFeedback ? [{ id: "feedback", label: "Feedback", run: () => onFeedback(node) }] : []} style={[styles.card, compact && styles.compact, { opacity: dim ? 0.4 : 1, borderColor: node.collision || node.state === "failing" ? colors.danger : focusId === node.id ? colors.gold : colors.border }, node.collision && styles.collision]}>
-      <View style={styles.row}><Glyph kind={node.kind} /><Text style={styles.label} numberOfLines={2}>{node.label}</Text><Text style={[styles.state, { color: stateColor[node.state] }]}>{node.kind === "host" ? node.online === false ? "offline" : "online" : node.state === "needs-you" ? "needs you" : node.state}</Text></View>
+      <View style={styles.row}>{node.kind === "chat" || node.kind === "subagent" ? <AgentOrb size={24} face={chatBotIdentity(node.harness ?? "unknown", node.profileId).face} thinking={node.thinking} label={`${node.profileId ?? node.harness ?? "Unknown bot"} · ${node.thinking.phase}`} /> : <Glyph kind={node.kind} />}<Text style={styles.label} numberOfLines={2}>{node.label}</Text><Text style={[styles.state, { color: stateColor[node.state] }]}>{node.kind === "host" ? node.online === false ? "offline" : "online" : node.state === "needs-you" ? "needs you" : node.state}</Text></View>
       {node.kind === "repo" ? <Text style={styles.meta} numberOfLines={2}>{node.branch || "branch unknown"} · {node.dirty === undefined ? "dirty unknown" : `${node.dirty} dirty`} · {node.collision ? "W1 COLLISION" : node.reason}</Text> : null}
       {node.kind === "host" ? <Text style={styles.meta}>{node.health || "Health unavailable"}</Text> : null}
       {!compact && node.kind !== "host" && node.kind !== "repo" ? <><Text style={styles.meta} numberOfLines={2}>{node.reason || "No live state reported"}</Text><Text style={styles.action} numberOfLines={2}>→ {node.action || TRIAGE_LANES.find(l => l.state === node.state)?.action}</Text></> : null}
@@ -61,6 +63,8 @@ export function OrchestraGraph({ graph, width: _width, children: _children, acti
     return { id: node.id, label: node.label, kind: node.kind === "repo" ? "repo" : node.kind === "host" ? "host" : "session",
       meta: node.state, detail: `${node.parentId ? "delegated · " : ""}${node.reason || "No live state reported"}`,
       shimmer: node.state === "live", dimmed: !matchesFilter(node, current, filter),
+      botIdentity: node.kind === "chat" || node.kind === "subagent" ? chatBotIdentity(node.harness ?? "unknown", node.profileId) : undefined,
+      thinking: node.kind === "chat" || node.kind === "subagent" ? node.thinking : undefined,
       onPress: () => setFocusId(node.id), children: children.length ? children : undefined };
   };
   return <View style={styles.root} testID="orchestra-graph">

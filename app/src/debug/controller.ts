@@ -14,8 +14,11 @@ import {
   type DebugScenarioId,
 } from "./scenarios";
 import { debugUi } from "./ui-store";
+import { parseOrchestra } from "../../../shared/orchestra";
+import type { AgentInfo, HostInfo } from "../../../shared/protocol";
 
 export type DebugCommand =
+  | { action: "visualEvidence"; snapshot: unknown }
   | { action: "scenario"; id: DebugScenarioId }
   | { action: "navigate"; screen: keyof RootStackParamList; params?: RootStackParamList[keyof RootStackParamList] }
   | { action: "reset"; seed?: DebugSeedVariant }
@@ -66,6 +69,24 @@ export async function runScenario(id: DebugScenarioId): Promise<void> {
 
 export async function runDebugCommand(cmd: DebugCommand): Promise<unknown> {
   switch (cmd.action) {
+    case "visualEvidence": {
+      // Replace the demo seed with an actual, read-only endpoint capture. No generated chat text,
+      // no outbound credentials, no execution authority and no paired service writes.
+      const snapshot = parseOrchestra(cmd.snapshot);
+      if (!snapshot) return { ok: false };
+      const hosts: HostInfo[] = snapshot.nodes.filter(node => node.kind === "host").map(host => ({
+        id: host.id.replace(/^host:/, ""), name: host.label, hostname: host.label,
+        online: host.online === true, self: false,
+        agents: snapshot.nodes.filter(node => node.hostId === host.id && (node.kind === "chat" || node.kind === "subagent")).map((node): AgentInfo => ({
+          id: node.id, name: node.label, kind: node.harness ?? "unknown", status: node.state === "live" ? "running" : "available",
+          sessionId: node.sessionId, profileId: node.profileId, cwd: node.path, lastActivityAt: node.updatedAt,
+        })),
+      }));
+      store.set(s => ({ ...s, settings: { address: "127.0.0.1:9999", token: "", harness: "hermes", inAppFeedback: false }, connection: { status: "offline", hosts, harnesses: [] }, activeId: null, conversations: [] }));
+      debugUi.set(s => ({ ...s, orchestraFixture: false, mainTabIndex: 0 }));
+      debugResetTo("Main", {}); flushPendingDebugNavigation();
+      return { ok: true, source: "supplied endpoint snapshot", generatedAt: snapshot.generatedAt };
+    }
     case "contextTarget": {
       // Debug-only loopback proof target. Never import a user's live transcript into a fixture.
       if (!/^(localhost|127\.0\.0\.1):\d+$/.test(cmd.address)) return { ok: false };

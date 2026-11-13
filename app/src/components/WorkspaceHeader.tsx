@@ -8,6 +8,7 @@ import { createConversation, store } from "../store/app";
 import { colors, fonts, type } from "../theme";
 import { TAB_LABELS, clampTab } from "./golden-nav";
 import { IconButton } from "./ScreenHeader";
+import { RoadmapButton } from "./RoadmapButton";
 
 /**
  * The row under the top navigation bar on Main: the current pane's name (the dot pager has
@@ -24,6 +25,7 @@ export function WorkspaceHeader({ navigation, tab, titleOnly = false }: { naviga
 export function WorkspaceActions({ navigation }: { navigation: NavigationProp<RootStackParamList> }) {
   const pending = approvals.use(s => s.items.filter(actionable).length);
   return <View style={styles.actions}>
+    <RoadmapButton />
     {pending > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Approvals, ${pending} pending`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approvals}>
       <Text style={styles.approvalsLabel}>Approvals</Text>
       {/* A sans numeral on a gold pill: a serif "1" beside a label reads as the letter I. */}

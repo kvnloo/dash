@@ -27,7 +27,7 @@ export function orchestraMap(hosts: HostInfo[], conversations: Conversation[]): 
       const latest = chat?.messages.filter(m => m.role === "assistant").at(-1);
       const state: MapState = latest?.state === "error" || latest?.state === "interrupted" ? "failing" : thinking.phase === "waiting-approval" ? "needs-you" : thinking.phase !== "idle" || agent.status === "running" ? "live" : "idle";
       const id = `chat:${host.id}:${agent.id}`;
-      nodes.push({ id, label: agent.name, kind: "chat", state, thinking: state === "live" && thinking.phase === "idle" ? { phase: "thinking" } : thinking, hostId, path: agent.cwd });
+      nodes.push({ id, label: agent.name, kind: "chat", state, thinking: state === "live" && thinking.phase === "idle" ? { phase: "thinking" } : thinking, hostId, path: agent.cwd, profileId: agent.profileId, harness: agent.kind, sessionId: agent.sessionId });
       edges.push({ id: `hosted:${id}`, from: hostId, to: id, relation: "hosted", active: false });
       if (agent.cwd) {
         const repoId = `repo:${host.id}:${agent.cwd}`;

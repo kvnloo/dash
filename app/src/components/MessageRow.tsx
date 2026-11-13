@@ -20,16 +20,22 @@ import type { DetailMode } from "../lib/reply-details";
 import { bridge } from "../net/bridge";
 import { StageLinks } from "./artifact-stage/StageLinks";
 import { PressScale } from "./PressScale";
+import { chatBotIdentity, type BotIdentity } from "../lib/bot-identity";
+import type { OrbState } from "../lib/orb-phase";
 
 export const MessageRow = memo(function MessageRow({
   message,
   harnessId,
   thinking,
+  identity,
+  showFace = true,
   detailMode = "Compact",
 }: {
   message: Message;
   harnessId?: string;
   thinking?: Thinking;
+  identity?: BotIdentity;
+  showFace?: boolean;
   detailMode?: DetailMode;
 }) {
   if (message.role === "user") {
@@ -52,6 +58,8 @@ export const MessageRow = memo(function MessageRow({
   if (message.delivery === "queued" && message.state === "streaming") return null;
   return (
     <View style={styles.assistantRow}>
+      <View style={styles.faceSlot}>{showFace ? <MessageFace message={message} thinking={thinking} identity={identity ?? chatBotIdentity(harnessId)} /> : null}</View>
+      <View style={styles.assistantContent}>
       {message.summaries?.filter(summary => summary.kind === "turn").map(summary => <ThinkingSummaryChip key={summary.blockId} turnId={message.turnId} summary={summary} />)}
       <ReplyBlocks turnId={message.turnId} summaries={message.summaries} parts={message.parts} mode={detailMode} request={callId => {
         const chat = store.get().conversations.find(c => c.messages.some(m => m.id === message.id));
@@ -59,11 +67,19 @@ export const MessageRow = memo(function MessageRow({
         bridge.send({ type: "tool_detail", id: message.turnId, callId, ...(history ? { messageId: message.id, sessionId: chat?.sessionId, profileId: chat?.profileId, hostId: chat?.targetHostId } : {}) });
       }} />
       <AssistantBody key={message.id} message={message} harnessId={harnessId} detailMode={detailMode} />
-      {thinking && thinking.phase !== "idle" ? <View style={styles.statusRow}><AgentOrb size={20} thinking={thinking} /><Text style={styles.statusText}>working · {thinking.tool ?? "terminal"}</Text></View> : null}
+
       {!message.parts?.length && detailMode !== "Hide" && (message.activity?.length || (message.state === "done" && message.status)) ? <Disclosure key={`${message.id}:activity`} label={`Activity · ${message.activity?.length ?? 1} ${(message.activity?.length ?? 1) === 1 ? "update" : "updates"}`} text={(message.activity ?? [message.status ?? ""]).join("\n")} /> : null}
+      </View>
     </View>
   );
 });
+
+function MessageFace({ message, thinking, identity }: { message: AssistantMessage; thinking?: Thinking; identity: BotIdentity }) {
+  const liveText = useKeyed(replyText, message.turnId);
+  const connection = store.use(s => s.connection.status);
+  const phase: OrbState = thinking ?? (message.state === "streaming" ? messageThinking(message, { liveText, connection }) : { phase: "idle" });
+  return <AgentOrb size={28} face={identity.face} thinking={phase} animated={thinking !== undefined} label={`${identity.name} · ${phase.phase}`} />;
+}
 
 function Disclosure({ label, text }: { label: string; text: string }) {
   const [open, setOpen] = useState(false);
@@ -88,7 +104,6 @@ function ThinkingMarker({ turnState, waiting = false }: { harnessId?: string; tu
 
 function AssistantBody({ message, harnessId, detailMode }: { message: AssistantMessage; harnessId?: string; detailMode: DetailMode }) {
   const liveText = useKeyed(replyText, message.turnId);
-  const connection = store.use(s => s.connection.status);
   switch (message.state) {
     case "pending":
       // The user bubble already says it is queued; a second orb row repeated it.
@@ -97,12 +112,7 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
       return (
         <>
           {liveText || message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={liveText || message.text} /> : null}
-          <View style={styles.statusRow}>
-            <AgentOrb size={20} thinking={messageThinking(message, { liveText, connection })} label={message.handoff === "queued" ? "queued" : "streaming"} />
-            <Text style={styles.statusText} numberOfLines={1}>
-              {message.status ?? "Working"}
-            </Text>
-          </View>
+
         </>
       );
     case "done":
@@ -212,7 +222,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   userText: { color: colors.text, ...type.body },
-  assistantRow: { paddingHorizontal: space.lg, paddingVertical: 6 },
+  assistantRow: { paddingHorizontal: space.lg, paddingVertical: 6, flexDirection: "row", gap: 8 },
+  faceSlot: { width: 28, paddingTop: 2 },
+  assistantContent: { flex: 1, minWidth: 0 },
   assistantText: { color: colors.text, ...type.body },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, minHeight: 22 },
   statusText: { color: colors.textTertiary, ...type.mono, flexShrink: 1 },

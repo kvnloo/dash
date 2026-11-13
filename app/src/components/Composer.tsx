@@ -30,6 +30,7 @@ import { PressScale } from "./PressScale";
 import { ComposerSuggestions } from "./ComposerSuggestions";
 import { composerMode, type SendMode } from "../lib/composer-mode";
 import { haptic } from "../haptics";
+import { ComposerMotion, SendReadiness } from "./ComposerMotion";
 
 interface Props {
   context?: ContextControl;
@@ -69,6 +70,7 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
   const [cursor, setCursor] = useState<Selection | undefined>(undefined);
   /** While dictating, focus the field without raising the keyboard; a tap on the field restores normal typing. */
   const [dictating, setDictating] = useState(false);
+  const [focused, setFocused] = useState(false);
   const onDictate = useCallback(async () => {
     setDictating(true);
     const result = await dictate();
@@ -150,6 +152,7 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
   }, [canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
 
   return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
+    <ComposerMotion busy={streaming} focused={focused} />
     {drafts.length > 0 ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips} accessibilityLabel="Attachments">
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}
@@ -157,13 +160,13 @@ export const Composer = memo(function Composer({ context, disabled, streaming, s
     ) : null}
     {steerBusy && !editingQueue ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
     <View style={[styles.field, thumb.row, editingQueue && styles.previewField]}>
-      <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={changeText} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
+      <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={changeText} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
       <View style={[styles.controls, thumb.row, editingQueue && thumb.align]}>
         {context ? <ContextGauge control={context} /> : null}
         <PressScale accessibilityRole="button" accessibilityLabel="Attach file" onPress={onAttach} disabled={disabled || editingQueue} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale>
         <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onTap={voiceCall ? onVoice : undefined} accessibilityLabel={voiceCall ? `Live call, ${voiceCall.phase}. Open voice` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
         {streaming ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale> : null}
-        <PressScale accessibilityRole="button" accessibilityLabel={editingQueue ? "Save queued merge" : streaming && !steerBusy ? "Queue" : sendMode.action} accessibilityHint={editingQueue ? "Keep this merged message queued for the next turn" : sendMode.label} onPress={submit} disabled={!canSend} style={[styles.hit, editingQueue && styles.previewSave]}>{editingQueue ? <Text style={styles.chipName}>Save queued</Text> : <View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View>}</PressScale>
+        <PressScale accessibilityRole="button" accessibilityLabel={editingQueue ? "Save queued merge" : streaming && !steerBusy ? "Queue" : sendMode.action} accessibilityHint={editingQueue ? "Keep this merged message queued for the next turn" : sendMode.label} onPress={submit} disabled={!canSend} style={[styles.hit, editingQueue && styles.previewSave]}><SendReadiness ready={canSend}>{editingQueue ? <Text style={styles.chipName}>Save queued</Text> : <View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View>}</SendReadiness></PressScale>
       </View>
     </View>
   </GlassSurface></View>;

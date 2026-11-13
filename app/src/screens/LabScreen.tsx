@@ -7,6 +7,7 @@ import { fade } from "../motion";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
+import { BotFaceLab } from "../components/BotFaceLab";
 import type { OrbPhase } from "../lib/orb-phase";
 
 const HERO_PHASES: OrbPhase[] = ["listening", "speaking", "thinking", "tool", "connecting", "idle"];
@@ -66,6 +67,7 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
   const P = (section: Section) => latest(records, "lab_pick", section);
 
   const items = useMemo(() => labItems(<>
+        <BotFaceLab />
         <View style={{ gap: 12 }}><Text style={styles.intro}>Compare every component in Compact, Comfortable and Rich. Tap Pick to save a variant on this phone.</Text>
           <InteractiveTile title="Gesture playground" summary="Tap opens detail. Double tap pins locally in this view. Triple tap copies this summary. Hold, slide and release selects a radial action; release in the centre cancels." testID="gesture-playground" style={{ marginHorizontal: 16, padding: sizing.padding, borderWidth: 1, borderColor: tc.rule, borderRadius: 14, backgroundColor: tc.raised }}>
             <Text style={styles.blockT}>Gesture playground</Text><Text style={styles.intro}>Tap: detail · 2×: pin locally · 3×: copy

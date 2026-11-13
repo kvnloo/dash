@@ -56,6 +56,8 @@ import { useZ0LiveState } from "../lib/z0live-state";
 import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
+import { chatBotIdentity } from "../lib/bot-identity";
+import { assistantFaceIds } from "../lib/bot-message-face";
 import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
 import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
@@ -107,6 +109,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     return messages.filter(message => !queued.has(message.id));
   }, [messages, conversation]);
   const anchors = useMemo(() => railTurns(visibleMessages), [visibleMessages]);
+  const faceIds = useMemo(() => assistantFaceIds(visibleMessages), [visibleMessages]);
+  const identity = useMemo(() => chatBotIdentity(conversation?.harness ?? settings?.harness, conversation?.profileId), [conversation?.harness, conversation?.profileId, settings?.harness]);
   useEffect(() => { setFollow(true); }, [conversation?.id, setFollow]);
   const jumpPrompt = useCallback((prompt: number) => {
     const anchor = anchors[prompt];
@@ -269,7 +273,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           ref={listRef}
           data={visibleMessages}
           extraData={external}
-          renderItem={({ item }) => <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
+          renderItem={({ item }) => <MessageRow message={item} identity={identity} showFace={faceIds.has(item.id)} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
           maintainVisibleContentPosition={{ startRenderingFromBottom: true }}
@@ -290,7 +294,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View style={styles.empty}>
-              <AgentOrb size={64} thinking={thinking} label={`${harnessName} ${caption}`} />
+              <AgentOrb size={64} face={identity.face} thinking={thinking} label={`${identity.name} ${caption}`} />
               <Text style={styles.emptyTitle}>{harnessName}</Text>
               <Text style={styles.emptySubtitle}>
                 {online && connection.host ? `on ${connection.host}` : "Ask anything"}
@@ -303,7 +307,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onLatest={() => { dragging.current = false; setFollow(true); scrollToNewest(); }} />
       </KeyboardInsetView>}
       <KeyboardDock>
-        <WorkersStrip workers={workers} />
+        <WorkersStrip workers={workers} profile={conversation?.profileId} />
         <View style={styles.liveRow}>
           <PressScale accessibilityRole="button" accessibilityLabel="Choose harness" onPress={() => { haptic.select(); setPickerVisible(true); }} style={styles.liveChip}><Text style={styles.liveChipText}>{harnessName} · Change</Text></PressScale>
           {approvalCount > 0 ? <PressScale accessibilityRole="button" accessibilityLabel={`Review ${approvalCount} approvals${approvalDryRun ? ", preview only" : ""}`} onPress={() => { haptic.select(); navigation.navigate("Approvals"); }} style={styles.approval}><Text style={styles.approvalText}>{approvalCount} approvals{approvalDryRun ? " · preview" : ""} ›</Text></PressScale> : null}

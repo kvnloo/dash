@@ -3,6 +3,7 @@ import { botSummary } from "./bots";
 import type { TreeNode } from "./tree";
 import { conversationThinking } from "./thinking";
 import type { Conversation } from "../model";
+import { chatBotIdentity, hermesBotIdentity } from "./bot-identity";
 
 /** Display the real OS hostname without changing the MagicDNS routing id. */
 export function hostLabel(host: HostInfo): string {
@@ -20,6 +21,7 @@ export function botsTree(hosts: readonly HostInfo[], open: (host: HostInfo, agen
     const sessions = host.agents.filter(agent => agent.sessionId);
     const sessionNode = (agent: AgentInfo): TreeNode => ({
       id: `${host.id}:session:${agent.id}`, kind: "session", label: agent.name,
+      botIdentity: chatBotIdentity(agent.kind, agent.profileId ?? (agent.kind === "hermes" && agent.id.startsWith("hermes:") ? agent.id.slice(7).split(":")[0] : undefined)),
       detail: agent.openIn ? `Open in ${agent.openIn}` : undefined,
       meta: activity(agent.lastActivityAt, now), status: host.online ? agent.status : "offline", dimmed: !host.online,
       thinking: conversationThinking(conversations.find(chat => chat.sessionId === agent.sessionId && chat.targetHostId === host.id)?.messages ?? [], host.online ? "online" : "offline"),
@@ -45,6 +47,7 @@ export function botsTree(hosts: readonly HostInfo[], open: (host: HostInfo, agen
           const chats = botSessions(bot);
           const anchor = host.agents.find(agent => agent.id === bot.agentId);
           return { id: `${host.id}:bot:${bot.id}`, kind: "bot", label: bot.name, detail: botSummary(bot), meta: `${chats.length} chats`, status: bot.status, dimmed: !host.online,
+            botIdentity: chatBotIdentity(anchor?.kind ?? bot.runtime, anchor?.profileId ?? (anchor?.id.startsWith("hermes:") ? anchor.id.slice(7).split(":")[0] : undefined)),
             onLongPress: () => actions(host, bot),
             children: () => chats.length ? chats.map(sessionNode) : [{ id: `${host.id}:bot:${bot.id}:new`, kind: "session", label: anchor ? "New chat" : "No sessions reported", onPress: anchor ? () => open(host, anchor) : undefined }],
           };
@@ -55,7 +58,7 @@ export function botsTree(hosts: readonly HostInfo[], open: (host: HostInfo, agen
           const installed = agents.filter(agent => !agent.sessionId);
           return { id: `${host.id}:harness:${kind}`, kind: "harness", label: installed.length === 1 ? installed[0]?.name ?? kind : kind.toUpperCase(), meta: `${chats.length} chats`, dimmed: !host.online,
             status: host.online ? agents.some(agent => agent.status === "running") ? "running" : agents.some(agent => agent.status === "available") ? "available" : "offline" : "offline",
-            children: () => [...chats.map(sessionNode), ...installed.map(agent => ({ id: `${host.id}:new:${agent.id}`, kind: "session", label: installed.length === 1 ? "New chat" : agent.name, detail: agent.detail, onPress: () => open(host, agent) } satisfies TreeNode))],
+            children: () => [...chats.map(sessionNode), ...installed.map(agent => ({ id: `${host.id}:new:${agent.id}`, kind: kind === "hermes" ? "bot" : "session", label: kind === "hermes" ? agent.profileId ?? agent.name : installed.length === 1 ? "New chat" : agent.name, botIdentity: kind === "hermes" ? hermesBotIdentity(agent.profileId ?? (agent.id.startsWith("hermes:") ? agent.id.slice(7) : undefined)) : chatBotIdentity(kind), detail: agent.detail, onPress: () => open(host, agent) } satisfies TreeNode))],
           };
         }),
         ...(!bots?.length && !kinds.length ? [{ id: `${host.id}:empty`, kind: "note", label: host.online ? "No bots or sessions reported" : "Host offline" } satisfies TreeNode] : []),
