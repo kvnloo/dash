@@ -11,8 +11,7 @@ import { toolTree } from "../lib/tool-tree";
 import { ToolInspector } from "./ToolInspector";
 import { PressScale } from "./PressScale";
 import { Feather } from "@expo/vector-icons";
-import { formatTool } from "../../../shared/tool-format";
-import { toolProgressLabel } from "../lib/turn-feedback";
+import { compactToolPreview, toolProgressLabel } from "../lib/turn-feedback";
 import type { ToolView } from "../lib/reply-details";
 
 /** Fixed compact body (3 × 16px) keeps FlashList measurement stable during streaming. */
@@ -56,9 +55,9 @@ export const ReplyBlocks = memo(function ReplyBlocks({ turnId, parts, summaries,
 function ToolBlock({ tools, mode, accent, children }: { tools: ToolView[]; mode: DetailMode; accent: string; children: React.ReactNode }) {
   const [expanded, setExpanded] = useState<boolean | null>(null);
   const open = expanded ?? mode === "Full";
-  const latest = tools.findLast(tool => tool.status === "error") ?? tools.at(-1);
-  if (!latest) return null;
-  const formatted = formatTool({ ...latest, output: latest.output.slice(-4096) });
+  const preview = compactToolPreview(tools);
+  if (!preview) return null;
+  const { tool: latest, formatted } = preview;
   return <View style={styles.block}>
     <PressScale accessibilityRole="button" accessibilityLabel="Tool calls" accessibilityHint={toolProgressLabel(tools)} accessibilityState={{ expanded: open }} aria-expanded={open} onPress={() => setExpanded(!open)} style={styles.header}>
       <Feather name={open ? "chevron-down" : "chevron-right"} size={14} color={accent} />
@@ -68,6 +67,7 @@ function ToolBlock({ tools, mode, accent, children }: { tools: ToolView[]; mode:
     <View style={!open ? styles.hidden : undefined} accessibilityElementsHidden={!open} importantForAccessibility={open ? "auto" : "no-hide-descendants"} aria-hidden={!open} pointerEvents={open ? "auto" : "none"}>{children}</View>
     {!open ? <View style={styles.toolPreview}>
       <Text style={styles.toolTitle} numberOfLines={2}>{formatted.title}</Text>
+      {formatted.detail ? <Text style={styles.toolTitle} numberOfLines={2}>{formatted.detail.slice(0, 4096)}</Text> : null}
       <CompactTail error={latest.status === "error"} text={formatted.output.trimEnd() || (latest.status === "live" ? "Waiting for output…" : latest.status === "error" ? "Tool failed without output" : "Completed without output")} />
     </View> : null}
   </View>;
