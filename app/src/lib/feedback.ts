@@ -25,7 +25,7 @@ export type FeedbackIssue = {
 };
 
 export function inAppFeedbackEnabled(settings: Settings | null): boolean {
-  return settings?.inAppFeedback !== false;
+  return false; // E2E TEST WORKTREE ONLY: feedback mode off so the main composer sends (was: settings?.inAppFeedback !== false)
 }
 
 export function githubIssueFromFeedback(action: FeedbackAction): FeedbackIssue {
