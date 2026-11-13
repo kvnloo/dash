@@ -158,6 +158,19 @@ or attach automatically. The chat explains how to reopen the native session from
 the correct paired computer's list or create a new chat. There is no silent
 legacy assignment, endpoint-alias equivalence or draft transfer.
 
+Only a conversation owned by the selected address shadows a matching native
+Chats or search result. Other saved rows remain selectable as **saved local**
+history, separately from the native resumable row. Selecting the latter adopts
+its current endpoint without relabeling, deleting or moving the saved draft.
+Harness search likewise reuses only an empty chat owned by the exact current address.
+
+`legacy-recovery.spec.ts` authors seven real UI/bridge journeys. Legacy and foreign
+upgrade inputs derive from actual UI-created durable index/files, with only their
+address provenance changed before reload; no debug store is seeded. The journeys
+check both list and search activation, native session resume, retained transcript
+and draft, plus the current/legacy/foreign empty-harness reuse boundary.
+Status: authored, not executed. No native S25 acceptance is claimed.
+
 `endpoint-ownership.spec.ts` exercises two real bridges through ordinary Settings
 and checks actual outbound frames, ACP invocations, session identity and native
 history request paths. Relay-based journeys select their relay before creating
