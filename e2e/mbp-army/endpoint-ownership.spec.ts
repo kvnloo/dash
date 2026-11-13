@@ -64,7 +64,7 @@ test(`endpoint switch ${harness} parks A stream and queue, B receives neither, A
     await expect.poll(async () => (await readFile(join(a.dir, 'army-acp-turns.jsonl'), 'utf8')).includes('"event":"end"')).toBe(true);
     expect(wire.filter(f => f.endpoint === `127.0.0.1:${b.port}` && f.direction === 'out' && ['attach', 'chat'].includes(f.type))).toEqual([]);
     expect(await starts(b)).toEqual([]);
-    expect(requests.filter(request => request.endpoint === `127.0.0.1:${b.port}` && (request.path === '/hermes/activity' || request.path === '/chats/history'))).toEqual([]);
+    expect(requests.filter(request => request.endpoint === `127.0.0.1:${b.port}` && (request.path === '/hermes/phase' || request.path === '/hermes/activity' || request.path === '/chats/history'))).toEqual([]);
     await selectEndpoint(page, a, ownedRow);
     await expect(page.getByText(`ARMY_STREAM_BEGIN ARMY_REPLY: ${queued}`, { exact: true })).toBeVisible({ timeout: 30000 });
     expect(wire.filter(f => f.endpoint === `127.0.0.1:${a.port}` && f.direction === 'out' && f.type === 'attach' && f.turns?.some(turn => turn.id === first.id))).toHaveLength(1);
@@ -76,6 +76,7 @@ test(`endpoint switch ${harness} parks A stream and queue, B receives neither, A
     expect(await starts(b)).toEqual([]);
     if (harness === 'Hermes') {
       await expect.poll(() => requests.some(request => request.endpoint === `127.0.0.1:${a.port}` && request.path === '/hermes/activity')).toBe(true);
+      await expect.poll(() => requests.some(request => request.endpoint === `127.0.0.1:${a.port}` && request.path === '/hermes/phase')).toBe(true);
     }
   } finally {
     await writeFile(info.outputPath('endpoint-wire.json'), JSON.stringify(wire, null, 2));
@@ -84,3 +85,31 @@ test(`endpoint switch ${harness} parks A stream and queue, B receives neither, A
   }
 });
 }
+
+test('endpoint tool details stay with their turn owner across A B A', async ({ page, bridge: a }) => {
+  const b = await createBridge();
+  const wire: { endpoint: string; type: string }[] = [];
+  page.on('websocket', socket => socket.on('framesent', frame => {
+    const message = JSON.parse(String(frame.payload));
+    wire.push({ endpoint: new URL(socket.url()).host, type: message.type });
+  }));
+  try {
+    await openChat(page, a);
+    await send(page, 'ARMY_TOOL_DETAIL endpoint retained output');
+    await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+    const owned = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ has: page.getByText('ARMY_TOOL_DETAIL endpoint retained output', { exact: true }) });
+    const rowId = await owned.getAttribute('data-testid');
+    if (!rowId) throw Error('Missing persisted tool conversation row');
+    const ownedRow = page.getByTestId(rowId);
+    await selectEndpoint(page, b, ownedRow);
+    await page.getByTestId('reply-tool-row').click();
+    await page.getByRole('button', { name: 'Load retained output (up to 1 MiB)', exact: true }).last().click();
+    expect(wire.filter(frame => frame.endpoint === `127.0.0.1:${b.port}` && frame.type === 'tool_detail')).toEqual([]);
+    await page.getByRole('button', { name: 'Close tool details', exact: true }).click();
+    await selectEndpoint(page, a, ownedRow);
+    await page.getByTestId('reply-tool-row').click();
+    await page.getByRole('button', { name: 'Load retained output (up to 1 MiB)', exact: true }).last().click();
+    await expect.poll(() => wire.filter(frame => frame.endpoint === `127.0.0.1:${a.port}` && frame.type === 'tool_detail').length).toBeGreaterThan(0);
+    expect(wire.filter(frame => frame.endpoint === `127.0.0.1:${b.port}` && frame.type === 'tool_detail')).toEqual([]);
+  } finally { await b.dispose(); }
+});

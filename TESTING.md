@@ -38,3 +38,18 @@ Web army evidence is not native phone acceptance: native IME, voice, Android
 permissions and live model behaviour are not covered yet
 (`not_yet_in_army` in `features.json`). Never report a test, screenshot or phone
 check as passed unless it ran against that exact commit.
+
+## Endpoint consumer qualification
+
+`endpoint-ownership.spec.ts` drives the real ChatScreen phase poll and MessageRow
+retained-tool request through A → B → A. Phase reads must resume on A and never
+carry A's native target to B; retained tool requests must obey the turn owner.
+`annotation-voice-target.spec.ts` combines the real web voice journey with a
+deterministic selection matrix for exact-address, legacy, foreign, stale and retry
+targets. Device self-check must report a missing owned eligible Hermes target as
+a failure, not voice readiness. New-chat creation can still use the global online
+connection before a conversation exists.
+
+These are source/fixture qualification journeys, not evidence that S25 microphone,
+native WebRTC, live MBP/Groot harnesses or reconnect acceptance passed. No native
+voice activation, credential grant or token issuance is authorized by these tests.

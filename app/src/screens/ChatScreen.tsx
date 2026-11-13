@@ -342,11 +342,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, [online, conversation?.id, flushQueue]);
 
   useEffect(() => {
-    if (conversation?.queueWaitForIdle && observed?.observed && observed.phase === "idle") {
+    if (online && conversation?.queueWaitForIdle && observed?.observed && observed.phase === "idle") {
       setQueueWaiting(conversation.id, false);
       flushQueue(conversation.id);
     }
-  }, [conversation?.id, conversation?.queueWaitForIdle, observed?.observed, observed?.phase, flushQueue]);
+  }, [online, conversation?.id, conversation?.queueWaitForIdle, observed?.observed, observed?.phase, flushQueue]);
 
   const onStop = useCallback(() => {
     if (conversation) stopConversation(conversation.id, (id) => { bridge.send({ type: "cancel", id }); });

@@ -1,9 +1,10 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
-    {"id": "conversation-endpoint-ownership", "title": "Changing paired endpoints parks foreign streams, queues and native-history reads without rebinding",
+    {"id": "conversation-endpoint-ownership", "title": "Changing paired endpoints parks foreign streams, queues, native phase/history reads and retained tool requests without rebinding",
      "tests": ["endpoint switch OMP parks A stream and queue, B receives neither, A resumes once",
-               "endpoint switch Hermes parks A stream and queue, B receives neither, A resumes once"]},
+               "endpoint switch Hermes parks A stream and queue, B receives neither, A resumes once",
+               "endpoint tool details stay with their turn owner across A B A"]},
     {"id": "history-request-ownership", "title": "Newest history snapshots preserve dispatch ownership and newer observed transcript messages",
      "tests": ["history ownership delayed newest response preserves its transcript owner",
                "history ownership unknown newest response preserves its transcript owner",
@@ -249,7 +250,7 @@
      "tests": ["annotation-entry: window button opens annotation at 390",
                "annotation-entry: window button opens annotation at 800",
                "annotation-entry: pill exit and re-entry clear failed Send and cold reload closes mode"]},
-    {"id": "annotation-voice-target", "title": "Annotated ink reaches the open chat; a bound voice call stays alive to speak a final reply before ending",
+    {"id": "annotation-voice-target", "title": "Voice selection rejects legacy and foreign endpoint provenance; annotated ink reaches the open chat and the bound call stays alive",
      "tests": ["annotation-voice-target: OMP chat beats a voice call bound to Hermes",
                "annotation-voice-target: accepted Hermes ink stays live until spoken reply without cancel"]}
   ],
