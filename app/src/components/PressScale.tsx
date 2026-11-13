@@ -1,8 +1,9 @@
-import { memo, useContext, type ReactNode } from "react";
+import { memo, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { Pressable, StyleSheet, type PressableProps, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   ReduceMotion,
+  cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -45,10 +46,14 @@ export const PressScale = memo(function PressScale({
 }: PressScaleProps) {
   const swiping = useContext(PagerGestureContext);
   const scale = useSharedValue(1);
-  const gesture = Gesture.Manual().enabled(!disabled)
+  // One gesture per mount, not per render: a new Gesture makes GestureDetector re-attach
+  // its native handler and Reanimated event worklets on every parent render.
+  const gesture = useMemo(() => Gesture.Manual().enabled(!disabled)
     .onTouchesDown(() => { scale.value = withTiming(scaleTo, spring); })
     .onTouchesUp((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); })
-    .onTouchesCancelled((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); });
+    .onTouchesCancelled((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); }), [disabled, scaleTo, scale]);
+  // A press released by unmount (view switch) must not keep animating a dead view.
+  useEffect(() => () => cancelAnimation(scale), [scale]);
   const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
     <GestureDetector gesture={gesture}><Pressable
