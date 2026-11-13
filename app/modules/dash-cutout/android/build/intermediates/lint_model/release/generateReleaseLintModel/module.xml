@@ -1,0 +1,18 @@
+<lint-module
+    format="1"
+    dir="/mnt/zer0models/worktrees/dash/rc3-roadmap-resume-apk/app/modules/dash-cutout/android"
+    name=":dash-cutout"
+    type="LIBRARY"
+    maven="app.dash.cutout:dash-cutout:1.0.0"
+    agpVersion="8.12.0"
+    buildFolder="build"
+    bootClassPath="/home/kvn/.cache/dash-native-android-sdk/platforms/android-36/android.jar:/home/kvn/.cache/dash-native-android-sdk/build-tools/35.0.0/core-lambda-stubs.jar"
+    javaSourceLevel="17"
+    compileTarget="android-36"
+    neverShrinking="true">
+  <lintOptions
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>
