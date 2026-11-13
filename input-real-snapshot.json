@@ -1,0 +1,21 @@
+{
+  "source": "Read-only chiefstaff native state.db; exact input lane; bounded text excerpts; no inferred reply",
+  "conversation": {
+    "id": "local-8ccb1205e62ea34ed26ab12af0742bd603a634fac16ab578658430cff325174b",
+    "sessionId": "local-8ccb1205e62ea34ed26ab12af0742bd603a634fac16ab578658430cff325174b",
+    "harness": "hermes",
+    "profileId": "chiefstaff",
+    "profileName": "chiefstaff",
+    "title": "Resume Dash roadmap implementation",
+    "createdAt": 1792638636494,
+    "updatedAt": 1792639779323,
+    "messages": [
+      {
+        "id": "219431",
+        "role": "user",
+        "text": "RESUME EXISTING WORK, not a restart. First read /mnt/zer0models/workspace/zer0/data/operations/sol-runs/20261021-roadmap-input-recovery/REPORT.md for exact preserved edits, failed qualification and blockers. The former Opus-only restriction is superseded by Kevin's explicit authorization of Sol 6.1 and Nous Opus5.5. You are the sole resumed owner of this lane. Check live ownership/processes before editing; hold any tree that has another live owner. Preserve all partial work. Read original task b",
+        "at": 1792638642553
+      }
+    ]
+  }
+}
