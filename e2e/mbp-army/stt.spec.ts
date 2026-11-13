@@ -16,6 +16,10 @@ test("STT fixture returns text while authenticated bridge GETs stay responsive",
   const token = (await readFile(join(bridge.dir, ".dash", "token"), "utf8")).trim();
   const root = "http://127.0.0.1:" + bridge.port;
   const auth = { Authorization: "Bearer " + token };
+  const probeUrl = root + "/chat/context?session=army-stt&profile=army-stt&harness=omp";
+  // Warm the probed route before STT starts: its first-ever call pays a one-time cold path
+  // (310-1176 ms on a loaded MBP, 9a01014d 2026-11-06) that has nothing to do with STT.
+  expect((await fetch(probeUrl, { headers: auth }).then(async r => { await r.text(); return r.status; }))).toBe(200);
   const transcription = fetch(root + "/transcribe", {
     method: "POST",
     headers: { ...auth, "Content-Type": "application/octet-stream" },
@@ -28,7 +32,7 @@ test("STT fixture returns text while authenticated bridge GETs stay responsive",
   for (let i = 0; i < 30; i++) {
     const start = performance.now();
     // A cheap authenticated GET: the context handler returns immediately for OMP.
-    probes.push(fetch(root + "/chat/context?session=army-stt&profile=army-stt&harness=omp", {
+    probes.push(fetch(probeUrl, {
       headers: auth,
     }).then(async response => {
       await response.text();
