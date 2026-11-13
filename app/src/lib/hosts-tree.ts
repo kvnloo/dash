@@ -16,7 +16,7 @@ function activity(at: number | undefined, now: number): string | undefined {
   return minutes < 1 ? "now" : minutes < 60 ? `${minutes}m` : minutes < 1440 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 1440)}d`;
 }
 
-export function hostsTree(hosts: readonly HostInfo[], open: (host: HostInfo, agent: AgentInfo) => void, actions: (host: HostInfo, bot?: BotInfo) => void, now = Date.now(), conversations: readonly Conversation[] = []): TreeNode[] {
+export function hostsTree(hosts: readonly HostInfo[], open: (host: HostInfo, agent: AgentInfo) => void, actions: (host: HostInfo, bot?: BotInfo) => void, canOpen: (host: HostInfo, agent: AgentInfo) => boolean, now = Date.now(), conversations: readonly Conversation[] = []): TreeNode[] {
   return hosts.map(host => {
     if (host.kind === "phone") return {
       id: `host:${host.id}`, kind: "host", label: hostLabel(host), detail: host.address,
@@ -37,7 +37,7 @@ export function hostsTree(hosts: readonly HostInfo[], open: (host: HostInfo, age
       meta: activity(agent.lastActivityAt, now), status: host.online ? agent.status : "offline", dimmed: !host.online,
       thinking: conversationThinking(conversations.find(chat => chat.sessionId === agent.sessionId && chat.targetHostId === host.id)?.messages ?? [], host.online ? "online" : "offline"),
       botFace: agentFace(agent),
-      onPress: () => open(host, agent),
+      onPress: canOpen(host, agent) ? () => open(host, agent) : undefined,
       children: agent.cwd ? () => [{ id: `${host.id}:repo:${agent.id}`, kind: "repo", label: agent.cwd?.split("/").filter(Boolean).pop() ?? "Repository", detail: agent.cwd }] : undefined,
     });
     const botSessions = (bot: BotInfo) => {
@@ -69,7 +69,7 @@ export function hostsTree(hosts: readonly HostInfo[], open: (host: HostInfo, age
               return { identity: botFaceIdentity(key, bot.runtime), state: live?.state ?? states[0]?.state ?? "idle" };
             })(),
             onLongPress: () => actions(host, bot),
-            children: () => chats.length ? chats.map(sessionNode) : [{ id: `${host.id}:bot:${bot.id}:new`, kind: "session", label: anchor ? "New chat" : "No sessions reported", onPress: anchor ? () => open(host, anchor) : undefined }],
+            children: () => chats.length ? chats.map(sessionNode) : [{ id: `${host.id}:bot:${bot.id}:new`, kind: "session", label: anchor ? "New chat" : "No sessions reported", onPress: anchor && canOpen(host, anchor) ? () => open(host, anchor) : undefined }],
           };
         }),
         ...kinds.map((kind): TreeNode => {
@@ -78,7 +78,7 @@ export function hostsTree(hosts: readonly HostInfo[], open: (host: HostInfo, age
           const installed = agents.filter(agent => !agent.sessionId);
           return { id: `${host.id}:harness:${kind}`, kind: "harness", label: installed.length === 1 ? installed[0]?.name ?? kind : kind.toUpperCase(), meta: `${chats.length} chats`, dimmed: !host.online,
             status: host.online ? agents.some(agent => agent.status === "running") ? "running" : agents.some(agent => agent.status === "available") ? "available" : "offline" : "offline",
-            children: () => [...chats.map(sessionNode), ...installed.map(agent => ({ id: `${host.id}:new:${agent.id}`, kind: "session", label: installed.length === 1 ? "New chat" : agent.name, detail: agent.detail, botFace: agentFace(agent), onPress: () => open(host, agent) } satisfies TreeNode))],
+            children: () => [...chats.map(sessionNode), ...installed.map(agent => ({ id: `${host.id}:new:${agent.id}`, kind: "session", label: installed.length === 1 ? "New chat" : agent.name, detail: agent.detail, botFace: agentFace(agent), onPress: canOpen(host, agent) ? () => open(host, agent) : undefined } satisfies TreeNode))],
           };
         }),
         ...(!bots?.length && !kinds.length ? [{ id: `${host.id}:empty`, kind: "note", label: host.online ? "No harnesses or sessions reported" : "Host offline" } satisfies TreeNode] : []),

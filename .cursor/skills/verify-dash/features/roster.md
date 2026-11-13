@@ -29,3 +29,5 @@ Preconditions:
 
 - 401 means the token file is stale vs the process that started `dash-pair`.
 - Host-b may appear as a host without a working Dash chat path. Listing is not the same as sending a turn there.
+- Hosts keeps reported session/history rows visible, but exposes their open action only when the same current `openAgentConversation` eligibility checks allow it. Offline agents, unavailable/build-hidden harnesses and unrouted remote targets do not gain an action merely by appearing in the roster. Authorized routed sessions retain the existing route policy.
+- `e2e/mbp-army/hosts-eligibility.spec.ts` checks the deterministic tree-consumer invariant (history retained; rejected callbacks absent; allowed callbacks preserved). It is not bridge or native-device acceptance.

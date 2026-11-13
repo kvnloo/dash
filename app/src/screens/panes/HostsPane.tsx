@@ -12,11 +12,12 @@ import { profileFromAgent } from "../../lib/roster";
 import { inAppFeedbackEnabled } from "../../lib/feedback";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import type { ScreenProps } from "../../navigation";
-import { openAgentConversation, store } from "../../store/app";
+import { conversationTargetError, openAgentConversation, store } from "../../store/app";
 
 export const HostsPane = memo(function HostsPane({ navigation, focused = true }: Pick<ScreenProps<"Main">, "navigation"> & { focused?: boolean }) {
   const [selectedHost, setSelectedHost] = useState<HostInfo | null>(null);
-  const hosts = store.use(s => s.connection.hosts);
+  const connection = store.use(s => s.connection);
+  const hosts = connection.hosts;
   // Only host sessions matter here; a phone-only chat changing must not re-render this pane.
   const conversations = store.useSelector(sessionChats, shallowArrayEqual);
   const open = useCallback((host: HostInfo, agent: AgentInfo) => {
@@ -35,7 +36,11 @@ export const HostsPane = memo(function HostsPane({ navigation, focused = true }:
       } }] : []),
     ]);
   }, [navigation]);
-  const nodes = useMemo(() => hostsTree(hosts, open, actions, Date.now(), conversations), [hosts, open, actions, conversations]);
+  const nodes = useMemo(() => hostsTree(hosts, open, actions, (host, agent) => {
+    const profile = profileFromAgent(host, agent);
+    // Match openAgentConversation without changing history visibility or route policy.
+    return profile.online && conversationTargetError(profile) === undefined;
+  }, Date.now(), conversations), [connection, open, actions, conversations]);
   return <>
     <Tree nodes={nodes} label="Hosts, harnesses and sessions" />
     {selectedHost && focused ? <Modal transparent animationType="fade" onRequestClose={() => setSelectedHost(null)}>
