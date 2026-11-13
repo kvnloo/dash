@@ -24,10 +24,12 @@ describe("pointer routing", () => {
     expect(routePointer("stylus", true, 2)).toBe("pass");
   });
 
-  test("a stylus touch enters annotation only in pen mode and only when inactive", () => {
+  test("a stylus touch enters annotation without a prior toggle; fingers never auto-enter", () => {
     expect(stylusEnters("stylus", true, false)).toBe(true);
     expect(stylusEnters("stylus", true, true)).toBe(false);
-    expect(stylusEnters("stylus", false, false)).toBe(false);
+    expect(stylusEnters("stylus", false, false)).toBe(true);
+    expect(stylusEnters("touch", false, false)).toBe(false);
+    expect(stylusEnters("mouse", false, false)).toBe(false);
     expect(stylusEnters("touch", true, false)).toBe(false);
   });
 

@@ -203,12 +203,12 @@
     },
     {
       "id": "dash-23",
-      "title": "Agent popup: harness / approvals / model",
+      "title": "Composer \u00b7 model / harness / approvals / token speed",
       "stage": "planned",
       "area": "Controls",
-      "detail": "Brief/research only; no qualified implementation",
+      "detail": "Editable model and harness chips; measured tokens/s remains read-only",
       "evidence": "No qualified implementation receipt.",
-      "next": "Implement in an isolated branch, then pass tests, Android export and phone review."
+      "next": "Show current model/harness in composer; tapping changes them; stream throughput shows actual measurements, never invented values."
     },
     {
       "id": "dash-24",
@@ -267,11 +267,11 @@
     {
       "id": "dash-30",
       "title": "Ripple roadmap inside Dash",
-      "stage": "candidate",
+      "stage": "planned",
       "area": "Controls",
-      "detail": "Shared Ripple renderer + OpenUI adapter under qualification",
-      "evidence": "Ripple 7159f6f; Dash integration candidate, not yet device-qualified.",
-      "next": "Verify inline render, filters, evidence expansion and no source flash on phone."
+      "detail": "BROKEN on phone: OpenUI Lang appears as source; deferred behind voice/S Pen",
+      "evidence": "https://github.com/kvnloo/dash/issues/114 \u00b7 owner screenshot confirms code fallback",
+      "next": "Verify actual loaded APK/Expo renderer and inline output on device before closing #114."
     },
     {
       "id": "native-pair",

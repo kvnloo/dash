@@ -1,7 +1,7 @@
 // Annotation mode: draw over whatever screen is showing, talk, and send it to the
 // agent as one message (composited screenshot + strokes JSON + marked transcript).
 //
-// Entry: Options → Annotate, or an S Pen touch while pen mode is on.
+// Entry: Options → Annotate, or an S Pen touch (automatic stylus detection).
 // No page-global long press: row holds keep their own actions. The tray, frame
 // and preview are siblings outside it so a thumb on the mic never cancels the pen.
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from "expo-audio";
@@ -83,10 +83,12 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const gesture = useMemo(() => {
     const draw = Gesture.Pan()
       .manualActivation(true)
-      .enabled(active || penMode)
+      .enabled(true)
       .onTouchesDown((e, manager) => {
         const kind = pointerKind(e.pointerType);
         if (stylusEnters(kind, penSv.value, activeSv.value)) {
+          penSv.value = true;
+          runOnJS(setPenMode)(true);
           activeSv.value = true;
           runOnJS(enterAnnotation)();
         }
@@ -103,10 +105,10 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       })
       .onEnd(() => { runOnJS(finish)(live.value.slice(), kindSv.value); })
       .onFinalize(() => { live.value = []; });
-    const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(active)
-      .onEnd((e, success) => { if (success && pointerKind(e.pointerType) === "stylus") runOnJS(send)(false); });
+    const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(true)
+      .onEnd((e, success) => { if (success && activeSv.value && pointerKind(e.pointerType) === "stylus") runOnJS(send)(false); });
     return Gesture.Simultaneous(draw, penDoubleTap);
-  }, [active, penMode, finish, send, live, activeSv, penSv, kindSv]);
+  }, [finish, send, live, activeSv, penSv, kindSv]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
