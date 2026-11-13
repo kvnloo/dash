@@ -221,11 +221,11 @@ def main():
         note(step='detail closed', open=page.evaluate("() => !!document.querySelector('[data-testid=\"trace-detail\"]')"))
 
         # --- live pulse animates (normal motion) ---
-        pulse = page.locator('[data-testid="live-pulse"]').first
+        pulse = page.locator('[data-testid="trace-timeline"] [data-testid="live-pulse"]').first
         pulse.scroll_into_view_if_needed()
-        o1 = page.evaluate("() => getComputedStyle(document.querySelector('[data-testid=\"live-pulse\"]').lastElementChild).opacity")
+        o1 = page.evaluate("() => getComputedStyle(document.querySelector('[data-testid=\"trace-timeline\"] [data-testid=\"live-pulse\"]').lastElementChild).opacity")
         time.sleep(0.37)
-        o2 = page.evaluate("() => getComputedStyle(document.querySelector('[data-testid=\"live-pulse\"]').lastElementChild).opacity")
+        o2 = page.evaluate("() => getComputedStyle(document.querySelector('[data-testid=\"trace-timeline\"] [data-testid=\"live-pulse\"]').lastElementChild).opacity")
         note(step='live pulse normal', opacity=[o1, o2])
 
         # --- lab ---
@@ -249,11 +249,11 @@ def main():
         rp = rctx.new_page()
         rp.on('pageerror', lambda e: results['console_errors'].append(f'reduced pageerror: {e}'[:300]))
         rp.goto(f'{base}/trace', wait_until='networkidle')
-        rp.wait_for_selector('[data-testid="live-pulse"]', timeout=30000)
+        rp.wait_for_selector('[data-testid="trace-timeline"] [data-testid="live-pulse"]', timeout=30000)
         time.sleep(0.2)
-        r1 = rp.evaluate("() => getComputedStyle(document.querySelector('[data-testid=\"live-pulse\"]').lastElementChild).opacity")
+        r1 = rp.evaluate("() => getComputedStyle(document.querySelector('[data-testid=\"trace-timeline\"] [data-testid=\"live-pulse\"]').lastElementChild).opacity")
         time.sleep(0.37)
-        r2 = rp.evaluate("() => getComputedStyle(document.querySelector('[data-testid=\"live-pulse\"]').lastElementChild).opacity")
+        r2 = rp.evaluate("() => getComputedStyle(document.querySelector('[data-testid=\"trace-timeline\"] [data-testid=\"live-pulse\"]').lastElementChild).opacity")
         n[0] += 1
         rp.screenshot(path=str(OUT / f'{n[0]:02d}-reduced-motion-top.png'))
         note(step='live pulse reduced motion', opacity=[r1, r2])
