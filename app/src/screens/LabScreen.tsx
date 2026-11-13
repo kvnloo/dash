@@ -112,12 +112,12 @@ export function LabScreen({ navigation }: ScreenProps<"Lab">) {
         </Block>
 
         <Block title="Orb states" note="thinking-orbs via aodl-views; pick a size for trace rows" testID="lab-orb-states">
-          {[20, 40, 64].map((size, i) => (
+          {[20, 40, 64, 48].map((size, i) => (
             <Variant key={size} letter={"ABC"[i] ?? ""} name={`${size}px`} picked={P("orb-states") === `${size}px`} onPick={() => pick("orb-states", `${size}px`)}>
               <View style={styles.orbRow}>
                 {(["idle", "thinking", "tool", "streaming", "waiting-approval"] as ThinkingPhase[]).map((phase) => (
                   <View key={phase} style={styles.orbCell}>
-                    <AgentOrb thinking={{ phase, tool: phase === "tool" ? "terminal" : undefined }} size={size} label={phase} />
+                    <AgentOrb thinking={{ phase: "thinking", tool: phase === "tool" ? "terminal" : undefined }} size={size} label={phase} />
                     <Text style={styles.orbLabel} numberOfLines={1}>{phase === "waiting-approval" ? "approval" : phase}</Text>
                   </View>
                 ))}
