@@ -36,5 +36,5 @@ export function OrchestraPane({ navigation }: Pick<ScreenProps<"Main">, "navigat
       const result = openAgentConversation({ id: agent.id, role: agent.kind, description: agent.detail || "Bridge session", name: agent.name, harness: agent.kind, targetHostId: host.id, profileId: agent.id, sessionId: agent.sessionId, cwd: agent.cwd, online: host.online });
       if ("conversation" in result) navigation.navigate("Chat");
     }
-  }} actions={<WorkspaceActions navigation={navigation} />} />;
+  }} pageRows={[{ id: "orchestra-approvals", label: "Approvals", kind: "action", home: "composer", values: [], index: 0, select: () => {}, run: () => navigation.navigate("Approvals") }]} actions={<WorkspaceActions navigation={navigation} approvals={false} />} />;
 }

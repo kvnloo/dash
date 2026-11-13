@@ -26,7 +26,7 @@ const timing = { ...snappy, reduceMotion: ReduceMotion.System };
  */
 export function ZeroCard({ screen, project, onOpenTrace }: { screen: string; project?: LiveProject; onOpenTrace(): void }) {
   const { info, sizing } = useDensity();
-  const snapshot = traceStore.use(s => s.snapshot);
+  const { snapshot, origin } = traceStore.use(s => s);
   const now = traceNow(snapshot);
   const st = snapshot.stats;
   const [shown, setShown] = useUiFlag(`zero-shown:${screen}`, true);
@@ -67,7 +67,9 @@ export function ZeroCard({ screen, project, onOpenTrace }: { screen: string; pro
   const onLayout = (e: LayoutChangeEvent) => { const next = e.nativeEvent.layout.height; if (Math.abs(next - cardH) > 1) { setCardH(next); h.value = next; } };
 
   const name = project?.name ?? "zero";
-  const running = now.live > 0;
+  // This feed has no session/project binding. Never borrow another worker's state as this
+  // conversation's live activity; keep the global snapshot explicit until a scoped feed exists.
+  const running = origin === "bridge" && now.live > 0;
   return <Animated.View style={[styles.wrap, wrap]} testID="zero-card-wrap">
     <GestureDetector gesture={pan}><View style={styles.fill}>
       <Animated.View onLayout={onLayout} style={[styles.card, { padding: sizing.padding, gap: Math.max(4, sizing.gap) }, card]} testID={shown ? "zero-card" : "zero-card-tucked"}>
@@ -83,7 +85,8 @@ export function ZeroCard({ screen, project, onOpenTrace }: { screen: string; pro
           </View>
           {shows("zeroCard", "path", info) && project ? <Text style={styles.path} numberOfLines={1}>{project.hostName} · {project.cwd}</Text> : null}
           <GestureDetector gesture={swipeUp}><View>
-          <PressScale accessibilityRole="button" accessibilityLabel={`Agent trace: ${now.step}, ${dur(now.elapsedS)}. Open trace.`} accessibilityHint="Swipe up or tap to open the full trace" onPress={openTrace} style={styles.sub} testID="zero-trace">
+          <PressScale accessibilityRole="button" accessibilityLabel={`Global trace, not session scoped. ${origin === "bundled" ? "Historical snapshot" : "Bridge snapshot"}: ${now.step}, ${dur(now.elapsedS)}. Open trace.`} accessibilityHint="Swipe up or tap to open the full trace" onPress={openTrace} style={styles.sub} testID="zero-trace">
+            <Text style={styles.meta}>Global trace · {origin === "bundled" ? "historical snapshot" : "bridge snapshot"} · not session scoped</Text>
             <View style={styles.subRow}>
               <Text style={styles.subTitle}>Trace</Text>
               <Text style={styles.step} numberOfLines={1}>{now.step}</Text>
@@ -93,7 +96,7 @@ export function ZeroCard({ screen, project, onOpenTrace }: { screen: string; pro
             {shows("traceCard", "counts", info) ? <View style={styles.subRow}>
               <Text style={[styles.k, { color: tc.live }]}>{st.live} live</Text>
               <Text style={[styles.k, { color: tc.cut }]}>{st.cut} cut</Text>
-              <Text style={[styles.k, { color: tc.ask }]}>{st.asks} ask</Text>
+              <Text style={[styles.k, { color: tc.ask }]}>{st.asks} approvals asked</Text>
               {shows("traceCard", "workers", info) ? <Text style={styles.k}>{st.workers} workers{now.model ? ` · ${now.model}` : ""}</Text> : null}
             </View> : null}
             {shows("traceCard", "read", info) ? <Text style={styles.read} numberOfLines={2}>{snapshot.read}</Text> : null}

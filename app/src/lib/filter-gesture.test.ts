@@ -50,6 +50,15 @@ describe("filter gesture state machine", () => {
     expect(last(run([...opened, { type: "move", t: 300, x: 50, y: 450, row: 0 }, { type: "up", t: 400 }])).phase).toBe("cancelled");
   });
 
+  test("platform cancellation never taps or commits, including after a live scrub", () => {
+    for (const phase of ["holding", "open", "hovering", "armed", "scrubbing"] as const) {
+      const cancelled = step({ ...IDLE, phase, row: 0, startIndex: 1, index: 3 }, { type: "cancel" });
+      expect(cancelled).toMatchObject({ phase: "cancelled", startIndex: 1, index: 3 });
+      expect(step(cancelled, { type: "up", t: 900 })).toBe(cancelled);
+      expect(transitionHaptic({ ...IDLE, phase }, cancelled)).toBeNull();
+    }
+  });
+
   test("moving inside the button before leaving it does not cancel", () => {
     const s = run([...opened, { type: "move", t: 260, x: 50, y: 495, row: ROW_BUTTON }, { type: "move", t: 270, x: 50, y: 470, row: ROW_NONE }, { type: "move", t: 280, x: 50, y: 495, row: ROW_BUTTON }]);
     expect(s.map(x => x.phase).slice(-3)).toEqual(["open", "open", "cancelled"]);

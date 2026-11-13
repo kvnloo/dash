@@ -59,6 +59,12 @@ export function tapIndex(row: Pick<SettingRow, "index" | "values" | "kind">): nu
 export function usePageControls(screen: string, rows: readonly SettingRow[]): void {
   const latest = useRef(rows);
   latest.current = rows;
-  const signature = rows.map(row => `${row.id}:${row.index}:${row.values.join("|")}`).join(",");
-  useEffect(() => registerPage(screen, latest.current), [screen, signature]);
+  const signature = rows.map(row => `${row.id}:${row.kind}:${row.home}:${row.label}:${row.hint}:${row.index}:${row.values.join("|")}`).join(",");
+  useEffect(() => registerPage(screen, latest.current.map(row => ({
+    ...row,
+    // A callback may change with selection/session even when its displayed value does not.
+    // Keep registered metadata stable, but dispatch to this render's callback by stable ID.
+    select: index => latest.current.find(current => current.id === row.id)?.select(index),
+    run: row.run ? () => latest.current.find(current => current.id === row.id)?.run?.() : undefined,
+  }))), [screen, signature]);
 }

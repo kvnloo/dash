@@ -234,11 +234,6 @@ function FilterButtonInner({ api }: { api: MenuApi }) {
       if (prev.phase === "holding" && next.phase === "open") runOnJS(js.openFromHold)();
       if (next.phase === "armed" && prev.phase === "hovering") {
         runOnJS(js.arm)(next.row);
-        if (meta.value.kinds[next.row] === "action") {
-          gs.value = { ...next, phase: "committed" };
-          runOnJS(js.finish)("committed", next.row, next.startIndex, next.index);
-          return;
-        }
       }
       if ((next.phase === "scrubbing" || next.phase === "armed") && next.index !== prev.index) runOnJS(js.applyIndex)(next.row, next.index);
       if (next.phase !== prev.phase && (next.phase === "committed" || next.phase === "cancelled" || next.phase === "tapped")) {
@@ -299,7 +294,7 @@ function FilterButtonInner({ api }: { api: MenuApi }) {
         feed({ type: "move", t: now, x: t0.absoluteX, y: t0.absoluteY, row: rowAt(t0.absoluteY, s.phase === "armed" || s.phase === "scrubbing"), vx });
       })
       .onTouchesUp((_e, manager) => { feed({ type: "up", t: Date.now() }); manager.end(); })
-      .onTouchesCancelled((_e, manager) => { feed({ type: "up", t: Date.now() }); manager.end(); });
+      .onTouchesCancelled((_e, manager) => { feed({ type: "cancel" }); manager.fail(); });
     // Pressure, where the platform reports it (stylus on Android/web); never required.
     const force = Gesture.Pan()
       .minDistance(0)
@@ -313,7 +308,7 @@ function FilterButtonInner({ api }: { api: MenuApi }) {
   return <View>
     {!hintSeen ? <View pointerEvents="none" style={styles.hint}><Text style={styles.hintText}>Hold · slide · pause · scrub</Text></View> : null}
     <GestureDetector gesture={gesture}>
-      <Animated.View ref={buttonRef} collapsable={false} style={styles.button} accessible accessibilityRole="button" accessibilityLabel="Display filters" accessibilityHint="Tap for info density and layout. Hold and slide to scrub a setting." accessibilityState={{ expanded: api.open }} testID="filter-button">
+      <Animated.View ref={buttonRef} collapsable={false} style={styles.button} accessible accessibilityRole="button" accessibilityLabel="Display filters" accessibilityHint="Tap for info density and layout. Hold and slide to scrub a setting." accessibilityState={{ expanded: api.open }} onAccessibilityTap={() => js.finish("tapped", -1, 0, 0)} testID="filter-button">
         <Feather name="sliders" size={18} color={api.open ? colors.gold : colors.textMuted} />
       </Animated.View>
     </GestureDetector>

@@ -9,6 +9,9 @@ import { PressScale } from "./PressScale";
 import { InteractiveTile } from "./InteractiveTile";
 import { Tree } from "./Tree";
 import type { TreeNode } from "../lib/tree";
+import { usePageControls, type SettingRow } from "../lib/settings-registry";
+import { useDensity } from "./Density";
+import { shows } from "../lib/info-levels";
 
 const kindColor = { chat: colors.gold, subagent: colors.orchestraSubagent, repo: colors.gold, host: colors.textMuted };
 const stateColor = { idle: colors.textMuted, live: colors.information, "needs-you": colors.warn, failing: colors.danger, done: colors.textMuted };
@@ -28,7 +31,8 @@ function Wire({ relation, active }: { relation: MapRelation; active: boolean }) 
   const animated = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return <Animated.View style={[{ width: 18, height: 24, borderLeftWidth: relation === "hosted" ? 1 : 2, borderBottomWidth: relation === "hosted" ? 1 : 2, borderColor: relationColor[relation], borderStyle: relation === "workspace" ? "dotted" : "solid", marginLeft: 10 }, animated]} />;
 }
-export function OrchestraGraph({ graph, width: _width, children: _children, actions, fixture = false, error, warnings = [], onOpen, onFeedback, canOpen }: { graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode; fixture?: boolean; error?: string; warnings?: string[]; onOpen?(node: MapNode): void; onFeedback?(node: MapNode): void; canOpen?(node: MapNode): boolean }) {
+export function OrchestraGraph({ graph, width: _width, children: _children, actions, pageRows = [], fixture = false, error, warnings = [], onOpen, onFeedback, canOpen }: { graph: OrchestraMap; width: number; children?: ReactNode; actions?: ReactNode; pageRows?: readonly SettingRow[]; fixture?: boolean; error?: string; warnings?: string[]; onOpen?(node: MapNode): void; onFeedback?(node: MapNode): void; canOpen?(node: MapNode): boolean }) {
+  const { info, sizing } = useDensity();
   const [view, setView] = useState<OrchestraView>(() => defaultView(graph.nodes));
   const [chosen, setChosen] = useState(false);
   const [filter, setFilter] = useState<MapFilter | null>(null);
@@ -42,13 +46,21 @@ export function OrchestraGraph({ graph, width: _width, children: _children, acti
   const fade = useSharedValue(1);
   const transition = useAnimatedStyle(() => ({ opacity: fade.value }));
   function switchView(next: OrchestraView) { fade.value = 0.5; setView(next); setChosen(true); setFilter(null); setFocusId(null); setFocusOnly(false); fade.value = withTiming(1, { duration: MOTION_MS.exit }); }
+  usePageControls("orchestra", [
+    { id: "orchestra-view", label: "View", kind: "scrub", home: "composer", values: ORCHESTRA_VIEWS.map(mode => mode.title), index: ORCHESTRA_VIEWS.findIndex(mode => mode.id === view), select: index => { const mode = ORCHESTRA_VIEWS[index]; if (mode) switchView(mode.id); } },
+    { id: "orchestra-focus", label: "Scope", kind: "toggle", home: "composer", values: ["All", "Focus"], index: focusOnly ? 1 : 0, select: index => setFocusOnly(index === 1), hint: focusId ? "Show selected node and its neighbours" : "Select a node before focusing" },
+    { id: "orchestra-filter", label: "Highlight", kind: "scrub", home: "composer", values: ["All", ...legend], index: filter ? legend.indexOf(filter.kind) + 1 : 0, select: index => { const kind = legend[index - 1]; setFilter(kind ? { kind, only: false } : null); } },
+    { id: "orchestra-reset", label: "Reset", kind: "action", home: "composer", values: [], index: 0, select: () => {}, run: () => { setFilter(null); setFocusOnly(false); setFocusId(null); } },
+    ...pageRows,
+  ]);
   function card(node: MapNode, compact = false) {
     const dim = !matchesFilter(node, current, filter) || node.online === false;
-    return <InteractiveTile key={node.id} title={node.label} summary={`${node.kind}: ${node.label}, ${node.state}. ${node.reason || ""}`} onOpen={() => setFocusId(node.id)} extraActions={onFeedback ? [{ id: "feedback", label: "Feedback", run: () => onFeedback(node) }] : []} style={[styles.card, compact && styles.compact, { opacity: dim ? 0.4 : 1, borderColor: node.collision || node.state === "failing" ? colors.danger : focusId === node.id ? colors.gold : colors.border }, node.collision && styles.collision]}>
-      <View style={styles.row}><Glyph kind={node.kind} /><Text style={styles.label} numberOfLines={2}>{node.label}</Text><Text style={[styles.state, { color: stateColor[node.state] }]}>{node.kind === "host" ? node.online === false ? "offline" : "online" : node.state === "needs-you" ? "needs you" : node.state}</Text></View>
-      {node.kind === "repo" ? <Text style={styles.meta} numberOfLines={2}>{node.branch || "branch unknown"} · {node.dirty === undefined ? "dirty unknown" : `${node.dirty} dirty`} · {node.collision ? "W1 COLLISION" : node.reason}</Text> : null}
-      {node.kind === "host" ? <Text style={styles.meta}>{node.health || "Health unavailable"}</Text> : null}
-      {!compact && node.kind !== "host" && node.kind !== "repo" ? <><Text style={styles.meta} numberOfLines={2}>{node.reason || "No live state reported"}</Text><Text style={styles.action} numberOfLines={2}>→ {node.action || TRIAGE_LANES.find(l => l.state === node.state)?.action}</Text></> : null}
+    return <InteractiveTile key={node.id} title={node.label} summary={`${node.kind}: ${node.label}, ${node.state}. ${node.reason || ""}`} onOpen={() => setFocusId(node.id)} extraActions={onFeedback ? [{ id: "feedback", label: "Feedback", run: () => onFeedback(node) }] : []} style={[styles.card, compact && styles.compact, { padding: sizing.padding, gap: sizing.gap, opacity: dim ? 0.4 : 1, borderColor: node.collision || node.state === "failing" ? colors.danger : focusId === node.id ? colors.gold : colors.border }, node.collision && styles.collision]}>
+      <View style={styles.row}><Glyph kind={node.kind} /><Text style={styles.label} numberOfLines={2}>{node.label}</Text>{shows("orchestraNode", "state", info) ? <Text style={[styles.state, { color: stateColor[node.state] }]}>{node.kind === "host" ? node.online === false ? "offline" : "online" : node.state === "needs-you" ? "needs you" : node.state}</Text> : null}</View>
+      {shows("orchestraNode", "caption", info) && node.kind === "repo" ? <Text style={styles.meta} numberOfLines={2}>{node.branch || "branch unknown"} · {node.dirty === undefined ? "dirty unknown" : `${node.dirty} dirty`} · {node.collision ? "W1 COLLISION" : node.reason}</Text> : null}
+      {shows("orchestraNode", "caption", info) && node.kind === "host" ? <Text style={styles.meta}>{node.health || "Health unavailable"}</Text> : null}
+      {shows("orchestraNode", "caption", info) && node.kind !== "host" && node.kind !== "repo" ? <><Text style={styles.meta} numberOfLines={2}>{node.reason || "No live state reported"}</Text><Text style={styles.action} numberOfLines={2}>→ {node.action || TRIAGE_LANES.find(l => l.state === node.state)?.action}</Text></> : null}
+      {shows("orchestraNode", "path", info) ? <Text style={styles.meta}>{[node.harness, node.model, node.path].filter(Boolean).join(" · ") || "No further evidence reported"}</Text> : null}
     </InteractiveTile>;
   }
   const lineageRoots = projected.nodes.filter(n => !projected.edges.some(e => e.to === n.id));
@@ -65,7 +77,7 @@ export function OrchestraGraph({ graph, width: _width, children: _children, acti
   };
   return <View style={styles.root} testID="orchestra-graph">
     <Text style={styles.summary}>{graph.nodes.filter(n => n.state === "live" && n.kind !== "repo").length} live · {graph.nodes.filter(n => n.state === "needs-you").length} need you · {graph.nodes.filter(n => n.kind === "host").length} hosts</Text>
-    <View style={styles.tabs}>{ORCHESTRA_VIEWS.map(mode => <PressScale key={mode.id} accessibilityRole="button" accessibilityLabel={mode.title} accessibilityState={{ selected: view === mode.id }} onPress={() => switchView(mode.id)} style={[styles.tab, view === mode.id && styles.tabOn]}><Text style={[styles.tabTitle, view === mode.id && { color: colors.gold }]}>{mode.title}</Text><Text style={styles.subtitle}>{mode.subtitle}</Text></PressScale>)}</View>
+    <Text style={styles.heading}>{ORCHESTRA_VIEWS.find(mode => mode.id === view)?.title} · {ORCHESTRA_VIEWS.find(mode => mode.id === view)?.subtitle}</Text>
     <Text style={styles.hint}>{fixture ? "Fixture · not live" : "Read-only host evidence · last 24h"} · Tap a label to inspect</Text>
     {error ? <Text accessibilityRole="alert" style={styles.warning}>{error}</Text> : null}
     {warnings.length ? <Text style={styles.warning}>{warnings.join(" · ")}</Text> : null}
@@ -86,13 +98,13 @@ export function OrchestraGraph({ graph, width: _width, children: _children, acti
       {!projected.nodes.length ? <Text style={styles.meta}>No {view === "lineage" ? "recorded delegation" : "matching evidence"} in this snapshot. No relationships inferred.</Text> : null}
       {graph.nodes.filter(n => n.grouped).map(n => <Text key={n.id} style={styles.hint}>{n.label} · {n.reason}</Text>)}
     </ScrollView></Animated.View>
-    <View style={styles.legend} accessibilityLabel="Graph legend. Tap to highlight, hold to show only.">{legend.map(kind => {
+    <View style={styles.legend} accessibilityLabel="Graph legend. Highlight controls are in Display filters.">{legend.map(kind => {
       const items = isKind(kind) ? current.nodes.filter(n => n.kind === kind) : current.edges.filter(e => e.relation === kind);
       if (!items.length) return null;
       const live = isKind(kind) ? current.nodes.filter(n => n.kind === kind && n.state === "live").length : current.edges.filter(e => e.relation === kind && e.active).length;
-      return <PressScale key={kind} accessibilityRole="button" accessibilityLabel={`Legend ${kind}`} accessibilityHint="Tap to highlight; long press to show only" onPress={() => setFilter(filter?.kind === kind ? null : { kind, only: false })} onLongPress={() => { setFilter({ kind, only: true }); setFocusOnly(false); }} style={[styles.legendItem, filter?.kind === kind && styles.tabOn]}><Glyph kind={kind} /><Text style={styles.meta}>{kind} {items.length} · {live} live</Text></PressScale>;
+      return <View key={kind} style={[styles.legendItem, filter?.kind === kind && styles.tabOn]}><Glyph kind={kind} /><Text style={styles.meta}>{kind} {items.length} · {live} live</Text></View>;
     })}</View>
-    <View style={styles.footer}><PressScale onPress={() => { setFocusOnly(!focusOnly); }} style={styles.button}><Text style={styles.meta}>{focusOnly ? "All" : "Focus"}</Text></PressScale><PressScale onPress={() => { setFilter(null); setFocusOnly(false); setFocusId(null); }} style={styles.button}><Text style={styles.meta}>Reset</Text></PressScale>{actions}</View>
+    {actions ? <View style={styles.footer}>{actions}</View> : null}
     {selected ? <View style={styles.sheet} accessibilityLabel="Node details"><ScrollView><Text style={styles.heading}>{selected.label}</Text><Text style={styles.meta}>{selected.kind} · {selected.state} · {selected.harness}{selected.model ? ` · ${selected.model}` : ""}</Text><Text style={styles.label}>{selected.reason || "No live state reported"}</Text><Text style={styles.action}>→ {selected.action || TRIAGE_LANES.find(l => l.state === selected.state)?.action}</Text><Text selectable style={styles.meta}>{selected.path}{selected.branch ? ` · ${selected.branch}` : ""}</Text><Text style={styles.meta}>Parent: {graph.nodes.find(n => n.id === selected.parentId)?.label || "None recorded"}</Text><Text style={styles.meta}>Children: {graph.edges.filter(e => e.from === selected.id && e.relation === "delegated").map(e => graph.nodes.find(n => n.id === e.to)?.label).join(", ") || "None recorded"}</Text><Text selectable style={styles.meta}>{selected.provenance?.join("\n")}</Text><View style={styles.row}>{onOpen && selected.sessionId && (!canOpen || canOpen(selected)) ? <PressScale onPress={() => onOpen(selected)} style={styles.button}><Text style={styles.action}>Open chat</Text></PressScale> : null}{selected.path?.startsWith("https://github.com/") ? <PressScale onPress={() => void Linking.openURL(selected.path!)} style={styles.button}><Text style={styles.action}>Open PR</Text></PressScale> : null}<PressScale onPress={() => setFocusId(null)} style={styles.button}><Text style={styles.action}>Close</Text></PressScale></View></ScrollView></View> : null}
   </View>;
 }

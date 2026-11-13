@@ -44,7 +44,8 @@ export type GestureEvent =
   | { type: "force"; t: number; pressure: number }
   /** The caller tells the machine the current value and range of the row being armed. */
   | { type: "rowInfo"; index: number; count: number }
-  | { type: "up"; t: number };
+  | { type: "up"; t: number }
+  | { type: "cancel" };
 
 export const IDLE: GestureState = { phase: "idle", row: ROW_NONE, since: 0, downX: 0, downY: 0, x: 0, startX: 0, startIndex: 0, index: 0, count: 1, left: false };
 
@@ -77,6 +78,7 @@ export function step(state: GestureState, event: GestureEvent): GestureState {
   if (event.type === "down") return { ...IDLE, phase: "holding", since: event.t, downX: event.x, downY: event.y, x: event.x };
   const p = state.phase;
   if (isTerminal(p)) return state;
+  if (event.type === "cancel") return { ...state, phase: "cancelled" };
 
   if (event.type === "rowInfo") {
     const count = Math.max(1, event.count);
