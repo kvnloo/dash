@@ -20,7 +20,7 @@
 #     a head moved, and a bundle probe of the live Metro otherwise (restarts it once if it 500s);
 #   - a head whose switch failed health is not retried until the head moves (no restart loop);
 #   - DASH_CHANNEL_POST_SWITCH runs after every healthy switch (best effort);
-#   - native compatibility covers native packages, local modules, plugins and dynamic Expo config ('v4:');
+#   - native compatibility covers native packages, local modules, plugins and resolved Expo config ('v5:');
 #     older baselines must be replaced after rebuilding and verifying the installed dev client;
 #   - every public switch, promotion and rollback requires an exact-commit green O15 army receipt.
 #   One instance per Metro: DASH_CHANNEL_CONF_DIR / DASH_CHANNELS_HOME / DASH_CHANNEL_METRO_UNIT.
@@ -142,12 +142,21 @@ deps_key() { # dir -> key of app dependencies
   cat "$1/app/package.json" "$1/app/bun.lock" 2>/dev/null | sha1sum | cut -c1-16
 }
 
-native_fp() { # release dir -> v4:<hash> of native source/config inputs
-  python3 - "$1" <<'PY'
-import hashlib, json, os, sys
+native_fp() { # release dir -> v5:<hash> of native source/config inputs
+  python3 - "$1" "$BUN" <<'PY'
+import hashlib, json, os, subprocess, sys
 from pathlib import Path
-root = Path(sys.argv[1]) / "app"
-app = json.loads((root / "app.json").read_text()).get("expo", {})
+root = Path(sys.argv[1]).resolve() / "app"
+try:
+    app = json.loads(subprocess.run(
+        [sys.argv[2], str(root / "node_modules/expo/bin/cli"), "config", "--type", "prebuild", "--json"],
+        cwd=root, capture_output=True, text=True, check=True, timeout=30,
+    ).stdout)
+    if not isinstance(app, dict):
+        raise ValueError("Expo config is not an object")
+except (OSError, ValueError, subprocess.SubprocessError) as error:
+    print(f"cannot resolve native Expo configuration: {error}", file=sys.stderr)
+    sys.exit(1)
 nm = root / "node_modules"
 MARKERS = ("android", "ios", "expo-module.config.json", "react-native.config.js")
 
@@ -174,8 +183,11 @@ for name in package_names():
 native = {
     "modules": packages,
     "plugins": app.get("plugins", []),
-    "android": {k: v for k, v in app.get("android", {}).items() if k in ("package", "permissions")},
+    "android": app.get("android", {}),
+    "ios": app.get("ios", {}),
     "newArch": app.get("newArchEnabled"),
+    "scheme": app.get("scheme"),
+    "name": app.get("name"),
 }
 
 def source_hash(directory, paths):
@@ -201,7 +213,7 @@ if local_modules.is_dir():
         native["local:" + directory.name] = source_hash(directory, paths)
 native["configPlugins"] = source_hash(root, (root / "plugins").glob("*.js"))
 native["dynamicConfig"] = source_hash(root, (root / name for name in ("app.config.js", "app.config.ts") if (root / name).is_file()))
-print("v4:" + hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
+print("v5:" + hashlib.sha1(json.dumps(native, sort_keys=True).encode()).hexdigest()[:16])
 PY
 }
 
@@ -324,7 +336,7 @@ do_switch() { # name [--force]
   receipt_allows "$sha" || die "switch held: no green tester-army receipt for $sha"
   if [[ -f "$H/native-baseline" ]]; then
     base="$(cat "$H/native-baseline")"
-    fp="$(native_fp "$REL/$sha")"
+    fp="$(native_fp "$REL/$sha")" || die "cannot establish native compatibility for $sha"
     if [[ "$fp" != "$base" && "$force" != "--force" ]]; then
       die "$name (${sha:0:12}) needs different native code than the installed dev client (fingerprint $fp, client $base). Build and install a new dev client, then run: dash-channel baseline $name. Or pass --force to try anyway."
     fi
@@ -444,8 +456,9 @@ cmd_promote() {
 
 cmd_baseline() {
   local name="${1:-}"; need_channel "$name"
-  local sha; sha="$(link_sha "$H/ch/$name")"; [[ -n "$sha" ]] || die "$name is not built"
-  native_fp "$REL/$sha" >"$H/native-baseline"
+  local sha fp; sha="$(link_sha "$H/ch/$name")"; [[ -n "$sha" ]] || die "$name is not built"
+  fp="$(native_fp "$REL/$sha")" || die "cannot record unresolved native configuration for $sha"
+  printf '%s\n' "$fp" >"$H/native-baseline"
   history "baseline $name $sha $(cat "$H/native-baseline")"
   log "native baseline = $(cat "$H/native-baseline") ($name ${sha:0:12})"
 }

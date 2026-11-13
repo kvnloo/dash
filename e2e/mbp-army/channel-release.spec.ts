@@ -1,4 +1,4 @@
-import { spawn, execFile } from 'node:child_process';
+import { spawn, execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, readlink, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +8,7 @@ import { test, expect } from './fixtures';
 const execute = promisify(execFile);
 const root = resolve(__dirname, '../..');
 const script = join(root, 'scripts/channels/dash-channel');
+const bun = process.env.ARMY_BUN || execFileSync('sh', ['-c', 'command -v bun'], { encoding: 'utf8' }).trim();
 
 function isolatedEnv(dir: string): NodeJS.ProcessEnv {
  return {
@@ -15,6 +16,7 @@ function isolatedEnv(dir: string): NodeJS.ProcessEnv {
   DASH_CHANNEL_CONF_DIR: join(dir, 'config'), DASH_CHANNELS_HOME: join(dir, 'channels'),
   DASH_RELEASES_DIR: join(dir, 'releases'), DASH_CHANNEL_REPO_URL: root,
   DASH_ARMY_RECEIPTS: join(dir, 'receipts'), DASH_CHANNEL_REQUIRE_RECEIPT: '0',
+  DASH_CHANNEL_BUN: bun,
   // A denied transition must not reach service control; even buggy source cannot restart host services.
   DASH_CHANNEL_SYSTEMCTL: '/usr/bin/false', DASH_CHANNEL_HEALTH_CMD: 'false',
  };
@@ -137,6 +139,7 @@ test('native compatibility: source, registration and plugin changes invalidate w
   await writeFile(join(module, 'android/build/Generated.kt'), 'generated output\n');
   await writeFile(join(module, 'android/.gradle/cache'), 'generated cache\n');
   await writeFile(join(release, 'app/src/army-display.ts'), 'export const display = \"updated chat text\";\n');
+  await writeFile(join(release, 'app/src/lib/build-info.json'), JSON.stringify({ sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', builtAtMs: 123456789 }));
   const jsOnly = await fingerprint(home, env);
   expect(jsOnly).toBe(initial);
   await writeFile(sourceFile, source(false));
@@ -155,5 +158,57 @@ test('native compatibility: source, registration and plugin changes invalidate w
   const plugin = await fingerprint(home, env);
   expect(plugin).not.toBe(renamed);
   await writeFile(info.outputPath('native-input-fingerprints.json'), JSON.stringify({ initial, jsOnly, nativeSource, registration, renamed, plugin }, null, 2));
+ } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('native compatibility: environment-selected app and release variants change the fingerprint', async ({}, info) => {
+ const dir = await mkdtemp(join(tmpdir(), 'dash-army-native-variants-'));
+ const home = join(dir, 'channels');
+ try {
+  const sha = (await execute('git', ['rev-parse', 'HEAD'], { cwd: root })).stdout.trim();
+  const release = await archiveRelease(join(dir, 'releases'), sha);
+  await mkdir(join(home, 'ch'), { recursive: true });
+  await symlink(release, join(home, 'ch/candidate'));
+  await writeFile(join(home, 'channels.tsv'), `candidate\t${sha}\tpin\n`);
+  const variants = [
+   { name: 'dev', DASH_APP_VARIANT: '', DASH_VARIANT: '' },
+   { name: 'e2e', DASH_APP_VARIANT: 'e2e', DASH_VARIANT: '' },
+   { name: 'release', DASH_APP_VARIANT: '', DASH_VARIANT: 'release' },
+  ];
+  const observed: { name: string; config: unknown; fingerprint: string }[] = [];
+  for (const variant of variants) {
+   const env = { ...isolatedEnv(dir), DASH_APP_VARIANT: variant.DASH_APP_VARIANT, DASH_VARIANT: variant.DASH_VARIANT };
+   const config: unknown = JSON.parse((await execute('bun', [
+    join(release, 'app/node_modules/expo/bin/cli'), 'config', '--type', 'prebuild', '--json',
+   ], { cwd: join(release, 'app'), env, timeout: 30000, maxBuffer: 4 * 1024 * 1024 })).stdout);
+   observed.push({ name: variant.name, config, fingerprint: await fingerprint(home, env) });
+  }
+  await writeFile(info.outputPath('native-variant-fingerprints.json'), JSON.stringify(observed, null, 2));
+  expect(observed[0]?.config).toMatchObject({ android: { package: 'app.dash.mobile' } });
+  expect(observed[1]?.config).toMatchObject({ android: { package: 'app.dash.mobile.e2e' } });
+  expect(observed[0]?.config).toHaveProperty('plugins', expect.arrayContaining([expect.arrayContaining(['expo-dev-client'])]));
+  expect(observed[2]?.config).toHaveProperty('plugins', expect.not.arrayContaining([expect.arrayContaining(['expo-dev-client'])]));
+  expect.soft(observed[1]?.fingerprint, 'different native applicationId requires a different installed client').not.toBe(observed[0]?.fingerprint);
+  expect.soft(observed[2]?.fingerprint, 'removing the native dev-client plugin requires a different installed client').not.toBe(observed[0]?.fingerprint);
+ } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('native compatibility: unresolved Expo config cannot overwrite an installed baseline', async ({}, info) => {
+ const dir = await mkdtemp(join(tmpdir(), 'dash-army-native-invalid-'));
+ const home = join(dir, 'channels');
+ try {
+  const sha = (await execute('git', ['rev-parse', 'HEAD'], { cwd: root })).stdout.trim();
+  const release = await archiveRelease(join(dir, 'releases'), sha);
+  const env = { ...isolatedEnv(dir), DASH_APP_VARIANT: '', DASH_VARIANT: '' };
+  await mkdir(join(home, 'ch'), { recursive: true });
+  await symlink(release, join(home, 'ch/candidate'));
+  await writeFile(join(home, 'channels.tsv'), `candidate\t${sha}\tpin\n`);
+  const before = await fingerprint(home, env);
+  await writeFile(join(release, 'app/app.config.js'), 'throw new Error("Army unresolved native configuration");\n');
+  const result = await channel(['baseline', 'candidate'], env);
+  const after = (await readFile(join(home, 'native-baseline'), 'utf8')).trim();
+  await writeFile(info.outputPath('unresolved-native-baseline.json'), JSON.stringify({ before, after, result }, null, 2));
+  expect(result.code, result.stderr).not.toBe(0);
+  expect(after).toBe(before);
  } finally { await rm(dir, { recursive: true, force: true }); }
 });
