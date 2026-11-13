@@ -117,3 +117,35 @@ already-applied delta immediately before fresh text. Both cases require the exac
 original agent reply and one actual agent invocation. The app retains individual
 frames until the store rejects stale sequences against its applied watermark,
 then appends the accepted text once per batch.
+
+## Conversation endpoint ownership (W08)
+
+New chats and roster/paged/search adoptions record the configured paired address,
+persisted in both durable rows and the light index. Host/session/profile IDs stay
+unchanged; only a real local conversation-ID collision receives an endpoint suffix.
+Tokens, self-host IDs (including `0`), and another address on the same machine do
+not establish ownership. Credential changes at the same address retain provenance.
+
+Only that address may receive the conversation's sends, reconnect attaches,
+queued replay or history requests, or apply its incoming turn events. An inactive
+endpoint's streaming rows do not block return to primary. Queue/history/drafts
+remain local when selecting another endpoint. Legacy rows without provenance stay
+readable but cannot send or attach: the ordinary chat error explains how to open
+the session afresh from the paired computer's Chats list, or create a new chat.
+There is no automatic legacy reassignment, address-alias migration or draft transfer.
+
+`endpoint-ownership.spec.ts` uses two real isolated bridges and normal Settings:
+A streams with a queued draft, B receives no A attach/chat, A finishes while B is
+selected, and returning to A attaches the same turn once and sends the queue once
+with the original session ID. Wire evidence records only scoped fixture fields.
+Qualification command (with the army web server/environment already prepared):
+`bunx playwright test -c e2e/mbp-army/playwright.config.ts e2e/mbp-army/endpoint-ownership.spec.ts e2e/mbp-army/delta-replay.spec.ts`.
+Status: authored, not executed; no phone or live harness acceptance claimed.
+
+The delta replay journeys now pair at the relay address before chat creation,
+rather than silently assigning a previously created direct-address chat to it.
+`chat-index-ownership.spec.ts` deliberately changes addresses only for list HTTP
+ownership and does not resume a saved chat; its generation/304 expectations stay
+unchanged. Address-changing future send journeys must likewise create/adopt at
+their actual selected endpoint. Parent hello-admission and delta qualification
+remain separate gates; this change does not relax sequence or hello admission.

@@ -5,7 +5,7 @@ import { CHATS_FEATURE, parseServerMessage, type ChatAttachment, type ClientMess
 import { agentNoticeInbox, noticeFailure } from "../store/notices";
 import type { LiveIntent } from "../../../shared/live";
 import { isDebugMode } from "../debug/mode";
-import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf } from "../store/live";
+import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf, liveRequestConversation } from "../store/live";
 import { fetchRosterIfChanged } from "../lib/roster";
 import { executionToken, socketUrl } from "../lib/bridge-auth";
 import { visibleHarnesses } from "../lib/hidden-harnesses";
@@ -87,6 +87,7 @@ class Bridge {
    * bridge (pairing or editing must report that bridge's own failure) until it connects once.
    */
   start(settings: Settings, options?: { failover?: boolean }): void {
+    this.flushDeltas();
     this.settings = settings;
     this.failover = options?.failover ?? true;
     if (isDebugMode()) {
@@ -139,10 +140,22 @@ class Bridge {
   }
 
   send(message: ClientMessage): boolean {
+    if ("id" in message && typeof message.id === "string" && ["chat", "attach", "cancel", "voice_begin", "voice_chunk", "voice_commit"].includes(message.type) && !this.ownsTurn(message.id)) return false;
+    if ("turnId" in message && typeof message.turnId === "string" && !this.ownsTurn(message.turnId)) return false;
     if (isDebugMode()) return true;
     if (!this.isOpen() || !this.ws) return false;
     this.ws.send(JSON.stringify(message));
     return true;
+  }
+
+  ownsConversation(id: string): boolean {
+    const conversation = store.get().conversations.find(c => c.id === id);
+    return Boolean(conversation?.endpointAddress && conversation.endpointAddress === this.settings?.address);
+  }
+
+  private ownsTurn(id: string): boolean {
+    const where = locateTurn(id);
+    return Boolean(where && this.ownsConversation(where.conversationId));
   }
 
   private async connectNow(): Promise<void> {
@@ -277,6 +290,8 @@ class Bridge {
     }
     const message = parseServerMessage(parsed);
     if (!message) return;
+    if ("id" in message && typeof message.id === "string" && ["lost", "delta", "transcript", "session", "status", "done", "error"].includes(message.type) && !this.ownsTurn(message.id)) return;
+    if ("turnId" in message && typeof message.turnId === "string" && !this.ownsTurn(message.turnId)) return;
     switch (message.type) {
       case "notice": void agentNoticeInbox.receive(message).catch(noticeFailure); return;
       case "gate_snapshot":
@@ -353,7 +368,10 @@ class Bridge {
       case "live_event":
       case "live_receipts":
       case "live_error":
-        applyLiveMessage(message);
+        {
+          const conversationId = liveRequestConversation(message.id);
+          if (conversationId && this.ownsConversation(conversationId)) applyLiveMessage(message);
+        }
         return;
       default: {
         const _exhaustive: never = message;
@@ -382,6 +400,7 @@ class Bridge {
   /** One ws history request. chats.v1 pages it and matches the reply by requestId. */
   requestHistory(input: { conversationId: string; harness: string; sessionId: string; cwd?: string; hostId?: string; profileId?: string }): void {
     const conversation = store.get().conversations.find(c => c.id === input.conversationId);
+    if (!this.ownsConversation(input.conversationId)) return;
     if (input.harness === "hermes") this.hermesCounts.set(input.conversationId, conversation?.messageCount);
     if (!this.chats) {
       this.send({ type: "history", harness: input.harness, sessionId: input.sessionId, cwd: input.cwd, hostId: input.hostId, profileId: input.profileId });
@@ -430,6 +449,8 @@ class Bridge {
 
   private teardownSocket(): void {
     const ws = this.ws;
+    this.flushDeltas();
+    this.historyRequests.clear();
     this.ws = null;
     if (ws) {
       ws.onopen = null;
@@ -538,6 +559,7 @@ export function sendVoiceCommit(turnId: string): boolean {
 
 /** Live surface (fast lane of a Hermes chat): open the worker for this conversation. */
 export function openLiveSurface(conversationId: string, target: { profileId?: string; sessionId?: string }): boolean {
+  if (!bridge.ownsConversation(conversationId)) return false;
   const id = beginOpen(conversationId);
   const ok = bridge.send({ type: "live_open", id, ...(target.profileId ? { profileId: target.profileId } : {}), ...(target.sessionId ? { sessionId: target.sessionId } : {}) });
   if (!ok) applyLiveMessage({ type: "live_error", id, message: "Not connected to the bridge." });
@@ -545,6 +567,7 @@ export function openLiveSurface(conversationId: string, target: { profileId?: st
 }
 
 export function sendLiveTurn(conversationId: string, text: string): boolean {
+  if (!bridge.ownsConversation(conversationId)) return false;
   const live = liveOf(conversationId);
   if (!live.workerId || !live.profileId) return false;
   const id = beginLiveTurn(conversationId, text, live.askHermes);
@@ -555,6 +578,7 @@ export function sendLiveTurn(conversationId: string, text: string): boolean {
 
 /** The owner's tap on an fx0 control or a native fast control: recorded in Hermes, then the worker reacts. */
 export function sendLiveIntent(conversationId: string, intent: LiveIntent): boolean {
+  if (!bridge.ownsConversation(conversationId)) return false;
   const live = liveOf(conversationId);
   if (!live.workerId || !live.profileId) return false;
   const id = beginIntent(conversationId, intent);
@@ -564,6 +588,7 @@ export function sendLiveIntent(conversationId: string, intent: LiveIntent): bool
 }
 
 export function refreshLiveReceipts(conversationId: string): boolean {
+  if (!bridge.ownsConversation(conversationId)) return false;
   const live = liveOf(conversationId);
   if (!live.workerId || !live.profileId) return false;
   return bridge.send({ type: "live_receipts", id: beginReceipts(conversationId), workerId: live.workerId, profileId: live.profileId });
