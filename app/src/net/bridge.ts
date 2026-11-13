@@ -13,7 +13,7 @@ import { activate, endpointsOf, pickEndpoint, probeBridge } from "../lib/bridge-
 import { shouldRequestHistory } from "../lib/live-sessions";
 import { headerSocket } from "../lib/native-socket";
 import { isPongFrame, reattachStreamingTurns, startSocketKeepalive } from "./socket-keepalive";
-import type { Settings } from "../model";
+import type { Conversation, Settings } from "../model";
 import { configureChatIndex, setChatsFeatures } from "../store/chat-index-store";
 import { configureHistoryPages } from "../store/history-pages";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -60,7 +60,7 @@ class Bridge {
   private rosterEtag: string | undefined;
   /** chats.v1 bridge: history requests carry limit + requestId, replies carry `before`. */
   private chats = false;
-  private historyRequests = new Map<string, string>();
+  private historyRequests = new Map<string, { conversationId: string; messages: Conversation["messages"] | undefined }>();
   private historySeq = 0;
   /** Hermes roster messageCount last requested per conversation: re-request only when it moves. */
   private hermesCounts = new Map<string, number | undefined>();
@@ -340,10 +340,17 @@ class Bridge {
         if (message.type === "done" || message.type === "error") flushPendingSends(sendChat);
         return;
       case "history": {
-        const conversationId = message.requestId ? this.historyRequests.get(message.requestId) : undefined;
-        if (message.requestId) this.historyRequests.delete(message.requestId);
-        if (conversationId) {
-          applyHistoryReply(conversationId, message.messages, message.before);
+        if (message.requestId !== undefined) {
+          const request = this.historyRequests.get(message.requestId);
+          this.historyRequests.delete(message.requestId);
+          // A supplied id owns the reply, even after eviction: never guess another session.
+          if (!request) return;
+          this.flushDeltas();
+          const conversation = store.get().conversations.find(c => c.id === request.conversationId);
+          // A newest-window snapshot cannot replace transcript work performed since dispatch,
+          // including a local turn that has already completed and no longer streams.
+          if (!conversation || conversation.messages !== request.messages) return;
+          applyHistoryReply(request.conversationId, message.messages, message.before);
           return;
         }
         applyLiveHistory(message.harness, message.sessionId, message.messages, message.hostId, message.profileId);
@@ -388,7 +395,7 @@ class Bridge {
       return;
     }
     const requestId = `h${(++this.historySeq).toString(36)}`;
-    this.historyRequests.set(requestId, input.conversationId);
+    this.historyRequests.set(requestId, { conversationId: input.conversationId, messages: conversation?.messages });
     if (this.historyRequests.size > 64) {
       const oldest = this.historyRequests.keys().next();
       if (!oldest.done) this.historyRequests.delete(oldest.value);

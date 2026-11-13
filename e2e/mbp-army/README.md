@@ -6,7 +6,21 @@ The fixture is not a model turn. It implements initialize/session/new/load/promp
 Each test has its own bridge, HOME, credential/config/outbox directories, loopback port, PID namespace, and browser context.
 A fixture-native Hermes SQLite row and a fixture-only discoverable OMP process support persisted-session journeys. The separate ephemeral regression intentionally omits them.
 
-## Chat-index HTTP ownership journey (#493)
+## History and chat-index response ownership
+
+`history-ownership.spec.ts` holds actual newest-history WebSocket responses from
+an isolated real bridge with the native long-Hermes fixture. It releases the
+snapshot after an actual ACP turn has completed, checks an unknown supplied
+request ID cannot use session fallback, and admits an unchanged transcript's
+normal history response. The unknown-ID case changes only the response ID at
+the owned relay; history content remains bridge-produced. No application store
+is seeded. These journeys are not native-phone acceptance.
+
+Newest-window replies with a request ID own both a conversation and its
+dispatch-time transcript array. Intervening transcript edits (including older
+page hydration) conservatively discard that snapshot and cursor; later fresh
+requests remain available. Replies without an ID retain the legacy session
+matching path.
 
 `chat-index-ownership.spec.ts` pairs through a loopback TCP/HTTP relay to isolated
 real bridges with native Codex JSONL histories. The relay holds actual response

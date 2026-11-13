@@ -178,7 +178,12 @@ export function hydrateLiveConversation(conversation: Conversation, history: His
   if (conversation.messages.length > 0 && conversation.harness !== "hermes" && !isRemoteClaude(conversation)) return conversation;
   const messages = historyToMessages(history, conversation.id, conversation.harness === "hermes");
   if (!messages.length) return conversation;
-  return { ...conversation, messages, updatedAt: Math.max(messages.at(-1)?.at ?? 0, conversation.updatedAt) };
+  // Native persistence can lag a completed ACP turn. A newest-window snapshot
+  // cannot replace already-observed messages newer than its own final timestamp.
+  const newest = messages.at(-1)?.at ?? 0;
+  const ids = new Set(messages.map(message => message.id));
+  const tail = conversation.messages.filter(message => message.at > newest && !ids.has(message.id));
+  return { ...conversation, messages: tail.length ? [...messages, ...tail] : messages, updatedAt: Math.max(newest, conversation.updatedAt) };
 }
 /**
  * A refreshed newest window on top of a conversation whose older pages were already paged in:
