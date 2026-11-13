@@ -40,8 +40,28 @@ export function orbMotion(phase: OrbPhase): OrbMotionParams {
 
 /** Pure sample of the orb's transform at clock position p; the worklet mirrors this arithmetic. */
 export function orbFrame(m: OrbMotionParams, p: number): { rotate: number; scale: number } {
+  "worklet";
   const wave = m.wave === "abs" ? Math.abs(Math.sin(p * Math.PI * m.beats)) : Math.cos(p * Math.PI * 2 * m.beats);
   return { rotate: p * m.spin, scale: m.base + m.amp * wave };
+}
+
+/** Numeric targets interpolate on the UI thread without rebuilding SVG geometry. */
+export function orbTarget(phase: OrbPhase) {
+  const m = orbMotion(phase);
+  return { spin: m.spin, base: m.base, amp: m.amp, beats: m.beats, abs: m.wave === "abs" ? 1 : 0,
+    radiusX: m.radiusX, radiusY: m.radiusY, opacity: m.opacity, warning: phase === "waiting-approval" ? 1 : 0 };
+}
+
+export function orbAdvance(rotate: number, beat: number, elapsed: number, spin: number, beats: number) {
+  "worklet";
+  return { rotate: rotate + elapsed * spin, beat: beat + elapsed * beats };
+}
+
+export function orbPulse(beat: number, base: number, amp: number, abs: number) {
+  "worklet";
+  const cosine = Math.cos(beat * Math.PI * 2);
+  const pulse = Math.abs(Math.sin(beat * Math.PI));
+  return base + amp * (cosine + (pulse - cosine) * abs);
 }
 
 /** A live z0live call owns the orb; otherwise it mirrors the chat's live thinking. */

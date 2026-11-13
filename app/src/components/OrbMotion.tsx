@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
-import { cancelAnimation, useReducedMotion, useSharedValue, withRepeat, withTiming, type SharedValue } from "react-native-reanimated";
+import { useFrameCallback, useReducedMotion, useSharedValue, type SharedValue } from "react-native-reanimated";
+import { turboMs } from "../turbo";
 
-import { ambient } from "../motion-ambient";
+const CYCLE_MS = turboMs(6000);
 
 const Clock = createContext<SharedValue<number> | null>(null);
 const Activity = createContext(true);
@@ -16,12 +17,15 @@ export function OrbMotionProvider({ children }: { children: ReactNode }) {
     const sub = AppState.addEventListener("change", state => setActive(state === "active"));
     return () => sub.remove();
   }, []);
+  const frame = useFrameCallback(({ timeSincePreviousFrame }) => {
+    // Unwrapped cycles; the first resumed frame excludes suspended time.
+    clock.value += (timeSincePreviousFrame ?? 0) / CYCLE_MS;
+  }, false);
   useEffect(() => {
-    if (active && !reduced) clock.value = withRepeat(withTiming(1, ambient(6000, true)), -1);
-    else { cancelAnimation(clock); clock.value = 0; }
-    return () => cancelAnimation(clock);
-  }, [active, clock, reduced]);
-  return <Clock.Provider value={clock}>{children}</Clock.Provider>;
+    frame.setActive(active && !reduced);
+    return () => frame.setActive(false);
+  }, [active, reduced, frame]);
+  return <Clock.Provider value={clock}><Activity.Provider value={active}>{children}</Activity.Provider></Clock.Provider>;
 }
 
 export function OrbActivity({ active, children }: { active: boolean; children: ReactNode }) {

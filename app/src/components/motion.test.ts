@@ -125,7 +125,9 @@ describe("post-Lab motion contracts", () => {
       expect(source).not.toContain("withSpring");
     }
     const ambient = readFileSync(join(import.meta.dir, "OrbMotion.tsx"), "utf8");
-    expect(ambient).toContain("ambient(6000, true)");
+    expect(ambient).toContain("useFrameCallback");
+    expect(ambient).toContain("frame.setActive(active && !reduced)");
+    expect(ambient).not.toContain("withRepeat");
   });
   test("native-stack does not rely on an iOS-only duration cap for Android", () => {
     const app = readFileSync(join(import.meta.dir, "../../App.tsx"), "utf8");
