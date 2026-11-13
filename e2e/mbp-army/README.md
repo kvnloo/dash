@@ -6,6 +6,21 @@ The fixture is not a model turn. It implements initialize/session/new/load/promp
 Each test has its own bridge, HOME, credential/config/outbox directories, loopback port, PID namespace, and browser context.
 A fixture-native Hermes SQLite row and a fixture-only discoverable OMP process support persisted-session journeys. The separate ephemeral regression intentionally omits them.
 
+## Authenticated hello admission
+
+`hello-admission.spec.ts` pairs normally with an isolated authenticated bridge,
+then selects an owned loopback relay through Settings. `hello-relay.ts` preserves
+Origin and authentication, rewrites upstream Host, and withholds the real initial
+hello while accepting WebSocket OPEN and forwarding keepalive traffic.
+The journey requires a client close within the existing eight-second admission
+deadline, an automatic retry, and normal Settings reconnect after hello delivery
+is restored. It also checks the retained draft and a nine-second real ACP reply.
+Relay events and ACP turn files are retained beside the ordinary army evidence.
+Plain OPEN is not admission, does not reset backoff, and does not enable failover.
+The existing transport owns this watchdog; the standalone lifecycle helper is
+not runtime proof. Status: authored, not run. Native acceptance remains unproved.
+
+
 ## Mesh/native roster journey (#474, #476, #481)
 
 `mesh-roster.spec.ts` starts two isolated real bridges named `groot` and `mbp`, pairs the
