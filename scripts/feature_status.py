@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 from enum import Enum
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -112,8 +113,10 @@ def run_code(run):
 # ---- observation (not proven; fails closed) ----
 
 def _same_sha(a, b):
-    a, b = str(a or '').lower(), str(b or '').lower()
-    return len(a) >= 7 and len(b) >= 7 and (a.startswith(b) or b.startswith(a))
+    if not all(isinstance(value, str) and re.fullmatch(r'[0-9a-fA-F]{7,40}', value) for value in (a, b)):
+        return False
+    a, b = a.lower(), b.lower()
+    return a.startswith(b) or b.startswith(a)
 
 
 def load_receipts(evidence_dir):

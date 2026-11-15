@@ -38,6 +38,24 @@ class FeatureStatus(unittest.TestCase):
     def test_done_needs_device_pass_and_preview_on_candidate(self):
         self.assertEqual(status([journey(), preview()]), "done")
 
+    def test_malformed_receipt_revisions_cannot_complete_a_feature(self):
+        for invalid in [SHA + "extra", SHA + "0", "a" * 6, 1111111, True, None]:
+            with self.subTest(revision=invalid):
+                candidate = "1" * 40 if invalid == 1111111 else SHA
+                rows = fs.evaluate(LEDGER, [journey(sha=invalid), preview(sha=invalid)], candidate)
+                self.assertEqual(rows[0]["status"], "open")
+
+    def test_malformed_candidates_cannot_match_receipts(self):
+        for invalid in [SHA + "extra", SHA + "0", "a" * 6, 1111111, None]:
+            with self.subTest(candidate=invalid):
+                rows = fs.evaluate(LEDGER, [journey(), preview()], invalid)
+                self.assertEqual(rows[0]["status"], "open")
+
+    def test_hex_revision_abbreviations_and_case_remain_supported(self):
+        for revision in [SHA, SHA.upper(), SHA[:7], SHA[:12]]:
+            self.assertEqual(status([journey(sha=revision), preview(sha=revision)]), "done")
+        self.assertFalse(fs._same_sha("a" * 7, "b" * 40))
+
     def test_stale_sha_is_not_done(self):
         self.assertEqual(status([journey(sha=OLD), preview()]), "open")
         self.assertEqual(status([journey(), preview(sha=OLD)]), "open")
