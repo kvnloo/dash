@@ -126,6 +126,17 @@ class PreviewHandoff(unittest.TestCase):
                     opened.assert_not_called()
                     self.assertEqual(list(Path(tmp).iterdir()), [])
 
+    def test_duplicate_features_do_not_overwrite_delivered_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(ph, "open_screen", return_value=(True, "Status: ok")) as opened:
+            code, output = run(["--sha", SHA, "--features", "DF-035, DF-035", "--open",
+                                "--serial", "fixture-device", "--out", tmp, "--json"])
+            receipts = fs.load_receipts(tmp)
+            self.assertEqual(code, 0)
+            self.assertEqual(len(json.loads(output)["cards"]), 1)
+            opened.assert_called_once_with("fixture-device", "dash://chats", None)
+            self.assertEqual(len(receipts), 1)
+            self.assertIs(fs.classify_preview(receipts, SHA), fs.Preview.DELIVERED)
+
     def test_bad_input_is_refused(self):
         self.assertEqual(run(["--sha", "not-a-sha", "--features", "DF-035"])[0], 2)
         self.assertEqual(run(["--sha", SHA, "--features", "DF-999"])[0], 2)

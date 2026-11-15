@@ -157,7 +157,7 @@ def main(argv=None) -> int:
     if args.open and not args.serial:
         print("--open needs --serial", file=sys.stderr)
         return 2
-    ids = [i.strip() for i in args.features.split(",") if i.strip()]
+    ids = list(dict.fromkeys(i.strip() for i in args.features.split(",") if i.strip()))
     if not ids:
         print("--features must name at least one feature", file=sys.stderr)
         return 2
