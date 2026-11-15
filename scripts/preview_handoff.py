@@ -132,7 +132,9 @@ def open_screen(serial: str, link: str, display_id: int | None) -> tuple[bool, s
     except (OSError, subprocess.TimeoutExpired) as e:
         return False, f"{type(e).__name__}: {e}"
     out = (r.stdout + r.stderr).strip()
-    ok = r.returncode == 0 and not re.search(r"(?i)^error|exception|unable to resolve", out, re.M)
+    ok = (r.returncode == 0
+          and re.search(r"(?im)^Status:\s*ok\s*$", out) is not None
+          and not re.search(r"(?i)^error|exception|unable to resolve", out, re.M))
     return ok, out[-400:]
 
 

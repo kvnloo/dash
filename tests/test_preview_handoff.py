@@ -11,6 +11,8 @@ import re
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from subprocess import CompletedProcess
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -93,6 +95,25 @@ class PreviewHandoff(unittest.TestCase):
         finally:
             ph.open_screen = real
         self.assertEqual(code, 1)
+
+    def test_unconfirmed_adb_launch_never_records_delivery(self):
+        for output in ["Status: timeout\n", "", "Starting: Intent { dat=dash://bots }\n", "Status: unknown\n"]:
+            with self.subTest(output=output), tempfile.TemporaryDirectory() as tmp:
+                with patch.object(ph.subprocess, "run", return_value=CompletedProcess([], 0, output, "")):
+                    code, _ = run(["--sha", SHA, "--features", "DF-110", "--open", "--serial", "fixture-device", "--out", tmp])
+                receipts = fs.load_receipts(tmp)
+                self.assertEqual(code, 1)
+                self.assertIs(receipts[0]["delivered"], False)
+                self.assertIs(fs.classify_preview(receipts, SHA), fs.Preview.NONE)
+
+    def test_adb_launch_requires_ok_status_and_clean_exit(self):
+        for result, expected in [
+            (CompletedProcess([], 0, "Status: ok\nActivity: app.dash.mobile/.MainActivity\n", ""), True),
+            (CompletedProcess([], 1, "Status: ok\n", ""), False),
+            (CompletedProcess([], 0, "Status: ok\n", "Error: launch failed"), False),
+        ]:
+            with self.subTest(result=result), patch.object(ph.subprocess, "run", return_value=result):
+                self.assertEqual(ph.open_screen("fixture-device", "dash://bots", None)[0], expected)
 
     def test_bad_input_is_refused(self):
         self.assertEqual(run(["--sha", "not-a-sha", "--features", "DF-035"])[0], 2)
