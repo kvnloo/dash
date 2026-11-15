@@ -158,6 +158,9 @@ def main(argv=None) -> int:
         print("--open needs --serial", file=sys.stderr)
         return 2
     ids = [i.strip() for i in args.features.split(",") if i.strip()]
+    if not ids:
+        print("--features must name at least one feature", file=sys.stderr)
+        return 2
     ledger = load_ledger(Path(args.ledger))
     try:
         cards = [brief(ledger, fid, sha) for fid in ids]

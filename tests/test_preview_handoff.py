@@ -115,6 +115,17 @@ class PreviewHandoff(unittest.TestCase):
             with self.subTest(result=result), patch.object(ph.subprocess, "run", return_value=result):
                 self.assertEqual(ph.open_screen("fixture-device", "dash://bots", None)[0], expected)
 
+    def test_empty_feature_selection_is_not_a_successful_handoff(self):
+        for features in ["", " ", ",", " , , "]:
+            for delivery in [[], ["--open", "--serial", "fixture-device"],
+                             ["--delivered-via", "fixture:message"]]:
+                with self.subTest(features=features, delivery=delivery), tempfile.TemporaryDirectory() as tmp:
+                    with patch.object(ph, "open_screen") as opened:
+                        code, _ = run(["--sha", SHA, "--features", features, "--out", tmp] + delivery)
+                    self.assertEqual(code, 2)
+                    opened.assert_not_called()
+                    self.assertEqual(list(Path(tmp).iterdir()), [])
+
     def test_bad_input_is_refused(self):
         self.assertEqual(run(["--sha", "not-a-sha", "--features", "DF-035"])[0], 2)
         self.assertEqual(run(["--sha", SHA, "--features", "DF-999"])[0], 2)
