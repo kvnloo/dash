@@ -71,8 +71,8 @@
     "debug": "EXPO_PUBLIC_DEBUG=1 EXPO_PUBLIC_DEBUG_AUTONAV=0 expo start",
     "debug:web": "EXPO_PUBLIC_DEBUG=1 EXPO_PUBLIC_DEBUG_AUTONAV=0 expo start --web --port 8099",
     "debug:shots": "bun ../scripts/debug-screenshots.mjs",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web"
   }
 }
