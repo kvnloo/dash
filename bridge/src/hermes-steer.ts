@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { sendIntoLiveSession, type LiveResult } from "./hermes-live";
+import { withHermesSource } from "./hermes-source";
 
 export type SteerReceipt = { ok: boolean; code: string };
 export type Delivery = "steered" | "queued" | "started";
@@ -19,7 +20,7 @@ export function steerDisposition(receipt: SteerReceipt): "steered" | "queue" | "
 }
 
 export async function gatewaySteer(options: { home: string; sessionId: string; text: string; signal?: AbortSignal; spawnSteer?: SteerSpawn }): Promise<SteerReceipt> {
-  const env: Record<string, string | undefined> = { ...process.env, HERMES_HOME: options.home };
+  const env: Record<string, string | undefined> = withHermesSource({ ...process.env, HERMES_HOME: options.home });
   delete env.HERMES_TUI_GATEWAY_URL;
   const child = (options.spawnSteer ?? spawnSteer)(["python3", fileURLToPath(new URL("./hermes-steer.py", import.meta.url))], { env });
   const abort = () => child.kill("SIGTERM");

@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { PartEmitter, hermesParts } from "./reply-parts";
 import type { ReplyPart } from "../../shared/protocol";
 import { TurnPhase } from "./turn-phase";
+import { withHermesSource } from "./hermes-source";
 
 export type LiveSink = { part?(part: ReplyPart): void; delta(text: string): void; status(text: string): void };
 export type LiveResult = { text: string; sessionId: string; exitCode: number };
@@ -97,7 +98,7 @@ export async function sendIntoLiveSession(options: {
   onStarted?(): void;
 }): Promise<LiveResult> {
   // The profile's own gateway, discovered from HERMES_HOME. Never an inherited explicit remote URL.
-  const env: Record<string, string | undefined> = { ...(options.env ?? process.env), HERMES_HOME: options.home };
+  const env: Record<string, string | undefined> = withHermesSource({ ...(options.env ?? process.env), HERMES_HOME: options.home });
   delete env.HERMES_TUI_GATEWAY_URL;
   const child = (options.spawn ?? bunSpawn)(options.argv, { cwd: options.cwd, env });
   child.stdin.write(options.text);
