@@ -13,7 +13,13 @@ export function pillModeOf(annotating: boolean, surface: "learn" | "quick" | nul
 
 export type LearnIntent = "explain" | "quiz" | "map";
 
-const LEARN_FORMAT = "Answer as Dash ephemeral UI, not prose: one ```genui block (JSON {\"version\":1,\"components\":[...]}; widget types card, stat, table, progress, choices, buttons, checklist, timeline; choices/buttons/checklist need an \"id\" and items [{\"id\",\"label\"}]) and, when a picture helps, one ```mermaid block starting \"flowchart TD\" (at most 10 nodes). One idea per card, plain words, no preamble.";
+// Dash renders only a strict subset (lib/genui.ts, lib/mermaid.ts); anything else falls back to code.
+const LEARN_FORMAT = [
+  "Answer as Dash ephemeral UI, not prose. One idea per card, plain words, no preamble.",
+  "1) One ```genui block: {\"version\":1,\"components\":[...]}. Each widget uses ONLY the keys type, title, text, value, columns, rows, items, children, id (no other keys; put a card's words in \"text\").",
+  "Types: card, stat, table, progress (value 0-100), choices, buttons, checklist, timeline. choices/buttons/checklist need an \"id\" and items [{\"id\":\"a\",\"label\":\"...\"}].",
+  "2) When a picture helps, one ```mermaid block: first line \"flowchart TD\", then one edge per line as A[label] --> B[label] or A -->|label| B; nodes may be A[text] or B{question}. No \"-- label -->\" edges, no subgraph, no styles, at most 10 nodes.",
+].join("\n");
 
 const LEARN_ASK: Record<LearnIntent, string> = {
   explain: "Explain it in 3 to 5 cards plus a small flowchart, and end with one check-yourself question as a choices widget (id \"check\").",
