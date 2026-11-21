@@ -12,7 +12,8 @@
 //   command the owner saw, not 15 minutes of passwordless sudo for the agent.
 // - `--` ends sudo's options: the agent cannot inject sudo flags (e.g. -A, -E, -u, -s).
 // - The sudo binary is resolved from the bridge's own PATH (set when the bridge started), never the agent's.
-// - stdin is closed right after the password line, so the command cannot read (or echo) it.
+// - stdin is closed right after the password line, so the command cannot read (or echo) it, and a
+//   command sudo would run without a password (NOPASSWD) is refused before the phone is asked.
 import { createDecipheriv, createPublicKey, diffieHellman, generateKeyPairSync, hkdfSync, randomBytes, type KeyObject } from "node:crypto";
 import { bearerToken, secretMatches } from "./bridge-security";
 import { MAX_SECRET_BYTES, MAX_SECRET_COMMAND, MAX_SECRET_REASON, SECRET_SEAL_INFO, secretAad, type SecretOutcome, type SecretRequest, type SecretResolved, type SecretSubmit } from "../../shared/secret";
@@ -39,6 +40,12 @@ export interface SecretBrokerOptions {
   runMs?: number;
   now?: () => number;
   spawn?: SudoSpawn;
+  /**
+   * Whether sudo would prompt for this command. With a NOPASSWD rule, `sudo -S` never reads stdin,
+   * so a password line would reach the command itself (and through it, the agent). Default:
+   * `sudo -k -n -l -- <cmd>` exits 0 only when no password is needed.
+   */
+  needsPassword?: (sudo: string, argv: readonly string[]) => Promise<boolean>;
   /** Receives ids, counts and outcomes only; never the command text or any secret. */
   log?: (event: string, fields: Record<string, unknown>) => void;
 }
@@ -109,6 +116,14 @@ export const defaultSudoSpawn: SudoSpawn = async (cmd, { cwd, stdin, timeoutMs }
   } finally { clearTimeout(kill); }
 };
 
+export const defaultNeedsPassword = async (sudo: string, argv: readonly string[]): Promise<boolean> => {
+  try {
+    const child = Bun.spawn([sudo, "-k", "-n", "-l", "--", ...argv], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+    const kill = setTimeout(() => child.kill(), 10_000);
+    try { return (await child.exited) !== 0; } finally { clearTimeout(kill); }
+  } catch { return true; }
+};
+
 export class SecretBroker {
   private readonly pending = new Map<string, Pending>();
   private readonly listeners = new Set<(message: SecretRequest | SecretResolved) => void>();
@@ -140,10 +155,16 @@ export class SecretBroker {
     try { this.options.log?.(event, fields); } catch { /* logging never fails a request */ }
   }
 
-  requestSudo(run: SudoRun): Promise<SudoResult> {
+  async requestSudo(run: SudoRun): Promise<SudoResult> {
     const sudo = this.options.sudo();
-    if (!sudo) return Promise.resolve({ outcome: "refused", exitCode: null, stdout: "", stderr: "", message: "sudo is not installed on this host" });
-    if (this.pending.size >= MAX_PENDING) return Promise.resolve({ outcome: "refused", exitCode: null, stdout: "", stderr: "", message: "too many sudo requests are waiting on the phone" });
+    if (!sudo) return { outcome: "refused", exitCode: null, stdout: "", stderr: "", message: "sudo is not installed on this host" };
+    if (this.pending.size >= MAX_PENDING) return { outcome: "refused", exitCode: null, stdout: "", stderr: "", message: "too many sudo requests are waiting on the phone" };
+    if (!(await (this.options.needsPassword ?? defaultNeedsPassword)(sudo, run.argv))) {
+      // Never collect a password sudo will not read: it would be the command's stdin.
+      this.log("secret.resolved", { outcome: "refused", reason: "no-password-needed" });
+      return { outcome: "refused", exitCode: null, stdout: "", stderr: "", message: "sudo does not ask for a password for this command here; no password was requested from the phone" };
+    }
+    if (this.pending.size >= MAX_PENDING) return { outcome: "refused", exitCode: null, stdout: "", stderr: "", message: "too many sudo requests are waiting on the phone" };
     const { privateKey, publicKey } = generateKeyPairSync("x25519");
     const publicRaw = rawPublicKey(publicKey);
     const id = randomBytes(16).toString("base64url");

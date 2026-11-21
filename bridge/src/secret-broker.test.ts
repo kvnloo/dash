@@ -7,6 +7,7 @@ import { sealSecret } from "../../app/src/lib/secret-seal";
 import type { SecretRequest, SecretResolved } from "../../shared/secret";
 
 const random = (b: Uint8Array) => { b.set(randomBytes(b.length)); };
+const tick = () => Bun.sleep(0);
 function harness(spawnOut: { stdout?: string; stderr?: string; exitCode?: number } = {}, ttlMs = 5_000) {
   const calls: { cmd: string[]; stdin: string; cwd: string }[] = [];
   const logs: string[] = [];
@@ -15,7 +16,7 @@ function harness(spawnOut: { stdout?: string; stderr?: string; exitCode?: number
     calls.push({ cmd, stdin: stdin.toString("utf8"), cwd });
     return { exitCode: spawnOut.exitCode ?? 0, stdout: Buffer.from(spawnOut.stdout ?? "ok\n"), stderr: Buffer.from(spawnOut.stderr ?? "") };
   };
-  const broker = new SecretBroker({ sudo: () => "/usr/bin/sudo", account: "kevin@studio", ttlMs, spawn, log: (e, f) => logs.push(JSON.stringify({ e, ...f })) });
+  const broker = new SecretBroker({ sudo: () => "/usr/bin/sudo", account: "kevin@studio", ttlMs, spawn, needsPassword: async () => true, log: (e, f) => logs.push(JSON.stringify({ e, ...f })) });
   broker.subscribe(m => wire.push(m));
   return { broker, calls, logs, wire };
 }
@@ -29,6 +30,7 @@ describe("secure sudo broker", () => {
   test("phone seal opens on the bridge and goes only into sudo -k -S stdin; nothing else carries it", async () => {
     const h = harness({ stdout: "echoed hunter2-π secret\n" });
     const done = h.broker.requestSudo({ argv: ["apt", "install", "-y", "jq"], cwd: "/tmp", reason: "install jq" });
+    await tick();
     const request = requestOf(h.wire);
     expect(request.command).toBe("apt install -y jq");
     expect(request.account).toBe("kevin@studio");
@@ -47,6 +49,7 @@ describe("secure sudo broker", () => {
     const h = harness();
     const a = h.broker.requestSudo({ argv: ["true"], cwd: "/" });
     const b = h.broker.requestSudo({ argv: ["false"], cwd: "/" });
+    await tick();
     const [ra, rb] = h.wire.filter((m): m is SecretRequest => m.type === "secret_request");
     const sealedForA = sealSecret(ra!, "pw", random);
     await h.broker.submit({ ...sealedForA, id: rb!.id });
@@ -61,10 +64,17 @@ describe("secure sudo broker", () => {
   test("decline, expiry, missing sudo and the pending cap", async () => {
     const h = harness({}, 30);
     const declined = h.broker.requestSudo({ argv: ["id"], cwd: "/" });
+    await tick();
     h.broker.cancel(requestOf(h.wire).id);
     expect((await declined).outcome).toBe("cancelled");
     expect((await h.broker.requestSudo({ argv: ["id"], cwd: "/" })).outcome).toBe("expired");
     const none = new SecretBroker({ sudo: () => null, account: "a@b" });
+    const nopasswd: (SecretRequest | SecretResolved)[] = [];
+    const open = new SecretBroker({ sudo: () => "/usr/bin/sudo", account: "a@b", needsPassword: async () => false });
+    open.subscribe(m => nopasswd.push(m));
+    const refused = await open.requestSudo({ argv: ["cat"], cwd: "/" });
+    expect(refused.outcome, "NOPASSWD: never ask the phone for a password sudo would pass to the command").toBe("refused");
+    expect(nopasswd).toEqual([]);
     expect((await none.requestSudo({ argv: ["id"], cwd: "/" })).outcome).toBe("refused");
     const capped = harness();
     for (let i = 0; i < 4; i++) void capped.broker.requestSudo({ argv: ["id"], cwd: "/" });

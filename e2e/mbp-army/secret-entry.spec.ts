@@ -15,6 +15,8 @@ test.afterEach(async ({ page }, info) => {
 async function fakeSudo(bridge: Bridge) {
   await writeFile(join(bridge.dir, 'bin', 'sudo'), [
     '#!/bin/sh',
+    '# Preflight (sudo -k -n -l -- cmd): like a sudoers rule that needs a password.',
+    'if [ "$1" = -k ] && [ "$2" = -n ] && [ "$3" = -l ]; then echo "sudo: a password is required" >&2; exit 1; fi',
     '[ "$1" = -k ] && [ "$2" = -S ] && [ "$3" = -p ] && [ "$4" = "" ] && [ "$5" = -- ] || { echo "army-sudo: bad flags" >&2; exit 90; }',
     'shift 5',
     'IFS= read -r pw',
