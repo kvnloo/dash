@@ -20,6 +20,7 @@ import { useRecordedSpeech } from "../../lib/useRecordedSpeech";
 import { appendInkSample, pointerKind, pressureOf, routePointer } from "../../lib/annotate/pointer";
 import { subscribeStylusButton, type StylusButtonSource } from "../../lib/stylus-mode";
 import { recognizeShape, type InkColor, type PointerKind, type StrokePoint, type Tool } from "../../lib/annotate/strokes";
+import { devToolsGutterNow } from "../../lib/dev-tools-gutter";
 import { useHandedness } from "../../lib/useHandedness";
 import {
   addSegment, annotate, clearStrokes, commitStroke, currentSink, enterAnnotation, eraseStrokes, exitAnnotation, finishSend,
@@ -564,7 +565,7 @@ function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; 
     transform: [{ translateY: Math.max(0, room.value - trayHeight.value) * progress.value }],
   }));
   return (
-    <Animated.View pointerEvents="box-none" style={[styles.trayViewport, { top: topInset, left: insets.left + space.xs, right: insets.right + space.xs }, clearDock]} {...overlayProps}>
+    <Animated.View pointerEvents="box-none" style={[styles.trayViewport, { top: topInset, left: insets.left + space.xs, right: insets.right + space.xs + devToolsGutterNow() }, clearDock]} {...overlayProps}>
       <Animated.ScrollView testID="annotation-tray" bounces={false} showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="always" style={[styles.tray, placement]} contentContainerStyle={styles.trayContent}
         onLayout={e => { trayHeight.value = e.nativeEvent.layout.height; }}>
