@@ -17,7 +17,7 @@ import { GateService } from "./src/gate/service";
 import { GateStore } from "./src/gate/store";
 import type { GateServerMessage } from "../shared/protocol";
 import { statSync } from "node:fs";
-import { homedir, hostname } from "node:os";
+import { homedir, hostname, userInfo } from "node:os";
 import { basename, join } from "node:path";
 import {
   CHATS_FEATURE,
@@ -101,6 +101,7 @@ import { createPmHttpHandler } from "./src/pm-http";
 import { createBridgeHealthHttpHandler, DRAIN_MESSAGE } from "./src/health";
 import { createTraceRoute } from "./src/trace-route";
 import { createTriageHttpHandler } from "./src/triage-http";
+import { SecretBroker, createSudoHttpHandler } from "./src/secret-broker";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 import { acknowledgeSocketPing, BRIDGE_WS_IDLE_TIMEOUT_SECONDS } from "./src/ws-keepalive";
 
@@ -114,6 +115,7 @@ interface SocketData {
   principal: BridgePrincipal;
   stopIdentityWatch?: () => void;
   stopNotices?: () => void;
+  stopSecrets?: () => void;
   /** Turn ids this socket is subscribed to. */
   turns: Set<string>;
   gateSend?: (message: GateServerMessage) => void;
@@ -776,7 +778,10 @@ const notices = new NoticeService(CREDENTIAL_DIR, (notice, delivered) => log("no
 const noticePort = Number(process.env.DASH_NOTICE_PORT ?? (PORT === 0 ? 0 : PORT + 1));
 if (!Number.isInteger(noticePort) || noticePort < 0 || noticePort > 65535) throw new Error("Invalid DASH_NOTICE_PORT");
 if (notices.quarantined) log("notices.quarantined", { file: basename(notices.quarantined) });
-const noticeServer = tryStartNoticeServer({ token: TOKEN, notices, port: noticePort, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG }, reason => log("notices.disabled", { reason }));
+// Secure sudo (#559): `dash-sudo` reaches it only on the loopback listener; the phone answers over /ws.
+const secretBroker = new SecretBroker({ sudo: () => Bun.which("sudo"), account: `${(() => { try { return userInfo().username; } catch { return "user"; } })()}@${HOST_NAME}`, log });
+const noticeServer = tryStartNoticeServer({ token: TOKEN, notices, port: noticePort, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG,
+  extra: createSudoHttpHandler({ token: TOKEN, broker: secretBroker }) }, reason => log("notices.disabled", { reason }));
 const attachments = new AttachmentStore(process.env.DASH_ATTACHMENT_DIR?.trim() || join(CREDENTIAL_DIR, "attachments"));
 const handleFiles = createFilesHttpHandler({
   token: TOKEN,
@@ -964,6 +969,7 @@ const server = Bun.serve<SocketData>({
         if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) { ws.close(1008, "Identity authorization expired"); return; }
         sendTo(ws, notice);
       });
+      if (ws.readyState === WebSocket.OPEN) ws.data.stopSecrets = secretBroker.subscribe(message => sendTo(ws, message));
     },
     async message(ws, raw) {
       if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) {
@@ -1135,6 +1141,15 @@ const server = Bun.serve<SocketData>({
           if (part) sendTo(ws, { type: "status", id: turn.id, seq: turn.events.length, text: "", part });
           break;
         }
+        case "secret_submit": {
+          // Sealed to the request's own key; never logged. The broker writes it only into sudo's stdin.
+          void secretBroker.submit(message);
+          break;
+        }
+        case "secret_cancel": {
+          secretBroker.cancel(message.id);
+          break;
+        }
         case "permission_decision": {
           // Only a socket that owns or attached to the turn may answer its permission requests.
           if (!ws.data.turns.has(message.turnId)) break;
@@ -1206,6 +1221,7 @@ const server = Bun.serve<SocketData>({
     close(ws) {
       ws.data.stopIdentityWatch?.();
       ws.data.stopNotices?.();
+      ws.data.stopSecrets?.();
       if (ws.data.gateSend) gate?.unsubscribe(ws.data.gateSend);
       detachSocket(ws.data.turns, (id) => turns.get(id), ws);
       for (const id of pruneStaleUtterances(utterances, Date.now())) {
@@ -1256,6 +1272,7 @@ function shutdown(): void {
   // Stop admission before awaiting cleanup; sockets must not launch new work.
   server.stop(true);
   noticeServer?.stop(true);
+  secretBroker.dispose();
   chatIndex.stop();
   for (const turn of turns.values()) turn.cancel();
   void Promise.all([acpSupervisor.close(), remoteAcpSupervisor.close()]).then(() => {

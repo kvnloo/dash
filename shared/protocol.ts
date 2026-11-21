@@ -4,6 +4,7 @@
 
 import { isGateItem, parseGateDecision, type GateItem, type GateDecision } from "./gate";
 import { parsePermissionDecision, parsePermissionRequest, parsePermissionResolution, type PermissionDecision, type PermissionRequest, type PermissionResolution } from "./permission";
+import { parseSecretCancel, parseSecretRequest, parseSecretResolved, parseSecretSubmit, type SecretCancel, type SecretRequest, type SecretResolved, type SecretSubmit } from "./secret";
 import { parseLiveClientMessage, parseLiveServerMessage, type LiveClientMessage, type LiveServerMessage } from "./live";
 import { parseReplyPart, parseReplyParts, type ReplyPart } from "./reply-parts";
 export type { ReplyPart } from "./reply-parts";
@@ -254,6 +255,9 @@ export type ClientMessage =
   | LiveClientMessage
   /** The owner's choice on an ACP permission request (shared/permission.ts). */
   | PermissionDecision
+  /** Secure sudo entry (shared/secret.ts): a sealed password, or the owner declining. */
+  | SecretSubmit
+  | SecretCancel
   /** Phone "forget everything": clear the bridge's notice replay ring. Old bridges ignore it. */
   | { type: "notices_clear" }
   | {
@@ -347,6 +351,8 @@ export type TurnEvent =
 
 export type ServerMessage =
   | NoticeMessage
+  | SecretRequest
+  | SecretResolved
   | GateServerMessage
   | LiveServerMessage
   | PermissionRequest
@@ -442,6 +448,8 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
     case "live_intent":
     case "live_receipts": return parseLiveClientMessage(raw);
     case "permission_decision": return parsePermissionDecision(raw);
+    case "secret_submit": return parseSecretSubmit(raw);
+    case "secret_cancel": return parseSecretCancel(raw);
     case "chat": {
       const attachments = parseChatAttachments(raw.attachments);
       if (raw.mode !== undefined && raw.mode !== "steer" && raw.mode !== "queue") return null;
@@ -599,6 +607,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     case "live_receipts":
     case "live_error": return parseLiveServerMessage(raw);
     case "permission_request": return parsePermissionRequest(raw);
+    case "secret_request": return parseSecretRequest(raw);
+    case "secret_resolved": return parseSecretResolved(raw);
     case "permission_resolved": return parsePermissionResolution(raw);
     case "gate_snapshot": return Array.isArray(raw.items) && raw.items.every(isGateItem) && typeof raw.dry_run === "boolean" ? { type: "gate_snapshot", items: raw.items, dry_run: raw.dry_run, owner_decisions: raw.owner_decisions === true } : null;
     case "gate_status": return str(raw.id) && str(raw.message) ? { type: "gate_status", id: raw.id, message: raw.message } : null;

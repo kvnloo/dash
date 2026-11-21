@@ -34,6 +34,7 @@ import { LabScreen } from "./src/screens/LabScreen";
 import { RoadmapProjectScreen, RoadmapScreen, RoadmapTaskScreen } from "./src/screens/RoadmapScreen";
 import { DebugHost } from "./src/debug/DebugHost";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
+import { SecretEntry } from "./src/components/SecretEntry";
 import { isDebugActive } from "./src/debug/expose";
 import { debugNavigationRef, flushPendingDebugNavigation } from "./src/debug/nav";
 import { clearDebugPersistence, applyDebugSeed } from "./src/debug/seed";
@@ -160,6 +161,7 @@ export default function App() {
               </Stack.Navigator>
               <BridgePullOverlay />
               <NativeEvents />
+              <SecretEntry />
             </AnnotationRoot></ContinuousVoiceRoot>
             </NavigationContainer>
           </BridgePullProvider>

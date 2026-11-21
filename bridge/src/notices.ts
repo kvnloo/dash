@@ -207,7 +207,9 @@ export function createNoticeHttpHandler(options: NoticePolicyOptions) {
 }
 
 /** Separate from the tailnet bridge: no reports ingress on a public/tailnet interface. */
-export function startNoticeServer(options: NoticePolicyOptions & { port: number }) {
+/** extra: other loopback-only routes (secure sudo); holdOpen lifts the idle timeout for a long wait. */
+type LoopbackRoute = (request: Request, peer: string | null, holdOpen: () => void) => Promise<Response | null>;
+export function startNoticeServer(options: NoticePolicyOptions & { port: number; extra?: LoopbackRoute }) {
   const handle = createNoticeHttpHandler(options);
   let releasing = false;
   const timer = setInterval(() => {
@@ -222,14 +224,18 @@ export function startNoticeServer(options: NoticePolicyOptions & { port: number 
   }, 60_000);
   timer.unref();
   const server = Bun.serve({ hostname: "127.0.0.1", port: options.port, maxRequestBodySize: 8192,
-    fetch: (request, server) => handle(request, server.requestIP(request)?.address ?? null) });
+    fetch: async (request, server) => {
+      const peer = server.requestIP(request)?.address ?? null;
+      const routed = options.extra ? await options.extra(request, peer, () => server.timeout(request, 0)) : null;
+      return routed ?? handle(request, peer);
+    } });
   const stop = server.stop.bind(server);
   server.stop = (...args) => { clearInterval(timer); return stop(...args); };
   return server;
 }
 
 /** Notices are optional: a taken port or bind error must not take the chat bridge down. */
-export function tryStartNoticeServer(options: NoticePolicyOptions & { port: number }, onError: (message: string) => void): ReturnType<typeof startNoticeServer> | null {
+export function tryStartNoticeServer(options: NoticePolicyOptions & { port: number; extra?: LoopbackRoute }, onError: (message: string) => void): ReturnType<typeof startNoticeServer> | null {
   try { return startNoticeServer(options); }
   catch (error) {
     const code = error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "bind failed";
