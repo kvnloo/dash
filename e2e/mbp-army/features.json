@@ -342,7 +342,9 @@
      "tests": ["attached composer sends into the same ACP session after leaving Chat",
                "attached composer keeps per-session draft across tab, search and reload",
                "attached composer switches only when a different chat is explicitly chosen",
-               "restored saved-local chat keeps its own draft and Main chat search"]}
+               "restored saved-local chat keeps its own draft and Main chat search"]},
+    {"id": "attached-last-exchange", "title": "Main bar attached to a chat pops up its last message or two on demand (#507); collapsed by default, tap opens the chat",
+     "tests": ["attached composer pops up the last exchange on demand and opens the chat from it"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",
