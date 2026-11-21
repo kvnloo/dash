@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Turbo preview Metro on the Studio: serves ~/dash-studio-preview/app on :8098 with file watching and
+     hot reload on (no CI). Only turbo-promote writes that worktree. The stable Metro is dev.kvnloo.dash-metro (:8097). -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.kvnloo.dash-metro-preview</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/kvn/.bun/bin/bun</string>
+    <string>node_modules/expo/bin/cli</string>
+    <string>start</string>
+    <string>--dev-client</string>
+    <string>--port</string>
+    <string>8098</string>
+    <string>--host</string>
+    <string>lan</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/kvn/dash-studio-preview/app</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/kvn/.bun/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOME</key><string>/Users/kvn</string>
+    <key>EXPO_NO_TELEMETRY</key><string>1</string>
+    <key>EXPO_PUBLIC_DASH_TURBO</key><string>1</string>
+    <key>REACT_NATIVE_PACKAGER_HOSTNAME</key><string>100.100.77.46</string>
+  </dict>
+  <key>StandardInPath</key><string>/dev/null</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>/Users/kvn/Library/Logs/dash/metro-preview.log</string>
+  <key>StandardErrorPath</key><string>/Users/kvn/Library/Logs/dash/metro-preview.err.log</string>
+</dict>
+</plist>

@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit(//Users/kvn/dash-turbo/wt/**)",
+      "Write(//Users/kvn/dash-turbo/wt/**)",
+      "Bash(/Users/kvn/dash-turbo/bin/turbo-new:*)",
+      "Bash(/Users/kvn/dash-turbo/bin/turbo-promote:*)",
+      "Bash(/Users/kvn/dash-turbo/bin/turbo-done:*)",
+      "Bash(/Users/kvn/dash-turbo/bin/turbo-status:*)",
+      "Bash(~/dash-turbo/bin/turbo-new:*)",
+      "Bash(~/dash-turbo/bin/turbo-promote:*)",
+      "Bash(~/dash-turbo/bin/turbo-done:*)",
+      "Bash(~/dash-turbo/bin/turbo-status:*)",
+      "Bash(git -C /Users/kvn/dash-turbo/wt/:*)",
+      "Bash(git -C ~/dash-turbo/wt/:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(sed -n:*)",
+      "Bash(cd:*)"
+    ],
+    "deny": [
+      "Edit(//Users/kvn/dash-studio/**)",
+      "Write(//Users/kvn/dash-studio/**)",
+      "Edit(//Users/kvn/dash-studio-preview/**)",
+      "Write(//Users/kvn/dash-studio-preview/**)",
+      "Bash(git push:*)",
+      "Bash(launchctl:*)",
+      "Bash(/Users/kvn/dash-turbo/bin/turbo-off:*)",
+      "Bash(~/dash-turbo/bin/turbo-off:*)"
+    ]
+  }
+}

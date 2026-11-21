@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# turbo-new <name>
+# Make an agent worktree at the preview's current commit: $DASH_TURBO_HOME/wt/<name> on branch
+# turbo/wt/<name>, with node_modules as APFS clones of the preview's (near-zero extra disk).
+# Prints the worktree path. Edit and commit there, then run turbo-promote on it.
+set -Eeuo pipefail
+NAME="${1:?usage: turbo-new <name>}"
+[[ "$NAME" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || { echo "name must be lowercase letters, digits, dashes" >&2; exit 2; }
+PREVIEW="${DASH_PREVIEW_DIR:-$HOME/dash-studio-preview}"
+HOME_DIR="${DASH_TURBO_HOME:-$HOME/dash-turbo}"
+MAX="${DASH_TURBO_MAX_WORKTREES:-3}"
+WT="$HOME_DIR/wt/$NAME"
+[[ ! -e "$WT" ]] || { echo "$WT exists already" >&2; exit 1; }
+mkdir -p "$HOME_DIR/wt"
+n=$(find "$HOME_DIR/wt" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+(( n < MAX )) || { echo "already $n agent worktrees (cap $MAX); remove one with turbo-done <name>" >&2; exit 1; }
+BASE="$(git -C "$PREVIEW" rev-parse HEAD)"
+git -C "$PREVIEW" worktree add --quiet -b "turbo/wt/$NAME" "$WT" "$BASE"
+for d in node_modules app/node_modules bridge/node_modules; do
+  [[ -d "$PREVIEW/$d" ]] && cp -cR "$PREVIEW/$d" "$WT/$d"
+done
+echo "$WT"
