@@ -1,4 +1,4 @@
-/** Turbo (dogfood) mode: the live preview build uses DeepSeek Harness's motion profile so iteration feels instant.
+/** Turbo (dogfood) mode (Studio preview :8098): the live preview build uses DeepSeek Harness's motion profile so iteration feels instant.
  * DSH (deepseek-ai/deepseek-harness packages/client): ~100-120 ms ease-out on opacity/transform/colour only,
  * no entrance animations on structural changes, content appears instantly (only chevrons/indicators move),
  * streaming text published once per frame. Set at bundle time by the preview Metro (EXPO_PUBLIC_DASH_TURBO=1). */
