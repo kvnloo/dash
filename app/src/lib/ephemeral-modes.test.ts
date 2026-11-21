@@ -5,11 +5,11 @@ import type { TriageItem } from "../../../shared/triage";
 const item = (id: string, kind: TriageItem["kind"], updatedAt: number): TriageItem => ({ id, title: `T ${id}`, reason: "r", next: "n", kind, priority: 1, updatedAt, sourceUpdatedAt: updatedAt, source: `Work board · ${id}` });
 
 describe("ephemeral modes", () => {
-  test("pill cycles Normal → Annotate → Learn → Quick → Normal", () => {
-    expect(nextPillMode("normal")).toBe("annotate");
-    expect(nextPillMode("annotate")).toBe("learn");
+  test("pill cycles Normal → Learn → Quick → Annotate; Annotate (pill covered by ink) leaves to Normal", () => {
+    expect(nextPillMode("normal")).toBe("learn");
     expect(nextPillMode("learn")).toBe("quick");
-    expect(nextPillMode("quick")).toBe("normal");
+    expect(nextPillMode("quick")).toBe("annotate");
+    expect(nextPillMode("annotate")).toBe("normal");
     expect(pillModeOf(true, "quick")).toBe("annotate");
     expect(pillModeOf(false, null)).toBe("normal");
   });

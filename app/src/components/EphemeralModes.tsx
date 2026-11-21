@@ -3,7 +3,7 @@
 // (genui cards/choices, mermaid diagrams) rendered in the chat.
 
 import { useEffect, useState } from "react";
-import { AppState, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { AppState, BackHandler, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { parseTriage, triageAge, type TriageSnapshot } from "../../../shared/triage";
 import { learnPrompt, quickItems, unblockPrompt, type LearnIntent } from "../lib/ephemeral-modes";
@@ -18,7 +18,18 @@ import { PressScale } from "./PressScale";
 export function EphemeralModes(): React.JSX.Element | null {
   const mode = surfaceMode.use(s => s);
   const annotating = annotate.use(s => s.active);
-  if (annotating || !mode) return null;
+  const open = !annotating && mode !== null;
+  useEffect(() => {
+    // Back closes Learn/Quick the same way it leaves Annotate (AnnotationRoot owns that one).
+    if (Platform.OS !== "android" || !open) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (annotate.get().active || surfaceMode.get() === null) return false;
+      setPillMode("normal");
+      return true;
+    });
+    return () => subscription.remove();
+  }, [open]);
+  if (!open) return null;
   return mode === "learn" ? <LearnSurface /> : <QuickSurface />;
 }
 

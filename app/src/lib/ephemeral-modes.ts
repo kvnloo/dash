@@ -3,8 +3,10 @@ import type { TriageItem, TriageSnapshot } from "../../../shared/triage";
 
 export type PillMode = "normal" | "annotate" | "learn" | "quick";
 export const PILL_LABEL: Record<PillMode, string> = { normal: "Normal", annotate: "Annotate", learn: "Learn", quick: "Quick" };
-const NEXT: Record<PillMode, PillMode> = { normal: "annotate", annotate: "learn", learn: "quick", quick: "normal" };
-/** Pill tap: Normal → Annotate → Learn → Quick → Normal. */
+// Annotate is last: its full-screen ink overlay covers the nav pill, so nothing can be cycled
+// after it. The tray's Exit chip and Android Back leave Annotate (to Normal).
+const NEXT: Record<PillMode, PillMode> = { normal: "learn", learn: "quick", quick: "annotate", annotate: "normal" };
+/** Pill tap: Normal → Learn → Quick → Annotate; Exit/Back leaves Annotate. */
 export function nextPillMode(mode: PillMode): PillMode { return NEXT[mode]; }
 export function pillModeOf(annotating: boolean, surface: "learn" | "quick" | null): PillMode {
   if (annotating) return "annotate";
