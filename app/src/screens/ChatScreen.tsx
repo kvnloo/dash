@@ -81,6 +81,7 @@ import { PromptRail } from "../components/PromptRail";
 import { followsLatest, promptOffset } from "../lib/prompt-navigation";
 import { railTurns, type RailTurn } from "../lib/rail-turns";
 import { enterAnnotation, registerSink } from "../store/annotate";
+import { setPillMode } from "../store/ephemeral-mode";
 import { sharedDrafts, consumeSharedDraft } from "../store/shared-drafts";
 
 const EMPTY: Message[] = [];
@@ -519,7 +520,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     {chatOptions && !windowed ? <>
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 16, gap: 4 }}>
       {/* Temporary entry point until the page-aware composer filter menu lands (sol-density-dial). */}
-      <PressScale accessibilityRole="button" accessibilityLabel="Annotate this screen" onPress={() => { haptic.select(); enterAnnotation(); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center", marginRight: "auto" }}><Text style={{ ...type.mono, fontSize: 11, color: colors.gold }}>✎ Annotate</Text></PressScale>
+      <PressScale accessibilityRole="button" accessibilityLabel="Annotate this screen" onPress={() => { haptic.select(); enterAnnotation(); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: colors.gold }}>✎ Annotate</Text></PressScale>
+      <PressScale accessibilityRole="button" accessibilityLabel="Learn mode" onPress={() => { haptic.select(); setPillMode("learn"); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: colors.gold }}>◎ Learn</Text></PressScale>
+      <PressScale accessibilityRole="button" accessibilityLabel="Quick action mode" onPress={() => { haptic.select(); setPillMode("quick"); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center", marginRight: "auto" }}><Text style={{ ...type.mono, fontSize: 11, color: colors.gold }}>⚡ Quick</Text></PressScale>
       <Text style={{ ...type.mono, color: colors.textTertiary, fontSize: 10, marginRight: 6 }}>Thinking & tools</Text>
       {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
     </View>
