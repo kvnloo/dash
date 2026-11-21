@@ -334,6 +334,8 @@
     {"id": "mode-pill-order", "title": "Mode pill cycles Normal → Learn → Quick → Annotate; Exit from Annotate (ink covers the pill) returns to Normal",
      "tests": ["mode pill cycles Normal → Learn → Quick → Annotate and Exit returns to Normal",
                "mode pill: Learn close chip returns to Normal; annotating from Quick still exits to Normal"]},
+    {"id": "quick-bulk-approve", "title": "Quick mode approves several pending approvals at once: Needs OK requests allowed once and bulk-safe upstream items approved by exact body, each behind a confirm",
+     "tests": ["quick mode approves several pending approvals at once: two Needs OK requests and three bulk-safe upstream items"]},
     {"id": "annotation-voice-target", "title": "Annotated ink reaches the open chat; a bound voice call stays alive to speak a final reply before ending",
      "tests": ["annotation-voice-target: OMP chat beats a voice call bound to Hermes",
                "annotation-voice-target: accepted Hermes ink stays live until spoken reply without cancel"]},
