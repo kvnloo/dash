@@ -334,6 +334,8 @@
     {"id": "mode-pill-order", "title": "Mode pill cycles Normal → Learn → Quick → Annotate; Exit from Annotate (ink covers the pill) returns to Normal",
      "tests": ["mode pill cycles Normal → Learn → Quick → Annotate and Exit returns to Normal",
                "mode pill: Learn close chip returns to Normal; annotating from Quick still exits to Normal"]},
+    {"id": "triage-actions", "title": "Triage is interactive (#541): counts needs-you/blocked/running and hands a blocker to an agent as a drafted prompt, or opens Quick mode",
+     "tests": ["triage counts running and blocked work and hands a blocker to an agent as a drafted prompt (#541)"]},
     {"id": "annotation-voice-target", "title": "Annotated ink reaches the open chat; a bound voice call stays alive to speak a final reply before ending",
      "tests": ["annotation-voice-target: OMP chat beats a voice call bound to Hermes",
                "annotation-voice-target: accepted Hermes ink stays live until spoken reply without cancel"]},

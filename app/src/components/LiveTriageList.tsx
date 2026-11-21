@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { AppState, Linking, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { parseTriage, triageAge, triageStale, type TriageItem, type TriageSnapshot } from '../../../shared/triage';
 import { executionToken } from '../lib/bridge-auth';
-import { store } from '../store/app';
+import { createConversation, setActive, store } from '../store/app';
+import { currentSink } from '../store/annotate';
+import { updateComposerDraft } from '../store/composer-drafts';
+import { setPillMode } from '../store/ephemeral-mode';
+import { unblockPrompt } from '../lib/ephemeral-modes';
+import { debugNavigationRef } from '../debug/nav';
 import { colors, fonts, space } from '../theme';
 import { PressScale } from './PressScale';
 import { useOrbMotion } from './OrbMotion';
@@ -52,9 +57,30 @@ export function LiveTriageList() {
   }, [active]);
   const items = feed.phase === 'live' ? [...feed.snapshot.items].sort((a, b) => Number(triageStale(a, now)) - Number(triageStale(b, now)) || a.priority - b.priority || rank(a) - rank(b) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.id.localeCompare(b.id)) : [];
   const open = items.find(i => i.id === selected);
+  const [handNote, setHandNote] = useState('');
+  useEffect(() => { setHandNote(''); }, [selected]);
+  // #541: the list is interactive. A blocker goes to the open chat's agent (as in Quick mode); with
+  // no chat open, a new chat opens with the unblock prompt drafted for the owner to review and send.
+  const handToAgent = async (item: TriageItem) => {
+    const prompt = unblockPrompt(item);
+    const sink = currentSink();
+    if (sink) {
+      try { await sink.send(prompt, [], sink.steerable() ? 'steer' : 'queue'); setHandNote(sink.label.replace(/^Sending to /, 'Sent to ')); }
+      catch (error) { setHandNote(error instanceof Error ? error.message : 'Could not send.'); }
+      return;
+    }
+    if (!settings || !debugNavigationRef.isReady()) { setHandNote('Pair with a bridge first.'); return; }
+    const chat = createConversation(settings.harness, { title: item.title.slice(0, 80) });
+    updateComposerDraft(chat.id, { text: '', attachments: [] }, () => ({ text: prompt, attachments: [] }));
+    setSelected(null);
+    setActive(chat.id);
+    debugNavigationRef.navigate('Chat');
+  };
+  const counts = { owner: items.filter(i => !triageStale(i, now) && i.kind === 'owner').length, blocked: items.filter(i => !triageStale(i, now) && i.kind === 'blocked').length, running: items.filter(i => !triageStale(i, now) && i.kind === 'running').length };
   return <View style={s.root}>
     <Text style={s.heading}>Current work and priorities</Text>
     {feed.phase !== 'live' ? <Text accessibilityRole="alert" style={s.meta}>{feed.phase === 'loading' ? 'Loading current priorities…' : `Triage unavailable · ${feed.reason}`}</Text> : null}
+    {feed.phase === 'live' ? <Text testID="triage-counts" style={s.meta}>{counts.owner} needs you · {counts.blocked} blocked · {counts.running} running</Text> : null}
     {feed.phase === 'live' && feed.snapshot.warnings.length ? <Text style={s.meta}>{feed.snapshot.warnings.join(' · ')}</Text> : null}
     <ScrollView testID="live-triage-list" contentContainerStyle={s.list}>
       {feed.phase === 'live' && !items.length ? <Text style={s.meta}>No running work, blockers or owner-needed items reported. Missing sources are listed above.</Text> : null}
@@ -67,7 +93,10 @@ export function LiveTriageList() {
     </ScrollView>
     {active && open ? <Modal transparent visible animationType="none" onRequestClose={() => setSelected(null)}><View style={s.backdrop}><View style={s.detail} testID="triage-detail" accessibilityViewIsModal>
       <ScrollView><Text style={s.title}>{open.title}</Text><Text style={s.meta}>{triageStale(open, now) ? 'Stale · not current · ' : ''}{triageAge(open, now)} · {open.source}</Text><Text selectable style={s.body}>{open.reason}</Text><Text selectable style={s.body}>{open.next}</Text>
-      {open.url ? <PressScale accessibilityRole="button" accessibilityLabel="Open triage source" onPress={() => { if (open.url) void Linking.openURL(open.url); }} style={s.button}><Text style={s.body}>Open source PR</Text></PressScale> : null}</ScrollView>
+      {open.url ? <PressScale accessibilityRole="button" accessibilityLabel="Open triage source" onPress={() => { if (open.url) void Linking.openURL(open.url); }} style={s.button}><Text style={s.body}>Open source PR</Text></PressScale> : null}
+      {open.kind === 'blocked' || open.kind === 'owner' ? <PressScale accessibilityRole="button" accessibilityLabel={`Hand ${open.title} to an agent`} onPress={() => void handToAgent(open)} style={s.button}><Text style={[s.body, { color: colors.gold }]}>Hand to agent</Text></PressScale> : null}
+      <PressScale accessibilityRole="button" accessibilityLabel="Open Quick mode" onPress={() => { setSelected(null); setPillMode('quick'); }} style={s.button}><Text style={s.body}>Quick mode</Text></PressScale>
+      {handNote ? <Text testID="triage-hand-note" style={s.meta}>{handNote}</Text> : null}</ScrollView>
       <PressScale accessibilityRole="button" accessibilityLabel="Close triage item" onPress={() => setSelected(null)} style={s.button}><Text style={s.body}>Close</Text></PressScale>
     </View></View></Modal> : null}
   </View>;
