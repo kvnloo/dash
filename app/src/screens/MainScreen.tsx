@@ -12,6 +12,7 @@ import { OrbActivity } from "../components/OrbMotion";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { AttachedComposer } from "../components/AttachedComposer";
+import { QuickPin } from "../components/QuickPin";
 import { KeyboardDock } from "../components/KeyboardDock";
 import { AppNav, type AppNavHandle } from "../components/AppNav";
 import { SearchResultRow } from "../components/SearchResultRow";
@@ -502,6 +503,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
 
       <BottomActionSheet open={rowMenu !== null} title={rowMenu?.title || "Result"} options={rowMenuOptions} onSelect={onRowMenuSelect} onClose={closeRowMenu} />
       <KeyboardDock style={styles.searchDock}>
+        {screenFocused && !searchMode ? <QuickPin /> : null}
         {attached && screenFocused && !searchMode ? (
           <AttachedComposer
             key={attached.id}
