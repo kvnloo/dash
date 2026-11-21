@@ -15,7 +15,8 @@ import { WORKSPACE_ACTION_LABELS, upstreamApprovalAction, workspaceHeadingLabel 
  * no labels), pending approvals, compose and settings. Navigation itself stays in AppNav.
  */
 export function WorkspaceHeader({ navigation, tab, titleOnly = false }: { navigation: NavigationProp<RootStackParamList>; tab: number; titleOnly?: boolean }) {
-  const title = TAB_LABELS[clampTab(tab)];
+  const label = TAB_LABELS[clampTab(tab)];
+  const title = label === "Chats" ? "Chats (turbo)" : label;
   return <View style={styles.header}>
     <Text style={styles.title} numberOfLines={1} accessibilityRole="header" accessibilityLabel={workspaceHeadingLabel(tab)}>{title}</Text>
     {titleOnly ? null : <WorkspaceActions navigation={navigation} />}
