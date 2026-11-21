@@ -78,6 +78,8 @@
                "channel approval: nightly cannot activate or pin an unreceipted build"]},
     {"id": "jsx-tsx-highlighting", "title": "JSX and TSX chat code blocks preserve source and visibly distinguish syntax (#518)",
      "tests": ["JSX and TSX replies preserve code and visibly distinguish syntax"]},
+    {"id": "code-grammar-coverage", "title": "Go, Rust, SQL and YAML code blocks highlight keywords in the one accent and dim italic comments (#518)",
+     "tests": ["Go, Rust, SQL and YAML replies highlight keywords and dim italic comments"]},
     {"id": "chat-active-sessions", "title": "Active sessions use exact live host identities, retain host-held chats, preserve membership across sorts and avoid archive scans",
      "tests": ["Chats combines harness, exact project and local dates, pages within the date bound, sorts visually and resets to the top",
                "Active sessions retain both host identities across every sort and remove an offline host without hiding saved history"]},
