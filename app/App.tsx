@@ -35,6 +35,7 @@ import { RoadmapProjectScreen, RoadmapScreen, RoadmapTaskScreen } from "./src/sc
 import { DebugHost } from "./src/debug/DebugHost";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
 import { EphemeralModes } from "./src/components/EphemeralModes";
+import { SecretEntry } from "./src/components/SecretEntry";
 import { isDebugActive } from "./src/debug/expose";
 import { debugNavigationRef, flushPendingDebugNavigation } from "./src/debug/nav";
 import { clearDebugPersistence, applyDebugSeed } from "./src/debug/seed";
@@ -162,6 +163,7 @@ export default function App() {
               <BridgePullOverlay />
               <EphemeralModes />
               <NativeEvents />
+              <SecretEntry />
             </AnnotationRoot></ContinuousVoiceRoot>
             </NavigationContainer>
           </BridgePullProvider>
