@@ -1,5 +1,5 @@
 import { fade } from "../motion";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import Animated, { FadeInUp, FadeOutUp, useReducedMotion } from "react-native-reanimated";
@@ -88,10 +88,7 @@ function LiveTrace({ snapshot, receivedAt, arrived, onNavigate, pairKey }: { sna
   const st = snapshot.stats;
   const onDecide = useCallback((id: string, v: "do" | "not_now" | "undo") => record("action", id, v), []);
   const onOpenRow = useCallback((row: TraceRow) => setOpen(row), []);
-  const groups = useMemo(() => {
-    const ordered = snapshot.rows.map(row => ({ row, summary: summarizeRow(row) })).sort((a, b) => b.summary.e - a.summary.e);
-    return (["live", "recent", "earlier"] as const).map(group => ({ group, items: ordered.filter(item => item.row.group === group) }));
-  }, [snapshot.rows]);
+  const closeRow = useCallback(() => setOpen(null), []);
   // The open detail follows its row by key across polls; a row that left the feed keeps its last copy, labelled.
   const current = open ? snapshot.rows.find(r => r.key === open.key) : undefined;
   const newest = arrived.map(key => snapshot.rows.find(r => r.key === key)).filter((r): r is TraceRow => Boolean(r));
@@ -124,23 +121,7 @@ function LiveTrace({ snapshot, receivedAt, arrived, onNavigate, pairKey }: { sna
         </TileGrid>
         <Text style={styles.hint}>Pinch to zoom · drag to pan · hold a row for its actions · tap a row</Text>
         <TraceTimeline snapshot={snapshot} rows={snapshot.rows} onOpenRow={onOpenRow} onScrub={setScrub} scrollRef={scrollRef} selectedKey={open?.key ?? null} freshKeys={arrived} />
-        </> : <View testID="trace-timeline" style={styles.activity}>
-          {groups.filter(({ items }) => items.length).map(({ group, items }) => (
-            <View key={group} style={styles.activityGroup}>
-              <Text accessibilityRole="header" style={styles.groupTitle}>{group === "earlier" ? "Earlier" : GROUP_LABEL[group]} · {items.length}</Text>
-              {items.map(({ row, summary }) => {
-                const status = summary.live ? "Running" : summary.cut ? "Interrupted" : row.workers.every(w => w.status === "completed") ? "Completed" : "Status unknown";
-                const verdict = traceVerdict(row.evidence);
-                return <Pressable key={row.key} accessibilityRole="button" testID={`row-${row.key}`} onPress={() => onOpenRow(row)}
-                  style={({ pressed }) => [styles.event, pressed && { backgroundColor: tc.raised }]}>
-                  <Text style={styles.eventMeta}>{row.project} · {Number.isFinite(summary.e) ? clock(snapshot.t0, summary.e) : "Time unknown"}</Text>
-                  <Text style={styles.eventTitle} numberOfLines={3}>{row.goal}</Text>
-                  <Text style={styles.eventMeta}>{status}{arrived.includes(row.key) ? " · New" : ""}{verdict === "unknown" ? "" : ` · Validation ${verdict}`}</Text>
-                </Pressable>;
-              })}
-            </View>
-          ))}
-        </View>}
+        </> : <ActivityList snapshot={snapshot} arrived={arrived} onOpenRow={onOpenRow} />}
       </ScrollView>
       {scrub ? (
         <Animated.View entering={reduced ? undefined : FadeInUp.duration(fade.duration)} exiting={reduced ? undefined : FadeOutUp.duration(fade.duration)} style={styles.float} pointerEvents="none" testID="scrub-float">
@@ -148,10 +129,36 @@ function LiveTrace({ snapshot, receivedAt, arrived, onNavigate, pairKey }: { sna
           <Text style={styles.floatS}>{scrub.live} live then</Text>
         </Animated.View>
       ) : null}
-      {open ? <TraceDetail key={open.key} snapshot={snapshot} row={current ?? open} stale={!current} onClose={() => setOpen(null)} onNavigate={onNavigate} /> : null}
+      {open ? <TraceDetail key={open.key} snapshot={snapshot} row={current ?? open} stale={!current} onClose={closeRow} onNavigate={onNavigate} /> : null}
     </>
   );
 }
+
+const ActivityList = memo(function ActivityList({ snapshot, arrived, onOpenRow }: {
+  snapshot: TraceSnapshot; arrived: string[]; onOpenRow(row: TraceRow): void;
+}) {
+  const ordered = snapshot.rows.map(row => ({ row, summary: summarizeRow(row) })).sort((a, b) => b.summary.e - a.summary.e);
+  const groups = (["live", "recent", "earlier"] as const).map(group => ({ group, items: ordered.filter(item => item.row.group === group) }));
+  return (
+    <View testID="trace-timeline" style={styles.activity}>
+      {groups.filter(({ items }) => items.length).map(({ group, items }) => (
+        <View key={group} style={styles.activityGroup}>
+          <Text accessibilityRole="header" style={styles.groupTitle}>{group === "earlier" ? "Earlier" : GROUP_LABEL[group]} · {items.length}</Text>
+          {items.map(({ row, summary }) => {
+            const status = summary.live ? "Running" : summary.cut ? "Interrupted" : row.workers.length > 0 && row.workers.every(w => w.status === "completed") ? "Completed" : "Status unknown";
+            const verdict = traceVerdict(row.turns?.[0]?.evidence ?? row.evidence);
+            return <Pressable key={row.key} accessibilityRole="button" testID={`row-${row.key}`} onPress={() => onOpenRow(row)}
+              style={({ pressed }) => [styles.event, pressed && { backgroundColor: tc.raised }]}>
+              <Text style={styles.eventMeta}>{row.project} · {Number.isFinite(summary.e) ? clock(snapshot.t0, summary.e) : "Time unknown"}</Text>
+              <Text style={styles.eventTitle} numberOfLines={3}>{row.goal}</Text>
+              <Text style={styles.eventMeta}>{status}{arrived.includes(row.key) ? " · New" : ""}{verdict === "unknown" ? "" : ` · Validation ${verdict}`}</Text>
+            </Pressable>;
+          })}
+        </View>
+      ))}
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },

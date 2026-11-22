@@ -431,7 +431,7 @@ test('Trace opens a readable timeline and shows the right evidence for each turn
       const frame = () => {
         const heading = document.querySelector('[data-testid="trace-evidence"]');
         if (heading?.getBoundingClientRect().height) {
-          requestAnimationFrame(() => performance.mark('trace-evidence-frame', { detail: performance.now() - start }));
+          requestAnimationFrame(() => performance.measure('trace-evidence-frame', { start, end: performance.now() }));
         } else if (performance.now() - start < 5000) requestAnimationFrame(frame);
       };
       requestAnimationFrame(frame);
@@ -441,7 +441,7 @@ test('Trace opens a readable timeline and shows the right evidence for each turn
   const evidence = page.getByTestId('trace-evidence');
   await expect(evidence.getByText('INTENT CONTRACT', { exact: true })).toBeInViewport();
   await expect.poll(() => page.evaluate(() => performance.getEntriesByName('trace-evidence-frame').length)).toBe(1);
-  const ms = await page.evaluate(() => performance.getEntriesByType('mark').find(entry => entry.name === 'trace-evidence-frame' && entry instanceof PerformanceMark && typeof entry.detail === 'number')?.toJSON().detail);
+  const ms = await page.evaluate(() => performance.getEntriesByName('trace-evidence-frame', 'measure')[0]?.duration);
   expect(typeof ms).toBe('number');
   expect(ms).toBeLessThan(1000);
   await info.attach('trace-open-ms', { body: String(ms), contentType: 'text/plain' });

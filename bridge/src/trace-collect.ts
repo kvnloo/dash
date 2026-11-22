@@ -71,7 +71,7 @@ export async function collectTrace(options: { runs?: string; profiles?: string[]
     evidence.artifacts = evidence.artifacts.slice(0, 64);
     evidence.warnings.push("Run liveness and tool counts are unavailable without a correlated session; no phone verification inferred.");
     const stamp = statSync(promptPath).mtimeMs, end = statSync(dir).mtimeMs;
-    rows.push({ key: `run:${basename(dir)}`, project: /dash|trace|composer|mic|orchestra|voice|context|annotate/.test(basename(dir)) ? "Dash" : basename(dir).replace(/^\d{8}-/, "").split("-")[0] || "Runs", goal: basename(dir).replace(/^\d{8}-/, ""), group: "earlier", workers: [worker(basename(dir), "Run · liveness unknown", Math.max(0, (stamp - start) / 1000), Math.max(1, (Math.min(now, end) - start) / 1000), "unknown")], evidence });
+    rows.push({ key: `run:${basename(dir)}`, project: /dash|trace|composer|mic|orchestra|voice|context|annotate/.test(basename(dir)) ? "Dash" : basename(dir).replace(/^\d{8}-/, "").split("-")[0] || "Runs", goal: basename(dir).replace(/^\d{8}-/, ""), group: now - end < 10800000 ? "recent" : "earlier", workers: [worker(basename(dir), "Run · liveness unknown", Math.max(0, (stamp - start) / 1000), Math.max(1, (Math.min(now, end) - start) / 1000), "unknown")], evidence });
     if (rows.length >= 60) break;
   }
   const base = process.env.HERMES_HOME || join(homedir(), ".hermes");
@@ -100,7 +100,7 @@ export async function collectTrace(options: { runs?: string; profiles?: string[]
           for (const e of events) { try { const parsed: unknown = JSON.parse(e.tool_calls); if (Array.isArray(parsed)) calls += parsed.length; } catch { /* malformed tool metadata */ } }
         } catch { warnings.push("Tool metadata unavailable"); }
         const updated = num(s.ended_at) || num(s.last_activity_at) || num(s.started_at);
-        rows.push({ key: `hermes:${basename(home)}:${id}`, project: basename(text(s.git_repo_root) || text(s.cwd)) || "Hermes", goal: redact(text(s.title)).slice(0, 100) || "Session · original request not loaded", group: status === "running" ? "live" : now / 1000 - updated < 10800 ? "recent" : "earlier", workers: [worker(id, text(s.model) || "Hermes", Math.max(0, num(s.started_at) - start / 1000), Math.min(now / 1000, updated) - start / 1000, status, calls)], ...(turns.length ? { turns } : {}), provenance: { parentSessionId: text(s.parent_session_id), source } });
+        rows.push({ key: `hermes:${basename(home)}:${id}`, project: basename(text(s.git_repo_root) || text(s.cwd)) || "Hermes", goal: redact(text(s.title)).slice(0, 100) || "Session · original request not loaded", group: status === "running" ? "live" : now / 1000 - updated < 10800 ? "recent" : "earlier", workers: [worker(id, text(s.model) || "Hermes", Math.max(0, num(s.started_at) - start / 1000), Math.min(now / 1000, updated) - start / 1000, status, calls)], ...(turns[0] ? { turns, evidence: turns[0].evidence } : {}), provenance: { parentSessionId: text(s.parent_session_id), source } });
       }
     } catch { warnings.push(`${basename(home)} session metadata unavailable`); } finally { db?.close(); }
   }

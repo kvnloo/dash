@@ -7,6 +7,7 @@ const db = new Database(path);
 try {
   const id = 'army-fixture-session';
   const now = Date.now() / 1000;
+  db.exec('CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL, tool_calls TEXT, active INTEGER DEFAULT 1)');
   db.transaction(() => {
     db.query('DELETE FROM messages WHERE session_id = ?').run(id);
     const insert = db.query('INSERT INTO messages (session_id, role, content, timestamp, active) VALUES (?, ?, ?, ?, ?)');
