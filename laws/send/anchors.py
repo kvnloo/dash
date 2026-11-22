@@ -56,7 +56,7 @@ ANCHORS = [
     ("S7", "x_row_routes", SIDECAR, "const mine = row.host_id === SELF_HOST;", 1),
     ("S7", "x_row_routes", LIVE, "...(summary.agentId ? { profileId: summary.agentId } : {})", 1),
     ("S7", "x_row_routes", NET, "return { hostId: conversation?.targetHostId, profileId: conversation?.profileId };", 1),
-    ("S7-S8", "x_self_archive", AVS, "return Boolean(profileId && sessionId && profileId === `${AGENTSVIEW_PREFIX}${harness}:${sessionId}`);", 1),
+    ("S7-S8", "x_self_archive", AVS, "return Boolean(profileId && sessionId &&\n    (profileId === `${AGENTSVIEW_PREFIX}${harness}:${sessionId}` || profileId === `${harness}:session:${sessionId}`));", 1),
     ("S7-S8", "x_profile_ok", BRIDGE, "&& !isSelfArchiveProfile(message.profileId, message.harness, message.sessionId) && !(message.harness === \"hermes\" && message.profileId === \"hermes:default\")) return rejectTurn(ws, message.id, \"Profile routing unavailable on this bridge.\");", 2),
     ("S9", "a_reject", BRIDGE, 'log("turn.rejected", { id, reason: message });\n  sendTo(ws, { type: "error", id, seq: 1, message });\n  sendTo(ws, { type: "done", id, seq: 2, exitCode: 1 });', 1),
     ("S9-S11", "a_admit dup (chat)", BRIDGE, "if (turns.has(message.id)) return;\n          const harness = HARNESSES.find((h) => h.id === message.harness);", 1),

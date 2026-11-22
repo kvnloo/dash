@@ -1,3 +1,4 @@
+import { chatPosts } from "./chat-posts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ConversationPersistence, hasHostHistory, uniqueConversationIds } from "./conversation-persistence";
 import { conversationFiles, conversationIndex } from "./conversation-files";
@@ -260,6 +261,11 @@ export function setConnection(patch: Partial<Connection>): void {
 export async function forgetEverything(send: (message: ClientMessage) => boolean = () => false): Promise<void> {
   const { agentNoticeInbox }: typeof import("./notices") = require("./notices");
   await agentNoticeInbox.forget(send);
+  chatPosts.set([]);
+  const { clearOvernightCaptures }: typeof import("./overnight-captures") = require("./overnight-captures");
+  const { clearBedtimeSchedule }: typeof import("./bedtime") = require("./bedtime");
+  await clearBedtimeSchedule();
+  await clearOvernightCaptures();
   const enrollment = store.get().settings?.identity;
   if (enrollment) {
     const { setSecret }: typeof import("../lib/secure") = require("../lib/secure");
@@ -404,7 +410,12 @@ export function openChat(summary: ChatSummary): Conversation {
   const { conversations } = store.get();
   const existing = conversations.find(c => c.endpointAddress === store.get().settings?.address && conversationKey(c) === summary.key);
   if (existing) {
-    const updated = summary.model ? { ...existing, sessionModel: { sessionId: summary.sessionId, model: summary.model } } : existing;
+    const updated = summary.model || summary.repoRoot || summary.task ? {
+      ...existing,
+      ...(summary.model ? { sessionModel: { sessionId: summary.sessionId, model: summary.model } } : {}),
+      ...(summary.repoRoot ? { repoRoot: summary.repoRoot } : {}),
+      ...(summary.task ? { task: summary.task } : {}),
+    } : existing;
     if (updated !== existing) store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id === existing.id ? updated : c) }));
     setActive(existing.id);
     return updated;
@@ -737,6 +748,7 @@ export function applyTurnEvent(
           event.harnessId === c.harness && (event.transport === "acp" || event.transport === "legacy") &&
           selfHost !== undefined && (isCatalogHarness(c.harness) || event.transport === "acp" && genericProfile !== undefined);
         return { ...c, sessionId: event.sessionId,
+          ...(event.repoRoot && selfHost && c.endpointAddress === settings?.address ? { repoRoot: event.repoRoot } : {}),
           ...(native ? { profileId: event.profileId ?? c.profileId, targetHostId: host ?? c.targetHostId, stale: false }
             : paired ? { targetHostId: host, ...(!isCatalogHarness(c.harness) ? { profileId: genericProfile!.id } : {}), stale: false } : {}) };
       });

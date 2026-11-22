@@ -34,6 +34,9 @@ mkdir -p "$TH/bin" "$TH/wt" "$TH/.claude" "$HOME/.local/state/dash" "$HOME/Libra
 for t in turbo-new turbo-promote turbo-done turbo-status turbo-off turbo-on; do install -m 0755 "$here/$t" "$TH/bin/$t"; done
 install -m 0644 "$here/agent-home/TURBO.md" "$TH/TURBO.md"
 install -m 0644 "$here/agent-home/.claude/settings.json" "$TH/.claude/settings.json"
+# Claude Code ignores a folder's .claude/settings.json until the folder is trusted (measured: rules
+# matched only after hasTrustDialogAccepted). Trust exactly ~/dash-turbo; a backup of ~/.claude.json is kept.
+python3 -I "$here/trust-agent-home.py" "$HOME/.claude.json" "$TH"
 install -m 0644 "$here/dev.kvnloo.dash-metro-preview.plist" "$PLIST"
 plutil -lint "$PLIST" >/dev/null
 launchctl bootout "gui/$(id -u)/dev.kvnloo.dash-metro-preview" 2>/dev/null || true

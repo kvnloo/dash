@@ -68,6 +68,11 @@ export interface MetroEndpoint {
 }
 
 /** The two Metro servers on the dev host: live-follow turbo (:8213) and the release channel (:8214). */
+export const STUDIO_CHANNELS = [
+  { label: "Stable", port: 8097 },
+  { label: "Preview", port: 8098 },
+];
+
 export const METRO_ENDPOINTS: readonly MetroEndpoint[] = [
   { id: "turbo", label: "Turbo (live)", port: 8213 },
   { id: "channel", label: "RC3 channel", port: 8214 },

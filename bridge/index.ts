@@ -1,3 +1,5 @@
+import { createAndroidUpdateHandler } from "./src/android-update";
+import { repositoryRoot } from "./src/chat-index/workspace";
 // Dash bridge: a WebSocket server on your tailnet that runs agent CLIs on this
 // machine and streams their output to the phone.
 //
@@ -116,6 +118,7 @@ interface SocketData {
   principal: BridgePrincipal;
   stopIdentityWatch?: () => void;
   stopNotices?: () => void;
+  stopChatPosts?: () => void;
   stopSecrets?: () => void;
   /** Turn ids this socket is subscribed to. */
   turns: Set<string>;
@@ -192,11 +195,13 @@ class Turn implements Sink {
 
   /** Host profile that owns this Hermes turn's session, once known. */
   private hermesProfile?: string;
+  private workspaceRepo?: string;
   private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
   /** Ends this turn's entry in the running-turn registry, so queued follow-ups go after it (#498). */
   private untrack?: () => void;
 
   start(input: TurnInput, remote?: RemoteHost): void {
+    if (!remote && !input.sessionId) this.workspaceRepo = repositoryRoot(input.cwd);
     if (input.model && !remote && ((this.harness.id === "hermes" && input.sessionId) || process.env.DASH_ENABLE_LEGACY_CLI === "1")) {
       this.endWithout("Model switching requires an ACP-controlled session on this host; no prompt was submitted.");
       return;
@@ -503,7 +508,7 @@ class Turn implements Sink {
   session(sessionId: string): void {
     if (this.harness.id === "hermes" && !this.finished) this.untrack ??= trackRunningTurn(sessionId);
     this.flush();
-    this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: SELF.id(), harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesTransport ?? (this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp") });
+    this.emit({ type: "session", id: this.id, seq: 0, sessionId, ...(this.workspaceRepo ? { repoRoot: this.workspaceRepo } : {}), hostId: SELF.id(), harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesTransport ?? (this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp") });
   }
 
   /** What we heard, for a turn the user spoke rather than typed. */
@@ -799,6 +804,7 @@ const handleHttp = createPairingHttpHandler({
 
 const CREDENTIAL_DIR = process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash");
 const notices = new NoticeService(CREDENTIAL_DIR, (notice, delivered) => log("notice.published", { id: notice.id, delivered }));
+const chatPosts = new NoticeService(CREDENTIAL_DIR, (post, delivered) => log("chat_post.published", { id: post.id, delivered }), "chat-posts");
 const noticePort = Number(process.env.DASH_NOTICE_PORT ?? (PORT === 0 ? 0 : PORT + 1));
 if (!Number.isInteger(noticePort) || noticePort < 0 || noticePort > 65535) throw new Error("Invalid DASH_NOTICE_PORT");
 if (notices.quarantined) log("notices.quarantined", { file: basename(notices.quarantined) });
@@ -809,7 +815,7 @@ const uiControl = new UiControlHub();
 const handleUiControl = createUiControlHttpHandler({ token: TOKEN, hub: uiControl, onEvent: log });
 const handleSudo = createSudoHttpHandler({ token: TOKEN, broker: secretBroker });
 const noticeServer = tryStartNoticeServer({ token: TOKEN, notices, port: noticePort, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG,
-  extra: async (request, peer, holdOpen) => (await handleUiControl(request, peer)) ?? handleSudo(request, peer, holdOpen) }, reason => log("notices.disabled", { reason }));
+  postToChat, extra: async (request, peer, holdOpen) => (await handleUiControl(request, peer)) ?? handleSudo(request, peer, holdOpen) }, reason => log("notices.disabled", { reason }));
 // Agents this bridge spawns inherit the real loopback port, so dash-notify, dash-sudo and dash-ui
 // reach it even when it was chosen by the OS (DASH_PORT=0) or set apart from DASH_PORT+1.
 if (noticeServer?.port) process.env.DASH_NOTICE_PORT = String(noticeServer.port);
@@ -853,16 +859,32 @@ function liveChats(): ChatSummary[] {
     const key = chatKey({ hostId: host.id, kind: agent.kind, sessionId: agent.sessionId, ...(profileId ? { profileId } : {}) });
     if (!liveSince.has(key)) liveSince.set(key, now);
     const since = liveSince.get(key) ?? now;
+    const repoRoot = host.self ? repositoryRoot(agent.cwd) : undefined;
     out.push({
       key, kind: agent.kind, sessionId: agent.sessionId, hostId: host.id, hostName: host.name, ...(profileId ? { profileId } : {}), agentId: agent.id,
       title: agent.name, ...(agent.cwd ? { cwd: agent.cwd } : {}), startedAt: since, lastActivityAt: agent.lastActivityAt ?? since,
       ...(agent.model ? { model: agent.model } : {}),
+      ...(repoRoot ? { repoRoot } : {}),
       messageCount: agent.messageCount ?? 0, origin: "live", chatable: host.self && isCatalogHarness(agent.kind),
       ...(agent.status === "running" ? { running: true } : {}), ...(agent.openIn ? { openIn: agent.openIn } : {}),
     });
   }
   if (liveSince.size > 512) for (const key of liveSince.keys()) if (!out.some(row => row.key === key)) liveSince.delete(key);
   return out;
+}
+/** Exact title only; incomplete or ambiguous results must never pick a recipient. */
+async function postToChat(title: string, body: string, signal: AbortSignal): Promise<Response> {
+  const self = { id: SELF.id(), name: HOST_NAME };
+  const hits = await chatIndex.titleSearch({ q: title, qh: title, kinds: [], hosts: [], limit: 100, self }, signal);
+  const matching = new Set([...liveChats(), ...hits.hits.map(hit => hit.chat)]
+    .filter(chat => chat.title.trim() === title)
+    .map(chat => chat.key));
+  if (matching.size > 1 || hits.next) return new Response("ambiguous chat title", { status: 409 });
+  const [chat] = matching;
+  if (!chat) return new Response("chat not found", { status: 404 });
+  if (signal.aborted) return new Response(null, { status: 408 });
+  const post = chatPosts.publish({ title: "Agent message", chat, body, postedAt: Date.now() });
+  return Response.json(post, { status: 201 });
 }
 const handleChats = createChatsHttpHandler({
   authorize: request => authorize(request, false),
@@ -888,8 +910,9 @@ const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFA
 
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
 const liveSurface = new LiveSurface({ log });
+const handleAndroidUpdate = createAndroidUpdateHandler(process.env.DASH_ANDROID_UPDATE_DIR, process.env.DASH_ANDROID_UPDATE_SERIAL);
 const handleSupervision = createSupervisionHttpHandler({ token: TOKEN, directory: process.env.DASH_SUPERVISION_DIR });
-const handlePosture = createPostureHttpHandler({ token: TOKEN, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG });
+const handlePosture = createPostureHttpHandler({ authorize, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG });
 const gatePoll = gate ? setInterval(() => { try { gate.refresh(); } catch { /* Explicit next request returns corruption error. */ } }, 2000) : null;
 
 const server = Bun.serve<SocketData>({
@@ -898,7 +921,7 @@ const server = Bun.serve<SocketData>({
   async fetch(request, server) {
     const url = new URL(request.url);
     // Reports use their own loopback-only listener, never the tailnet surface.
-    if (url.pathname === "/notice") return new Response("use the local notice listener", { status: 403 });
+    if (url.pathname === "/notice" || url.pathname === "/chat/post") return new Response("use the local notice listener", { status: 403 });
     // Native clients omit Origin; browser clients must use the exact bridge
     // origin or an explicitly configured origin. Never trust forwarded headers.
     const authority = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${server.port}`;
@@ -922,6 +945,10 @@ const server = Bun.serve<SocketData>({
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      if (url.pathname === "/android/update") {
+        if (request.method === "POST") server.timeout(request, 195);
+        return cors(await handleAndroidUpdate(request, Boolean(await authorize(request, false))));
+      }
       if (url.pathname === "/debug/trace") {
         const trace = await handleFlowTrace(request, await authorize(request));
         if (trace) return cors(trace);
@@ -1000,6 +1027,10 @@ const server = Bun.serve<SocketData>({
         if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) { ws.close(1008, "Identity authorization expired"); return; }
         sendTo(ws, notice);
       });
+      if (ws.readyState === WebSocket.OPEN) ws.data.stopChatPosts = chatPosts.subscribe(post => {
+        if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) { ws.close(1008, "Identity authorization expired"); return; }
+        if (post.chat && post.postedAt) sendTo(ws, { type: "chat_post", id: post.id, body: post.body, chat: post.chat, postedAt: post.postedAt });
+      });
       if (ws.readyState === WebSocket.OPEN) ws.data.stopSecrets = secretBroker.subscribe(message => sendTo(ws, message));
     },
     async message(ws, raw) {
@@ -1019,7 +1050,7 @@ const server = Bun.serve<SocketData>({
       }
       switch (message.type) {
         case "notices_clear": {
-          try { notices.clear(); log("notices.cleared", {}); }
+          try { notices.clear(); chatPosts.clear(); log("notices.cleared", {}); }
           catch { log("notices.clear_failed", {}); }
           break;
         }
@@ -1262,6 +1293,7 @@ const server = Bun.serve<SocketData>({
     close(ws) {
       ws.data.stopIdentityWatch?.();
       ws.data.stopNotices?.();
+      ws.data.stopChatPosts?.();
       ws.data.stopSecrets?.();
       if (ws.data.uiControl) uiControl.leave(ws.data.uiControl);
       if (ws.data.gateSend) gate?.unsubscribe(ws.data.gateSend);

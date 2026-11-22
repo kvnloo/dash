@@ -111,7 +111,7 @@ adb -s <S25-serial> shell am start -W \
   -d 'exp+dash://expo-development-client/?url=http%3A%2F%2F100.113.138.100%3A8098'
 ```
 
-The APK includes `expo-dev-client`, plus turbo's SDK `expo-intent-launcher` and `react-native-view-shot` native modules. Existing bridge pairing and `:4747` are unchanged. No bridge token goes in the launch URL.
+The APK includes `expo-dev-client`, plus the `react-native-view-shot` native module. Existing bridge pairing and `:4747` are unchanged. No bridge token goes in the launch URL.
 
 JavaScript/TypeScript and styling changes use Metro Fast Refresh. Native module, native dependency, app config/plugin, permission or manifest changes require another prebuild/APK installation. A Metro bundle resolving successfully does not prove native launch or Fast Refresh on the phone. The rollout owner must install, open the URL, verify a real edit appears, and inspect device/Metro errors before calling it live. Workers must not restart the protected stable/preview services or drive the daily phone.
 

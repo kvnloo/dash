@@ -1,3 +1,4 @@
+import { taskFromPrompt } from "../../../shared/chat-task";
 import type { AssistantMessage, Conversation } from "../model";
 
 export type ChatPreviewKind = "needs-you" | "failed" | "working" | "reply" | "you" | "empty";
@@ -200,4 +201,16 @@ export function chatPreview(c: PreviewConversation): ChatPreviewResult {
     }
   }
   return needsYou ?? failed ?? working ?? content ?? { text: fallback(c), kind: "empty" };
+}
+
+
+/** Pick the newest substantive request in a bounded window; acknowledgments keep the prior task. */
+export function currentChatTask(c: Pick<Conversation, "messages" | "task">): string | undefined {
+  for (let i = c.messages.length - 1; i >= Math.max(0, c.messages.length - 16); i--) {
+    const message = c.messages[i];
+    if (message?.role !== "user" || message.delivery === "failed") continue;
+    const task = taskFromPrompt(message.text);
+    if (task) return task;
+  }
+  return c.task;
 }
