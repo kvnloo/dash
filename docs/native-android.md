@@ -3,7 +3,9 @@
 ## DeX Dash Pad (device acceptance pending)
 
 The local `dash-dex` Expo module registers `DashDex` and a non-exported
-`DashPadActivity`, using the application's existing ReactHost. The optional native adapter requires both `EXPO_PUBLIC_DASH_TURBO=1` and `EXPO_PUBLIC_DASH_DEX=1`.
+`DashPadActivity`, using the application's existing ReactHost. The phone attaches only a React
+surface; MainActivity retains ownership of the host lifecycle. The optional
+native adapter requires both `EXPO_PUBLIC_DASH_TURBO=1` and `EXPO_PUBLIC_DASH_DEX=1`.
 Expo Go and older APKs report unavailable. Commands reject activity-launch
 failures instead of claiming attachment. Private Samsung confirmations without
 a public desktop display ID cannot move MainActivity.

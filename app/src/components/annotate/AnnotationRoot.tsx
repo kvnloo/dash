@@ -487,6 +487,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
                 dom={{ style: { flex: 1 }, scrollEnabled: false }} />
             </Animated.View> : null}
           </View>
+          {padZoomed ? <View style={StyleSheet.absoluteFill} /> : null}
           {dex.preview.length > 1 ? <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <Svg width={size.width} height={size.height}>
               <Polyline points={dex.preview.map(p => `${p.x * size.width},${p.y * size.height}`).join(" ")}

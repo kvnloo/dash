@@ -1,7 +1,7 @@
 import { test, expect, openChat, send, web } from "./fixtures";
 import { enterAnnotation } from "./annotation";
 
-  for (const engine of ["tldraw", "skia"]) {
+for (const engine of ["tldraw", "skia"]) {
   test(`DeX Pad pinches the TV chat and sends a circle drawn on the phone (${engine})`, async ({ page, bridge }, info) => {
     await page.setViewportSize({ width: 1200, height: 780 });
     await openChat(page, bridge, `${web}?annotateEngine=${engine}`);
@@ -33,7 +33,6 @@ import { enterAnnotation } from "./annotation";
       await touch("touchStart", [point(0, .4, .5)]);
       await touch("touchStart", [point(0, .4, .5), point(1, .6, .5)]);
       await touch("touchMove", [point(0, .3, .5), point(1, .7, .5)]);
-
       await touch("touchEnd");
 
       const zoomed = tv.getByTestId("dex-zoomed-chat");

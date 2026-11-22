@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Pressable, Platform, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, type GestureResponderEvent, type ViewStyle } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { closePad } from "../../lib/dex";
 import { padAspect, sendPadEvent, subscribePadAspect, type PadPoint, type PadSample } from "../../lib/dex-pad";
+
+type Contact = GestureResponderEvent["nativeEvent"];
+type ContactId = Contact["identifier"];
 
 export function DashPad() {
   const [error, setError] = useState(false);
@@ -10,12 +13,11 @@ export function DashPad() {
   const aspect = useSyncExternalStore(subscribePadAspect, padAspect);
   const width = Math.min(room.width, room.height * aspect);
   const height = width / aspect;
-  const tracking = useRef<{ points: PadSample[]; finger: number; pinching: boolean;
-    previous?: { center: PadPoint; distance: number; first: number; second: number };
+  const tracking = useRef<{ points: PadSample[]; finger: ContactId; pinching: boolean;
+    previous?: { center: PadPoint; distance: number; first: ContactId; second: ContactId };
   }>(undefined);
   useEffect(() => () => sendPadEvent({ type: "reset" }), []);
 
-  type Contact = GestureResponderEvent["nativeEvent"];
   const point = (touch: Contact) => ({
     x: Math.min(1, Math.max(0, touch.locationX / Math.max(1, width))),
     y: Math.min(1, Math.max(0, touch.locationY / Math.max(1, height))),
@@ -84,7 +86,7 @@ export function DashPad() {
       {error ? <Text accessibilityRole="alert" style={styles.text}>Could not close Dash Pad.</Text> : null}
     </SafeAreaView></SafeAreaProvider>;
 }
-const webSurface = { touchAction: "none", userSelect: "none" };
+const webSurface = { touchAction: "none", userSelect: "none" } satisfies ViewStyle & { touchAction: string };
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
   pad: { flex: 1, backgroundColor: "#000", padding: 16, gap: 12 },
