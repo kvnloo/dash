@@ -2,6 +2,9 @@ import { createServer } from 'node:http';
 import { test, expect, openChat, send } from './fixtures';
 
 test.use({ bridgeOptions: { generatedUI: true } });
+test.afterEach(async ({ page }, info) => {
+ if (!page.isClosed()) await page.screenshot({ path: info.outputPath('final.png') });
+});
 
 test('opens a hosted prototype link and uses its control in Dash', async ({ page, bridge }) => {
  const requested: string[] = [];
