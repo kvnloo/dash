@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { createContext, useContext, useEffect, useState } from "react";
 import { AppState, Platform, StyleSheet, View } from "react-native";
 import { setWallpaperWindow } from "../lib/wallpaper-window";
-import { appearanceTheme } from "../store/appearance";
+import { appearanceTheme, hydrateAppearanceTheme } from "../store/appearance";
 import { wallpaperScrim } from "../theme";
 
 export const WallpaperTheme = createContext(false);
@@ -11,6 +11,7 @@ export const useWallpaperGlass = () => useContext(WallpaperTheme);
 export function useWallpaperWindow() {
   const enabled = appearanceTheme.use(theme => theme === "wallpaper");
   const [ready, setReady] = useState(false);
+  useEffect(() => { void hydrateAppearanceTheme(); }, []);
   useEffect(() => {
     let current = true;
     const sync = () => {

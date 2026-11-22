@@ -43,7 +43,6 @@ import { clearDebugPersistence, applyDebugSeed } from "./src/debug/seed";
 import { applyDemoSeed } from "./src/mock/seed";
 import { hydrate, store } from "./src/store/app";
 import { WallpaperBackdrop, WallpaperTheme, useWallpaperWindow } from "./src/components/WallpaperTheme";
-import { hydrateAppearanceTheme } from "./src/store/appearance";
 import { colors } from "./src/theme";
 import { NativeEvents } from "./src/components/NativeEvents";
 import { ContinuousVoiceRoot } from "./src/components/ContinuousVoiceRoot";
@@ -105,7 +104,6 @@ export default function App() {
   const wallpaper = useWallpaperWindow();
 
   useEffect(() => {
-    void hydrateAppearanceTheme();
     void hydrate().then(async () => {
       if (isDebugActive()) {
         await clearDebugPersistence();

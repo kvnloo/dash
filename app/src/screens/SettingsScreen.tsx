@@ -1,5 +1,3 @@
-import { wallpaperAvailable } from "../lib/wallpaper-window";
-import { appearanceTheme, setAppearanceTheme } from "../store/appearance";
 import { ModelsPanel } from "../components/ModelsPanel";
 import { DensityPicker } from "../components/Density";
 import { InformationDensityPicker } from "../components/InformationDensityPicker";
@@ -28,6 +26,9 @@ import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
 import { screenBack } from "../lib/screen-back";
 import { endpointsOf, withEditedEndpoint } from "../lib/bridge-failover";
+
+import { wallpaperAvailable } from "../lib/wallpaper-window";
+import { appearanceTheme, setAppearanceTheme } from "../store/appearance";
 
 export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const thumb = useHandedness();
