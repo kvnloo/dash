@@ -99,6 +99,7 @@ export class LiveSurface {
   }
 
   async handle(message: LiveClientMessage, send: Send): Promise<void> {
+    const started = Date.now();
     try {
       switch (message.type) {
         case "live_open": return await this.open(message, send);
@@ -106,13 +107,15 @@ export class LiveSurface {
           const text = message.askHermes
             ? `Use the hermes tool to ask Hermes exactly this, then relay its answer in one or two sentences: ${message.text}`
             : message.text;
-          const started = await this.call<{ turnId: string }>("POST", `/v1/sessions/fx/${enc(message.profileId)}/${enc(message.workerId)}/turns`, { text, messageId: message.id });
-          return await this.stream(message.id, message.profileId, message.workerId, started.turnId, send);
+          const turn = await this.call<{ turnId: string }>("POST", `/v1/sessions/fx/${enc(message.profileId)}/${enc(message.workerId)}/turns`, { text, messageId: message.id });
+          return await this.stream(message.id, message.profileId, message.workerId, turn.turnId, send, 0, started);
         }
         case "live_intent": {
           const result = await this.call<{ receipt: LiveReceipt; turnId?: string }>("POST", `/v1/sessions/fx/${enc(message.profileId)}/${enc(message.workerId)}/intents`, { intent: message.intent, continue: message.continue === true });
+          // The tap is in the owning Hermes session once z0bridge answers with its receipt row.
+          this.options.log?.("live.intent", { id: message.id, worker: message.workerId, control: message.intent.controlId, receipt: result.receipt.kind, ...hermesRef(result.receipt), ms: Date.now() - started });
           send({ type: "live_event", id: message.id, seq: 1, workerId: message.workerId, event: { type: "receipt", receipt: compactReceipt(result.receipt) } });
-          if (result.turnId) await this.stream(message.id, message.profileId, message.workerId, result.turnId, send, 1);
+          if (result.turnId) await this.stream(message.id, message.profileId, message.workerId, result.turnId, send, 1, started);
           else send({ type: "live_event", id: message.id, seq: 2, workerId: message.workerId, event: { type: "done", stopReason: "recorded" } });
           return;
         }
@@ -130,6 +133,7 @@ export class LiveSurface {
   }
 
   private async open(message: Extract<LiveClientMessage, { type: "live_open" }>, send: Send): Promise<void> {
+    const started = Date.now();
     const profile = hermesProfileOf(message.profileId, this.profile);
     let parent: { id: string; title?: string };
     if (message.sessionId) parent = await this.call("GET", `/v1/sessions/hermes/${enc(profile)}/${enc(message.sessionId)}`);
@@ -145,10 +149,12 @@ export class LiveSurface {
     const artifacts = await Promise.all(metas.artifacts.slice(-6).map(meta => this.artifact(profile, attached.id, meta)));
     const harnesses = await this.call<{ harnesses: { id: string; version?: string }[] }>("GET", "/v1/harnesses").catch(() => ({ harnesses: [] }));
     const model = harnesses.harnesses.find(h => h.id === "fx")?.version;
+    this.options.log?.("live.open", { id: message.id, worker: attached.id, parent: parent.id, attached: worker ? "existing" : "new", artifacts: artifacts.length, ms: Date.now() - started });
     send({ type: "live_opened", id: message.id, workerId: attached.id, profileId: profile, parentSessionId: parent.id, ...(parent.title ? { parentTitle: parent.title } : {}), ...(model ? { model } : {}), artifacts });
   }
 
-  private async stream(id: string, profile: string, worker: string, turnId: string, send: Send, offset = 0): Promise<void> {
+  /** Relay one worker turn. Logs ids and latency only (never text): control and receipt arrival, then the turn end. */
+  private async stream(id: string, profile: string, worker: string, turnId: string, send: Send, offset = 0, started = Date.now()): Promise<void> {
     const response = await this.fetchFn(`${this.base}/v1/turns/${enc(turnId)}/events`, {
       headers: { authorization: `Bearer ${this.token()}`, accept: "text/event-stream" },
     });
@@ -157,7 +163,12 @@ export class LiveSurface {
     for await (const raw of readSse(response.body)) {
       const event = await this.map(profile, worker, raw);
       if (event) send({ type: "live_event", id, seq: ++seq, workerId: worker, event });
-      if (raw.type === "done" || raw.type === "error") return;
+      if (event?.type === "control") this.options.log?.("live.control", { id, worker, turn: turnId, control: event.control.id, kind: event.control.kind, ms: Date.now() - started });
+      if (event?.type === "receipt") this.options.log?.("live.receipt", { id, worker, turn: turnId, receipt: event.receipt.kind, ...hermesRef(event.receipt) });
+      if (raw.type === "done" || raw.type === "error") {
+        this.options.log?.("live.turn", { id, worker, turn: turnId, end: raw.type === "done" ? String(raw.stopReason ?? "end_turn") : "error", events: seq - offset, ms: Date.now() - started });
+        return;
+      }
     }
   }
 
@@ -176,6 +187,10 @@ export class LiveSurface {
     }
   }
 }
+
+/** Where Hermes holds a receipt: its child record and message id (no summary text). */
+const hermesRef = (receipt: LiveReceipt): Record<string, string | number> =>
+  receipt.hermes ? { hermesChild: receipt.hermes.child, hermesMessage: receipt.hermes.messageId } : { hermes: "none" };
 
 function compactReceipt(receipt: LiveReceipt): LiveReceipt {
   return {
