@@ -31,7 +31,7 @@ export type Bridge = { dir: string; port: number; bootstrap: string; peerCredent
  * peerIdentity: enroll this bridge with that authority for `dash:chat` (DASH_PEER_IDENTITY_FILE) so it
  *   reaches peer bridges with minted tokens instead of peer-roster-tokens.json; peerPort is DASH_PEER_PORT.
  */
-export type BridgeOptions = { generatedUI?: boolean; archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; rosterHost?: string; rosterPeer?: Bridge; finishedSessions?: boolean; hermesProfiles?: string[]; env?: Record<string,string>; identity?: boolean | FixtureZ0bridge; peerIdentity?: FixtureZ0bridge; peerPort?: number };
+export type BridgeOptions = { generatedUI?: boolean; archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; rosterHost?: string; rosterPeer?: Bridge; finishedSessions?: boolean; hermesProfiles?: string[]; hermesBots?: string[]; grok?: boolean; env?: Record<string,string>; identity?: boolean | FixtureZ0bridge; peerIdentity?: FixtureZ0bridge; peerPort?: number };
 export const LONG_CHAT_TITLE = 'ARMY long Claude Code chat';
 export const LONG_CHAT_PROMPTS = 125;
 export const LONG_HERMES_TITLE = 'ARMY long Hermes chat';
@@ -45,6 +45,10 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
  for (const name of ['claude','claude-agent-acp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' claude\n', {mode:0o700});
  // Native fx accepts only its maintained stdio ACP entrypoint, never legacy ask flags.
  await writeFile(join(bin,'fx'), '#!/bin/sh\n[ "$#" -eq 1 ] && [ "$1" = acp ] || exit 64\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' fx\n', {mode:0o700});
+ // Grok over its ACP entrypoint (`grok agent --no-leader stdio`), answered by the fixture peer.
+ if (options.grok) await writeFile(join(bin,'grok'), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' grok\n', {mode:0o700});
+ // Hermes gateway profile bots: a profile whose config.yaml enables a messaging platform (bridge/src/bots.ts).
+ for (const name of options.hermesBots ?? []) { const home=join(dir,'.hermes','profiles',name); await mkdir(home,{recursive:true}); await writeFile(join(home,'config.yaml'),'platforms:\n  telegram:\n    enabled: true\n'); }
  if (options.finishedSessions) {
   const codex = join(dir,'.codex','sessions','2026','10','28');
   const claude = join(dir,'.claude','projects','army');

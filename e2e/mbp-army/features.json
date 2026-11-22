@@ -401,7 +401,11 @@
     {"id": "perf-no-accumulation", "title": "Measured perf gates (A29): Orchestra view switches do not slow down or accumulate heap/DOM/listeners (#530); prompt rail scrub never freezes a frame (#522)",
      "tests": ["perf: 40 Orchestra view switches do not slow down or accumulate heap, DOM nodes or listeners (#530)",
                "perf: prompt rail scrub over a 1000-message chat never freezes a frame (#522)"]},
-    {"id": "headed-army-retention", "title": "Bound finished headed army artifacts per suite", "tests": ["finished headed army runs retain three bulky outputs per suite without touching active runs"]}
+    {"id": "headed-army-retention", "title": "Bound finished headed army artifacts per suite", "tests": ["finished headed army runs retain three bulky outputs per suite without touching active runs"]},
+    {"id":"new-agent-sheet-every-harness","title":"The New agent sheet lists every catalog harness, the Cursor cloud harness and the host's spawnable bots","tests":["new-agent-every-harness: the New agent sheet lists every harness, Cursor cloud and bots, and spawns a Hermes bot, a Cursor cloud agent and GrokBot into Chats"]},
+    {"id":"spawn-hermes-profile-bot","title":"Spawning a Hermes gateway profile bot starts a Hermes chat in that profile and it appears in Chats","tests":["new-agent-every-harness: the New agent sheet lists every harness, Cursor cloud and bots, and spawns a Hermes bot, a Cursor cloud agent and GrokBot into Chats"]},
+    {"id":"spawn-cursor-cloud-agent","title":"Spawning a Cursor cloud agent launches it over the Cursor API, follows up in the same agent, and the chat appears in Chats","tests":["new-agent-every-harness: the New agent sheet lists every harness, Cursor cloud and bots, and spawns a Hermes bot, a Cursor cloud agent and GrokBot into Chats"]},
+    {"id":"spawn-grokbot-agent","title":"Spawning GrokBot starts a Grok chat that appears in Chats","tests":["new-agent-every-harness: the New agent sheet lists every harness, Cursor cloud and bots, and spawns a Hermes bot, a Cursor cloud agent and GrokBot into Chats"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",
