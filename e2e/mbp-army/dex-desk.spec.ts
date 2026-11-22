@@ -25,7 +25,7 @@ async function deskBridge(queue?: FixturePhoneQueue): Promise<Bridge> {
 
 const panel = (page: Page, id: string) => page.getByTestId(`desk-panel-${id}`);
 
-for (const size of [{ width: 1920, height: 1080 }, { width: 1280, height: 800 }]) {
+for (const size of [{ width: 1920, height: 1080 }, { width: 1280, height: 800 }, { width: 1200, height: 780 }]) {
   test(`desk mode at ${size.width}x${size.height} shows every panel and chats in the centre pane`, async ({ page }, info) => {
     const queue = await startFixturePhoneQueue();
     const bridge = await deskBridge(queue);

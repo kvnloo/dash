@@ -5,6 +5,22 @@ test("DeX simulation shows TV and Pad and Touchpad returns to TV", async ({ page
   await openChat(page, bridge);
   await expect(page.getByTestId("dex-tv")).toHaveCount(0);
   await expect(page.getByTestId("dex-pad")).toHaveCount(0);
+  // The DeX-sized window shows the wide desk layout: left rail, Chats column, side panels.
+  const wide = async () => {
+    await expect(page.getByTestId("desk-shell")).toBeVisible();
+    await expect(page.getByTestId("desk-rail").getByRole("tab")).toHaveCount(9);
+    await expect(page.getByTestId("desk-panel-chats")).toBeVisible();
+    await expect(page.getByTestId("desk-panel-needs")).toBeVisible();
+    const rail = await page.getByTestId("desk-rail").boundingBox();
+    const chats = await page.getByTestId("desk-panel-chats").boundingBox();
+    const center = await page.getByTestId("desk-center").boundingBox();
+    const needs = await page.getByTestId("desk-panel-needs").boundingBox();
+    if (!rail || !chats || !center || !needs) throw Error("desk columns have no layout");
+    expect(rail.x + rail.width).toBeLessThanOrEqual(chats.x + 1);
+    expect(chats.x + chats.width).toBeLessThanOrEqual(center.x + 1);
+    expect(center.x + center.width).toBeLessThanOrEqual(needs.x + 1);
+  };
+  await wide();
   await expect.poll(() => page.evaluate("typeof window.__dashDex?.simulate")).toBe("function");
   await page.evaluate("window.__dashDex?.simulate({ mode: 'dual', tv: { w: 1920, h: 1080 } })");
   await expect(page.getByTestId("dex-tv")).toBeVisible();
@@ -21,6 +37,7 @@ test("DeX simulation shows TV and Pad and Touchpad returns to TV", async ({ page
   await page.evaluate("window.__dashDex?.simulate({ mode: 'off' })");
   await expect(page.getByTestId("dex-tv")).toHaveCount(0);
   await expect(composer(page)).toBeVisible();
+  await wide();
   await send(page, "after DeX simulation");
   await expect(page.getByText(/ARMY_REPLY: after DeX simulation/).first()).toBeVisible();
   await page.screenshot({ path: test.info().outputPath("final.png") });
