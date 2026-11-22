@@ -1,6 +1,8 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "provider-out-of-usage-next-model", "title": "A provider out of usage names the cause, offers another model, and the same chat answers with the model the owner picks (#501)",
+     "tests": ["a provider out of usage offers another model and the chat answers with it"]},
     {"id": "chat-one-bubble-per-message", "title": "A sent message and its reply show once in Hermes, Claude Code, Codex and OMP chats, also after the agent records the turn natively and the chat reopens or the app reloads (DA-020, #498)",
      "tests": ["Hermes chat shows one user and one reply bubble after Hermes records the turn in state.db",
                "Claude Code chat shows one user and one reply bubble after AgentsView records the turn",
