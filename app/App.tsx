@@ -13,6 +13,7 @@ import { IBMPlexMono_400Regular } from "@expo-google-fonts/ibm-plex-mono";
 import { useEffect } from "react";
 import { Linking, Platform, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { PenHoverRoot } from "./src/components/PenHover";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BridgePullOverlay, BridgePullProvider } from "./src/components/BridgePull";
@@ -132,6 +133,7 @@ export default function App() {
       {Platform.OS === "web" ? <style>{"input:focus,textarea:focus{outline:none!important}"}</style> : null}
       <SafeAreaProvider>
         <View style={styles.touchRoot} onStartShouldSetResponderCapture={observeTouch}>
+        <PenHoverRoot>
         <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
           <BridgePullProvider>
             <NavigationContainer
@@ -173,6 +175,7 @@ export default function App() {
           <ServedBuildChip />
           <StatusBar style="light" hidden />
         </KeyboardProvider>
+        </PenHoverRoot>
         </View>
       </SafeAreaProvider>
     </TileDetailProvider></TileGestureProvider></OrbMotionProvider></DensityProvider></GestureHandlerRootView>

@@ -11,6 +11,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { PagerGestureContext } from "./pager-gesture";
 import { PRESS_SCALE, press, pressScaleFor } from "../motion";
+import { PenGlow, usePenTarget } from "./PenHover";
 
 const spring = { ...press, reduceMotion: ReduceMotion.System };
 
@@ -18,6 +19,12 @@ export type PressScaleProps = PressableProps & {
   scaleTo?: number;
   children?: ReactNode;
 };
+
+function cornerRadius(style: PressableProps["style"]): number | undefined {
+  if (style == null || typeof style === "function") return undefined;
+  const radius = StyleSheet.flatten(style)?.borderRadius;
+  return typeof radius === "number" ? radius : undefined;
+}
 
 function childLayout(style: PressableProps["style"]): ViewStyle | undefined {
   if (style == null || typeof style === "function") return undefined;
@@ -51,7 +58,8 @@ export const PressScale = memo(function PressScale({
   const target = pressScaleFor(scaleTo, useReducedMotion());
   // One gesture per mount, not per render: a new Gesture makes GestureDetector re-attach
   // its native handler and Reanimated event worklets on every parent render.
-  const gesture = useMemo(() => Gesture.Manual().enabled(!disabled)
+  const pen = usePenTarget();
+  const squash = useMemo(() => Gesture.Manual().enabled(!disabled)
     // The pager latches a completed swipe through release so Pressable cannot turn that
     // release into a tap. This child sees the next pointer down even while the parent Pan
     // waits for Manual to fail, so it is the reliable boundary for a fresh sequence.
@@ -61,12 +69,15 @@ export const PressScale = memo(function PressScale({
     })
     .onTouchesUp((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); })
     .onTouchesCancelled((_event, manager) => { scale.value = withTiming(1, spring); manager.fail(); }), [disabled, target, scale, swiping]);
+  // A hovering S Pen lights the control (PenHover); its hover never presses.
+  const gesture = useMemo(() => pen.gesture ? Gesture.Simultaneous(squash, pen.gesture) : squash, [squash, pen.gesture]);
   // A press released by unmount (view switch) must not keep animating a dead view.
   useEffect(() => () => cancelAnimation(scale), [scale]);
   const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
     <GestureDetector gesture={gesture}><Pressable
       disabled={disabled}
+      {...pen.pointer}
       {...rest}
       style={style}
       onPress={e => { if (!swiping?.value) onPress?.(e); }}
@@ -78,7 +89,7 @@ export const PressScale = memo(function PressScale({
         onPressOut?.(e);
       }}
     >
-      <Animated.View style={[styles.fill, childLayout(style), anim]}>{children}</Animated.View>
+      <Animated.View style={[styles.fill, childLayout(style), anim]}>{pen.lit && !disabled ? <PenGlow radius={cornerRadius(style)} /> : null}{children}</Animated.View>
     </Pressable></GestureDetector>
   );
 });

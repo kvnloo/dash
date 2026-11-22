@@ -21,6 +21,7 @@ import type { DetailMode } from "../lib/reply-details";
 import { bridge } from "../net/bridge";
 import { StageLinks } from "./artifact-stage/StageLinks";
 import { PressScale } from "./PressScale";
+import { PenHoverMessage } from "./PenHover";
 
 export const MessageRow = memo(function MessageRow({
   message,
@@ -36,7 +37,7 @@ export const MessageRow = memo(function MessageRow({
   if (message.role === "user") {
     return (
       <View style={styles.userRow}>
-        <View style={styles.bubble}>
+        <PenHoverMessage style={styles.bubble}>
           {message.delivery ? <Text style={styles.statusText} accessibilityLabel={message.deliveryNote}>{message.delivery === "steered" ? `Steered · ${new Date(message.deliveryAt ?? message.at).toLocaleTimeString()}` : message.delivery === "steering" ? "Sending steer…" : message.delivery === "queued" ? "Queued for next turn" : message.delivery === "failed" ? "Delivery failed · check before resending" : "Next turn started"}</Text> : null}
           {message.deliveryNote?.startsWith("The turn stopped") ? <Text style={styles.statusText}>{message.deliveryNote}</Text> : null}
           {message.attachments?.length ? <SentFiles files={message.attachments} spaced={Boolean(message.text)} /> : null}
@@ -45,14 +46,14 @@ export const MessageRow = memo(function MessageRow({
               {message.text}
             </Text>
           ) : null}
-        </View>
+        </PenHoverMessage>
       </View>
     );
   }
   if (message.delivery === "steered" && message.state !== "error") return null;
   if (message.delivery === "queued" && message.state === "streaming") return null;
   return (
-    <View style={styles.assistantRow}>
+    <PenHoverMessage style={styles.assistantRow}>
       {message.summaries?.filter(summary => summary.kind === "turn").map(summary => <ThinkingSummaryChip key={summary.blockId} turnId={message.turnId} summary={summary} />)}
       <ReplyBlocks turnId={message.turnId} summaries={message.summaries} parts={message.parts} mode={detailMode} request={callId => {
         const chat = store.get().conversations.find(c => c.messages.some(m => m.id === message.id));
@@ -62,7 +63,7 @@ export const MessageRow = memo(function MessageRow({
       <AssistantBody key={message.id} message={message} harnessId={harnessId} detailMode={detailMode} />
       {thinking && thinking.phase !== "idle" ? <View style={styles.statusRow}><AgentOrb size={20} thinking={thinking} /><Text style={styles.statusText}>working · {thinking.tool ?? "terminal"}</Text></View> : null}
       {!message.parts?.length && detailMode !== "Hide" && (message.activity?.length || (message.state === "done" && message.status)) ? <Disclosure key={`${message.id}:activity`} lines={message.activity ?? [message.status ?? ""]} /> : null}
-    </View>
+    </PenHoverMessage>
   );
 });
 
