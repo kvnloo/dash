@@ -121,6 +121,8 @@
                "ephemeral-ui card.v0 kinds 21-30 all draw the repo card",
                "ephemeral-ui card.v0 kinds 31-40 all draw the repo card",
                "ephemeral-ui card.v0 kinds 41-50 all draw the repo card"]},
+    {"id": "voice-turbo-run", "title": "A spoken Turbo command dispatches parallel free provider lanes and reports completion",
+     "tests": ["z0live Turbo replaces a throttled lane with a free provider", "z0live Turbo scales up to three parallel provider lanes"]},
     {"id": "voice-orb-overlay", "title": "A live call shows an interactive, pass-through hero orb outside Voice and annotation",
      "tests": ["live hero orb follows each voice phase, mutes, passes through and hides for annotation"]},
     {"id": "voice-live-captions", "title": "A live call shows a one-line streaming caption of user and agent text over Dash that CC turns off",

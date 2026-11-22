@@ -29,6 +29,7 @@ export interface VoiceState {
   muted: boolean;
   delivery?: "draft" | "sending" | "accepted" | "reply" | "unknown";
   note?: string;
+  turbo?: string;
   lines: { role: "user" | "assistant"; text: string }[];
 }
 export interface VoiceIO {
@@ -51,6 +52,7 @@ export interface VoiceIO {
   /** A spoken approval command for a pending Needs OK/sudo (DA-058). Returns the confirmation line
    * when it was consumed; the utterance is then never dispatched to the agent. */
   intercept?(text: string): string | null;
+  turbo?(task: string, signal: AbortSignal): Promise<{ message: string; answer?: string }>;
 }
 export function object(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 export const realWords = (text: string): boolean => /[\p{L}\p{N}]{2}/u.test(text) && !/^\s*(\[.*\]|\(.*\)|[.!?…]+)\s*$/.test(text);
@@ -92,6 +94,8 @@ export class ContinuousVoice {
   private seen = new Set<string>();
   private spokenAt = 0;
   private eventCounter = 0;
+  private turboRun?: AbortController;
+  private utterance = 0;
   private userPartial = "";
   private assistantPartial = "";
   private unwatchTyped?: () => void;
@@ -139,7 +143,7 @@ export class ContinuousVoice {
     this.transcriptionLogged = false;
     this.speechTranscriptArrived = false;
     clearTimeout(this.transcriptTimeout);
-    this.update({ phase: "connecting", muted: false, note: undefined, lines: [] });
+    this.update({ phase: "connecting", muted: false, note: undefined, turbo: undefined, lines: [] });
     // Covers mint, cursor recovery, microphone acquisition, SDP and ICE, not just the final handshake.
     let finishDeadline: () => void = () => {};
     const deadline = new Promise<void>(resolve => { finishDeadline = resolve; });
@@ -251,7 +255,8 @@ export class ContinuousVoice {
       this.userPartial = "";
       this.clearTranscriptWatchdog();
       this.speechTranscriptArrived = false;
-      this.user = true; this.spokenAt = Date.now(); this.floor("user");
+      this.user = true;
+      ++this.utterance; this.spokenAt = Date.now(); this.floor("user");
       this.update({ phase: "hearing", ...(this.state.note === NO_TRANSCRIPT_NOTE ? { note: undefined } : {}) });
     }
     if (event.type === "input_audio_buffer.speech_stopped") {
@@ -297,6 +302,12 @@ export class ContinuousVoice {
       if (!this.io.transcriptionOnly) this.transcriptObservation("user_transcript", text, { event_id: id });
       if (!this.live(generation)) return;
       if (this.io.transcriptionOnly || this.io.holdIntent?.()) { this.update({ phase: "listening", delivery: "draft", note: "Spoken intent kept with the annotation. Send when ready." }); this.floor("quiet"); return; }
+      const turboTask = /^turbo(?:[,:]\s*|\s+|$)(.*)$/is.exec(text);
+      if (turboTask && this.io.turbo) {
+        if (typeof event.item_id === "string") this.send({ type: "conversation.item.delete", item_id: event.item_id });
+        await this.runTurbo(turboTask[1].trim(), typeof event.item_id === "string" ? event.item_id : id, generation);
+        return;
+      }
       if (/\b(never mind|cancel that)\b/i.test(text)) { await this.io.request("/v1/tools/cancel_work", { session_id: this.sid, arguments: {} }); this.update({ phase: "listening" }); return; }
       // This voice is an attached Hermes conversation, not a second fake chat.
       // Every real utterance is dispatched once through Luna; only the final inbox result speaks.
@@ -358,6 +369,37 @@ export class ContinuousVoice {
     }
     if (event.type === "error") await this.stop("Realtime reported an error. Mic stopped; no automatic resend.");
   }
+  private async runTurbo(task: string, id: string | undefined, generation: number): Promise<void> {
+    const key = id ? `turbo:${id}` : "";
+    if (key && this.seen.has(key)) { this.update({ phase: "listening" }); this.floor("quiet"); return; }
+    if (key) this.seen.add(key);
+    if (this.turboRun) { this.update({ turbo: "Turbo is already running.", phase: "listening" }); this.floor("quiet"); return; }
+    if (!key || !task || task.length > 1500) {
+      this.update({ turbo: "Say ‘turbo’ followed by a task of up to 1,500 characters.", phase: "listening" });
+      this.floor("quiet");
+      return;
+    }
+    const run = new AbortController();
+    const timeout = setTimeout(() => run.abort(), 95_000);
+    this.turboRun = run;
+    const utterance = this.utterance;
+    this.update({ turbo: "Starting Turbo…", phase: "listening" });
+    this.floor("quiet");
+    try {
+      const result = await this.io.turbo?.(task, run.signal);
+      if (!result || !this.live(generation)) return;
+      this.update({ turbo: result.message });
+      if (utterance === this.utterance && !this.user) {
+        this.io.caption?.("assistant", result.message, true);
+        this.deliverFinal(`result:${key}`, [result.message, result.answer].filter(Boolean).join(" "));
+      }
+    } catch {
+      if (this.live(generation)) this.update({ turbo: "Turbo status unavailable. Nothing was resent." });
+    } finally {
+      clearTimeout(timeout);
+      if (this.turboRun === run) this.turboRun = undefined;
+    }
+  }
   private interrupt(): void {
     if (!this.response && !this.creating && !this.playing) return;
     if (this.response) this.send({ type: "response.cancel" });
@@ -408,6 +450,7 @@ export class ContinuousVoice {
   }
   async stop(note?: string, options: { cancelWork?: boolean } = {}): Promise<void> {
     ++this.generation;
+    this.turboRun?.abort(); this.turboRun = undefined;
     this.unwatchTyped?.(); this.unwatchTyped = undefined;
     clearInterval(this.timer); clearTimeout(this.timeout); this.clearTranscriptWatchdog();
     this.peer?.mute(true); this.peer?.close(); this.peer = undefined;
@@ -416,7 +459,7 @@ export class ContinuousVoice {
     this.response = this.creating = this.user = this.playing = this.continuation = false; this.toolPending = 0; this.inbox = []; this.seen.clear();
     this.userPartial = this.assistantPartial = "";
     this.finalTurn = undefined; this.finalResponseDone = this.finalAudioStarted = false;
-    this.update({ phase: note ? "error" : "idle", muted: false, note });
+    this.update({ phase: note ? "error" : "idle", muted: false, note, turbo: undefined });
     if (acquiring) {
       try { (await acquiring).close(); } catch { /* No acquired media. */ }
       if (this.acquiring === acquiring) this.acquiring = undefined;

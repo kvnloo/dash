@@ -237,6 +237,16 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
           else voiceCaption.set({ role, text, final });
         },
         intercept: text => generation === epoch.current ? interceptSpokenApproval(text) : null,
+        turbo: async (task, signal) => {
+          const token = fakeIdentity?.dash ?? await executionToken(settings);
+          const response = await fetch(`http://${settings.address}/voice/turbo`, {
+            method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({ task }), redirect: "error", signal,
+          });
+          const result: unknown = await response.json();
+          if (!object(result) || typeof result.message !== "string") throw Error("Turbo status unavailable");
+          return { message: result.message, ...(response.ok && typeof result.answer === "string" ? { answer: result.answer } : {}) };
+        },
         cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
         transcript: (id, text, start, end) => { if (annotate.get().active && annotate.get().turboTarget === turboCapture) addSegment({ id, text, start, end, source: "voice" }); } });
       call.current = controller;
