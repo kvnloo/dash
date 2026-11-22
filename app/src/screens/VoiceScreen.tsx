@@ -13,6 +13,7 @@ import { firstFailingVoiceProbe, runDeviceCheck } from "../lib/device-check";
 import type { ScreenProps } from "../navigation";
 import type { OrbState } from "../lib/orb-phase";
 import { colors, radius, space, type } from "../theme";
+import { setActive } from "../store/app";
 
 
 /** Live conversation mode: the hero orb follows a live z0live call, else the chat's live phase. */
@@ -29,8 +30,15 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
     });
     return () => { mounted = false; };
   }, []);
-  const { state, start, stop, mute } = useContinuousVoice();
+  const { state, start, stop, mute, takeApprovalChat } = useContinuousVoice();
   const live = !["idle", "error"].includes(state.phase);
+  const backToChat = () => {
+    const conversationId = takeApprovalChat();
+    if (!conversationId) { screenBack(props.navigation); return; }
+    // Open the actual transcript even when Voice was launched from a workspace tab.
+    setActive(conversationId);
+    props.navigation.replace("Chat");
+  };
   const opening = state.phase === "connecting";
   const caption = state.note ?? (live ? `${state.phase}${state.muted ? " · muted" : ""}${state.delivery ? ` · ${state.delivery}` : ""}` : "Realtime voice inside Dash");
   const lines = state.lines;
@@ -68,7 +76,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
         ) : null}
         {live ? (
           <>
-            <Pressable accessibilityRole="button" onPress={() => screenBack(props.navigation)} style={styles.secondary}>
+            <Pressable accessibilityRole="button" onPress={backToChat} style={styles.secondary}>
               <Text style={styles.secondaryText}>Back to chat · call keeps going</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={mute} style={styles.secondary}><Text style={styles.secondaryText}>{state.muted ? "Unmute" : "Mute"}</Text></Pressable>
