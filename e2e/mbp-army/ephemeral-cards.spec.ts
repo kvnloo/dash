@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { test, expect, openChat, chooseHarness, send } from './fixtures';
 import { EPHEMERAL_KINDS } from '../../app/src/vendor/ephemeral-ui/kinds.generated';
 
-// kvnloo/ephemeral-ui cards: the reply names card.v0 kinds through the openui-lang catalog, and the
+// kvnloo/ephemeral-ui cards: the reply names kit kinds through the openui-lang catalog, and the
 // app draws the repo's own card (pinned kit, synthetic fixtures) in a sandboxed frame.
 test.use({ bridgeOptions: { generatedUI: true, env: { ARMY_EPHEMERAL_KINDS: EPHEMERAL_KINDS.join(',') } } });
 test.afterEach(async ({ page }, info) => {
@@ -43,8 +43,9 @@ test('ephemeral-ui card with an app that does not list the kind is rejected with
  await expect(page.getByText(/EphemeralCard\(/)).toHaveCount(0);
 });
 
-for (const batch of [0, 1, 2, 3, 4]) {
- test(`ephemeral-ui card.v0 kinds ${batch * 10 + 1}-${batch * 10 + 10} all draw the repo card`, async ({ page, bridge }) => {
+// Every kind the pinned kit exports gets a render journey, ten cards per chat turn.
+for (let batch = 0; batch * 10 < EPHEMERAL_KINDS.length; batch++) {
+ test(`ephemeral-ui kit kinds ${batch * 10 + 1}-${Math.min(batch * 10 + 10, EPHEMERAL_KINDS.length)} all draw the repo card`, async ({ page, bridge }) => {
   test.setTimeout(180_000);
   await openChat(page, bridge);
   await send(page, `ARMY_EPHEMERAL_BATCH_${batch}`);

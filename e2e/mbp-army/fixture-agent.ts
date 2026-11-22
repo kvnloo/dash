@@ -58,7 +58,7 @@ function generatedReply(prompt: string): string | null {
  if (prompt.includes('ARMY_HTML_PROTOTYPE')) return '```html\n<button onclick="this.nextElementSibling.textContent=\'Updated\'">Try control</button><p>Ready</p>\n```';
  if (prompt.includes('ARMY_CODE_MORE')) return '```go\nfunc main() { // entry\n}\n```\n\n```rust\nfn main() { // entry\n}\n```\n\n```sql\nSELECT id FROM chats; -- entry\n```\n\n```yml\nname: dash # entry\n```';
  if (prompt.includes('ARMY_CODE_TSX')) return '```tsx\nconst card = <Panel title="Dash" />;\n```\n\n```jsx\nconst badge = <Badge label="Ready" />;\n```';
- // kvnloo/ephemeral-ui card.v0 kinds through the openui-lang catalog (#ephemeral-ui cards).
+ // kvnloo/ephemeral-ui kit kinds through the openui-lang catalog (#ephemeral-ui cards).
  const eui = /ARMY_EPHEMERAL_BATCH_(\d)/.exec(prompt);
  if (eui) { const kinds = String(process.env.ARMY_EPHEMERAL_KINDS ?? '').split(',').filter(Boolean).slice(Number(eui[1]) * 10, Number(eui[1]) * 10 + 10); return '```openui-lang\nroot = Stack([' + kinds.map(k => `EphemeralCard("${k}")`).join(', ') + ']);\n```'; }
  if (prompt.includes('ARMY_EPHEMERAL_INBOX')) return 'Here is your inbox.\n\n```openui-lang\nroot = EphemeralCard("inbox", "gmail");\n```';
