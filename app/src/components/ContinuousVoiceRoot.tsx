@@ -20,6 +20,7 @@ import { debugUi } from "../debug/ui-store";
 import { attachedHermes, voiceTarget } from "../lib/voice-target";
 import { voicePhase } from "../lib/voice-phase";
 import { voiceCaption } from "../store/voice-captions";
+import { interceptSpokenApproval } from "../lib/voice-approval-actions";
 import { VoiceCaptionStrip, VoiceCaptionsToggle } from "./VoiceCaptionStrip";
 
 /** One logcat line per failed voice stage (phone-watch turns these into incidents). Notes never carry secrets. */
@@ -235,6 +236,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
           if (!text.trim()) voiceCaption.set(previous => previous?.role === role && !previous.final ? null : previous);
           else voiceCaption.set({ role, text, final });
         },
+        intercept: text => generation === epoch.current ? interceptSpokenApproval(text) : null,
         cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
         transcript: (id, text, start, end) => { if (annotate.get().active && annotate.get().turboTarget === turboCapture) addSegment({ id, text, start, end, source: "voice" }); } });
       call.current = controller;
