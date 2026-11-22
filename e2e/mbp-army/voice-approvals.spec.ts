@@ -102,7 +102,7 @@ test("tapping Allow once in the live caption line resolves a Needs OK that arriv
   await page.getByTestId("voice-approval-allow").click({ noWaitAfter: true });
   await expect.poll(() => selected(bridge), { timeout: 15000, message: "the agent received allow_once" }).toBe(1);
   await expect(approval).toHaveCount(0);
-  await expect(page.getByText(/ARMY_PERMISSION_SELECTED/).first()).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/^Allowed/).first(), "the chat's own Needs OK card shows the bridge's grant").toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply");
   await expect(page.getByTestId("voice-phase")).toHaveAttribute("aria-label", /^Voice status: (listening|hearing|thinking|speaking)/);
   expect(asks(voiceBroker)).toHaveLength(1);
