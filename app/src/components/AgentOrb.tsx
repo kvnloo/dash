@@ -19,7 +19,7 @@ const faceStates: Record<OrbPhase, BotFaceState> = {
 export const AgentOrb = memo(function AgentOrb({ thinking, size = 64, caption = false, label, animated = true, variant }: Props) {
   const preferred = orbStyle.use(value => value);
   const style = variant ?? preferred;
-  return <View accessibilityRole="image" accessibilityLabel={label ?? thinking.phase} testID="agent-orb" style={{ alignItems: "center", gap: 4 }}>
+  return <View accessibilityRole="image" accessibilityLabel={label ?? thinking.phase} testID="agent-orb" style={{ alignItems: "center", gap: 4, opacity: orbMotion(thinking.phase).opacity }}>
     <View testID={`orb-style-${style}`}>
       {style === "face"
         ? <BotFace size={orbPixels(size)} identity={faceIdentity} state={faceStates[thinking.phase]} animated={animated} />
@@ -56,7 +56,7 @@ function ThinkingOrb({ thinking, size, animated, rings }: { thinking: OrbState; 
     const w = wave === "abs" ? Math.abs(Math.sin(p * Math.PI * beats)) : Math.cos(p * Math.PI * 2 * beats);
     return { transform: [{ perspective: 1000 }, { rotate: `${p * spin}deg` }, { scale: base + amp * w }] };
   });
-  return <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={[{ width: px, height: px, opacity: m.opacity, borderRadius: px, borderWidth: thinking.phase === "waiting-approval" ? 1 : 0, borderColor: color }, motion]}>
+  return <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={[{ width: px, height: px, borderRadius: px, borderWidth: thinking.phase === "waiting-approval" ? 1 : 0, borderColor: color }, motion]}>
     <Svg width="100%" height="100%" viewBox="0 0 64 64">
       {rings ? <>
         {[0, 60, 120].map(angle => <Ellipse key={angle} cx={32} cy={32} rx={m.radiusX} ry={m.radiusY * .43}
