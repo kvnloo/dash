@@ -38,7 +38,7 @@ test("main mic tap then tap inserts the real bridge STT fixture transcript", asy
   expect(errors.filter(error => error.startsWith("PAGEERROR"))).toEqual([]);
 });
 
-test("main mic hold and slide up opens Voice and attempts Live autostart", async ({ page, bridge, errors }) => {
+test("main mic hold and slide up starts Live in place and shows its readiness failure in the voice bar", async ({ page, bridge, errors }) => {
   await pair(page, bridge);
   const mic = page.getByRole("button", { name: "Dictate", exact: true });
   const box = await mic.boundingBox();
@@ -53,14 +53,14 @@ test("main mic hold and slide up opens Voice and attempts Live autostart", async
   await page.mouse.move(x, y - 72, { steps: 8 });
   await page.mouse.up();
 
-  await expect(page.getByText("Dash voice", { exact: true })).toBeVisible();
-  // A paired army bridge has no owner identity/live broker. Autostart must reach a visible
-  // readiness failure, not leave the idle "Realtime voice inside Dash" caption untouched.
-  await expect(page.getByTestId("voice-caption")).toContainText(
-    /Pair Dash with z0bridge identity|Open a Hermes chat once|Microphone in use|Bridge lacks native voice|Voice bootstrap failed|Native voice disabled|Voice target not confirmed/i,
+  // DA-063: Live starts here, in Dash's own voice bar; the full-screen Voice view is not opened.
+  // A paired army bridge has no owner identity/live broker, so the attempt reaches a visible readiness failure.
+  await expect(page.getByTestId("voice-error")).toContainText(
+    /Pair Dash with z0bridge identity|Open an attached Hermes chat|Microphone in use|Bridge lacks native voice|Voice bootstrap failed|Native voice disabled|Voice target not confirmed/i,
     { timeout: 20000 },
   );
-  await page.getByRole("button", { name: "Back", exact: true }).click({ noWaitAfter: true });
+  await expect(page.getByText("Dash voice", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("voice-caption")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Live voice", exact: true })).toBeVisible();
   expect(errors.filter(error => error.startsWith("PAGEERROR"))).toEqual([]);
 });

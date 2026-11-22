@@ -4,6 +4,7 @@ import type { ChatAttachment } from "../../../shared/protocol";
 import type { Conversation } from "../model";
 import { parseSearchQuery } from "../lib/global-search";
 import { lastExchange } from "../lib/last-exchange";
+import type { OrbState } from "../lib/orb-phase";
 import { Composer } from "./Composer";
 import { haptic } from "../haptics";
 import { bridge, sendChat } from "../net/bridge";
@@ -21,6 +22,8 @@ interface Props {
   onOpen(): void;
   onSearch(query?: string): void;
   onVoice(): void;
+  /** A running Live call: the composer mic shows its orb. */
+  voiceCall?: OrbState;
   onDetach(): void;
 }
 
@@ -28,7 +31,7 @@ interface Props {
  * The main-screen composer keeps the exact chat's persisted draft and send target.
  * Harness settings are defaults for NEW chats, never authority for this one.
  */
-export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, onVoice, onDetach }: Props) {
+export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, onVoice, voiceCall, onDetach }: Props) {
   const online = store.use(state => state.connection.status === "online");
   const draft = composerDrafts.use(all => all[conversation.id]);
   const priorDraft = useRef<{ id: string; value: ComposerDraft } | null>(null);
@@ -140,6 +143,7 @@ export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, o
         onSend={onSend}
         onStop={() => stopConversation(conversation.id, id => { void bridge.send({ type: "cancel", id }); })}
         onVoice={onVoice}
+        voiceCall={voiceCall}
       />
     </View>
   );

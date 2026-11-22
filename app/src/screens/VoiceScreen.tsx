@@ -76,7 +76,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
               <Text style={styles.secondaryText}>Back to chat · call keeps going</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={mute} style={styles.secondary}><Text style={styles.secondaryText}>{state.muted ? "Unmute" : "Mute"}</Text></Pressable>
-            <Text style={styles.note}>Call stays active across Dash screens. Leaving Dash stops the mic; background capture is not enabled.</Text>
+            <Text style={styles.note}>Call stays active across Dash screens. Leaving Dash pauses the mic; it resumes on the same chat when you come back.</Text>
           </>
         ) : (
           <>
