@@ -7,7 +7,7 @@ import { ScreenHeader } from "../components/ScreenHeader";
 import { haptic } from "../haptics";
 import type { EphemeralCardSpec } from "../lib/ephemeral-card";
 import { catalogLabel, ephemeralCatalog, type CatalogFixture } from "../lib/ephemeral-catalog";
-import { galleryPageOf, GALLERY_PAGE_SIZE, galleryPages, propsDiff, type GalleryResult } from "../lib/gallery";
+import { catalogParity, galleryPageOf, GALLERY_PAGE_SIZE, galleryPages, type GalleryResult } from "../lib/gallery";
 import type { ScreenProps } from "../navigation";
 import { colors, fonts, radius, space, type } from "../theme";
 
@@ -81,9 +81,11 @@ function Pager({ page, pages, go, where }: { page: number; pages: number; go: (p
 const GalleryCell = memo(function GalleryCell({ fixture, at, result, onResult }: { fixture: CatalogFixture; at: string; result?: GalleryResult; onResult: (id: string, r: GalleryResult) => void }) {
   const spec = useMemo<EphemeralCardSpec>(() => ({ kind: fixture.kind, app: fixture.app, fixture: { id: fixture.id, seed: fixture.seed, input: fixture.input, at } }), [fixture, at]);
   const onDrawn = useCallback(({ ok, props }: { ok: boolean; props: string | null }) => {
-    onResult(fixture.id, { ok, match: ok && props === fixture.props, diff: ok && props !== null ? propsDiff(fixture.props, props) : [] });
+    onResult(fixture.id, ok ? { ok, ...catalogParity(fixture.kind, fixture.props, props) } : { ok, match: false, diff: [], synthetic: [] });
   }, [fixture, onResult]);
-  const status = !result ? "Drawing…" : !result.ok ? "Could not be drawn" : result.match ? "Mounted · props match catalog" : `Mounted · props differ from catalog: ${result.diff.join(", ") || "?"}`;
+  const status = !result ? "Drawing…" : !result.ok ? "Could not be drawn"
+    : !result.match ? `Mounted · props differ from catalog: ${result.diff.join(", ")}`
+    : result.synthetic.length ? `Mounted · props match catalog · ${result.synthetic.join(", ")} from Dash's synthetic data` : "Mounted · props match catalog";
   return <View style={styles.cell} testID={`gallery-cell-${fixture.id}`}>
     <View style={styles.cellHead}>
       <Text style={styles.cellId} numberOfLines={1}>{fixture.id}</Text>

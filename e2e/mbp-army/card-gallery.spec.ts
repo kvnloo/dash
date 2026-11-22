@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect, pair, web } from './fixtures';
-import { EPHEMERAL_CATALOG_SHA256, EPHEMERAL_CATALOG_VERSION, EPHEMERAL_KINDS, EPHEMERAL_KIT_REV } from '../../app/src/vendor/ephemeral-ui/kinds.generated';
+import { EPHEMERAL_CATALOG_SHA256, EPHEMERAL_CATALOG_VERSION, EPHEMERAL_DATA_BY_KIND, EPHEMERAL_KINDS, EPHEMERAL_KIT_REV } from '../../app/src/vendor/ephemeral-ui/kinds.generated';
 
 // DA-078: the Dash card gallery draws every fixture of every kind in the shared kvnloo/ephemeral-ui catalog
 // (catalog/README.md "What an app's gallery test must assert": coverage, every fixture mounts, props parity,
@@ -14,6 +14,7 @@ const catalog: { v: number; version: string; count: { kinds: number; fixtures: n
 const fixtures = catalog.kinds.flatMap(k => k.fixtures);
 const PAGE = 6; // app/src/lib/gallery.ts GALLERY_PAGE_SIZE
 const pages = Math.ceil(fixtures.length / PAGE);
+const synthetic = new Set(Object.entries(EPHEMERAL_DATA_BY_KIND).filter(([, d]) => d === 'ops').map(([k]) => k));
 const label = `catalog v${catalog.version} · ephemeral-ui@${EPHEMERAL_KIT_REV.slice(0, 7)} · ${catalog.kinds.length} kinds · ${fixtures.length} fixtures`;
 
 test.afterEach(async ({ page }, info) => { if (!page.isClosed()) await page.screenshot({ path: info.outputPath('final.png') }); });
@@ -68,7 +69,9 @@ for (let p = 1; p <= pages; p++) {
    await expect(card).toBeVisible({ timeout: 30_000 });
    await expect(frame.getByRole('alert')).toHaveCount(0);
    // Props parity: the drawn card's spec deep-equals fixture.props (compared in the app, shown per cell).
-   await expect(page.getByTestId(`gallery-status-${f.id}`)).toHaveText('Mounted · props match catalog', { timeout: 30_000 });
+   // Ops boards copy capturedAt/provenance from the snapshot Dash ships synthetic (app/src/lib/gallery.ts SYNTHETIC_PROPS).
+   const status = synthetic.has(f.card.kind) ? "Mounted · props match catalog · capturedAt, provenance from Dash's synthetic data" : 'Mounted · props match catalog';
+   await expect(page.getByTestId(`gallery-status-${f.id}`)).toHaveText(status, { timeout: 30_000 });
    const body = await card.innerText();
    expect(body.trim().length, `${f.id} draws text`).toBeGreaterThan(0);
    expect(body, `${f.id} has no undefined/NaN`).not.toMatch(/\bundefined\b|\bNaN\b/);
