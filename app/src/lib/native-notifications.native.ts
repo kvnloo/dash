@@ -8,10 +8,12 @@ import { executionToken } from "./bridge-auth";
 import { createNoticePostureReader, nativeNoticeAllowed, notificationChannels } from "./notice-posture";
 import { route } from "../../../shared/interaction-policy";
 import { notificationLink, parseNotificationTarget, shouldNotify, type DashNotice, type NotificationTarget } from "./notification-policy";
+import { PERMISSION_ACTIONS, PERMISSION_CATEGORY, parseNoticeAction, type NoticeAction, type PermissionRef } from "./notification-actions";
 
 const KEY = "dash.notifications.enabled.v1";
 const readNoticePosture = createNoticePostureReader({ now: Date.now, token: executionToken, fetch: (url, init) => fetch(url, init) });
 let loaded: Promise<typeof import("expo-notifications") | null> | undefined;
+let categories: Promise<void> | undefined;
 function api() {
   loaded ??= (async () => {
     if (Platform.OS !== "android" || Constants.executionEnvironment === ExecutionEnvironment.StoreClient || !requireOptionalNativeModule("ExpoNotificationScheduler")) return null;
@@ -28,6 +30,12 @@ async function channel() {
   if (!notifications) return null;
   const channels = notificationChannels(notifications.AndroidImportance, notifications.AndroidNotificationVisibility.PRIVATE);
   for (const config of Object.values(channels)) await notifications.setNotificationChannelAsync(config.id, config);
+  categories ??= notifications.setNotificationCategoryAsync(PERMISSION_CATEGORY, PERMISSION_ACTIONS.map(action => ({
+    identifier: action.identifier, buttonTitle: action.buttonTitle,
+    // Foreground so the decision goes over the live bridge socket and the chat shows the host's answer.
+    options: { opensAppToForeground: true, isDestructive: action.destructive },
+  }))).then(() => undefined);
+  await categories;
   return notifications;
 }
 export async function refreshNotificationPermission(): Promise<void> {
@@ -38,7 +46,7 @@ export async function refreshNotificationPermission(): Promise<void> {
     notificationState.set(s => ({ ...s, available: true, permission: permission.status, error: "" }));
   } catch (error) { failure(error); }
 }
-export async function startNativeNotifications(open: (target: NotificationTarget) => void): Promise<() => void> {
+export async function startNativeNotifications(open: (target: NotificationTarget) => void, act?: (action: NoticeAction, ref: PermissionRef) => void): Promise<() => void> {
   try {
     const notifications = await channel();
     if (!notifications) return () => {};
@@ -52,9 +60,16 @@ export async function startNativeNotifications(open: (target: NotificationTarget
     } });
     let lastId: string | undefined;
     const handle = (response: import("expo-notifications").NotificationResponse | null) => {
-      if (!response || response.actionIdentifier !== notifications.DEFAULT_ACTION_IDENTIFIER || response.notification.request.identifier === lastId) return;
+      if (!response || response.notification.request.identifier === lastId) return;
+      const data = response.notification.request.content.data;
+      const button = parseNoticeAction(response.actionIdentifier, data);
+      if (!button && response.actionIdentifier !== notifications.DEFAULT_ACTION_IDENTIFIER) return;
       lastId = response.notification.request.identifier;
-      const target = parseNotificationTarget(response.notification.request.content.data);
+      if (button && act) {
+        act(button.action, button.ref);
+        void notifications.dismissNotificationAsync(response.notification.request.identifier).catch(failure);
+      }
+      const target = parseNotificationTarget(data);
       if (target) open(target);
       void notifications.clearLastNotificationResponseAsync().catch(failure);
     };
@@ -92,8 +107,13 @@ export async function postNativeNotice(notice: DashNotice): Promise<void> {
     const channels = notificationChannels(notifications.AndroidImportance, notifications.AndroidNotificationVisibility.PRIVATE);
     await notifications.scheduleNotificationAsync({ identifier: notice.key,
       content: { title: notice.title, body: notice.body, sound: false, autoDismiss: true,
-        data: { url: notificationLink(notice.target), ...(notice.report ? { report: true } : {}) } },
+        ...(notice.permission && notice.actions?.length ? { categoryIdentifier: PERMISSION_CATEGORY } : {}),
+        data: { url: notificationLink(notice.target), ...(notice.report ? { report: true } : {}),
+          ...(notice.permission ? { permission: notice.permission } : {}) } },
       trigger: { channelId: channels[routed.channel].id },
     });
   } catch (error) { failure(error); }
+}
+export async function dismissNativeNotice(key: string): Promise<void> {
+  try { await (await api())?.dismissNotificationAsync(key); } catch (error) { failure(error); }
 }

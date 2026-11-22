@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# turbo-off: kill switch. Stops the preview Metro (:8098) and blocks promotions until turbo-on.
+# Never touches the stable Metro (:8097) or the bridge.
+set -uo pipefail
+STATE="${DASH_TURBO_STATE:-$HOME/.local/state/dash}"
+mkdir -p "$STATE"
+echo "turbo-off $(date -u +%FT%TZ)" >"$STATE/OFF"
+launchctl bootout "gui/$(id -u)/dev.kvnloo.dash-metro-preview" 2>/dev/null || true
+echo "turbo off: preview Metro stopped, promotions blocked. Stable :8097: $(curl -s -m 3 http://127.0.0.1:8097/status || echo down)"

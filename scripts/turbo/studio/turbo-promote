@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# turbo-promote <agent-worktree> [note]
+#
+# The only way a change reaches the phone's preview build (Metro :8098, ~/dash-studio-preview).
+# Gate, in order; the first failure rejects and the preview stays on its last good commit:
+#   0. the worktree is clean and its HEAD fast-forwards the preview HEAD
+#   1. no native-affecting files changed (those need an APK rebuild, not a hot reload)
+#   2. tsc -p app and tsc -p bridge
+#   3. bun test in bridge/ when bridge/ or shared/ changed
+#   4. a throwaway Metro (CI=1, own port) builds the Android bundle from the worktree: HTTP 200
+# Pass: fast-forward the preview worktree (Metro hot-reloads it onto the phone), stamp
+# app/src/lib/build-info.json with the new SHA, then re-check the live preview Metro; if it no
+# longer builds, roll the preview back to the previous commit.
+# Every attempt appends one JSON line to $STATE/preview-history.jsonl; $STATE/preview.json is the
+# current good preview. Stable Metro :8097 (~/dash-studio) is never touched.
+set -Eeuo pipefail
+WT_IN="${1:?usage: turbo-promote <agent-worktree> [note]}"
+NOTE="${2:-}"
+PREVIEW="${DASH_PREVIEW_DIR:-$HOME/dash-studio-preview}"
+STATE="${DASH_TURBO_STATE:-$HOME/.local/state/dash}"
+PREVIEW_ORIGIN="${DASH_PREVIEW_ORIGIN:-http://127.0.0.1:8098}"
+BUN="${BUN:-$HOME/.bun/bin/bun}"
+export PATH="$HOME/.bun/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+QUERY='platform=android&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.bytecode=1&transform.routerRoot=app&unstable_transformProfile=hermes-stable'
+mkdir -p "$STATE/gate"
+
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+jstr() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n' ' '; }
+START=$(date +%s)
+SHA="-"; BASE="-"; LOGDIR="$STATE/gate/pending"; METRO_PID=""
+record() { # ok reason
+  printf '{"at":"%s","ok":%s,"sha":"%s","base":"%s","worktree":"%s","note":"%s","reason":"%s","secs":%s,"logs":"%s"}\n' \
+    "$(now)" "$1" "$SHA" "$BASE" "$(jstr "$WT_IN")" "$(jstr "$NOTE")" "$(jstr "$2")" "$(( $(date +%s) - START ))" "$LOGDIR" >>"$STATE/preview-history.jsonl"
+}
+cleanup() {
+  [[ -n "$METRO_PID" ]] && { pkill -TERM -P "$METRO_PID" 2>/dev/null || true; kill "$METRO_PID" 2>/dev/null || true; }
+  rmdir "$STATE/promote.lock" 2>/dev/null || true
+}
+reject() { record false "$1"; echo "REJECTED ${SHA:0:7}: $1 (preview stays on ${BASE:0:7}; logs $LOGDIR)"; exit 1; }
+
+[[ ! -f "$STATE/OFF" ]] || { echo "REJECTED: turbo is off ($(cat "$STATE/OFF")); run turbo-on"; exit 1; }
+mkdir "$STATE/promote.lock" 2>/dev/null || { echo "REJECTED: another promotion is running ($STATE/promote.lock)"; exit 1; }
+trap cleanup EXIT
+
+WT="$(cd "$WT_IN" && git rev-parse --show-toplevel)" || reject "not a git worktree: $WT_IN"
+[[ "$(cd "$WT" && pwd -P)" != "$(cd "$PREVIEW" && pwd -P)" ]] || reject "edit an agent worktree (turbo-new), never the preview itself"
+[[ "$(cd "$WT" && pwd -P)" != "$(cd "$HOME/dash-studio" && pwd -P)" ]] || reject "the stable checkout is not promotable"
+SHA="$(git -C "$WT" rev-parse HEAD)"
+BASE="$(git -C "$PREVIEW" rev-parse HEAD)"
+LOGDIR="$STATE/gate/${SHA:0:12}"; mkdir -p "$LOGDIR"
+[[ -z "$(git -C "$WT" status --porcelain --untracked-files=no)" ]] || reject "uncommitted changes in $WT (commit first)"
+[[ "$SHA" != "$BASE" ]] || reject "nothing new: worktree HEAD is the preview HEAD"
+git -C "$WT" merge-base --is-ancestor "$BASE" "$SHA" || reject "not a fast-forward of the preview (${BASE:0:7}); rebase onto turbo/preview"
+
+CHANGED="$(git -C "$WT" diff --name-only "$BASE" "$SHA")"
+printf '%s\n' "$CHANGED" >"$LOGDIR/changed.txt"
+if grep -qE '^(bun\.lock|app/package\.json|app/bun\.lock|app/app\.json|app/app\.config\.js|app/plugins/|app/android/|app/ios/|app/modules/)' <<<"$CHANGED"; then
+  reject "native-affecting files changed ($(grep -E '^(bun\.lock|app/package\.json|app/bun\.lock|app/app\.json|app/app\.config\.js|app/plugins/|app/android/|app/ios/|app/modules/)' <<<"$CHANGED" | head -3 | tr '\n' ' ')): needs an APK rebuild, not a hot reload"
+fi
+grep -q '^app/src/lib/build-info.json$' <<<"$CHANGED" && reject "app/src/lib/build-info.json is stamped by turbo-promote; do not commit it"
+
+# Agent worktrees made by turbo-new carry node_modules clones; anything else needs them first.
+for d in node_modules app/node_modules bridge/node_modules; do
+  [[ -d "$WT/$d" ]] || reject "$WT/$d missing (create worktrees with turbo-new)"
+done
+
+echo "gate ${SHA:0:7} over ${BASE:0:7}: $(wc -l <<<"$CHANGED" | tr -d ' ') file(s)"
+( cd "$WT" && "$BUN" app/node_modules/typescript/bin/tsc -p app --noEmit ) >"$LOGDIR/tsc-app.log" 2>&1 \
+  || reject "tsc -p app failed: $(grep -m2 'error TS' "$LOGDIR/tsc-app.log" | tr '\n' ' ')"
+echo "  tsc app ok"
+( cd "$WT" && "$BUN" bridge/node_modules/typescript/bin/tsc -p bridge --noEmit ) >"$LOGDIR/tsc-bridge.log" 2>&1 \
+  || reject "tsc -p bridge failed: $(grep -m2 'error TS' "$LOGDIR/tsc-bridge.log" | tr '\n' ' ')"
+echo "  tsc bridge ok"
+if grep -qE '^(bridge|shared)/' <<<"$CHANGED"; then
+  ( cd "$WT/bridge" && "$BUN" test ) >"$LOGDIR/bun-test.log" 2>&1 || reject "bridge bun test failed: $(grep -m2 -E '\(fail\)|error' "$LOGDIR/bun-test.log" | tr '\n' ' ')"
+  echo "  bridge tests ok"
+fi
+
+# Throwaway Metro on a free port, same bundle URL the phone asks for.
+PORT=""
+for p in $(seq 8190 8199); do lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 || { PORT=$p; break; }; done
+[[ -n "$PORT" ]] || reject "no free throwaway Metro port in 8190-8199"
+( cd "$WT/app" && exec env CI=1 EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_DASH_TURBO=1 "$BUN" node_modules/expo/bin/cli start --dev-client --port "$PORT" --host localhost ) >"$LOGDIR/metro.log" 2>&1 &
+METRO_PID=$!
+up=""
+for _ in $(seq 1 120); do
+  [[ "$(curl -s -m 2 "http://localhost:$PORT/status" 2>/dev/null)" == *running* ]] && { up=1; break; }
+  kill -0 "$METRO_PID" 2>/dev/null || reject "throwaway Metro exited: $(tail -3 "$LOGDIR/metro.log" | tr '\n' ' ')"
+  sleep 1
+done
+[[ -n "$up" ]] || reject "throwaway Metro did not answer /status within 120 s"
+read -r code size < <(curl -s -m 480 -o "$LOGDIR/bundle.js" -w '%{http_code} %{size_download}\n' "http://localhost:$PORT/index.ts.bundle?$QUERY")
+pkill -TERM -P "$METRO_PID" 2>/dev/null || true; kill "$METRO_PID" 2>/dev/null || true; METRO_PID=""
+if [[ "$code" != 200 ]]; then
+  mv "$LOGDIR/bundle.js" "$LOGDIR/bundle-error.txt" 2>/dev/null || true
+  reject "Metro bundle HTTP $code: $(head -c 300 "$LOGDIR/bundle-error.txt" 2>/dev/null | tr '\n' ' ')"
+fi
+rm -f "$LOGDIR/bundle.js"
+echo "  bundle ok ($size bytes)"
+
+# Promote: fast-forward the preview; its watching Metro hot-reloads the phone.
+git -C "$PREVIEW" merge --ff-only --quiet "$SHA" >"$LOGDIR/merge.log" 2>&1 || reject "fast-forward of the preview failed: $(tail -2 "$LOGDIR/merge.log" | tr '\n' ' ')"
+AT_MS=$(( $(date +%s) * 1000 ))
+printf '{"sha":"%s","builtAtMs":%s}\n' "$SHA" "$AT_MS" >"$PREVIEW/app/src/lib/build-info.json"
+
+# Post-check the live preview Metro; roll back if it does not build what we promoted.
+sleep 3
+read -r pcode _ < <(curl -s -m 300 -o /dev/null -w '%{http_code} %{size_download}\n' "$PREVIEW_ORIGIN/index.ts.bundle?$QUERY")
+if [[ "$pcode" != 200 ]]; then
+  git -C "$PREVIEW" reset --quiet --keep "$BASE" >>"$LOGDIR/merge.log" 2>&1 || true
+  printf '{"sha":"%s","builtAtMs":%s}\n' "$BASE" "$AT_MS" >"$PREVIEW/app/src/lib/build-info.json"
+  SHA_FAILED="$SHA"; SHA="$SHA_FAILED"
+  reject "live preview Metro answered HTTP $pcode after the fast-forward; rolled back to ${BASE:0:7}"
+fi
+printf '{"sha":"%s","previous":"%s","at":"%s","builtAtMs":%s,"note":"%s","worktree":"%s"}\n' \
+  "$SHA" "$BASE" "$(now)" "$AT_MS" "$(jstr "$NOTE")" "$(jstr "$WT")" >"$STATE/preview.json.tmp"
+mv "$STATE/preview.json.tmp" "$STATE/preview.json"
+record true "promoted"
+echo "PROMOTED ${SHA:0:7} (was ${BASE:0:7}) in $(( $(date +%s) - START ))s: the phone's preview (:8098) hot-reloads it now."

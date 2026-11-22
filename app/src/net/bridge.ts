@@ -1,3 +1,4 @@
+import { receiveSecretRequest, receiveSecretResolved } from "../store/secrets";
 import { applyGateMessage } from "../store/approvals";
 import { createPermissionsStore } from "../store/permissions";
 import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
@@ -296,6 +297,8 @@ class Bridge {
       case "gate_snapshot":
       case "gate_status":
       case "gate_error": applyGateMessage(message); return;
+      case "secret_request": receiveSecretRequest(message); return;
+      case "secret_resolved": receiveSecretResolved(message); return;
       case "permission_request": {
         const where = locateTurn(message.turnId);
         if (where) permissionRequests.receiveRequest(where.conversationId, message);

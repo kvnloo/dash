@@ -17,7 +17,7 @@ import { GateService } from "./src/gate/service";
 import { GateStore } from "./src/gate/store";
 import type { GateServerMessage } from "../shared/protocol";
 import { statSync } from "node:fs";
-import { homedir, hostname } from "node:os";
+import { homedir, hostname, userInfo } from "node:os";
 import { basename, join } from "node:path";
 import {
   CHATS_FEATURE,
@@ -61,7 +61,7 @@ const handleFlowTrace = flowTraceHttp(process.env.DASH_DEBUG_FLOW_TRACE === "1")
 import { activityHttp } from "./src/hermes-activity";
 const nativeActivityHttp = activityHttp((profile, session) => hermesSessions.nativeActivity(profile, session));
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
-import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, liveText, planContinuation, type HandoffState } from "./src/hermes-continue";
+import { awaitHandoff, awaitRunningTurn, chooseHermesRoute, claimContinuation, queueContinuation, HandoffAborted, handoffText, liveText, planContinuation, dashReplyBusy, steerFallsBackToQueue, trackRunningTurn, type HandoffState } from "./src/hermes-continue";
 import type { LiveOwner } from "./src/hermes-owner";
 import { z0bridgeHermes } from "./src/z0bridge-hermes";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
@@ -101,6 +101,7 @@ import { createPmHttpHandler } from "./src/pm-http";
 import { createBridgeHealthHttpHandler, DRAIN_MESSAGE } from "./src/health";
 import { createTraceRoute } from "./src/trace-route";
 import { createTriageHttpHandler } from "./src/triage-http";
+import { SecretBroker, createSudoHttpHandler } from "./src/secret-broker";
 import { bunRun, defaultShareDirs, shareRoots } from "./src/share";
 import { acknowledgeSocketPing, BRIDGE_WS_IDLE_TIMEOUT_SECONDS } from "./src/ws-keepalive";
 
@@ -114,6 +115,7 @@ interface SocketData {
   principal: BridgePrincipal;
   stopIdentityWatch?: () => void;
   stopNotices?: () => void;
+  stopSecrets?: () => void;
   /** Turn ids this socket is subscribed to. */
   turns: Set<string>;
   gateSend?: (message: GateServerMessage) => void;
@@ -188,6 +190,8 @@ class Turn implements Sink {
   /** Host profile that owns this Hermes turn's session, once known. */
   private hermesProfile?: string;
   private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
+  /** Ends this turn's entry in the running-turn registry, so queued follow-ups go after it (#498). */
+  private untrack?: () => void;
 
   start(input: TurnInput, remote?: RemoteHost): void {
     if (input.model && !remote && ((this.harness.id === "hermes" && input.sessionId) || process.env.DASH_ENABLE_LEGACY_CLI === "1")) {
@@ -266,17 +270,34 @@ class Turn implements Sink {
     if (!sessionId || !target) { this.endWithout("Unknown or ambiguous Hermes profile/session."); return; }
     this.hermesProfile = target.profile;
     // Steering is a control message into the current turn, not a second continuation.
-    const release = input.mode === "steer" ? () => {} : claimContinuation(target.profile, sessionId);
-    if (!release) { this.endWithout("A Dash reply is already queued or running in this Hermes session. Wait for it, or stop it first."); return; }
+    let release: (() => void) | undefined = input.mode === "steer" ? () => {} : claimContinuation(target.profile, sessionId);
     const abort = new AbortController();
     this.abort = abort;
     log("turn.start", { id: this.id, harness: "hermes", cwd: input.cwd, resume: true });
     void (async () => {
       let handedOff = false;
       try {
+        if (!release) {
+          // An earlier Dash message in this session is still queued or running: wait in line (#498).
+          this.flush();
+          this.emit({ type: "status", id: this.id, seq: 0, text: "Queued behind your earlier message.", delivery: "queued", deliveryAt: Date.now() });
+          log("hermes.queue", { id: this.id, waited: "dash-reply" });
+          release = await queueContinuation(target.profile, sessionId, abort.signal);
+          if (this.cancelled || this.finished) return;
+        }
         const hosting = (owner: LiveOwner) => hermesSessions.ownerHosting(target.profile, sessionId, owner);
         const plan = planContinuation(hermesSessions.liveOwner(target.profile, sessionId), hosting, hermesSessions.gatewayHosted(target.profile, sessionId));
-        if (input.mode === "steer" && plan.kind !== "live") throw new Error("This session is not gateway-hosted; steering was not sent.");
+        if (steerFallsBackToQueue(input.mode, plan.kind, input.mode === "steer" && dashReplyBusy(target.profile, sessionId))) {
+          // No gateway hosts this session (often Dash's own turn is running it): send it as the next turn.
+          release = await queueContinuation(target.profile, sessionId, abort.signal);
+          input = { ...input, mode: "queue" };
+          this.flush();
+          this.emit({ type: "status", id: this.id, seq: 0, text: "This session can't be steered here; queued for the next turn.", delivery: "queued", deliveryAt: Date.now() });
+          log("hermes.steer", { id: this.id, fallback: "queue" });
+        }
+        if (plan.kind !== "live" && await awaitRunningTurn(sessionId, abort.signal)) log("hermes.queue", { id: this.id, waited: "dash-turn" });
+        if (this.cancelled || this.finished) return;
+        this.untrack ??= trackRunningTurn(sessionId);
         if (plan.kind === "live") {
           if (plan.owner) this.status(liveText(plan.owner.surface, HOST_NAME));
           log("hermes.live", { id: this.id, surface: plan.owner?.surface ?? "none", hosting: "gateway" });
@@ -346,7 +367,7 @@ class Turn implements Sink {
         this.error(error instanceof HandoffAborted ? error.message : String(error));
         this.finish(1);
       } finally {
-        if (!handedOff) release();
+        if (!handedOff) release?.();
       }
     })();
   }
@@ -477,6 +498,7 @@ class Turn implements Sink {
   // Sink -------------------------------------------------------------------
 
   session(sessionId: string): void {
+    if (this.harness.id === "hermes" && !this.finished) this.untrack ??= trackRunningTurn(sessionId);
     this.flush();
     this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: SELF.id(), harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesTransport ?? (this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp") });
   }
@@ -522,6 +544,7 @@ class Turn implements Sink {
     if (this.finished) return;
     this.flush();
     this.finished = true;
+    this.untrack?.();
     const done = () => {
       this.emit({ type: "done", id: this.id, seq: 0, exitCode });
       this.settled = true;
@@ -776,7 +799,10 @@ const notices = new NoticeService(CREDENTIAL_DIR, (notice, delivered) => log("no
 const noticePort = Number(process.env.DASH_NOTICE_PORT ?? (PORT === 0 ? 0 : PORT + 1));
 if (!Number.isInteger(noticePort) || noticePort < 0 || noticePort > 65535) throw new Error("Invalid DASH_NOTICE_PORT");
 if (notices.quarantined) log("notices.quarantined", { file: basename(notices.quarantined) });
-const noticeServer = tryStartNoticeServer({ token: TOKEN, notices, port: noticePort, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG }, reason => log("notices.disabled", { reason }));
+// Secure sudo (#559): `dash-sudo` reaches it only on the loopback listener; the phone answers over /ws.
+const secretBroker = new SecretBroker({ sudo: () => Bun.which("sudo"), account: `${(() => { try { return userInfo().username; } catch { return "user"; } })()}@${HOST_NAME}`, log });
+const noticeServer = tryStartNoticeServer({ token: TOKEN, notices, port: noticePort, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG,
+  extra: createSudoHttpHandler({ token: TOKEN, broker: secretBroker }) }, reason => log("notices.disabled", { reason }));
 const attachments = new AttachmentStore(process.env.DASH_ATTACHMENT_DIR?.trim() || join(CREDENTIAL_DIR, "attachments"));
 const handleFiles = createFilesHttpHandler({
   token: TOKEN,
@@ -964,6 +990,7 @@ const server = Bun.serve<SocketData>({
         if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) { ws.close(1008, "Identity authorization expired"); return; }
         sendTo(ws, notice);
       });
+      if (ws.readyState === WebSocket.OPEN) ws.data.stopSecrets = secretBroker.subscribe(message => sendTo(ws, message));
     },
     async message(ws, raw) {
       if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) {
@@ -1135,6 +1162,15 @@ const server = Bun.serve<SocketData>({
           if (part) sendTo(ws, { type: "status", id: turn.id, seq: turn.events.length, text: "", part });
           break;
         }
+        case "secret_submit": {
+          // Sealed to the request's own key; never logged. The broker writes it only into sudo's stdin.
+          void secretBroker.submit(message);
+          break;
+        }
+        case "secret_cancel": {
+          secretBroker.cancel(message.id);
+          break;
+        }
         case "permission_decision": {
           // Only a socket that owns or attached to the turn may answer its permission requests.
           if (!ws.data.turns.has(message.turnId)) break;
@@ -1206,6 +1242,7 @@ const server = Bun.serve<SocketData>({
     close(ws) {
       ws.data.stopIdentityWatch?.();
       ws.data.stopNotices?.();
+      ws.data.stopSecrets?.();
       if (ws.data.gateSend) gate?.unsubscribe(ws.data.gateSend);
       detachSocket(ws.data.turns, (id) => turns.get(id), ws);
       for (const id of pruneStaleUtterances(utterances, Date.now())) {
@@ -1256,6 +1293,7 @@ function shutdown(): void {
   // Stop admission before awaiting cleanup; sockets must not launch new work.
   server.stop(true);
   noticeServer?.stop(true);
+  secretBroker.dispose();
   chatIndex.stop();
   for (const turn of turns.values()) turn.cancel();
   void Promise.all([acpSupervisor.close(), remoteAcpSupervisor.close()]).then(() => {

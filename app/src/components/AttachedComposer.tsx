@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { ChatAttachment } from "../../../shared/protocol";
 import type { Conversation } from "../model";
 import { parseSearchQuery } from "../lib/global-search";
+import { lastExchange } from "../lib/last-exchange";
 import { Composer } from "./Composer";
 import { haptic } from "../haptics";
 import { bridge, sendChat } from "../net/bridge";
@@ -48,6 +49,9 @@ export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, o
 
   const harnessName = store.use(state => state.connection.harnesses.find(harness => harness.id === conversation.harness)?.name) ?? conversation.harness;
   const blocked = conversationTargetError(conversation);
+  const recent = lastExchange(conversation);
+  const [peekOpen, setPeekOpen] = useState(false);
+  useEffect(() => { setPeekOpen(false); }, [conversation.id]);
   const busy = conversationBusy(conversation.id);
   const sessionModel = conversation.sessionId && conversation.sessionModel?.sessionId === conversation.sessionId
     ? conversation.sessionModel.model : undefined;
@@ -68,6 +72,7 @@ export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, o
   }, [conversation.id, online]);
 
   const onSend = useCallback((text: string, attachments: ChatAttachment[]) => {
+    setPeekOpen(false);
     const state = store.get();
     const current = state.conversations.find(chat => chat.id === conversation.id);
     // A navigation, endpoint or roster change must never turn the draft into a
@@ -94,6 +99,12 @@ export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, o
       <View style={styles.header}>
         <Text testID="attached-composer-target" accessibilityLabel={"Attached to " + targetLabel}
           numberOfLines={1} style={styles.target}>{targetLabel}</Text>
+        {recent.you || recent.agent || recent.replying ? (
+          <Pressable testID="attached-last-toggle" accessibilityRole="button" accessibilityState={{ expanded: peekOpen }}
+            accessibilityLabel={peekOpen ? "Hide last messages" : "Show last messages"} onPress={() => setPeekOpen(open => !open)} style={styles.action}>
+            <Text style={styles.actionText}>{peekOpen ? "Last ▾" : "Last ▸"}</Text>
+          </Pressable>
+        ) : null}
         <Pressable accessibilityRole="button" accessibilityLabel="Open attached chat" onPress={onOpen} style={styles.action}>
           <Text style={styles.actionText}>Open</Text>
         </Pressable>
@@ -104,6 +115,16 @@ export function AttachedComposer({ conversation, blurTarget, onOpen, onSearch, o
           <Text style={styles.actionText}>Detach</Text>
         </Pressable>
       </View>
+      {/* #507: last message or two, as an on-demand popup. Main never keeps a standing text copy of
+          the transcript (army invariant: attached-composer.spec), so the text exists only while open. */}
+      {peekOpen && (recent.you || recent.agent || recent.replying) ? (
+        <Pressable testID="attached-last-exchange" accessibilityRole="button" accessibilityLabel="Open attached chat from last messages"
+          onPress={onOpen} style={styles.recent}>
+          {recent.you ? <Text testID="attached-last-you" numberOfLines={1} style={styles.recentYou}>You: {recent.you}</Text> : null}
+          {recent.agent ? <Text testID="attached-last-agent" numberOfLines={2} style={styles.recentAgent}>{harnessName}: {recent.agent}</Text>
+            : recent.replying ? <Text style={styles.recentYou}>{harnessName} is replying…</Text> : null}
+        </Pressable>
+      ) : null}
       {blocked ? <Text accessibilityRole="alert" style={styles.blocked}>{blocked}</Text> : null}
       <Composer
         draftKey={conversation.id}
@@ -131,4 +152,7 @@ const styles = StyleSheet.create({
   action: { minHeight: 44, minWidth: 44, paddingHorizontal: space.xs, alignItems: "center", justifyContent: "center" },
   actionText: { color: colors.text, ...type.label },
   blocked: { color: colors.danger, paddingHorizontal: space.md, ...type.small },
+  recent: { marginHorizontal: space.sm, marginBottom: space.xs, paddingHorizontal: space.sm, paddingVertical: space.xs, borderLeftWidth: 2, borderColor: colors.hair, gap: 2 },
+  recentYou: { color: colors.textMuted, ...type.small },
+  recentAgent: { color: colors.text, ...type.small },
 });

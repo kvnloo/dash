@@ -34,6 +34,8 @@ import { LabScreen } from "./src/screens/LabScreen";
 import { RoadmapProjectScreen, RoadmapScreen, RoadmapTaskScreen } from "./src/screens/RoadmapScreen";
 import { DebugHost } from "./src/debug/DebugHost";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
+import { EphemeralModes } from "./src/components/EphemeralModes";
+import { SecretEntry } from "./src/components/SecretEntry";
 import { isDebugActive } from "./src/debug/expose";
 import { debugNavigationRef, flushPendingDebugNavigation } from "./src/debug/nav";
 import { clearDebugPersistence, applyDebugSeed } from "./src/debug/seed";
@@ -159,7 +161,9 @@ export default function App() {
                 <Stack.Screen name="RoadmapTask" component={RoadmapTaskScreen} />
               </Stack.Navigator>
               <BridgePullOverlay />
+              <EphemeralModes />
               <NativeEvents />
+              <SecretEntry />
             </AnnotationRoot></ContinuousVoiceRoot>
             </NavigationContainer>
           </BridgePullProvider>

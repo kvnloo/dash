@@ -59,6 +59,56 @@ export function planContinuation(owner: LiveOwner | undefined, hosting: (owner: 
   return gatewayHosted ? { kind: "live" } : { kind: "free" };
 }
 
+/**
+ * A steer needs the gateway to host the session. When nothing hosts it (Dash's own ACP turn is
+ * running it, or it is idle) the text goes as the next turn instead of being dropped (#498).
+ */
+export function steerFallsBackToQueue(mode: "steer" | "queue" | string | undefined, plan: ContinuationPlan["kind"], dashBusy = false): boolean {
+  // While Dash's own reply is queued or running, a gateway steer would overtake it: queue instead.
+  return mode === "steer" && (plan !== "live" || dashBusy);
+}
+
+/** True while a Dash reply in this session is queued, waiting or running. */
+export function dashReplyBusy(profile: string, sessionId: string): boolean {
+  return continuing.has(`${profile}\u0000${sessionId}`) || Boolean(runningTurns.get(sessionId)?.size);
+}
+
+/** Dash's own running Hermes turns, by session id. A follow-up waits for these, never races them. */
+const runningTurns = new Map<string, Set<() => void>>();
+const runningWaiters = new Map<string, Set<() => void>>();
+
+/** Mark a Dash turn as running `sessionId`; call the returned function once it ends. */
+export function trackRunningTurn(sessionId: string): () => void {
+  let ended = false;
+  const token = () => {};
+  const set = runningTurns.get(sessionId) ?? new Set<() => void>();
+  set.add(token);
+  runningTurns.set(sessionId, set);
+  return () => {
+    if (ended) return;
+    ended = true;
+    set.delete(token);
+    if (set.size) return;
+    runningTurns.delete(sessionId);
+    for (const wake of runningWaiters.get(sessionId) ?? []) wake();
+    runningWaiters.delete(sessionId);
+  };
+}
+
+/** Resolves true after waiting for Dash's running turn(s) in `sessionId`, false when none ran. */
+export async function awaitRunningTurn(sessionId: string, signal: AbortSignal): Promise<boolean> {
+  if (!runningTurns.get(sessionId)?.size) return false;
+  await new Promise<void>((resolve, reject) => {
+    const waiters = runningWaiters.get(sessionId) ?? new Set<() => void>();
+    runningWaiters.set(sessionId, waiters);
+    const wake = () => { signal.removeEventListener("abort", stop); resolve(); };
+    const stop = () => { waiters.delete(wake); reject(new HandoffAborted()); };
+    waiters.add(wake);
+    if (signal.aborted) stop(); else signal.addEventListener("abort", stop, { once: true });
+  });
+  return true;
+}
+
 /** Status for a reply sent into a session another surface has open through the same gateway. */
 export function liveText(surface: string, host: string): string {
   return `Open in ${surfaceLabel(surface)} on ${host} · sending into the live session`;
@@ -81,12 +131,46 @@ export class HandoffAborted extends Error {
 /** One waiting/continuing Dash reply per profile session. */
 const continuing = new Set<string>();
 
+/** Follow-ups waiting for the session, oldest first. Release hands the slot to the next one (#498). */
+const continuationWaiters = new Map<string, Array<(release: () => void) => void>>();
+
+function holdContinuation(key: string): () => void {
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const next = continuationWaiters.get(key)?.shift();
+    if (!continuationWaiters.get(key)?.length) continuationWaiters.delete(key);
+    if (next) next(holdContinuation(key));
+    else continuing.delete(key);
+  };
+}
+
 export function claimContinuation(profile: string, sessionId: string): (() => void) | undefined {
   const key = `${profile}\u0000${sessionId}`;
   if (continuing.has(key)) return undefined;
   continuing.add(key);
-  let released = false;
-  return () => { if (!released) { released = true; continuing.delete(key); } };
+  return holdContinuation(key);
+}
+
+/** Like claimContinuation, but waits its turn (FIFO) instead of rejecting a message sent in a burst. */
+export function queueContinuation(profile: string, sessionId: string, signal: AbortSignal): Promise<() => void> {
+  const release = claimContinuation(profile, sessionId);
+  if (release) return Promise.resolve(release);
+  const key = `${profile}\u0000${sessionId}`;
+  return new Promise((resolve, reject) => {
+    const waiters = continuationWaiters.get(key) ?? [];
+    continuationWaiters.set(key, waiters);
+    const take = (granted: () => void) => { signal.removeEventListener("abort", stop); resolve(granted); };
+    const stop = () => {
+      const at = waiters.indexOf(take);
+      if (at >= 0) waiters.splice(at, 1);
+      if (!waiters.length) continuationWaiters.delete(key);
+      reject(new HandoffAborted());
+    };
+    waiters.push(take);
+    if (signal.aborted) stop(); else signal.addEventListener("abort", stop, { once: true });
+  });
 }
 
 /**

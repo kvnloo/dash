@@ -36,7 +36,8 @@ import {
   indicatorTranslateX,
 } from "./golden-nav";
 import { toMain } from "../lib/main-nav";
-import { annotate, toggleAnnotation } from "../store/annotate";
+import { annotate } from "../store/annotate";
+import { cyclePillMode, nextPillMode, PILL_LABEL, pillModeOf, surfaceMode } from "../store/ephemeral-mode";
 
 const RIPPLE = { color: "transparent" as const };
 
@@ -64,6 +65,8 @@ export const AppNav = memo(
   >(function AppNav({ navigation, tab, onTab, progress: progressProp }, ref) {
     const thumb = useHandedness();
     const annotationActive = annotate.use(s => s.active);
+    const surface = surfaceMode.use(s => s);
+    const pillMode = pillModeOf(annotationActive, surface);
     const internal = useSharedValue(clampProgress(tab));
     // A single source of truth: no second spring between the finger and indicator.
     const progress = progressProp ?? internal;
@@ -166,18 +169,18 @@ export const AppNav = memo(
           <PressScale
             testID="spen-mode-pill"
             accessibilityRole="button"
-            accessibilityLabel={`S Pen mode: ${annotationActive ? "Annotate" : "Normal"}. Switch to ${annotationActive ? "Normal" : "Annotate"}`}
-            accessibilityState={{ selected: annotationActive }}
+            accessibilityLabel={`Mode: ${PILL_LABEL[pillMode]}. Switch to ${PILL_LABEL[nextPillMode(pillMode)]}`}
+            accessibilityState={{ selected: pillMode !== "normal" }}
             android_ripple={RIPPLE}
             scaleTo={PRESS_SCALE.nav}
             onPress={() => {
               haptic.tap();
-              toggleAnnotation();
+              cyclePillMode();
             }}
             style={styles.modePill}
           >
             <Text testID="spen-mode-label" allowFontScaling={false} numberOfLines={1} style={styles.modeText}>
-              {annotationActive ? "Annotate" : "Normal"}
+              {PILL_LABEL[pillMode]}
             </Text>
           </PressScale>
           <PressScale

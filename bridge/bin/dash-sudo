@@ -1,0 +1,4 @@
+#!/usr/bin/env bun
+import { sudoCli } from "../src/sudo-cli";
+// Never prompts for or prints a password: the owner answers on the phone.
+process.exitCode = await sudoCli(process.argv.slice(2));

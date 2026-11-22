@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# turbo-on: undo turbo-off. Starts the preview Metro (:8098) and allows promotions again.
+set -uo pipefail
+STATE="${DASH_TURBO_STATE:-$HOME/.local/state/dash}"
+rm -f "$STATE/OFF"
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dev.kvnloo.dash-metro-preview.plist" 2>/dev/null || true
+for _ in $(seq 1 60); do [[ "$(curl -s -m 2 http://127.0.0.1:8098/status)" == *running* ]] && break; sleep 1; done
+echo "turbo on: preview :8098 $(curl -s -m 3 http://127.0.0.1:8098/status || echo down)"

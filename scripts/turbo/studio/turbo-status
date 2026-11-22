@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# turbo-status: preview commit, what the preview and stable Metros serve, the last gate results.
+set -uo pipefail
+PREVIEW="${DASH_PREVIEW_DIR:-$HOME/dash-studio-preview}"
+STATE="${DASH_TURBO_STATE:-$HOME/.local/state/dash}"
+echo "preview worktree: $(git -C "$PREVIEW" log -1 --format='%h %s' 2>/dev/null)"
+echo "preview.json:     $(cat "$STATE/preview.json" 2>/dev/null || echo none)"
+for p in 8098 8097; do
+  s=$(curl -s -m 3 "http://127.0.0.1:$p/status" 2>/dev/null); echo "metro :$p:       ${s:-down}"
+done
+for l in dev.kvnloo.dash-metro-preview dev.kvnloo.dash-metro dev.kvnloo.dash-bridge; do
+  st=$(launchctl print "gui/$(id -u)/$l" 2>/dev/null | awk -F'= ' '/^\tstate/{print $2; exit}'); echo "launchd $l: ${st:-not loaded}"
+done
+echo "agent worktrees:  $(ls "${DASH_TURBO_HOME:-$HOME/dash-turbo}/wt" 2>/dev/null | tr '\n' ' ')"
+echo "last gate runs:"; tail -5 "$STATE/preview-history.jsonl" 2>/dev/null

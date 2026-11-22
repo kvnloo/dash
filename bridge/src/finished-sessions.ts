@@ -139,6 +139,24 @@ function cwdBasename(cwd: string): string {
   return parts[parts.length - 1] ?? "";
 }
 
+const PARTIAL_USER = /"(?:type":"user"|operation":"enqueue"|type":"user_message"|role":"user")/;
+const PARTIAL_TEXT = /"(?:content|text|message)":"((?:[^"\\]|\\.)*)/;
+const PARTIAL_CWD = /"cwd":"((?:[^"\\]|\\.)*)"/;
+
+function unescapePrefix(raw: string): string {
+  // The head may end mid-escape; drop an incomplete trailing escape before decoding.
+  const safe = raw.slice(0, 4096).replace(/\\(?:u[0-9a-fA-F]{0,3})?$/, "");
+  try { return JSON.parse(`"${safe}"`) as string; } catch { return ""; }
+}
+
+/** A first prompt larger than HEAD_BYTES leaves its record cut off; read the user text it starts with (#493). */
+function partialRecord(line: string): { user?: string; cwd?: string } {
+  if (!PARTIAL_USER.test(line)) return {};
+  const text = PARTIAL_TEXT.exec(line)?.[1];
+  const cwd = PARTIAL_CWD.exec(line)?.[1];
+  return { user: text ? unescapePrefix(text) : undefined, cwd: cwd ? unescapePrefix(cwd) : undefined };
+}
+
 function fromHead(head: string, kind: Kind, file: FileCandidate): AgentInfo | null {
   let cwd: string | undefined;
   let user: string | undefined;
@@ -148,6 +166,9 @@ function fromHead(head: string, kind: Kind, file: FileCandidate): AgentInfo | nu
     try {
       parsed = JSON.parse(line);
     } catch {
+      const partial = partialRecord(line);
+      cwd ??= partial.cwd?.trim() || undefined;
+      if (!user && partial.user?.trim()) user = partial.user;
       continue;
     }
     if (!isRecord(parsed)) continue;
