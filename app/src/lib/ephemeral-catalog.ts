@@ -75,5 +75,16 @@ export function ephemeralCatalog(): EphemeralCatalog {
   return loaded;
 }
 
+const CHAT_STATES: readonly CatalogFixtureState[] = ["sample", "example", "input"];
+/**
+ * The catalog fixture a chat card for (kind, app) draws: the kind's first sample or example fixture for that app,
+ * else its input fixture. Unavailable fixtures never stand in for a card. Null when the catalog has none for the app.
+ */
+export function catalogFixtureFor(kind: EphemeralKind, app: string, catalog: EphemeralCatalog = ephemeralCatalog()): CatalogFixture | null {
+  const fixtures = catalog.kinds.find(k => k.kind === kind)?.fixtures.filter(f => f.app === app) ?? [];
+  for (const state of CHAT_STATES) { const f = fixtures.find(x => x.state === state); if (f) return f; }
+  return null;
+}
+
 /** Short revision for labels: "catalog v0.1.0 · ephemeral-ui@7c5daca". */
 export const catalogLabel = (c: EphemeralCatalog): string => `catalog v${c.version} · ephemeral-ui@${c.rev.slice(0, 7)}`;
