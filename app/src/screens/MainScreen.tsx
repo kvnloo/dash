@@ -1,4 +1,5 @@
 import { BlurTargetView } from "expo-blur";
+import { useWallpaperGlass } from "../components/WallpaperTheme";
 import { useIsFocused } from "@react-navigation/native";
 import { Canvas } from "../components/Canvas";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
@@ -148,6 +149,7 @@ function chatDraftForResult(item: SearchResult): string | undefined {
 export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
   const screenFocused = useIsFocused();
+  const wallpaper = useWallpaperGlass();
   const [foreground, setForeground] = useState(AppState.currentState === "active");
   useEffect(() => {
     const listener = AppState.addEventListener("change", state => setForeground(state === "active"));
@@ -453,7 +455,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   ], [navigation, index, searchActive, screenFocused, foreground, width]);
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
+    <View style={[styles.screen, { paddingTop: insets.top }, wallpaper && { backgroundColor: "transparent", opacity: screenFocused ? 1 : 0 }]}>{wallpaper ? null : <Canvas />}
       <AppNav
         ref={navRef}
         navigation={navigation}

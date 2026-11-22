@@ -43,6 +43,8 @@ export const colors = {
   ink3: palette.textTertiary, inkDark: palette.bg, devNav: glass.fillNavStrong,
   devNav96: glass.fillNavStrong, navGlass: glass.fill, hair: glass.hair, hair2: glass.hair2,
 } as const;
+// One tint over the wallpaper keeps chat readable even against bright images.
+export const wallpaperScrim = "rgba(8,9,8,0.80)";
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48, scene: 64 } as const;
 export const radius = { sm: 6, card: 8, md: 14, lg: 18, pill: 999 } as const;
 export const controlMin = 44;

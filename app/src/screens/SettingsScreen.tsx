@@ -28,6 +28,8 @@ import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
 import { screenBack } from "../lib/screen-back";
 import { endpointsOf, withEditedEndpoint } from "../lib/bridge-failover";
+import { wallpaperAvailable } from "../lib/wallpaper-window";
+import { appearanceTheme, setAppearanceTheme } from "../store/appearance";
 
 export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const thumb = useHandedness();
@@ -213,6 +215,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             <InformationDensityPicker />
           </GlassSurface>
           <Text style={styles.help}>Layout sets spacing and tile size. Detail sets how much evidence each tile shows. Each dial changes only its own axis; Auto detail follows the layout.</Text>
+          {wallpaperAvailable ? <WallpaperThemePicker /> : null}
+
           <Text style={styles.label}>Bridge</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field
@@ -343,6 +347,24 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
       </KeyboardAvoidingView>
     </View>
   );
+}
+
+function WallpaperThemePicker() {
+  const selected = appearanceTheme.use(theme => theme === "wallpaper");
+  return <>
+    <Text style={styles.label}>Appearance</Text>
+    <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+      <Pressable accessibilityRole="switch" accessibilityLabel="Wallpaper glass" aria-checked={selected}
+        onPress={() => setAppearanceTheme(selected ? "night" : "wallpaper")}
+        style={({ pressed }) => [styles.harnessRow, pressed && styles.pressed]}>
+        <Text style={styles.harnessName}>Wallpaper glass</Text>
+        <Text style={styles.statusText}>{selected ? "On" : "Off"}</Text>
+      </Pressable>
+    </GlassSurface>
+    <Text style={styles.help}>{Platform.OS === "web"
+      ? "Web preview uses a sample backdrop. On supported Android builds, this shows your system wallpaper behind chats."
+      : "Show your system wallpaper behind chats with a dark tint to keep text readable."}</Text>
+  </>;
 }
 
 function Field({
