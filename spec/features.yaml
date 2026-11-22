@@ -1171,7 +1171,7 @@ features:
       - "findings help-mic"
     surface_refs:
       - "app/src/components/MicButton.tsx:24"
-      - "app/src/lib/mic-gesture.ts:51"
+      - "app/src/lib/mic-gesture.ts:4"
       - "app/src/screens/SettingsScreen.tsx:158"
     status_from_code: "partial"
     claimed_status: "partial"

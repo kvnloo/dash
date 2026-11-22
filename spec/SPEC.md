@@ -695,7 +695,7 @@ Sources: H-092, H-099, R-8985, owner-turns 2026-10-22
 
 **Acceptance.** Holding the mic grows a pill with the other mode; sliding picks; release only switches the mode; tap uses it; settings help matches.
 
-Code: `app/src/components/MicButton.tsx:24`, `app/src/lib/mic-gesture.ts:51`, `app/src/screens/SettingsScreen.tsx:158`
+Code: `app/src/components/MicButton.tsx:24`, `app/src/lib/mic-gesture.ts:4`, `app/src/screens/SettingsScreen.tsx:158`
 
 Note: Gesture implemented; Settings help text still describes long-press as a handedness switch.
 Sources: H-100, R-8983, findings help-mic
