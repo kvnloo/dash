@@ -34,6 +34,8 @@ import {
 import { FEEDBACK_CONVERSATION_ID, inAppFeedbackEnabled, type FeedbackAction } from "../lib/feedback";
 import { submitInAppFeedback } from "../lib/feedback-submit";
 import { DEFAULT_MAIN_TAB } from "../lib/home";
+import { feedbackConversation, opensOnDogfood } from "../lib/dogfood-home";
+import { DogfoodHome } from "../components/DogfoodHome";
 import { composerTrigger } from "../lib/composer-suggestions";
 import type { AgentTarget } from "../mock/agents";
 import type { ScreenProps } from "../navigation";
@@ -164,6 +166,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const [localTab, setLocalTab] = useState(DEFAULT_MAIN_TAB);
   const query = debugSearch !== null ? debugSearch : localQuery;
   const index = debugTab !== null ? debugTab : localTab;
+  // Cold open lands on the dogfood home (self-development loop) while in-app feedback is on.
+  const [home, setHome] = useState(() => opensOnDogfood(store.get().settings, { debug: isDebugActive(), routeTab }));
 
   const setQuery = useCallback(
     (next: string | ((prev: string) => string)) => {
@@ -189,10 +193,12 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   // the tab Main already recorded (after the user swiped away) still moves the pager.
   const routeParams = route.params;
   useEffect(() => {
+    if (route.params?.home === true) { setHome(true); return; }
     if (typeof routeTab !== "number") return;
+    setHome(false);
     setIndex(routeTab);
     pagerRef.current?.setPage(routeTab);
-  }, [routeParams, routeTab, setIndex]);
+  }, [route.params?.home, routeParams, routeTab, setIndex]);
 
   const onPage = useCallback(
     (e: { nativeEvent: { position: number } }) => {
@@ -333,6 +339,19 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   );
 
   const feedbackOn = inAppFeedbackEnabled(settings);
+  const showHome = home && feedbackOn && debugTab === null && !searchActive;
+  const openTab = useCallback((next: number) => {
+    setHome(false);
+    setIndex(next);
+    pagerRef.current?.setPage(next);
+  }, [setIndex]);
+  const openFeedbackThread = useCallback(() => {
+    const s = store.get();
+    const thread = feedbackConversation(s.conversations, s.settings?.address);
+    if (!thread) return;
+    setActive(thread.id);
+    navigation.navigate("Chat");
+  }, [navigation]);
   const harnessId = settings?.harness ?? harnesses[0]?.id ?? "omp";
   const harnessName = harnesses.find((h) => h.id === harnessId)?.name ?? harnessId;
 
@@ -441,9 +460,9 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       <ChatsPane navigation={navigation} focused={index === 1 && !searchActive} />
     </View>,
     <View key="orchestra" style={{ width, flex: 1 }}>
-      <LazyPane focused={index === 2}><OrbActivity active={index === 2 && !searchActive && screenFocused && foreground}><OrchestraPane navigation={navigation} focused={index === 2 && !searchActive && screenFocused && foreground} /></OrbActivity></LazyPane>
+      <LazyPane focused={index === 2 && !showHome}><OrbActivity active={index === 2 && !showHome && !searchActive && screenFocused && foreground}><OrchestraPane navigation={navigation} focused={index === 2 && !showHome && !searchActive && screenFocused && foreground} /></OrbActivity></LazyPane>
     </View>,
-  ], [navigation, index, searchActive, screenFocused, foreground, width]);
+  ], [navigation, index, showHome, searchActive, screenFocused, foreground, width]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
@@ -451,12 +470,11 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
         ref={navRef}
         navigation={navigation}
         tab={index}
+        home={showHome}
         progress={pagerProgress}
-        onTab={(next) => {
-          pagerRef.current?.setPage(next);
-        }}
+        onTab={openTab}
       />
-      <WorkspaceHeader navigation={navigation} tab={index} titleOnly={index === 2} />
+      <WorkspaceHeader navigation={navigation} tab={index} titleOnly={index === 2 && !showHome} title={showHome ? "Dogfood" : undefined} />
       <ConnectionPill />
       <BlurTargetView ref={blurTarget} style={styles.body}>
         {searchActive ? (
@@ -497,6 +515,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             >
               {pages}
             </MainPager>
+            {showHome ? <DogfoodHome onOpenThread={openFeedbackThread} onOpenTab={openTab} /> : null}
           </Animated.View>
         )}
       </BlurTargetView>

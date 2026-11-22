@@ -84,7 +84,8 @@ const stageLinks = createStageLinkRouter({
 const appRoutes = createAppRouteRouter({
   isReady: () => debugNavigationRef.isReady(),
   open: (route) => {
-    if (route === "Orchestra") debugNavigationRef.navigate("Main", { tab: 2 });
+    if (route === "Dogfood") debugNavigationRef.navigate("Main", { home: true });
+    else if (route === "Orchestra") debugNavigationRef.navigate("Main", { tab: 2 });
     else if (route === "Bots" || route === "Hosts") debugNavigationRef.navigate("Main", { tab: 0 });
     else if (route === "Chats") debugNavigationRef.navigate("Main", { tab: 1 });
     else debugNavigationRef.navigate(route);
