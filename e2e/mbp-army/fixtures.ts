@@ -6,14 +6,14 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { dirname } from 'node:path';
 import { once } from 'node:events';
-import { startFixtureZ0bridge, type IdentityTokenOptions } from './fixture-z0bridge';
+import { startFixtureZ0bridge, type FixtureZ0bridge, type IdentityTokenOptions } from './fixture-z0bridge';
 export const web = process.env.ARMY_WEB || 'http://127.0.0.1:18400';
 const root = resolve(__dirname, '../..');
 const bridgeRoot = process.env.ARMY_BRIDGE_ROOT || root;
 const bun = process.env.ARMY_BUN || execFileSync('sh',['-c','command -v bun'],{encoding:'utf8'}).trim();
 const bunDir = dirname(bun);
 const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
-export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Promise<void>; start(): Promise<void>; dispose(): Promise<void>; identityToken(options?: IdentityTokenOptions): string; logs(): string; exitCode(): number | null };
+export type Bridge = { dir: string; port: number; bootstrap: string; peerCredentialId?: string; stop(signal?: NodeJS.Signals): Promise<void>; start(): Promise<void>; dispose(): Promise<void>; identityToken(options?: IdentityTokenOptions): string; logs(): string; exitCode(): number | null };
 /**
  * generatedUI: enable deterministic fenced OpenUI/GenUI replies in the ACP peer.
  * archiveClaude: a Claude Code chat AgentsView recorded on this computer.
@@ -26,8 +26,12 @@ export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Pro
  * subagents: delegated workers of the native Hermes fixture chat (state.db child rows): two live, one ended.
  * longHermes: a 1000-message native Hermes chat (LONG_HERMES_PROMPTS prompts, each with one answer):
  *   Hermes pages by (timestamp, id) keyset over user and assistant rows, not by AgentsView ordinal.
+ * identity: true starts a private z0bridge authority; a shared FixtureZ0bridge makes this bridge
+ *   verify the same authority as other bridges (a mesh), and the caller owns its lifetime.
+ * peerIdentity: enroll this bridge with that authority for `dash:chat` (DASH_PEER_IDENTITY_FILE) so it
+ *   reaches peer bridges with minted tokens instead of peer-roster-tokens.json; peerPort is DASH_PEER_PORT.
  */
-export type BridgeOptions = { generatedUI?: boolean; archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; rosterHost?: string; rosterPeer?: Bridge; finishedSessions?: boolean; hermesProfiles?: string[]; env?: Record<string,string>; identity?: boolean };
+export type BridgeOptions = { generatedUI?: boolean; archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; rosterHost?: string; rosterPeer?: Bridge; finishedSessions?: boolean; hermesProfiles?: string[]; env?: Record<string,string>; identity?: boolean | FixtureZ0bridge; peerIdentity?: FixtureZ0bridge; peerPort?: number };
 export const LONG_CHAT_TITLE = 'ARMY long Claude Code chat';
 export const LONG_CHAT_PROMPTS = 125;
 export const LONG_HERMES_TITLE = 'ARMY long Hermes chat';
@@ -87,15 +91,24 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
   await writeFile(join(bin,'army-kanban'),'#!/bin/sh\ncat '+quote(join(dir,'kanban.json'))+'\n',{mode:0o700});
   pmEnv.DASH_PM_ROOTS='army='+join(dir,'pm-repo'); pmEnv.DASH_PM_KANBAN=join(bin,'army-kanban'); pmEnv.DASH_ROADMAP_FILE=join(dir,'roadmap.json');
  }
- const identity = options.identity ? await startFixtureZ0bridge(dir) : undefined;
+ const ownIdentity = options.identity === true ? await startFixtureZ0bridge(dir) : undefined;
+ const identity = ownIdentity ?? (options.identity === true ? undefined : options.identity);
+ const identityEnv = ownIdentity?.env ?? (identity ? await identity.bridgeEnv(dir) : {});
+ const peerEnv: Record<string,string> = {}; let peerCredentialId: string | undefined;
+ if (options.peerIdentity) {
+  await mkdir(join(dir,'.dash'),{recursive:true});
+  peerEnv.DASH_PEER_IDENTITY_FILE=join(dir,'.dash','z0bridge-peer.json');
+  peerCredentialId=await options.peerIdentity.enroll(peerEnv.DASH_PEER_IDENTITY_FILE,['dash:chat']);
+ }
+ if (options.peerPort) peerEnv.DASH_PEER_PORT=String(options.peerPort);
  const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', ARMY_ARCHIVE_CLAUDE:options.archiveClaude?'1':'0', ARMY_REMOTE_CLAUDE:options.remoteClaude?remoteCwd:'', ARMY_PM:options.pm?'1':'0', ARMY_LONG_CLAUDE:options.longClaude?String(LONG_CHAT_PROMPTS):'', ARMY_LONG_HERMES:options.longHermes?String(LONG_HERMES_PROMPTS):'', ARMY_SUBAGENTS:options.subagents?'1':'', ARMY_HERMES_PROFILES:(options.hermesProfiles??[]).join(','), ARMY_GENERATED_UI:options.generatedUI?'1':'', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot, DASH_KANBAN_DB:join(dir,'work.db'), DASH_SUPERVISION_DIR:join(dir,'.local/state/dash/supervision'), DASH_ORCHESTRA_PROFILES:join(dir,'.hermes'),
-  DASH_FLEET_REGISTRY:join(dir,'fleet.yaml'), ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv, ...(identity?.env ?? {}), ...(options.env ?? {})};
+  DASH_FLEET_REGISTRY:join(dir,'fleet.yaml'), ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv, ...identityEnv, ...peerEnv, ...(options.env ?? {})};
  const seed = spawn(bun,[join(__dirname,'seed-gate.ts')],{env,stdio:['ignore','pipe','pipe']});
- let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) { await identity?.stop(); throw Error('gate seed: '+seedLog); }
+ let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) { await ownIdentity?.stop(); throw Error('gate seed: '+seedLog); }
  let child: ChildProcess; let log=''; let port=0;
- const f: Bridge = {dir,port:0,bootstrap:'',logs:()=>log,exitCode:()=>child?.exitCode ?? null,
+ const f: Bridge = {dir,port:0,bootstrap:'',peerCredentialId,logs:()=>log,exitCode:()=>child?.exitCode ?? null,
   identityToken: options => { if (!identity) throw Error('Bridge identity fixture is not enabled'); return identity.identityToken(options); },
-  async dispose() { await f.stop(); await identity?.stop(); },
+  async dispose() { await f.stop(); await ownIdentity?.stop(); },
   async start() {
    const oldPort=port; if(oldPort) env.DASH_PORT=String(oldPort);
    let startup='';child=spawn('bwrap',['--bind','/','/','--unshare-pid','--proc','/proc','--dev','/dev','--die-with-parent','/bin/sh','-c','if [ "$ARMY_PERSIST_SESSION" = 1 ]; then if [ "$ARMY_DUPLICATE_SESSION" = 1 ]; then TERN_PANE=700001 "$1" "$2" primary & TERN_PANE=700002 "$1" "$2" secondary & else "$1" "$2" & fi; fi; exec "$1" "$3"','army-bridge',bun,join(__dirname,'session-holder.ts'),join(bridgeRoot,'bridge/index.ts')],{cwd:bridgeRoot,env,stdio:['ignore','pipe','pipe']});
@@ -103,7 +116,7 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
    child.stdout?.on('data',collect);child.stderr?.on('data',collect);
    await expect.poll(()=>port>0 && startup.includes('dash bridge'),{timeout:20000,message:'isolated real bridge startup'}).toBeTruthy();
    f.port=port; f.bootstrap=(await readFile(join(dir,'.dash/bootstrap-token'),'utf8')).trim();
-  }, async stop(){if(child && child.exitCode===null && child.signalCode===null){child.kill('SIGTERM');await once(child,'exit');}}
+  }, async stop(signal='SIGTERM'){if(child && child.exitCode===null && child.signalCode===null){child.kill(signal);await once(child,'exit');}}
  };try {
  await f.start();
  if(persistSession){

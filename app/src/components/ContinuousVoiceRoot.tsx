@@ -58,7 +58,13 @@ const DeviceInsets = createContext<EdgeInsets | null>(null);
 export function useDeviceInsets(): EdgeInsets {
   const device = useContext(DeviceInsets); const app = useSafeAreaInsets(); return device ?? app;
 }
-interface VoiceContext { state: VoiceState; start(opts?: { auto?: boolean }): Promise<void>; stop(): Promise<void>; mute(): void }
+interface VoiceContext {
+  takeApprovalChat(): string | undefined;
+  state: VoiceState;
+  start(opts?: { auto?: boolean }): Promise<void>;
+  stop(): Promise<void>;
+  mute(): void;
+}
 const Context = createContext<VoiceContext | null>(null);
 export function useContinuousVoice(): VoiceContext {
   const value = useContext(Context); if (!value) throw new Error("Voice root not mounted"); return value;
@@ -83,6 +89,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const [bindingGeneration, setBindingGeneration] = useState(0);
   const call = useRef<ContinuousVoice | null>(null);
   const attached = useRef<Conversation | null>(null);
+  const approvalChat = useRef<string | undefined>(undefined);
   const epoch = useRef(0);
   const starting = useRef(false);
   const releaseMic = useRef<(() => void) | undefined>(undefined);
@@ -168,6 +175,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       starting.current = false;
       return;
     }
+    approvalChat.current = undefined;
     voiceCaption.set(null);
     const releaseWhenStopped = micRelease.current.hold(release);
     releaseMic.current = releaseWhenStopped;
@@ -255,7 +263,12 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
           if (!text.trim()) voiceCaption.set(previous => previous?.role === role && !previous.final ? null : previous);
           else voiceCaption.set({ role, text, final });
         },
-        intercept: text => generation === epoch.current ? interceptSpokenApproval(text) : null,
+        intercept: text => {
+          if (generation !== epoch.current) return null;
+          const approval = interceptSpokenApproval(text);
+          if (approval?.conversationId) approvalChat.current = approval.conversationId;
+          return approval?.line ?? null;
+        },
         cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
         transcript: (id, text, start, end) => { if (annotate.get().active && annotate.get().turboTarget === turboCapture) addSegment({ id, text, start, end, source: "voice" }); } });
       call.current = controller;
@@ -280,6 +293,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const controller = call.current;
     call.current = null;
     attached.current = null;
+    approvalChat.current = undefined;
     voiceCaption.set(null);
     const cleanup = controller?.stop(undefined, { cancelWork: options?.preserveWork !== true });
     if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
@@ -388,7 +402,14 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   // The bar owns a band under the status bar (screens inset below it); it never floats over AppNav or content.
   // Space stays allocated while a chat window covers the app, so the list underneath never jumps on close.
   const home = voiceControlHome(visible, windowOpen);
-  return <Context.Provider value={{ state: shown, start, stop, mute }}>
+  // A permission may belong to a different chat than the call's frozen Hermes target.
+  const takeApprovalChat = () => {
+    const id = approvalChat.current;
+    approvalChat.current = undefined;
+    const { conversations, settings } = store.get();
+    return settings && conversations.some(chat => chat.id === id && chat.endpointAddress === settings.address) ? id : undefined;
+  };
+  return <Context.Provider value={{ state: shown, start, stop, mute, takeApprovalChat }}>
     <DeviceInsets.Provider value={insets}>
       <SafeAreaInsetsContext.Provider value={appInsets(insets, visible, barRow)}>{children}</SafeAreaInsetsContext.Provider>
     </DeviceInsets.Provider>
