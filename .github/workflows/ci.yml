@@ -130,6 +130,9 @@ jobs:
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'app/bun.lock', 'bridge/bun.lock') }}
       - name: Install locked root and bridge dependencies; public app without private renderer
         run: bun install --frozen-lockfile && bun scripts/install-public-ci.ts && bun install --frozen-lockfile --cwd bridge
+      - name: Verify shared theme and card catalog pin
+        if: matrix.gate == 'typecheck'
+        run: node scripts/check-shared-ephemeral.mjs --upstream
       - name: Typecheck app, bridge, shared and scripts
         if: matrix.gate == 'typecheck'
         run: bun run typecheck

@@ -21,14 +21,17 @@ import type { DetailMode } from "../lib/reply-details";
 import { bridge } from "../net/bridge";
 import { StageLinks } from "./artifact-stage/StageLinks";
 import { PressScale } from "./PressScale";
+import { PenHoverMessage } from "./PenHover";
 
 export const MessageRow = memo(function MessageRow({
   message,
+  conversationId,
   harnessId,
   thinking,
   detailMode = "Compact",
 }: {
   message: Message;
+  conversationId?: string;
   harnessId?: string;
   thinking?: Thinking;
   detailMode?: DetailMode;
@@ -36,7 +39,7 @@ export const MessageRow = memo(function MessageRow({
   if (message.role === "user") {
     return (
       <View style={styles.userRow}>
-        <View style={styles.bubble}>
+        <PenHoverMessage style={styles.bubble}>
           {message.delivery ? <Text style={styles.statusText} accessibilityLabel={message.deliveryNote}>{message.delivery === "steered" ? `Steered · ${new Date(message.deliveryAt ?? message.at).toLocaleTimeString()}` : message.delivery === "steering" ? "Sending steer…" : message.delivery === "queued" ? "Queued for next turn" : message.delivery === "failed" ? "Delivery failed · check before resending" : "Next turn started"}</Text> : null}
           {message.deliveryNote?.startsWith("The turn stopped") ? <Text style={styles.statusText}>{message.deliveryNote}</Text> : null}
           {message.attachments?.length ? <SentFiles files={message.attachments} spaced={Boolean(message.text)} /> : null}
@@ -45,7 +48,7 @@ export const MessageRow = memo(function MessageRow({
               {message.text}
             </Text>
           ) : null}
-        </View>
+        </PenHoverMessage>
       </View>
     );
   }
@@ -56,14 +59,14 @@ export const MessageRow = memo(function MessageRow({
   if (message.delivery === "steered" && message.state !== "error") return null;
   if (message.delivery === "queued" && message.state === "streaming") return null;
   return (
-    <View style={styles.assistantRow}>
+    <PenHoverMessage style={styles.assistantRow}>
       {message.summaries?.filter(summary => summary.kind === "turn").map(summary => <ThinkingSummaryChip key={summary.blockId} turnId={message.turnId} summary={summary} />)}
       <ReplyBlocks turnId={message.turnId} summaries={message.summaries} parts={message.parts} mode={detailMode} request={callId => {
         const chat = store.get().conversations.find(c => c.messages.some(m => m.id === message.id));
         const history = message.seq === 0 && chat?.harness === "hermes";
         bridge.send({ type: "tool_detail", id: message.turnId, callId, ...(history ? { messageId: message.id, sessionId: chat?.sessionId, profileId: chat?.profileId, hostId: chat?.targetHostId } : {}) });
       }} />
-      <AssistantBody key={message.id} message={message} harnessId={harnessId} detailMode={detailMode} />
+      <AssistantBody key={message.id} conversationId={conversationId} message={message} harnessId={harnessId} detailMode={detailMode} />
       {thinking && thinking.phase !== "idle" ? <View style={styles.statusRow}><AgentOrb size={20} thinking={thinking} /><Text style={styles.statusText}>working · {thinking.tool ?? "terminal"}</Text></View> : null}
       {/* A turn that asked for a model: the bridge applies it with ACP session/set_model before the prompt and
           fails the turn otherwise, so a finished reply ran on it. */}
@@ -71,7 +74,7 @@ export const MessageRow = memo(function MessageRow({
         accessibilityLabel={`Ran with model ${message.requestedModel}, set by the host before the prompt`}>Model · {message.requestedModel}</Text>
         : message.requestedModel && message.state !== "error" ? <Text testID="reply-model" style={styles.statusText} numberOfLines={1}>Requested · {message.requestedModel}</Text> : null}
       {!message.parts?.length && detailMode !== "Hide" && (message.activity?.length || (message.state === "done" && message.status)) ? <Disclosure key={`${message.id}:activity`} lines={message.activity ?? [message.status ?? ""]} /> : null}
-    </View>
+    </PenHoverMessage>
   );
 });
 
@@ -87,9 +90,9 @@ function Disclosure({ lines }: { lines: string[] }) {
     {open ? <Text testID="reply-activity-lines" selectable style={styles.detailText}>{collapseActivity(lines).join("\n")}</Text> : null}
   </View>;
 }
-function Answer({ text, turnId, detailMode, streaming = false }: { text: string; turnId: string; detailMode: DetailMode; streaming?: boolean }) {
+function Answer({ text, conversationId, turnId, detailMode, streaming = false }: { text: string; conversationId?: string; turnId: string; detailMode: DetailMode; streaming?: boolean }) {
   const parts = splitThinking(text);
-  return <>{parts.thinking ? <ReplyBlocks turnId={turnId} parts={[{ kind: "reasoning", text: parts.thinking }]} mode={detailMode} /> : null}{parts.text ? <Markdown text={parts.text} streaming={streaming} onIntent={intent => sendInlineIntent(turnId, intent)} /> : null}</>;
+  return <>{parts.thinking ? <ReplyBlocks turnId={turnId} parts={[{ kind: "reasoning", text: parts.thinking }]} mode={detailMode} /> : null}{parts.text ? <Markdown conversationId={conversationId} text={parts.text} streaming={streaming} onIntent={intent => sendInlineIntent(turnId, intent)} /> : null}</>;
 }
 
 function ThinkingMarker({ turnState, waiting = false }: { harnessId?: string; turnState: AssistantState; waiting?: boolean }) {
@@ -98,7 +101,7 @@ function ThinkingMarker({ turnState, waiting = false }: { harnessId?: string; tu
   return <View accessibilityLabel={waiting ? "queued" : turnState} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: color }} />;
 }
 
-function AssistantBody({ message, harnessId, detailMode }: { message: AssistantMessage; harnessId?: string; detailMode: DetailMode }) {
+function AssistantBody({ message, conversationId, harnessId, detailMode }: { message: AssistantMessage; conversationId?: string; harnessId?: string; detailMode: DetailMode }) {
   const liveText = useKeyed(replyText, message.turnId);
   const connection = store.use(s => s.connection.status);
   switch (message.state) {
@@ -108,7 +111,7 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
     case "streaming":
       return (
         <>
-          {liveText || message.text ? <Answer streaming turnId={message.turnId} detailMode={detailMode} text={liveText || message.text} /> : null}
+          {liveText || message.text ? <Answer conversationId={conversationId} streaming turnId={message.turnId} detailMode={detailMode} text={liveText || message.text} /> : null}
           <View style={styles.statusRow}>
             <AgentOrb size={20} thinking={messageThinking(message, { liveText, connection })} label={message.handoff === "queued" ? "queued" : "streaming"} />
             <Text style={styles.statusText} numberOfLines={1}>
@@ -118,11 +121,11 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
         </>
       );
     case "done":
-      return <><Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /><HostFiles text={message.text} /><StageLinks text={message.text} /></>;
+      return <><Answer conversationId={conversationId} turnId={message.turnId} detailMode={detailMode} text={message.text} /><HostFiles text={message.text} /><StageLinks text={message.text} /></>;
     case "interrupted":
       return (
         <>
-          {message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
+          {message.text ? <Answer conversationId={conversationId} turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text style={styles.noteText}>{message.status ?? "Connection to the bridge was lost mid-reply."}</Text>
@@ -132,7 +135,7 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
     case "error":
       return (
         <>
-          {message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
+          {message.text ? <Answer conversationId={conversationId} turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text selectable style={styles.errorText}>

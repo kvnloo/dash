@@ -1,4 +1,18 @@
-import { dsh } from "./turbo";
+import { dsh, SPEED, turboMs } from "./turbo";
+/** Standard durations in ms for the Turbo-tuned surfaces. Keep distance and velocity
+ * calculations in standard time, then scale the resulting deadline once. */
+const STANDARD_MS = {
+  pagerAdjacent: 140,
+  pagerFar: 180,
+  pagerReleaseFloor: 80,
+  sheetEnter: 240,
+  orbCycle: 6000,
+};
+export const surfaceMotionMs = {
+  sheetEnter: turboMs(STANDARD_MS.sheetEnter),
+  orbCycle: turboMs(STANDARD_MS.orbCycle),
+};
+
 /** Fast first: motion confirms an action, never gates it.
  * A normalized critically damped response has a hard timing deadline.
  * Duration springs are not deadlines: their energy tail can run longer.
@@ -14,7 +28,7 @@ export const snappy = { duration: dsh(150, 100), easing: criticalProgress };
 export const settle = { duration: dsh(180, 120), easing: criticalProgress };
 export const fade = { duration: dsh(120, 100) };
 /** Reserve two display frames of scheduling headroom inside the 180 ms release budget. */
-export const nav = { duration: dsh(140, 120) };
+export const nav = { duration: turboMs(STANDARD_MS.pagerAdjacent) };
 export const press = { duration: dsh(70, 60) };
 
 /** Compatibility names for existing consumers; no elastic nav spring. */
@@ -53,9 +67,14 @@ export function distanceDuration(distance: number, near: number, far: number, sp
 }
 
 /** One page keeps `nav`; a jump across four or more pages takes the full release budget (`settle`). */
+function standardPageDuration(pages: number): number {
+  "worklet";
+  return distanceDuration(Math.max(0, Math.abs(pages) - 1), STANDARD_MS.pagerAdjacent, STANDARD_MS.pagerFar, 3);
+}
+
 export function pageDuration(pages: number): number {
   "worklet";
-  return distanceDuration(Math.max(0, Math.abs(pages) - 1), nav.duration, Math.max(nav.duration, settle.duration), 3);
+  return Math.round(standardPageDuration(pages) * SPEED);
 }
 
 /** Window open morph: a row near the centre opens in `fade` time, a far row in `settle` time. */
@@ -81,9 +100,10 @@ export function pressScaleFor(scaleTo: number, reduced: boolean): number {
 export function navDuration(distance: number, velocity: number, reduced = false): number {
   "worklet";
   if (reduced) return 0;
-  const base = pageDuration(distance);
+  const base = standardPageDuration(distance);
   const toward = distance * velocity > 0;
-  return toward ? Math.max(80, Math.min(base, Math.abs(distance / velocity) * 1000)) : base;
+  const standard = toward ? Math.max(STANDARD_MS.pagerReleaseFloor, Math.min(base, Math.abs(distance / velocity) * 1000)) : base;
+  return Math.round(standard * SPEED);
 }
 
 /** Monotone Hermite settle; preserves release velocity unless it would overshoot. */

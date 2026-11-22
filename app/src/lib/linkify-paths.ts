@@ -278,7 +278,7 @@ function pathEnd(line: string, start: number): number | null {
   return end;
 }
 
-function linkifyLine(line: string, state: ScanState): string {
+function linkifyLine(line: string, state: ScanState, fileDestination?: (path: string) => string): string {
   // Indented code and reference definitions are also kept verbatim.
   if (state.codeWidth === 0 && state.tagBuffer === null &&
       state.markdownBracket === null && !state.htmlComment &&
@@ -354,7 +354,9 @@ function linkifyLine(line: string, state: ScanState): string {
       if (end !== null && end > index) {
         const target = line.slice(index, end);
         const label = target.replace(/([\\[\]])/g, "\\$1");
-        parts.push(line.slice(last, index), "[" + label + "](" + markdownDestination(target) + ")");
+        const href = fileDestination && !/^https?:\/\//i.test(target)
+          ? fileDestination(target) : markdownDestination(target);
+        parts.push(line.slice(last, index), "[" + label + "](" + href + ")");
         index = end;
         last = end;
         continue;
@@ -370,8 +372,11 @@ function linkifyLine(line: string, state: ScanState): string {
 /**
  * Linkify complete prose, preserving code/HTML/links and incomplete final
  * streaming lines. Re-running this function does not alter generated links.
+ * Set finalLineComplete only once a reply has finished streaming.
  */
-export function linkifyMarkdown(markdown: string): string {
+export function linkifyMarkdown(
+  markdown: string, finalLineComplete = false, fileDestination?: (path: string) => string,
+): string {
   if (markdown.length > MAX_MARKDOWN_LENGTH) return markdown;
   const lines = markdown.split("\n");
   const state: ScanState = {
@@ -400,8 +405,8 @@ export function linkifyMarkdown(markdown: string): string {
       }
     }
     // A streaming tail can still grow into a longer path or URL.
-    const complete = index < lines.length - 1 || /\s$/.test(rawLine);
-    result.push(complete ? linkifyLine(rawLine, state) : rawLine);
+    const complete = finalLineComplete || index < lines.length - 1 || /\s$/.test(rawLine);
+    result.push(complete ? linkifyLine(rawLine, state, fileDestination) : rawLine);
   }
   return result.join("\n");
 }

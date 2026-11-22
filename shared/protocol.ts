@@ -7,6 +7,7 @@ import { parsePermissionDecision, parsePermissionRequest, parsePermissionResolut
 import { parseSecretCancel, parseSecretRequest, parseSecretResolved, parseSecretSubmit, type SecretCancel, type SecretRequest, type SecretResolved, type SecretSubmit } from "./secret";
 import { parseLiveClientMessage, parseLiveServerMessage, type LiveClientMessage, type LiveServerMessage } from "./live";
 import { parseReplyPart, parseReplyParts, type ReplyPart } from "./reply-parts";
+import { parseUiControlClientMessage, parseUiControlFrame, type UiControlClientMessage, type UiControlFrame } from "./ui-control";
 export type { ReplyPart } from "./reply-parts";
 import { parseSummary, type SummaryInfo } from "./thinking-summary";
 export const PROTOCOL_VERSION = 1;
@@ -22,7 +23,10 @@ function isNoticeTime(value: unknown): value is string {
   const day = new Date(`${match[1]}T00:00:00Z`);
   return Number.isFinite(Date.parse(value)) && Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === match[1];
 }
-export type NoticeMessage = NoticeInput & { type: "notice"; id: string };
+export type NoticeMode = "worker" | "me";
+/** Silent notices still reach the inbox, but must never produce a device alert. */
+export type NoticeMessage = NoticeInput & { type: "notice"; id: string; silent?: true };
+export const NOTICE_MODE_FEATURE = "notice-mode.v1";
 export interface ChatPost { type: "chat_post"; id: string; chat: string; body: string; postedAt: number }
 
 /** Reports are additive v1 events, never approvals or turn events. */
@@ -267,6 +271,9 @@ export type ClientMessage =
   | SecretCancel
   /** Phone "forget everything": clear the bridge's notice replay ring. Old bridges ignore it. */
   | { type: "notices_clear" }
+  | { type: "notice_mode"; mode: NoticeMode }
+  /** Agent UI control (shared/ui-control.ts): capability + consent, and per-frame acks. Old bridges ignore them. */
+  | UiControlClientMessage
   | {
       type: "chat";
       /** Omitted by older clients: queue for the next turn. */
@@ -358,6 +365,8 @@ export type TurnEvent =
 
 export type ServerMessage =
   | NoticeMessage
+  /** Agent UI control (docs/specs/ui-control.md). Sent only to phones that advertised ui_control_hello. */
+  | UiControlFrame
   | ChatPost
   | SecretRequest
   | SecretResolved
@@ -445,6 +454,8 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
   if (!isRecord(raw)) return null;
   switch (raw.type) {
     case "notices_clear": return { type: "notices_clear" };
+    case "notice_mode":
+      return raw.mode === "worker" || raw.mode === "me" ? { type: "notice_mode", mode: raw.mode } : null;
     case "gate_list": return { type: "gate_list" };
     case "gate_decide": {
       const decision = parseGateDecision(raw.decision);
@@ -458,6 +469,8 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
     case "permission_decision": return parsePermissionDecision(raw);
     case "secret_submit": return parseSecretSubmit(raw);
     case "secret_cancel": return parseSecretCancel(raw);
+    case "ui_control_hello":
+    case "ui_control_ack": return parseUiControlClientMessage(raw);
     case "chat": {
       const attachments = parseChatAttachments(raw.attachments);
       if (raw.mode !== undefined && raw.mode !== "steer" && raw.mode !== "queue") return null;
@@ -613,7 +626,7 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     }
     case "notice": {
       const notice = parseNoticeInput(raw);
-      return notice && str(raw.id) && raw.id.length > 0 && raw.id.length <= 128 ? { type: "notice", id: raw.id, ...notice } : null;
+      return notice && str(raw.id) && raw.id.length > 0 && raw.id.length <= 128 ? { type: "notice", id: raw.id, ...notice, ...(raw.silent === true ? { silent: true } : {}) } : null;
     }
     case "live_opened":
     case "live_event":
@@ -623,6 +636,7 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     case "secret_request": return parseSecretRequest(raw);
     case "secret_resolved": return parseSecretResolved(raw);
     case "permission_resolved": return parsePermissionResolution(raw);
+    case "ui_control": return parseUiControlFrame(raw);
     case "gate_snapshot": return Array.isArray(raw.items) && raw.items.every(isGateItem) && typeof raw.dry_run === "boolean" ? { type: "gate_snapshot", items: raw.items, dry_run: raw.dry_run, owner_decisions: raw.owner_decisions === true } : null;
     case "gate_status": return str(raw.id) && str(raw.message) ? { type: "gate_status", id: raw.id, message: raw.message } : null;
     case "gate_error": return str(raw.message) ? { type: "gate_error", message: raw.message } : null;

@@ -1,9 +1,10 @@
+import { glide, type GlideScheme } from "./glide-theme";
 import type { LiveIntent } from "../../../shared/live";
-import { EPHEMERAL_APPS_BY_KIND, EPHEMERAL_KINDS, type EphemeralKind } from "../vendor/ephemeral-ui/kinds.generated";
+import { EPHEMERAL_APPS_BY_KIND, EPHEMERAL_DATA_BY_KIND, EPHEMERAL_KINDS, type EphemeralKind } from "../vendor/ephemeral-ui/kinds.generated";
 import { EPHEMERAL_KIT_PARTS as parts } from "../vendor/ephemeral-ui/kit-html.generated";
 
 /**
- * kvnloo/ephemeral-ui cards (card.v0). The model names a kind and a catalog app; the host draws the
+ * kvnloo/ephemeral-ui cards (every kind the kit exports). The model names a kind and a catalog app; the host draws the
  * repo's own card from the pinned, vendored kit with its synthetic public fixtures. No model input,
  * code or URL reaches the page.
  */
@@ -20,14 +21,31 @@ export function ephemeralCardSpec(kind: unknown, app?: unknown): EphemeralCardSp
   return typeof app === "string" && apps.includes(app) ? { kind, app } : null;
 }
 
-const dataFor = (kind: EphemeralKind): ("apps" | "themes" | "trace" | "intent")[] =>
-  kind.startsWith("trace") ? ["apps", "themes", "trace"]
-    : kind.startsWith("intent-") || kind.startsWith("intel-") ? ["apps", "themes", "intent"]
-      : ["apps", "themes"];
+const dataFor = (kind: EphemeralKind): ("apps" | "themes" | "trace" | "intent" | "ops")[] => {
+  const extra = EPHEMERAL_DATA_BY_KIND[kind];
+  return extra ? ["apps", "themes", extra] : ["apps", "themes"];
+};
+
+// The vendored iframe expects t3-light / t3-dark IDs. Feed shared values at its data
+// boundary rather than forking or relaxing the offline card host.
+const hostedThemes = `"themes.json":${JSON.stringify({
+  themes: (["light", "dark"] as const).map(scheme => ({
+    ...glide.color[scheme],
+    id: `t3-${scheme}`,
+    scheme,
+    host: glide.id,
+    label: glide.name,
+    radius: glide.radius.base,
+    font: glide.type.family.sans,
+    mono: glide.type.family.mono,
+    density: glide.space.density,
+    shadow: "none",
+  })),
+}).replace(/</g, "\\u003c")}`;
 
 /** One self-contained card page: the kit plus only the fixtures its kind reads. */
-export function ephemeralCardDocument(spec: EphemeralCardSpec, scheme: "light" | "dark"): string {
-  const page = parts.head + dataFor(spec.kind).map(key => parts.data[key]).join(",") + parts.tail;
+export function ephemeralCardDocument(spec: EphemeralCardSpec, scheme: GlideScheme): string {
+  const page = parts.head + dataFor(spec.kind).map(key => key === "themes" ? hostedThemes : parts.data[key]).join(",") + parts.tail;
   const json = JSON.stringify({ kind: spec.kind, app: spec.app, scheme }).replace(/</g, "\\u003c");
   return page.replace("/*EUI_SPEC*/null", () => json);
 }

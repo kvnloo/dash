@@ -1,12 +1,11 @@
-import { useIsFocused } from "@react-navigation/native";
 import { memo, useMemo } from "react";
 import { View } from "react-native";
-import Animated, { useAnimatedReaction, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 import { expressionForState, type BotFaceIdentity, type BotFaceState } from "../lib/moodie-identity";
 import { colors } from "../theme";
 import { BLOB_BODY_PATH, EXPRESSIONS, createEyePath, lidToScale, liveliness, type Expression } from "../vendor/moodie";
-import { useOrbMotion } from "./OrbMotion";
+import { useAmbientRunning, useOrbMotion } from "./OrbMotion";
 
 /** Actual synergy.ai Moodie geometry + bloub motion; see vendor/moodie.ts for MIT attribution.
  * Paths are made only when expressions change. UI-thread VIEW transforms animate the small SVG;
@@ -25,10 +24,9 @@ export const BotFace = memo(function BotFace({ identity, state = "idle", size = 
     left: createEyePath({ ...preset.left, height: preset.left.height * preset.left.open }),
     right: createEyePath({ ...preset.right, height: preset.right.height * preset.right.open }),
   }), [preset]);
-  const focused = useIsFocused();
-  const reduced = useReducedMotion();
-  const { clock, active } = useOrbMotion();
-  const running = focused && active && animated && !reduced;
+  const ambientRunning = useAmbientRunning();
+  const { clock } = useOrbMotion();
+  const running = ambientRunning && animated;
   const time = useSharedValue(identity.offset);
   // Unwrap the existing six-second app clock: continuous time, no per-avatar frame loop.
   // That clock already pauses in the background and with system reduced motion.

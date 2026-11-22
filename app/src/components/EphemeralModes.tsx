@@ -2,7 +2,7 @@
 // through the same sink annotation uses; the answers come back as Dash ephemeral UI
 // (genui cards/choices, mermaid diagrams) rendered in the chat.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppState, BackHandler, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { parseTriage, triageAge, type TriageSnapshot } from "../../../shared/triage";
@@ -13,9 +13,10 @@ import { devToolsGutterNow } from "../lib/dev-tools-gutter";
 import { bulkGateDecision, bulkPermissionChoices, bulkSafeGateItems } from "../lib/bulk-approve";
 import { bridge, permissionRequests } from "../net/bridge";
 import { approvals } from "../store/approvals";
-import { annotate, currentSink } from "../store/annotate";
+import { annotate, currentChatSink, enterLearnSketch } from "../store/annotate";
 import { store } from "../store/app";
-import { setPillMode, surfaceMode } from "../store/ephemeral-mode";
+import { learnTopic, learnVoice, setPillMode, surfaceMode } from "../store/ephemeral-mode";
+import { useContinuousVoice } from "./ContinuousVoiceRoot";
 import { colors, radius, space, type } from "../theme";
 import { PressScale } from "./PressScale";
 import { NAV_CHROME_HEIGHT } from "./golden-nav";
@@ -49,7 +50,7 @@ function useSend(): { label: string | undefined; send(text: string): Promise<boo
   return {
     label, note, setNote,
     async send(text: string) {
-      const sink = currentSink();
+      const sink = currentChatSink();
       if (!sink) { setNote("Open a chat first: the agent in that chat answers."); return false; }
       try {
         await sink.send(text, [], sink.steerable() ? "steer" : "queue");
@@ -81,21 +82,64 @@ function Shell({ title, hint, children }: { title: string; hint: string; childre
 }
 
 function LearnSurface(): React.JSX.Element {
-  const [topic, setTopic] = useState("");
+  const topic = learnTopic.use(s => s);
   const { label, send, note, setNote } = useSend();
+  const voice = useContinuousVoice();
+  const latestVoice = useRef(voice);
+  latestVoice.current = voice;
+  const listening = learnVoice.use(s => s.listening);
+  const heard = learnVoice.use(s => s.heard);
   const ask = (intent: LearnIntent) => {
     if (!topic.trim()) { setNote("Type a topic first."); return; }
     void send(learnPrompt(intent, topic));
   };
+  // Talk: every final thing said on the live z0live call becomes the topic and comes back as cards.
+  const lastHeard = useRef(heard?.id);
+  useEffect(() => {
+    if (!heard || heard.id === lastHeard.current) return;
+    lastHeard.current = heard.id;
+    learnTopic.set(heard.text);
+    void send(learnPrompt("explain", heard.text));
+  }, [heard]);
+  const phase = voice.state.phase;
+  const voiceNote = voice.state.note;
+  useEffect(() => {
+    if (!listening || phase !== "error") return;
+    learnVoice.set(s => ({ ...s, listening: false, ownsCall: false }));
+    setNote(`Live voice unavailable: ${(voiceNote ?? "could not start").replace(/[.!?]+$/, "")}. Type a topic instead.`);
+  }, [listening, phase, voiceNote]);
+  const talk = () => {
+    if (listening) {
+      const owned = learnVoice.get().ownsCall;
+      learnVoice.set(s => ({ ...s, listening: false, ownsCall: false }));
+      if (owned) void voice.stop();
+      setNote("Stopped listening.");
+      return;
+    }
+    const idle = phase === "idle" || phase === "error";
+    learnVoice.set(s => ({ ...s, listening: true, ownsCall: s.ownsCall || idle }));
+    if (idle) void voice.start();
+    setNote("Listening: say a topic. Each one comes back as cards.");
+  };
+  // Closing Learn ends listening and the call Learn started; a Learn sketch keeps the call (its
+  // words become the annotation's) and comes back here when it is sent or closed.
+  useEffect(() => () => {
+    if (annotate.get().learn) { learnVoice.set(s => ({ ...s, listening: false })); return; }
+    const owned = learnVoice.get().ownsCall;
+    learnVoice.set(s => ({ ...s, listening: false, ownsCall: false }));
+    if (owned) void latestVoice.current.stop();
+  }, []);
   return (
     <Shell title="Learn" hint={label ? label.replace(/^Sending to /, "→ ") : "open a chat to learn with its agent"}>
-      <TextInput testID="learn-topic" accessibilityLabel="Learn topic" value={topic} onChangeText={setTopic} maxLength={300}
+      <TextInput testID="learn-topic" accessibilityLabel="Learn topic" value={topic} onChangeText={learnTopic.set} maxLength={300}
         placeholder="What do you want to understand?" placeholderTextColor={colors.textMuted} selectionColor={colors.gold}
         style={styles.input} returnKeyType="send" onSubmitEditing={() => ask("explain")} />
       <View style={styles.row}>
         <Chip label="Explain" a11y="Explain the topic as cards" primary onPress={() => ask("explain")} />
         <Chip label="Quiz me" a11y="Quiz me on the topic" onPress={() => ask("quiz")} />
         <Chip label="Map it" a11y="Map the topic as a diagram" onPress={() => ask("map")} />
+        <Chip label="✎ Draw" a11y="Draw it with the S Pen for the agent" onPress={() => enterLearnSketch(topic)} />
+        <Chip label={listening ? "● Listening" : "Talk"} a11y={listening ? "Stop talking topics" : "Talk topics with live voice"} on={listening} onPress={talk} />
       </View>
       {note ? <Text testID="learn-note" style={styles.note}>{note}</Text> : null}
     </Shell>
@@ -210,9 +254,9 @@ function ApprovalsBlock(): React.JSX.Element {
   );
 }
 
-function Chip({ label, a11y, primary, onPress }: { label: string; a11y: string; primary?: boolean; onPress(): void }): React.JSX.Element {
+function Chip({ label, a11y, primary, on, onPress }: { label: string; a11y: string; primary?: boolean; on?: boolean; onPress(): void }): React.JSX.Element {
   return (
-    <PressScale accessibilityRole="button" accessibilityLabel={a11y} onPress={() => { haptic.select(); onPress(); }} style={[styles.chip, primary && styles.primary]}>
+    <PressScale accessibilityRole="button" accessibilityLabel={a11y} accessibilityState={on === undefined ? undefined : { selected: on }} onPress={() => { haptic.select(); onPress(); }} style={[styles.chip, primary && styles.primary, on && styles.on]}>
       <Text style={[styles.chipText, primary && styles.chipTextOn]}>{label}</Text>
     </PressScale>
   );
@@ -228,6 +272,7 @@ const styles = StyleSheet.create({
   input: { minHeight: 44, paddingHorizontal: space.md, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.hair2, backgroundColor: colors.surface, color: colors.text, fontSize: 16 },
   chip: { minHeight: 44, minWidth: 44, paddingHorizontal: space.md, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.hair },
   primary: { backgroundColor: colors.accent, borderColor: colors.accent },
+  on: { backgroundColor: colors.goldLo, borderColor: colors.gold },
   chipText: { ...type.mono, color: colors.textMuted },
   chipTextOn: { color: colors.bg },
   note: { ...type.small, color: colors.textMuted },

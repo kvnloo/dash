@@ -2,8 +2,6 @@ import { sessionChats } from "../../lib/session-chats";
 import { shallowArrayEqual } from "../../store/createStore";
 import { memo, useMemo } from "react";
 import { useWindowDimensions } from "react-native";
-import { TraceEntryCard } from "../../components/trace/TraceEntryCard";
-import { useTraceFeed } from "../../trace/useTraceFeed";
 import { OrchestraGraph } from "../../components/OrchestraGraph";
 import { AodlCatalogNetwork } from "../../components/AodlCatalogNetwork";
 import { WorkspaceActions } from "../../components/WorkspaceHeader";
@@ -26,13 +24,11 @@ export const OrchestraPane = memo(function OrchestraPane({ navigation, focused }
   const fixtureOn = isDebugActive() && fixture === true;
   const { width } = useWindowDimensions();
   const { snapshot, error } = useOrchestraEvidence(settings, focused);
-  // The entry card must load its own authenticated bridge data, not wait for a visit to Trace.
-  useTraceFeed(settings, focused);
   const graph = useMemo(() => fixtureOn ? orchestraMotionFixture() : snapshot ? {
     nodes: snapshot.nodes.map(n => ({ ...n, thinking: n.state === "live" ? { phase: "thinking" as const } : { phase: "idle" as const } })),
     edges: snapshot.edges,
   } : orchestraMap(hosts, conversations), [hosts, conversations, fixtureOn, snapshot]);
-  return <OrchestraGraph triageHeader={<TraceEntryCard onOpen={() => navigation.navigate("Trace")} />} graph={graph} width={width} fixture={fixtureOn} error={fixtureOn ? undefined : error} warnings={snapshot?.warnings} canOpen={node => Boolean(node.sessionId && (conversations.some(c => c.sessionId === node.sessionId) || hosts.some(h => `host:${h.id}` === node.hostId && h.self && h.online && h.agents.some(a => a.sessionId === node.sessionId))))} onFeedback={inAppFeedbackEnabled(settings) ? node => {
+  return <OrchestraGraph graph={graph} width={width} fixture={fixtureOn} error={fixtureOn ? undefined : error} warnings={snapshot?.warnings} canOpen={node => Boolean(node.sessionId && (conversations.some(c => c.sessionId === node.sessionId) || hosts.some(h => `host:${h.id}` === node.hostId && h.self && h.online && h.agents.some(a => a.sessionId === node.sessionId))))} onFeedback={inAppFeedbackEnabled(settings) ? node => {
     submitInAppFeedback({ kind: "select", text: `Selected orchestra ${node.label}`, selection: { kind: "orchestra", id: node.id, label: node.label } });
     navigation.navigate("Chat");
   } : undefined} onOpen={node => {
@@ -45,7 +41,6 @@ export const OrchestraPane = memo(function OrchestraPane({ navigation, focused }
       if ("conversation" in result) navigation.navigate("Chat");
     }
   }} actions={<WorkspaceActions navigation={navigation} />}>
-    <AodlCatalogNetwork />
-    <TraceEntryCard onOpen={() => navigation.navigate("Trace")} />
+    <AodlCatalogNetwork hosts={hosts} snapshot={fixtureOn ? null : snapshot} />
   </OrchestraGraph>;
 });

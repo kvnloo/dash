@@ -74,3 +74,46 @@ path is confirmed by native logcat. Neither observation proves these repairs
 explain all multi-gigabyte native/private growth. A post-rollout, same-workload
 Android memory series is still required. No service restart, APK installation,
 phone navigation or live-phone heap snapshot is part of this runner.
+
+## Dev-client performance measure buffer (DA-069)
+
+Kevin's phone runs the dev client from a channel Metro (`expo start --dev-client`,
+no `--no-dev`), so it executes React's development renderer. Once
+`console.timeStamp` and `performance.measure` exist, that renderer records one
+`performance.measure` per component render ("performance tracks"). React
+Native's native `PerformanceEntryReporter` keeps every measure in
+`PerformanceEntryKeyedBuffer` until `performance.clearMeasures()` is called,
+and nothing in Dash read or cleared them. A streaming chat re-renders on every
+frame, so this buffer grew for as long as a reply streamed.
+
+Evidence (Android 15 x86_64 emulator, Expo Go 57.0.9, dev bundle from Metro,
+fixture ACP agent streaming ~25 text deltas/s for 5 minutes, `dumpsys meminfo`
+TOTAL PSS every 30 s, after 20 s of streaming):
+
+| Build | PSS start → +4 min | Rate |
+|---|---|---|
+| staging, run 1 | 929 → 1245 MB | ~78 MB/min |
+| staging, run 2 | 1072 → 1383 MB | ~77 MB/min |
+| measures trimmed, run 1 | 1063 → 1201 MB | ~34 MB/min |
+| measures trimmed, run 2 | 1019 → 1222 MB | ~50 MB/min |
+
+A 120 s heapprofd capture on staging attributed 62.8 MB of 118 MB still-unreleased
+native allocations to `PerformanceEntryKeyedBuffer::add` ←
+`PerformanceEntryReporter::reportMeasure` ← `NativePerformance::reportMeasure`.
+With the trim, that stack no longer appears; the remaining growth is Hermes heap
+(the growing reply and its copies). An idle open chat window (no stream) stayed
+flat on staging (619.7 → 619.8 MB native over 150 s).
+
+`app/src/lib/performance-buffer.ts` clears measures every 2 s from both
+bootstraps. Production React records no measures, so the trim costs nothing
+there. Marks are untouched. The army journey `chat-memory.spec.ts` records
+measures at a dev-renderer rate during a real streaming reply and requires the
+timeline to stay bounded (staging retained all 6080; trimmed kept at most 380).
+
+Not qualified here: the S25 itself, release builds, and real model traffic. The
+emulator renders with SwiftShader, so absolute numbers differ from the phone.
+Things tested and ruled out as the main driver on the emulator: re-rendering the
+reply at most every 250 ms, re-lexing only the growing Markdown block, and a
+static streaming orb. A single huge `<Text>` (no Markdown) was worse
+(~158 MB/min): Fabric's Android `TextMeasureCache`/`LineMeasureCache` keep up to
+1024 entries keyed by the full attributed string.

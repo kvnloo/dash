@@ -70,7 +70,7 @@ SCREENS: dict[str, tuple[str, str]] = {
     "J-notifications-share": ("dash://chats", "background Dash, tap a reply notification; share a file into Dash"),
     "J-turbo-preview-brief": ("dash://orchestra", "this brief itself: it opened the screen to test"),
     "J-turbo-chatgpt-fanout": ("dash://orchestra", "trigger Turbo and watch the created/completed counts"),
-    "J-dogfood-loop": ("dash://orchestra", "turn on dogfood mode, capture a bug, confirm Fixed?"),
+    "J-dogfood-loop": ("dash://dogfood", "turn on dogfood mode, capture a bug, confirm Fixed?"),
     "J-watch-agent": ("dash://chats", "use Dash; check a watcher reports the error first"),
     "J-design-conformance": ("dash://orchestra", "swipe through Bots, Chats and Orchestra, then Settings"),
     "J-perf-profile": ("dash://chats", "scroll fast through a long list and a long chat"),

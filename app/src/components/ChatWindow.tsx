@@ -30,6 +30,7 @@ import { useHandedness } from "../lib/useHandedness";
 import { crossfade, fade, morphDuration, snappy } from "../motion";
 import { colors, glass, radius, space, type } from "../theme";
 import { AgentOrb } from "./AgentOrb";
+import { agentTarget } from "../lib/agent-targets";
 import { HostStatsRow } from "./HostStatsRow";
 import { validModelId, type ModelChoice, type RouteGroup } from "../lib/chat-routes";
 
@@ -302,6 +303,7 @@ export function WindowDock({ identity, title, options, onAnnotate, treeOpen, onT
     <View testID="chat-window-badge-row" style={[styles.badgeRow, thumb.row]}>
       {options}
       <Pressable
+        ref={agentTarget("chat-annotate")}
         testID="chat-annotate"
         accessibilityRole="button"
         accessibilityLabel="Annotate this screen"
@@ -325,7 +327,7 @@ export function WindowDock({ identity, title, options, onAnnotate, treeOpen, onT
         </View>
         <Feather name={treeOpen ? "chevron-down" : "chevron-up"} size={14} color={colors.textTertiary} />
       </Pressable>
-      <Pressable testID="chat-window-close" accessibilityRole="button" accessibilityLabel="Close chat window" onPress={() => { haptic.tap(); onClose(); }} style={styles.close}>
+      <Pressable ref={agentTarget("chat-window-close")} testID="chat-window-close" accessibilityRole="button" accessibilityLabel="Close chat window" onPress={() => { haptic.tap(); onClose(); }} style={styles.close}>
         <View style={styles.closeGlyph}><Feather name="x" size={14} color={colors.textMuted} /></View>
       </Pressable>
     </View>
