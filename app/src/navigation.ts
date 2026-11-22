@@ -18,6 +18,8 @@ export type RootStackParamList = {
   RoadmapProject: { projectId: string; feature?: string };
   RoadmapTask: { taskId: string };
   Lab: undefined;
+  /** Bots page prototype (DA-073): gem table, orrery, simple bot page, host tree. */
+  BotsPage: undefined;
 };
 
 export type ScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;
