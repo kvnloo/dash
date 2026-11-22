@@ -11,6 +11,12 @@ export type SurfaceMode = "learn" | "quick" | null;
 
 export const surfaceMode = createStore<SurfaceMode>(null);
 
+// Annotate can also start from the S Pen side button or the chat's ✎ Annotate. It always
+// replaces Learn/Quick, so Exit/Back from Annotate lands on Normal whichever way it began.
+annotate.subscribe(() => {
+  if (annotate.get().active && surfaceMode.get() !== null) surfaceMode.set(null);
+});
+
 export function cyclePillMode(): void {
   setPillMode(nextPillMode(pillModeOf(annotate.get().active, surfaceMode.get())));
 }

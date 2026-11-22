@@ -54,6 +54,11 @@ test('annotation-entry: pill exit and re-entry clear failed Send and cold reload
   const pill = page.getByTestId('spen-mode-pill').last();
   await expect(pill).toBeVisible();
   await expect(page.getByTestId('spen-mode-label').last()).toHaveText('Normal');
+  // Pill order: Normal → Learn → Quick → Annotate (Annotate last: its ink covers the pill).
+  await pill.click({ noWaitAfter: true });
+  await expect(page.getByTestId('spen-mode-label').last()).toHaveText('Learn');
+  await pill.click({ noWaitAfter: true });
+  await expect(page.getByTestId('spen-mode-label').last()).toHaveText('Quick');
   await pill.click({ noWaitAfter: true });
   await expect(page.getByLabel('Annotation mode on', { exact: true })).toBeVisible();
   await expect(page.getByTestId('spen-mode-label').last()).toHaveText('Annotate');
@@ -80,7 +85,7 @@ test('annotation-entry: pill exit and re-entry clear failed Send and cold reload
   await expect(page.getByLabel('Annotation mode on', { exact: true })).toHaveCount(0);
   await expect(page.getByTestId('spen-mode-label').last()).toHaveText('Normal');
 
-  await pill.click({ noWaitAfter: true });
+  for (let tap = 0; tap < 3; tap++) await pill.click({ noWaitAfter: true });
   await expect(page.getByLabel('Annotation mode on', { exact: true })).toBeVisible();
   await expect(page.getByTestId('annotation-tray').getByRole('alert')).toHaveCount(0);
   await expect(send, 'failed upload keeps unsent ink').toBeEnabled();

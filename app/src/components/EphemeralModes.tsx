@@ -3,7 +3,7 @@
 // (genui cards/choices, mermaid diagrams) rendered in the chat.
 
 import { useEffect, useState } from "react";
-import { AppState, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { AppState, BackHandler, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { parseTriage, triageAge, type TriageSnapshot } from "../../../shared/triage";
 import { learnPrompt, quickItems, unblockPrompt, type LearnIntent } from "../lib/ephemeral-modes";
@@ -14,11 +14,28 @@ import { store } from "../store/app";
 import { setPillMode, surfaceMode } from "../store/ephemeral-mode";
 import { colors, radius, space, type } from "../theme";
 import { PressScale } from "./PressScale";
+import { NAV_CHROME_HEIGHT } from "./golden-nav";
+import { WORKSPACE_HEADER_HEIGHT } from "./WorkspaceHeader";
+
+// Same clearance as the annotation tray: below the nav row and the header (and below the chat
+// window's camera pill + expanded nav), so the panel never covers the mode pill it was opened from.
+const PANEL_TOP_CLEARANCE = NAV_CHROME_HEIGHT + WORKSPACE_HEADER_HEIGHT + space.sm;
 
 export function EphemeralModes(): React.JSX.Element | null {
   const mode = surfaceMode.use(s => s);
   const annotating = annotate.use(s => s.active);
-  if (annotating || !mode) return null;
+  const open = !annotating && mode !== null;
+  useEffect(() => {
+    // Back closes Learn/Quick the same way it leaves Annotate (AnnotationRoot owns that one).
+    if (Platform.OS !== "android" || !open) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (annotate.get().active || surfaceMode.get() === null) return false;
+      setPillMode("normal");
+      return true;
+    });
+    return () => subscription.remove();
+  }, [open]);
+  if (!open) return null;
   return mode === "learn" ? <LearnSurface /> : <QuickSurface />;
 }
 
@@ -46,7 +63,7 @@ function useSend(): { label: string | undefined; send(text: string): Promise<boo
 function Shell({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }): React.JSX.Element {
   const insets = useSafeAreaInsets();
   return (
-    <View pointerEvents="box-none" style={[styles.viewport, { top: insets.top + 64, left: insets.left + space.sm, right: insets.right + space.sm }]}>
+    <View pointerEvents="box-none" style={[styles.viewport, { top: insets.top + PANEL_TOP_CLEARANCE, left: insets.left + space.sm, right: insets.right + space.sm }]}>
       <View testID={`mode-surface-${title.toLowerCase()}`} style={styles.panel} accessibilityLabel={`${title} mode`}>
         <View style={styles.head}>
           <Text accessibilityRole="header" style={styles.title}>{title}</Text>
