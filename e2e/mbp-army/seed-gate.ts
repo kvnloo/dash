@@ -11,6 +11,23 @@ if(process.env.ARMY_PERSIST_SESSION==='1'){
  db.query('INSERT OR REPLACE INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run('army-fixture-session','acp','ARMY native fixture',Date.now()/1000,Date.now()/1000,0,process.env.DASH_CWD || home,0,0,null,null,'{}');db.close();
 }
 
+// Named Hermes profiles (`$HERMES_HOME/profiles/<name>`), each with its own SessionDB and two
+// native chats, so the Hosts tree has a real profile level between the Hermes harness and its chats.
+if(process.env.ARMY_HERMES_PROFILES){
+ const {Database}=await import('bun:sqlite');const {join}=await import('node:path');const {mkdirSync}=await import('node:fs');
+ const root=process.env.HERMES_HOME;if(!root)throw Error('isolated Hermes home required');
+ const now=Date.now()/1000;
+ for(const name of process.env.ARMY_HERMES_PROFILES.split(',')){
+  const home=join(root,'profiles',name);mkdirSync(home,{recursive:true});
+  const db=new Database(join(home,'state.db'));
+  db.exec('CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY,source TEXT,title TEXT,started_at REAL,last_activity_at REAL,message_count INTEGER,cwd TEXT,archived INTEGER,hidden INTEGER,parent_session_id TEXT,end_reason TEXT,model_config TEXT)');
+  const row=db.query('INSERT OR REPLACE INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+  row.run(`army-${name}-one`,'cli',`ARMY ${name} chat one`,now-600,now-120,0,process.env.DASH_CWD||home,0,0,null,null,'{}');
+  row.run(`army-${name}-two`,'telegram',`ARMY ${name} chat two`,now-900,now-300,0,process.env.DASH_CWD||home,0,0,null,null,'{}');
+  db.close();
+ }
+}
+
 // Delegated workers of that native chat, as Hermes records delegate_task children: rows whose
 // parent_session_id is the chat. Two are live (one on a tool, one thinking); one has ended and must
 // not count. The columns a live Hermes adds for this are added here, only for this fixture.
