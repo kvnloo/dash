@@ -70,6 +70,7 @@ export interface UserMessage {
 }
 
 export interface AssistantMessage {
+  agentPost?: true;
   delivery?: "steered" | "queued" | "started";
   summaries?: SummaryInfo[];
   id: string;
@@ -140,6 +141,9 @@ export interface Conversation {
   openedAt?: number;
   /** A transient chat the phone can read but not send to. Never persisted. */
   viewOnly?: boolean;
+  /** Bounded current work label cached in the lightweight chat index. */
+  task?: string;
+  repoRoot?: string;
   /** Short last-message text kept in the conversation index while the transcript is not loaded. */
   preview?: string;
   /** Latest reply identity in the light index, so attention does not load every transcript. */
@@ -308,6 +312,8 @@ export function parseConversation(raw: unknown): Conversation | null {
     messageCount: finite(raw.messageCount) ? raw.messageCount : undefined,
     stale: raw.stale === true,
     ...(typeof raw.openedAt === "number" ? { openedAt: raw.openedAt } : {}),
+    ...(typeof raw.task === "string" && raw.task ? { task: raw.task.slice(0, 88) } : {}),
+    ...(typeof raw.repoRoot === "string" && raw.repoRoot ? { repoRoot: raw.repoRoot } : {}),
     ...(typeof raw.preview === "string" && raw.preview ? { preview: raw.preview.slice(0, 200) } : {}),
     latestReply: isRecord(raw.latestReply) && nonBlank(raw.latestReply.id) && nonBlank(raw.latestReply.turnId) &&
       finite(raw.latestReply.at) && isAssistantState(raw.latestReply.state)

@@ -102,11 +102,13 @@ test('endpoint tool details stay with their turn owner across A B A', async ({ p
     if (!rowId) throw Error('Missing persisted tool conversation row');
     const ownedRow = page.getByTestId(rowId);
     await selectEndpoint(page, b, ownedRow);
+    await page.getByTestId('reply-tools-toggle').click();
     await page.getByTestId('reply-tool-row').click();
     await page.getByRole('button', { name: 'Load retained output (up to 1 MiB)', exact: true }).last().click();
     expect(wire.filter(frame => frame.endpoint === `127.0.0.1:${b.port}` && frame.type === 'tool_detail')).toEqual([]);
     await page.getByRole('button', { name: 'Close tool details', exact: true }).click();
     await selectEndpoint(page, a, ownedRow);
+    await page.getByTestId('reply-tools-toggle').click();
     await page.getByTestId('reply-tool-row').click();
     await page.getByRole('button', { name: 'Load retained output (up to 1 MiB)', exact: true }).last().click();
     await expect.poll(() => wire.filter(frame => frame.endpoint === `127.0.0.1:${a.port}` && frame.type === 'tool_detail').length).toBeGreaterThan(0);

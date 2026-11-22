@@ -88,6 +88,3 @@ export function botTarget(host: HostInfo, bot: BotInfo): AgentTarget | undefined
   const agent = host.agents.find(a => a.id === bot.agentId);
   return agent ? profileFromAgent(host, agent) : undefined;
 }
-
-// Keep the legacy key so existing collapsed hosts survive the UI rename.
-export const COLLAPSED_KEY = "dash.bots.collapsed.v1";

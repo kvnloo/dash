@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArtifactStage } from "../components/artifact-stage/ArtifactStage";
-import { LiveArtifactFrame } from "../components/LiveArtifactFrame";
+import { HTMLPrototype } from "../components/artifact-stage/HTMLPrototype";
 import { sandboxHTML } from "../lib/genui";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { forDash, isStageUrl, stageLabel } from "../lib/stage-link";
@@ -18,12 +18,12 @@ export function ArtifactStageScreen({ navigation, route }: ScreenProps<"Artifact
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScreenHeader compact title={route.params?.title ?? (ok ? `Stage · ${stageLabel(url)}` : "Stage")} onBack={back} />
-      {route.params?.html !== undefined ? <View style={styles.stage}><LiveArtifactFrame html={sandboxHTML(route.params.html.slice(0, 200000))} version={1} height={700} onIntent={() => {}} staticOnly /></View> : ok ? (
+      {route.params?.html !== undefined ? <View style={styles.stage}><HTMLPrototype html={sandboxHTML(route.params.html.slice(0, 200000), true)} /></View> : ok ? (
         <View style={[styles.stage, { paddingBottom: insets.bottom }]}>
           <ArtifactStage url={forDash(url)} title={route.params?.title} />
         </View>
       ) : (
-        <Text style={styles.note}>This is not an artifact-stage review link (tailnet or loopback host with a review token).</Text>
+        <Text style={styles.note}>This is not an artifact-stage review link (HTTPS, tailnet or loopback host with a review token).</Text>
       )}
     </View>
   );
