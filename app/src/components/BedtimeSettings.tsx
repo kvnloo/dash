@@ -13,7 +13,7 @@ export function BedtimeSettings() {
   if (!schedule) return null;
   const bed = bedtime ?? schedule.bedtime;
   const morning = wake ?? schedule.wake;
-  const save = async (enabled: boolean, applyEdits: boolean) => {
+  const save = async (enabled: boolean, applyEdits: boolean, followHost = schedule.followHost) => {
     const nextBed = applyEdits ? bed : schedule.bedtime;
     const nextWake = applyEdits ? morning : schedule.wake;
     if (!validTime(nextBed) || !validTime(nextWake) || nextBed === nextWake) {
@@ -23,7 +23,7 @@ export function BedtimeSettings() {
     setBusy(true);
     setError("");
     try {
-      await setBedtimeSchedule({ enabled, bedtime: nextBed, wake: nextWake });
+      await setBedtimeSchedule({ enabled, bedtime: nextBed, wake: nextWake, followHost });
       if (applyEdits) { setBedtime(undefined); setWake(undefined); }
     } catch { setError("Couldn't save the bedtime schedule."); }
     finally { setBusy(false); }
@@ -34,6 +34,12 @@ export function BedtimeSettings() {
     <PressScale accessibilityRole="switch" accessibilityLabel="Bedtime capture only" accessibilityState={{ checked: schedule.enabled }} aria-checked={schedule.enabled} disabled={busy} onPress={() => void save(!schedule.enabled, false)} style={styles.hit}>
       <Text style={styles.action}>{schedule.enabled ? "On" : "Off"} · {schedule.bedtime}–{schedule.wake}</Text>
     </PressScale>
+    {schedule.enabled ? <PressScale accessibilityRole="switch" accessibilityLabel="Follow paired host sleep posture"
+      accessibilityState={{ checked: schedule.followHost }} aria-checked={schedule.followHost} disabled={busy}
+      onPress={() => void save(true, false, !schedule.followHost)} style={styles.hit}>
+      <Text style={styles.action}>Follow paired host sleep posture · {schedule.followHost ? "On" : "Off"}</Text>
+      <Text style={styles.note}>Also capture during fresh host wind-down or sleep. Dash reads the phase, not wearable records; the schedule still applies if the host is unavailable.</Text>
+    </PressScale> : null}
     <View style={styles.row}>
       <View><Text style={styles.note}>Bedtime (HH:MM)</Text><TextInput accessibilityLabel="Bedtime (HH:MM)" style={styles.input} value={bed} onChangeText={setBedtime} maxLength={5} /></View>
       <View><Text style={styles.note}>Wake time (HH:MM)</Text><TextInput accessibilityLabel="Wake time (HH:MM)" style={styles.input} value={morning} onChangeText={setWake} maxLength={5} /></View>

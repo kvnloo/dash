@@ -1,6 +1,6 @@
 import { MAX_CAPTURE_TEXT_LENGTH } from "../../../shared/overnight-captures";
 import { captureGate, createCaptureOverride } from "../lib/capture-gate";
-import { bedtimeSchedule, isBedtime, useBedtime } from "../store/bedtime";
+import { bedtimeSchedule, captureModeNow, useBedtime } from "../store/bedtime";
 import { captureForTomorrow } from "../store/overnight-captures";
 import { OvernightNotes } from "./OvernightNotes";
 import { isUsageCommand } from "../lib/composer-command";
@@ -298,7 +298,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
     const schedule = bedtimeSchedule.get();
     if (!schedule) return;
     const now = Date.now();
-    const quiet = isBedtime(schedule, new Date(now));
+    const quiet = captureModeNow(new Date(now));
     const gate = captureGate({ captureMode: quiet, captureEnforced: quiet, text, attachments: drafts, isStopAction: false,
       override: explicitSend ? createCaptureOverride(now) : null }, now);
     if (gate.action === "capture") {

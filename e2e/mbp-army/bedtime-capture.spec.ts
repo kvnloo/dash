@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test, expect, openChat, chatRow, composer, pair } from './fixtures';
 
@@ -70,4 +70,35 @@ test('bedtime saves an unassigned main composer thought without opening a chat',
  await page.getByRole('button', { name: 'Saved for tomorrow (1)', exact: true }).click();
  await expect(page.getByText('ARMY_UNASSIGNED_THOUGHT', { exact: true })).toBeVisible();
  await expect(page.getByTestId('chat-window')).toHaveCount(0);
+});
+
+test('opted-in host sleep posture activates capture outside the device schedule', async ({ page, bridge }) => {
+ const stateDir = join(bridge.dir, '.local', 'state', 'circadian');
+ await mkdir(stateDir, { recursive: true });
+ const now = Date.now();
+ const at = (hours: number) => new Date(now + hours * 3600_000).toISOString();
+ await writeFile(join(stateDir, 'posture.json'), JSON.stringify({
+  generatedAt: at(0),
+  state: {
+   schema: 'dash.human_state/v1',
+   anchors: { wakeAt: at(-16), freezeAt: at(-4), bedTarget: at(-1), nightModeAt: at(-3), wakeTarget: at(7) },
+   lastActivityAt: null, disengagedUntil: null, quality: 'wearable',
+  },
+ }));
+ await pair(page, bridge);
+ const noon = new Date();
+ noon.setUTCHours(12, 0, 0, 0);
+ await page.clock.setFixedTime(noon);
+ await page.getByRole('button', { name: 'Open settings', exact: true }).first().click();
+ const schedule = page.getByRole('switch', { name: 'Bedtime capture only', exact: true });
+ await schedule.click();
+ await expect(schedule).toHaveAttribute('aria-checked', 'true');
+ const posture = page.waitForResponse(response => new URL(response.url()).pathname === '/posture' && response.ok());
+ await page.getByRole('switch', { name: 'Follow paired host sleep posture', exact: true }).click();
+ await posture;
+ await page.getByRole('button', { name: 'Back', exact: true }).click();
+ await composer(page).fill('ARMY_HOST_SLEEP_THOUGHT');
+ await page.getByRole('button', { name: 'Save for tomorrow', exact: true }).click();
+ await expect(composer(page)).toHaveValue('');
+ await expect(page.getByRole('button', { name: 'Saved for tomorrow (1)', exact: true })).toBeVisible();
 });

@@ -4,6 +4,7 @@ Status: PARTIALLY COVERED — `e2e/mbp-army/bedtime-capture.spec.ts` covers bedt
 
 - `bedtime-gate` [COVERED]: after the configured bedtime, Save for tomorrow stores the chat draft without an agent turn. Reload preserves the note; after wake, copying the note is local until the owner taps Send.
 - `bedtime-main` [COVERED]: the unattached Main composer saves an unassigned thought without opening a chat.
+- `bedtime-host` [COVERED]: opting into paired host sleep posture also activates capture when the real fixture bridge reports a fresh sleep phase outside the local window.
 
 Go to Settings → Bedtime capture, set the local bedtime and wake time, and enable the switch. At bedtime, type a text thought and choose Save for tomorrow. Open Saved for tomorrow to copy a note back to the draft or dismiss it.
 

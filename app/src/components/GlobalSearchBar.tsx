@@ -1,5 +1,5 @@
 import { MAX_CAPTURE_TEXT_LENGTH } from "../../../shared/overnight-captures";
-import { bedtimeSchedule, isBedtime, useBedtime } from "../store/bedtime";
+import { bedtimeSchedule, captureModeNow, useBedtime } from "../store/bedtime";
 import { captureForTomorrow } from "../store/overnight-captures";
 import { OvernightNotes } from "./OvernightNotes";
 import { toggleHandedness, useHandedness } from "../lib/useHandedness";
@@ -67,7 +67,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
     if (onSend) {
       const schedule = bedtimeSchedule.get();
       if (!schedule) return;
-      if (isBedtime(schedule) && !explicitSend) {
+      if (captureModeNow() && !explicitSend) {
         if (tooLong) return;
         setSaveError(false);
         pending.current = true;
