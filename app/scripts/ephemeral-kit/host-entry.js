@@ -14,9 +14,23 @@ function post(message) {
 }
 
 const appOf = (id) => catalog.byId[id] ?? (Object.hasOwn(HOST_APP_NAMES, id) ? { id, name: HOST_APP_NAMES[id], hex: null, cat: "agents", kinds: [] } : null);
+// A catalog fixture mounts the way kvnloo/ephemeral-ui tools/card-catalog.mjs mounts it: its own seed and input,
+// the clock frozen at catalog.generatedAt, and an app the catalog does not list drawn as { id, name: id, hex: null }.
+const fixtureAppOf = (id) => catalog.byId[id] ?? { id, name: id, hex: null };
+const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])])) : v);
+const propsOf = (spec) => JSON.stringify(sortKeys(JSON.parse(JSON.stringify(spec ?? null))));
+
+async function frozenAt(at, run) {
+  const ms = Date.parse(at);
+  if (!Number.isFinite(ms)) return run();
+  const RealDate = Date;
+  globalThis.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [ms])); } static now() { return ms; } };
+  try { return await run(); } finally { globalThis.Date = RealDate; }
+}
 
 async function boot() {
   const spec = window.__EUI_SPEC || {};
+  const fixture = spec.fixture && typeof spec.fixture === "object" ? spec.fixture : null;
   const root = document.getElementById("eui-root");
   try {
     delete document.startViewTransition;
@@ -24,14 +38,16 @@ async function boot() {
     setTheme(spec.scheme === "light" ? "t3-light" : "t3-dark");
     await loadApps();
     const kind = Object.hasOwn(KINDS, spec.kind) ? KINDS[spec.kind] : null;
-    const app = appOf(spec.app);
+    const app = fixture ? fixtureAppOf(spec.app) : appOf(spec.app);
     if (!kind || !app || !kind.make) throw new Error("unknown card");
-    // No input: every kind draws the kit's sample data. Fleet and intel-suite draw theirs only on demo.
-    const card = kind.make(app, rng(spec.app + spec.kind), undefined, { demo: true });
+    // No fixture: every kind draws the kit's sample data. Fleet and intel-suite draw theirs only on demo.
+    const card = fixture
+      ? await frozenAt(fixture.at, async () => { const c = kind.make(app, rng(String(fixture.seed)), fixture.input === undefined ? undefined : structuredClone(fixture.input)); await c.done; return c; })
+      : kind.make(app, rng(spec.app + spec.kind), undefined, { demo: true });
     root.replaceChildren(card.el);
     await card.done;
     document.documentElement.dataset.euiReady = spec.kind;
-    post({ type: "eui:ready", kind: spec.kind, app: spec.app });
+    post({ type: "eui:ready", kind: spec.kind, app: spec.app, props: propsOf(card.spec) });
     if (card.play) quiet(card.play(new Run()));
   } catch (error) {
     root.textContent = "This card could not be drawn.";

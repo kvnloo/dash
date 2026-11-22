@@ -294,6 +294,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
 
           <Pressable accessibilityRole="button" accessibilityLabel="Review approvals" onPress={() => navigation.navigate("Approvals")} style={styles.secondary}><Text style={styles.secondaryText}>Review approvals</Text></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Component lab" onPress={() => navigation.navigate("Lab")} style={styles.secondary}><Text style={styles.secondaryText}>Component lab</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Card gallery" accessibilityHint="Every ephemeral-ui card kind from the shared catalog" onPress={() => navigation.navigate("Gallery")} style={styles.secondary}><Text style={styles.secondaryText}>Card gallery</Text></Pressable>
           <Text style={styles.label}>On your computer</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Text style={styles.mono}>cd bridge && bun run start</Text>

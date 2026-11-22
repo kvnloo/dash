@@ -18,6 +18,8 @@ export type RootStackParamList = {
   RoadmapProject: { projectId: string; feature?: string };
   RoadmapTask: { taskId: string };
   Lab: undefined;
+  /** Every fixture of the shared kvnloo/ephemeral-ui card catalog; `page` is 1-based. */
+  Gallery: { page?: number } | undefined;
 };
 
 export type ScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;
