@@ -50,6 +50,7 @@ import { WallpaperBackdrop, WallpaperTheme, useWallpaperWindow } from "./src/com
 import { colors } from "./src/theme";
 import { NativeEvents } from "./src/components/NativeEvents";
 import { ContinuousVoiceRoot } from "./src/components/ContinuousVoiceRoot";
+import { CouncilHost } from "./src/components/CouncilCard";
 import { ServedBuildChip } from "./src/components/ServedBuildChip";
 import { turboRequests } from "./src/lib/turbo-request";
 import { restoreTurboNavigation, saveTurboNavigation } from "./src/lib/turbo-navigation";
@@ -189,6 +190,7 @@ export default function App() {
               </Stack.Navigator>
               <BridgePullOverlay />
               <EphemeralModes />
+              <CouncilHost />
               <NativeEvents />
               <SecretEntry />
             </AnnotationRoot></ContinuousVoiceRoot>
