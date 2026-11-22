@@ -1,3 +1,4 @@
+import { repositoryRoot } from "./src/chat-index/workspace";
 // Dash bridge: a WebSocket server on your tailnet that runs agent CLIs on this
 // machine and streams their output to the phone.
 //
@@ -843,10 +844,12 @@ function liveChats(): ChatSummary[] {
     const key = chatKey({ hostId: host.id, kind: agent.kind, sessionId: agent.sessionId, ...(profileId ? { profileId } : {}) });
     if (!liveSince.has(key)) liveSince.set(key, now);
     const since = liveSince.get(key) ?? now;
+    const repoRoot = host.self ? repositoryRoot(agent.cwd) : undefined;
     out.push({
       key, kind: agent.kind, sessionId: agent.sessionId, hostId: host.id, hostName: host.name, ...(profileId ? { profileId } : {}), agentId: agent.id,
       title: agent.name, ...(agent.cwd ? { cwd: agent.cwd } : {}), startedAt: since, lastActivityAt: agent.lastActivityAt ?? since,
       ...(agent.model ? { model: agent.model } : {}),
+      ...(repoRoot ? { repoRoot } : {}),
       messageCount: agent.messageCount ?? 0, origin: "live", chatable: host.self && isCatalogHarness(agent.kind),
       ...(agent.status === "running" ? { running: true } : {}), ...(agent.openIn ? { openIn: agent.openIn } : {}),
     });

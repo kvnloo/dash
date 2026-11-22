@@ -19,7 +19,7 @@ export function hzChatRow(profile: string, row: HermesListRow): NewChatRow | und
     origin: "hermes" as const, kind: "hermes", session_id: agent.sessionId, host_id: SELF_HOST, host_name: "", profile_id: profile,
     agent_id: agent.id, title: redact(firstLine(agent.name)) || `Hermes · ${profile}`, cwd: agent.cwd ?? null,
     started_at: row.startedAt, last_activity_at: agent.lastActivityAt ?? row.startedAt, message_count: agent.messageCount ?? 0,
-    chatable: 1, src_id: `${profile}:${agent.sessionId}`,
+    task: row.task, chatable: 1, src_id: `${profile}:${agent.sessionId}`,
   };
   return { key: internalKey(r), ...r };
 }

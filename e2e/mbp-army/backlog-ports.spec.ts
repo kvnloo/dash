@@ -9,9 +9,9 @@ test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({p
 
 const toList=async(page:Page)=>{await page.getByRole('button',{name:'Close chat window',exact:true}).click({noWaitAfter:true});await expect(page.getByTestId('chats-pane')).toBeVisible();};
 const reopen=async(page:Page)=>{await chatRow(page).click({noWaitAfter:true});await expect(page.getByTestId('chat-window')).toBeVisible();};
-const preview=(page:Page)=>chatRow(page).getByText(/^(No summary yet|Last reply · |Failed · |You: |Working on reply|Waiting to start|Waiting for host|Waiting to send|Sending to host|Thinking through request|Running tests|Running command|Editing |Reading |Searching files|Building app)/);
+const preview=(page:Page)=>chatRow(page).getByTestId('chat-work-summary');
 
-test('Chats list rows preview an empty chat, an agent failure, a reply in flight, and the last reply',async({page,bridge},info)=>{
+test('Chats list rows prioritize failures and keep a current task rather than the last reply',async({page,bridge},info)=>{
  await openChat(page,bridge);
  // A chat nobody has written to says so; it does not repeat its title or folder.
  await toList(page);
@@ -27,13 +27,29 @@ test('Chats list rows preview an empty chat, an agent failure, a reply in flight
  await reopen(page);await send(page,'ARMY_HOLD preview in flight');
  await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
  await toList(page);
- await expect(preview(page)).toHaveText('Working on reply');
+ await expect(chatRow(page)).toContainText(/Running/);
+ await expect(preview(page)).toHaveText('Task · ARMY_HOLD preview in flight');
  await page.screenshot({path:info.outputPath('row-preview-in-flight.png')});
 
- // The reply lands: the old failure is resolved and the row shows the reply.
+ // The reply lands, but the work label is still the request, not the latest message.
  await writeFile(join(bridge.dir,'army-release'),'');
- await expect(preview(page)).toHaveText('Last reply · ARMY_STREAM_BEGIN ARMY_REPLY: ARMY_HOLD preview in flight',{timeout:30000});
+ await reopen(page);
+ const reply = page.getByText('ARMY_STREAM_BEGIN ARMY_REPLY: ARMY_HOLD preview in flight', { exact: true }).filter({ visible: true });
+ await expect(reply).toBeVisible({timeout:30000});
+ const lastMessage = await reply.innerText();
+ await toList(page);
+ await expect(preview(page)).toHaveText('Task · ARMY_HOLD preview in flight');
+ await expect(preview(page)).not.toHaveText(lastMessage);
  await expect(chatRow(page)).not.toContainText('Failed');
+
+ await reopen(page);
+ await send(page, 'Please review the keyboard layout.');
+ await expect(page.getByText('ARMY_REPLY: Please review the keyboard layout.', { exact: true }).filter({ visible: true })).toBeVisible();
+ await send(page, 'Thanks!');
+ await expect(page.getByText('ARMY_REPLY: Thanks!', { exact: true }).filter({ visible: true })).toBeVisible();
+ await toList(page);
+ await expect(preview(page)).toHaveText('Task · review the keyboard layout.');
+
 });
 
 test('holding the Harness row in the chat options lists the harnesses and choosing one switches without sending',async({page,bridge},info)=>{

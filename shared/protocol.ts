@@ -93,6 +93,9 @@ export interface ChatSummary {
   /** ≤ 200 chars, single line, redacted. */
   title: string;
   cwd?: string;
+  /** Redacted, bounded task label derived from recent user requests. */
+  task?: string;
+  repoRoot?: string;
   startedAt: number;
   /** Sort key. */
   lastActivityAt: number;
@@ -876,12 +879,13 @@ export function parseChatSummary(value: unknown): ChatSummary | null {
   if (!str(v.key) || !str(v.kind) || !str(v.sessionId) || !str(v.hostId) || !str(v.hostName) || !str(v.title)) return null;
   if (!num(v.startedAt) || !num(v.lastActivityAt) || !num(v.messageCount) || typeof v.chatable !== "boolean") return null;
   const origin = ORIGINS.find(o => o === v.origin);
-  if (!origin || !optStr(v.profileId) || !optStr(v.agentId) || !optStr(v.cwd) || !optStr(v.openIn) || !optStr(v.model)) return null;
+  if (!origin || !optStr(v.profileId) || !optStr(v.agentId) || !optStr(v.cwd) || !optStr(v.task) || !optStr(v.repoRoot) || !optStr(v.openIn) || !optStr(v.model)) return null;
   if (v.running !== undefined && typeof v.running !== "boolean") return null;
   return {
     key: v.key, kind: v.kind, sessionId: v.sessionId, hostId: v.hostId, hostName: v.hostName,
     ...(str(v.profileId) ? { profileId: v.profileId } : {}), ...(str(v.agentId) ? { agentId: v.agentId } : {}),
-    title: v.title, ...(str(v.cwd) ? { cwd: v.cwd } : {}), startedAt: v.startedAt, lastActivityAt: v.lastActivityAt,
+    title: v.title, ...(str(v.cwd) ? { cwd: v.cwd } : {}),
+    ...(str(v.task) ? { task: v.task.slice(0, 88) } : {}), ...(str(v.repoRoot) ? { repoRoot: v.repoRoot } : {}), startedAt: v.startedAt, lastActivityAt: v.lastActivityAt,
     messageCount: v.messageCount, origin, chatable: v.chatable,
     ...(str(v.model) ? { model: v.model } : {}),
     ...(typeof v.running === "boolean" ? { running: v.running } : {}), ...(str(v.openIn) ? { openIn: v.openIn } : {}),

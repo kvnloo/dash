@@ -91,6 +91,21 @@ if (process.env.ARMY_INDEX_LABEL) {
  }
 }
 
+if (process.env.ARMY_CHAT_TASK === '1') {
+ const { mkdirSync } = await import('node:fs');
+ const { join } = await import('node:path');
+ const { execFileSync } = await import('node:child_process');
+ const root = join(process.env.DASH_CWD || '', 'calendar-repo');
+ const cwd = join(root, 'packages', 'widget');
+ mkdirSync(cwd, { recursive: true });
+ execFileSync('git', ['init', '-q', root]);
+ await seedAgentsview({ id: '11111111-2222-4333-8444-555555555556', machine: 'local',
+  title: 'Calendar session', cwd, transcript: [
+   ['user', 'Add an export button'], ['assistant', 'Export button added.'],
+   ['user', 'Please fix the week picker layout.'], ['assistant', 'The layout is ready.'],
+   ['user', 'Thanks!'], ['assistant', 'Happy to help.'],
+  ] });
+}
 if(process.env.ARMY_ARCHIVE_CLAUDE==='1'){
  const installId='a1b2c3d4e5f60718293a4b5c6d7e8f90';
  await seedAgentsview({id:'11111111-2222-4333-8444-555555555555',machine:installId,installId,title:'ARMY archived Claude Code chat',cwd:process.env.DASH_CWD||'',transcript:[['user','ARMY archived Claude Code chat'],['assistant','ARMY older model answer'],['user','ARMY next question'],['assistant','ARMY earlier answer from '+installId],['user','ARMY pending follow-up']]});

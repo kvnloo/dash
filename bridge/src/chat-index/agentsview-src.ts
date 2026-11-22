@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { hostname } from "node:os";
 import { isCatalogHarness } from "../../../shared/catalog";
 import { MESSAGE_TEXT_MAX, type HistoryMessage } from "../../../shared/protocol";
+import { TASK_SOURCE_CHARS, taskFromPrompt } from "../../../shared/chat-task";
 import { redact } from "../reply-parts";
 import { AGENTSVIEW_PREFIX, nativeSessionId } from "../agentsview-sessions";
 import { machineHostId, REMOTE_HARNESSES } from "../remote-hosts";
@@ -19,8 +20,10 @@ export const OWNER_FILTER = `+ifnull(is_automated,0) = 0 and parent_session_id i
   and (+user_message_count >= 2 or +message_count >= 10) and agent <> 'hermes'`;
 
 function fields(db: Database): string {
-  const hasModel = db.query<{ name: string }, []>("pragma table_info(messages)").all().some(column => column.name === "model");
-  return `${FIELDS}, ${hasModel ? "(select nullif(trim(m.model), '') from messages m where m.session_id = sessions.id and m.role = 'assistant' and nullif(trim(m.model), '') is not null order by m.ordinal desc limit 1)" : "NULL"} as model`;
+  const columns = db.query<{ name: string }, []>("pragma table_info(messages)").all().map(column => column.name);
+  const hasModel = columns.includes("model");
+  const tasks = columns.includes("content") ? `(select json_group_array(prompt) from (select substr(content,1,${TASK_SOURCE_CHARS}) as prompt from messages where session_id = sessions.id and role = 'user' ${columns.includes("is_system") ? "and coalesce(is_system,0) = 0" : ""} order by ordinal desc limit 4))` : "NULL";
+  return `${FIELDS}, ${hasModel ? "(select nullif(trim(m.model), '') from messages m where m.session_id = sessions.id and m.role = 'assistant' and nullif(trim(m.model), '') is not null order by m.ordinal desc limit 1)" : "NULL"} as model, ${tasks} as prompts`;
 }
 
 const FIELDS = `id, agent, project, cwd, machine,
@@ -29,7 +32,7 @@ const FIELDS = `id, agent, project, cwd, machine,
 
 export interface AvSessionRow {
   id: string; agent: string; project: string | null; cwd: string | null; machine: string | null; title: string | null;
-  started_at: string | null; ended_at: string | null; message_count: number; model?: string | null; ok?: number;
+  started_at: string | null; ended_at: string | null; message_count: number; model?: string | null; prompts?: string | null; ok?: number;
 }
 
 export function openAgentsview(path: string): Database {
@@ -68,13 +71,24 @@ function localId(row: AvSessionRow): string {
   return prefix.length > 1 && row.id.startsWith(prefix) ? row.id.slice(prefix.length) : row.id;
 }
 
+function currentTask(raw: string | null | undefined): string | undefined {
+  if (!raw) return undefined;
+  const prompts: unknown = JSON.parse(raw);
+  if (!Array.isArray(prompts)) return undefined;
+  for (const prompt of prompts) {
+    const task = typeof prompt === "string" ? taskFromPrompt(redact(prompt)) : undefined;
+    if (task) return task;
+  }
+  return undefined;
+}
+
 export function avChatRow(row: AvSessionRow, self: MachineNames): NewChatRow {
   const sessionId = nativeSessionId(row.agent, localId(row));
   const host = machineHost(row.machine, self);
   const title = redact(firstLine(row.title)) || firstLine(row.project) || row.agent;
   const routed = host.host_id !== SELF_HOST && REMOTE_HARNESSES.includes(row.agent) && self.routable?.has((row.machine ?? "").trim().toLowerCase()) === true;
   const r = {
-    model: row.model ?? null,
+    model: row.model ?? null, task: currentTask(row.prompts),
     origin: "agentsview" as const, kind: row.agent, session_id: sessionId, ...host, profile_id: null,
     agent_id: `${AGENTSVIEW_PREFIX}${row.agent}:${sessionId}`, title, cwd: row.cwd || null,
     started_at: stamp(row.started_at), last_activity_at: stamp(row.ended_at) || stamp(row.started_at),
