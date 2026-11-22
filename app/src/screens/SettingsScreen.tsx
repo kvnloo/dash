@@ -1,4 +1,6 @@
 import { ModelsPanel } from "../components/ModelsPanel";
+import { DensityPicker } from "../components/Density";
+import { InformationDensityPicker } from "../components/InformationDensityPicker";
 import { DeviceCheck } from "../components/DeviceCheck";
 import { NotificationSettings } from "../components/NotificationSettings";
 import { setHandedness, useHandedness } from "../lib/useHandedness";
@@ -197,6 +199,13 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             </View>
             <Text style={[styles.help, { padding: space.md }]}>{settings ? "Auto follows a system preference when available; otherwise Right. This platform exposes no handedness signal. Long-press the composer mic to switch hands." : "Pair a bridge to save display preferences."}</Text>
           </GlassSurface>
+          <Text style={styles.label}>Trace and Lab</Text>
+          <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card} testID="settings-density">
+            <DensityPicker />
+            <View style={styles.divider} />
+            <InformationDensityPicker />
+          </GlassSurface>
+          <Text style={styles.help}>Layout sets spacing and tile size. Detail sets how much evidence each tile shows. Each dial changes only its own axis; Auto detail follows the layout.</Text>
           <Text style={styles.label}>Bridge</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field
