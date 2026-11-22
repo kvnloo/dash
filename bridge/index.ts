@@ -1,3 +1,4 @@
+import { createAndroidUpdateHandler } from "./src/android-update";
 import { repositoryRoot } from "./src/chat-index/workspace";
 // Dash bridge: a WebSocket server on your tailnet that runs agent CLIs on this
 // machine and streams their output to the phone.
@@ -883,6 +884,7 @@ const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFA
 
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
 const liveSurface = new LiveSurface({ log });
+const handleAndroidUpdate = createAndroidUpdateHandler(process.env.DASH_ANDROID_UPDATE_DIR, process.env.DASH_ANDROID_UPDATE_SERIAL);
 const handleSupervision = createSupervisionHttpHandler({ token: TOKEN, directory: process.env.DASH_SUPERVISION_DIR });
 const handlePosture = createPostureHttpHandler({ authorize, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG });
 const gatePoll = gate ? setInterval(() => { try { gate.refresh(); } catch { /* Explicit next request returns corruption error. */ } }, 2000) : null;
@@ -917,6 +919,10 @@ const server = Bun.serve<SocketData>({
       // Only origins admitted above can preflight. The actual request still
       // requires the endpoint's separate bootstrap or execution credential.
       if (request.method === "OPTIONS") return cors(new Response(null, { status: 204 }));
+      if (url.pathname === "/android/update") {
+        if (request.method === "POST") server.timeout(request, 195);
+        return cors(await handleAndroidUpdate(request, Boolean(await authorize(request, false))));
+      }
       if (url.pathname === "/debug/trace") {
         const trace = await handleFlowTrace(request, await authorize(request));
         if (trace) return cors(trace);

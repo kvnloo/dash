@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, readlink, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { test, expect } from './fixtures';
+import { test, expect, createBridge, pair } from './fixtures';
 
 const execute = promisify(execFile);
 const root = resolve(__dirname, '../..');
@@ -156,4 +156,43 @@ test('native compatibility: source, registration and plugin changes invalidate w
   expect(plugin).not.toBe(renamed);
   await writeFile(info.outputPath('native-input-fingerprints.json'), JSON.stringify({ initial, jsOnly, nativeSource, registration, renamed, plugin }, null, 2));
  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('Dash offers a staged Android update and O15 still refuses an unreceipted install', async ({ page }) => {
+ const directory = await mkdtemp(join(tmpdir(), 'dash-army-apk-'));
+ const sha = 'a'.repeat(40);
+ let bridge;
+ try {
+  await writeFile(join(directory, 'source-revision.txt'), sha);
+  await writeFile(join(directory, 'version-code.txt'), '900');
+  await writeFile(join(directory, 'dash-native-arm64.apk'), 'fixture only; never reaches adb');
+  bridge = await createBridge(true, { env: {
+   DASH_ANDROID_UPDATE_DIR: directory,
+   DASH_ANDROID_UPDATE_SERIAL: 'army-never-install',
+   DASH_ARMY_RECEIPTS: join(directory, 'receipts'),
+   GIT_TERMINAL_PROMPT: '0',
+  } });
+  await pair(page, bridge);
+  await page.getByRole('button', { name: 'Bridge details', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Edit bridge', exact: true }).click();
+  const check = page.getByRole('button', { name: 'Check for Android update' });
+  const install = page.getByRole('button', { name: 'Install via ADB' });
+  await check.click();
+  await expect(page.getByRole('heading', { name: 'Update available' })).toBeVisible();
+  await page.getByRole('button', { name: 'Not now' }).click();
+  await expect(install).toHaveCount(0);
+  expect(bridge.logs()).not.toContain('O15 DENY');
+
+  // A stale offer cannot install the newly staged revision.
+  await check.click();
+  await expect(install).toBeVisible();
+  await writeFile(join(directory, 'source-revision.txt'), 'b'.repeat(40));
+  await install.click();
+  await expect(page.getByText('Update changed or an install is running. Check again.')).toBeVisible();
+  await check.click();
+  await expect(page.getByText(/Android build 900 · bbbbbbb/)).toBeVisible();
+  await install.click();
+  await expect(page.getByText('Install refused or failed. Check the bridge log.')).toBeVisible({ timeout: 30_000 });
+  expect(bridge.logs()).toContain('O15 DENY');
+ } finally { await bridge?.dispose(); await rm(directory, { recursive: true, force: true }); }
 });
