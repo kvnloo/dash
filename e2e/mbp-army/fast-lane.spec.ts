@@ -145,12 +145,42 @@ test('z0live fast lane answers three small-talk turns under 1 s, routes the task
 
   // The lane timeline (bridge fold of the broker's lane records) shows both lanes and their handoffs.
   await expect(page.getByTestId('lane-timeline-summary-text')).toHaveText(/^2 lanes/, { timeout: 10000 });
+  // A full call (eight transcript lines) still lays out: title under the header, the transcript above
+  // the trace, the trace above the lanes, the lanes above Stop voice. Collapsed lanes leave room for
+  // the newest lines; expanded lanes may take the transcript's room but never overlap it.
+  const box = async (name: string, locator = page.getByTestId(name)) => {
+    const found = await locator.boundingBox();
+    if (!found) throw new Error(`${name} has no box`);
+    return found;
+  };
+  const layout = async (state: string) => {
+    const back = await box('back', page.getByRole('button', { name: 'Back', exact: true }));
+    const title = await box('title', page.getByText('Dash voice', { exact: true }));
+    const lines = await box('voice-transcript');
+    const content = await box('voice-content');
+    const trace = await box('voice-route');
+    const lanes = await box('lane-timeline');
+    const stop = await box('stop', page.getByRole('button', { name: 'Stop voice in Dash', exact: true }));
+    expect(title.y, `${state}: title stays below the header`).toBeGreaterThanOrEqual(back.y + back.height - 1);
+    // The transcript scrolls out under a clipped content area; what is visible ends above the trace.
+    expect(Math.min(lines.y + lines.height, content.y + content.height), `${state}: transcript ends above the routing trace`).toBeLessThanOrEqual(trace.y + 1);
+    expect(trace.y + trace.height, `${state}: routing trace ends above the lanes`).toBeLessThanOrEqual(lanes.y + 1);
+    expect(lanes.y + lanes.height, `${state}: lanes end above Stop voice`).toBeLessThanOrEqual(stop.y + 1);
+    return lines;
+  };
+  const collapsed = await layout('lanes collapsed');
+  expect(collapsed.height, 'collapsed lanes leave room for the newest transcript lines').toBeGreaterThanOrEqual(40);
+  const newest = await box('newest line', transcript.getByText('META done in session army-fixture-session'));
+  expect(newest.y + newest.height, 'the newest line is not clipped').toBeLessThanOrEqual(collapsed.y + collapsed.height + 1);
+  expect(newest.y, 'the newest line is not clipped').toBeGreaterThanOrEqual(collapsed.y - 1);
+  await page.screenshot({ path: info.outputPath('fast-lane-collapsed.png') });
   await page.getByTestId('lane-timeline-summary').click({ noWaitAfter: true });
   await expect(page.getByTestId('lane-name-fast')).toHaveText('Fast · army-fast-mini');
   await expect(page.getByTestId('lane-name-meta')).toHaveText('Meta · army-meta-large');
   await expect(page.getByTestId('lane-handoff-line-fast')).toHaveText(`↳ FAST ${SMALL_TALK[2]}`, { timeout: 10000 });
   await expect(page.getByTestId('lane-handoff-line-meta')).toHaveText('↳ META done in session army-fixture-session', { timeout: 10000 });
   await page.screenshot({ path: info.outputPath('fast-lane-trace.png') });
+  await layout('lanes expanded');
 
   await page.getByRole('button', { name: 'Stop voice in Dash', exact: true }).click({ noWaitAfter: true });
   await expect(page.getByRole('button', { name: 'Start voice in Dash', exact: true })).toBeVisible();
