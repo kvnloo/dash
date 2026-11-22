@@ -374,9 +374,13 @@
      "tests": ["opens a hosted prototype link and uses its control in Dash", "runs generated HTML controls only in the explicit prototype stage"]},
     {"id": "perf-no-accumulation", "title": "Measured perf gates (A29): Orchestra view switches do not slow down or accumulate heap/DOM/listeners (#530); prompt rail scrub never freezes a frame (#522)",
      "tests": ["perf: 40 Orchestra view switches do not slow down or accumulate heap, DOM nodes or listeners (#530)",
-               "perf: prompt rail scrub over a 1000-message chat never freezes a frame (#522)"]}
+               "perf: prompt rail scrub over a 1000-message chat never freezes a frame (#522)"]},
+    {"id": "one-command-onboarding", "title": "One command (scripts/onboard.sh) detects hardware, lists harnesses, installs the bridge + Metro as launchd/systemd services and the phone pairs from the printed link (#564)",
+     "tests": ["one command on a fresh Mac installs bridge and Metro launch agents, lists harnesses, and the phone pairs from the printed link",
+               "minimal onboarding on Linux refuses without a tailnet or on a busy port, then installs a systemd user bridge and prints a fresh pairing code"]}
   ],
   "not_yet_in_army": [
+    "onboarding on a real Mac: launchctl/plutil, Tailscale.app CLI address and scanning the printed QR with a phone (the army runs the written plists through a fixture service manager)",
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",
     "live model behaviour", "Orchestra / orchestration screens", "handedness",
     "Hermes session history", "notifications and deep links",
