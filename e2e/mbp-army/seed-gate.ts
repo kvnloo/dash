@@ -65,7 +65,7 @@ if(process.env.ARMY_LONG_HERMES){
 
 // AgentsView archive rows (the bridge indexes them on boot). Self: the install id names this
 // computer. Remote: a session synced from `army-remote`, id prefixed `<machine>~` like AgentsView.
-async function seedAgentsview(row:{id:string;machine:string;title:string;cwd:string;installId?:string;transcript?:[string,string][]}){
+async function seedAgentsview(row:{id:string;machine:string;title:string;cwd:string;installId?:string;agent?:string;transcript?:[string,string][]}){
  const {Database}=await import('bun:sqlite');const {join}=await import('node:path');const {mkdirSync,writeFileSync}=await import('node:fs');
  const home=process.env.HOME;if(!home||!home.includes('dash-army-'))throw Error('isolated HOME required');
  const dir=join(home,'.agentsview');mkdirSync(dir,{recursive:true});
@@ -82,7 +82,7 @@ async function seedAgentsview(row:{id:string;machine:string;title:string;cwd:str
   create trigger if not exists messages_ai after insert on messages begin insert into messages_fts(rowid, content) values (new.id, new.content); end;`);
  const now=Date.now();const at=(m:number)=>new Date(now-m*60000).toISOString();
  db.query('insert into sessions (id, project, machine, agent, first_message, started_at, ended_at, message_count, user_message_count, cwd) values (?,?,?,?,?,?,?,?,?,?)')
-  .run(row.id,'army',row.machine,'claude',row.title,at(row.transcript?row.transcript.length:30),at(1),row.transcript?row.transcript.length:12,row.transcript?row.transcript.filter(([role])=>role==='user').length:3,row.cwd);
+  .run(row.id,'army',row.machine,row.agent??'claude',row.title,at(row.transcript?row.transcript.length:30),at(1),row.transcript?row.transcript.length:12,row.transcript?row.transcript.filter(([role])=>role==='user').length:3,row.cwd);
  const msgs:[string,string][]=row.transcript??[['user',row.title],['assistant','ARMY earlier answer from '+row.machine]];
  // A seeded transcript is one minute per row, ending a minute ago; the default pair keeps its spacing.
  const stamp=(i:number)=>row.transcript?at(msgs.length-i):at(20-i);
@@ -135,6 +135,10 @@ if (process.env.ARMY_TURBO_CLAUDE === '1') {
 if(process.env.ARMY_ARCHIVE_CLAUDE==='1'){
  const installId='a1b2c3d4e5f60718293a4b5c6d7e8f90';
  await seedAgentsview({id:'11111111-2222-4333-8444-555555555555',machine:installId,installId,title:'ARMY archived Claude Code chat',cwd:process.env.DASH_CWD||'',transcript:[['user','ARMY archived Claude Code chat'],['assistant','ARMY older model answer'],['user','ARMY next question'],['assistant','ARMY earlier answer from '+installId],['user','ARMY pending follow-up']]});
+}
+if(process.env.ARMY_ARCHIVE_CODEX==='1'){
+ const installId='a1b2c3d4e5f60718293a4b5c6d7e8f90';
+ await seedAgentsview({id:'codex:11111111-2222-4333-8444-5555555c0de5',machine:installId,installId,agent:'codex',title:'ARMY archived Codex chat',cwd:process.env.DASH_CWD||'',transcript:[['user','ARMY archived Codex chat'],['assistant','ARMY earlier Codex answer'],['user','ARMY next Codex question'],['assistant','ARMY later Codex answer']]});
 }
 if(process.env.ARMY_LONG_CLAUDE){
  // A long chat as Hermes and Claude Code write them: every prompt is followed by several tool-step

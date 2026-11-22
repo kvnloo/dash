@@ -574,7 +574,14 @@
                "card gallery page 30 of 33 mounts every catalog fixture with catalog props",
                "card gallery page 31 of 33 mounts every catalog fixture with catalog props",
                "card gallery page 32 of 33 mounts every catalog fixture with catalog props",
-               "card gallery page 33 of 33 mounts every catalog fixture with catalog props"]}
+               "card gallery page 33 of 33 mounts every catalog fixture with catalog props"]},
+    {"id": "provider-out-of-usage-next-model", "title": "A provider out of usage names the cause, offers another model, and the same chat answers with the model the owner picks (#501)",
+     "tests": ["a provider out of usage offers another model and the chat answers with it"]},
+    {"id": "chat-one-bubble-per-message", "title": "A sent message and its reply show once in Hermes, Claude Code, Codex and OMP chats, also after the agent records the turn natively and the chat reopens or the app reloads (DA-020, #498)",
+     "tests": ["Hermes chat shows one user and one reply bubble after Hermes records the turn in state.db",
+               "Claude Code chat shows one user and one reply bubble after AgentsView records the turn",
+               "Codex chat shows one user and one reply bubble after AgentsView records the turn",
+               "OMP chat shows one user and one reply bubble after OMP records the turn in its session file"]}
   ],
   "not_yet_in_army": [
     "onboarding on a real Mac: launchctl/plutil, Tailscale.app CLI address and scanning the printed QR with a phone (the army runs the written plists through a fixture service manager)",
