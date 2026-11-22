@@ -58,8 +58,8 @@ export function parseGenUI(source: string): Widget[] | null {
   } catch { return null; }
 }
 
-export function sandboxHTML(source: string): string {
-  // First policy wins; model meta tags cannot loosen it. No scripting, navigation, forms or network.
-  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-src 'none'; connect-src 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#0c0c0a;color:#ece8df;font:16px system-ui;margin:16px;overflow-wrap:anywhere}*{box-sizing:border-box}img{max-width:100%}</style></head><body>${source}</body></html>`;
+export function sandboxHTML(source: string, interactive = false): string {
+  // The first CSP cannot be loosened by the document. Only the explicit stage runs inline scripts.
+  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${interactive ? "'unsafe-inline'" : "'none'"}; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-src 'none'; connect-src 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{background:#0c0c0a;color:#ece8df;font:16px system-ui;margin:16px;overflow-wrap:anywhere}*{box-sizing:border-box}img{max-width:100%}</style></head><body>${source}</body></html>`;
 }
 export const isImageRef = (url: string) => /^(https?:\/\/[^\s<>]+|\/(?!\/)[^\s<>]+)\.(png|jpe?g|webp|gif|avif)(\?[^\s<>]*)?$/i.test(url);

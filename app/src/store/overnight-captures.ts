@@ -86,3 +86,14 @@ export function planCapture(id: string): Promise<readonly Capture[]> {
 export function dismissCapture(id: string): Promise<readonly Capture[]> {
   return change(queue => dismiss(queue, id));
 }
+
+export async function clearOvernightCaptures() {
+  const task = inFlight.then(async () => {
+    await restored;
+    await AsyncStorage.removeItem(KEY);
+    overnightCaptures.set([]);
+    restoreFailed = false;
+  });
+  inFlight = task.catch(() => {});
+  await task;
+}

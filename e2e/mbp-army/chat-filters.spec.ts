@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Page } from 'playwright/test';
 import { test, expect, pair, createBridge, composer, send } from './fixtures';
+import { nativeLayout, nativeLeaves } from './native-layout';
 
 test.use({ bridgeOptions: { archiveClaude: true }, timezoneId: 'America/New_York' });
 test.afterEach(async ({ page }, info) => {
@@ -42,6 +43,53 @@ async function scrollChats(page: Page) {
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, 10000);
 }
+
+/** Each filter chip, re-laid out with Yoga as the phone does: its label and icon must keep their size. */
+async function expectChipsLabelledOnNative(page: Page) {
+  for (const id of ['activity', 'harness', 'project', 'date', 'sort']) {
+    const chip = page.getByTestId(`chat-filter-${id}`);
+    await expect(chip).toBeVisible();
+    const box = await nativeLayout(chip);
+    const leaves = nativeLeaves(box);
+    const label = leaves[0];
+    expect(label?.text, `${id} chip has a label on the web build`).toBeTruthy();
+    for (const leaf of leaves) {
+      // On native a collapsed wrapper leaves the leaf 0 wide and Android clips it: an empty outline.
+      expect(leaf.native, `${id} chip "${leaf.text}" keeps its width under native layout (web ${leaf.web}px)`).toBeGreaterThan(Math.min(leaf.web, 8) - 0.5);
+      expect(Math.abs(leaf.native - leaf.web), `${id} chip "${leaf.text}" lays out the same on native and web`).toBeLessThanOrEqual(1.5);
+    }
+    expect(Math.abs(box.native - box.web), `${id} chip width matches between native and web`).toBeLessThanOrEqual(1.5);
+  }
+}
+
+// DA-046: chat-filters passed on web while the S25 drew the chips as empty outlines. PressScale's inner
+// wrapper was `flex: 1`, basis 0 on Yoga, so the content-sized chip row collapsed only on native.
+test('Chats filter chips keep their labels under native layout and Claude Code filters the list', async ({ page, bridge }, info) => {
+  await pair(page, bridge);
+  await expect.poll(async () => (await firstVisualRow(page))?.id).toBeTruthy();
+  await expectChipsLabelledOnNative(page);
+  await expect(page.getByTestId('chat-filter-harness')).toContainText('Harness');
+  await expect(page.getByTestId('chat-filter-sort')).toContainText('Recent');
+  await expect(chatRows(page).filter({ hasText: 'ARMY native fixture' }).first()).toBeVisible();
+  await page.screenshot({ path: info.outputPath('chips-default.png') });
+
+  await page.getByTestId('chat-filter-harness').click({ noWaitAfter: true });
+  const sheet = page.getByTestId('bottom-action-sheet');
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByTestId('bottom-action-sheet-option-claude')).toContainText('Claude Code');
+  await sheet.getByTestId('bottom-action-sheet-option-claude').click({ noWaitAfter: true });
+  await expect(sheet).toHaveCount(0);
+  const harness = page.getByTestId('chat-filter-harness');
+  await expect(harness).toContainText('Claude Code');
+  await expect(harness).toHaveAttribute('aria-label', 'Harness, Claude Code');
+  // Only Claude chats remain.
+  await expect.poll(async () => (await chatRows(page).evaluateAll(rows => rows.map(row => row.getAttribute('data-testid') ?? ''))).filter(id => !id.includes(':claude:'))).toEqual([]);
+  await expect(chatRows(page).first()).toBeVisible();
+  await expect(chatRows(page).filter({ hasText: 'ARMY native fixture' })).toHaveCount(0);
+  // The selected chip, now wider and raised, still lays out with its label on native.
+  await expectChipsLabelledOnNative(page);
+  await page.screenshot({ path: info.outputPath('chips-claude.png') });
+});
 
 test('Chats combines harness, exact project and local dates, pages within the date bound, sorts visually and resets to the top', async ({ page, bridge }, info) => {
   const dates = await page.evaluate(() => {

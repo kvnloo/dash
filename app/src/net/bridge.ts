@@ -1,3 +1,4 @@
+import { receiveChatPost } from "../store/chat-posts";
 import { receiveSecretRequest, receiveSecretResolved } from "../store/secrets";
 import { applyGateMessage } from "../store/approvals";
 import { createPermissionsStore } from "../store/permissions";
@@ -304,6 +305,7 @@ class Bridge {
         void handleUiControlFrame(message, ack => { if (this.ws === socket) this.send(ack); });
         return;
       }
+      case "chat_post": if (this.settings) receiveChatPost(message, this.settings.address); return;
       case "gate_snapshot":
       case "gate_status":
       case "gate_error": applyGateMessage(message); return;
