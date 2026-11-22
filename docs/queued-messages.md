@@ -1,7 +1,7 @@
 # Queued messages
 
-While a turn is running, choose Queue instead in the Hermes composer (other
-harnesses expose Queue while busy). Queued parts stay in a compact stack above
+While a turn is running, tap Queue in the Hermes composer (other harnesses
+expose Queue while busy). Queued parts stay in a compact stack above
 the composer rather than becoming separate chat bubbles. Expand the count to
 edit or delete a part. Drag its numbered handle vertically to reorder; native
 accessibility increment/decrement actions also move a part.

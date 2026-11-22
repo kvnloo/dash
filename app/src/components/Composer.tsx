@@ -76,16 +76,19 @@ interface Props {
 }
 
 let draftSeq = 0;
+/** The busy-turn mode each chat last sent with: the composer's guess for the next tap. */
+const lastBusyMode = new Map<string, SendMode>();
 
 export const Composer = memo(function Composer({ draftKey, context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, model, modelOverride, rateLabel, rateRecent = false, onChooseHarness, onChangeModel, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
   const thumb = useHandedness();
   const [modelOpen, setModelOpen] = useState(false);
   const [modelDraft, setModelDraft] = useState("");
   const validModel = modelDraft.trim() === "" || MODEL_ID.test(modelDraft.trim());
-  const [choice, setChoice] = useState<SendMode>("steer");
-  useEffect(() => { if (!steerBusy) setChoice("steer"); }, [steerBusy]);
+  // While a steerable turn runs, the primary button guesses the next move (the mode this chat last
+  // sent with, Steer first) and the other mode is one tap beside it. Neither needs a menu.
+  const [choice, setChoice] = useState<SendMode>(() => (draftKey && lastBusyMode.get(draftKey)) || "steer");
   const sendMode = composerMode(steerBusy, choice);
-  const switchMode = () => { setChoice(value => value === "steer" ? "queue" : "steer"); haptic.select(); };
+  const otherMode = composerMode(steerBusy, choice === "steer" ? "queue" : "steer");
   const [seed] = useState<ComposerDraft>(() => ({ text: initialText ?? "", attachments: initialAttachments ?? [] }));
   const [localDraft, setLocalDraft] = useState(seed);
   const savedDraft = composerDrafts.use(all => draftKey ? all[draftKey] : undefined);
@@ -274,7 +277,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
 
   const remove = useCallback((key: string) => setDrafts(list => list.filter(d => d.key !== key)), []);
 
-  const submit = useCallback(() => {
+  const submitAs = useCallback((mode: SendMode) => {
     if (localUsage && context) { setText(""); Keyboard.dismiss(); context.showUsage(); return; }
     if (!canSend) return;
     if (queuePreview !== undefined) { onSaveQueuePreview?.(); return; }
@@ -282,8 +285,14 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
     const value = text.trim();
     setText("");
     setDrafts([]);
-    onSend(value, refs, sendMode.mode);
-  }, [localUsage, context, canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
+    if (steerBusy) {
+      setChoice(mode);
+      if (draftKey) lastBusyMode.set(draftKey, mode);
+    }
+    onSend(value, refs, mode);
+  }, [localUsage, context, canSend, drafts, text, onSend, queuePreview, onSaveQueuePreview, steerBusy, draftKey]);
+  const submit = useCallback(() => submitAs(sendMode.mode), [submitAs, sendMode.mode]);
+  const submitOther = useCallback(() => { haptic.select(); submitAs(otherMode.mode); }, [submitAs, otherMode.mode]);
 
   return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} onUsage={context ? () => { if (isUsageCommand(draftText)) changeText(""); Keyboard.dismiss(); context.showUsage(); } : undefined} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
     {drafts.length > 0 ? (
@@ -293,7 +302,13 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
     ) : null}
     {drafts.some(d => d.state === "local") ? <PressScale accessibilityRole="button" accessibilityLabel="Upload shared files" disabled={disabled || editingQueue} onPress={uploadShared} style={styles.modeToggle}><Text style={styles.chipName}>Upload shared files to paired computer</Text></PressScale> : null}
     {clipboardHasImage && !editingQueue ? <PressScale accessibilityRole="button" accessibilityLabel="Paste image" disabled={disabled || pastingImage} onPress={() => { void pasteImage(); }} style={styles.modeToggle}><Text style={styles.chipName}>{pastingImage ? "Pasting image…" : "Paste image"}</Text></PressScale> : null}
-    {steerBusy && !editingQueue ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
+    {steerBusy && !editingQueue && canSend && !localUsage ? <View testID="composer-busy-modes" style={[styles.modeRow, thumb.row]}>
+      <Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text>
+      <PressScale testID={`composer-send-${otherMode.mode}`} accessibilityRole="button" accessibilityLabel={otherMode.action} accessibilityHint={otherMode.label} onPress={submitOther} style={[styles.modeToggle, styles.modeSend]}>
+        <Feather name={otherMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={14} color={colors.gold} />
+        <Text style={styles.chipName}>{otherMode.action}</Text>
+      </PressScale>
+    </View> : null}
     {speech.state.note ? <View style={styles.modeRow}>
       <Text accessibilityLiveRegion="polite" accessibilityRole={speech.state.phase === "error" ? "alert" : "text"} style={styles.chipMeta}>{speech.state.note}</Text>
       {speechBusy ? <PressScale accessibilityRole="button" accessibilityLabel="Stop dictation" onPress={() => void speech.end()} style={styles.modeToggle}><Text style={styles.chipName}>Stop</Text></PressScale> : null}
@@ -408,6 +423,7 @@ const styles = StyleSheet.create({
   controls: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
   modeRow: { alignItems: "center", justifyContent: "space-between", paddingHorizontal: 8 },
   modeToggle: { minHeight: 44, paddingHorizontal: 8 },
+  modeSend: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 64, justifyContent: "center", borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, borderColor: glass.hair2 },
   hit: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   send: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.gold, alignItems: "center", justifyContent: "center" },
   stop: { backgroundColor: colors.text },
