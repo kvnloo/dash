@@ -80,10 +80,10 @@ test('a bot gem opens its simple page with honest channels and chats; it offers 
  await expect(botPage).toBeVisible();
  await expect(page.getByRole('heading', { name: 'courier', exact: true })).toBeVisible();
  await expect(botPage.getByTestId('bot-channel-slack')).toContainText('Not running');
- // The roster lists the courier profile, but this bridge starts new chats on the default profile
- // only: the page says so instead of offering a button that would fail.
- await expect(botPage.getByTestId('bot-start-note')).toHaveText('This bridge cannot target this Hermes profile. Open a live session instead.');
- await expect(botPage.getByRole('button', { name: /^Chat with/ })).toHaveCount(0);
+ // The bridge lists the courier profile bot as a Hermes spawn target (DA-085, bridge/src/bots.ts),
+ // so its page offers the one action that works: a new chat in that profile, and no refusal note.
+ await expect(botPage.getByRole('button', { name: 'Chat with courier', exact: true })).toBeVisible();
+ await expect(botPage.getByTestId('bot-start-note')).toHaveCount(0);
  await expect(botPage.getByText('No chats with this bot on its host.', { exact: true })).toBeVisible();
  await page.screenshot({ path: info.outputPath('bot-page-courier.png') });
 
