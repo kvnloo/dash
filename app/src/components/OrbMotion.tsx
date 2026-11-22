@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
 import { NavigationContext } from "@react-navigation/native";
-import { cancelAnimation, useReducedMotion, useSharedValue, withRepeat, withTiming, type SharedValue } from "react-native-reanimated";
+import { cancelAnimation, Easing, ReduceMotion, useReducedMotion, useSharedValue, withRepeat, withTiming, type SharedValue } from "react-native-reanimated";
 
-import { ambient } from "../motion-ambient";
+import { surfaceMotionMs } from "../motion";
 
 const Clock = createContext<SharedValue<number> | null>(null);
 const Activity = createContext(true);
@@ -18,7 +18,7 @@ export function OrbMotionProvider({ children }: { children: ReactNode }) {
     return () => sub.remove();
   }, []);
   useEffect(() => {
-    if (active && !reduced) clock.value = withRepeat(withTiming(1, ambient(6000, true)), -1);
+    if (active && !reduced) clock.value = withRepeat(withTiming(1, { duration: surfaceMotionMs.orbCycle, easing: Easing.linear, reduceMotion: ReduceMotion.System }), -1);
     else { cancelAnimation(clock); clock.value = 0; }
     return () => cancelAnimation(clock);
   }, [active, clock, reduced]);

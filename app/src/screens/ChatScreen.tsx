@@ -1,5 +1,6 @@
 import { chatPosts } from "../store/chat-posts";
 import { conversationKey } from "../lib/chat-index";
+import { useWallpaperGlass } from "../components/WallpaperTheme";
 import { useIsFocused } from "@react-navigation/native";
 import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
@@ -155,6 +156,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     return () => { for (const type of events) element.removeEventListener(type, mark, { capture: true }); };
   }, [setFollow]);
   const focused = useIsFocused();
+  const wallpaper = useWallpaperGlass();
   const [appActive, setAppActive] = useState(AppState.currentState === "active");
   const [viewedMessageIds, setViewedMessageIds] = useState<ReadonlySet<string>>(() => new Set());
   const onViewableMessages = useCallback(({ viewableItems }: { viewableItems: ViewToken<Message>[] }) => {
@@ -293,9 +295,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const liveOn = harnessId === "hermes" && live.open;
   useEffect(() => { if (sharedDraft && conversation) setLiveOpen(conversation.id, false); }, [sharedDraft, conversation?.id]);
 
-  const toggleLive = useCallback(() => {
+  const selectLive = useCallback((next: boolean) => {
+    if (!next && !conversation) return;
     const active = conversation ?? createConversation("hermes");
-    const next = !liveOf(active.id).open;
+    if (liveOf(active.id).open === next) return;
     haptic.select();
     setLiveOpen(active.id, next);
     if (next && liveOf(active.id).status !== "ready") openLiveSurface(active.id, { profileId: active.profileId, sessionId: active.sessionId });
@@ -528,8 +531,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const menuRows = useMemo((): ComposerMenuRow[] => {
     const rows: ComposerMenuRow[] = [];
     if (harnessId === "hermes" && conversation) rows.push({
-      id: "surface", label: "Surface", value: surfaceValue(liveOn), values: ["Chat", "Live surface"], index: liveOn ? 1 : 0,
-      run: toggleLive, inspect: index => { if ((index === 1) !== liveOn) toggleLive(); },
+      id: "surface", label: "Surface", value: surfaceValue(liveOn), values: ["Hermes chat", "Live surface"], index: liveOn ? 1 : 0,
+      run: () => selectLive(!liveOn), inspect: index => selectLive(index === 1),
     });
     rows.push({
       id: "details", label: "Thinking & tools", value: detailMode, values: [...DETAIL_MODES], index: Math.max(0, DETAIL_MODES.indexOf(detailMode)),
@@ -548,7 +551,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       options: connection.harnesses.filter(h => h.available).map(h => ({ id: h.id, label: h.name, selected: h.id === harnessId, run: () => onSelectHarness(h.id) })),
     });
     return rows;
-  }, [harnessId, conversation, liveOn, toggleLive, detailMode, context, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible, connection.harnesses, onSelectHarness]);
+  }, [harnessId, conversation, liveOn, selectLive, detailMode, context, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible, connection.harnesses, onSelectHarness]);
 
   const dockBody = <>
     <WorkersStrip workers={workers} />
@@ -645,7 +648,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Keep them still in the chat; ShimmerText (Skia) still shows live activity.
   return (
     <OrbActivity active={false}>
-    <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} aria-busy={windowed && morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
+    <Animated.View style={[styles.screen, wallpaper && { backgroundColor: "transparent" }, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} aria-busy={windowed && morph.settling} testID={windowed ? "chat-window" : undefined}>{wallpaper ? null : <Canvas />}
       {windowed ? <>
         <WindowPill geometry={pill} title={conversation?.title || harnessName}
           status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
@@ -667,12 +670,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
         </Text>
       ) : null}
       {harnessId === "hermes" ? (
-        <View style={styles.liveRow}>
-          <PressScale accessibilityRole="switch" accessibilityLabel="Live surface" accessibilityState={{ checked: liveOn }} aria-checked={liveOn}
-            onPress={toggleLive} style={[styles.liveChip, liveOn && styles.liveChipOn]}>
-            <Text style={[styles.liveChipText, liveOn && styles.liveChipTextOn]}>Live surface</Text>
-          </PressScale>
-          <Text style={styles.liveNote} numberOfLines={1}>{liveOn ? "fast lane · Hermes stays in charge" : "Hermes chat"}</Text>
+        <View accessibilityRole="tablist" accessibilityLabel="Chat surface" style={styles.liveRow}>
+          {[false, true].map(isLive => {
+            const selected = liveOn === isLive;
+            const label = isLive ? "Live surface" : "Hermes chat";
+            return <PressScale key={label} accessibilityRole="tab" accessibilityLabel={label}
+              accessibilityState={{ selected }} aria-selected={selected}
+              onPress={() => selectLive(isLive)} style={[styles.liveChip, selected && styles.liveChipOn]}>
+              <Text style={[styles.liveChipText, selected && styles.liveChipTextOn]}>{selected ? "✓ " : ""}{label}</Text>
+            </PressScale>;
+          })}
         </View>
       ) : null}
       </View> : null}
@@ -684,9 +691,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           data={visibleMessages}
           extraData={external}
           renderItem={({ item }) => item.truncated ? <View>
-            <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />
+            <MessageRow conversationId={conversation?.id} message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />
             <PressScale accessibilityRole="button" accessibilityLabel="Show full message" onPress={() => showFull(item.id)} style={styles.showFull}><Text style={styles.showFullText}>Show full message</Text></PressScale>
-          </View> : <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
+          </View> : <MessageRow conversationId={conversation?.id} message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
           onViewableItemsChanged={onViewableMessages}

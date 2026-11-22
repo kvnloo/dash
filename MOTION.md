@@ -9,8 +9,8 @@ The technique names below come from the oneshotprompts.com motion vocabulary
 
 ## Laws
 
-1. **Fast first.** Motion confirms an action. It never gates the action. Every finite transition ends in 180 ms or less
-   (`settle`, the release budget). Turbo (`dsh`) makes each token shorter, never longer.
+1. **Fast first.** Motion confirms an action. It never gates the action. Keep navigation within the 180 ms release budget.
+   Turbo makes transitions shorter, never longer.
 2. **No overshoot on layout or navigation.** Use a *critically damped spring*: damping ratio 1, no bounce.
    An *underdamped spring* (a wobble) or an *elastic ease* is not permitted on a layout, a page, or a sheet.
    The code does not use `withSpring`. We render the critical response with `withTiming` so that the deadline is hard.
@@ -21,7 +21,7 @@ The technique names below come from the oneshotprompts.com motion vocabulary
    jump to the end (`ReduceMotion.System`). Opacity still crossfades in `fade` time (`ReduceMotion.Never`).
    The user still sees each state change, but nothing moves. Press feedback has no scale (not an instant scale).
 6. **No stagger.** Every row is usable at once (`entranceDelay` = 0).
-7. **Ambient loops are not transitions.** Use `ambient()` in `motion-ambient.ts`. Loops stop on blurred screens.
+7. **Ambient loops are not transitions.** Loops stop on blurred screens. Use `ambient()` for local loops; orbs share a single clock.
 
 ## Tokens
 
@@ -29,9 +29,11 @@ The technique names below come from the oneshotprompts.com motion vocabulary
 |---|---:|---:|---|
 | `press` | 70 ms | 60 ms | *Press depress*: scale to `PRESS_SCALE` (row 0.985, control 0.92, nav 0.9) |
 | `fade` / `crossfade` / `MOTION_MS.crossfade` | 120 ms | 100 ms | Opacity, exits, status surfaces, the reduce-motion crossfade |
-| `nav` | 140 ms | 120 ms | One page of the tab pager |
+| `nav` | 140 ms | 77 ms | One page of the tab pager |
+| `surfaceMotionMs.sheetEnter` | 240 ms | 132 ms | Bottom action sheet entrance |
+| `surfaceMotionMs.orbCycle` | 6000 ms | 3300 ms | Shared ambient agent/voice orb clock |
 | `snappy` | 150 ms | 100 ms | Default open, toggles, the mic pill |
-| `settle` | 180 ms | 120 ms | Gesture release, and the ceiling for distance-based durations |
+| `settle` | 180 ms | 120 ms | Gesture release, and the ceiling for window morphs |
 | `MOTION_MS.enter` / `exit` | 150 / 120 ms | 0 / 0 | Layout enter and exit builders (`enterUp`, `popIn`, `fadeOut`) |
 
 ### Spring constants
@@ -54,17 +56,18 @@ that only have a spring API (Framer Motion, SwiftUI, Compose).
 
 | Function | near | far | span | Distance |
 |---|---|---|---|---|
-| `pageDuration(pages)` | `nav` | `settle` | 3 | Pages past the first. One page = 140 ms, two = 163 ms, four or more = 180 ms |
+| `pageDuration(pages)` | 140 ms | 180 ms | 3 | Pages past the first, before Turbo scaling |
 | `morphDuration(travel, h)` | `fade` | `settle` | h / 2 | Pixels from the source row to the window centre |
 
 A fling toward the target still finishes early. `navDuration` takes the minimum of the page budget and
-distance / velocity, with a floor of 80 ms.
+distance / velocity, with a floor of 80 ms. The pager result, sheet entrance, and
+orb cycle use the same 0.55 multiplier from `turbo.ts` when `EXPO_PUBLIC_DASH_TURBO=1`.
 
 ## The five most visible transitions
 
 | # | Surface | Technique | Before | Now |
 |---|---|---|---|---|
-| 1 | Tab pager (tap a tab, `setPage`) | *Tab panel slide*, *distance-based duration* | 140 ms for any jump, so a four-page jump was a blur | `pageDuration`: 140 ms for one page, up to 180 ms. Swipes are unchanged |
+| 1 | Tab pager (tap a tab, `setPage`) | *Tab panel slide*, *distance-based duration* | 140 ms for any jump, so a four-page jump was a blur | `pageDuration`: 140 ms for one page, up to 180 ms, scaled in Turbo. Swipe release is scaled after its velocity adjustment |
 | 2 | Chat window open/close (`useWindowMorph`) | *Shared-element transition* (card to detail) | 150 ms from any row. Reduce motion jumped with no feedback | `morphDuration`: 120 ms near the centre to 180 ms from the edge. Reduce motion: opacity crossfade only |
 | 3 | Press feedback (`PressScale`, on every row and control) | *Press depress* | Reduce motion still jumped to the pressed scale | `pressScaleFor`: no scale under reduce motion |
 | 4 | Connection banner and queued stack (`ConnectionPill`, `QueuedStack`) | *Toast slide-in stack* (fade only) | Literal 110 ms. The queue used the *exit* duration for its enter and ignored reduce motion | `statusIn` / `statusOut`: `MOTION_MS.crossfade`, kept under reduce motion |

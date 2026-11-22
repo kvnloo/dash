@@ -3,8 +3,9 @@
  * no entrance animations on structural changes, content appears instantly (only chevrons/indicators move),
  * streaming text published once per frame. Set at bundle time by the preview Metro (EXPO_PUBLIC_DASH_TURBO=1). */
 export const TURBO = process.env.EXPO_PUBLIC_DASH_TURBO === "1";
-/** Multiplier for ambient loops (orbs, pulses) in turbo. */
-export const SPEED = TURBO ? 0.55 : 1;
+/** Duration multiplier for the Turbo motion profile. */
+export const TURBO_DURATION_FACTOR = 0.55;
+export const SPEED = TURBO ? TURBO_DURATION_FACTOR : 1;
 export function turboMs(duration: number): number {
   return Math.max(1, Math.round(duration * SPEED));
 }

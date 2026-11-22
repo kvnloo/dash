@@ -1,4 +1,5 @@
 import { ReleaseSettings } from "../components/ReleaseSettings";
+import { OrbStylePicker } from "../components/OrbStylePicker";
 import { ModelsPanel } from "../components/ModelsPanel";
 import { DensityPicker } from "../components/Density";
 import { InformationDensityPicker } from "../components/InformationDensityPicker";
@@ -27,6 +28,8 @@ import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
 import { screenBack } from "../lib/screen-back";
 import { endpointsOf, withEditedEndpoint } from "../lib/bridge-failover";
+import { wallpaperAvailable } from "../lib/wallpaper-window";
+import { appearanceTheme, setAppearanceTheme } from "../store/appearance";
 
 export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const thumb = useHandedness();
@@ -189,6 +192,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           </Pressable>
           {deviceCheckOpen ? <DeviceCheck /> : null}
           <Text style={styles.label}>Display</Text>
+          <Text style={styles.label}>Orb style</Text>
+          <OrbStylePicker />
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <View style={styles.harnessRow}><Text style={styles.harnessName}>Thumb side</Text></View>
             <View style={{ flexDirection: "row", paddingHorizontal: space.md, gap: space.sm }}>
@@ -210,6 +215,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             <InformationDensityPicker />
           </GlassSurface>
           <Text style={styles.help}>Layout sets spacing and tile size. Detail sets how much evidence each tile shows. Each dial changes only its own axis; Auto detail follows the layout.</Text>
+          {wallpaperAvailable ? <WallpaperThemePicker /> : null}
+
           <Text style={styles.label}>Bridge</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field
@@ -294,6 +301,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
 
           <Pressable accessibilityRole="button" accessibilityLabel="Review approvals" onPress={() => navigation.navigate("Approvals")} style={styles.secondary}><Text style={styles.secondaryText}>Review approvals</Text></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Component lab" onPress={() => navigation.navigate("Lab")} style={styles.secondary}><Text style={styles.secondaryText}>Component lab</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Bots page prototype" onPress={() => navigation.navigate("BotsPage")} style={styles.secondary}><Text style={styles.secondaryText}>Bots page (prototype)</Text></Pressable>
           <Text style={styles.label}>On your computer</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Text style={styles.mono}>cd bridge && bun run start</Text>
@@ -340,6 +348,24 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
       </KeyboardAvoidingView>
     </View>
   );
+}
+
+function WallpaperThemePicker() {
+  const selected = appearanceTheme.use(theme => theme === "wallpaper");
+  return <>
+    <Text style={styles.label}>Appearance</Text>
+    <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+      <Pressable accessibilityRole="switch" accessibilityLabel="Wallpaper glass" aria-checked={selected}
+        onPress={() => setAppearanceTheme(selected ? "night" : "wallpaper")}
+        style={({ pressed }) => [styles.harnessRow, pressed && styles.pressed]}>
+        <Text style={styles.harnessName}>Wallpaper glass</Text>
+        <Text style={styles.statusText}>{selected ? "On" : "Off"}</Text>
+      </Pressable>
+    </GlassSurface>
+    <Text style={styles.help}>{Platform.OS === "web"
+      ? "Web preview uses a sample backdrop. On supported Android builds, this shows your system wallpaper behind chats."
+      : "Show your system wallpaper behind chats with a dark tint to keep text readable."}</Text>
+  </>;
 }
 
 function Field({

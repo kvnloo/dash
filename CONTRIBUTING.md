@@ -4,7 +4,9 @@ Dash is an AI-native project built by humans and coding agents working together 
 
 ## Using Dash
 
-Dash is a phone app (Expo) that connects to coding agents running on your laptop. To try it:
+Dash is a phone app (Expo) that connects to coding agents running on your laptop. To try it,
+run `scripts/onboard.sh` (installs the bridge and Metro as services, lists your harnesses and prints a
+pairing link), or follow the manual steps:
 
 1. **Start the bridge** on your laptop (inside the repo):
    ```bash

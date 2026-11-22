@@ -6,6 +6,17 @@ The fixture is not a model turn. It implements initialize/session/new/load/promp
 Each test has its own bridge, HOME, credential/config/outbox directories, loopback port, PID namespace, and browser context.
 A fixture-native Hermes SQLite row and a fixture-only discoverable OMP process support persisted-session journeys. The separate ephemeral regression intentionally omits them.
 
+## One-command onboarding journey (#564)
+
+`onboard.spec.ts` runs `scripts/onboard.sh` on an empty HOME whose PATH holds only fixture
+OMP, Hermes and Claude Code CLIs. `fixture-service-manager.ts` stands in for `launchctl`,
+`plutil` and `systemctl --user`: it parses the written plist (Python `plistlib`) or unit and
+starts exactly that program, environment, folder and log. The Mac journey installs the bridge
+and Metro launch agents, checks the harness list, pairs the real web app from the printed
+`dash://connect` link with the bootstrap token, sends an OMP turn and uninstalls. The Linux
+journey covers the dry run, the no-tailnet and busy-port refusals, the systemd unit and `--pair`.
+Real `launchctl`, Tailscale.app and a phone scanning the QR are not exercised here.
+
 ## Chat-index HTTP ownership journey (#493)
 
 `chat-index-ownership.spec.ts` pairs normally, then selects a loopback TCP/HTTP relay

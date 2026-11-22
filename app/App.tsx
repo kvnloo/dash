@@ -1,3 +1,4 @@
+import { hydrateOrbStyle } from "./src/store/orb-style";
 import { useHostSleepPosture } from "./src/hooks/useHostSleepPosture";
 import { TileDetailProvider } from "./src/components/InteractiveTile";
 import { DensityProvider } from "./src/components/Density";
@@ -13,6 +14,7 @@ import { IBMPlexMono_400Regular } from "@expo-google-fonts/ibm-plex-mono";
 import { useEffect, useState } from "react";
 import { Linking, Platform, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { PenHoverRoot } from "./src/components/PenHover";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BridgePullOverlay, BridgePullProvider } from "./src/components/BridgePull";
@@ -32,6 +34,7 @@ import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { VoiceScreen } from "./src/screens/VoiceScreen";
 import { TraceScreen } from "./src/screens/TraceScreen";
 import { LabScreen } from "./src/screens/LabScreen";
+import { BotsPageScreen } from "./src/screens/BotsPageScreen";
 import { RoadmapProjectScreen, RoadmapScreen, RoadmapTaskScreen } from "./src/screens/RoadmapScreen";
 import { DebugHost } from "./src/debug/DebugHost";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
@@ -42,6 +45,7 @@ import { debugNavigationRef, flushPendingDebugNavigation } from "./src/debug/nav
 import { clearDebugPersistence, applyDebugSeed } from "./src/debug/seed";
 import { applyDemoSeed } from "./src/mock/seed";
 import { hydrate, store } from "./src/store/app";
+import { WallpaperBackdrop, WallpaperTheme, useWallpaperWindow } from "./src/components/WallpaperTheme";
 import { colors } from "./src/theme";
 import { NativeEvents } from "./src/components/NativeEvents";
 import { ContinuousVoiceRoot } from "./src/components/ContinuousVoiceRoot";
@@ -58,6 +62,8 @@ const theme: Theme = {
   colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bg, text: colors.text, border: colors.border },
 };
 
+const wallpaperNavigationTheme: Theme = { ...theme, colors: { ...theme.colors, background: "transparent" } };
+
 const linking = {
   prefixes: ["dash://"],
   config: {
@@ -67,6 +73,7 @@ const linking = {
       ArtifactStage: "stage",
       Trace: "trace",
       Lab: "lab",
+      BotsPage: "botspage",
     },
   },
 };
@@ -107,9 +114,10 @@ export default function App() {
     void restoreTurboNavigation().then(initial => { if (mounted) setNavigation({ initial }); });
     return () => { mounted = false; };
   }, [hydrated]);
+  const wallpaper = useWallpaperWindow();
 
   useEffect(() => {
-    void hydrate().then(async () => {
+    void Promise.all([hydrateOrbStyle(), hydrate()]).then(async () => {
       if (isDebugActive()) {
         await clearDebugPersistence();
         applyDebugSeed("paired");
@@ -137,15 +145,18 @@ export default function App() {
   if (!hydrated || !fontsLoaded || !navigation) return <View style={styles.splash} />;
 
   return (
-    <GestureHandlerRootView style={styles.root}><DensityProvider><OrbMotionProvider><TileGestureProvider><TileDetailProvider>
+    <GestureHandlerRootView style={wallpaper ? styles.clear : styles.root}><WallpaperTheme.Provider value={wallpaper}>
+      {wallpaper ? <WallpaperBackdrop /> : null}
+      <DensityProvider><OrbMotionProvider><TileGestureProvider><TileDetailProvider>
       {Platform.OS === "web" ? <style>{"input:focus,textarea:focus{outline:none!important}"}</style> : null}
       <SafeAreaProvider>
         <View style={styles.touchRoot} onStartShouldSetResponderCapture={observeTouch}>
+        <PenHoverRoot>
         <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
           <BridgePullProvider>
             <NavigationContainer
               ref={debugNavigationRef}
-              theme={theme}
+              theme={wallpaper ? wallpaperNavigationTheme : theme}
               initialState={navigation.initial}
               onStateChange={saveTurboNavigation}
               linking={Platform.OS === "web" ? linking : undefined}
@@ -158,17 +169,18 @@ export default function App() {
                 // Disable platform-owned transitions; bounded motion lives inside each screen.
                 screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "none" }}
               >
-                <Stack.Screen name="Main" component={MainScreen} />
+                <Stack.Screen name="Main" component={MainScreen} options={wallpaper ? { contentStyle: styles.clear } : undefined} />
                 <Stack.Screen name="Approvals" component={ApprovalsScreen} />
                 <Stack.Screen name="Notices" component={NoticesScreen} />
                 <Stack.Screen name="ArtifactStage" component={ArtifactStageScreen} />
-                <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => route.params?.window ? CHAT_WINDOW : {}} />
+                <Stack.Screen name="Chat" component={ChatScreen} options={({ route }) => route.params?.window ? CHAT_WINDOW : wallpaper ? { contentStyle: styles.clear } : {}} />
                 <Stack.Screen name="OrchestraDetail" component={OrchestraDetailScreen} />
                 <Stack.Screen name="Voice" component={VoiceScreen} options={{ presentation: "fullScreenModal" }} />
                 <Stack.Screen name="Pair" component={PairScreen} />
                 <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: "modal" }} />
                 <Stack.Screen name="Trace" component={TraceScreen} />
                 <Stack.Screen name="Lab" component={LabScreen} />
+                <Stack.Screen name="BotsPage" component={BotsPageScreen} />
                 <Stack.Screen name="Roadmap" component={RoadmapScreen} />
                 <Stack.Screen name="RoadmapProject" component={RoadmapProjectScreen} />
                 <Stack.Screen name="RoadmapTask" component={RoadmapTaskScreen} />
@@ -184,9 +196,10 @@ export default function App() {
           <ServedBuildChip />
           <StatusBar style="light" hidden />
         </KeyboardProvider>
+        </PenHoverRoot>
         </View>
       </SafeAreaProvider>
-    </TileDetailProvider></TileGestureProvider></OrbMotionProvider></DensityProvider></GestureHandlerRootView>
+    </TileDetailProvider></TileGestureProvider></OrbMotionProvider></DensityProvider></WallpaperTheme.Provider></GestureHandlerRootView>
   );
 }
 

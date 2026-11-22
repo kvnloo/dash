@@ -1,11 +1,11 @@
 # Android development build
 
-## DeX WP2 (device spike pending)
+## DeX Dash Pad (device acceptance pending)
 
 The local `dash-dex` Expo module registers `DashDex` and a non-exported
-`DashPadActivity`, using the application's existing ReactHost. `DashPad` is a
-placeholder, not a mirror or annotation implementation. The optional native
-adapter requires both `EXPO_PUBLIC_DASH_TURBO=1` and `EXPO_PUBLIC_DASH_DEX=1`.
+`DashPadActivity`, using the application's existing ReactHost. The phone attaches only a React
+surface; MainActivity retains ownership of the host lifecycle. The optional
+native adapter requires both `EXPO_PUBLIC_DASH_TURBO=1` and `EXPO_PUBLIC_DASH_DEX=1`.
 Expo Go and older APKs report unavailable. Commands reject activity-launch
 failures instead of claiming attachment. Private Samsung confirmations without
 a public desktop display ID cannot move MainActivity.
@@ -20,15 +20,19 @@ the merged-manifest checker and APK class inclusion check require the results.
 
 Explicit web developer simulation:
 `window.__dashDex.simulate({mode: "dual", tv: {w: 1920, h: 1080}})` shows the
-real Dash tree beside the placeholder Pad. Touchpad closes the Pad;
+real Dash tree beside the Pad. In Samsung DeX, launch Dash on the TV desktop,
+open a chat, and select Options → Annotate → Open Dash Pad. The activity opens
+on the phone; one finger draws on the TV and two fingers zoom/pan the same
+chat and its ink. This uses the existing Dash chat on the external display,
+not screen capture, and native annotation keeps its Skia default.
+Close Dash Pad closes the phone activity;
 `simulate({mode: "off"})` restores the ordinary layout without remounting Dash
 or starting another voice root. This is not native availability; web stays
 unchanged until simulation is explicitly called. The army journey includes a
 real chat send after exit.
 
 O15 still requires green CI army evidence for the exact SHA before the native
-build script runs. This WP2 task explicitly authorizes compilation on the build
-host only, not phone installation or testing. Shared-host, multi-resume,
+build script runs. Shared-host, multi-resume,
 display-density and One UI behavior remain unverified on devices. L2 overlays
 are deferred until a failed, owner-authorized L1 spike; no overlay permission,
 MediaProjection, Presentation or native mirror pump is included.

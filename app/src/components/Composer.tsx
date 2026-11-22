@@ -41,6 +41,7 @@ import { colors, fonts, glass, radius, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 import { PressScale } from "./PressScale";
 import { ComposerSuggestions } from "./ComposerSuggestions";
+import { ComposerAura } from "./ComposerAura";
 import { composerMode, type SendMode } from "../lib/composer-mode";
 import { haptic } from "../haptics";
 import type { IncomingShare } from "../lib/incoming-share";
@@ -340,6 +341,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
   const submitOther = () => { haptic.select(); void submitAs(otherMode.mode); };
 
   return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} onUsage={context ? () => { if (isUsageCommand(draftText)) changeText(""); Keyboard.dismiss(); context.showUsage(); } : undefined} />{!editingQueue ? <OvernightNotes conversationId={draftKey} onUse={note => setText(current => current ? `${current}\n${note}` : note)} /> : null}<GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
+    <ComposerAura working={streaming || steerBusy} focused={fieldFocused} text={draftText} />
     {captureOnly ? <View style={styles.modeRow}>
       <Text style={[styles.chipMeta, { flex: 1 }]}>{drafts.length ? "Bedtime saves text only. Remove files to save this thought." : tooLong ? `Shorten your thought to ${MAX_CAPTURE_TEXT_LENGTH} characters to save it.` : "Bedtime · Save for tomorrow"}</Text>
       {canSend ? <PressScale accessibilityRole="button" accessibilityLabel="Send anyway" onPress={() => void submitAs(sendMode.mode, true)} disabled={savingCapture} style={styles.modeToggle}><Text style={styles.chipName}>Send anyway</Text></PressScale> : null}
