@@ -33,10 +33,10 @@ export class NoticeService {
   private readonly deferredPath: string;
   private held: DeferredState = { items: [], dropped: 0 };
   /** onPublish: called after each new notice is stored and broadcast, with the count of live sockets that took it. */
-  constructor(directory: string, private readonly onPublish?: (notice: NoticeMessage, delivered: number) => void) {
+  constructor(directory: string, private readonly onPublish?: (notice: NoticeMessage, delivered: number) => void, file = "notices") {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
-    this.path = join(directory, "notices.json");
-    this.deferredPath = join(directory, "notices-deferred.json");
+    this.path = join(directory, file + ".json");
+    this.deferredPath = join(directory, file + "-deferred.json");
     try {
       const raw: unknown = JSON.parse(readFileSync(this.deferredPath, "utf8"));
       if (!record(raw) || !Array.isArray(raw.items) || !Number.isInteger(raw.dropped) || typeof raw.dropped !== "number" || raw.dropped < 0) throw new Error("Invalid deferred notices");
@@ -140,6 +140,7 @@ export class NoticeService {
 interface NoticePolicyOptions {
   token: string; notices: NoticeService; now?: () => number; file?: string; configFile?: string;
   log?: (entry: unknown) => void;
+  postToChat?: (chat: string, body: string, signal: AbortSignal) => Promise<Response>;
 }
 export function createNoticeHttpHandler(options: NoticePolicyOptions) {
   let windowStart = 0, count = 0;
@@ -201,7 +202,13 @@ export function createNoticeHttpHandler(options: NoticePolicyOptions) {
     catch { return new Response("invalid JSON", { status: 400 }); }
     const input = parseNoticeInput(raw);
     if (!input) return new Response("invalid notice (title 1–80, body 1–600, optional dash:// URL)", { status: 400 });
-    try { return await submit(input, now); }
+    try {
+      if (input.chat !== undefined) {
+        if (!options.postToChat || input.url || input.class || input.not_before || input.postedAt !== undefined) return new Response("invalid chat post", { status: 400 });
+        return await options.postToChat(input.chat.trim(), input.body, request.signal);
+      }
+      return await submit(input, now);
+    }
     catch { return new Response("notice storage unavailable", { status: 503 }); }
   };
 }

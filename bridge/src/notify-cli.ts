@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseNoticeInput, parseServerMessage } from "../../shared/protocol";
 
-export async function notifyCli(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<number> {
+export async function notifyCli(args: string[], env: NodeJS.ProcessEnv = process.env, chat?: string): Promise<number> {
   const [title, body, ...flags] = args;
   const fields: Record<string, string> = {};
   let invalid = false;
@@ -12,7 +12,7 @@ export async function notifyCli(args: string[], env: NodeJS.ProcessEnv = process
     if ((flag !== "--url" && flag !== "--class") || !value || fields[flag.slice(2)] !== undefined) { invalid = true; break; }
     fields[flag.slice(2)] = value;
   }
-  const input = parseNoticeInput({ title, body, ...fields });
+  const input = parseNoticeInput({ title, body, ...fields, chat });
   if (!input || invalid) {
     process.stderr.write('Usage: dash-notify "title" "body" [--url dash://...] [--class critical|decision|report|digest] (title ≤80, body ≤600)\n'); return 2;
   }
@@ -26,6 +26,10 @@ export async function notifyCli(args: string[], env: NodeJS.ProcessEnv = process
       const held: unknown = await response.json();
       if (typeof held !== "object" || held === null || !("held" in held) || held.held !== true || !("releaseAt" in held) || !(held.releaseAt === null || typeof held.releaseAt === "string")) throw new Error("invalid held response");
       process.stdout.write(`held ${held.releaseAt ?? "morning digest"}\n`); return 0;
+    }
+    if (chat && (response.status === 404 || response.status === 409)) {
+      process.stderr.write(response.status === 404 ? "dash-post: no chat has that exact title\n" : "dash-post: title is ambiguous; use a unique exact chat title\n");
+      return 1;
     }
     if (response.status !== 201) { process.stderr.write(`dash-notify: bridge refused notice (HTTP ${response.status})\n`); return 1; }
     const notice = parseServerMessage(await response.json());

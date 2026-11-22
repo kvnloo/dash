@@ -1,3 +1,5 @@
+import { chatPosts } from "../store/chat-posts";
+import { conversationKey } from "../lib/chat-index";
 import { useIsFocused } from "@react-navigation/native";
 import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
@@ -182,12 +184,24 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Older pages (scrolled up) live in memory beside the conversation's own newest window.
   const history = useHistoryPages(conversation);
   const older = history.older;
+  const posts = chatPosts.use(items => items);
   const visibleMessages = useMemo(() => {
     const queued = new Set(conversation ? queuedParts(conversation).flatMap(part => [part.user.id, part.assistant.id]) : []);
     const current = messages.filter(message => !queued.has(message.id));
-    if (!older.length) return current;
-    return mergeOlderHistory(current, older);
-  }, [messages, conversation, older]);
+    const transcript = older.length ? mergeOlderHistory(current, older) : current;
+    if (!conversation?.endpointAddress || conversation.endpointAddress !== settings?.address) return transcript;
+    const key = conversationKey(conversation);
+    const targeted = posts.filter(post => post.endpoint === conversation.endpointAddress && post.chat === key);
+    if (!targeted.length) return transcript;
+    const display = [...transcript];
+    // Insert against the visible timeline, without reordering existing native rows.
+    for (const post of targeted) {
+      const after = display.findLastIndex(row => row.at <= post.postedAt);
+      const id = "chat-post:" + post.id;
+      display.splice(after + 1, 0, { id, turnId: id, seq: 0, at: post.postedAt, role: "assistant", state: "done", text: post.body, agentPost: true });
+    }
+    return display;
+  }, [messages, conversation, older, posts, settings?.address]);
   const visibleRows = useRef(visibleMessages);
   useLayoutEffect(() => { visibleRows.current = visibleMessages; }, [visibleMessages]);
   // A view-only chat is transient: closing it drops it from the phone.

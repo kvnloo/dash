@@ -1,0 +1,10 @@
+#!/usr/bin/env bun
+import { notifyCli } from "../src/notify-cli";
+
+const [chat, body, ...extra] = process.argv.slice(2);
+if (!chat?.trim() || chat.length > 512 || !body?.trim() || body.length > 600 || extra.length) {
+  process.stderr.write('Usage: dash-post "exact chat title" "message" (message ≤600)\n');
+  process.exitCode = 2;
+} else {
+  process.exitCode = await notifyCli(["Agent message", body], process.env, chat);
+}

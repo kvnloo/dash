@@ -116,6 +116,7 @@ interface SocketData {
   principal: BridgePrincipal;
   stopIdentityWatch?: () => void;
   stopNotices?: () => void;
+  stopChatPosts?: () => void;
   stopSecrets?: () => void;
   /** Turn ids this socket is subscribed to. */
   turns: Set<string>;
@@ -799,13 +800,14 @@ const handleHttp = createPairingHttpHandler({
 
 const CREDENTIAL_DIR = process.env.DASH_CREDENTIAL_DIR ?? join(homedir(), ".dash");
 const notices = new NoticeService(CREDENTIAL_DIR, (notice, delivered) => log("notice.published", { id: notice.id, delivered }));
+const chatPosts = new NoticeService(CREDENTIAL_DIR, (post, delivered) => log("chat_post.published", { id: post.id, delivered }), "chat-posts");
 const noticePort = Number(process.env.DASH_NOTICE_PORT ?? (PORT === 0 ? 0 : PORT + 1));
 if (!Number.isInteger(noticePort) || noticePort < 0 || noticePort > 65535) throw new Error("Invalid DASH_NOTICE_PORT");
 if (notices.quarantined) log("notices.quarantined", { file: basename(notices.quarantined) });
 // Secure sudo (#559): `dash-sudo` reaches it only on the loopback listener; the phone answers over /ws.
 const secretBroker = new SecretBroker({ sudo: () => Bun.which("sudo"), account: `${(() => { try { return userInfo().username; } catch { return "user"; } })()}@${HOST_NAME}`, log });
 const noticeServer = tryStartNoticeServer({ token: TOKEN, notices, port: noticePort, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG,
-  extra: createSudoHttpHandler({ token: TOKEN, broker: secretBroker }) }, reason => log("notices.disabled", { reason }));
+  postToChat, extra: createSudoHttpHandler({ token: TOKEN, broker: secretBroker }) }, reason => log("notices.disabled", { reason }));
 const attachments = new AttachmentStore(process.env.DASH_ATTACHMENT_DIR?.trim() || join(CREDENTIAL_DIR, "attachments"));
 const handleFiles = createFilesHttpHandler({
   token: TOKEN,
@@ -858,6 +860,19 @@ function liveChats(): ChatSummary[] {
   }
   if (liveSince.size > 512) for (const key of liveSince.keys()) if (!out.some(row => row.key === key)) liveSince.delete(key);
   return out;
+}
+/** Exact title only; incomplete or ambiguous results must never pick a recipient. */
+async function postToChat(title: string, body: string, signal: AbortSignal): Promise<Response> {
+  const self = { id: SELF.id(), name: HOST_NAME };
+  const hits = await chatIndex.titleSearch({ q: title, qh: title, kinds: [], hosts: [], limit: 100, self }, signal);
+  const matching = new Set([...liveChats(), ...hits.hits.map(hit => hit.chat)]
+    .filter(chat => chat.title.trim() === title)
+    .map(chat => chat.key));
+  if (matching.size > 1 || hits.next) return new Response("ambiguous chat title", { status: 409 });
+  const [chat] = matching;
+  if (!chat) return new Response("chat not found", { status: 404 });
+  const post = chatPosts.publish({ title: "Agent message", chat, body, postedAt: Date.now() });
+  return Response.json(post, { status: 201 });
 }
 const handleChats = createChatsHttpHandler({
   authorize: request => authorize(request, false),
@@ -995,6 +1010,10 @@ const server = Bun.serve<SocketData>({
         if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) { ws.close(1008, "Identity authorization expired"); return; }
         sendTo(ws, notice);
       });
+      if (ws.readyState === WebSocket.OPEN) ws.data.stopChatPosts = chatPosts.subscribe(post => {
+        if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) { ws.close(1008, "Identity authorization expired"); return; }
+        if (post.chat && post.postedAt) sendTo(ws, { type: "chat_post", id: post.id, body: post.body, chat: post.chat, postedAt: post.postedAt });
+      });
       if (ws.readyState === WebSocket.OPEN) ws.data.stopSecrets = secretBroker.subscribe(message => sendTo(ws, message));
     },
     async message(ws, raw) {
@@ -1014,7 +1033,7 @@ const server = Bun.serve<SocketData>({
       }
       switch (message.type) {
         case "notices_clear": {
-          try { notices.clear(); log("notices.cleared", {}); }
+          try { notices.clear(); chatPosts.clear(); log("notices.cleared", {}); }
           catch { log("notices.clear_failed", {}); }
           break;
         }
@@ -1247,6 +1266,7 @@ const server = Bun.serve<SocketData>({
     close(ws) {
       ws.data.stopIdentityWatch?.();
       ws.data.stopNotices?.();
+      ws.data.stopChatPosts?.();
       ws.data.stopSecrets?.();
       if (ws.data.gateSend) gate?.unsubscribe(ws.data.gateSend);
       detachSocket(ws.data.turns, (id) => turns.get(id), ws);
