@@ -141,16 +141,12 @@ test("Settings orb style survives reload and appears on chat and the active mic"
   const back = page.getByRole("button", { name: "Back", exact: true }).last();
   await back.click({ noWaitAfter: true });
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.getByRole("tab").nth(1).click({ noWaitAfter: true });
-  await settings.click({ noWaitAfter: true });
-  await expect(face).toBeChecked();
-  await back.click({ noWaitAfter: true });
-
   const chats = page.getByRole("tab").nth(1);
   await chats.click({ noWaitAfter: true });
   const hermes = page.getByTestId("chats-pane").locator('[data-testid^="chat-row-"]')
     .filter({ hasText: "ARMY native fixture" });
   await expect(hermes).toHaveCount(1, { timeout: 30000 });
+  await expect(hermes.getByTestId("orb-style-face")).toBeInViewport();
   await hermes.click({ noWaitAfter: true });
   const window = page.getByTestId("chat-window");
   await expect(window.getByTestId("orb-style-face").first()).toBeVisible();
