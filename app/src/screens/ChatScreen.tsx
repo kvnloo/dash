@@ -68,14 +68,12 @@ import { queuedParts } from "../lib/pending-queue";
 import { QueuedStack } from "../components/QueuedStack";
 import { colors, glass, radius, space, type } from "../theme";
 import { useLiveThinking } from "../lib/live-thinking";
-import type { OrbState } from "../lib/orb-phase";
-import { useContinuousVoice, useDeviceInsets, voiceWindowOpen } from "../components/ContinuousVoiceRoot";
+import { useContinuousVoice, useDeviceInsets, useLiveVoiceAction, voiceWindowOpen } from "../components/ContinuousVoiceRoot";
 import { VoiceCaptionStrip, VoiceCaptionsToggle } from "../components/VoiceCaptionStrip";
 import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
-import { focusVoiceOrbOverlay } from "../components/VoiceOrbOverlay";
 import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
 import { approvals, actionable } from "../store/approvals";
 import { PromptRail } from "../components/PromptRail";
@@ -305,13 +303,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     (record.phase === "pending" || record.phase === "deciding" || record.turnId === latestAssistant?.turnId)) : [];
   const voice = useContinuousVoice();
   const voiceActive = !["idle", "error"].includes(voice.state.phase);
-  // Broker liveness/another client's call is not evidence that Dash's mic is live.
-  const voiceCall: OrbState | undefined = voiceActive ? { phase: voice.state.phase === "hearing" ? "listening" : voice.state.phase === "error" ? "idle" : voice.state.phase } : undefined;
-  const onVoice = () => {
-    // A running call stays put: focus its hero orb instead of doing nothing.
-    if (voiceActive) { focusVoiceOrbOverlay(); return; }
-    void voice.start();
-  };
+  // A running call stays put: the mic focuses its hero orb instead of doing nothing.
+  const { call: voiceCall, live: onVoice } = useLiveVoiceAction();
 
   const latestCompletedAssistant = messages.findLast((message): message is AssistantMessage => message.role === "assistant" && message.state === "done");
   useEffect(() => {

@@ -15,7 +15,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { microphone } from "../lib/recorded-speech";
 import { ensureMicPermission, permissionRequestInFlight } from "../lib/mic-permission";
 import { createStore } from "../store/createStore";
-import { VoiceOrbOverlay } from "./VoiceOrbOverlay";
+import { focusVoiceOrbOverlay, VoiceOrbOverlay } from "./VoiceOrbOverlay";
+import type { OrbState } from "../lib/orb-phase";
 import { debugUi } from "../debug/ui-store";
 import { attachedHermes, voiceTarget } from "../lib/voice-target";
 import { voicePhase } from "../lib/voice-phase";
@@ -46,6 +47,9 @@ function trustedVoiceBroker(raw: unknown): { origin: string; fake: boolean } {
 }
 
 const initial: VoiceState = { phase: "idle", muted: false, lines: [] };
+/** Android gives a backgrounded app no microphone. A call paused that way resumes, on the same chat, when Dash is back this soon. */
+export const VOICE_RESUME_MS = 10 * 60_000;
+const PAUSED_NOTE = "Mic paused while Dash was in the background. It resumes on this chat when you return.";
 /** True while a full-screen chat window is open: its dock row is then the single home of voice Mute/End. */
 export const voiceWindowOpen = createStore(false);
 const DeviceInsets = createContext<EdgeInsets | null>(null);
@@ -57,6 +61,19 @@ interface VoiceContext { state: VoiceState; start(opts?: { auto?: boolean }): Pr
 const Context = createContext<VoiceContext | null>(null);
 export function useContinuousVoice(): VoiceContext {
   const value = useContext(Context); if (!value) throw new Error("Voice root not mounted"); return value;
+}
+
+/**
+ * The mic's Live mode, wherever the mic is (main bar, attached composer, chat composer): start the call
+ * inside Dash, or bring its orb forward when one is already running. It never navigates to another screen
+ * or opens another app; the voice bar, hero orb and captions are Dash's own call UI.
+ */
+export function useLiveVoiceAction(): { call: OrbState | undefined; live(): void } {
+  const voice = useContinuousVoice();
+  const active = !["idle", "error"].includes(voice.state.phase);
+  // Broker liveness/another client's call is not evidence that Dash's mic is live.
+  const call: OrbState | undefined = active ? { phase: voice.state.phase === "hearing" ? "listening" : voice.state.phase === "error" ? "idle" : voice.state.phase } : undefined;
+  return { call, live: () => { if (active) focusVoiceOrbOverlay(); else void voice.start(); } };
 }
 
 export function ContinuousVoiceRoot({ children }: { children: ReactNode }): React.JSX.Element {
@@ -71,6 +88,8 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const micRelease = useRef(new VoiceMicReleaseGate());
   const desiredMute = useRef(false);
   const autoStarted = useRef(false);
+  /** When an owner-started call was paused by leaving Dash; null when there is nothing to resume. */
+  const pausedAt = useRef<number | null>(null);
   const pendingFinals = useRef(new Set<string>());
   const successfulAnnotation = useRef(false);
   const autoStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -253,6 +272,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     pendingFinals.current.clear();
     successfulAnnotation.current = false;
     epoch.current++; starting.current = false; desiredMute.current = false; suppressAutoBar.current = false;
+    pausedAt.current = null;
     const controller = call.current;
     call.current = null;
     attached.current = null;
@@ -270,14 +290,26 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     else setState(previous => previous.phase === "connecting" ? { ...previous, muted: next } : previous);
   };
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", next => { if (next === "background" && !permissionRequestInFlight()) {
+    const subscription = AppState.addEventListener("change", next => {
+      if (next === "active") {
+        // Back in Dash: an owner call paused by leaving resumes on the chat it was bound to (start() retries
+        // attached.current), without the owner having to find a Start button.
+        const paused = pausedAt.current;
+        pausedAt.current = null;
+        if (paused !== null && Date.now() - paused <= VOICE_RESUME_MS && latest.current.phase === "error" && attached.current) void latest.current.start();
+        return;
+      }
+      if (next !== "background" || permissionRequestInFlight()) return;
+      const owned = !suppressAutoBar.current && !autoStarted.current && (call.current !== null || starting.current);
       epoch.current++; starting.current = false;
       const controller = call.current;
-      void controller?.stop("Mic stopped because Dash left the foreground. Tap Start to resume.");
+      const note = owned ? PAUSED_NOTE : "Mic stopped because Dash left the foreground. Tap Start to resume.";
+      void controller?.stop(note);
       if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
       if (suppressAutoBar.current) annotate.set(s => s.active ? { ...s, voiceNote: "Voice stopped in background" } : s);
-      setState(previous => ["idle", "error"].includes(previous.phase) ? previous : suppressAutoBar.current ? initial : { ...previous, phase: "error", note: "Mic stopped because Dash left the foreground. Tap Start to resume." });
-    } });
+      if (owned && !["idle", "error"].includes(latest.current.phase)) pausedAt.current = Date.now();
+      setState(previous => ["idle", "error"].includes(previous.phase) ? previous : suppressAutoBar.current ? initial : { ...previous, phase: "error", note });
+    });
     return () => {
       epoch.current++; subscription.remove();
       if (autoStopTimer.current !== null) clearTimeout(autoStopTimer.current);

@@ -12,6 +12,7 @@ import { OrbActivity } from "../components/OrbMotion";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { AttachedComposer } from "../components/AttachedComposer";
+import { useLiveVoiceAction } from "../components/ContinuousVoiceRoot";
 import { QuickPin } from "../components/QuickPin";
 import { KeyboardDock } from "../components/KeyboardDock";
 import { AppNav, type AppNavHandle } from "../components/AppNav";
@@ -145,6 +146,8 @@ function chatDraftForResult(item: SearchResult): string | undefined {
 export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
   const screenFocused = useIsFocused();
+  // The main-bar mic's Live mode runs the call here, in Dash's own voice bar and orb: no Voice screen, no other app.
+  const liveVoice = useLiveVoiceAction();
   const [foreground, setForeground] = useState(AppState.currentState === "active");
   useEffect(() => {
     const listener = AppState.addEventListener("change", state => setForeground(state === "active"));
@@ -514,7 +517,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               if (searchQuery !== undefined) setQuery(searchQuery);
               setSearchMode(true);
             }}
-            onVoice={() => navigation.navigate("Voice", { autostart: true })}
+            onVoice={liveVoice.live}
+            voiceCall={liveVoice.call}
             onDetach={() => setActive(null)}
           />
         ) : (
@@ -532,10 +536,9 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               onScope={onScope}
               dock="bottom"
               placeholder={`Message ${harnessName}`}
-              onVoice={() => {
-                // Voice keeps the explicitly attached chat; never retarget via a new feedback chat.
-                navigation.navigate("Voice", { autostart: true });
-              }}
+              // Voice keeps the explicitly attached chat; never retarget via a new feedback chat.
+              onVoice={liveVoice.live}
+              voiceCall={liveVoice.call}
               onSend={(text) => {
                 if (feedbackOn) {
                   haptic.select();
