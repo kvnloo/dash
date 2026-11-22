@@ -59,10 +59,12 @@ export const AppNav = memo(
     {
       navigation: NavigationProp<RootStackParamList>;
       tab: number;
+      /** The dogfood home covers the pager: no workspace dot is current. */
+      home?: boolean;
       onTab?(next: number): void;
       progress?: SharedValue<number>;
     }
-  >(function AppNav({ navigation, tab, onTab, progress: progressProp }, ref) {
+  >(function AppNav({ navigation, tab, home = false, onTab, progress: progressProp }, ref) {
     const thumb = useHandedness();
     const annotationActive = annotate.use(s => s.active);
     const surface = surfaceMode.use(s => s);
@@ -108,7 +110,7 @@ export const AppNav = memo(
       else toMain(navigation, next);
     };
 
-    const active = clampTab(tab);
+    const active = home ? -1 : clampTab(tab);
     const pull = useBridgePullOptional();
     const pullPan = useBridgePullPan();
     const chevronStyle = useAnimatedStyle(() => {
@@ -139,7 +141,7 @@ export const AppNav = memo(
             </View>
           </PressScale>
           <View style={styles.pager} accessibilityLabel="Primary mobile workspace">
-            <Animated.View pointerEvents="none" style={[styles.pillTrack, pillStyle]}>
+            <Animated.View pointerEvents="none" style={[styles.pillTrack, pillStyle, home && styles.pillHidden]}>
               <View style={styles.pill}>
                 <View style={styles.spec} />
                 <View style={styles.shade} />
@@ -292,6 +294,7 @@ const styles = StyleSheet.create({
     height: NAV_PILL_HEIGHT,
     overflow: "visible",
   },
+  pillHidden: { opacity: 0 },
   pill: {
     flex: 1,
     borderRadius: NAV_PILL_RADIUS,

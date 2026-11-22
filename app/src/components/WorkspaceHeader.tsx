@@ -5,6 +5,8 @@ import type { NavigationProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../navigation";
 import { actionable, approvals } from "../store/approvals";
 import { createConversation, store } from "../store/app";
+import { inAppFeedbackEnabled } from "../lib/feedback";
+import { toDogfood } from "../lib/main-nav";
 import { colors, fonts, type } from "../theme";
 import { TAB_LABELS, clampTab } from "./golden-nav";
 import { IconButton } from "./ScreenHeader";
@@ -14,15 +16,17 @@ import { WORKSPACE_ACTION_LABELS, upstreamApprovalAction, workspaceHeadingLabel 
  * The row under the top navigation bar on Main: the current pane's name (the dot pager has
  * no labels), pending approvals, compose and settings. Navigation itself stays in AppNav.
  */
-export function WorkspaceHeader({ navigation, tab, titleOnly = false }: { navigation: NavigationProp<RootStackParamList>; tab: number; titleOnly?: boolean }) {
-  const title = TAB_LABELS[clampTab(tab)];
+export function WorkspaceHeader({ navigation, tab, titleOnly = false, title: override }: { navigation: NavigationProp<RootStackParamList>; tab: number; titleOnly?: boolean; title?: string }) {
+  const title = override ?? TAB_LABELS[clampTab(tab)];
   return <View style={styles.header}>
-    <Text style={styles.title} numberOfLines={1} accessibilityRole="header" accessibilityLabel={workspaceHeadingLabel(tab)}>{title}</Text>
-    {titleOnly ? null : <WorkspaceActions navigation={navigation} />}
+    <Text style={styles.title} numberOfLines={1} accessibilityRole="header" accessibilityLabel={override ? `${override} workspace` : workspaceHeadingLabel(tab)}>{title}</Text>
+    {titleOnly ? null : <WorkspaceActions navigation={navigation} dogfood={override === undefined} />}
   </View>;
 }
 
-export function WorkspaceActions({ navigation }: { navigation: NavigationProp<RootStackParamList> }) {
+/** `dogfood`: offer the way back to the dogfood home (only while in-app feedback is on). */
+export function WorkspaceActions({ navigation, dogfood = true }: { navigation: NavigationProp<RootStackParamList>; dogfood?: boolean }) {
+  const feedbackOn = store.use(s => inAppFeedbackEnabled(s.settings));
   const pending = approvals.use(s => s.items.filter(actionable).length);
   const upstreamAction = upstreamApprovalAction(pending);
   return <View style={styles.actions}>
@@ -36,6 +40,7 @@ export function WorkspaceActions({ navigation }: { navigation: NavigationProp<Ro
         <View style={styles.badge}><Text style={styles.badgeText}>{upstreamAction.badgeText}</Text></View>
       </View>
     </PressScale> : null}
+    {dogfood && feedbackOn ? <IconButton icon="message-circle" label="Dogfood feedback" onPress={() => toDogfood(navigation)} /> : null}
     <IconButton icon="map" label={WORKSPACE_ACTION_LABELS.roadmap} onPress={() => navigation.navigate("Roadmap")} />
     <IconButton icon="activity" label={WORKSPACE_ACTION_LABELS.trace} onPress={() => navigation.navigate("Trace")} />
     <IconButton icon="edit-3" label={WORKSPACE_ACTION_LABELS.newChat} onPress={() => { createConversation(store.get().settings?.harness ?? "omp"); navigation.navigate("Chat"); }} />

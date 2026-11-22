@@ -2,7 +2,8 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { WindowOrigin } from "./lib/chat-window";
 
 export type RootStackParamList = {
-  Main: { tab?: number } | undefined;
+  /** `home`: the dogfood home (self-development loop) over the pager. */
+  Main: { tab?: number; home?: boolean } | undefined;
   /** `window`: opened from the Chats list as a window over the retained workspace (source row rect). */
   Chat: { draft?: string; window?: WindowOrigin } | undefined;
   OrchestraDetail: { orchestraId: string };
