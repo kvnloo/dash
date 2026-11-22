@@ -34,11 +34,15 @@ test('ui-overlay: fixture agent circles an element by id and the mark renders ar
   await expect(circle).toBeVisible();
   await expect(circle).toHaveAttribute('aria-label', 'Agent circle: Annotate here');
   await expect(page.getByTestId('agent-overlay-label')).toHaveText('Annotate here');
-  const ring = await box(circle), target = await box(page.getByTestId('chat-annotate'));
-  expect(ring.x).toBeLessThanOrEqual(target.x);
-  expect(ring.y).toBeLessThanOrEqual(target.y);
-  expect(ring.x + ring.width).toBeGreaterThanOrEqual(target.x + target.width);
-  expect(ring.y + ring.height).toBeGreaterThanOrEqual(target.y + target.height);
+  // Marks re-measure their element every 200 ms, so the ring settles around it if the chat window
+  // is still laying out when the command lands.
+  await expect(async () => {
+    const ring = await box(circle), target = await box(page.getByTestId('chat-annotate'));
+    expect(ring.x).toBeLessThanOrEqual(target.x);
+    expect(ring.y).toBeLessThanOrEqual(target.y);
+    expect(ring.x + ring.width).toBeGreaterThanOrEqual(target.x + target.width);
+    expect(ring.y + ring.height).toBeGreaterThanOrEqual(target.y + target.height);
+  }, 'the ring follows the element and encloses it').toPass({ timeout: 2000 });
   await expect(page.getByTestId('agent-activity-text')).toHaveText('Agent · Circled chat-annotate: Annotate here');
   await expect(page.getByText(/ARMY_UI_RESULT \{"status":"done"/).first()).toBeVisible();
   await page.screenshot({ path: info.outputPath('agent-circle.png') });
@@ -55,10 +59,12 @@ test('ui-overlay: agent arrow, pointer, highlight, drawing, clear, expiry and di
   const arrow = await dashUi(bridge, 'arrow', 'chat-window-close', 'Close it here', '--ttl', '20000');
   expect(arrow.answer).toMatchObject({ status: 'done', detail: 'Arrow at chat-window-close: Close it here' });
   await expect(page.getByTestId('agent-overlay-arrow')).toBeVisible();
-  const tip = await box(page.getByTestId('agent-overlay-arrow-tip')), close = await box(page.getByTestId('chat-window-close'));
-  expect(Math.abs(tip.x + tip.width / 2 - (close.x + close.width / 2)), 'arrow tip is centred on the element').toBeLessThan(2);
-  const gap = Math.min(Math.abs(tip.y - close.y), Math.abs(tip.y - (close.y + close.height)));
-  expect(gap, 'arrow tip ends at the element edge').toBeLessThan(10);
+  await expect(async () => {
+    const tip = await box(page.getByTestId('agent-overlay-arrow-tip')), close = await box(page.getByTestId('chat-window-close'));
+    expect(Math.abs(tip.x + tip.width / 2 - (close.x + close.width / 2)), 'arrow tip is centred on the element').toBeLessThan(2);
+    const gap = Math.min(Math.abs(tip.y - close.y), Math.abs(tip.y - (close.y + close.height)));
+    expect(gap, 'arrow tip ends at the element edge').toBeLessThan(10);
+  }, 'the arrow follows the element').toPass({ timeout: 2000 });
 
   const point = await dashUi(bridge, 'point', '0.5,0.5', 'Middle', '--ttl', '20000');
   expect(point.answer.status).toBe('done');
@@ -67,9 +73,11 @@ test('ui-overlay: agent arrow, pointer, highlight, drawing, clear, expiry and di
   expect(Math.abs(dot.y + dot.height / 2 - 422)).toBeLessThan(2);
 
   expect((await dashUi(bridge, 'highlight', 'chat-annotate', '--ttl', '20000')).answer.status).toBe('done');
-  const outline = await box(page.getByTestId('agent-overlay-highlight')), annotate = await box(page.getByTestId('chat-annotate'));
-  expect(outline.x).toBeLessThanOrEqual(annotate.x);
-  expect(outline.x + outline.width).toBeGreaterThanOrEqual(annotate.x + annotate.width);
+  await expect(async () => {
+    const outline = await box(page.getByTestId('agent-overlay-highlight')), annotate = await box(page.getByTestId('chat-annotate'));
+    expect(outline.x).toBeLessThanOrEqual(annotate.x);
+    expect(outline.x + outline.width).toBeGreaterThanOrEqual(annotate.x + annotate.width);
+  }, 'the highlight follows the element').toPass({ timeout: 2000 });
 
   expect((await dashUi(bridge, 'draw', '0.1,0.3 0.5,0.35 0.9,0.3', '--color', 'cream', '--ttl', '20000')).answer.status).toBe('done');
   await expect(page.getByTestId('agent-overlay-draw')).toBeVisible();
