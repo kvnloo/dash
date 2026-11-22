@@ -62,7 +62,7 @@ export function NowTestingCard() {
 
 const styles = StyleSheet.create({
   wrap: { position: "absolute", left: space.md, right: space.md, zIndex: 50, elevation: 50 },
-  card: { backgroundColor: glass.fillRaised, borderColor: colors.gold, borderWidth: 1, borderRadius: radius.md, padding: space.md, gap: space.xs },
+  card: { backgroundColor: colors.bg, borderColor: colors.gold, borderWidth: 1, borderRadius: radius.md, padding: space.md, gap: space.xs },
   kicker: { ...type.label, color: colors.gold },
   feature: { ...type.heading, color: colors.text },
   steps: { ...type.small, color: colors.textMuted },
