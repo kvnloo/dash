@@ -1,0 +1,78 @@
+# Dash / Glide ask audit (DA-081..095, GL-104..108)
+
+Audited 2026-11-22 against kvnloo/dash `origin/staging` @ 1089f54a (main @ c277c779; every Dash commit cited below is on both) and kvnloo/glide `origin/main` @ 19074c59. Sibling repos read: kvnloo/aodl @ 636f388, kvnloo/blueprint (feature branches), kvnloo/elemental-ui @ 3130a17, kvnloo/t3code @ 16b1d929, kvnloo/oh-my-pi @ 6f03614d, kvnloo/z0intelligence @ 1e28daa. Issue/PR numbers come from the public REST API (742 Dash, 397 Glide items).
+
+Verdicts: DONE = code on the integration branch meets the ask (a render/device check may still be listed). PARTIAL = some of it exists. MISSING = nothing that meets it. SUPERSEDED = a later decision replaced it.
+
+| row | verdict | evidence | done_check | size | build unit |
+|---|---|---|---|---|---|
+| DA-081 | SUPERSEDED | First built in d289812f (2026-09-09): `app/src/theme.ts` headed "Liquid-glass overlays — dark Grok palette, Zero-style refraction edge", bg `#000000`, plus `GlassSurface.tsx` (expo-blur). Replaced on 2026-10-20 by 9ec1d101 "port Living Night tokens" (`theme.ts:1-2` zerOS ui-foundation tokens, bg `#0c0c0a`, gold accent). That is the AODL language DA-084 asks for. The ledger's DF-113 ("black/gold liquid-glass", implemented) keeps it. Drift: `DESIGN.md:5-35` frontmatter still lists the old Grok palette (`bg #000000`, `surface #121212`). | `DESIGN.md` frontmatter colours equal the `theme.ts` night palette (a script diffs them, exit 0). If Kevin wants pure `#000` back, that's a separate decision. | S | BU-D1 |
+| DA-082 | MISSING | The bridge has no t3code transport. Its harnesses are omp/codex/grok/claude/hermes/pi/fx (`bridge/src/harnesses.ts:132-394`). "t3code" appears only in design research (`docs/design/ai-ui-patterns/catalog.json:39`). Reference: the public MIT kvnloo/t3code fork, `apps/mobile`, connects with `${server}/ws?orchestrationProtocol=2&wsTicket=…` (`apps/mobile/scripts/measure-renders.mts:167`, `packages/contracts/src/environment.ts:13`). | An army journey with a t3code server fixture: Dash lists its threads in Chats and opens one with its transcript. A `features.json` entry is added. | M | BU-D3 |
+| DA-083 | PARTIAL (Kevin) | Already public: `api.github.com/repos/kvnloo/dash` returns 200 with `"visibility":"public"`. gitleaks 8.21.2 over `--all` (2144 commits) found 44 hits, and all 44 are false positives: redaction-test fixtures (`bridge/src/chat-index/*.test.ts`, `agentsview-sessions.test.ts`, `shared/tool-format.test.ts`), sha256 `source_key`s in `spec/requirements.json`, a pin hash in `vendor/ephemeral-ui/shared-pin.json`, and a Pencil `fileToken` UUID. So there are 0 real secrets. Not secrets, but identifying data: `origin/main` history still holds real tailnet 100.x addresses, a real tailnet MagicDNS suffix (14 commits, first 01450ece), home-directory paths, and a personal author email on 176 commits. HEAD itself is scrubbed (100.64.0.x placeholders). | `gitleaks git --log-opts=--all` exits 0 with a committed `.gitleaksignore` holding the 44 triaged fingerprints, and CI runs gitleaks. Kevin decides whether to rewrite history; that needs a force-push. | S | BU-D7 |
+| DA-084 | DONE | `app/src/catalog/encodings/visual.json` is byte-identical to aodl `encodings/visual.json` (sha256 7be00b86…f740 for both). It is read by `app/src/catalog/visual.ts:9` (avatars, Orchestra; DF-051 implemented). All 11 tokens in aodl `language/src/theme.css` (ink 1-4, page `#0c0c0a`, hair, gold oklch(0.80 0.075 80), green, Cormorant and Hanken fonts) appear verbatim in `app/src/theme.ts`. Gap: values are copied, not imported, and nothing checks drift. That fix is in BU-D1. | (met) diff of the visual.json sha256 values is 0, and the token script is all True. Render check is under Needs device. | — | (BU-D1 adds the guard) |
+| DA-085 | PARTIAL | You can start chats with the 7 local CLI harnesses (`harnesses.ts:132-394`, `components/HarnessPicker.tsx`, bridge sheet "Harnesses on <host>"). There is no Cursor cloud harness: `bridge/src/roster.ts:376` says "Unknown harness ids (including Cursor cloud) return []". Deployed bots (Hermes gateway profiles, GrokBot) are discovered read-only (`bridge/src/bots.ts:1-11` "all read-only"). Dash can't spawn a bot. | An army journey where the New-agent sheet lists every catalog harness plus Cursor cloud plus bot targets. Spawning a Hermes profile bot and a Cursor cloud agent (fixture API) produces sessions in Chats. | L | BU-D2 |
+| DA-086 | MISSING | Dash has no personal-model screen (no `sft-svlm` or "personal model" in app/bridge). `kvnloo/sft-svlm` is not public: `git ls-remote` fails, and api.github.com returns 404. The thesis moved into kvnloo/z0intelligence (`ROADMAP.md:359` "Carry forward the central sft-svlm thesis", `docs/RESEARCH.md:21`). | A Dash "Personal model" screen reads data sources and training status from the chosen service's HTTP API (fixture in army). An army journey asserts sources and status render. | L | BU-D8 (needs Kevin: which service) |
+| DA-087 | MISSING | No Dash landing/waitlist issue among the 742 issues/PRs. No landing repo: `kvnloo/dash-landing`, `dash-site`, `dash-web` and `landing` are all absent or private. Reference only: Glide has a landing page (glide#373, glide#396). | A kvnloo/dash issue tagging @cursor exists, and the landing repo is deployed (curl 200). Its waitlist form stores a test email (API 2xx and a row exists). | M | BU-D6 (needs GitHub write) |
+| DA-088 | MISSING | Dash workflows (`.github/workflows/*`) have no `issues: opened` triage. `labeler.yml` labels PRs only, and 25 open issues have no labels. Reference: oh-my-pi `python/robomp` (MIT, self-hosted FastAPI and `omp --mode rpc`, labels plus comment on `issues.opened`, `ROBOMP_REPO_ALLOWLIST`). | A test issue on kvnloo/dash gets a triage label and a comment within 5 min. The robomp `/events` row shows `done`. | M | BU-D6 (needs host and PAT) |
+| DA-089 | DONE (code) | 62553600 (2026-10-25) moved transcripts out of AsyncStorage into files (`app/src/store/conversation-files.native.ts:6-7` `dash-conversations-v2/`, `dash-history-v1/`). The legacy-row read is inside `try … catch { persistenceFailure() }` (`app/src/store/app.ts:124-167`), so an oversize legacy row no longer rejects uncaught. Contract in `docs/cache-storage.md:13-25`. PR #414 merged 2026-10-27. Note: `lib/storage-row-budget.ts` has no importers (dead), and issue #372 is still open. | Under Needs device: 5 cold launches, logcat shows no "Row too big". | — | — |
+| DA-090 | PARTIAL | Done for Dash. `MOTION.md` (166998f3, on main) names the oneshotprompts.com motion techniques (`MOTION.md:7`) and maps them to tokens. `app/src/motion.ts` is imported by 24 app files. Missing: "all the other z0 apps". kvnloo/glide `main` has no MOTION.md and doesn't reference it. Dash issue #533 is still open. | Glide (and any other z0 app) adopts the MOTION.md token table with a check that its timing constants equal Dash's (script exit 0). Dash #533 is closed citing 166998f3. | S | BU-G5 |
+| DA-091 | DONE (code) | 8b9c5359 / PR #469 (merged 2026-10-28) added `tern/roadmap/` (`main.tsx:1-10`, run in Tern with `tern split @focused right -- bun tern/roadmap/main.tsx`). It uses `@stencil-hq/tern`, the Tern Surface Protocol. `styles.ts` copies the Living Night tokens. Issue #575 is closed. I ran it outside Tern on a 2-item fixture and it rendered the text view (output in REPORT). | Under Needs device/macOS: a screenshot of the split pane in Tern. | — | — |
+| DA-092 | PARTIAL | `app/src/screens/RoadmapScreen.tsx` reads `pm/events.jsonl` from the repos (`bridge/src/pm-http.ts:106`). "Running now" rows open `RoadmapTask` (`:71`). A project screen filters tasks by feature (`:101-133`, testIDs `pm-feature-*`). Army `e2e/mbp-army/roadmap.spec.ts:35-67` covers it. Missing (issue #576, open): a running task opens only a facts page and doesn't lead to its live chat/session. | An army journey taps a running task and lands on its live chat (session id matches the pm task's session). The feature filter still passes in roadmap.spec. | S | BU-D5 |
+| DA-093 | DONE (code) | 236c8981 "compact host info sheet, provenance inside it, session id copyable" (fixes #526, closed) and 1d59c937 (host hardware stats, merged with 2012d4c4). Army specs `e2e/mbp-army/host-sheet.spec.ts` and `host-stats.spec.ts`. All on main. | Under Needs device: an S25 screenshot of the sheet next to attachment 25753.png. | — | — |
+| DA-094 | PARTIAL | Staging has native DeX detection behind flags (`app/src/lib/dex.native.ts:14` `TURBO && EXPO_PUBLIC_DASH_DEX==="1"`). It also has the TV and Pad simulation (`components/dex/DexSimulation.tsx`, `DashPad.tsx`) and army `dex-detection.spec.ts`. The multi-pane desk dashboard (PR #613, 980dda56 and merge ebc53030) only landed on `integrate/turbo-lane-20261028` and `integ/rc3-roadmap-resume-20261027`. It is not on staging or main. #646/#645/#703 are open. Issue #554 is open. | On staging, the army at 1200x780 shows the left rail, Chats column and side panels (desk-mode spec from #613 ported), and the native S25 DeX screenshot shows the same. | M | BU-D4 |
+| DA-095 | MISSING | Dash has no blueprint wallpaper and no elemental-ui components. The blueprint "living wallpaper" exists only on blueprint feature branches (`feat/living-wallpaper`, `feat/wallpaper-selfheal-8k-inspect` 2817939: `website/src/components/wallpaper/LivingWallpaper.tsx`, `lib/wallpaper/*`). kvnloo/elemental-ui is public (materials, PBR, components docs). Dash only has branch `notice/elemental-ui` (a NOTICE line, e2442f2c). Related but different: PR #706 (DA-049, open) puts the Android system wallpaper behind chats. | In themed mode, army shows the blueprint living wallpaper layer and elemental-ui buttons (testIDs). An S25 screenshot is listed under Needs device. | M | BU-D4 |
+| GL-104 | MISSING | Glide `main` has no gigapixel, deep-zoom, OpenSeadragon or DZI viewer (the only hits are vendored ephemeral-ui catalog strings). Reusable reference: blueprint 2817939 "Inspect 8K deep zoom" (`website/src/lib/wallpaper/inspection.ts`, `openseadragon.d.ts`, `scene.dzi`). | `glide` opens a ≥1 gigapixel DZI or tiled image in a pane. A journey zooms 3 levels and pans with every tile request 200 and no full-image decode. | M | BU-G1 |
+| GL-105 | PARTIAL | Orphan branch `pr-films` (0ddcb949, 2026-11-03) holds 43 fframes demo films ("Demo films for this fork's pull requests, made with fframes"). Glide has 0 open PRs today. Of the 10 open issues, only #346 links fframes, and #53/#55/#306/#278/#209/#107/#56/#54 have no film. | A script lists every open glide PR and feature issue. Each body links a `pr-films` (or fframestudio) video, and the script exits 0. | M | BU-G4 |
+| GL-106 | PARTIAL | `/fleet factory` and bare `/factory` fallback (glide#313, #325, #307 merged) draw a factory graph card (`glide/fleet.py:173,408-460`). Its nodes are the content factory's brain, lanes and cards from an ops snapshot ("Snapshot last run"), not the live running agents. Nothing ports Dash's Orchestra graph (`app/src/components/OrchestraGraph.tsx`). | A Glide pane shows a live graph of running agents (sessions and subagents from the gateway). A journey starts a subagent, sees a node appear within 2 s, and sees it go done. Tern screenshot under Needs device. | M | BU-G2 |
+| GL-107 | DONE (code) | glide#338 / f76d0e5b (2026-11-14). `/glide focus clean` and the block card's "Clean screen" button clear the pane to the library thinking orb in the ring timer, over glass. The orb pulses, and its ink moves along the palette ramp as the agent gets busier (`frontend/src/voice/cleanFocus.tsx:1-5`). | Under Needs device/macOS: a Tern capture of the clean view. | — | — |
+| GL-108 | MISSING | `tool.progress` gateway events are consumed (`frontend/src/gateway/coverage.ts:42`, `HERMES_TERN_TOOL_PROGRESS`) and render as transcript rows and the working line (`frontend/src/turn/activity.ts`). No turn or tool code imports the eui card host (`frontend/src/eui/cards.ts`), so there's no live ephemeral-ui progress card. glide#326 (agent widgets) is open. | During a replayed turn, a live eui card (for example a file tree of edited files) updates per `tool.progress` and settles at turn end. A journey uses fixture `turn-tools.jsonl`. | M | BU-G3 |
+
+## Build units (ready to queue)
+
+Each unit is one lane brief. Base: kvnloo/dash `staging` or kvnloo/glide `main`. Prove each with the repo's own suite (Dash: tester army, `bun run test`).
+
+1. BU-D1 dash-design-tokens: rows DA-081, DA-084 (guard). S.
+   - Rewrite the `DESIGN.md` frontmatter colours to the `theme.ts` night palette.
+   - Add `scripts/check-aodl-tokens` that compares `encodings/visual.json` sha256 and the `theme.css` tokens with a pinned aodl revision. Wire it into CI.
+   - done_check: the script exits 0, and a deliberate one-token edit makes it exit non-zero.
+2. BU-D2 dash-spawn-every-harness: row DA-085. L.
+   - Add a Cursor cloud agent harness (API adapter, list and start).
+   - Add bot targets (Hermes gateway profile, GrokBot) to a New-agent sheet.
+   - done_check: army journey "new-agent-every-harness". Sessions from a Hermes bot and a Cursor cloud fixture show up in Chats.
+3. BU-D3 dash-t3code-transport: row DA-082. M.
+   - Add a bridge adapter for a t3code server's `/ws` (orchestration protocol 2, ws ticket). Its threads show in Chats.
+   - done_check: an army journey with a t3code fixture server lists and opens a thread.
+4. BU-D4 dash-dex-and-themed: rows DA-094, DA-095. M.
+   - Port #613 desk mode onto staging.
+   - Add a themed mode with the blueprint living wallpaper and elemental-ui buttons.
+   - done_check: army desk-mode spec (1200x780) passes, plus a themed-mode spec with testIDs. S25 DeX and themed screenshots under Needs device.
+5. BU-D5 dash-roadmap-task-links: row DA-092. S.
+   - A running pm task links to its live chat/session.
+   - done_check: `roadmap.spec.ts` gets a step "tap running task opens its chat", and it passes.
+6. BU-D6 dash-github-ops: rows DA-087, DA-088. M. Needs GitHub write or a host (tek/Kevin).
+   - File the landing issue (@cursor) and create the landing repo with waitlist.
+   - Deploy robomp for kvnloo/dash.
+   - done_check: landing curl 200 and a test email is stored. A test issue is labelled and commented within 5 min.
+7. BU-D7 dash-secret-hygiene: row DA-083. S.
+   - Commit `.gitleaksignore` with the 44 triaged fingerprints and add a gitleaks CI job.
+   - Kevin decides on rewriting history.
+   - done_check: `gitleaks git --log-opts=--all` exits 0.
+8. BU-D8 dash-personal-model: row DA-086. L. Blocked until Kevin names the service (sft-svlm is private, z0intelligence is public).
+   - Add a Personal-model screen with data sources and training status.
+   - done_check: an army journey against a fixture service.
+9. BU-G1 glide-gigapixel-viewer: row GL-104. M.
+   - Add a deep-zoom pane (DZI/IIIF tiles). Blueprint's inspection code is the reference.
+   - done_check: a journey zooms and pans a ≥1 GP image.
+10. BU-G2 glide-agent-graph: row GL-106. M.
+    - Add a live running-agents graph card to the factory pane.
+    - done_check: a journey sees a subagent node appear and finish.
+11. BU-G3 glide-tool-progress-eui: row GL-108. M.
+    - Render `tool.progress` as a live eui card.
+    - done_check: a journey replays `turn-tools.jsonl` and the card updates, then settles.
+12. BU-G4 glide-feature-films: row GL-105. M.
+    - Record fframes films for each open feature issue and PR, and link them.
+    - done_check: the link-audit script exits 0.
+13. BU-G5 z0-motion-adoption: row DA-090. S.
+    - Adopt the MOTION.md tokens in Glide (and the other z0 apps), with an equality check against Dash.
+    - Close dash#533.
+    - done_check: the check exits 0.
