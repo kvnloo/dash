@@ -81,7 +81,7 @@ The status counts were taken at the commit this map was written on. Maintain the
 - [Slash commands and @ mentions](./slash-and-mentions.md): UNCOVERED
 - [Attachments](./attachments.md): COVERED
 - [Mic: dictation and Live voice](./dictation-mic.md): UNCOVERED
-- [Composer chips and bedtime capture gate](./composer-chips-and-capture.md): UNCOVERED
+- [Composer chips and bedtime capture gate](./composer-chips-and-capture.md): PARTIALLY COVERED (bedtime capture)
 
 ### Harnesses and sessions
 

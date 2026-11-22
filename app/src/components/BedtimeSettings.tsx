@@ -31,7 +31,7 @@ export function BedtimeSettings() {
   return <View style={styles.block}>
     <Text style={styles.body}>Bedtime capture</Text>
     <Text style={styles.note}>Save text on this device instead of sending between bedtime and wake time. Uses your device clock; saved thoughts never send automatically.</Text>
-    <PressScale accessibilityRole="switch" accessibilityLabel="Bedtime capture only" accessibilityState={{ checked: schedule.enabled }} disabled={busy} onPress={() => void save(!schedule.enabled, false)} style={styles.hit}>
+    <PressScale accessibilityRole="switch" accessibilityLabel="Bedtime capture only" accessibilityState={{ checked: schedule.enabled }} aria-checked={schedule.enabled} disabled={busy} onPress={() => void save(!schedule.enabled, false)} style={styles.hit}>
       <Text style={styles.action}>{schedule.enabled ? "On" : "Off"} · {schedule.bedtime}–{schedule.wake}</Text>
     </PressScale>
     <View style={styles.row}>

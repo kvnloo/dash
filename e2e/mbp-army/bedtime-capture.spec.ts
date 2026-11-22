@@ -3,6 +3,9 @@ import { join } from 'node:path';
 import { test, expect, openChat, chatRow, composer, pair } from './fixtures';
 
 test.use({ timezoneId: 'UTC' });
+test.afterEach(async ({ page }, info) => {
+ if (!page.isClosed()) await page.screenshot({ path: info.outputPath('final.png') });
+});
 test('bedtime saves the chat draft locally across reload until the owner sends it after wake', async ({ page, bridge }) => {
  const evening = new Date();
  evening.setUTCHours(21, 59, 0, 0);
