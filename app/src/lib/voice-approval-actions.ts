@@ -48,9 +48,12 @@ export function actOnVoiceApproval(approval: LiveApproval, action: SpokenApprova
 }
 
 /** Spoken approval command while one is pending: consumed here, never sent to the agent. */
-export function interceptSpokenApproval(transcript: string): string | null {
+export function interceptSpokenApproval(transcript: string): { line: string; conversationId?: string } | null {
   const action = spokenApproval(transcript);
   if (!action) return null;
   const approval = currentVoiceApproval();
-  return approval ? actOnVoiceApproval(approval, action) : null;
+  if (!approval) return null;
+  const line = actOnVoiceApproval(approval, action);
+  if (!line) return null;
+  return { line, conversationId: approval.kind === "permission" ? approval.record.conversationId : undefined };
 }

@@ -53,6 +53,17 @@ unsafe or unprovisioned credentials leave the peer undiscovered. Native peer ros
 remain view-only: existing archive SSH routing is unchanged. No credential provisioning,
 live service or device changes are part of this journey.
 
+## Host restart and z0bridge host add (DA-022, #5, #79, #563)
+
+`host-restart.spec.ts` renders and installs `scripts/restart/systemd/dash-bridge.service` with a
+scratch HOME and recording `systemctl`/`loginctl` stand-ins (no real units are installed), and kills a
+real bridge with SIGKILL, then restarts it on its port the way a supervisor would. The paired web app
+reconnects and sends with no user action. The z0bridge journey shares one fixture authority
+(`fixture-z0bridge.ts`) between bridges. groot holds a `dash:chat` enrollment
+(`bridgeOptions.peerIdentity`) and no `peer-roster-tokens.json`. A host on another authority refuses
+groot's minted token. After that host is enrolled with the same authority on the same port, its chats
+appear with no pairing on it. Real reboots and the phone are device checks (`docs/host-restart.md`).
+
 ## OpenUI / GenUI native reply journey
 
 `openui-native.spec.ts` uses `bridgeOptions.generatedUI` in `fixtures.ts` to enable
