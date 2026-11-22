@@ -66,13 +66,20 @@ test.describe(`restored OMP panes share one native session${differentCwd?' acros
   await expect(composer(page)).toBeEditable();
   await send(page,'before restored pane closes');
   await expect(page.getByText(/ARMY_REPLY: before restored pane closes/).filter({visible:true}).first()).toBeVisible({timeout:20000});
+  // The newest roster pane may be either process. Close the pane that actually
+  // served the first turn, rather than treating the fixture's names as sort order.
+  const firstRoute=/ws\.chat .* harness=omp .* profileId=(omp:tern-70000[12]) /.exec(bridge.logs())?.[1];
+  const serving=panes.find(pane=>pane.id===firstRoute);
+  const survivor=panes.find(pane=>pane.id!==firstRoute);
+  if(!serving||!survivor)throw Error('Missing serving or surviving OMP pane');
+  const closesSecondary=serving.id==='omp:tern-700002';
   const refreshed=page.waitForResponse(async response=>{
    if(response.url()!==`http://127.0.0.1:${bridge.port}/roster`||response.status()!==200)return false;
    const body=await response.text();
-   return body.includes('omp:tern-700002')&&!body.includes('omp:tern-700001');
+   return body.includes(survivor.id)&&!body.includes(serving.id);
   },{timeout:45000});
-  await writeFile(join(bridge.dir,'.omp','agent','army-holder-primary.stop'),'stop\n');
-  await expect.poll(roster,{timeout:20000}).toEqual(['omp:tern-700002']);
+  await writeFile(join(bridge.dir,'.omp','agent',closesSecondary?'army-holder-secondary.stop':'army-holder-primary.stop'),'stop\n');
+  await expect.poll(roster,{timeout:20000}).toEqual([survivor.id]);
   await (await refreshed).finished();
   await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
   await expect(page.getByText(/ARMY_REPLY: before restored pane closes/).filter({visible:true}).first()).toBeVisible();
@@ -85,7 +92,7 @@ test.describe(`restored OMP panes share one native session${differentCwd?' acros
   const calls=(await readFile(join(bridge.dir,'army-acp-calls.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line));
   expect(calls.map(call=>call.method)).toEqual(['session/load','session/load']);
   expect(calls.map(call=>call.sessionId)).toEqual(['army-fixture-session','army-fixture-session']);
-  expect(calls.map(call=>call.cwd)).toEqual([primary?.cwd,secondary?.cwd]);
+  expect(calls.map(call=>call.cwd)).toEqual([serving.cwd,survivor.cwd]);
  });
 });
 }

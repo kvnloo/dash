@@ -60,10 +60,16 @@ test('Next up opens the exact completed background reply without sending and pre
   const aRow = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: 'Earlier attention history 0' });
   await aRow.click({ noWaitAfter: true });
   await expect(page.getByTestId('chat-window')).toBeVisible();
-  const viewport = await page.getByTestId('transcript-viewport').boundingBox();
-  if (!viewport) throw Error('No transcript viewport');
-  await page.mouse.move(viewport.x + viewport.width / 2, viewport.y + viewport.height / 2);
-  await page.mouse.wheel(0, -10000);
+  // Navigate to the earlier turn through the prompt rail. A wheel sent before
+  // the virtual list has laid out any scrollable content can be dropped.
+  const rail = page.getByRole('slider', { name: 'Prompt navigator', exact: true });
+  await expect(rail.getByTestId('rail-tick')).toHaveCount(9);
+  const bounds = await rail.boundingBox();
+  if (!bounds) throw Error('No prompt navigator bounds');
+  await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + 1);
+  await expect(page.getByLabel('Turn preview', { exact: true })).toContainText('Earlier attention history 0');
+  await page.getByRole('button', { name: 'Jump', exact: true }).click();
+  await page.getByRole('button', { name: 'Close turn preview', exact: true }).click();
   await expect(page.getByTestId('transcript-viewport').getByText('Earlier attention history 0', { exact: true })).toBeInViewport();
   await writeFile(join(bridge.dir, 'army-release'), '');
   await expect.poll(() => turnEvents(bridge.dir, 'end'), { timeout: 30_000 }).toBe(9);
@@ -104,6 +110,12 @@ test('Next up Later survives reload, Skip dismisses only one completion, and a n
   await expect(page.getByTestId('chat-window')).toBeVisible();
   await send(page, 'ARMY_HOLD first background completion');
   await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
+  // Release and observe the older completion before starting the newer one.
+  // A single release for two active agents does not define completion order.
+  await toChats(page);
+  await writeFile(join(bridge.dir, 'army-release'), '');
+  await expectReadReplyFor(page, firstChatTitle);
+  await unlink(join(bridge.dir, 'army-release'));
   await newChat(page);
   await send(page, 'ARMY_HOLD second background completion');
   await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
