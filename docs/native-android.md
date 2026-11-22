@@ -33,6 +33,48 @@ display-density and One UI behavior remain unverified on devices. L2 overlays
 are deferred until a failed, owner-authorized L1 spike; no overlay permission,
 MediaProjection, Presentation or native mirror pump is included.
 
+## DeX desk mode (#554)
+
+Desk mode is the multi-pane dashboard Dash shows in Samsung DeX or any wide
+window (`app/src/components/desk/`, decision in `app/src/lib/desk.ts`):
+left rail (tablist, Ctrl+1..9), Chats column, the stack navigator as the
+centre pane (Orchestra graph, or the open chat), and side panels for Needs
+you, Hosts (live `/hosts/stats` plus 24 h `/hosts/utilization`), the k3s
+phone queue (`/phones/queue`, read by the bridge from `DASH_PHONE_QUEUE_URL`),
+workers, traces and the build chip. Columns resize by dragging their edge,
+panels collapse from their header; both persist in AsyncStorage
+(`dash.desk.v1`). Ctrl+K opens the quick switch; right-click on a chat row
+opens the long-press menu. The phone layout is unchanged below the threshold.
+
+Decision order: `?desk=on|off|auto` (web, per page load) > Settings "Desk
+layout" > auto. Auto turns on at a root width >= 1100 dp, or >= 960 dp with
+a desktop signal (DeX mode from `DashDex`, or a native mouse/touchpad).
+
+Targets: the S25 Ultra (One UI 9, Android 17) is the primary DeX device, the
+S22+ (One UI 8) second. One UI 9 has DeX, but built into the Samsung launcher
+(`com.honeyspace.dexservice`, Wireless DeX tile, `dex_policy` service) on top
+of Android desktop windowing; the standalone `desktopmode.uiservice` /
+`desktoplauncher` packages are gone and `getSystemService("desktopmode")` is
+absent on both phones (read-only adb, 2026-10-28). So detection
+(`DexDetector.kt`, no Pad opt-in needed) works from the window/display side:
+MainActivity on a non-default display, desk `uiMode` on external displays or
+the activity, Samsung's display category, a freeform window smaller than its
+display on a display >= 600 dp (desktop windowing), a public external
+presentation display that is on, mouse/touchpad presence and `screenWidthDp`.
+The Samsung paths (`semDesktopModeEnabled`, `desktopmode`, Knox broadcast) are
+optional, guarded fallbacks. The freeform/external signals set `desktop` /
+`desktopSource` only: they lower the desk threshold and never change `mode`,
+so they cannot open the Pad or move a window. The Build panel shows the live
+decision (`Desk <reason> · <width> wide · DeX signal <source>`).
+`with-dex.js` adds `com.samsung.android.keepalive.density`,
+`com.sec.android.support.multiwindow`, keyboard/navigation/screenSize
+config changes and a freeform `<layout>` (default 1280x800 dp, min 360x480).
+These native changes only reach a phone in a NEW APK (O15 receipt first);
+JS-only desk mode works in the existing APK by width alone. Keyboard
+shortcuts are web-only for now: React Native has no global hardware-key
+hook, so native Ctrl+K / Ctrl+N need a key-event bridge in `DashDex`
+(not built). Native desk mode is NOT TESTED on a device.
+
 Dash's installed Android package is `app.dash.mobile`. Expo Go and web still run, but do not register Dash as a share destination or enable native notifications.
 
 ## Build on the MBP
