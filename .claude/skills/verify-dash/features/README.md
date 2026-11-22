@@ -69,6 +69,7 @@ The status counts were taken at the commit this map was written on. Maintain the
 - [Identity badge and panel](./identity-badge.md): COVERED
 - [Target switcher](./target-switcher.md): UNCOVERED
 - [Context gauge](./context-gauge.md): COVERED
+- [S Pen hover](./spen-hover.md): COVERED
 
 ### Composer
 
