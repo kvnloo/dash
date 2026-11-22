@@ -46,6 +46,9 @@ export interface VoiceIO {
   captureReleased?(): void;
   /** Newest user/agent text for the live caption strip, partial while it streams (DA-056). */
   caption?(role: "user" | "assistant", text: string, final: boolean): void;
+  /** A spoken approval command for a pending Needs OK/sudo (DA-058). Returns the confirmation line
+   * when it was consumed; the utterance is then never dispatched to the agent. */
+  intercept?(text: string): string | null;
 }
 export function object(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 export const realWords = (text: string): boolean => /[\p{L}\p{N}]{2}/u.test(text) && !/^\s*(\[.*\]|\(.*\)|[.!?…]+)\s*$/.test(text);
@@ -277,6 +280,13 @@ export class ContinuousVoice {
         this.floor(this.response ? "assistant" : "quiet"); return;
       }
       this.interrupt();
+      const handled = this.io.intercept?.(text);
+      if (handled) {
+        this.io.caption?.("assistant", handled, true);
+        this.update({ phase: "listening", lines: [...this.line("user", text), { role: "assistant" as const, text: handled }].slice(-8) });
+        this.floor("quiet");
+        return;
+      }
       this.io.caption?.("user", text, true);
       this.update({ phase: "thinking", lines: this.line("user", text) });
       this.io.transcript(typeof event.item_id === "string" ? event.item_id : `voice-${Date.now()}`, text, this.spokenAt, Date.now());
