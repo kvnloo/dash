@@ -7,7 +7,7 @@
 //   DASH_PM_KANBAN="hermes -p clean kanban list --json"   unset: no kanban overlay
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseLedger, type PmDocument, type PmIssue } from "../../shared/pm";
+import { parseLedger, type PmDocument, type PmIssue, type PmKanban } from "../../shared/pm";
 import { readRoadmap, roadmapFile } from "./roadmap-store";
 import type { RoadmapItem } from "../../shared/roadmap";
 
@@ -22,19 +22,18 @@ export function pmRoots(env: Record<string, string | undefined> = process.env): 
   });
 }
 
-type Card = { id: string; status: string; assignee?: string };
 const record = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** Hermes board snapshot, refreshed at most once a minute; a failed read keeps the last one. */
 class KanbanCache {
-  private cards = new Map<string, Card>();
+  private cards = new Map<string, PmKanban>();
   private at = 0;
   private ok = false;
   private running: Promise<void> | undefined;
   constructor(private command: string[] | undefined) {}
 
   state(): PmDocument["kanban"] { return !this.command ? "off" : this.ok ? "live" : "unavailable"; }
-  get(id: string): Card | undefined { return this.cards.get(id); }
+  get(id: string): PmKanban | undefined { return this.cards.get(id); }
 
   async fresh(waitMs: number): Promise<void> {
     if (!this.command || Date.now() - this.at < 60_000) return;
@@ -52,10 +51,15 @@ class KanbanCache {
       clearTimeout(timer);
       const list: unknown = JSON.parse(out);
       if (!Array.isArray(list)) throw new Error("not a list");
-      const cards = new Map<string, Card>();
+      const cards = new Map<string, PmKanban>();
       for (const c of list) {
         if (record(c) && typeof c.id === "string" && typeof c.status === "string") {
-          cards.set(c.id, { id: c.id, status: c.status, ...(typeof c.assignee === "string" && c.assignee ? { assignee: c.assignee } : {}) });
+          const sessionId = c.session_id;
+          cards.set(c.id, {
+            id: c.id, status: c.status,
+            ...(typeof c.assignee === "string" && c.assignee ? { assignee: c.assignee } : {}),
+            ...(typeof sessionId === "string" && sessionId && sessionId.length <= 256 && sessionId.trim() === sessionId ? { sessionId } : {}),
+          });
         }
       }
       this.cards = cards;

@@ -160,8 +160,19 @@ if(process.env.ARMY_REMOTE_CLAUDE){
 
 // /pm: a repository ledger in the _pm format (shared/pm.ts), the Hermes board and the roadmap file.
 if(process.env.ARMY_PM==='1'){
+ const {Database}=await import('bun:sqlite');
  const {join}=await import('node:path');const {mkdirSync,writeFileSync}=await import('node:fs');
  const home=process.env.HOME;if(!home||!home.includes('dash-army-'))throw Error('isolated HOME required');
+ const sessionId='army-roadmap-session';
+ const db=new Database(join(process.env.HERMES_HOME||home,'state.db'));
+ db.exec('CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY,source TEXT,title TEXT,started_at REAL,last_activity_at REAL,message_count INTEGER,cwd TEXT,archived INTEGER,hidden INTEGER,parent_session_id TEXT,end_reason TEXT,model_config TEXT)');
+ db.exec('CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT,session_id TEXT,role TEXT,content TEXT,timestamp REAL,reasoning TEXT,reasoning_content TEXT,tool_calls TEXT,tool_call_id TEXT,is_error INTEGER,active INTEGER DEFAULT 1)');
+ const now=Date.now()/1000;
+ db.query('INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(sessionId,'acp','ARMY roadmap chat',now-60,now-30,2,home,0,0,null,null,'{}');
+ const message=db.query('INSERT INTO messages (session_id, role, content, timestamp) VALUES (?,?,?,?)');
+ message.run(sessionId,'user','ARMY work on the roadmap task',now-60);
+ message.run(sessionId,'assistant','ARMY transcript from the linked roadmap session',now-30);
+ db.close();
  const ids:Record<string,number>={project:4,feature:5,task:6};
  const rows:unknown[]=[];let seq=0;
  const ev=(kind:string,subject:string,payload:Record<string,unknown>)=>rows.push({v:1,source:'dash-pm',kind,subject:'issue:'+subject,causation:'army-seed',seq:++seq,ts_ns:1_700_000_000_000_000_000+seq*1_000_000,payload});
@@ -181,9 +192,10 @@ if(process.env.ARMY_PM==='1'){
  issue('second','project','Second Project');
  issue('second/gamma','feature','Feature Gamma','second');
  issue('second/gamma/five','task','ARMY task five','second/gamma');
+ ev('issue.updated','second/gamma/five',{id:'second/gamma/five',set:{hermes:'t_0000a1bb'}});
  rows.push('{"this line": "is not a ledger row"');
  mkdirSync(join(home,'pm-repo','pm'),{recursive:true});
  writeFileSync(join(home,'pm-repo','pm','events.jsonl'),rows.map(r=>typeof r==='string'?r:JSON.stringify(r)).join('\n')+'\n');
- writeFileSync(join(home,'kanban.json'),JSON.stringify([{id:'t_0000a1aa',status:'running',assignee:'clean',title:'ARMY card'},{id:'t_ffffffff',status:'done',assignee:'other',title:'unrelated'}]));
+ writeFileSync(join(home,'kanban.json'),JSON.stringify([{id:'t_0000a1aa',status:'running',assignee:'clean',title:'ARMY card',session_id:sessionId},{id:'t_0000a1bb',status:'running',session_id:'army-roadmap-session-missing'},{id:'t_ffffffff',status:'done',assignee:'other',title:'unrelated'}]));
  writeFileSync(join(home,'roadmap.json'),JSON.stringify({id:'dash-roadmap',title:'Dash roadmap',updated:'',items:[{id:'r1',title:'ARMY roadmap item',stage:'candidate',area:'',detail:'',evidence:'ARMY LIVE roadmap evidence',next:'ARMY LIVE roadmap next',progress:70}]}));
 }

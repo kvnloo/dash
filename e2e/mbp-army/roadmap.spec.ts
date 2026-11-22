@@ -22,12 +22,27 @@ test.describe('Roadmap from the repositories\' pm ledgers',()=>{
   await expect(home).toBeVisible();
   await expect(home.getByRole('heading',{name:'Waiting on you, 1'})).toBeVisible();
   await expect(task(home,'army/beta/four')).toBeVisible();
-  await expect(home.getByRole('heading',{name:'Running now, 1'})).toBeVisible();
+  await expect(home.getByRole('heading',{name:'Running now, 2'})).toBeVisible();
   await expect(task(home,'army/alpha/one')).toContainText('Hermes running');
   await expect(page.getByTestId('pm-project-army')).toHaveAttribute('aria-label','Army Project, 1 of 4 tasks done');
   await expect(page.getByTestId('pm-project-second')).toBeVisible();
   await expect(page.getByTestId('pm-ledger-errors')).toContainText('1 ledger line skipped');
   await page.screenshot({path:info.outputPath('roadmap-home.png')});
+
+  await test.step('tap running task opens its chat',async()=>{
+   await task(home,'army/alpha/one').click({noWaitAfter:true});
+   await expect(page.getByText('ARMY transcript from the linked roadmap session',{exact:true})).toBeVisible();
+   await page.screenshot({path:info.outputPath('roadmap-linked-chat.png')});
+   await page.getByRole('button',{name:'Back',exact:true}).click({noWaitAfter:true});
+   await expect(home).toBeVisible();
+  });
+
+  await test.step('an unindexed session still opens task detail',async()=>{
+   await task(home,'second/gamma/five').click({noWaitAfter:true});
+   await expect(page.getByTestId('pm-task-detail').getByRole('heading',{name:'ARMY task five'})).toBeVisible();
+   await page.getByRole('button',{name:'Back',exact:true}).click({noWaitAfter:true});
+   await expect(home).toBeVisible();
+  });
 
   await page.getByTestId('pm-project-army').click({noWaitAfter:true});
   const project=page.getByTestId('roadmap-project');
@@ -79,7 +94,8 @@ test.describe('Roadmap from the repositories\' pm ledgers',()=>{
   expect((await fetch(`http://127.0.0.1:${bridge.port}/pm`)).status).toBe(401);
   const doc=await (await fetch(`http://127.0.0.1:${bridge.port}/pm`,{headers:{Authorization:`Bearer ${token}`}})).json();
   expect(doc.kanban).toBe('live');
-  expect(doc.repos).toEqual([{repo:'army',issues:10,errors:[expect.stringContaining('pm/events.jsonl:16: not JSON')]}]);
+  expect(doc.issues.find((issue:{id:string})=>issue.id==='army/alpha/one').kanban.sessionId).toBe('army-roadmap-session');
+  expect(doc.repos).toEqual([{repo:'army',issues:10,errors:[expect.stringContaining('pm/events.jsonl:17: not JSON')]}]);
  });
 });
 
