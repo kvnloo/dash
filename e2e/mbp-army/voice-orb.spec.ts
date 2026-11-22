@@ -138,13 +138,13 @@ test("Settings orb style survives reload and appears on chat and the active mic"
   await face.click({ noWaitAfter: true });
   await expect(face).toBeChecked();
   await page.screenshot({ path: info.outputPath("orb-style-picker.png") });
+  const back = page.getByRole("button", { name: "Back", exact: true }).last();
+  await back.click({ noWaitAfter: true });
   await page.reload({ waitUntil: "domcontentloaded" });
-  if (!await face.isVisible()) {
-    await page.getByRole("tab").nth(1).click({ noWaitAfter: true });
-    await settings.click({ noWaitAfter: true });
-  }
+  await page.getByRole("tab").nth(1).click({ noWaitAfter: true });
+  await settings.click({ noWaitAfter: true });
   await expect(face).toBeChecked();
-  await page.getByRole("button", { name: "Back", exact: true }).last().click({ noWaitAfter: true });
+  await back.click({ noWaitAfter: true });
 
   const chats = page.getByRole("tab").nth(1);
   await chats.click({ noWaitAfter: true });

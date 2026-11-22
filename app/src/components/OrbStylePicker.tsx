@@ -7,7 +7,7 @@ export function OrbStylePicker() {
   const selected = orbStyle.use(value => value);
   return <View accessibilityRole="radiogroup" accessibilityLabel="Orb style" style={styles.row}>
     {orbStyles.map(({ id, label }) => <Pressable key={id} accessibilityRole="radio" accessibilityLabel={label}
-      accessibilityState={{ checked: selected === id }} onPress={() => setOrbStyle(id)}
+      aria-checked={selected === id} onPress={() => setOrbStyle(id)}
       style={[styles.option, selected === id && styles.selected]}>
       <AgentOrb variant={id} thinking={{ phase: "thinking" }} size={28} animated={false} />
       <Text style={styles.label}>{label}</Text>
