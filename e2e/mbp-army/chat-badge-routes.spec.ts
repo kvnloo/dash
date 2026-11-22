@@ -84,6 +84,11 @@ test('chat badge traces host harness profile session model, switches the next tu
   await expect(transcript.getByText(/ARMY_DA062/)).toHaveCount(0);
   await expect(badge).not.toContainText('→');
   await expect(badge).not.toHaveAttribute('aria-label', /Next turn requests model/);
+  // That Hermes chat is attached to a gateway session, which takes no model override: the sheet says so.
+  await badge.click({ noWaitAfter: true });
+  await expect(page.getByTestId('chat-window-change-model')).toHaveCount(0);
+  await expect(page.getByTestId('chat-window-model-change')).toHaveText(/^Model change unavailable/);
+  await badge.click({ noWaitAfter: true });
 
   // And back again: the first chat keeps its transcript and its requested model.
   await badge.click({ noWaitAfter: true });

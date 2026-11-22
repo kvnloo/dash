@@ -294,7 +294,7 @@ export function WindowDock({ identity, title, options, onAnnotate, treeOpen, onT
       <View testID="chat-window-provenance" style={styles.provenance}>
         <Text style={styles.provenanceLine}>{identity.parentSessionId ? "Lineage: parent session reported by host" : identity.model ? "Lineage: no parent session recorded by host" : "Lineage unavailable: host has not reported it"}</Text>
         <Text testID="chat-window-model-source" style={styles.provenanceLine}>{identity.model && identity.observedAt ? `Model reported by host for this session · checked ${clock(identity.observedAt)}` : "Model unknown: host has not reported it for this session"}</Text>
-        <Text testID="chat-window-model-change" style={styles.provenanceLine}>{!onModel ? "Model change unavailable: no exact-session model route in this build"
+        <Text testID="chat-window-model-change" style={styles.provenanceLine}>{!onModel ? "Model change unavailable for this session: the host switches models only over ACP"
           : requestedModel ? "Model change: host sets it before the next prompt or fails the turn"
           : "Model change: Change picks the next turn's model"}</Text>
       </View>

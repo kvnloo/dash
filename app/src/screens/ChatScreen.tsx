@@ -496,6 +496,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }) : [], [treeOpen, allConversations, conversation?.id, settings?.address, connection.hosts, connection.harnesses, indexList]);
   const hostRoles = useHostModelRoles(settings, windowed && treeOpen);
   const models = useMemo(() => modelChoices({ reported: identity.model, requested: conversation?.modelOverride, roles: hostRoles }), [identity.model, conversation?.modelOverride, hostRoles]);
+  // The bridge applies a model only over ACP: a Hermes chat already attached to a gateway session on this
+  // host refuses overrides, so the badge says so instead of offering a choice that would fail the turn.
+  const modelSwitchable = !(harnessId === "hermes" && conversation?.sessionId && (!conversation.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)));
   const warp = useCallback((id: string) => {
     if (id === conversation?.id) return;
     // A host-index row becomes a phone chat only now, exactly as opening it from Chats does.
@@ -717,7 +720,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onTree={setTreeOpen}
           requestedModel={conversation?.modelOverride}
           models={models}
-          onModel={model => setConversationModel((conversation ?? createConversation(harnessId)).id, model)}
+          onModel={modelSwitchable ? model => setConversationModel((conversation ?? createConversation(harnessId)).id, model) : undefined}
           routes={routes}
           onWarp={warp}
           onClose={closeWindow}
