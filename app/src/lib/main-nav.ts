@@ -12,3 +12,8 @@ export type MainReturn = { dispatch: (action: StackActionType) => void };
 export function toMain(navigation: MainReturn, tab?: number): void {
   navigation.dispatch(StackActions.popTo("Main", tab === undefined ? undefined : { tab }));
 }
+
+/** Return to Main showing the dogfood home (the self-development loop). */
+export function toDogfood(navigation: MainReturn): void {
+  navigation.dispatch(StackActions.popTo("Main", { home: true }));
+}

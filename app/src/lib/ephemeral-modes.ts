@@ -33,6 +33,18 @@ export function learnPrompt(intent: LearnIntent, topic: string): string {
   return `[Dash · Learn mode · ${intent}] Topic: ${topic.trim()}\n${LEARN_ASK[intent]}\n${LEARN_FORMAT}`;
 }
 
+/** S Pen ink drawn from Learn: the sketch (PNG + strokes JSON) rides as attachments under this header. */
+export function learnSketchPrompt(topic: string, annotation: string): string {
+  const about = topic.trim() ? `Topic: ${topic.trim()}` : "Topic: whatever the sketch shows";
+  return [
+    `[Dash · Learn mode · sketch] ${about}`,
+    "I drew this with the S Pen in Learn. The attached PNG is the screen with my ink; the JSON has every stroke.",
+    "Look at the sketch first: one card saying what you see, then build on the idea in 2 to 4 cards and a small flowchart.",
+    LEARN_FORMAT,
+    annotation,
+  ].join("\n");
+}
+
 export function unblockPrompt(item: TriageItem): string {
   return [
     `[Dash · Quick action · Unblock] ${item.title}`,

@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { NewAgentSheet } from "./NewAgentSheet";
 import { PressScale } from "./PressScale";
 import { haptic } from "../haptics";
 import type { NavigationProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../navigation";
 import { actionable, approvals } from "../store/approvals";
 import { createConversation, store } from "../store/app";
+import { inAppFeedbackEnabled } from "../lib/feedback";
+import { toDogfood } from "../lib/main-nav";
 import { colors, fonts, type } from "../theme";
 import { TAB_LABELS, clampTab } from "./golden-nav";
 import { IconButton } from "./ScreenHeader";
@@ -14,17 +18,20 @@ import { WORKSPACE_ACTION_LABELS, upstreamApprovalAction, workspaceHeadingLabel 
  * The row under the top navigation bar on Main: the current pane's name (the dot pager has
  * no labels), pending approvals, compose and settings. Navigation itself stays in AppNav.
  */
-export function WorkspaceHeader({ navigation, tab, titleOnly = false }: { navigation: NavigationProp<RootStackParamList>; tab: number; titleOnly?: boolean }) {
-  const title = TAB_LABELS[clampTab(tab)];
+export function WorkspaceHeader({ navigation, tab, titleOnly = false, title: override }: { navigation: NavigationProp<RootStackParamList>; tab: number; titleOnly?: boolean; title?: string }) {
+  const title = override ?? TAB_LABELS[clampTab(tab)];
   return <View style={styles.header}>
-    <Text style={styles.title} numberOfLines={1} accessibilityRole="header" accessibilityLabel={workspaceHeadingLabel(tab)}>{title}</Text>
-    {titleOnly ? null : <WorkspaceActions navigation={navigation} />}
+    <Text style={styles.title} numberOfLines={1} accessibilityRole="header" accessibilityLabel={override ? `${override} workspace` : workspaceHeadingLabel(tab)}>{title}</Text>
+    {titleOnly ? null : <WorkspaceActions navigation={navigation} dogfood={override === undefined} />}
   </View>;
 }
 
-export function WorkspaceActions({ navigation }: { navigation: NavigationProp<RootStackParamList> }) {
+/** `dogfood`: offer the way back to the dogfood home (only while in-app feedback is on). */
+export function WorkspaceActions({ navigation, dogfood = true }: { navigation: NavigationProp<RootStackParamList>; dogfood?: boolean }) {
+  const feedbackOn = store.use(s => inAppFeedbackEnabled(s.settings));
   const pending = approvals.use(s => s.items.filter(actionable).length);
   const upstreamAction = upstreamApprovalAction(pending);
+  const [newAgent, setNewAgent] = useState(false);
   return <View style={styles.actions}>
     {/* The pill is a column PressScale around a fixed row. A row-direction PressScale grows its
         flex: 1 inner view to the whole header width, which pushed the trace, new chat and settings
@@ -36,8 +43,11 @@ export function WorkspaceActions({ navigation }: { navigation: NavigationProp<Ro
         <View style={styles.badge}><Text style={styles.badgeText}>{upstreamAction.badgeText}</Text></View>
       </View>
     </PressScale> : null}
+    {dogfood && feedbackOn ? <IconButton icon="message-circle" label="Dogfood feedback" onPress={() => toDogfood(navigation)} /> : null}
     <IconButton icon="map" label={WORKSPACE_ACTION_LABELS.roadmap} onPress={() => navigation.navigate("Roadmap")} />
     <IconButton icon="activity" label={WORKSPACE_ACTION_LABELS.trace} onPress={() => navigation.navigate("Trace")} />
+    <IconButton icon="plus-circle" label={WORKSPACE_ACTION_LABELS.newAgent} onPress={() => setNewAgent(true)} />
+    <NewAgentSheet visible={newAgent} onClose={() => setNewAgent(false)} onStarted={() => navigation.navigate("Chat")} />
     <IconButton icon="edit-3" label={WORKSPACE_ACTION_LABELS.newChat} onPress={() => { createConversation(store.get().settings?.harness ?? "omp"); navigation.navigate("Chat"); }} />
     <IconButton icon="settings" label={WORKSPACE_ACTION_LABELS.settings} onPress={() => navigation.navigate("Settings")} />
   </View>;
@@ -49,8 +59,10 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
   header: { flexDirection: "row", alignItems: "center", minHeight: WORKSPACE_HEADER_HEIGHT, paddingVertical: 4, paddingLeft: 16, paddingRight: 8, gap: 2 },
   title: { ...type.title, color: colors.text, flex: 1 },
-  approvals: { minHeight: 44, paddingHorizontal: 8, justifyContent: "center" },
-  approvalsRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  // Tight on purpose: with approvals pending, dogfood on and the New agent button, the row must
+  // still fit a 390 px phone without pushing the page wider than the screen.
+  approvals: { minHeight: 44, paddingHorizontal: 4, justifyContent: "center" },
+  approvalsRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   approvalsLabel: { fontFamily: fonts.semibold, fontSize: 15, color: colors.textMuted },
   badge: { minWidth: 18, minHeight: 18, borderRadius: 9, paddingHorizontal: 5, paddingVertical: 2, backgroundColor: colors.gold, alignItems: "center", justifyContent: "center" },
   badgeText: { fontFamily: fonts.semibold, fontSize: 11, lineHeight: 14, color: colors.bg, fontVariant: ["tabular-nums"] },

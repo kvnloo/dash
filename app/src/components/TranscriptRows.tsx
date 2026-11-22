@@ -13,6 +13,7 @@ import { MessageRow } from "./MessageRow";
 export const TranscriptRow = memo(function TranscriptRow(props: TranscriptRowProps) {
   const { message, harnessId, detailMode, thinking } = props;
   return <MessageRow
+    conversationId={props.conversationId}
     message={message}
     harnessId={harnessId}
     detailMode={detailMode}

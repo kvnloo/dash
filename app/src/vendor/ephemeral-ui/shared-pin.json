@@ -1,0 +1,10 @@
+{
+  "revision": "7c5daca42108f6701c0e78f227a7db3b2f50d25d",
+  "themeVersion": "0.1.0",
+  "catalogVersion": "0.1.0",
+  "files": {
+    "theme/glide.json": "2529e9151c99dacd710b62a2bcd291fa3cd7de02eb36901a981741d5ab3a12ca",
+    "theme/tokens.schema.json": "3689a17d88f68692103ad3c40e113fbce807ed52cb23e024152466e9aadfa100",
+    "catalog/catalog.json": "75e18220dab326bdc4824c1cc3710f1b1bb08f19d31f150d337452c56b4ec90a"
+  }
+}

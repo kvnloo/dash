@@ -69,10 +69,12 @@ The status counts were taken at the commit this map was written on. Maintain the
 - [Identity badge and panel](./identity-badge.md): COVERED
 - [Target switcher](./target-switcher.md): UNCOVERED
 - [Context gauge](./context-gauge.md): COVERED
+- [S Pen hover](./spen-hover.md): COVERED
 
 ### Composer
 
 - [Composer: type and Send](./composer-send.md): COVERED
+- [Composer rim motion](./composer-aura.md): COVERED
 - [Stop a running turn](./stop.md): COVERED
 - [Queue and the queued stack](./queue.md): COVERED
 - [Steer a running Hermes turn](./steer.md): COVERED
@@ -88,7 +90,9 @@ The status counts were taken at the commit this map was written on. Maintain the
 - [Harness picker](./harness-picker.md): COVERED
 - [Sending to every harness](./harness-send-matrix.md): UNCOVERED
 - [Persisted sessions](./persisted-sessions.md): UNCOVERED
+- [Saved Glide council handoff](./council-handoff.md): COVERED
 - [Bots pane](./bots-pane.md): UNCOVERED
+- [Bots page (prototype)](./bots-page.md): COVERED
 
 ### Delivery and errors
 

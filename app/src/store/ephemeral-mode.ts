@@ -10,11 +10,35 @@ export { nextPillMode, pillModeOf, PILL_LABEL, type PillMode } from "../lib/ephe
 export type SurfaceMode = "learn" | "quick" | null;
 
 export const surfaceMode = createStore<SurfaceMode>(null);
+/** The Learn topic outlives the panel, so a sketch or a closed panel does not lose it. */
+export const learnTopic = createStore("");
+/** Learn's Talk: while listening, each final z0live transcript becomes a Learn topic. */
+export interface LearnVoiceState {
+  listening: boolean;
+  /** Learn started the live call, so leaving Learn ends it. */
+  ownsCall?: boolean;
+  heard?: { id: string; text: string };
+}
+export const learnVoice = createStore<LearnVoiceState>({ listening: false });
+
+/** Called by the live voice call for every final user transcript. */
+export function hearLearnTopic(id: string, text: string): void {
+  if (!learnVoice.get().listening || surfaceMode.get() !== "learn" || !text.trim()) return;
+  learnVoice.set(s => ({ ...s, heard: { id, text: text.trim().slice(0, 300) } }));
+}
 
 // Annotate can also start from the S Pen side button or the chat's ✎ Annotate. It always
-// replaces Learn/Quick, so Exit/Back from Annotate lands on Normal whichever way it began.
+// replaces Learn/Quick, so Exit/Back from Annotate lands on Normal whichever way it began,
+// except a Learn sketch (Learn's Draw), which goes back to Learn.
+let wasAnnotating = annotate.get().active;
 annotate.subscribe(() => {
-  if (annotate.get().active && surfaceMode.get() !== null) surfaceMode.set(null);
+  const { active, learn } = annotate.get();
+  if (active && surfaceMode.get() !== null) surfaceMode.set(null);
+  if (wasAnnotating && !active && learn) {
+    annotate.set(s => ({ ...s, learn: undefined }));
+    surfaceMode.set("learn");
+  }
+  wasAnnotating = active;
 });
 
 export function cyclePillMode(): void {
@@ -27,6 +51,10 @@ export function setPillMode(mode: PillMode): void {
     enterAnnotation();
     return;
   }
-  if (annotate.get().active) exitAnnotation();
+  if (annotate.get().active) {
+    // An explicit mode choice wins over a Learn sketch's way back.
+    annotate.set(s => (s.learn ? { ...s, learn: undefined } : s));
+    exitAnnotation();
+  }
   surfaceMode.set(mode === "normal" ? null : mode);
 }

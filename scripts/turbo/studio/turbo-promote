@@ -9,7 +9,7 @@
 #   3. bun test in bridge/ when bridge/ or shared/ changed
 #   4. a throwaway Metro (CI=1, own port) builds the Android bundle from the worktree: HTTP 200
 # Pass: fast-forward the preview worktree (Metro hot-reloads it onto the phone), stamp
-# app/src/lib/build-info.json with the new SHA, then re-check the live preview Metro; if it no
+# app/src/lib/build-info.json with the new SHA and what to test (feature + screen), then re-check the live preview Metro; if it no
 # longer builds, roll the preview back to the previous commit.
 # Every attempt appends one JSON line to $STATE/preview-history.jsonl; $STATE/preview.json is the
 # current good preview. Stable Metro :8097 (~/dash-studio) is never touched.
@@ -101,7 +101,15 @@ echo "  bundle ok ($size bytes)"
 # Promote: fast-forward the preview; its watching Metro hot-reloads the phone.
 git -C "$PREVIEW" merge --ff-only --quiet "$SHA" >"$LOGDIR/merge.log" 2>&1 || reject "fast-forward of the preview failed: $(tail -2 "$LOGDIR/merge.log" | tr '\n' ' ')"
 AT_MS=$(( $(date +%s) * 1000 ))
-printf '{"sha":"%s","builtAtMs":%s}\n' "$SHA" "$AT_MS" >"$PREVIEW/app/src/lib/build-info.json"
+# Now testing: the feature and the screen to open ride along in build-info.json, so the phone shows a
+# "Now testing" card that takes the owner to the changed screen (scripts/turbo/now_testing.py).
+if python3 "$WT/scripts/turbo/now_testing.py" --repo "$WT" --sha "$SHA" --base "$BASE" --built-at-ms "$AT_MS" --note "$NOTE" \
+    >"$LOGDIR/build-info.json" 2>"$LOGDIR/now-testing.log" && [[ -s "$LOGDIR/build-info.json" ]]; then
+  cp "$LOGDIR/build-info.json" "$PREVIEW/app/src/lib/build-info.json"
+  echo "  now testing: $(python3 -c 'import json,sys; t=json.load(sys.stdin).get("testing") or {}; print(t.get("feature","?"), t.get("screen",""))' <"$LOGDIR/build-info.json" 2>/dev/null)"
+else
+  printf '{"sha":"%s","builtAtMs":%s}\n' "$SHA" "$AT_MS" >"$PREVIEW/app/src/lib/build-info.json"
+fi
 
 # Post-check the live preview Metro; roll back if it does not build what we promoted.
 sleep 3

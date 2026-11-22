@@ -93,6 +93,19 @@ export function ComposerActionMenuRow({
     return Gesture.Exclusive(hold, tap);
   }, [actions, choices.length, touchedChoice]);
 
+  // Surface is a two-way view switch, not a secondary action. Keep both choices
+  // in the menu row instead of opening a popover over the composer.
+  if (row.id === "surface") return <View accessibilityRole="radiogroup" accessibilityLabel="Surface options" style={styles.surfaceRow}>
+    {choices.map((choice, index) => <Pressable key={choice.id}
+      accessibilityRole="radio" accessibilityLabel={choice.label}
+      accessibilityState={{ checked: choice.selected }} aria-checked={choice.selected}
+      onPress={() => actions.choose(index)}
+      style={[styles.surfaceChoice, choice.selected && styles.highlight]}
+    >
+      <Text numberOfLines={1} style={[styles.choiceText, choice.selected && styles.surfaceSelected]}>{choice.selected ? "✓ " : ""}{choice.label}</Text>
+    </Pressable>)}
+  </View>;
+
   return <View style={[styles.anchor, expanded && styles.anchorExpanded]}>
     <GestureDetector gesture={gesture}>
       <Animated.View
@@ -151,4 +164,7 @@ const styles = StyleSheet.create({
   right: { right: 0 },
   choice: { minHeight: MENU_ROW_HEIGHT, paddingHorizontal: 12, justifyContent: "center" },
   choiceText: { ...type.small, color: colors.text },
+  surfaceRow: { minHeight: MENU_ROW_HEIGHT, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 6 },
+  surfaceChoice: { flex: 1, minHeight: 44, borderRadius: radius.md, justifyContent: "center", alignItems: "center" },
+  surfaceSelected: { color: colors.gold },
 });

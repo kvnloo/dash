@@ -1,4 +1,5 @@
 import "./reanimated-gc";
+import "./performance-trim";
 import { registerRootComponent } from "expo";
 import App from "../App";
 import { AppRegistry } from "react-native";

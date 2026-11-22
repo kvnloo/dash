@@ -247,6 +247,28 @@ def Laws.local_profile_own_session(k, s, h, hermes, q, w):
 def Laws.local_profile_needs_session(k, s, h, hermes, w):
   w
 
+# S7-S8 spawn routes
+def Laws.hermes_bot_needs_hermes(known, h, hermes, w):
+  and_l(hermes, known, w)
+
+def Laws.hermes_bot_needs_profile(known, h, hermes, w):
+  and_r(hermes, known, w)
+
+def Laws.hermes_bot_new_chat_only(known, h, hermes, q, w):
+  w
+
+def Laws.cursor_agent_own_harness(c, a, valid, h, hermes, q, w):
+  av_harness(c, a, h, q, and_r(valid, Bool.and(Nat.is_eq(c, h), Nat.is_eq(a, q)), w))
+
+def Laws.cursor_agent_own_session(c, a, valid, h, hermes, q, w):
+  av_session(c, a, h, q, and_r(valid, Bool.and(Nat.is_eq(c, h), Nat.is_eq(a, q)), w))
+
+def Laws.cursor_agent_valid_id(c, a, valid, h, hermes, q, w):
+  and_l(valid, Bool.and(Nat.is_eq(c, h), Nat.is_eq(a, q)), w)
+
+def Laws.cursor_agent_needs_session(c, a, valid, h, hermes, w):
+  and_r(valid, False{}, w)
+
 # S9
 def tail_accounted(k: S.AKind, speech: Bool, known: Bool, avail: Bool, cwd: Bool, att: Bool) -> Laws.T(S.a_accounted(S.a_tail(k, speech, known, avail, cwd, att))):
   match k:

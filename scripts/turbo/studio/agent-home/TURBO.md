@@ -15,10 +15,15 @@ the stroke positions and timed transcript. Treat the screenshot as context, not 
 1. `~/dash-turbo/bin/turbo-new <short-name>` prints a fresh worktree at the preview's commit
    (`~/dash-turbo/wt/<short-name>`). Work only there.
 2. Make the smallest change that does what he asked. Follow the repo's `AGENTS.md` code conventions.
-3. Commit in that worktree (`git -C <wt> commit -am "<type(scope): subject>"`).
+3. Commit in that worktree (`git -C <wt> commit -am "<type(scope): subject>"`). Add trailers so the
+   phone's "Now testing" card names the feature and opens its screen:
+   `Now-Testing: <what Kevin should check>`, `Dash-Screen: dash://<chats|hosts|orchestra|settings|trace|lab>`
+   and optionally `Now-Steps: <how to reach the state>` (or `Dash-Feature: DF-NNN` from spec/features.yaml).
+   Without them the card uses the promote note and guesses the screen from the changed files.
 4. `~/dash-turbo/bin/turbo-promote <wt> "<one line: what Kevin should look at>"`. It runs the gate
    (tsc app + bridge, bridge tests if touched, a throwaway Metro bundle build) and only then
-   fast-forwards the preview.
+   fast-forwards the preview, stamping build-info.json with the feature and screen
+   (`scripts/turbo/now_testing.py`).
 5. Reply in two lines at most: `PROMOTED <sha>` or `REJECTED <sha>: <reason>`, then where to look.
    Then `~/dash-turbo/bin/turbo-done <short-name>`.
 

@@ -15,14 +15,16 @@ export const UI_CONTROL_LIMITS = {
   ttlMaxMs: 30_000,
 };
 
-export type UiControlRoute = "Lab" | "Trace" | "Orchestra" | "Settings" | "Bots" | "Hosts" | "Chat";
+export type UiControlRoute = "Lab" | "Trace" | "Orchestra" | "Settings" | "Bots" | "Hosts" | "Chats" | "Chat";
 
-/** The deep-link AppRoute names (including the legacy Bots alias) plus the Chat screen, with exact case. */
+/** The deep-link AppRoute names (including the legacy Bots alias and the Chats list) plus the Chat screen, with exact case. */
 export const UI_CONTROL_ROUTES: readonly UiControlRoute[] = [
-  "Lab", "Trace", "Orchestra", "Settings", "Bots", "Hosts", "Chat",
+  "Lab", "Trace", "Orchestra", "Settings", "Bots", "Hosts", "Chats", "Chat",
 ];
 
 export type UiControlTarget = { testID: string } | { x: number; y: number };
+export type UiControlShape = "pointer" | "circle" | "arrow";
+export const UI_CONTROL_SHAPES: readonly UiControlShape[] = ["pointer", "circle", "arrow"];
 export type UiControlPoint = [x: number, y: number];
 export interface UiControlStroke {
   points: UiControlPoint[];
@@ -30,9 +32,15 @@ export interface UiControlStroke {
 
 /** Commands describe presentation intent; they cannot perform arbitrary taps or URL navigation. */
 export type UiControlCommand =
-  | { type: "point"; id: string; target: UiControlTarget; label?: string; ttlMs: number }
+  /** shape (additive v1): how the pointer looks. Absent = "pointer"; an older app ignores it. */
+  | { type: "point"; id: string; target: UiControlTarget; label?: string; shape?: UiControlShape; ttlMs: number }
   | { type: "draw"; id: string; strokes: UiControlStroke[]; color?: "gold" | "cream"; ttlMs: number }
-  | { type: "navigate"; id: string; route: UiControlRoute; conversationId?: string }
+  /**
+   * chatTitle (Chat only): open the phone's chat with this title (exact, case-insensitive) when the
+   * agent does not know the phone-side conversation id. annotate (Chat only): enter annotation mode
+   * once the chat is showing. Both are additive v1 fields; an older app ignores them.
+   */
+  | { type: "navigate"; id: string; route: UiControlRoute; conversationId?: string; chatTitle?: string; annotate?: true }
   | { type: "highlight"; id: string; testID: string; ttlMs: number }
   | { type: "clear"; id?: string };
 
@@ -133,11 +141,14 @@ export function parseUiControl(raw: unknown): UiControlParseResult {
       if (target === null) return reject("invalid point.target");
       if (!isTtl(command.ttlMs)) return reject("invalid point.ttlMs");
       if (command.label !== undefined && !isLabel(command.label)) return reject("invalid point.label");
+      const shape = command.shape;
+      if (shape !== undefined && !UI_CONTROL_SHAPES.some(known => known === shape)) return reject("invalid point.shape");
       return {
         ok: true,
         command: {
           type: "point", id, target, ttlMs: command.ttlMs,
           ...(command.label !== undefined ? { label: command.label } : {}),
+          ...(shape === "pointer" || shape === "circle" || shape === "arrow" ? { shape } : {}),
         },
       };
     }
@@ -163,11 +174,20 @@ export function parseUiControl(raw: unknown): UiControlParseResult {
       if (command.conversationId !== undefined && !isBoundedId(command.conversationId)) {
         return reject("invalid navigate.conversationId");
       }
+      if (command.chatTitle !== undefined && !isBoundedId(command.chatTitle)) return reject("invalid navigate.chatTitle");
+      if (command.annotate !== undefined && command.annotate !== true) return reject("invalid navigate.annotate");
+      // A chat target or annotation only means something on the Chat screen; one target at a time.
+      if (command.route !== "Chat" && (command.conversationId !== undefined || command.chatTitle !== undefined || command.annotate !== undefined)) {
+        return reject("navigate.conversationId, chatTitle and annotate need route Chat");
+      }
+      if (command.conversationId !== undefined && command.chatTitle !== undefined) return reject("navigate takes conversationId or chatTitle, not both");
       return {
         ok: true,
         command: {
           type: "navigate", id, route: command.route,
           ...(command.conversationId !== undefined ? { conversationId: command.conversationId } : {}),
+          ...(command.chatTitle !== undefined ? { chatTitle: command.chatTitle } : {}),
+          ...(command.annotate === true ? { annotate: true } : {}),
         },
       };
     case "highlight":
@@ -184,4 +204,76 @@ export function parseUiControl(raw: unknown): UiControlParseResult {
     default:
       return reject("unknown ui_control command type");
   }
+}
+
+/** Bridge-assigned correlation for one delivered frame; echoed by the app's ack. */
+const REF = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** The delivered frame: the v1 envelope plus the bridge's correlation ref. */
+export interface UiControlFrame extends UiControlWireMessage {
+  ref: string;
+}
+
+export function parseUiControlFrame(raw: unknown): UiControlFrame | null {
+  if (!isRecord(raw) || typeof raw.ref !== "string" || !REF.test(raw.ref)) return null;
+  const parsed = parseUiControl(raw);
+  return parsed.ok ? { type: "ui_control", schema: UI_CONTROL_SCHEMA, ref: raw.ref, command: parsed.command } : null;
+}
+
+/**
+ * App -> bridge. `hello` advertises that this app understands ui_control and whether the owner
+ * has agent control switched on; `ack` reports what happened to one delivered frame.
+ * done: performed. skipped: understood but not possible now (unknown chat, stale target).
+ * refused: agent control is off, or the owner dismissed agent control moments ago.
+ */
+export type UiControlAckStatus = "done" | "skipped" | "refused";
+export type UiControlClientMessage =
+  | { type: "ui_control_hello"; enabled: boolean }
+  | { type: "ui_control_ack"; ref: string; status: UiControlAckStatus; detail?: string; screen?: string; ms?: number };
+
+export const UI_CONTROL_DETAIL_MAX = 200;
+
+export function parseUiControlClientMessage(raw: unknown): UiControlClientMessage | null {
+  if (!isRecord(raw)) return null;
+  if (raw.type === "ui_control_hello") return typeof raw.enabled === "boolean" ? { type: "ui_control_hello", enabled: raw.enabled } : null;
+  if (raw.type !== "ui_control_ack" || typeof raw.ref !== "string" || !REF.test(raw.ref)) return null;
+  if (raw.status !== "done" && raw.status !== "skipped" && raw.status !== "refused") return null;
+  if (raw.detail !== undefined && (typeof raw.detail !== "string" || raw.detail.length > UI_CONTROL_DETAIL_MAX)) return null;
+  if (raw.screen !== undefined && (typeof raw.screen !== "string" || !TEST_ID.test(raw.screen))) return null;
+  if (raw.ms !== undefined && (typeof raw.ms !== "number" || !Number.isFinite(raw.ms) || raw.ms < 0 || raw.ms > 600_000)) return null;
+  return {
+    type: "ui_control_ack", ref: raw.ref, status: raw.status,
+    ...(raw.detail !== undefined ? { detail: raw.detail } : {}),
+    ...(raw.screen !== undefined ? { screen: raw.screen } : {}),
+    ...(raw.ms !== undefined ? { ms: raw.ms } : {}),
+  };
+}
+
+const PATH_ROUTES: Readonly<Record<string, UiControlRoute>> = {
+  lab: "Lab", trace: "Trace", orchestra: "Orchestra", settings: "Settings",
+  bots: "Hosts", hosts: "Hosts", chats: "Chats", chat: "Chat",
+};
+
+/**
+ * The agent-facing path syntax, e.g. "Chats > Release notes > Annotate", "Settings", "Chat".
+ * "Chats > <title>" opens that chat; a trailing "Annotate" enters annotation mode there.
+ * "Chats > id:<conversationId>" names the phone conversation id instead of a title.
+ */
+export function parseUiControlPath(path: string, id: string): UiControlParseResult {
+  const parts = path.split(">").map(part => part.trim());
+  if (parts.some(part => part.length === 0)) return reject("empty path segment");
+  const [head, ...rest] = parts;
+  const route = head === undefined ? undefined : PATH_ROUTES[head.toLowerCase()];
+  if (!route) return reject(`unknown screen "${head ?? ""}" (use ${Object.keys(PATH_ROUTES).join(", ")})`);
+  const annotate = rest.length > 0 && rest[rest.length - 1]?.toLowerCase() === "annotate";
+  if (annotate) rest.pop();
+  if (route !== "Chats" && route !== "Chat" && (rest.length > 0 || annotate)) return reject(`${route} takes no further path`);
+  if (rest.length > 1) return reject("a chat path is Chats > <chat> [> Annotate]");
+  const chat = rest[0];
+  if (chat === undefined && route === "Chats" && annotate) return reject("Annotate needs a chat: Chats > <chat> > Annotate");
+  const target = chat === undefined ? {} : chat.toLowerCase().startsWith("id:") ? { conversationId: chat.slice(3).trim() } : { chatTitle: chat };
+  return parseUiControl({
+    type: "ui_control", schema: UI_CONTROL_SCHEMA,
+    command: { type: "navigate", id, route: chat === undefined ? route : "Chat", ...target, ...(annotate ? { annotate: true } : {}) },
+  });
 }

@@ -14,7 +14,7 @@ export interface UiControlStroke {
 }
 
 export type UiControlCommandShape =
-  | { readonly type: "point"; readonly id: string; readonly target: UiControlPointTarget; readonly label?: string; readonly ttlMs: number }
+  | { readonly type: "point"; readonly id: string; readonly target: UiControlPointTarget; readonly label?: string; readonly shape?: "pointer" | "circle" | "arrow"; readonly ttlMs: number }
   | { readonly type: "draw"; readonly id: string; readonly strokes: readonly UiControlStroke[]; readonly color?: "gold" | "cream"; readonly ttlMs: number }
   | { readonly type: "highlight"; readonly id: string; readonly testID: string; readonly ttlMs: number }
   | { readonly type: "navigate"; readonly id: string; readonly route: AppRoute | "Chat"; readonly conversationId?: string }
@@ -31,7 +31,7 @@ interface OverlayItemBase {
 }
 
 export type OverlayItem =
-  | (OverlayItemBase & { readonly kind: "point"; readonly target: UiControlPointTarget; readonly label?: string })
+  | (OverlayItemBase & { readonly kind: "point"; readonly target: UiControlPointTarget; readonly label?: string; readonly shape?: "pointer" | "circle" | "arrow" })
   | (OverlayItemBase & { readonly kind: "draw"; readonly strokes: readonly UiControlStroke[]; readonly color?: "gold" | "cream" })
   | (OverlayItemBase & { readonly kind: "highlight"; readonly testID: string });
 
@@ -128,6 +128,7 @@ function snapshotItem(
           ? { testID: command.target.testID }
           : { x: command.target.x, y: command.target.y },
         ...(command.label !== undefined ? { label: command.label } : {}),
+        ...(command.shape !== undefined ? { shape: command.shape } : {}),
       };
     case "draw":
       return {

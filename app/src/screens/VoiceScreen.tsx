@@ -10,6 +10,7 @@ import { LaneTimeline } from "../components/LaneTimeline";
 import { useZ0LiveLanes } from "../lib/z0live-lanes";
 import { store } from "../store/app";
 import { screenBack } from "../lib/screen-back";
+import { openCouncil } from "../store/council";
 import { firstFailingVoiceProbe, runDeviceCheck } from "../lib/device-check";
 
 import type { ScreenProps } from "../navigation";
@@ -59,6 +60,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
         <Text accessibilityLiveRegion="polite" style={styles.caption} testID="voice-caption">
           {caption}
         </Text>
+        {state.turbo ? <Text accessibilityLiveRegion="polite" style={styles.caption} testID="voice-turbo-status">{state.turbo}</Text> : null}
         <View style={styles.transcript} testID="voice-transcript">
           {lines.map((line, i) => (
             <Text key={`${i}:${line.role}`} numberOfLines={2} style={[styles.line, line.role === "user" ? styles.user : styles.assistant, i < lines.length - 1 && styles.older]}>
@@ -75,6 +77,9 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
       {laneSample?.lanes.lanes.length ? <View style={styles.lanes}><LaneTimeline lanes={laneSample.lanes.lanes} offset={laneSample.offset} /></View> : null}
       <View style={styles.controls}>
         <PrimaryButton accessibilityLabel={live ? "Stop voice in Dash" : "Start voice in Dash"} onPress={() => void (live ? stop() : start())} label={opening ? "Cancel connection" : live ? "Stop voice" : "Start voice"} />
+        <Pressable testID="voice-open-council" accessibilityRole="button" accessibilityLabel="Open the council card" accessibilityHint="Brief, agent reports, read aloud through the orb" onPress={() => openCouncil("z0live")} style={styles.secondary}>
+          <Text style={styles.secondaryText}>Council · brief and agent reports</Text>
+        </Pressable>
         {!live && firstFailure ? (
           <Text testID="voice-first-failure" accessibilityLiveRegion="polite" style={styles.failure}>
             First failing voice check: {firstFailure}
@@ -86,7 +91,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
               <Text style={styles.secondaryText}>Back to chat · call keeps going</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={mute} style={styles.secondary}><Text style={styles.secondaryText}>{state.muted ? "Unmute" : "Mute"}</Text></Pressable>
-            <Text style={styles.note}>Call stays active across Dash screens. Leaving Dash stops the mic; background capture is not enabled.</Text>
+            <Text style={styles.note}>Call stays active across Dash screens. Leaving Dash pauses the mic; it resumes on the same chat when you come back.</Text>
           </>
         ) : (
           <>

@@ -9,9 +9,13 @@
 // - Running user services whose unit name says bot/dots (e.g. an OpenDots or GrokBot unit),
 //   and the GrokBot desktop process.
 // Tokens and .env values are never read here.
+//
+// Spawn targets (`BotInfo.spawn`): the New-agent sheet starts a chat with a bot through the
+// harness behind it. A Hermes profile bot is a new Hermes ACP chat in that profile's home
+// (profile route `hermes:<profile>`); GrokBot is a new Grok chat (`harness:grok`).
 import { readdirSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import type { BotChannel, BotInfo } from "../../shared/protocol";
+import type { BotChannel, BotInfo, BotSpawn, HarnessInfo } from "../../shared/protocol";
 
 /** Chat platforms a person messages. `api_server`, `a2a` and webhooks are plumbing, not bots. */
 export const MESSAGING_PLATFORMS = new Set([
@@ -156,6 +160,28 @@ export function serviceBots(listing: string): BotInfo[] {
 
 export function grokDesktopBot(): BotInfo {
   return { id: "grok-bot", name: "GrokBot", runtime: "grok", status: "running", channels: [], agentId: "grok-bot", detail: "Desktop app" };
+}
+
+function spawnVia(harnesses: readonly HarnessInfo[], harness: string, profileId: string): BotSpawn {
+  const info = harnesses.find(h => h.id === harness);
+  const available = info?.available === true;
+  return { harness, profileId, available, ...(available ? {} : { hint: `${info?.name ?? harness} isn't installed on this host.` }) };
+}
+
+/**
+ * Bots with their New-agent spawn targets. GrokBot is listed whenever the Grok harness is
+ * installed, even with the desktop app closed: starting a GrokBot agent is a new Grok chat.
+ */
+export function withSpawnTargets(bots: readonly BotInfo[], harnesses: readonly HarnessInfo[]): BotInfo[] {
+  const out = bots.map(bot => {
+    if (bot.runtime === "hermes" && bot.agentId?.startsWith("hermes:")) return { ...bot, spawn: spawnVia(harnesses, "hermes", bot.agentId) };
+    if (bot.id === "grok-bot") return { ...bot, spawn: spawnVia(harnesses, "grok", "harness:grok") };
+    return bot;
+  });
+  if (!out.some(bot => bot.id === "grok-bot") && harnesses.some(h => h.id === "grok" && h.available)) {
+    out.push({ id: "grok-bot", name: "GrokBot", runtime: "grok", status: "available", channels: [], detail: "Grok agent", spawn: spawnVia(harnesses, "grok", "harness:grok") });
+  }
+  return out;
 }
 
 /** Real filesystem sources for this host. */
