@@ -2,6 +2,8 @@
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
     {"id":"reply-to-selected-message-text","title":"Quote selected agent message text into the unsent composer without sending","tests":["reply selection adds only highlighted assistant text to unsent draft, preserving attachments","cancel text selection leaves draft and bridge unchanged"]},
+    {"id": "zero-card-with-trace", "title": "One Zero card anchored to the main input on every Main tab: the paired computer plus the live agent trace nested in it; tucks to one line, survives reload, comes back (#538)",
+     "tests": ["one Zero card above the main input carries the live agent trace, tucks away and comes back"]},
     {"id": "composer-model-harness-rate", "title": "Composer controls edit harness/model and show honest streaming token speed through the real authenticated bridge",
      "tests": ["composer harness chooser is attached to the input and never sends a turn",
                "composer model edit applies ACP set_model before prompting and rejects unsupported models",

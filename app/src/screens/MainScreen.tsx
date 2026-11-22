@@ -43,6 +43,8 @@ import { colors, space, type } from "../theme";
 import { HostsPane } from "./panes/HostsPane";
 import { ChatsPane } from "./panes/ChatsPane";
 import { OrchestraPane } from "./panes/OrchestraPane";
+import { ZeroCard } from "../components/ZeroCard";
+import { useTraceFeed } from "../trace/useTraceFeed";
 
 function feedbackFromSearch(item: SearchResult): FeedbackAction {
   switch (item.kind) {
@@ -333,6 +335,9 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   );
 
   const feedbackOn = inAppFeedbackEnabled(settings);
+  // The Zero card above the main input loads its own authenticated trace, on every Main tab.
+  const zeroVisible = screenFocused && !searchMode && !attached;
+  useTraceFeed(settings, zeroVisible && foreground);
   const harnessId = settings?.harness ?? harnesses[0]?.id ?? "omp";
   const harnessName = harnesses.find((h) => h.id === harnessId)?.name ?? harnessId;
 
@@ -525,6 +530,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
                 <Text numberOfLines={1} style={styles.resumeText}>Return to {attached.title || attached.harness}</Text>
               </Pressable>
             ) : null}
+            {zeroVisible ? <ZeroCard onOpenTrace={() => navigation.navigate("Trace")} /> : null}
             <GlobalSearchBar
               value={query}
               blurTarget={blurTarget}
