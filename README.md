@@ -6,6 +6,23 @@ Black UI, one chat thread per harness (OMP, Codex, Grok, Hermes, Claude Code whe
 
 ## Quick start (laptop)
 
+One command, from a fresh clone on macOS or Linux (Tailscale installed and signed in):
+
+```bash
+scripts/onboard.sh            # --minimal: bridge only · --dry-run: show the plan · --help
+```
+
+It installs Bun if needed, reports the hardware, installs the locked bridge (and app) dependencies,
+lists which harnesses (OMP, Codex, Grok, Claude Code, Hermes, Pi, fx) the bridge can start, installs the
+bridge and Metro as launchd agents (macOS: `dev.kvnloo.dash-bridge`, `dev.kvnloo.dash-metro`) or systemd
+user services (Linux: `dash-bridge`, `dash-metro`), waits until both are healthy and prints a pairing
+code, links and a QR code. The services keep the PATH of the shell you ran it from, so the harnesses it
+listed are the ones the bridge finds. A hand-written service file is kept as `<file>.before-onboard`.
+`scripts/onboard.sh --pair` prints a fresh code; `scripts/onboard.sh --uninstall` removes the services
+(keeps `~/.dash` and `node_modules`). Rerun it after installing another harness.
+
+Manual setup, step by step:
+
 ```bash
 # 1. Bridge — runs agent CLIs, listens on your tailnet
 cd bridge && bun install && bun run index.ts
