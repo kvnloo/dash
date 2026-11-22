@@ -12,6 +12,7 @@ for (const width of [360,480]) {
    await openChat(page,bridge);
    await send(page,'ARMY_TOOL_DETAIL save release notes');
    await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+   await page.getByTestId('reply-tools-toggle').click();
    const row=page.getByTestId('reply-tool-row');
    // Before #514's fix this says "Write · write_file": parsing capped JSON loses the path.
    await expect(row).toContainText('Write');
