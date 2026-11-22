@@ -1,3 +1,4 @@
+import { chatPosts } from "./chat-posts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ConversationPersistence, hasHostHistory, uniqueConversationIds } from "./conversation-persistence";
 import { conversationFiles, conversationIndex } from "./conversation-files";
@@ -260,6 +261,7 @@ export function setConnection(patch: Partial<Connection>): void {
 export async function forgetEverything(send: (message: ClientMessage) => boolean = () => false): Promise<void> {
   const { agentNoticeInbox }: typeof import("./notices") = require("./notices");
   await agentNoticeInbox.forget(send);
+  chatPosts.set([]);
   const { clearOvernightCaptures }: typeof import("./overnight-captures") = require("./overnight-captures");
   const { clearBedtimeSchedule }: typeof import("./bedtime") = require("./bedtime");
   await clearBedtimeSchedule();
