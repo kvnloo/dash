@@ -72,23 +72,18 @@ test('Hermes surface selection follows the transcript or Live surface', async ({
       const options = page.getByRole('radiogroup', { name: 'Surface options' });
       const showChoices = async (surface: string) => {
         await page.getByRole('button', { name: 'Options. Current surface: ' + surface, exact: true }).click();
-        const row = page.getByTestId('composer-menu-row-surface');
-        await expect(row).toBeVisible();
-        const box = await row.boundingBox();
-        if (!box) throw Error('Surface row has no box');
-        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-        await page.mouse.down();
         await expect(options).toBeVisible();
-        await page.mouse.up();
       };
       await showChoices('Chat');
       await expect(options.getByRole('radio', { checked: true })).toHaveCount(1);
       await expect(options.getByRole('radio', { name: 'Hermes chat' })).toBeChecked();
+      await page.screenshot({ path: info.outputPath('window-hermes-chat.png') });
       await options.getByRole('radio', { name: 'Live surface' }).click();
       await expect(liveView).toBeVisible();
       await showChoices('Live surface');
       await expect(options.getByRole('radio', { checked: true })).toHaveCount(1);
       await expect(options.getByRole('radio', { name: 'Live surface' })).toBeChecked();
+      await page.screenshot({ path: info.outputPath('window-live-surface.png') });
       await options.getByRole('radio', { name: 'Hermes chat' }).click();
       await expect(transcript).toBeVisible();
     } finally {

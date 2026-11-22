@@ -93,6 +93,19 @@ export function ComposerActionMenuRow({
     return Gesture.Exclusive(hold, tap);
   }, [actions, choices.length, touchedChoice]);
 
+  // Surface is a two-way view switch, not a secondary action. Keep both choices
+  // in the menu row instead of opening a popover over the composer.
+  if (row.id === "surface") return <View accessibilityRole="radiogroup" accessibilityLabel="Surface options" style={styles.surfaceRow}>
+    {choices.map((choice, index) => <Pressable key={choice.id}
+      accessibilityRole="radio" accessibilityLabel={choice.label}
+      accessibilityState={{ checked: choice.selected }} aria-checked={choice.selected}
+      onPress={() => actions.choose(index)}
+      style={[styles.surfaceChoice, choice.selected && styles.highlight]}
+    >
+      <Text numberOfLines={1} style={[styles.choiceText, choice.selected && styles.surfaceSelected]}>{choice.selected ? "✓ " : ""}{choice.label}</Text>
+    </Pressable>)}
+  </View>;
+
   return <View style={[styles.anchor, expanded && styles.anchorExpanded]}>
     <GestureDetector gesture={gesture}>
       <Animated.View
@@ -115,22 +128,20 @@ export function ComposerActionMenuRow({
       </Animated.View>
     </GestureDetector>
     {expanded ? <View
-      accessibilityRole={row.id === "surface" ? "radiogroup" : undefined}
       accessibilityLabel={row.label + " options"}
       testID={"composer-menu-submenu-" + row.id}
       style={[styles.submenu, side === "left" ? styles.right : styles.left]}
     >
       {choices.map((choice, index) => <Pressable
         key={choice.id}
-        accessibilityRole={row.id === "surface" ? "radio" : "button"}
+        accessibilityRole="button"
         accessibilityLabel={choice.label}
-        accessibilityState={row.id === "surface" ? { checked: choice.selected } : { selected: choice.selected }}
-        aria-checked={row.id === "surface" ? choice.selected : undefined}
+        accessibilityState={{ selected: choice.selected }}
         onPress={() => actions.choose(index)}
         testID={"composer-menu-choice-" + row.id + "-" + index}
         style={[styles.choice, (hoverChoice === index || choice.selected) && styles.highlight]}
       >
-        <Text numberOfLines={2} style={styles.choiceText}>{row.id === "surface" && choice.selected ? "✓ " : ""}{choice.label}</Text>
+        <Text numberOfLines={2} style={styles.choiceText}>{choice.label}</Text>
       </Pressable>)}
     </View> : null}
   </View>;
@@ -153,4 +164,7 @@ const styles = StyleSheet.create({
   right: { right: 0 },
   choice: { minHeight: MENU_ROW_HEIGHT, paddingHorizontal: 12, justifyContent: "center" },
   choiceText: { ...type.small, color: colors.text },
+  surfaceRow: { minHeight: MENU_ROW_HEIGHT, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 6 },
+  surfaceChoice: { flex: 1, minHeight: 44, borderRadius: radius.md, justifyContent: "center", alignItems: "center" },
+  surfaceSelected: { color: colors.gold },
 });
