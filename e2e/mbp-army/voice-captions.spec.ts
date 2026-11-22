@@ -88,7 +88,9 @@ test("live caption strip shows streaming user and agent text in one line over Da
 
   // With a chat window open, the caption moves to the window's dock next to Mute/End.
   await page.getByRole("tab").nth(1).click({ noWaitAfter: true });
-  await page.getByRole("button", { name: /^(Create new chat|New chat)$/ }).first().click({ noWaitAfter: true });
+  // The hero orb covers the middle of the list; tap the row at its edge, outside the orb.
+  await hermes.click({ noWaitAfter: true, position: { x: 16, y: 12 } });
+  await expect(page.getByTestId("chat-window")).toBeVisible();
   await expect(page.getByTestId("window-voice-controls")).toBeVisible();
   await expect(page.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply");
   await expect(page.getByTestId("voice-captions-toggle")).toHaveCount(1);
