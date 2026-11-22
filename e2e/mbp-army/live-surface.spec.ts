@@ -19,7 +19,8 @@ async function openLive(page: Page, bridge: Bridge) {
   await send(page, 'ARMY live seed');
   await expect(page.getByText(/ARMY_REPLY: ARMY live seed/)).toBeVisible();
   await page.getByRole('button', { name: 'Options. Current surface: Chat', exact: true }).click({ noWaitAfter: true });
-  await page.getByRole('button', { name: 'Surface, Current: Chat · switch to Live surface', exact: true }).click({ noWaitAfter: true });
+  // #702 (DA-064): the window options offer each surface as a radio; pick Live surface directly.
+  await page.getByRole('radiogroup', { name: 'Surface options' }).getByRole('radio', { name: 'Live surface' }).click({ noWaitAfter: true });
   await expect(page.getByTestId('live-surface')).toBeVisible({ timeout: 15_000 });
   await expect(composer(page)).toHaveAttribute('placeholder', 'Live surface · quick reply');
 }
