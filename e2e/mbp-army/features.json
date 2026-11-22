@@ -125,6 +125,8 @@
                "ephemeral-ui card.v0 kinds 21-30 all draw the repo card",
                "ephemeral-ui card.v0 kinds 31-40 all draw the repo card",
                "ephemeral-ui card.v0 kinds 41-50 all draw the repo card"]},
+    {"id": "orb-style-picker", "title": "Choose a thinking orb or bot face for chat and voice, including after reload",
+     "tests": ["Settings orb style survives reload and appears on chat and the active mic"]},
     {"id": "voice-orb-overlay", "title": "A live call shows an interactive, pass-through hero orb outside Voice and annotation",
      "tests": ["live hero orb follows each voice phase, mutes, passes through and hides for annotation"]},
     {"id": "voice-live-captions", "title": "A live call shows a one-line streaming caption of user and agent text over Dash that CC turns off",

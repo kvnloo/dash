@@ -1,3 +1,4 @@
+import { hydrateOrbStyle } from "./src/store/orb-style";
 import { useHostSleepPosture } from "./src/hooks/useHostSleepPosture";
 import { TileDetailProvider } from "./src/components/InteractiveTile";
 import { DensityProvider } from "./src/components/Density";
@@ -109,7 +110,7 @@ export default function App() {
   }, [hydrated]);
 
   useEffect(() => {
-    void hydrate().then(async () => {
+    void Promise.all([hydrateOrbStyle(), hydrate()]).then(async () => {
       if (isDebugActive()) {
         await clearDebugPersistence();
         applyDebugSeed("paired");
