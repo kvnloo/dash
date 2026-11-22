@@ -10,6 +10,8 @@
     {"id":"reply-to-selected-message-text","title":"Quote selected agent message text into the unsent composer without sending","tests":["reply selection adds only highlighted assistant text to unsent draft, preserving attachments","cancel text selection leaves draft and bridge unchanged"]},
     {"id": "composer-one-tap-steer-queue", "title": "While a steerable turn runs, the composer offers Steer and Queue side by side: one tap sends with that mode (no menu) and the primary button guesses the last-used mode",
      "tests": ["while a Hermes turn runs, one tap on Queue or Steer sends with that mode and the next guess follows it"]},
+    {"id": "zero-card-with-trace", "title": "One Zero card anchored to the main input on every Main tab: the paired computer plus the live agent trace nested in it; tucks to one line, survives reload, comes back (#538)",
+     "tests": ["one Zero card above the main input carries the live agent trace, tucks away and comes back"]},
     {"id": "composer-model-harness-rate", "title": "Composer controls edit harness/model and show honest streaming token speed through the real authenticated bridge",
      "tests": ["composer harness chooser is attached to the input and never sends a turn",
                "composer model edit applies ACP set_model before prompting and rejects unsupported models",
