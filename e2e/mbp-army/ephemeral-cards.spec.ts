@@ -55,6 +55,8 @@ for (let batch = 0; batch * 10 < EPHEMERAL_KINDS.length; batch++) {
    const frame = page.frameLocator(`iframe[title$=" ${kind} card"]`);
    await expect(frame.locator(`.eu-card[data-kind="${kind}"]`)).toBeVisible({ timeout: 30_000 });
    await expect(frame.getByRole('alert')).toHaveCount(0);
+   // Kinds that need data (fleet, intel-suite, ops) must draw the kit's sample, not their empty state.
+   await expect(frame.getByText(/data unavailable|could not be drawn|snapshot: \d{3}/i)).toHaveCount(0);
   }
   await expect(page.getByRole('alert', { name: 'Interface could not be rendered', exact: true })).toHaveCount(0);
  });
