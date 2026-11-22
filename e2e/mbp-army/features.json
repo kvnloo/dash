@@ -362,6 +362,8 @@
                "restored saved-local chat keeps its own draft and Main chat search"]},
     {"id": "attached-last-exchange", "title": "Main bar attached to a chat pops up its last message or two on demand (#507); collapsed by default, tap opens the chat",
      "tests": ["attached composer pops up the last exchange on demand and opens the chat from it"]},
+    {"id": "bedtime-capture", "title": "After opted-in bedtime, save composer thoughts locally and recover them without auto-send",
+     "tests": ["bedtime saves the chat draft locally across reload until the owner sends it after wake", "bedtime saves an unassigned main composer thought without opening a chat"]},
     {"id": "perf-no-accumulation", "title": "Measured perf gates (A29): Orchestra view switches do not slow down or accumulate heap/DOM/listeners (#530); prompt rail scrub never freezes a frame (#522)",
      "tests": ["perf: 40 Orchestra view switches do not slow down or accumulate heap, DOM nodes or listeners (#530)",
                "perf: prompt rail scrub over a 1000-message chat never freezes a frame (#522)"]}

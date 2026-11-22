@@ -1,6 +1,7 @@
 import { ModelsPanel } from "../components/ModelsPanel";
 import { DeviceCheck } from "../components/DeviceCheck";
 import { NotificationSettings } from "../components/NotificationSettings";
+import { BedtimeSettings } from "../components/BedtimeSettings";
 import { setHandedness, useHandedness } from "../lib/useHandedness";
 import type { Handedness } from "../lib/handedness";
 import { Canvas } from "../components/Canvas";
@@ -171,6 +172,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           </Pressable>
           {modelsOpen ? <ModelsPanel /> : null}
           <NotificationSettings />
+          <BedtimeSettings />
           <Pressable accessibilityRole="button" onPress={() => navigation.navigate("Notices")} style={styles.secondary}><Text style={styles.secondaryText}>Notices · Agent reports</Text></Pressable>
           <Pressable
             accessibilityRole="button"
