@@ -8,7 +8,20 @@ import { PressScale } from "../PressScale";
 type Intent = Extract<EphemeralMessage, { type: "eui:intent" }>;
 
 /** The host frame shared by native and web: status, height and the one agent handoff button. */
-export function useEphemeralCard(spec: EphemeralCardSpec, onIntent?: (intent: LiveIntent) => boolean) {
+export type EphemeralCardProps = {
+  spec: EphemeralCardSpec;
+  onIntent?: (intent: LiveIntent) => boolean;
+  /** Frame title / accessibility name; defaults to "<app> <kind> card". */
+  title?: string;
+  /** Footer provenance line; defaults to the kit sample-data line. */
+  source?: string;
+  /** Called once the card page reports drawn (props: its spec as key-sorted JSON) or failed (null). */
+  onDrawn?: (result: { ok: boolean; props: string | null }) => void;
+};
+
+export const cardTitle = (props: EphemeralCardProps) => props.title ?? `${props.spec.app} ${props.spec.kind} card`;
+
+export function useEphemeralCard(spec: EphemeralCardSpec, onIntent?: (intent: LiveIntent) => boolean, onDrawn?: EphemeralCardProps["onDrawn"]) {
   const scheme = useColorScheme() === "light" ? "light" : "dark";
   const html = useMemo(() => ephemeralCardDocument(spec, scheme), [spec, scheme]);
   const [height, setHeight] = useState(360);
@@ -17,13 +30,15 @@ export function useEphemeralCard(spec: EphemeralCardSpec, onIntent?: (intent: Li
   const [notice, setNotice] = useState("");
   const seen = useRef("");
   const receiveRef = useRef<(raw: unknown) => void>(() => {});
+  const drawnRef = useRef(onDrawn);
+  drawnRef.current = onDrawn;
   const receive = (raw: unknown) => receiveRef.current(raw);
   receiveRef.current = (raw: unknown) => {
     const message = parseEphemeralMessage(raw);
     if (!message) return;
     if (message.type === "eui:size") setHeight(message.height);
-    else if (message.type === "eui:ready") setStatus("ready");
-    else if (message.type === "eui:error") setStatus("error");
+    else if (message.type === "eui:ready") { setStatus("ready"); drawnRef.current?.({ ok: true, props: message.props }); }
+    else if (message.type === "eui:error") { setStatus("error"); drawnRef.current?.({ ok: false, props: null }); }
     else {
       const key = `${message.at}:${message.action}`;
       if (message.at && seen.current === key) return;
@@ -43,14 +58,14 @@ export function useEphemeralCard(spec: EphemeralCardSpec, onIntent?: (intent: Li
   return { html, height, status, last, notice, send, receive: stable, canSend: !!onIntent };
 }
 
-export function EphemeralCardFooter({ spec, card }: { spec: EphemeralCardSpec; card: ReturnType<typeof useEphemeralCard> }) {
+export function EphemeralCardFooter({ spec, card, source }: { spec: EphemeralCardSpec; card: ReturnType<typeof useEphemeralCard>; source?: string }) {
   return <View style={styles.foot}>
     {card.status === "error" ? <Text accessibilityRole="alert" style={styles.meta}>This card could not be drawn. Ask me to send it again.</Text> : null}
     {card.last && card.canSend ? <PressScale accessibilityRole="button" accessibilityLabel={`Send to agent: ${card.last.label}`} onPress={card.send} style={styles.send}>
       <Text numberOfLines={2} style={styles.sendText}>Send to agent · {card.last.label}</Text>
     </PressScale> : null}
     {card.notice ? <Text role="status" style={styles.meta}>{card.notice}</Text> : null}
-    <Text style={styles.source}>ephemeral-ui · {spec.kind} · {spec.app} · kit sample data</Text>
+    <Text style={styles.source}>{source ?? `ephemeral-ui · ${spec.kind} · ${spec.app} · kit sample data`}</Text>
   </View>;
 }
 

@@ -35,23 +35,23 @@ export function reportClauses(run: CouncilRun): ReportClause[] {
   return clauses;
 }
 
-function turnStarts(run: CouncilRun): number[] {
+function turnStarts(run: CouncilRun, glide: boolean): number[] {
   let at = 0;
-  return run.events.map(e => { const start = at; if (e.type === "turn") at += TURN_MS; return start; });
+  return run.events.map(e => { const start = at; at += e.type === "turn" ? (glide ? 520 : TURN_MS) : glide ? 90 : 0; return start; });
 }
 
-export function councilTiming(run: CouncilRun, reduce = false) {
+export function councilTiming(run: CouncilRun, reduce = false, glide = false) {
   const chars = run.brief.length + run.constraints.join("").length;
   const typing = reduce ? 0 : Math.min(3200, Math.max(900, chars * 24));
   const working = typing + (reduce ? 0 : DELIVERY_MS);
-  const turns = run.events.filter(e => e.type === "turn").length * TURN_MS;
+  const turns = run.events.reduce((ms, e) => ms + (e.type === "turn" ? (glide ? 520 : TURN_MS) : glide ? 90 : 0), 0);
   const report = working + (reduce ? 0 : turns);
   return { typing, working, report, total: report + (reduce ? 0 : reportClauses(run).length * CLAUSE_MS) };
 }
 
 /** The exchange `t` ms after Convene (`null` = not convened yet). Reduced motion jumps to the end. */
-export function councilAt(run: CouncilRun, t: number | null, reduce = false): CouncilExchange {
-  const time = councilTiming(run, reduce);
+export function councilAt(run: CouncilRun, t: number | null, reduce = false, glide = false): CouncilExchange {
+  const time = councilTiming(run, reduce, glide);
   const elapsed = t === null ? 0 : reduce ? time.total : Math.max(0, t);
   const phase: CouncilPhase = t === null ? "seated" : elapsed < time.typing ? "brief" : elapsed < time.working ? "sending"
     : elapsed < time.report ? "working" : elapsed < time.total ? "report" : "done";
@@ -62,7 +62,8 @@ export function councilAt(run: CouncilRun, t: number | null, reduce = false): Co
   const constraints = run.constraints.map(line => { const shown = line.slice(0, Math.max(0, typed)); typed -= line.length; return shown; });
   const delivery = phase === "sending" ? (elapsed - time.typing) / DELIVERY_MS : phase === "seated" || phase === "brief" ? 0 : 1;
   const work = phase === "working" ? elapsed - time.working : phase === "report" || phase === "done" ? Infinity : -1;
-  const starts = turnStarts(run);
+  const starts = turnStarts(run, glide);
+  const turnMs = glide ? 520 : TURN_MS;
   let round = 0;
   const seats = run.seats.map((_, i): SeatState => {
     if (t === null) return "waiting";
@@ -70,8 +71,8 @@ export function councilAt(run: CouncilRun, t: number | null, reduce = false): Co
     if (work < 0) return "received";
     const mine = run.events.map((e, k) => ({ e, k })).filter(({ e }) => e.type === "turn" && e.seat === i);
     const last = mine.at(-1);
-    if (!last || work >= (starts[last.k] ?? 0) + TURN_MS) return "done";
-    const now = mine.find(({ k }) => work >= (starts[k] ?? 0) && work < (starts[k] ?? 0) + TURN_MS);
+    if (!last || work >= (starts[last.k] ?? 0) + turnMs) return "done";
+    const now = mine.find(({ k }) => work >= (starts[k] ?? 0) && work < (starts[k] ?? 0) + turnMs);
     if (now?.e.type === "turn") round = Math.max(round, now.e.round);
     return now ? "drafting" : "thinking";
   });

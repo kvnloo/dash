@@ -52,7 +52,7 @@ export function acpRequestFailure(error: unknown, phase: string): string {
   const outOfUsage = status === 402 || /payment required|balance exhausted|out of (usage|credits)|usage limit|quota exceeded|insufficient (credit|balance|quota)/i.test(text);
   const rateLimited = status === 429 || /rate.?limit|too many requests/i.test(text);
   const hint = model ? `could not restore model ${model}; the host may have lost provider login`
-    : outOfUsage ? "the agent's provider account is out of usage or credits on this host"
+    : outOfUsage ? "the agent's provider account is out of usage or credits on this host; pick another model for the next turn"
     : rateLimited ? "the agent's provider is rate limiting this host; try again shortly"
     : "check host authentication and agent diagnostics";
   return `ACP request failed during ${phase} (code ${code}); ${hint}`;

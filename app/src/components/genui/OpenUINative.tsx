@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { colors, glass, radius, space, type } from "../../theme";
 import type { LiveIntent } from "../../../../shared/live";
-import { EphemeralCard } from "./EphemeralCard";
+import { CatalogEphemeralCard } from "./CatalogEphemeralCard";
 import { RippleRoadmap } from "./RippleRoadmap";
 import { layoutModel } from "./openui-native-model";
 import type { OpenUINode, OpenUILayoutRow } from "./openui-native-model";
@@ -102,7 +102,7 @@ function NativeRow({ row, childrenByParent, onIntent }: { row: OpenUILayoutRow; 
         ? <View style={styles.card}><RippleRoadmap /></View>
         : <Text accessibilityRole="alert" selectable style={styles.body}>Unsupported roadmap</Text>;
     case "EphemeralCard":
-      return <EphemeralCard spec={{ kind: row.kind, app: row.app }} onIntent={onIntent} />;
+      return <CatalogEphemeralCard kind={row.kind} app={row.app} onIntent={onIntent} />;
   }
 }
 

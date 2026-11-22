@@ -207,8 +207,27 @@ export function hydrateLiveConversation(conversation: Conversation, history: His
   return { ...conversation, messages, updatedAt: Math.max(incoming.at(-1)?.at ?? 0, conversation.updatedAt) };
 }
 
+/**
+ * Text as the agent's own transcript keeps it, for matching a phone row to its native row. Agents
+ * store a turn with its whitespace changed: Hermes strips its final response, which streamed with
+ * the model's leading blank lines, and multi-part replies are joined with paragraph breaks.
+ */
+function bare(text: string): string { return redactTool(text).replace(/\s+/g, ""); }
+
 /** Preserve order; source ids keep a richer phone projection aligned across moving windows. */
 export function mergeTranscriptMessages(existing: readonly Message[], incoming: readonly Message[], nativeNewest = false): Message[] {
+  return reconcileTranscript(existing, incoming, nativeNewest).messages;
+}
+
+/**
+ * Native rows of `incoming` the phone already shows: the same ids, or the native copy of a phone
+ * turn (its prompt and reply). An older page must not list them again above the phone's own rows.
+ */
+export function nativeRowsShown(existing: readonly Message[], incoming: readonly Message[]): ReadonlySet<string> {
+  return reconcileTranscript(existing, incoming).shown;
+}
+
+function reconcileTranscript(existing: readonly Message[], incoming: readonly Message[], nativeNewest = false): { messages: Message[]; shown: Set<string> } {
   const positions = new Map<string, number>();
   for (let index = 0; index < incoming.length; index++) positions.set(incoming[index]!.id, index);
   const existingById = new Map<string, Message>();
@@ -216,7 +235,7 @@ export function mergeTranscriptMessages(existing: readonly Message[], incoming: 
   for (const message of existing) {
     existingById.set(message.id, message);
     if (message.role === "assistant" && !message.turnId.startsWith("history:"))
-      phoneText.set(message.id, redactTool(message.text));
+      phoneText.set(message.id, bare(message.text));
   }
   const represented = new Set<string>();
   for (const message of existing) {
@@ -226,7 +245,7 @@ export function mergeTranscriptMessages(existing: readonly Message[], incoming: 
       const position = positions.get(id);
       const native = position === undefined ? existingById.get(id) : incoming[position];
       // A native row that has grown past the stopped phone reply is new visible evidence.
-      if (!native || phoneText.get(message.id)!.includes(native.text)) represented.add(id);
+      if (!native || phoneText.get(message.id)!.includes(bare(native.text))) represented.add(id);
     }
   }
   const consumed = new Set<string>();
@@ -287,9 +306,9 @@ export function mergeTranscriptMessages(existing: readonly Message[], incoming: 
       index++;
       continue;
     }
-    const prompt = redactTool(message.text);
+    const prompt = bare(message.text);
     const matchesUser = (native: Message) => native.role === "user" &&
-      (!native.truncated ? native.text === prompt : Boolean(native.text) && prompt.startsWith(native.text));
+      (!native.truncated ? bare(native.text) === prompt : Boolean(bare(native.text)) && prompt.startsWith(bare(native.text)));
     let candidate = projectedUser ?? next;
     if (!projection) while (candidate < incoming.length) {
       const native = incoming[candidate];
@@ -306,7 +325,6 @@ export function mergeTranscriptMessages(existing: readonly Message[], incoming: 
     }
     const start = candidate + 1;
     let joined = "";
-    let paragraphs = "";
     let count = 0;
     let complete = false;
     let cut = false;
@@ -314,15 +332,14 @@ export function mergeTranscriptMessages(existing: readonly Message[], incoming: 
     for (let i = start; i < incoming.length; i++) {
       const part = incoming[i];
       if (!part || part.role !== "assistant") break;
-      const raw = joined + part.text;
-      const spaced = paragraphs + (count ? "\n\n" : "") + part.text;
-      if (!replyText.startsWith(raw) && !replyText.startsWith(spaced)) {
+      const raw = joined + bare(part.text);
+      if (!replyText.startsWith(raw)) {
         if (count === 0 && part.truncated && phoneAssistant.state === "done") { count++; cut = true; }
         break;
       }
-      joined = raw; paragraphs = spaced; count++;
+      joined = raw; count++;
       cut ||= part.truncated === true;
-      if (joined === replyText || paragraphs === replyText) { complete = true; break; }
+      if (joined === replyText) { complete = true; break; }
       if (cut) break;
     }
     let retry = false;
@@ -330,7 +347,7 @@ export function mergeTranscriptMessages(existing: readonly Message[], incoming: 
       for (let later = index + 2; later < existing.length; later++) {
         const row = existing[later]!;
         if (positions.has(row.id)) break;
-        if (row.role === "user" && redactTool(row.text) === prompt) { retry = true; break; }
+        if (row.role === "user" && bare(row.text) === prompt) { retry = true; break; }
       }
     }
     if (retry) { result.push(message, phoneAssistant); index++; continue; }
@@ -354,7 +371,9 @@ export function mergeTranscriptMessages(existing: readonly Message[], incoming: 
     index++;
   }
   appendUntil(incoming.length);
-  return result;
+  const shown = new Set([...consumed, ...represented]);
+  for (const message of incoming) if (existingById.has(message.id)) shown.add(message.id);
+  return { messages: result, shown };
 }
 
 /** Newest-window refreshes share the same id/order-based reconciliation as hydration. */
@@ -374,10 +393,10 @@ export function mergeOlderHistory(current: Message[], older: readonly Message[])
   for (const message of current) {
     if (message.role !== "assistant" || !message.nativeProjection) continue;
     shown.add(message.nativeProjection.userId);
-    const text = redactTool(message.text);
+    const text = bare(message.text);
     for (const id of message.nativeProjection.replyIds) {
       const row = byId.get(id);
-      if (row && text.includes(row.text)) shown.add(id);
+      if (row && text.includes(bare(row.text))) shown.add(id);
     }
   }
   const result: Message[] = [];

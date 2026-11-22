@@ -38,6 +38,7 @@ import { TraceScreen } from "./src/screens/TraceScreen";
 import { LabScreen } from "./src/screens/LabScreen";
 import { BotsPageScreen } from "./src/screens/BotsPageScreen";
 import { SharedThemeScreen } from "./src/screens/SharedThemeScreen";
+import { GalleryScreen } from "./src/screens/GalleryScreen";
 import { RoadmapProjectScreen, RoadmapScreen, RoadmapTaskScreen } from "./src/screens/RoadmapScreen";
 import { DebugHost } from "./src/debug/DebugHost";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
@@ -79,6 +80,7 @@ const linking = {
       Trace: "trace",
       Lab: "lab",
       BotsPage: "botspage",
+      Gallery: { path: "gallery", parse: { page: Number } },
     },
   },
 };
@@ -182,6 +184,7 @@ export default function App() {
                 <Stack.Screen name="Lab" component={LabScreen} />
                 <Stack.Screen name="BotsPage" component={BotsPageScreen} />
                 <Stack.Screen name="SharedTheme" component={SharedThemeScreen} />
+                <Stack.Screen name="Gallery" component={GalleryScreen} />
                 <Stack.Screen name="Roadmap" component={RoadmapScreen} />
                 <Stack.Screen name="RoadmapProject" component={RoadmapProjectScreen} />
                 <Stack.Screen name="RoadmapTask" component={RoadmapTaskScreen} />

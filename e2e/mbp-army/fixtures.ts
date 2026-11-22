@@ -25,6 +25,7 @@ export type Bridge = { dir: string; port: number; bootstrap: string; peerCredent
  * longClaude: a 1000-message Claude Code chat AgentsView recorded on this computer
  *   (LONG_CHAT_PROMPTS prompts, each followed by tool-step rows and a final answer).
  * subagents: delegated workers of the native Hermes fixture chat (state.db child rows): two live, one ended.
+ * codex: the Codex ACP adapter (`codex-acp`) on PATH, and a Codex chat AgentsView recorded on this computer.
  * longHermes: a 1000-message native Hermes chat (LONG_HERMES_PROMPTS prompts, each with one answer):
  *   Hermes pages by (timestamp, id) keyset over user and assistant rows, not by AgentsView ordinal.
  * identity: true starts a private z0bridge authority; a shared FixtureZ0bridge makes this bridge
@@ -33,7 +34,7 @@ export type Bridge = { dir: string; port: number; bootstrap: string; peerCredent
  *   reaches peer bridges with minted tokens instead of peer-roster-tokens.json; peerPort is DASH_PEER_PORT.
  * liveFx: a loopback z0bridge `--fx` stand-in (fixture-fx.ts) for the Live surface; requests and Hermes receipts land in army-fx.jsonl.
  */
-export type BridgeOptions = { generatedUI?: boolean; archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; rosterHost?: string; rosterPeer?: Bridge; finishedSessions?: boolean; hermesProfiles?: string[]; env?: Record<string,string>; identity?: boolean | FixtureZ0bridge; peerIdentity?: FixtureZ0bridge; peerPort?: number; liveFx?: boolean };
+export type BridgeOptions = { generatedUI?: boolean; archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; rosterHost?: string; rosterPeer?: Bridge; finishedSessions?: boolean; hermesProfiles?: string[]; codex?: boolean; env?: Record<string,string>; identity?: boolean | FixtureZ0bridge; peerIdentity?: FixtureZ0bridge; peerPort?: number; liveFx?: boolean };
 export const LONG_CHAT_TITLE = 'ARMY long Claude Code chat';
 export const LONG_CHAT_PROMPTS = 125;
 export const LONG_HERMES_TITLE = 'ARMY long Hermes chat';
@@ -45,6 +46,8 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
  for (const name of ['hermes','omp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+'\n', {mode:0o700});
  // Claude Code: the bridge drives it through `claude-agent-acp` (ACP over stdio).
  for (const name of ['claude','claude-agent-acp']) await writeFile(join(bin,name), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' claude\n', {mode:0o700});
+ // Codex: the bridge drives it through `codex-acp`. Opt-in, so other journeys keep their harness list.
+ if (options.codex) await writeFile(join(bin,'codex-acp'), '#!/bin/sh\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' codex\n', {mode:0o700});
  // Native fx accepts only its maintained stdio ACP entrypoint, never legacy ask flags.
  await writeFile(join(bin,'fx'), '#!/bin/sh\n[ "$#" -eq 1 ] && [ "$1" = acp ] || exit 64\nexec '+quote(bun)+' '+quote(join(__dirname,'fixture-agent.ts'))+' fx\n', {mode:0o700});
  if (options.finishedSessions) {
@@ -105,7 +108,7 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
   peerCredentialId=await options.peerIdentity.enroll(peerEnv.DASH_PEER_IDENTITY_FILE,['dash:chat']);
  }
  if (options.peerPort) peerEnv.DASH_PEER_PORT=String(options.peerPort);
- const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', ARMY_ARCHIVE_CLAUDE:options.archiveClaude?'1':'0', ARMY_REMOTE_CLAUDE:options.remoteClaude?remoteCwd:'', ARMY_PM:options.pm?'1':'0', ARMY_LONG_CLAUDE:options.longClaude?String(LONG_CHAT_PROMPTS):'', ARMY_LONG_HERMES:options.longHermes?String(LONG_HERMES_PROMPTS):'', ARMY_SUBAGENTS:options.subagents?'1':'', ARMY_HERMES_PROFILES:(options.hermesProfiles??[]).join(','), ARMY_GENERATED_UI:options.generatedUI?'1':'', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot, DASH_KANBAN_DB:join(dir,'work.db'), DASH_SUPERVISION_DIR:join(dir,'.local/state/dash/supervision'), DASH_ORCHESTRA_PROFILES:join(dir,'.hermes'),
+ const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', ARMY_ARCHIVE_CLAUDE:options.archiveClaude?'1':'0', ARMY_ARCHIVE_CODEX:options.codex?'1':'0', ARMY_REMOTE_CLAUDE:options.remoteClaude?remoteCwd:'', ARMY_PM:options.pm?'1':'0', ARMY_LONG_CLAUDE:options.longClaude?String(LONG_CHAT_PROMPTS):'', ARMY_LONG_HERMES:options.longHermes?String(LONG_HERMES_PROMPTS):'', ARMY_SUBAGENTS:options.subagents?'1':'', ARMY_HERMES_PROFILES:(options.hermesProfiles??[]).join(','), ARMY_GENERATED_UI:options.generatedUI?'1':'', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot, DASH_KANBAN_DB:join(dir,'work.db'), DASH_SUPERVISION_DIR:join(dir,'.local/state/dash/supervision'), DASH_ORCHESTRA_PROFILES:join(dir,'.hermes'),
   DASH_FLEET_REGISTRY:join(dir,'fleet.yaml'), ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv, ...identityEnv, ...peerEnv, ...(liveFx?.env ?? {}), ...(options.env ?? {})};
  const seed = spawn(bun,[join(__dirname,'seed-gate.ts')],{env,stdio:['ignore','pipe','pipe']});
  let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) { await ownIdentity?.stop(); await liveFx?.stop(); throw Error('gate seed: '+seedLog); }

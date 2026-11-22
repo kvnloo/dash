@@ -8,7 +8,12 @@ import { EPHEMERAL_KIT_PARTS as parts } from "../vendor/ephemeral-ui/kit-html.ge
  * repo's own card from the pinned, vendored kit with its synthetic public fixtures. No model input,
  * code or URL reaches the page.
  */
-export type EphemeralCardSpec = { kind: EphemeralKind; app: string };
+export type EphemeralCardSpec = { kind: EphemeralKind; app: string; fixture?: EphemeralFixtureMount };
+/**
+ * Mount one shared-catalog fixture (lib/ephemeral-catalog.ts) exactly as the kit's catalog generator does: its
+ * seed and card.input, the clock frozen at the catalog's generatedAt. The page then reports the card's props.
+ */
+export type EphemeralFixtureMount = { id: string; seed: string; input?: unknown; at: string };
 
 const KIND_SET: ReadonlySet<string> = new Set(EPHEMERAL_KINDS);
 export const isEphemeralKind = (kind: unknown): kind is EphemeralKind => typeof kind === "string" && KIND_SET.has(kind);
@@ -46,12 +51,12 @@ const hostedThemes = `"themes.json":${JSON.stringify({
 /** One self-contained card page: the kit plus only the fixtures its kind reads. */
 export function ephemeralCardDocument(spec: EphemeralCardSpec, scheme: GlideScheme): string {
   const page = parts.head + dataFor(spec.kind).map(key => key === "themes" ? hostedThemes : parts.data[key]).join(",") + parts.tail;
-  const json = JSON.stringify({ kind: spec.kind, app: spec.app, scheme }).replace(/</g, "\\u003c");
+  const json = JSON.stringify({ kind: spec.kind, app: spec.app, scheme, fixture: spec.fixture }).replace(/</g, "\\u003c");
   return page.replace("/*EUI_SPEC*/null", () => json);
 }
 
 export type EphemeralMessage =
-  | { type: "eui:ready" }
+  | { type: "eui:ready"; props: string | null }
   | { type: "eui:error"; reason: string }
   | { type: "eui:size"; height: number }
   | { type: "eui:intent"; action: string; label: string; ids: string[]; at: number };
@@ -64,7 +69,8 @@ export function parseEphemeralMessage(raw: unknown): EphemeralMessage | null {
   let v: unknown = raw;
   if (typeof raw === "string") { try { v = JSON.parse(raw); } catch { return null; } }
   if (!record(v)) return null;
-  if (v.type === "eui:ready") return { type: "eui:ready" };
+  // props: the drawn card's spec as key-sorted JSON (host-entry.js), compared with the catalog fixture's props.
+  if (v.type === "eui:ready") return { type: "eui:ready", props: typeof v.props === "string" && v.props.length <= 524_288 ? v.props : null };
   if (v.type === "eui:error") return { type: "eui:error", reason: typeof v.reason === "string" ? v.reason.slice(0, 200) : "" };
   if (v.type === "eui:size") return typeof v.height === "number" && Number.isFinite(v.height) && v.height > 0 ? { type: "eui:size", height: Math.min(Math.round(v.height), 2400) } : null;
   if (v.type === "eui:intent" && record(v.detail)) {
