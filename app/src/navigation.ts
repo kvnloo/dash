@@ -18,6 +18,7 @@ export type RootStackParamList = {
   RoadmapProject: { projectId: string; feature?: string };
   RoadmapTask: { taskId: string };
   Lab: undefined;
+  SharedTheme: undefined;
 };
 
 export type ScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;
