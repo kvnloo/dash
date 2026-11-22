@@ -4,16 +4,52 @@ import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer, type ServerResponse } from 'node:http';
 
-export interface VoiceBrokerCall { method: string; path: string; body: unknown; authorized: boolean }
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+export interface VoiceBrokerCall { method: string; path: string; body: unknown; authorized: boolean; /** Date.now() when the request arrived. */ at?: number }
+/**
+ * Two z0live lanes behind ask_z0 (DA-024): a small fast model answers small talk, a large meta
+ * model takes task asks into the attached Hermes session. The model delays live here, at the
+ * broker boundary the app talks to, never in the app. Lane records go to the session JSONL the
+ * bridge folds into the Voice screen's lane timeline (`DASH_Z0LIVE_SESSIONS`).
+ */
+export interface FixtureLanes {
+  sessionsDir: string;
+  /** Time to the fast model's first token after the ask reaches the broker. */
+  fastFirstTokenMs: number;
+  /** Time for the meta lane to hand back a task result. */
+  metaMs: number;
+}
+/** The broker's routing trace: one entry per ask, which lane took it and when its answer was ready and fetched. */
+export interface BrokerRoute {
+  callId: string;
+  question: string;
+  lane: 'fast' | 'meta';
+  /** The Hermes target the call was minted for: the chat that was open when voice started. */
+  target: { profile: string; session: string };
+  askedAt: number;
+  readyAt?: number;
+  /** First inbox response that carried the answer to the app. */
+  fetchedAt?: number;
+}
+/** Task asks (code, tests, PRs) go to the meta lane; everything else is small talk for the fast lane. */
+export function routeLane(question: string): 'fast' | 'meta' {
+  return /\b(fix|code|test|tests|bug|refactor|implement|build|merge|pr|diff|deploy|commit|branch|run)\b/i.test(question) ? 'meta' : 'fast';
+}
 export interface FixtureZ0liveBroker {
   origin: string;
   calls(): readonly VoiceBrokerCall[];
   authorize(token: string): void;
   /** Hold the provider's SDP answer (the call stays connecting) until the returned release() is called. */
   holdAnswer(): () => void;
+  /** Routing trace (only with lanes). */
+  routes(): readonly BrokerRoute[];
+  /** The z0live session id this broker minted (its JSONL is `<sessionsDir>/<id>.jsonl`). */
+  sessionId: string;
   stop(): Promise<void>;
 }
-type InboxMessage = { id: string; session_id: string; params: Record<string, never>; say: string };
+type InboxMessage = { id: string; session_id: string; params: Record<string, string>; say: string };
 type QueuedMessage = { cursor: number; message: InboxMessage };
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -35,15 +71,28 @@ function json(response: ServerResponse, status: number, body: unknown, origin?: 
   response.end(JSON.stringify(body));
 }
 
-export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
+export async function startFixtureZ0liveBroker(options: { lanes?: FixtureLanes } = {}): Promise<FixtureZ0liveBroker> {
   const calls: VoiceBrokerCall[] = [];
   const queued: QueuedMessage[] = [];
+  const routes: BrokerRoute[] = [];
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  let target = { profile: '', session: '' };
   const sessionId = 'army-z0live-' + randomUUID();
   const providerSecret = 'army-fake-provider-secret';
   let allowedToken = '';
   let cursor = 0;
   let answerHeld: Promise<void> = Promise.resolve();
   let releaseHeld = () => {};
+  const lanes = options.lanes;
+  const trace = (type: string, data: Record<string, unknown>) => {
+    if (!lanes) return;
+    mkdirSync(lanes.sessionsDir, { recursive: true });
+    appendFileSync(join(lanes.sessionsDir, sessionId + '.jsonl'), JSON.stringify({ type, ts: Date.now() / 1000, data }) + '\n');
+  };
+  const later = (ms: number, run: () => void) => {
+    const timer = setTimeout(() => { timers.delete(timer); run(); }, ms);
+    timers.add(timer);
+  };
   const server = createServer(async (request, response) => {
     const method = request.method ?? 'GET';
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -51,7 +100,7 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
     const origin = request.headers.origin;
     const cors = typeof origin === 'string' && /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) ? origin : undefined;
     if (method === 'OPTIONS') {
-      calls.push({ method, path, body: null, authorized: false });
+      calls.push({ method, path, body: null, authorized: false, at: Date.now() });
       response.writeHead(204, headers(cors));
       response.end();
       return;
@@ -73,7 +122,7 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
       const provider = url.pathname === '/v1/fake/answer';
       const authorized = request.headers.authorization === 'Bearer ' + (provider ? providerSecret : allowedToken) &&
         (provider || allowedToken.length > 0);
-      calls.push({ method, path, body, authorized });
+      calls.push({ method, path, body, authorized, at: Date.now() });
       if (!authorized) { json(response, 401, { error: 'invalid fixture token' }, cors); return; }
       if (method === 'POST' && url.pathname === '/v1/realtime/session') {
         if (!record(body) || body.client !== 'dash' || !Array.isArray(body.transports) ||
@@ -82,6 +131,10 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
             typeof body.context.hermes_target.profile !== 'string') {
           json(response, 400, { error: 'invalid session request' }, cors); return;
         }
+        target = { profile: body.context.hermes_target.profile, session: body.context.hermes_target.session };
+        trace('app_state', { source: 'connected' });
+        trace('lane_attached', { lane: 'fast', name: 'Fast', model: 'army-fast-mini' });
+        trace('lane_attached', { lane: 'meta', name: 'Meta', model: 'army-meta-large' });
         json(response, 200, { session_id: sessionId, value: providerSecret, transport: 'realtime' }, cors);
         return;
       }
@@ -92,6 +145,11 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
         }
         const after = Number(rawAfter);
         const items = queued.filter(item => item.cursor > after).slice(0, 20);
+        const now = Date.now();
+        for (const item of items) {
+          const route = routes.find(entry => entry.callId === item.message.params.call_id);
+          if (route && route.fetchedAt === undefined) route.fetchedAt = now;
+        }
         const next = items.length ? items[items.length - 1].cursor : after;
         json(response, 200, {
           messages: items.map(item => item.message),
@@ -112,8 +170,25 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
             !record(body.arguments) || typeof body.arguments.question !== 'string') {
           json(response, 400, { error: 'invalid ask_z0' }, cors); return;
         }
-        const next = ++cursor;
-        queued.push({ cursor: next, message: { id: 'army-reply-' + next, session_id: sessionId, params: {}, say: 'ARMY voice reply' } });
+        if (!lanes) {
+          const next = ++cursor;
+          queued.push({ cursor: next, message: { id: 'army-reply-' + next, session_id: sessionId, params: {}, say: 'ARMY voice reply' } });
+          json(response, 200, { ok: true }, cors);
+          return;
+        }
+        const question = body.arguments.question;
+        const callId = body.call_id;
+        const lane = routeLane(question);
+        const route: BrokerRoute = { callId, question, lane, target, askedAt: Date.now() };
+        routes.push(route);
+        trace('lane_step', { lane, step: lane === 'fast' ? 'Answering: ' + question : 'Taking it to session ' + target.session });
+        later(lane === 'fast' ? lanes.fastFirstTokenMs : lanes.metaMs, () => {
+          const say = lane === 'fast' ? 'FAST ' + question : 'META done in session ' + target.session;
+          const next = ++cursor;
+          queued.push({ cursor: next, message: { id: 'army-reply-' + next, session_id: sessionId, params: { lane, call_id: callId }, say } });
+          route.readyAt = Date.now();
+          trace('lane_handoff', { lane, summary: say });
+        });
         json(response, 200, { ok: true }, cors);
         return;
       }
@@ -143,6 +218,8 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
     origin: 'http://127.0.0.1:' + address.port,
     calls: () => calls,
     authorize: token => { allowedToken = token; },
+    routes: () => routes,
+    sessionId,
     holdAnswer: () => {
       answerHeld = new Promise<void>(resolve => { releaseHeld = resolve; });
       return () => releaseHeld();
@@ -150,6 +227,8 @@ export async function startFixtureZ0liveBroker(): Promise<FixtureZ0liveBroker> {
     // A held answer is released first: an open request would keep close() waiting.
     stop: () => {
       releaseHeld();
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
       return new Promise<void>((resolve, reject) => {
         server.close(error => error ? reject(error) : resolve());
         server.closeAllConnections();

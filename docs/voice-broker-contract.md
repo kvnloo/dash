@@ -26,6 +26,12 @@ On start, Dash reads its saved cursor from AsyncStorage under `dash.voice.inbox.
 
 At teardown, the app closes its peer/mic first, then attempts `cancel_work` and `sessions/<id>/end`. These requests should be idempotent. A failed response or network timeout is not evidence that work stopped.
 
+## Lanes and the routing trace (DA-024)
+
+An inbox message may name the z0live lane that produced it in `params.lane` (or a top-level `lane`), for example `"fast"` for the small model that answers small talk or `"meta"` for the large model that takes a task into the attached Hermes session, and the ask it answers in `params.call_id`. Both are optional; a broker that sends neither still works. Dash shows the lane and the time from the user's final transcript to the answer's arrival in the live call screen's routing trace (`voice-route`), tags the spoken line with the lane, and logs `[voice] route lane=<lane> first_token_ms=<ms>`.
+
+After each `ask_z0`, Dash polls `GET /v1/inbox` every 100 ms for up to 3 s (one request in flight), then falls back to the 1 Hz poll. A fast-lane answer therefore waits tens of milliseconds for Dash rather than up to a second. Quick polls do not count toward the three-failure stop.
+
 ## SDP and fixture boundary
 
 The normal provider answer is the SDP text response from `POST https://api.openai.com/v1/realtime/calls`, using the minted provider secret. In **web-army-only** builds, TURBO-C02 routes that signaling call to `POST <loopback broker>/v1/fake/answer`, which replies with SDP text starting `v=0`; this is a fixture extension, **not** a deployed broker endpoint.

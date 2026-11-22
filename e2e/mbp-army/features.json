@@ -126,6 +126,8 @@
      "tests": ["live hero orb follows each voice phase, mutes, passes through and hides for annotation"]},
     {"id": "z0live-lane-timeline", "title": "The live call screen lists each attached z0live lane with its live step, elapsed time and expandable last handoff, collapsed to one line by default",
      "tests": ["z0live lane timeline shows each lane live step, elapsed time and expandable handoff, collapsed by default"]},
+    {"id": "z0live-fast-lane-routing", "title": "A z0live call attached to the open chat answers small talk from the fast lane with its first token in Dash under 1 s, routes a task ask to the meta lane, and the live call screen traces which lane answered each turn (DA-024)",
+     "tests": ["z0live fast lane answers three small-talk turns under 1 s, routes the task to the meta lane and traces both"]},
     {"id": "voice-live-captions", "title": "A live call shows a one-line streaming caption of user and agent text over Dash that CC turns off",
      "tests": ["live caption strip shows streaming user and agent text in one line over Dash and CC turns it off"]},
     {"id": "voice-live-approvals", "title": "During a live call a Needs OK or sudo request appears in the caption line; speech or a tap resolves it and sudo opens the sealed entry without leaving voice",
