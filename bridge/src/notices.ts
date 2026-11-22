@@ -174,7 +174,8 @@ export function createNoticeHttpHandler(options: NoticePolicyOptions) {
   };
   return async (request: Request, peer: string | null): Promise<Response> => {
     const url = new URL(request.url);
-    if (url.pathname !== "/notice") return new Response("not found", { status: 404 });
+    const targeted = url.pathname === "/chat/post";
+    if (!targeted && url.pathname !== "/notice") return new Response("not found", { status: 404 });
     // Ignore proxy headers. Browsers cannot use the local reporting surface.
     if ((peer !== "127.0.0.1" && peer !== "::1" && peer !== "::ffff:127.0.0.1") || request.headers.has("origin") ||
         !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || request.headers.get("host") && request.headers.get("host") !== url.host) return new Response("forbidden", { status: 403 });
@@ -203,10 +204,11 @@ export function createNoticeHttpHandler(options: NoticePolicyOptions) {
     const input = parseNoticeInput(raw);
     if (!input) return new Response("invalid notice (title 1–80, body 1–600, optional dash:// URL)", { status: 400 });
     try {
-      if (input.chat !== undefined) {
-        if (!options.postToChat || input.url || input.class || input.not_before || input.postedAt !== undefined) return new Response("invalid chat post", { status: 400 });
+      if (targeted) {
+        if (!options.postToChat || !input.chat || input.url || input.class || input.not_before || input.postedAt !== undefined) return new Response("invalid chat post", { status: 400 });
         return await options.postToChat(input.chat.trim(), input.body, request.signal);
       }
+      if (input.chat !== undefined || input.postedAt !== undefined) return new Response("invalid notice", { status: 400 });
       return await submit(input, now);
     }
     catch { return new Response("notice storage unavailable", { status: 503 }); }

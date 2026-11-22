@@ -871,6 +871,7 @@ async function postToChat(title: string, body: string, signal: AbortSignal): Pro
   if (matching.size > 1 || hits.next) return new Response("ambiguous chat title", { status: 409 });
   const [chat] = matching;
   if (!chat) return new Response("chat not found", { status: 404 });
+  if (signal.aborted) return new Response(null, { status: 408 });
   const post = chatPosts.publish({ title: "Agent message", chat, body, postedAt: Date.now() });
   return Response.json(post, { status: 201 });
 }
@@ -908,7 +909,7 @@ const server = Bun.serve<SocketData>({
   async fetch(request, server) {
     const url = new URL(request.url);
     // Reports use their own loopback-only listener, never the tailnet surface.
-    if (url.pathname === "/notice") return new Response("use the local notice listener", { status: 403 });
+    if (url.pathname === "/notice" || url.pathname === "/chat/post") return new Response("use the local notice listener", { status: 403 });
     // Native clients omit Origin; browser clients must use the exact bridge
     // origin or an explicitly configured origin. Never trust forwarded headers.
     const authority = `${HOST.includes(":") ? `[${HOST}]` : HOST}:${server.port}`;
