@@ -6,11 +6,13 @@ const mono = process.env.EXPO_PUBLIC_ZEROS_THEME === "proof-mono";
 export const proofMono = mono;
 // The Dash shell remains dark; embedded cards and the gallery can use either shared scheme.
 const dark = glide.color.dark;
+// AODL pins ink-2, ink-3 and green (scripts/check-aodl-tokens); Glide's dark scheme supplies the rest.
+const aodl = { ink2: "#B4AFA3", ink3: "#837F74", green: "#98cf8b" } as const;
 const night = {
   bg: dark.bg, surfaceRaised: dark.popover,
-  text: dark.fg, textMuted: dark.mutedFg, textTertiary: dark.faint, textFaint: "#5e5b52",
+  text: dark.fg, textMuted: aodl.ink2, textTertiary: aodl.ink3, textFaint: "#5e5b52",
   accent: dark.primary, actionStrong: glide.brand.cta.rim, actionMuted: glide.brand.cta.shade,
-  ok: dark.successFg, information: dark.info, warn: dark.warning,
+  ok: aodl.green, information: dark.info, warn: dark.warning,
   danger: dark.dangerFg, provenance: dark.magenta,
 };
 const palette = mono ? { ...night, bg: "#050505", surfaceRaised: "#111111", text: "#f0f0ed", textMuted: "#c4c4c0", textTertiary: "#92928d", textFaint: "#74746f", accent: "#f0f0ed", actionStrong: "#ffffff", actionMuted: "#b0b0ac", ok: "#f0f0ed", information: "#d8d8d4", warn: "#c2c2bd", danger: "#ffffff", provenance: "#a6a6a1" } : night;
