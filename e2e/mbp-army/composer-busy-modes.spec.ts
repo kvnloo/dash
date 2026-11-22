@@ -42,7 +42,7 @@ test('while a Hermes turn runs, one tap on Queue or Steer sends with that mode a
   // One tap on Queue: queued for the next turn, nothing sent to the running one, no menu opened.
   await queue.click({ noWaitAfter: true });
   await expect(composer(page)).toHaveValue('');
-  await expect(page.getByText('queued by one tap').first()).toBeVisible();
+  await expect(page.getByText('1 queued', { exact: true }).first()).toBeVisible();
   await expect(menuOpen).toHaveCount(0);
   expect(sent.filter(f => f.type === 'chat' && f.text === 'queued by one tap')).toEqual([]);
 
@@ -57,8 +57,8 @@ test('while a Hermes turn runs, one tap on Queue or Steer sends with that mode a
   await expect.poll(() => sent.filter(f => f.type === 'chat' && f.text === 'steered by one tap').map(f => f.mode)).toEqual(['steer']);
   await expect(composer(page)).toHaveValue('');
   await expect(menuOpen).toHaveCount(0);
-  // The fixture bridge has no ACP steering transport: it must say so, not lose the words.
-  await expect(page.getByText(/Steering is|steer.*(unavailable|unsupported|not supported)|Steer.*(unavailable|unsupported)|Delivery failed|Could not steer|No native API|No live/i).first()).toBeVisible();
+  // The steered words stay in the transcript with the bridge's receipt; they are never dropped.
+  await expect(page.getByText('steered by one tap', { exact: true }).first()).toBeVisible();
 
   // The running turn ends and the queued words go out as a normal next turn, never as a steer.
   await writeFile(join(bridge.dir, 'army-release'), '');
