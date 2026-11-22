@@ -45,6 +45,7 @@ import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
 import { peerRosterCollector } from "./src/peer-roster";
 import { AGENTSVIEW_PREFIX, agentsviewMachineId, agentsviewPath, isSelfArchiveProfile, rosterArchiveHead } from "./src/agentsview-sessions";
 import { ChatIndexClient } from "./src/chat-index/client";
+import { createT3CodeSource } from "./src/t3code";
 import { createChatsHttpHandler } from "./src/chat-index/http";
 import { hermesWsPage } from "./src/chat-index/hermes-src";
 import { sidecarPath } from "./src/chat-index/sidecar";
@@ -98,6 +99,7 @@ import { createSupervisionHttpHandler } from "./src/supervision-http";
 import { createPostureHttpHandler } from "./src/posture-http";
 import { createOrchestraHttpHandler } from "./src/orchestra-http";
 import { createHostsHttpHandler } from "./src/hosts-http";
+import { createPhoneQueueHttpHandler } from "./src/phone-queue-http";
 import { createRoadmapHttpHandler } from "./src/roadmap-http";
 import { createPmHttpHandler } from "./src/pm-http";
 import { createBridgeHealthHttpHandler, DRAIN_MESSAGE } from "./src/health";
@@ -881,6 +883,7 @@ const handleChats = createChatsHttpHandler({
   client: chatIndex,
   self: () => ({ id: SELF.id(), name: HOST_NAME, matches: (hostId: string) => SELF.matches(hostId) }),
   live: liveChats,
+  t3code: createT3CodeSource(process.env.DASH_T3CODE_SERVER, process.env.DASH_T3CODE_TOKEN, log),
 });
 
 /** Paged ws history for Hermes: the newest `limit`, and an older-page cursor when more may exist. */
@@ -889,6 +892,7 @@ const contextCompaction = compactionEnabled();
 const handleContext = contextHttp({ sessions: hermesSessions, compaction: contextCompaction });
 const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => selfRoster(harnessList(), HOST) });
 const handleHosts = createHostsHttpHandler({ authorize, hostId: () => SELF.id() });
+const handlePhoneQueue = createPhoneQueueHttpHandler({ authorize });
 const handleRoadmap = createRoadmapHttpHandler({ authorize });
 const handlePm = createPmHttpHandler({ authorize });
 const handleVoiceStatus = createVoiceStatusHttpHandler({ authorize });
@@ -957,6 +961,8 @@ const server = Bun.serve<SocketData>({
       const triage = await handleTriage(request); if (triage) return cors(triage);
       const hosts = await handleHosts(request);
       if (hosts) return cors(hosts);
+      const phoneQueue = await handlePhoneQueue(request);
+      if (phoneQueue) return cors(phoneQueue);
       const orchestra = await handleOrchestra(request);
       if (orchestra) return cors(orchestra);
       const roadmap = await handleRoadmap(request);

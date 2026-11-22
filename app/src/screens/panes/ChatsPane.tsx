@@ -2,7 +2,8 @@ import { useIsFocused } from "@react-navigation/native";
 import { useHandedness } from "../../lib/useHandedness";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, StyleSheet, Text, View } from "react-native";
+import type { NavigationProp } from "@react-navigation/native";
 import { chatKey, type ChatSummary, type HostInfo } from "../../../../shared/protocol";
 import type { WindowOrigin } from "../../lib/chat-window";
 import { threadAppearance } from "../../components/thread-appearance";
@@ -26,7 +27,8 @@ import { NEXT_ACTION_LATER_MS } from "../../lib/next-action-card";
 import { submitInAppFeedback } from "../../lib/feedback-submit";
 import { usePagedChats } from "../../hooks/usePagedChats";
 import type { AssistantMessage, ConnectionStatus, Conversation } from "../../model";
-import type { ScreenProps } from "../../navigation";
+import type { RootStackParamList, ScreenProps } from "../../navigation";
+import { useDeskActive } from "../../lib/desk";
 import { clearEndedConversations, deleteConversation, openChat, setActive, store } from "../../store/app";
 import { summaryByKey } from "../../store/chat-index-store";
 import { composerDrafts } from "../../store/composer-drafts";
@@ -80,7 +82,7 @@ function remoteModel(summary: ChatSummary, harnessName: string, selfId: string |
     content: {
       title: summary.title.trim() || harnessName,
       ...rowWorkspace(summary.cwd, summary.repoRoot),
-      outcome: summary.task || `${summary.messageCount} message${summary.messageCount === 1 ? "" : "s"} · ${harnessName}${foreign ? ` · ${summary.hostName}` : ""}`,
+      outcome: summary.origin === "t3code" ? summary.hostName : summary.task || `${summary.messageCount} message${summary.messageCount === 1 ? "" : "s"} · ${harnessName}${foreign ? ` · ${summary.hostName}` : ""}`,
       outcomeLabel: summary.task ? "Task" : null,
       activity: summary.running ? "Running on host" : summary.openIn ? `Open in ${summary.openIn}` : "Not opened yet",
       needsAttention: false,
@@ -140,12 +142,27 @@ const Row = memo(function Row({
   const thinking = item.thinking;
   const content = item.content;
   const activityShimmer = activityShimmerEnabled(thinking.phase, connectionStatus, stale);
-  return (
+  // Desk mode (DeX / wide window): mouse hover and right-click open the same row menu as a long-press.
+  const desk = useDeskActive();
+  const [hovered, setHovered] = useState(false);
+  const menuRef = useRef(onLongPress);
+  menuRef.current = onLongPress;
+  const frame = useRef<View>(null);
+  useEffect(() => {
+    const element: unknown = frame.current;
+    if (!desk || Platform.OS !== "web" || typeof HTMLElement === "undefined" || !(element instanceof HTMLElement)) return;
+    const contextMenu = (event: MouseEvent) => { event.preventDefault(); menuRef.current(item.id); };
+    element.addEventListener("contextmenu", contextMenu);
+    return () => element.removeEventListener("contextmenu", contextMenu);
+  }, [desk, item.id]);
+  const row = (
     <PressScale
       onPress={(event) => pressRow(event.nativeEvent, CHAT_ROW_HEIGHT, item.id, onPress)}
       onLongPress={() => onLongPress(item.id)}
       delayLongPress={350}
-      style={[styles.row, active && !stale && styles.rowActive]}
+      onHoverIn={desk ? () => setHovered(true) : undefined}
+      onHoverOut={desk ? () => setHovered(false) : undefined}
+      style={[styles.row, active && !stale && styles.rowActive, desk && hovered && styles.rowHover]}
       accessibilityRole="button"
       testID={`chat-row-${item.id.startsWith("remote:") ? item.id.slice(7) : item.id}`}
     >
@@ -177,6 +194,8 @@ const Row = memo(function Row({
       <View style={styles.hairline} />
     </PressScale>
   );
+  // Phone layout keeps the bare row; desk mode adds a host element for the right-click menu.
+  return desk ? <View ref={frame} collapsable={false}>{row}</View> : row;
 }, (a, b) => a.item === b.item && a.saved === b.saved && a.live === b.live && a.active === b.active && a.connectionStatus === b.connectionStatus && a.onPress === b.onPress && a.onLongPress === b.onLongPress);
 
 /**
@@ -228,7 +247,7 @@ function startOfToday(): number {
 const NO_ENTRIES: readonly ConversationEntry[] = [];
 const NO_LIST = emptyList();
 
-export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: Pick<ScreenProps<"Main">, "navigation"> & { focused?: boolean }) {
+export const ChatsPane = memo(function ChatsPane({ navigation, focused = false }: { navigation: NavigationProp<RootStackParamList>; focused?: boolean }) {
   const thumb = useHandedness();
   const screenFocused = useIsFocused();
   const conversations = store.use((s) => s.conversations);
@@ -511,6 +530,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   rowActive: { backgroundColor: "rgba(215,185,134,.035)" },
+  rowHover: { backgroundColor: "rgba(236,232,223,.05)" },
   stale: { color: colors.textTertiary },
   liveDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.gold },
   badge: { color: colors.textTertiary, ...type.mono, fontSize: 10, textTransform: "none", letterSpacing: 0 },

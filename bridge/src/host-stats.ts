@@ -61,12 +61,27 @@ async function temperature(): Promise<number | undefined> {
   return values.length ? Math.max(...values) / 1000 : undefined;
 }
 
-/** One collector per bridge: counters only, no history, services or remote host access. */
+/** Summed rx/tx byte counters of every non-loopback interface in /proc/net/dev. */
+function netCounters(raw: string): { rx: number; tx: number } | undefined {
+  let rx = 0, tx = 0, seen = false;
+  for (const line of raw.split("\n").slice(2)) {
+    const [name, rest] = line.split(":");
+    if (!name || rest === undefined || name.trim() === "lo") continue;
+    const fields = rest.trim().split(/\s+/).map(Number);
+    const received = fields[0], sent = fields[8];
+    if (received === undefined || sent === undefined || !Number.isFinite(received) || !Number.isFinite(sent)) continue;
+    rx += received; tx += sent; seen = true;
+  }
+  return seen ? { rx, tx } : undefined;
+}
+
+/** One collector per caller: counters only, no history, services or remote host access. */
 export function createHostStatsCollector(hostId: () => string) {
   let previous: { total: number; idle: number; at: number } | undefined;
+  let previousNet: { rx: number; tx: number; at: number } | undefined;
   return async (): Promise<HostStats> => {
-    const [stat, mem, load, disk, gpus, battery, temperatureC] = await Promise.all([
-      text("/proc/stat"), text("/proc/meminfo"), text("/proc/loadavg"), statfs("/").catch(() => undefined), gpuStats(), powerStats(), temperature(),
+    const [stat, mem, load, disk, gpus, battery, temperatureC, netDev] = await Promise.all([
+      text("/proc/stat"), text("/proc/meminfo"), text("/proc/loadavg"), statfs("/").catch(() => undefined), gpuStats(), powerStats(), temperature(), text("/proc/net/dev"),
     ]);
     const stats: HostStats = { hostId: hostId(), sampledAt: Date.now(), cpuCount: stat.match(/^cpu\d+\s/gm)?.length || Math.max(1, cpus().length) };
     // Linux guest/guest_nice counters are already included in user/nice (first eight fields).
@@ -85,6 +100,14 @@ export function createHostStatsCollector(hostId: () => string) {
     if (gpus) stats.gpus = gpus;
     if (battery) stats.battery = battery;
     if (temperatureC !== undefined) stats.temperatureC = temperatureC;
+    const net = netCounters(netDev);
+    if (net) {
+      const seconds = previousNet ? (stats.sampledAt - previousNet.at) / 1000 : 0;
+      if (previousNet && seconds > 0 && seconds <= 30 && net.rx >= previousNet.rx && net.tx >= previousNet.tx) {
+        stats.net = { rxBytesPerSec: (net.rx - previousNet.rx) / seconds, txBytesPerSec: (net.tx - previousNet.tx) / seconds };
+      }
+      previousNet = { ...net, at: stats.sampledAt };
+    }
     return stats;
   };
 }

@@ -56,6 +56,8 @@ jobs:
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'app/bun.lock', 'bridge/bun.lock') }}
+      - name: Check AODL and DESIGN.md token drift
+        run: scripts/check-aodl-tokens
       - name: Install locked root and bridge dependencies; public app without private renderer
         run: bun install --frozen-lockfile && bun scripts/install-public-ci.ts && bun install --frozen-lockfile --cwd bridge
       - name: Headless Chromium, bridge sandbox and audio decoder

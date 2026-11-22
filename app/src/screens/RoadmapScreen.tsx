@@ -1,7 +1,8 @@
 // The Roadmap: projects, features and tasks the repositories track in git (pm/events.jsonl, shared/pm.ts),
 // in the Tern pane's minimal order and Dash's Living Night language: what waits on the owner first,
 // then what runs now, then the projects. Gold is only the selection rail; colour is only status.
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Canvas } from "../components/Canvas";
@@ -9,6 +10,10 @@ import { ScreenHeader } from "../components/ScreenHeader";
 import { screenBack } from "../lib/screen-back";
 import type { ScreenProps } from "../navigation";
 import { ancestors, byAttention, features, pmPrUrl, progressUnder, projects, tasksUnder, type PmIssue, type PmState } from "../../../shared/pm";
+import { chatsApi, type ApiSettings } from "../net/chats-api";
+import { openChat, store } from "../store/app";
+import { sameChatEndpoint } from "../store/chat-index-store";
+import type { ChatSummary } from "../../../shared/protocol";
 import { pm, refreshPm, usePmRefresh } from "../store/pm";
 import { colors, controlMin, fonts, radius, space, type } from "../theme";
 
@@ -57,6 +62,23 @@ function Status() {
   </>;
 }
 
+/** Resolve the exact Hermes id on the bridge that supplied the task, not a title or a remote archive. */
+async function taskChat(settings: ApiSettings, host: string, sessionId: string, signal: AbortSignal): Promise<ChatSummary | undefined> {
+  let cursor: string | null = null;
+  let match: ChatSummary | undefined;
+  do {
+    const result = await chatsApi.list(settings, { kinds: ["hermes"], hosts: [host], cursor }, { signal });
+    if (!result.ok) return;
+    for (const row of result.value.items) {
+      if (row.kind !== "hermes" || row.hostId !== host || row.sessionId !== sessionId) continue;
+      if (match && match.key !== row.key) return; // Ambiguous across profiles: keep the task detail.
+      match = row;
+    }
+    cursor = result.value.next;
+  } while (cursor && !signal.aborted);
+  return match;
+}
+
 /** Roadmap home: waiting on you, running now, projects. */
 export function RoadmapScreen({ navigation }: ScreenProps<"Roadmap">) {
   usePmRefresh();
@@ -68,7 +90,35 @@ export function RoadmapScreen({ navigation }: ScreenProps<"Roadmap">) {
   const running = tasks.filter(i => i.state === "running" && i.attention !== "you").sort(byAttention);
   const list = projects(issues);
   const overall = tasks.length ? Math.round(tasks.reduce((n, t) => n + percentOf(t), 0) / tasks.length) : undefined;
+  const lookup = useRef<AbortController | null>(null);
+  useFocusEffect(useCallback(() => () => {
+    lookup.current?.abort();
+    lookup.current = null;
+  }, []));
   const open = (id: string) => navigation.navigate("RoadmapTask", { taskId: id });
+  const openRunning = async (task: PmIssue) => {
+    if (lookup.current) return;
+    const { settings, connection } = store.get();
+    const host = connection.hosts.find(h => h.self);
+    const sessionId = task.kanban?.sessionId;
+    if (!settings || !host || !sessionId || !sameChatEndpoint(settings, pm.get().source)) { open(task.id); return; }
+    const controller = new AbortController();
+    lookup.current = controller;
+    const timer = setTimeout(() => controller.abort(), 8000);
+    let chat: ChatSummary | undefined;
+    try {
+      chat = await taskChat(settings, host.id, sessionId, controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (lookup.current !== controller) return;
+    lookup.current = null;
+    if (!sameChatEndpoint(settings, store.get().settings)) return;
+    if (chat && !controller.signal.aborted) {
+      openChat(chat);
+      navigation.push("Chat");
+    } else open(task.id);
+  };
   return <View style={[styles.screen, { paddingTop: insets.top }]}>
     <Canvas /><ScreenHeader title="Roadmap" onBack={() => screenBack(navigation)} onAction={() => void refreshPm()} action="Refresh roadmap" icon="refresh-cw" />
     <ScrollView testID="roadmap-screen" contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.xxl }]}
@@ -79,7 +129,7 @@ export function RoadmapScreen({ navigation }: ScreenProps<"Roadmap">) {
       </View>
       <Status />
       {you.length ? <><SectionHead title="Waiting on you" count={you.length} hint="blocks progress" />{you.map(t => <TaskRow key={t.id} issue={t} where={t.next} onPress={() => open(t.id)} />)}</> : null}
-      {running.length ? <><SectionHead title="Running now" count={running.length} />{running.map(t => <TaskRow key={t.id} issue={t} onPress={() => open(t.id)} />)}</> : null}
+      {running.length ? <><SectionHead title="Running now" count={running.length} />{running.map(t => <TaskRow key={t.id} issue={t} onPress={() => void openRunning(t)} />)}</> : null}
       <SectionHead title="Projects" count={list.length} />
       {list.map(project => {
         const p = progressUnder(issues, project.id);
