@@ -162,7 +162,8 @@ test('Council card from chat sends the brief to every seat, shows their reports 
 });
 
 test('Council card from the live-call Voice screen shows the labelled demo run, reads the report aloud on request and mute stops it', async ({ page, bridge }, info) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  // S25 Ultra web size, as in working-indicator.spec.ts; the device screenshot itself stays a device check.
+  await page.setViewportSize({ width: 480, height: 1040 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await scriptSpeech(page);
   await pair(page, bridge);
@@ -182,14 +183,14 @@ test('Council card from the live-call Voice screen shows the labelled demo run, 
   await expect(page.getByTestId('council-clause-verdict')).toContainText('Offer read aloud as an opt-in');
   for (const id of ['argon', 'astra', 'fable']) await expect(page.getByTestId(`council-seat-state-${id}`)).toHaveText('RECEIVED · DONE');
   expect((await speech(page)).said).toEqual([]);
-  await page.screenshot({ path: info.outputPath('council-demo-report.png') });
+  await page.screenshot({ path: info.outputPath('council-s25-demo-report.png') });
 
   // Read aloud after the fact reads the report through the orb; a tap returns, Mute ends it.
   await page.getByRole('switch', { name: 'Read aloud' }).click({ noWaitAfter: true });
   const orb = page.getByTestId('council-orb-view');
   await expect(orb).toBeVisible();
   await expect(page.getByTestId('council-caption')).toHaveText('Verdict.');
-  await page.screenshot({ path: info.outputPath('council-demo-orb.png') });
+  await page.screenshot({ path: info.outputPath('council-s25-demo-orb.png') });
   await orb.click({ noWaitAfter: true });
   await expect(page.getByTestId('council-resume')).toBeVisible();
   await page.getByRole('switch', { name: 'Mute council' }).click({ noWaitAfter: true });
