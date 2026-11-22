@@ -4,6 +4,7 @@
     {"id":"turbo-spoken-markup-request","title":"Preview sends spoken markup only to its attached Turbo Claude session","tests":["Turbo speaks and sends one marked request to the paired Claude session from another screen"]},
     {"id":"turbo-navigation-restore","title":"Preview restores the visible workspace after loading a new bundle","tests":["Turbo reload reopens the current workspace instead of Orchestra"]},
     {"id":"android-update-acceptance","title":"Dash offers a staged Android APK for explicit acceptance without bypassing O15","tests":["Dash offers a staged Android update and O15 still refuses an unreceipted install"]},
+    {"id": "chat-surface-selection", "title": "Exactly one Hermes chat surface is selected", "tests": ["Hermes surface selection follows the transcript or Live surface"]},
     {"id":"dash-logwatch-triage","title":"File a local triage task on distinct phone JS or bridge errors","tests":["Dash log watcher files a local task for each distinct phone JS or bridge error"]},
     {"id":"targeted-agent-chat-post","title":"An agent can post directly to a uniquely named chat without prompting the harness","tests":["dash-post delivers into only the named chat and replays once after reload"]},
     {"id":"reply-to-selected-message-text","title":"Quote selected agent message text into the unsent composer without sending","tests":["reply selection adds only highlighted assistant text to unsent draft, preserving attachments","cancel text selection leaves draft and bridge unchanged"]},
