@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kvnloo/ephemeral-ui/theme/tokens.schema.json",
+  "title": "ephemeral-ui shared theme tokens (v0)",
+  "description": "One theme file every app reads. Colors use the kit's token names; a web host applies color.<scheme>.<token> as --h-<token>, radius.base/lg as --h-radius/--h-radius-lg, space.density as --h-density, type.family.sans/mono as --h-font/--h-mono (see theme/README.md).",
+  "type": "object",
+  "required": ["v", "id", "name", "version", "brand", "color", "radius", "space", "type", "motion", "glass", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "v": { "const": 0 },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "description": { "type": "string" },
+    "brand": {
+      "type": "object",
+      "description": "Store and launcher branding: the name, tagline and mark colors shown wherever the app is listed.",
+      "required": ["name", "appId", "tagline", "mark", "accent", "accentInk"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "appId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "tagline": { "type": "string", "minLength": 1, "maxLength": 170 },
+        "mark": { "$ref": "#/$defs/hex" },
+        "accent": { "$ref": "#/$defs/hex" },
+        "accentInk": { "$ref": "#/$defs/hex" },
+        "cta": { "type": "object", "required": ["rim", "fill", "shade", "ink"], "additionalProperties": false, "properties": { "rim": { "$ref": "#/$defs/hex" }, "fill": { "$ref": "#/$defs/hex" }, "shade": { "$ref": "#/$defs/hex" }, "ink": { "$ref": "#/$defs/hex" } } }
+      }
+    },
+    "color": {
+      "type": "object",
+      "required": ["light", "dark"],
+      "additionalProperties": false,
+      "properties": { "light": { "$ref": "#/$defs/palette" }, "dark": { "$ref": "#/$defs/palette" } }
+    },
+    "radius": {
+      "type": "object", "description": "Corner radii, px.",
+      "required": ["chip", "tile", "block", "card", "pill", "base", "lg"],
+      "additionalProperties": false,
+      "patternProperties": { "": { "$ref": "#/$defs/px" } },
+      "properties": { "chip": {}, "tile": {}, "block": {}, "card": {}, "pill": {}, "base": {}, "lg": {} }
+    },
+    "space": {
+      "type": "object", "description": "Spacing steps, px, keyed by 4 px units; pad is the card padding at density 1.",
+      "required": ["1", "2", "3", "4", "pad", "density"],
+      "propertyNames": { "pattern": "^(\\d+(\\.5)?|pad|density)$" },
+      "properties": { "density": { "type": "number", "minimum": 0.5, "maximum": 1.5 } },
+      "additionalProperties": { "$ref": "#/$defs/px" }
+    },
+    "type": {
+      "type": "object",
+      "required": ["family", "base", "size", "tracking"],
+      "additionalProperties": false,
+      "properties": {
+        "family": { "type": "object", "required": ["sans", "mono", "serif"], "additionalProperties": false, "properties": { "sans": { "type": "string" }, "mono": { "type": "string" }, "serif": { "type": "string" } } },
+        "base": { "type": "object", "required": ["size", "lineHeight"], "additionalProperties": false, "properties": { "size": { "$ref": "#/$defs/px" }, "lineHeight": { "type": "number", "minimum": 1, "maximum": 2 } } },
+        "size": { "type": "object", "description": "Type ramp, px. Nothing under 10.", "required": ["label", "body", "title"], "additionalProperties": { "type": "number", "minimum": 10, "maximum": 200 } },
+        "tracking": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^-?\\d*\\.?\\d+em$" } }
+      }
+    },
+    "motion": {
+      "type": "object",
+      "required": ["duration", "easing", "spring", "speed", "reducedMotion"],
+      "additionalProperties": false,
+      "properties": {
+        "duration": { "type": "object", "description": "ms at speed 1; a host divides by its speed.", "required": ["quick", "base", "slow"], "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 5000 } },
+        "easing": { "type": "object", "required": ["out", "inOut"], "additionalProperties": { "type": "string", "pattern": "^cubic-bezier\\(" } },
+        "spring": { "type": "object", "additionalProperties": { "type": "object", "required": ["stiffness", "damping"], "additionalProperties": false, "properties": { "stiffness": { "type": "number", "exclusiveMinimum": 0 }, "damping": { "type": "number", "exclusiveMinimum": 0 }, "mass": { "type": "number", "exclusiveMinimum": 0 } } } },
+        "speed": {
+          "type": "object", "description": "Motion speed multipliers; durations are divided by the speed in use. turbo is the fast setting a host's turbo switch selects.",
+          "required": ["default", "min", "max", "turbo"], "additionalProperties": false,
+          "properties": { "default": { "const": 1 }, "min": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }, "max": { "type": "number", "minimum": 1 }, "turbo": { "type": "number", "minimum": 1 } }
+        },
+        "reducedMotion": { "enum": ["zero", "fade"], "description": "What prefers-reduced-motion does: zero every duration (the kit's anim()), or keep fades only." }
+      }
+    },
+    "glass": {
+      "type": "object", "description": "Backdrop levels: blur px, saturate percent, and the surface tint opacity percent where it is fixed.",
+      "required": ["none", "card"],
+      "additionalProperties": {
+        "type": "object", "required": ["blur", "saturate"], "additionalProperties": false,
+        "properties": { "blur": { "type": "number", "minimum": 0, "maximum": 64 }, "saturate": { "type": "number", "minimum": 100, "maximum": 300 }, "tint": { "type": "number", "minimum": 0, "maximum": 100 } }
+      }
+    },
+    "sources": { "type": "object", "description": "Where each group's values were taken from.", "additionalProperties": { "type": "string" } }
+  },
+  "$defs": {
+    "hex": { "type": "string", "pattern": "^#[0-9a-f]{6}([0-9a-f]{2})?$" },
+    "px": { "type": "number", "minimum": 0, "maximum": 1000 },
+    "palette": {
+      "type": "object",
+      "required": ["bg", "fg", "card", "muted", "mutedFg", "accent", "border", "input", "primary", "primaryFg", "success", "warning", "danger"],
+      "propertyNames": { "pattern": "^[a-z][a-zA-Z]*$" },
+      "additionalProperties": { "$ref": "#/$defs/hex" }
+    }
+  }
+}

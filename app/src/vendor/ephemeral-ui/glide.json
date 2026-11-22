@@ -1,0 +1,116 @@
+{
+  "$schema": "./tokens.schema.json",
+  "v": 0,
+  "id": "glide",
+  "name": "Glide",
+  "version": "0.1.0",
+  "description": "The default theme every app reads (Glide on Tern, Dash, Hermes desktop, the phones). Light is the kit's default light (T3 Code light); dark is Glide's Tern window theme (Dash black and gold). Values are copied from their sources unchanged, so wearing this file changes nothing on screen today.",
+  "brand": {
+    "name": "Glide",
+    "appId": "glide",
+    "tagline": "An agent workspace that guards two scarce resources: your attention and the agent's context window.",
+    "mark": "#e6cd96",
+    "accent": "#d7b986",
+    "accentInk": "#1d160b",
+    "cta": { "rim": "#f0d7a0", "fill": "#cfae74", "shade": "#9c7a43", "ink": "#1d160b" }
+  },
+  "color": {
+    "light": {
+      "bg": "#fcfcfc",
+      "fg": "#18181b",
+      "card": "#ffffff",
+      "muted": "#fafafa",
+      "mutedFg": "#71717b",
+      "accent": "#f4f4f5",
+      "border": "#e4e4e7",
+      "input": "#d4d4d8",
+      "primary": "#1b4ed8",
+      "primaryFg": "#ffffff",
+      "sidebar": "#fafafa",
+      "sidebarBorder": "#e4e4e7",
+      "message": "#ebebed",
+      "messageBorder": "#00000000",
+      "success": "#00bc7d",
+      "successFg": "#007a55",
+      "warning": "#fe9a00",
+      "danger": "#fb2c36",
+      "dangerFg": "#c10007"
+    },
+    "dark": {
+      "bg": "#0c0c0a",
+      "fg": "#ece8df",
+      "card": "#080807",
+      "muted": "#161512",
+      "mutedFg": "#bbb5a9",
+      "accent": "#211d16",
+      "border": "#3d3c39",
+      "input": "#3d3c39",
+      "primary": "#d7b986",
+      "primaryFg": "#1d160b",
+      "sidebar": "#151411",
+      "sidebarBorder": "#3d3c39",
+      "message": "#17150f",
+      "messageBorder": "#00000000",
+      "success": "#8fb98a",
+      "successFg": "#8fb98a",
+      "warning": "#d7b986",
+      "danger": "#e5484d",
+      "dangerFg": "#e5726a",
+      "faint": "#aca79d",
+      "secondary": "#2a2419",
+      "popover": "#151411",
+      "info": "#9db4d8",
+      "magenta": "#c9a6d8",
+      "cyan": "#8cc3be"
+    }
+  },
+  "radius": { "chip": 4, "tile": 8, "block": 12, "card": 16, "pill": 999, "base": 8, "lg": 12 },
+  "space": { "0.5": 2, "1": 4, "1.5": 6, "2": 8, "2.5": 10, "3": 12, "3.5": 14, "4": 16, "6": 24, "pad": 16, "density": 1 },
+  "type": {
+    "family": {
+      "sans": "-apple-system, BlinkMacSystemFont, \"Inter Variable\", Inter, \"Segoe UI\", system-ui, sans-serif",
+      "mono": "ui-monospace, \"SF Mono\", \"SFMono-Regular\", Menlo, Consolas, \"Liberation Mono\", monospace",
+      "serif": "\"Instrument Serif\", Georgia, serif"
+    },
+    "base": { "size": 15, "lineHeight": 1.5 },
+    "size": { "label": 10, "meta": 11, "small": 12, "body": 13, "lead": 15, "name": 17, "title": 20, "display": 28, "hero": 44, "giant": 88 },
+    "tracking": { "caps": ".08em", "wide": ".16em", "tight": "-.01em", "display": "-.04em", "giant": "-.06em" }
+  },
+  "motion": {
+    "duration": { "press": 150, "hover": 180, "quick": 200, "base": 250, "slow": 400, "reveal": 620 },
+    "easing": {
+      "out": "cubic-bezier(.16,1,.3,1)",
+      "inOut": "cubic-bezier(.65,0,.35,1)",
+      "emph": "cubic-bezier(.2,0,0,1)",
+      "in": "cubic-bezier(.3,0,.8,.15)",
+      "glass": "cubic-bezier(.2, .7, .2, 1)"
+    },
+    "spring": {
+      "snappy": { "stiffness": 380, "damping": 32 },
+      "soft": { "stiffness": 140, "damping": 22 },
+      "bouncy": { "stiffness": 260, "damping": 15 },
+      "gentle": { "stiffness": 90, "damping": 20 }
+    },
+    "speed": { "default": 1, "min": 0.5, "max": 2, "turbo": 2 },
+    "reducedMotion": "zero"
+  },
+  "glass": {
+    "none": { "blur": 0, "saturate": 100 },
+    "scrim": { "blur": 3, "saturate": 100 },
+    "overlay": { "blur": 4, "saturate": 100 },
+    "bar": { "blur": 16, "saturate": 130, "tint": 82 },
+    "composer": { "blur": 18, "saturate": 140, "tint": 72 },
+    "card": { "blur": 22, "saturate": 140 },
+    "max": { "blur": 44, "saturate": 220 }
+  },
+  "sources": {
+    "color.light": "ephemeral-ui src/data/themes.json t3-light (the kit's default light; T3 Code apps/web/src/index.css @ 54e9bb96)",
+    "color.dark": "glide glide/themes/dash.json vars (Glide's Tern window theme) @ 6c1e677: background, foreground, card, muted, mutedForeground, accent, border, primary, popover (sidebar), userBubble (message), green, yellow, destructive, red, faint, secondary, blue (info), magenta, cyan; input and sidebarBorder take border, primaryFg takes glide/frontend/tokens.ts GOLD.ink",
+    "brand": "glide README.md (tagline), glide/frontend/tokens.ts DASH.gold and GOLD, ephemeral-ui src/intel.html (Glide mark #e6cd96)",
+    "radius": "glide/frontend/tokens.ts RADIUS; base and lg are the kit's --h-radius (t3 radius 8) and --h-radius-lg (radius + 4, src/js/themes.js)",
+    "space": "ephemeral-ui src/styles.css: the paddings and gaps it uses most (2-24 px) and --pad (16px * --h-density)",
+    "type": "family: ephemeral-ui t3 font/mono and --serif; base: src/styles.css body; size and tracking: glide/frontend/tokens.ts TYPE and TRACK",
+    "motion": "easing and spring: ephemeral-ui src/js/motion.js ease and springs; glass easing: glide/frontend/glass.ts --g-ease; duration: glass.ts hover lifts (.15s/.18s/.2s), src/styles.css .25s, motion.js anim() default 400, themes.js setTheme reveal 620; speed: src/index.html #c-speed (0.5-2), durations divide by speed, so turbo 2 halves them",
+    "glass": "ephemeral-ui src/styles.css (#drawer scrim 3, #palette backdrop 4, header.top 16/1.3 at 82%, Hermes composer 18/1.4 at 72%); glide/frontend/glass.ts frost 22px/140% and the playground's 44px/220% ceiling"
+  }
+}

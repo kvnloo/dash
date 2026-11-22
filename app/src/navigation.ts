@@ -20,6 +20,7 @@ export type RootStackParamList = {
   Lab: undefined;
   /** Bots page prototype (DA-073): gem table, orrery, simple bot page, host tree. */
   BotsPage: undefined;
+  SharedTheme: undefined;
 };
 
 export type ScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

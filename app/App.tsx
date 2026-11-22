@@ -35,6 +35,7 @@ import { VoiceScreen } from "./src/screens/VoiceScreen";
 import { TraceScreen } from "./src/screens/TraceScreen";
 import { LabScreen } from "./src/screens/LabScreen";
 import { BotsPageScreen } from "./src/screens/BotsPageScreen";
+import { SharedThemeScreen } from "./src/screens/SharedThemeScreen";
 import { RoadmapProjectScreen, RoadmapScreen, RoadmapTaskScreen } from "./src/screens/RoadmapScreen";
 import { DebugHost } from "./src/debug/DebugHost";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
@@ -181,6 +182,7 @@ export default function App() {
                 <Stack.Screen name="Trace" component={TraceScreen} />
                 <Stack.Screen name="Lab" component={LabScreen} />
                 <Stack.Screen name="BotsPage" component={BotsPageScreen} />
+                <Stack.Screen name="SharedTheme" component={SharedThemeScreen} />
                 <Stack.Screen name="Roadmap" component={RoadmapScreen} />
                 <Stack.Screen name="RoadmapProject" component={RoadmapProjectScreen} />
                 <Stack.Screen name="RoadmapTask" component={RoadmapTaskScreen} />
