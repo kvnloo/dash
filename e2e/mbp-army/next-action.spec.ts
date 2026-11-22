@@ -102,13 +102,22 @@ test('Next up opens the exact completed background reply without sending and pre
 });
 
 test('Next up Later survives reload, Skip dismisses only one completion, and a newer reply in that chat returns', async ({ page, bridge }) => {
-  await page.clock.install();
+  // This journey never changes time; keep native browser input timing. Use the
+  // accessible Send button and prove the new prompt is running before navigation.
+  const sendHeld = async (prompt: string, starts: number) => {
+    await composer(page).fill(prompt);
+    const button = page.getByRole('button', { name: 'Send', exact: true });
+    await expect(button).toBeEnabled();
+    await button.press('Enter');
+    await expect.poll(() => turnEvents(bridge.dir)).toBe(starts);
+    await expect(page.getByText('ARMY_STREAM_BEGIN', { exact: true }).filter({ visible: true })).toBeVisible();
+  };
   await pair(page, bridge);
   const firstChatTitle = 'ARMY archived Claude Code chat';
   await page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: firstChatTitle }).click({ noWaitAfter: true });
   await expect(page.getByTestId('chat-window')).toBeVisible();
-  await send(page, 'ARMY_HOLD first background completion');
-  await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
+  await expect(visibleText(page, 'ARMY earlier answer from')).toBeVisible();
+  await sendHeld('ARMY_HOLD first background completion', 1);
   // Release and observe the older completion before starting the newer one.
   // A single release for two active agents does not define completion order.
   await toChats(page);
@@ -116,8 +125,7 @@ test('Next up Later survives reload, Skip dismisses only one completion, and a n
   await expectReadReplyFor(page, firstChatTitle);
   await unlink(join(bridge.dir, 'army-release'));
   await newChat(page);
-  await send(page, 'ARMY_HOLD second background completion');
-  await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
+  await sendHeld('ARMY_HOLD second background completion', 2);
   await toChats(page);
   await writeFile(join(bridge.dir, 'army-release'), '');
   await expect.poll(() => turnEvents(bridge.dir, 'end'), { timeout: 30_000 }).toBe(2);
@@ -146,9 +154,7 @@ test('Next up Later survives reload, Skip dismisses only one completion, and a n
   // marker exactly and require the third ACP turn before leaving the chat.
   await expect(visibleText(page, 'ARMY_CLAUDE_REPLY: ARMY_HOLD first background completion')).toBeInViewport();
   await unlink(join(bridge.dir, 'army-release'));
-  await send(page, 'ARMY_HOLD newer completion in the same chat');
-  await expect.poll(() => turnEvents(bridge.dir)).toBe(startsBeforeLater + 1);
-  await expect(page.getByText('ARMY_STREAM_BEGIN', { exact: true }).filter({ visible: true })).toBeVisible();
+  await sendHeld('ARMY_HOLD newer completion in the same chat', startsBeforeLater + 1);
   await toChats(page);
   await writeFile(join(bridge.dir, 'army-release'), '');
   await expectReadReplyFor(page, firstChatTitle);
