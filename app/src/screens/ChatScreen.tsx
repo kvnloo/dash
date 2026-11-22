@@ -539,7 +539,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     const reading = context.snapshot?.maximum ? `~${Math.round(Math.min(1, context.snapshot.used / context.snapshot.maximum) * 100)}%` : "Unknown";
     rows.push({ id: "context", label: "Context", value: `${reading} · grid`, run: () => { if (!context.open) context.toggle(); } });
     rows.push({ id: "annotate", label: "Annotate", value: "S Pen or finger", run: () => enterAnnotation() });
-    rows.push({ id: "council", label: "Council", value: "Brief + reports ›", run: () => openCouncil("chat") });
+    rows.push({ id: "council", label: "Council", value: "Brief + reports ›", run: () => openCouncil("chat", harnessId === "hermes" && conversation?.sessionId ? {
+      session: conversation.sessionId, profile: conversation.profileId ?? "default", host: conversation.targetHostId,
+    } : undefined) });
     if (approvalCount > 0) rows.push({ id: "approvals", label: "Approvals", value: `${approvalCount} pending${approvalDryRun ? " · preview" : ""} ›`, run: () => navigation.navigate("Approvals") });
     rows.push({
       id: "harness", label: "Harness", value: `${harnessName} · Change…`, run: () => setPickerVisible(true),

@@ -3,10 +3,10 @@
 // council run from its credential dir. The browser's speechSynthesis is replaced by a scripted
 // recorder so each sentence's start and end are controlled; this proves the card, the orb view and
 // the switch between them, never device audio or a real council.
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Page } from 'playwright/test';
-import { test, expect, openChat, pair } from './fixtures';
+import { test, expect, openChat, pair, createBridge } from './fixtures';
 
 const RUN = {
   schema: 'glide.council-run/v1',
@@ -202,4 +202,69 @@ test('Council card from the live-call Voice screen shows the labelled demo run, 
   await page.getByRole('button', { name: 'Close council', exact: true }).click({ noWaitAfter: true });
   await expect(page.getByTestId('council-modal')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Open the council card', exact: true })).toBeVisible();
+});
+
+test('Glide council opens from its Hermes chat and Dash resumes and writes back the saved sentence', async ({ page }, info) => {
+  const bridge = await createBridge(true, { env: { DASH_HERMES_SOURCE: join(__dirname, 'fixture-council'), DASH_HERMES_BIN: 'army-council-hermes' } });
+  try {
+    const home = join(bridge.dir, '.hermes');
+    const saved = join(home, 'army-council.json');
+    const id = 'council-0123456789abcdef0123456789abcdef';
+    const state = {
+      schema: 'glide.council-session/v1', council_id: id, stored_session_id: 'army-root', revision: 7,
+      created_at: '2026-10-25T12:00:00.000Z', updated_at: '2026-10-25T12:00:01.000Z',
+      started_by: 'glide', updated_by: 'glide', live: true, from: 'recorded council',
+      run: RUN,
+      passages: [
+        { key: 'brief', label: 'Brief', text: RUN.brief, seat: null },
+        { key: 'report:dissent', label: 'Dissent', text: 'Dissent. Moss wants text only. Keep the written report.', seat: 'moss' },
+        { key: 'report:receipts', label: 'Receipts', text: 'First receipt.', seat: null },
+      ],
+      position: { elapsed_ms: 20_000, passage: 'report:dissent', sentence: 1, read_aloud: true, muted: false },
+    };
+    await writeFile(join(bridge.dir, 'bin', 'army-council-hermes'), `#!/bin/sh
+[ "$1" = "--print-runtime-command" ] || exit 64
+echo '["/usr/bin/python3"]'
+`, { mode: 0o700 });
+    await writeFile(saved, JSON.stringify({ ...state, schema: 'glide.council-session/v2' }));
+    await scriptSpeech(page);
+    await pair(page, bridge);
+    const hermes = page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({ hasText: 'ARMY native fixture' });
+    await expect(hermes).toHaveCount(1);
+    await hermes.click({ noWaitAfter: true });
+    await page.getByRole('button', { name: 'Options. Current surface: Chat', exact: true }).click({ noWaitAfter: true });
+    await page.getByTestId('composer-menu-row-council').click({ noWaitAfter: true });
+
+    const council = page.getByTestId(id);
+    await council.click();
+    await expect(page.getByRole('alert').filter({ hasText: 'unsupported version' })).toBeVisible();
+    expect((await speech(page)).said).toEqual([]);
+
+    await writeFile(saved, JSON.stringify(state));
+    await council.click();
+    const orb = page.getByTestId('council-orb-view');
+    await expect(orb).toBeVisible();
+    await expect(page.getByTestId('council-caption')).toHaveText('Moss wants text only.');
+    await page.screenshot({ path: info.outputPath('resumed-orb.png') });
+
+    const readSaved = async () => JSON.parse(await readFile(saved, 'utf8'));
+    await expect.poll(readSaved).toMatchObject({
+      revision: 8, updated_by: 'dash', position: { passage: 'report:dissent', sentence: 1, elapsed_ms: 20_000 },
+    });
+    await finishSentence(page);
+    await expect(page.getByTestId('council-caption')).toHaveText('Keep the written report.');
+    await expect.poll(readSaved).toMatchObject({ updated_by: 'dash', position: { passage: 'report:dissent', sentence: 2 } });
+    await finishSentence(page);
+    await expect(page.getByTestId('council-caption')).toHaveText('First receipt.');
+    await expect.poll(readSaved).toMatchObject({ updated_by: 'dash', position: { passage: 'report:receipts', sentence: 0 } });
+    await orb.click({ noWaitAfter: true });
+    await expect(page.getByTestId('council-verdict')).toContainText(RUN.outcome);
+    expect((await speech(page)).said).toEqual(['Moss wants text only.', 'Keep the written report.', 'First receipt.']);
+    await page.getByRole('button', { name: 'Close council', exact: true }).click();
+    await expect(page.getByTestId('council-modal')).toHaveCount(0);
+    await info.attach('council-gateway-rpc', { path: join(home, 'army-council-rpc.jsonl'), contentType: 'application/jsonl' });
+  } finally {
+    await bridge.stop();
+    await writeFile(info.outputPath("bridge.log"), bridge.logs());
+  }
 });

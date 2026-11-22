@@ -581,7 +581,9 @@
      "tests": ["Hermes chat shows one user and one reply bubble after Hermes records the turn in state.db",
                "Claude Code chat shows one user and one reply bubble after AgentsView records the turn",
                "Codex chat shows one user and one reply bubble after AgentsView records the turn",
-               "OMP chat shows one user and one reply bubble after OMP records the turn in its session file"]}
+               "OMP chat shows one user and one reply bubble after OMP records the turn in its session file"]},
+    {"id": "council-session-handoff", "title": "Resume the saved Glide council and write playback position from its Hermes chat (DA-079)",
+     "tests": ["Glide council opens from its Hermes chat and Dash resumes and writes back the saved sentence"]}
   ],
   "not_yet_in_army": [
     "onboarding on a real Mac: launchctl/plutil, Tailscale.app CLI address and scanning the printed QR with a phone (the army runs the written plists through a fixture service manager)",
