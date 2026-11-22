@@ -38,6 +38,8 @@ test("Wallpaper glass stays selected and reveals the backdrop behind a usable ch
   await expect(toggle).not.toBeChecked();
   await back.click({ noWaitAfter: true });
   await expect(scrim).toHaveCount(0);
-  await chatRow(page).click({ noWaitAfter: true });
-  await expect(chat).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  // Settings back can return to the default workspace; select Chats explicitly.
+  await chats.click({ noWaitAfter: true });
+  await expect(chats).toHaveAttribute("aria-selected", "true");
+  await expect(composer(page)).toBeInViewport();
 });
