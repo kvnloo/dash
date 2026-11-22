@@ -27,7 +27,9 @@ export type TraceWorker = {
   stalls: [number, number][];
 };
 
-export type TraceRow = { key: string; project: string; goal: string; group: RowGroup; workers: TraceWorker[]; evidence?: TraceEvidence; provenance?: { parentSessionId: string; source: string } };
+export const TRACE_TURN_LIMIT = 8;
+export type TraceTurn = { id: string; at: number; evidence: TraceEvidence };
+export type TraceRow = { key: string; project: string; goal: string; group: RowGroup; workers: TraceWorker[]; evidence?: TraceEvidence; turns?: TraceTurn[]; provenance?: { parentSessionId: string; source: string } };
 export type TraceAction = { id: string; outcome: Outcome; outcomeLabel: string; title: string; why: string };
 export type TraceStats = {
   workers: number; live: number; cut: number; resumed: number; asks: number;
@@ -68,6 +70,15 @@ const obj = (v: unknown, at: string): Record<string, unknown> => {
   if (!isObj(v)) throw new Error(`trace snapshot: ${at} is not an object`);
   return v;
 };
+
+function parseTurns(value: unknown): TraceTurn[] {
+  const turns = arr(value, "turns");
+  if (turns.length > TRACE_TURN_LIMIT) throw new Error("Too many trace turns");
+  return turns.map(value => {
+    const t = obj(value, "turn");
+    return { id: str(t.id, "turn id"), at: num(t.at, "turn time"), evidence: parseTraceEvidence(t.evidence) };
+  });
+}
 
 function parseWorker(v: unknown, at: string): TraceWorker {
   const w = obj(v, at);
@@ -128,6 +139,7 @@ export function parseTraceSnapshot(raw: unknown): TraceSnapshot {
         goal: str(r.goal, `rows[${i}].goal`),
         group: oneOf(r.group, ["live", "recent", "earlier"] as const, `rows[${i}].group`),
         workers: arr(r.workers, `rows[${i}].workers`).map((w, j) => parseWorker(w, `rows[${i}].workers[${j}]`)),
+        ...(r.turns === undefined ? {} : { turns: parseTurns(r.turns) }),
         ...(r.evidence === undefined ? {} : { evidence: parseTraceEvidence(r.evidence) }),
         ...(r.provenance === undefined ? {} : { provenance: { source: str(obj(r.provenance, "provenance").source, "source"), parentSessionId: str(obj(r.provenance, "provenance").parentSessionId, "parentSessionId") } }),
       };

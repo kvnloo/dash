@@ -33,8 +33,10 @@ export const DensityAnimatedText = Animated.createAnimatedComponent(DensityText)
 export function DensityPicker() {
   const { density, setDensity, typeScale, setTypeScale } = useDensity();
   const preview = largeTypePreviewControl(typeScale);
-  return <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 16, paddingVertical: 8 }} accessibilityLabel="Information density">
-    {DENSITIES.map(value => <PressScale key={value} onPress={() => setDensity(value)} accessibilityRole="button" accessibilityLabel={`${value} density`} accessibilityState={{ selected: density === value }} accessibilityHint={density === value ? "Current density" : `Activate to use ${value} density`} testID={`density-${value}`} style={{ minHeight: 44, paddingHorizontal: 12, borderRadius: 24, borderWidth: 1, borderColor: density === value ? colors.text : colors.border, backgroundColor: density === value ? colors.surfaceRaised : colors.bg }}>
+  // Layout axis only: spacing, tile size and type scale. Shown information is the separate Detail dial.
+  return <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 8 }} accessibilityLabel="Layout density" testID="layout-density-picker">
+    <Text allowFontScaling accessibilityRole="header" style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.textMuted, marginRight: 4 }}>LAYOUT</Text>
+    {DENSITIES.map(value => <PressScale key={value} onPress={() => setDensity(value)} accessibilityRole="button" accessibilityLabel={`Layout density ${value.charAt(0).toUpperCase() + value.slice(1)}`} accessibilityState={{ selected: density === value }} accessibilityHint={density === value ? "Current layout density" : `Use ${value} spacing and tile size; shown information does not change`} testID={`density-${value}`} style={{ minHeight: 44, paddingHorizontal: 12, borderRadius: 24, borderWidth: 1, borderColor: density === value ? colors.text : colors.border, backgroundColor: density === value ? colors.surfaceRaised : colors.bg }}>
       <Text allowFontScaling style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.text }}>{value.charAt(0).toUpperCase() + value.slice(1)}</Text>
     </PressScale>)}
     <PressScale

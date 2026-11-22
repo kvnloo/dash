@@ -36,3 +36,6 @@ report the rejection.
   `plugins/`, lockfiles). The gate refuses native changes: those need an APK rebuild, so say so.
 
 `~/dash-turbo/bin/turbo-status` shows what the preview serves now. `turbo-off` (kill switch) is Kevin's.
+
+Run every shell command on ONE line (no backslash continuations, no newlines): the pre-approved
+permission rules only match single-line commands, and anything else waits 60 s for Kevin and is denied.

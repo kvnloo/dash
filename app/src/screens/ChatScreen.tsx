@@ -1,3 +1,5 @@
+import { chatPosts } from "../store/chat-posts";
+import { conversationKey } from "../lib/chat-index";
 import { useIsFocused } from "@react-navigation/native";
 import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
@@ -70,6 +72,7 @@ import { colors, glass, radius, space, type } from "../theme";
 import { useLiveThinking } from "../lib/live-thinking";
 import type { OrbState } from "../lib/orb-phase";
 import { useContinuousVoice, useDeviceInsets, voiceWindowOpen } from "../components/ContinuousVoiceRoot";
+import { VoiceCaptionStrip, VoiceCaptionsToggle } from "../components/VoiceCaptionStrip";
 import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
@@ -181,12 +184,24 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Older pages (scrolled up) live in memory beside the conversation's own newest window.
   const history = useHistoryPages(conversation);
   const older = history.older;
+  const posts = chatPosts.use(items => items);
   const visibleMessages = useMemo(() => {
     const queued = new Set(conversation ? queuedParts(conversation).flatMap(part => [part.user.id, part.assistant.id]) : []);
     const current = messages.filter(message => !queued.has(message.id));
-    if (!older.length) return current;
-    return mergeOlderHistory(current, older);
-  }, [messages, conversation, older]);
+    const transcript = older.length ? mergeOlderHistory(current, older) : current;
+    if (!conversation?.endpointAddress || conversation.endpointAddress !== settings?.address) return transcript;
+    const key = conversationKey(conversation);
+    const targeted = posts.filter(post => post.endpoint === conversation.endpointAddress && post.chat === key);
+    if (!targeted.length) return transcript;
+    const display = [...transcript];
+    // Insert against the visible timeline, without reordering existing native rows.
+    for (const post of targeted) {
+      const after = display.findLastIndex(row => row.at <= post.postedAt);
+      const id = "chat-post:" + post.id;
+      display.splice(after + 1, 0, { id, turnId: id, seq: 0, at: post.postedAt, role: "assistant", state: "done", text: post.body, agentPost: true });
+    }
+    return display;
+  }, [messages, conversation, older, posts, settings?.address]);
   const visibleRows = useRef(visibleMessages);
   useLayoutEffect(() => { visibleRows.current = visibleMessages; }, [visibleMessages]);
   // A view-only chat is transient: closing it drops it from the phone.
@@ -287,7 +302,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     if (conversation) { haptic.tap(); sendLiveTurn(conversation.id, text); }
   }, [conversation]);
 
-  const { thinking, caption, external, observed, streamingMessage } = useLiveThinking(conversation);
+  const { thinking, caption, external: hostActivity, observed, streamingMessage } = useLiveThinking(conversation);
+  // The in-flight reply already owns the working indicator. A separately
+  // observed terminal phase never gets a second transcript row beside it.
+  const hasInlineWorking = streamingMessage && streamingMessage.delivery !== "queued" && streamingMessage.delivery !== "steered";
+  const external = hasInlineWorking ? undefined : hostActivity;
   useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
   const workers = useSessionWorkers(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
   const [chatOptions, setChatOptions] = useState(false);
@@ -493,6 +512,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       inspect: index => { const mode = DETAIL_MODES[index]; if (mode) setDetailMode((conversation ?? createConversation(harnessId)).id, mode); },
     });
     if (conversation) rows.push({ id: "summaries", label: "Thinking summaries", value: conversation.summariesEnabled ? "On · next turn" : "Off", run: () => setThinkingSummaries(conversation.id, !conversation.summariesEnabled) });
+    // The context window, by name: the same grid card the composer gauge opens on a tap.
+    const reading = context.snapshot?.maximum ? `~${Math.round(Math.min(1, context.snapshot.used / context.snapshot.maximum) * 100)}%` : "Unknown";
+    rows.push({ id: "context", label: "Context", value: `${reading} · grid`, run: () => { if (!context.open) context.toggle(); } });
     rows.push({ id: "annotate", label: "Annotate", value: "S Pen or finger", run: () => enterAnnotation() });
     if (approvalCount > 0) rows.push({ id: "approvals", label: "Approvals", value: `${approvalCount} pending${approvalDryRun ? " · preview" : ""} ›`, run: () => navigation.navigate("Approvals") });
     rows.push({
@@ -501,7 +523,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       options: connection.harnesses.filter(h => h.available).map(h => ({ id: h.id, label: h.name, selected: h.id === harnessId, run: () => onSelectHarness(h.id) })),
     });
     return rows;
-  }, [harnessId, conversation, liveOn, toggleLive, detailMode, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible, connection.harnesses, onSelectHarness]);
+  }, [harnessId, conversation, liveOn, toggleLive, detailMode, context, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible, connection.harnesses, onSelectHarness]);
 
   const dockBody = <>
     <WorkersStrip workers={workers} />
@@ -509,7 +531,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       <Text accessibilityRole="alert" style={[styles.liveNote, { flex: 1 }]}>{voice.state.note}</Text>
       <PressScale accessibilityRole="button" accessibilityLabel="Retry Live voice" onPress={() => void voice.start()} style={styles.liveChip}><Text style={styles.liveChipText}>Retry voice</Text></PressScale>
     </View> : null}
+    {windowed && voiceActive ? <VoiceCaptionStrip state={voice.state} /> : null}
     {windowed && voiceActive ? <View testID="window-voice-controls" style={[styles.liveRow, thumb.row]}>
+      <VoiceCaptionsToggle style={styles.liveChip} />
       <PressScale testID="voice-mute" accessibilityRole="button" accessibilityLabel={voice.state.muted ? "Unmute voice microphone" : "Mute voice microphone"} onPress={voice.mute} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.muted ? "Unmute" : "Mute"}</Text></PressScale>
       <PressScale testID="voice-end" accessibilityRole="button" accessibilityLabel="End voice call" onPress={() => void voice.stop()} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.phase === "connecting" ? "Cancel connection" : "End voice"}</Text></PressScale>
     </View> : null}
@@ -571,6 +595,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onSend(text, attachments, mode);
         }
       }}
+      onCaptureSaved={() => { if (composerDraft !== undefined) navigation.setParams({ draft: undefined }); }}
       onStop={onStop}
       onVoice={onVoice}
       voiceCall={voiceCall}

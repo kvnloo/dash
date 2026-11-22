@@ -82,12 +82,14 @@ for p in $(seq 8190 8199); do lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 |
 [[ -n "$PORT" ]] || reject "no free throwaway Metro port in 8190-8199"
 ( cd "$WT/app" && exec env CI=1 EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_DASH_TURBO=1 "$BUN" node_modules/expo/bin/cli start --dev-client --port "$PORT" --host localhost ) >"$LOGDIR/metro.log" 2>&1 &
 METRO_PID=$!
-for _ in $(seq 1 180); do
-  [[ "$(curl -s -m 2 "http://127.0.0.1:$PORT/status" 2>/dev/null)" == *running* ]] && break
+up=""
+for _ in $(seq 1 120); do
+  [[ "$(curl -s -m 2 "http://localhost:$PORT/status" 2>/dev/null)" == *running* ]] && { up=1; break; }
   kill -0 "$METRO_PID" 2>/dev/null || reject "throwaway Metro exited: $(tail -3 "$LOGDIR/metro.log" | tr '\n' ' ')"
   sleep 1
 done
-read -r code size < <(curl -s -m 300 -o "$LOGDIR/bundle.js" -w '%{http_code} %{size_download}\n' "http://127.0.0.1:$PORT/index.ts.bundle?$QUERY")
+[[ -n "$up" ]] || reject "throwaway Metro did not answer /status within 120 s"
+read -r code size < <(curl -s -m 480 -o "$LOGDIR/bundle.js" -w '%{http_code} %{size_download}\n' "http://localhost:$PORT/index.ts.bundle?$QUERY")
 pkill -TERM -P "$METRO_PID" 2>/dev/null || true; kill "$METRO_PID" 2>/dev/null || true; METRO_PID=""
 if [[ "$code" != 200 ]]; then
   mv "$LOGDIR/bundle.js" "$LOGDIR/bundle-error.txt" 2>/dev/null || true

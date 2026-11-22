@@ -60,10 +60,15 @@ test('Next up opens the exact completed background reply without sending and pre
   const aRow = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: 'Earlier attention history 0' });
   await aRow.click({ noWaitAfter: true });
   await expect(page.getByTestId('chat-window')).toBeVisible();
-  const viewport = await page.getByTestId('transcript-viewport').boundingBox();
-  if (!viewport) throw Error('No transcript viewport');
-  await page.mouse.move(viewport.x + viewport.width / 2, viewport.y + viewport.height / 2);
-  await page.mouse.wheel(0, -10000);
+  // Navigate to the earlier turn through the prompt rail. A wheel sent before
+  // the virtual list has laid out any scrollable content can be dropped.
+  const rail = page.getByRole('slider', { name: 'Prompt navigator', exact: true });
+  await expect(rail.getByTestId('rail-tick')).toHaveCount(9);
+  // Hover previews the turn; wait for the track to receive pointer events.
+  await rail.hover({ position: { x: 22, y: 6 } });
+  await expect(page.getByLabel('Turn preview', { exact: true })).toContainText('Earlier attention history 0');
+  await page.getByRole('button', { name: 'Jump', exact: true }).click();
+  await page.getByRole('button', { name: 'Close turn preview', exact: true }).click();
   await expect(page.getByTestId('transcript-viewport').getByText('Earlier attention history 0', { exact: true })).toBeInViewport();
   await writeFile(join(bridge.dir, 'army-release'), '');
   await expect.poll(() => turnEvents(bridge.dir, 'end'), { timeout: 30_000 }).toBe(9);
@@ -97,16 +102,32 @@ test('Next up opens the exact completed background reply without sending and pre
 });
 
 test('Next up Later survives reload, Skip dismisses only one completion, and a newer reply in that chat returns', async ({ page, bridge }) => {
+  // Use the virtual clock for the final snooze expiry, and exercise Send
+  // through the keyboard so the tap gesture does not race the frozen timers.
   await page.clock.install();
+  // Prove the new prompt is running before navigating away.
+  const sendHeld = async (prompt: string, starts: number) => {
+    await composer(page).fill(prompt);
+    const button = page.getByRole('button', { name: 'Send', exact: true });
+    await expect(button).toBeEnabled();
+    await button.press('Enter');
+    await expect.poll(() => turnEvents(bridge.dir)).toBe(starts);
+    await expect(page.getByText('ARMY_STREAM_BEGIN', { exact: true }).filter({ visible: true })).toBeVisible();
+  };
   await pair(page, bridge);
   const firstChatTitle = 'ARMY archived Claude Code chat';
   await page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: firstChatTitle }).click({ noWaitAfter: true });
   await expect(page.getByTestId('chat-window')).toBeVisible();
-  await send(page, 'ARMY_HOLD first background completion');
-  await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
+  await expect(visibleText(page, 'ARMY earlier answer from')).toBeVisible();
+  await sendHeld('ARMY_HOLD first background completion', 1);
+  // Release and observe the older completion before starting the newer one.
+  // A single release for two active agents does not define completion order.
+  await toChats(page);
+  await writeFile(join(bridge.dir, 'army-release'), '');
+  await expectReadReplyFor(page, firstChatTitle);
+  await unlink(join(bridge.dir, 'army-release'));
   await newChat(page);
-  await send(page, 'ARMY_HOLD second background completion');
-  await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
+  await sendHeld('ARMY_HOLD second background completion', 2);
   await toChats(page);
   await writeFile(join(bridge.dir, 'army-release'), '');
   await expect.poll(() => turnEvents(bridge.dir, 'end'), { timeout: 30_000 }).toBe(2);
@@ -130,9 +151,12 @@ test('Next up Later survives reload, Skip dismisses only one completion, and a n
   await expect(card(page)).toHaveCount(0);
 
   await rows.filter({ hasText: firstChatTitle }).click({ noWaitAfter: true });
+  // Wait for the reopened transcript to hydrate before editing its composer.
+  // Old completed replies also include ARMY_STREAM_BEGIN, so match the live
+  // marker exactly and require the third ACP turn before leaving the chat.
+  await expect(visibleText(page, 'ARMY_CLAUDE_REPLY: ARMY_HOLD first background completion')).toBeInViewport();
   await unlink(join(bridge.dir, 'army-release'));
-  await send(page, 'ARMY_HOLD newer completion in the same chat');
-  await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
+  await sendHeld('ARMY_HOLD newer completion in the same chat', startsBeforeLater + 1);
   await toChats(page);
   await writeFile(join(bridge.dir, 'army-release'), '');
   await expectReadReplyFor(page, firstChatTitle);
