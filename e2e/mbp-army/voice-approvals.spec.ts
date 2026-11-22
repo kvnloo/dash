@@ -40,8 +40,12 @@ async function pairForVoice(page: Page, bridge: Bridge, broker: FixtureZ0liveBro
     Object.defineProperty(window, "__dashVoiceSay", { value: settings.say, configurable: true });
   }, { dash, z0live, say });
   await pair(page, bridge);
-  await expect(page.getByTestId("chats-pane").locator('[data-testid^="chat-row-"]').filter({ hasText: "ARMY native fixture" }))
-    .toHaveCount(1, { timeout: 30000 });
+  const hermes = page.getByTestId("chats-pane").locator('[data-testid^="chat-row-"]').filter({ hasText: "ARMY native fixture" });
+  await expect(hermes).toHaveCount(1, { timeout: 30000 });
+  // Opening the Hermes chat once makes it the attached voice target, as in voice.spec.ts.
+  await hermes.click({ noWaitAfter: true });
+  await expect(page.getByTestId("chat-window")).toBeVisible();
+  await page.getByRole("button", { name: "Close chat window", exact: true }).click({ noWaitAfter: true });
 }
 /** Start the call from full-screen Voice through the normal Main UI. */
 async function startCall(page: Page): Promise<void> {
