@@ -4,6 +4,7 @@ import { createPermissionsStore } from "../store/permissions";
 import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
 import { CHATS_FEATURE, MODEL_SELECTION_FEATURE, parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
 import { agentNoticeInbox, noticeFailure } from "../store/notices";
+import { handleUiControlFrame, onAgentControlChange, uiControlHello } from "../store/agent-control";
 import type { LiveIntent } from "../../../shared/live";
 import { isDebugMode } from "../debug/mode";
 import { applyLiveMessage, beginIntent, beginLiveTurn, beginOpen, beginReceipts, liveOf, liveRequestConversation } from "../store/live";
@@ -75,6 +76,8 @@ class Bridge {
   private pongSeen = false;
 
   constructor() {
+    // Consent is the phone's: tell the bridge the moment the owner flips Agent control.
+    onAgentControlChange(() => { if (this.admittedSocket && this.admittedSocket === this.ws) this.send(uiControlHello()); });
     RNAppState.addEventListener("change", (next) => {
       const wasBackground = this.appState !== "active";
       this.appState = next;
@@ -294,6 +297,13 @@ class Bridge {
     if ("turnId" in message && typeof message.turnId === "string" && !this.ownsTurn(message.turnId)) return;
     switch (message.type) {
       case "notice": void agentNoticeInbox.receive(message).catch(noticeFailure); return;
+      case "ui_control": {
+        // Only the admitted socket's bridge may drive the app; acks go back on that same socket.
+        const socket = this.ws;
+        if (!socket || socket !== this.admittedSocket) return;
+        void handleUiControlFrame(message, ack => { if (this.ws === socket) this.send(ack); });
+        return;
+      }
       case "gate_snapshot":
       case "gate_status":
       case "gate_error": applyGateMessage(message); return;
@@ -335,6 +345,7 @@ class Bridge {
         this.rosterTimer = setInterval(() => { if (this.appState === "active") void this.refreshRoster(); }, 10000);
         if (this.ws) reattachStreamingTurns(this.ws, streamingTurns());
         this.send({ type: "gate_list" });
+        this.send(uiControlHello());
         flushPendingSends(sendChat);
         this.scheduleMigration();
         return;

@@ -34,6 +34,7 @@ import { LabScreen } from "./src/screens/LabScreen";
 import { RoadmapProjectScreen, RoadmapScreen, RoadmapTaskScreen } from "./src/screens/RoadmapScreen";
 import { DebugHost } from "./src/debug/DebugHost";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
+import { AgentControlLayer } from "./src/components/AgentControlLayer";
 import { EphemeralModes } from "./src/components/EphemeralModes";
 import { SecretEntry } from "./src/components/SecretEntry";
 import { isDebugActive } from "./src/debug/expose";
@@ -164,7 +165,9 @@ export default function App() {
               <EphemeralModes />
               <NativeEvents />
               <SecretEntry />
-            </AnnotationRoot></ContinuousVoiceRoot>
+            </AnnotationRoot>
+            <AgentControlLayer />
+            </ContinuousVoiceRoot>
             </NavigationContainer>
           </BridgePullProvider>
           <DebugHost />

@@ -25,6 +25,11 @@ export interface Settings {
   /** Product feedback from Main composer, Voice, and row long-press. Default on in beta. */
   inAppFeedback: boolean;
   /**
+   * Agents on the paired computer may navigate this app and draw pointers over it
+   * (docs/specs/ui-control.md). Off until the owner turns it on.
+   */
+  agentControl?: boolean;
+  /**
    * Paired bridges in failover order (first = primary). `address`/`token`/`identity`
    * above are the one in use. Absent = the single bridge above.
    */
@@ -183,6 +188,7 @@ export function parseSettings(raw: unknown): Settings | null {
     harness: raw.harness,
     cwd: typeof raw.cwd === "string" && raw.cwd ? raw.cwd : undefined,
     inAppFeedback: raw.inAppFeedback !== false,
+    ...(raw.agentControl === true ? { agentControl: true } : {}),
     handedness: parseHandedness(raw.handedness),
     ...(endpoints ? { endpoints } : {}),
   };
