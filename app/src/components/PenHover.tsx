@@ -86,7 +86,7 @@ export function usePenTarget(): PenTarget {
 }
 
 /** Glow drawn over a control while the pen hovers it. */
-export const PenGlow = memo(function PenGlow({ radius = 12 }: { radius?: number }) {
+export const PenGlow = memo(function PenGlow({ radius = 14 }: { radius?: number }) {
   return <Animated.View testID="pen-glow" pointerEvents="none" entering={statusIn} exiting={statusOut}
     style={[styles.glow, { borderRadius: radius }]} />;
 });

@@ -89,7 +89,8 @@ export const PressScale = memo(function PressScale({
         onPressOut?.(e);
       }}
     >
-      <Animated.View style={[styles.fill, childLayout(style), anim]}>{pen.lit && !disabled ? <PenGlow radius={cornerRadius(style)} /> : null}{children}</Animated.View>
+      {pen.lit && !disabled ? <PenGlow radius={cornerRadius(style)} /> : null}
+      <Animated.View style={[styles.fill, childLayout(style), anim]}>{children}</Animated.View>
     </Pressable></GestureDetector>
   );
 });
