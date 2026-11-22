@@ -1,7 +1,9 @@
 # Steering a running Hermes turn
 
 In an existing Hermes chat, the busy phases `thinking`, `tool`, and `streaming`
-expose Steer as the composer primary action. Queue instead selects the next turn;
+expose both modes on the composer with a draft: the primary button guesses the
+next move (the mode this chat last sent with, Steer first) and the other mode is
+a one-tap button beside it. Either tap sends; no menu or mode toggle is needed.
 Stop remains separate. The split control follows the thumb-side setting and mode
 switches use the existing selection haptic. Idle chats retain normal Send.
 
