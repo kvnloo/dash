@@ -394,7 +394,8 @@
     {"id": "perf-no-accumulation", "title": "Measured perf gates (A29): Orchestra view switches do not slow down or accumulate heap/DOM/listeners (#530); prompt rail scrub never freezes a frame (#522)",
      "tests": ["perf: 40 Orchestra view switches do not slow down or accumulate heap, DOM nodes or listeners (#530)",
                "perf: prompt rail scrub over a 1000-message chat never freezes a frame (#522)"]},
-    {"id": "headed-army-retention", "title": "Bound finished headed army artifacts per suite", "tests": ["finished headed army runs retain three bulky outputs per suite without touching active runs"]}
+    {"id": "headed-army-retention", "title": "Bound finished headed army artifacts per suite", "tests": ["finished headed army runs retain three bulky outputs per suite without touching active runs"]},
+    {"id": "transcript-links-and-literal-prompts", "title": "Open bare transcript URLs and positioned files; deliver slash and at prompts unchanged", "tests": ["bare transcript URL and positioned source file open on tap", "slash and at prompts reach the ACP agent verbatim"]}
   ],
   "not_yet_in_army": [
     "native IME and keyboard attach", "native WebRTC audio, speaker routing and real OpenAI realtime (device only)", "Android attachment permissions and share sheet",

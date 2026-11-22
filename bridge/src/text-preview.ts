@@ -1,9 +1,10 @@
 import { constants } from "node:fs";
+import { homedir } from "node:os";
 import { open } from "node:fs/promises";
 import { checkShareable } from "./share";
 import { redactTool } from "../../shared/tool-format";
 export async function textPreview(raw: string | null, roots: string[]): Promise<Response> {
-  const check = checkShareable(raw, roots);
+  const check = checkShareable(raw?.startsWith("~/") ? homedir() + raw.slice(1) : raw, roots);
   if (!check.ok) return new Response(check.message, { status: check.status });
   const max = 1024 * 1024;
   if (check.size > max) return new Response("Text file exceeds 1 MiB", { status: 413 });
