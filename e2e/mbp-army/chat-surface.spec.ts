@@ -68,7 +68,7 @@ test('Hermes surface selection follows the transcript or Live surface', async ({
 
       // Opening the same chat from the list uses the window dock's Surface picker.
       await page.getByRole('button', { name: 'Back', exact: true }).click();
-      await page.getByTestId('chats-pane').locator('[data-testid^=chat-row-]').filter({ has: page.getByText('New chat', { exact: true }) }).click();
+      await page.getByTestId('chats-pane').getByRole('button', { name: /^Hermes · idle New chat / }).click();
       const options = page.getByRole('radiogroup', { name: 'Surface options' });
       const showChoices = async (surface: string) => {
         await page.getByRole('button', { name: 'Options. Current surface: ' + surface, exact: true }).click();
