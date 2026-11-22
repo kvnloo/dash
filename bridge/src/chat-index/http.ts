@@ -5,6 +5,7 @@ import {
   type HistoryPage,
 } from "../../../shared/protocol";
 import { decodeCursor } from "../../../shared/protocol";
+import type { createT3CodeSource } from "../t3code";
 import { remoteHostFor } from "../remote-hosts";
 import { remoteClaudeHistory } from "../remote-history";
 import { AbortedError, BusyError, RpcError, type ChatIndexClient } from "./client";
@@ -21,6 +22,7 @@ export interface ChatsHttpOptions {
   self(): SelfIdentity;
   /** Roster-only rows across hosts, already keyed with chatKey (including native-store fallbacks). */
   live(): ChatSummary[];
+  t3code?: ReturnType<typeof createT3CodeSource>;
 }
 
 type Json = Record<string, unknown>;
@@ -72,7 +74,11 @@ export function createChatsHttpHandler(options: ChatsHttpOptions) {
     const self = options.self();
     const fh = filterHash(query);
     const value = await client.list({ limit: query.limit, ...(query.cursor ? { cursor: query.cursor } : {}), fh, kinds: query.kinds, hosts: query.hosts.map(h => internalHost(self, h)), chatable: query.chatable, self: { id: self.id, name: self.name } }, request.signal);
-    const live = options.live().filter(row => (!query.kinds.length || query.kinds.includes(row.kind)) && (!query.hosts.length || query.hosts.some(h => h === row.hostId || (row.hostId === self.id && self.matches(h)))) && (!query.chatable || row.chatable));
+    const t3code = options.t3code;
+    const external = t3code && !query.cursor && !query.chatable
+      && (!query.kinds.length || query.kinds.includes("t3code"))
+      && (!query.hosts.length || query.hosts.includes(t3code.hostId)) ? await t3code.list() : [];
+    const live = [...options.live(), ...external].filter(row => (!query.kinds.length || query.kinds.includes(row.kind)) && (!query.hosts.length || query.hosts.some(h => h === row.hostId || (row.hostId === self.id && self.matches(h)))) && (!query.chatable || row.chatable));
     const liveKeys = new Set(live.map(row => row.key));
     // Page 1 carries the live overlay; later pages skip those keys so each chat appears once.
     const items = query.cursor ? value.items.filter(item => !liveKeys.has(item.key)) : overlayLive(value.items, live);
@@ -143,6 +149,13 @@ export function createChatsHttpHandler(options: ChatsHttpOptions) {
     const query = parseHistoryQuery(url.searchParams);
     if ("error" in query) return fail(400, query.error, query.field);
     const self = options.self();
+    const t3code = options.t3code;
+    const threadId = t3code && (query.key?.startsWith(t3code.prefix) ? query.key.slice(t3code.prefix.length)
+      : query.kind === "t3code" && query.host === t3code.hostId ? query.sessionId : undefined);
+    if (t3code && threadId) {
+      const page = await t3code.history(threadId, query.limit, query.before, request.signal);
+      return page === undefined ? fail(502, "t3code_unavailable") : page === null ? fail(400, "bad_cursor", "before") : json(page);
+    }
     let target: { key: string } | { kind: string; sessionId: string; host: string; profile?: string };
     if (query.key !== undefined) {
       const key = internalChatKey(self, query.key);
@@ -170,6 +183,13 @@ export function createChatsHttpHandler(options: ChatsHttpOptions) {
     const rawKey = url.searchParams.get("key");
     const id = url.searchParams.get("id");
     if (!rawKey || rawKey.length > 512) return fail(400, "bad_request", "key");
+    const t3code = options.t3code;
+    if (t3code && rawKey.startsWith(t3code.prefix) && id && /^t3:[a-f0-9]{32}$/.test(id)) {
+      const rows = await t3code.transcript(rawKey.slice(t3code.prefix.length), request.signal);
+      if (!rows) return fail(502, "t3code_unavailable");
+      const message = rows.find(row => row.id === id);
+      return message ? json({ message }) : fail(404, "not_found");
+    }
     if (!id || !/^(?:av:\d{1,18}|hz:[A-Za-z0-9_-]{1,64}:\d{1,18}|\d{1,18})$/.test(id)) return fail(400, "bad_request", "id");
     const key = internalChatKey(options.self(), rawKey);
     if (!key) return fail(404, "not_found");

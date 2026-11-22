@@ -1,6 +1,7 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id":"t3code-threads","title":"Chats lists and opens read-only T3 Code threads (DA-082)","tests":["Chats lists T3 Code threads and opens their transcripts"]},
     {"id":"turbo-spoken-markup-request","title":"Preview sends spoken markup only to its attached Turbo Claude session","tests":["Turbo speaks and sends one marked request to the paired Claude session from another screen"]},
     {"id":"turbo-navigation-restore","title":"Preview restores the visible workspace after loading a new bundle","tests":["Turbo reload reopens the current workspace instead of Orchestra"]},
     {"id":"android-update-acceptance","title":"Dash offers a staged Android APK for explicit acceptance without bypassing O15","tests":["Dash offers a staged Android update and O15 still refuses an unreceipted install"]},
@@ -266,7 +267,7 @@
     {"id": "claude-remote-resume", "title": "Continue a Claude Code chat recorded on another computer: resumed there, reply streamed; unrouted stays view only",
      "tests": ["resumes on that computer and streams the reply, turn after turn", "a chat saved as ended comes back sendable once the bridge routes to its computer",
                "opens view only and sends nothing"]},
-    {"id": "roadmap", "title": "Roadmap screen: projects, feature filter, task detail with live Hermes and roadmap status",
+    {"id": "roadmap", "title": "Roadmap screen: projects, feature filter, task detail and running-task links to indexed Hermes chats",
      "tests": ["Roadmap -> project -> feature filter -> task detail with live Hermes and roadmap status"]},
     {"id": "subagent-strip", "title": "A Hermes chat with delegated workers shows the subagent strip above the composer: live count, newest first, opens to a tree",
      "tests": ["a Hermes chat with delegated workers shows the subagent strip, newest first, and opens to a tree"]},

@@ -1,0 +1,57 @@
+# DA-083: historical false positives, scoped to exact finding fingerprints.
+
+# Ephemeral UI vendor pin checksum
+f7d2662cf732b1975f8d36063867f4c5fd1d26f8:app/src/vendor/ephemeral-ui/shared-pin.json:generic-api-key:7
+
+# Pencil design file UUID
+65ce765e2bcb4ee3d05671bd1e9d1440ed17e99e:docs/design/pencil/dash.pen:generic-api-key:4409
+
+# SHA-256 requirement source_key
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10014
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10044
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10096
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10148
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10178
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10223
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10282
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10341
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10400
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10430
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10489
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10519
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10578
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:10637
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:7335
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:7346
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9395
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9447
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9476
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9528
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9580
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9632
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9684
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9729
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9774
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9826
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9899
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9910
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9921
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9932
+97921a4edf663004a1cc532d6a97e408e09a766a:spec/requirements.json:generic-api-key:9984
+
+# Synthetic API key redaction fixture
+30e6035c17c9d917137435e9d62d2b3c57261f72:bridge/src/agentsview-sessions.test.ts:generic-api-key:25
+64bb3f16e7112ff4b549bd3909130f29ac3d4979:bridge/src/agentsview-sessions.test.ts:generic-api-key:45
+64bb3f16e7112ff4b549bd3909130f29ac3d4979:bridge/src/chat-index/history.test.ts:generic-api-key:24
+64bb3f16e7112ff4b549bd3909130f29ac3d4979:bridge/src/chat-index/search.test.ts:generic-api-key:123
+64bb3f16e7112ff4b549bd3909130f29ac3d4979:bridge/src/chat-index/sidecar.test.ts:generic-api-key:87
+76adf473b9dc58402373011cea97bff223e4ea28:bridge/src/chat-index/history.test.ts:generic-api-key:23
+76adf473b9dc58402373011cea97bff223e4ea28:bridge/src/chat-index/search.test.ts:generic-api-key:73
+76adf473b9dc58402373011cea97bff223e4ea28:bridge/src/chat-index/sidecar.test.ts:generic-api-key:87
+
+# Synthetic curl redaction fixture
+655eb0c91ac19d4f69b2010e5b20e8a9929f03a8:shared/tool-format.test.ts:curl-auth-header:89
+
+# Synthetic private-key redaction fixture
+64bb3f16e7112ff4b549bd3909130f29ac3d4979:bridge/src/chat-index/search.test.ts:private-key:88
+997be055c5bda96ed3f21de19803a74a575201ae:bridge/src/chat-index/search.test.ts:private-key:88

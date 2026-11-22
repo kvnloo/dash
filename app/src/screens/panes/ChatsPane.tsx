@@ -80,7 +80,7 @@ function remoteModel(summary: ChatSummary, harnessName: string, selfId: string |
     content: {
       title: summary.title.trim() || harnessName,
       ...rowWorkspace(summary.cwd, summary.repoRoot),
-      outcome: summary.task || `${summary.messageCount} message${summary.messageCount === 1 ? "" : "s"} · ${harnessName}${foreign ? ` · ${summary.hostName}` : ""}`,
+      outcome: summary.origin === "t3code" ? summary.hostName : summary.task || `${summary.messageCount} message${summary.messageCount === 1 ? "" : "s"} · ${harnessName}${foreign ? ` · ${summary.hostName}` : ""}`,
       outcomeLabel: summary.task ? "Task" : null,
       activity: summary.running ? "Running on host" : summary.openIn ? `Open in ${summary.openIn}` : "Not opened yet",
       needsAttention: false,
