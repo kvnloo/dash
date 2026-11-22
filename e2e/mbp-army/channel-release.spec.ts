@@ -173,8 +173,7 @@ test('Dash offers a staged Android update and O15 still refuses an unreceipted i
    GIT_TERMINAL_PROMPT: '0',
   } });
   await pair(page, bridge);
-  await page.getByRole('button', { name: 'Bridge details', exact: true }).first().click();
-  await page.getByRole('button', { name: 'Edit bridge', exact: true }).click();
+  await page.getByRole('button', { name: 'Open settings', exact: true }).first().click();
   const check = page.getByRole('button', { name: 'Check for Android update' });
   const install = page.getByRole('button', { name: 'Install via ADB' });
   await check.click();
