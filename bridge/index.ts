@@ -55,7 +55,7 @@ import { liveArgv } from "./src/hermes-live";
 import { sendGatewayMessage } from "./src/hermes-steer";
 import { sessionPhaseHttp } from "./src/hermes-phase";
 import { sessionWorkersHttp } from "./src/hermes-workers";
-import { z0liveStateHttp } from "./src/z0live-state";
+import { z0liveLanesHttp, z0liveStateHttp } from "./src/z0live-state";
 import { voiceBootstrap } from "./src/voice-bootstrap";
 import { createVoiceStatusHttpHandler, voiceStatus } from "./src/voice-status";
 import { flowTraceHttp } from "./src/flow-trace-http";
@@ -979,6 +979,8 @@ const server = Bun.serve<SocketData>({
       if (workers) return cors(workers);
       const z0live = z0liveStateHttp(request, await authorize(request));
       if (z0live) return cors(z0live);
+      const lanes = z0liveLanesHttp(request, await authorize(request));
+      if (lanes) return cors(lanes);
       const suggestions = await handleSuggestions(request);
       if (suggestions) return cors(suggestions);
       const files = await handleFiles(request);
