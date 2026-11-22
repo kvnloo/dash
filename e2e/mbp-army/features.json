@@ -117,6 +117,8 @@
     {"id": "host-stats", "title": "Local host hardware usage in the host info sheet, separate from roster updates",
      "tests": ["host info sheet shows local CPU, RAM, disk and load from the authenticated bridge",
                "chat host info sheet shows resources without replacing session identity"]},
+    {"id": "density-dials", "title": "Settings has separate Layout and Detail density dials; each changes only its own axis on the Lab stat tile",
+     "tests": ["Settings layout and detail dials each change only their own axis"]},
     {"id": "phone-hosts", "title": "Hosts lists online and recently offline phones, retaining fleet phones and hiding stale ghosts",
      "tests": ["Hosts lists phones without offering harnesses and hides stale unregistered phones"]},
     {"id": "claude-remote-live-history", "title": "Open routed Claude chat follows live remote JSONL over the turn SSH route",
