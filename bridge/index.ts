@@ -21,6 +21,8 @@ import { homedir, hostname, userInfo } from "node:os";
 import { basename, join } from "node:path";
 import {
   CHATS_FEATURE,
+  NOTICE_MODE_FEATURE,
+  type NoticeMode,
   MODEL_SELECTION_FEATURE,
   PROTOCOL_VERSION,
   chatKey,
@@ -115,6 +117,7 @@ interface SocketData {
   principal: BridgePrincipal;
   stopIdentityWatch?: () => void;
   stopNotices?: () => void;
+  noticeMode: NoticeMode;
   stopSecrets?: () => void;
   /** Turn ids this socket is subscribed to. */
   turns: Set<string>;
@@ -965,7 +968,7 @@ const server = Bun.serve<SocketData>({
     if (!principal) {
       return new Response("unauthorized", { status: 401 });
     }
-    if (server.upgrade(request, { data: { turns: new Set(), principal } })) return;
+    if (server.upgrade(request, { data: { turns: new Set(), principal, noticeMode: url.searchParams.get("notice_mode") === "me" ? "me" : "worker" } })) return;
     return new Response("upgrade failed", { status: 400 });
   },
   websocket: {
@@ -982,13 +985,13 @@ const server = Bun.serve<SocketData>({
         cwd: DEFAULT_CWD,
         harnesses,
         hosts: await selfRoster(harnesses, tailscaleIp ?? undefined),
-        features: [CHATS_FEATURE, MODEL_SELECTION_FEATURE],
+        features: [CHATS_FEATURE, MODEL_SELECTION_FEATURE, NOTICE_MODE_FEATURE],
         routes: remoteRouteIds(),
         voice: { stt: voice.stt.ok, nativeVoice: voice.nativeVoice },
       });
       if (ws.readyState === WebSocket.OPEN) ws.data.stopNotices = notices.subscribe(notice => {
         if (ws.data.principal.kind === "identity" && ws.data.principal.expiresAt <= Date.now()) { ws.close(1008, "Identity authorization expired"); return; }
-        sendTo(ws, notice);
+        sendTo(ws, ws.data.noticeMode === "me" ? { ...notice, silent: true } : notice);
       });
       if (ws.readyState === WebSocket.OPEN) ws.data.stopSecrets = secretBroker.subscribe(message => sendTo(ws, message));
     },
@@ -1008,6 +1011,7 @@ const server = Bun.serve<SocketData>({
         return;
       }
       switch (message.type) {
+        case "notice_mode": ws.data.noticeMode = message.mode; break;
         case "notices_clear": {
           try { notices.clear(); log("notices.cleared", {}); }
           catch { log("notices.clear_failed", {}); }

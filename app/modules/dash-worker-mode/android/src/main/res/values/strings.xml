@@ -1,0 +1,5 @@
+<resources>
+  <string name="dash_mode_tile">Dash mode</string>
+  <string name="dash_worker_mode">Worker mode</string>
+  <string name="dash_me_mode">Me mode</string>
+</resources>

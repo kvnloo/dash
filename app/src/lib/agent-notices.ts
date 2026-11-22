@@ -37,7 +37,7 @@ export function createAgentNoticeInbox(options: {
       const next = [notice, ...items].slice(0, 50);
       await options.storage?.write(JSON.stringify(next));
       items = next; options.changed?.(items);
-      options.emit({ key: `notice:${notice.id}`, title: notice.title, body: notice.body,
+      if (!notice.silent) options.emit({ key: `notice:${notice.id}`, title: notice.title, body: notice.body,
         ...(notice.class ? { class: notice.class } : {}), target: parseNotificationTarget({ url: notice.url }) ?? { kind: "notices" }, report: true });
     }),
     clear: () => enqueue(clear),

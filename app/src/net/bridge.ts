@@ -2,7 +2,7 @@ import { receiveSecretRequest, receiveSecretResolved } from "../store/secrets";
 import { applyGateMessage } from "../store/approvals";
 import { createPermissionsStore } from "../store/permissions";
 import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
-import { CHATS_FEATURE, MODEL_SELECTION_FEATURE, parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
+import { CHATS_FEATURE, MODEL_SELECTION_FEATURE, NOTICE_MODE_FEATURE, parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
 import { agentNoticeInbox, noticeFailure } from "../store/notices";
 import type { LiveIntent } from "../../../shared/live";
 import { isDebugMode } from "../debug/mode";
@@ -12,6 +12,7 @@ import { executionToken, socketUrl } from "../lib/bridge-auth";
 import { visibleHarnesses } from "../lib/hidden-harnesses";
 import { activate, endpointsOf, pickEndpoint, probeBridge } from "../lib/bridge-failover";
 import { shouldRequestHistory } from "../lib/live-sessions";
+import { nativeNoticeMode, subscribeToWorkerMode } from "../lib/worker-mode";
 import { headerSocket } from "../lib/native-socket";
 import { isPongFrame, reattachStreamingTurns, startSocketKeepalive } from "./socket-keepalive";
 import type { Conversation, Settings } from "../model";
@@ -73,15 +74,24 @@ class Bridge {
   /** Liveness of the open socket: last inbound frame, and whether this bridge answers pings. */
   private lastInboundAt = 0;
   private pongSeen = false;
+  private supportsNoticeMode = false;
 
   constructor() {
+    subscribeToWorkerMode(() => this.syncNoticeMode());
     RNAppState.addEventListener("change", (next) => {
       const wasBackground = this.appState !== "active";
       this.appState = next;
+      if (next === "active") this.syncNoticeMode();
       // Coming back to the foreground: don't wait out the backoff.
       if (next === "active" && wasBackground && this.settings && !this.isOpen()) this.connectNow();
       else if (next === "active" && wasBackground) void this.returnToPrimary();
     });
+  }
+
+  private syncNoticeMode(): void {
+    if (!this.supportsNoticeMode) return;
+    const mode = nativeNoticeMode();
+    if (mode) this.send({ type: "notice_mode", mode });
   }
 
   /**
@@ -173,7 +183,11 @@ class Bridge {
       if (settings.identity && Platform.OS === "web") throw new Error("z0bridge WebSockets require the native app (header authentication).");
       const token = settings.identity ? await executionToken(settings) : undefined;
       if (this.settings !== settings || this.connectEpoch !== epoch) return;
-      ws = token ? headerSocket(wsUrl(settings), token) : new WebSocket(wsUrl(settings));
+      // Set mode before the bridge can replay any reports on open.
+      const baseUrl = wsUrl(settings);
+      const mode = nativeNoticeMode();
+      const url = mode === "me" ? `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}notice_mode=me` : baseUrl;
+      ws = token ? headerSocket(url, token) : new WebSocket(url);
     } catch (error) {
       if (this.settings === settings && this.connectEpoch === epoch) this.onClosed(error instanceof Error ? error.message : "Identity connection failed");
       return;
@@ -312,6 +326,8 @@ class Bridge {
       }
       case "hello": {
         this.admittedSocket = this.ws;
+        this.supportsNoticeMode = message.features?.includes(NOTICE_MODE_FEATURE) === true;
+        this.syncNoticeMode();
         clearTimeout(this.connectTimer);
         this.connectTimer = undefined;
         this.attempt = 0;
