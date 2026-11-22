@@ -80,6 +80,7 @@ import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
 import { AgentOrb } from "../components/AgentOrb";
+import { openCouncil } from "../store/council";
 import { focusVoiceOrbOverlay } from "../components/VoiceOrbOverlay";
 import { useSessionWorkers, WorkersStrip } from "../components/WorkersStrip";
 import { approvals, actionable } from "../store/approvals";
@@ -541,6 +542,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     const reading = context.snapshot?.maximum ? `~${Math.round(Math.min(1, context.snapshot.used / context.snapshot.maximum) * 100)}%` : "Unknown";
     rows.push({ id: "context", label: "Context", value: `${reading} · grid`, run: () => { if (!context.open) context.toggle(); } });
     rows.push({ id: "annotate", label: "Annotate", value: "S Pen or finger", run: () => enterAnnotation() });
+    rows.push({ id: "council", label: "Council", value: "Brief + reports ›", run: () => openCouncil("chat") });
     if (approvalCount > 0) rows.push({ id: "approvals", label: "Approvals", value: `${approvalCount} pending${approvalDryRun ? " · preview" : ""} ›`, run: () => navigation.navigate("Approvals") });
     rows.push({
       id: "harness", label: "Harness", value: `${harnessName} · Change…`, run: () => setPickerVisible(true),

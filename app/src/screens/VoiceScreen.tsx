@@ -7,6 +7,7 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { useContinuousVoice } from "../components/ContinuousVoiceRoot";
 import { screenBack } from "../lib/screen-back";
+import { openCouncil } from "../store/council";
 import { firstFailingVoiceProbe, runDeviceCheck } from "../lib/device-check";
 
 import type { ScreenProps } from "../navigation";
@@ -57,6 +58,9 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
       </View>
       <View style={styles.controls}>
         <PrimaryButton accessibilityLabel={live ? "Stop voice in Dash" : "Start voice in Dash"} onPress={() => void (live ? stop() : start())} label={opening ? "Cancel connection" : live ? "Stop voice" : "Start voice"} />
+        <Pressable testID="voice-open-council" accessibilityRole="button" accessibilityLabel="Open the council card" accessibilityHint="Brief, agent reports, read aloud through the orb" onPress={() => openCouncil("z0live")} style={styles.secondary}>
+          <Text style={styles.secondaryText}>Council · brief and agent reports</Text>
+        </Pressable>
         {!live && firstFailure ? (
           <Text testID="voice-first-failure" accessibilityLiveRegion="polite" style={styles.failure}>
             First failing voice check: {firstFailure}
