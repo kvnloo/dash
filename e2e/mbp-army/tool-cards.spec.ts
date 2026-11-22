@@ -26,7 +26,7 @@ test('tool and thinking cards stay compact and un-nested at phone width',async({
  const rows=stack.getByTestId('reply-tool-row');
  await expect(rows).toHaveCount(0);
  await expect(page.getByTestId('reply-tools-toggle')).toHaveAttribute('aria-expanded','false');
- await expect(page.getByTestId('reply-working')).toHaveCount(1);
+ await expect(page.getByTestId('transcript-viewport').getByRole('img', {name:'streaming',exact:true})).toHaveCount(1);
  await expect(page.getByTestId('chat-window-pill-status')).toHaveCount(0);
  await page.getByTestId('reply-tools-toggle').click({noWaitAfter:true});
  await expect(rows).toHaveCount(2);
@@ -130,8 +130,8 @@ test('full-screen chat shows one working indicator until Stop',async({page,bridg
  await expect(page.getByTestId('chat-window')).toHaveCount(0);
  await send(page,'ARMY_HANG single working indicator');
  await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
- await expect(page.getByTestId('reply-working')).toHaveCount(1);
+ await expect(page.getByTestId('transcript-viewport').getByRole('img', {name:'streaming',exact:true})).toHaveCount(1);
  await expect(page.getByTestId('chat-fullscreen-pill-status')).toHaveCount(0);
  await page.getByRole('button',{name:'Stop',exact:true}).click();
- await expect(page.getByTestId('reply-working')).toHaveCount(0);
+ await expect(page.getByTestId('transcript-viewport').getByRole('img', {name:'streaming',exact:true})).toHaveCount(0);
 });

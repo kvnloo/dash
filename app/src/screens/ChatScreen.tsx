@@ -287,7 +287,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     if (conversation) { haptic.tap(); sendLiveTurn(conversation.id, text); }
   }, [conversation]);
 
-  const { thinking, caption, external, observed, streamingMessage } = useLiveThinking(conversation);
+  const { thinking, caption, external: hostActivity, observed, streamingMessage } = useLiveThinking(conversation);
+  // The in-flight reply already owns the working indicator. A separately
+  // observed terminal phase never gets a second transcript row beside it.
+  const hasInlineWorking = streamingMessage && streamingMessage.delivery !== "queued" && streamingMessage.delivery !== "steered";
+  const external = hasInlineWorking ? undefined : hostActivity;
   useSessionActivity(settings, online && harnessId === "hermes" && !streamingMessage, conversation?.profileId, conversation?.sessionId, conversation?.targetHostId);
   const workers = useSessionWorkers(settings, online && harnessId === "hermes", conversation?.profileId, conversation?.sessionId);
   const [chatOptions, setChatOptions] = useState(false);
