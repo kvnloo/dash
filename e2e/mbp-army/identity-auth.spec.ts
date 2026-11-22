@@ -1,6 +1,6 @@
 // Real authenticated bridge routes with an ephemeral ES256 z0bridge authority.
 // The fixture issues tokens and introspects only its own minted access tokens.
-import { test, expect, type Bridge } from './fixtures';
+import { test, expect, web, type Bridge } from './fixtures';
 import { record } from '../../shared/z0bridge-identity';
 
 test.use({ bridgeOptions: { identity: true, env: { DASH_NATIVE_VOICE: '1' } } });
@@ -57,4 +57,13 @@ test('identity token with aud z0live gets 401', async ({ bridge }) => {
 
 test('identity token missing dash:chat scope gets 401', async ({ bridge }) => {
   expect((await roster(bridge, bridge.identityToken({ scope: 'z0live:voice' }))).status).toBe(401);
+});
+
+test('authenticated posture accepts enrolled identities and rejects missing credentials', async ({ bridge }) => {
+ const url = new URL('/posture', web);
+ url.port = String(bridge.port);
+ expect((await fetch(url)).status).toBe(401);
+ const response = await fetch(url, { headers: { Authorization: `Bearer ${bridge.identityToken()}` } });
+ expect(response.status).toBe(200);
+ expect(await response.json()).toMatchObject({ schema: 'dash.posture_view/v1', source: 'clock' });
 });

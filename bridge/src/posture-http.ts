@@ -6,7 +6,6 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { bearerToken, secretMatches } from "./bridge-security";
 import { evaluateHumanPosture, fmt, parseTs, type HumanState, type PostureConfig } from "../../shared/human-posture";
 import { policy, type Decision } from "../../shared/interaction-policy";
 
@@ -80,11 +79,11 @@ export async function readPosture(file: string, nowMs: number, anchors: Partial<
   }
 }
 
-export function createPostureHttpHandler(options: { token: string; file?: string; configFile?: string; now?: () => number }) {
+export function createPostureHttpHandler(options: { authorize(request: Request): Promise<boolean>; file?: string; configFile?: string; now?: () => number }) {
   const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
   return async (request: Request): Promise<Response | null> => {
     if (new URL(request.url).pathname !== "/posture") return null;
-    if (!secretMatches(bearerToken(request), options.token)) return json({ error: "unauthorized" }, 401);
+    if (!await options.authorize(request)) return json({ error: "unauthorized" }, 401);
     if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
     const anchors = await readAnchors(options.configFile ?? defaultPostureConfigFile());
     const { decision, source } = await readPosture(options.file ?? defaultPostureFile(), (options.now ?? Date.now)(), anchors);
