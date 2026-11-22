@@ -47,9 +47,10 @@ export function createT3CodeSource(server: string | undefined, token: string | u
       const socket = new WebSocket(url);
       function finish(result?: { value: unknown }) {
         deadline.removeEventListener("abort", finishOnAbort);
-        if (socket.readyState < WebSocket.CLOSING) socket.close();
+        socket.onopen = socket.onmessage = socket.onerror = socket.onclose = null;
         if (result) resolve(result.value);
         else reject(new Error("T3 Code read failed"));
+        if (socket.readyState < WebSocket.CLOSING) socket.close();
       }
       const finishOnAbort = () => finish();
       deadline.addEventListener("abort", finishOnAbort, { once: true });
