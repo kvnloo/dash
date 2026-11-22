@@ -35,7 +35,7 @@ export interface PmFields {
 }
 
 /** Live status the bridge adds from the Hermes board; never stored in the ledger. */
-export interface PmKanban { id: string; status: string; assignee?: string }
+export interface PmKanban { id: string; status: string; assignee?: string; sessionId?: string }
 
 export interface PmIssue extends PmFields {
   id: string;
@@ -169,7 +169,7 @@ function parseIssue(v: unknown): PmIssue | null {
   if (typeof v.updatedAt === "number" && Number.isFinite(v.updatedAt)) issue.updatedAt = v.updatedAt;
   if (Array.isArray(v.links)) issue.links = v.links.flatMap(l => record(l) && isId(l.to) && text(l.relation, 40) ? [{ to: l.to, relation: l.relation }] : []);
   const k = v.kanban;
-  if (record(k) && typeof k.id === "string" && text(k.status, 40)) issue.kanban = { id: k.id, status: k.status, ...(text(k.assignee, 80) ? { assignee: k.assignee } : {}) };
+  if (record(k) && typeof k.id === "string" && text(k.status, 40)) issue.kanban = { id: k.id, status: k.status, ...(text(k.assignee, 80) ? { assignee: k.assignee } : {}), ...(text(k.sessionId, 256) && k.sessionId.trim() === k.sessionId ? { sessionId: k.sessionId } : {}) };
   if (Array.isArray(v.live)) issue.live = v.live.filter((s): s is string => text(s, 20));
   return issue;
 }

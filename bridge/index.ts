@@ -45,6 +45,7 @@ import { collectRoster, readLiveTranscript, SelfHost } from "./src/roster";
 import { peerRosterCollector } from "./src/peer-roster";
 import { AGENTSVIEW_PREFIX, agentsviewMachineId, agentsviewPath, isSelfArchiveProfile, rosterArchiveHead } from "./src/agentsview-sessions";
 import { ChatIndexClient } from "./src/chat-index/client";
+import { createT3CodeSource } from "./src/t3code";
 import { createChatsHttpHandler } from "./src/chat-index/http";
 import { hermesWsPage } from "./src/chat-index/hermes-src";
 import { sidecarPath } from "./src/chat-index/sidecar";
@@ -882,6 +883,7 @@ const handleChats = createChatsHttpHandler({
   client: chatIndex,
   self: () => ({ id: SELF.id(), name: HOST_NAME, matches: (hostId: string) => SELF.matches(hostId) }),
   live: liveChats,
+  t3code: createT3CodeSource(process.env.DASH_T3CODE_SERVER, process.env.DASH_T3CODE_TOKEN, log),
 });
 
 /** Paged ws history for Hermes: the newest `limit`, and an older-page cursor when more may exist. */

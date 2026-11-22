@@ -77,7 +77,7 @@ export const CHATS_FEATURE = "chats.v1";
 /** Old bridges silently discard unknown chat fields; require this before sending model overrides. */
 export const MODEL_SELECTION_FEATURE = "model-selection.v1";
 
-export type ChatOrigin = "live" | "hermes" | "agentsview";
+export type ChatOrigin = "live" | "hermes" | "agentsview" | "t3code";
 
 /** One chat summary row. Never carries message bodies. */
 export interface ChatSummary {
@@ -983,7 +983,7 @@ export function parseHistoryQuery(params: URLSearchParams): HistoryQuery | ChatQ
   return { kind, sessionId, ...(host ? { host } : {}), ...(profile ? { profile } : {}), ...(before ? { before } : {}), limit };
 }
 
-const ORIGINS = ["live", "hermes", "agentsview"] as const;
+const ORIGINS = ["live", "hermes", "agentsview", "t3code"] as const;
 
 export function parseChatSummary(value: unknown): ChatSummary | null {
   if (!isRecord(value)) return null;

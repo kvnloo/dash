@@ -3,11 +3,12 @@ import { AppState } from "react-native";
 import { parsePmDocument, type PmDocument } from "../../../shared/pm";
 import { executionToken } from "../lib/bridge-auth";
 import { createStore } from "./createStore";
+import type { ApiSettings } from "../net/chats-api";
 import { store } from "./app";
 
 /** The Roadmap screens' one document (GET /pm): projects, features and tasks from the repos' git ledgers. */
-interface PmState { doc: PmDocument | null; loading: boolean; error: string; loadedAt: number }
-export const pm = createStore<PmState>({ doc: null, loading: false, error: "", loadedAt: 0 });
+interface PmState { doc: PmDocument | null; source: ApiSettings | null; loading: boolean; error: string; loadedAt: number }
+export const pm = createStore<PmState>({ doc: null, source: null, loading: false, error: "", loadedAt: 0 });
 
 let inflight: Promise<void> | undefined;
 
@@ -21,7 +22,7 @@ export function refreshPm(): Promise<void> {
       if (!response.ok) throw new Error(response.status === 404 ? "This bridge has no roadmap yet. Update the bridge." : `Roadmap unavailable (HTTP ${response.status}).`);
       const doc = parsePmDocument(await response.json());
       if (!doc) throw new Error("The bridge sent an unreadable roadmap.");
-      pm.set({ doc, loading: false, error: "", loadedAt: Date.now() });
+      pm.set({ doc, source: settings, loading: false, error: "", loadedAt: Date.now() });
     } catch (e) {
       pm.set(s => ({ ...s, loading: false, error: e instanceof Error ? e.message : "Roadmap unavailable." }));
     }
