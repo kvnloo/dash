@@ -292,6 +292,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
 
           <Pressable accessibilityRole="button" accessibilityLabel="Review approvals" onPress={() => navigation.navigate("Approvals")} style={styles.secondary}><Text style={styles.secondaryText}>Review approvals</Text></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Component lab" onPress={() => navigation.navigate("Lab")} style={styles.secondary}><Text style={styles.secondaryText}>Component lab</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Bots page prototype" onPress={() => navigation.navigate("BotsPage")} style={styles.secondary}><Text style={styles.secondaryText}>Bots page (prototype)</Text></Pressable>
           <Text style={styles.label}>On your computer</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Text style={styles.mono}>cd bridge && bun run start</Text>
