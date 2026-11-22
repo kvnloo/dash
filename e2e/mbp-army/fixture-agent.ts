@@ -3,6 +3,7 @@
 import { createInterface } from 'node:readline';
 import {appendFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
+import {execFile} from 'node:child_process';
 process.on('uncaughtException',e=>{appendFileSync(join(process.env.HOME || '.', 'fixture-errors.log'),String(e.stack)+'\n');process.exit(1);});
 function isRecord(v:unknown):v is Record<string,unknown>{return typeof v==='object'&&v!==null&&!Array.isArray(v);}
 const send = (v: unknown) => process.stdout.write(JSON.stringify(v) + '\n');
@@ -126,6 +127,21 @@ createInterface({input:process.stdin}).on('line', line => {
    return;
   }
   update(prefix);
+  // ARMY_UI_CONTROL ["open","Chats > X > Annotate"]: drive the phone the way a real agent on this
+  // computer does, by running the bridge's own dash-ui CLI with the environment the bridge gave it.
+  const uiArgv = /ARMY_UI_CONTROL (\[[^\n]*\])/.exec(text)?.[1];
+  if (uiArgv) {
+   const argv: unknown = JSON.parse(uiArgv);
+   const args = Array.isArray(argv) ? argv.filter((a): a is string => typeof a === 'string') : [];
+   tool('army-ui','dash-ui',{argv:args});
+   execFile(process.execPath,[join(process.env.ARMY_BRIDGE_ROOT || '.','bridge','bin','dash-ui'),...args],{env:process.env,timeout:15000},(error,stdout,stderr)=>{
+    const out = (stdout || stderr || String(error)).trim().slice(0,400);
+    toolDone('army-ui',out);
+    update('ARMY_UI_RESULT '+out+' ');
+    answer();
+   });
+   return;
+  }
   if (text.includes('ARMY_HANG')) return;
   // ARMY_HOLD: no answer until the spec creates $HOME/army-release, so overlap never races a clock.
   const hold = () => { if (existsSync(join(process.env.HOME || '.', 'army-release'))) answer(); else timer = setTimeout(hold, 100); };

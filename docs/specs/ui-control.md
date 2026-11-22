@@ -1,6 +1,6 @@
 # Agent → app UI control (v1)
 
-Status: contract only — shared wire types, pure validation and tests; no bridge, navigation or overlay wiring in this change.
+Status: wired. Agents send commands with `bridge/bin/dash-ui`; the bridge delivers them to consenting phones; the app navigates directly and acks (see "Delivery path" below). Overlay rendering (point/draw/highlight) is a separate layer.
 
 ## Purpose and trust boundary
 
@@ -30,13 +30,13 @@ The command is a discriminated union by its inner "type" field. The outer "type"
 | --- | --- | --- |
 | "point" | required "id", "target", "ttlMs"; optional "label" | Point to a visible element by testID, or one position in the visible window. |
 | "draw" | required "id", "strokes", "ttlMs"; optional "color" | Render one or more temporary polyline strokes, each with "points": [[x,y], ...]. |
-| "navigate" | required "id", "route"; optional "conversationId" | Request navigation to an allowlisted in-app screen. A conversationId identifies a Chat thread only; it is not a URL or host path. |
+| "navigate" | required "id", "route"; optional "conversationId", "chatTitle", "annotate" | Request navigation to an allowlisted in-app screen. A conversationId identifies a Chat thread only; it is not a URL or host path. "chatTitle" (1–128) names a phone chat by title, exact and case-insensitive. "annotate": true enters annotation mode once the chat shows. All three need route "Chat"; conversationId and chatTitle are exclusive. |
 | "highlight" | required "id", "testID", "ttlMs" | Temporarily emphasize one registered visible testID target. |
 | "clear" | optional "id" | Dismiss an overlay with that command id, or all agent-owned overlays when omitted. Does not erase user-owned ink. |
 
 A "point.target" is **either** {"testID":"visible-id"} **or** {"x":0.5,"y":0.5}. Mixing testID with x/y, or providing only one coordinate, is ambiguous and rejected. Unrecognized fields (including in nested targets, strokes and the envelope) are ignored, not executed or passed through.
 
-Only the following exact-case navigation routes are allowed: "Lab", "Trace", "Orchestra", "Settings", "Hosts", "Bots" (legacy alias; the current AppRoute names from app/src/lib/app-route-link.ts), plus "Chat". No relative paths, HTTP links, deep-link parameters or arbitrary screens. "conversationId" is meaningful only for Chat; the receiver must never reuse it for another route. An absent conversationId navigates to the generic Chat screen.
+Only the following exact-case navigation routes are allowed: "Lab", "Trace", "Orchestra", "Settings", "Hosts", "Bots" (legacy alias), "Chats" (the current AppRoute names from app/src/lib/app-route-link.ts), plus "Chat". No relative paths, HTTP links, deep-link parameters or arbitrary screens. "conversationId" is meaningful only for Chat; the receiver must never reuse it for another route. An absent conversationId navigates to the generic Chat screen.
 
 ## Coordinate space, drawing and visuals
 
@@ -61,7 +61,9 @@ Draw color is optional and restricted to "gold" or "cream" to match the existing
 | Stroke "points" | array of 1–512 coordinate tuples per stroke |
 | "ttlMs" for point, draw, highlight | required integer milliseconds, inclusive 250–30,000 |
 | Optional "color" | exactly "gold" or "cream" |
-| Navigate "route" | exactly Lab, Trace, Orchestra, Settings, Bots or Chat |
+| Navigate "route" | exactly Lab, Trace, Orchestra, Settings, Bots, Hosts, Chats or Chat |
+| Optional navigate "chatTitle" | same 1–128 nonblank limit; route Chat only; not with conversationId |
+| Optional navigate "annotate" | exactly true; route Chat only |
 
 All optional fields, when supplied, must be valid; explicit null is not equivalent to absence. Every required field must exist and be valid, even if an older peer would ignore it. Validation rejects conflicting known target fields and never coerces values. The named "UI_CONTROL_LIMITS" and "UI_CONTROL_ROUTES" exports are the source for programmatic limit and allowlist tests; this table is the human-readable contract.
 
@@ -74,6 +76,23 @@ All optional fields, when supplied, must be valid; explicit null is not equivale
 - **Replay/rate control:** Bridge and app must bind each command to an authenticated session, reject stale/out-of-order payloads, and cap command delivery rate and total active overlays. Those are integration controls, not properties of this stateless parser. Consent, dispatch, renderer expiration and feature negotiation are **not implemented** by this issue.
 
 The command id is a stable correlation/overlay key; clear with an id targets that key, and clear without an id removes only agent-owned overlays. Neither form resets local user ink.
+
+## Delivery path (implemented)
+
+~~~text
+agent: dash-ui open "Chats > Release notes > Annotate"
+  -> POST http://127.0.0.1:<notice port>/ui-control   (loopback only, Bearer ~/.dash/token, v1 envelope)
+  -> bridge UiControlHub -> {"type":"ui_control","schema":"dash.ui_control/v1","ref":"<hex>","command":{...}} on /ws
+  -> app: consent check, navigation container dispatch (no taps), visible receipt
+  -> {"type":"ui_control_ack","ref":"<hex>","status":"done","detail":"Opened Release notes › Annotate","screen":"Chat","ms":33}
+  -> HTTP answer to dash-ui: {"status":"done","ref":"…","detail":"…","screen":"Chat","appMs":33,"ms":33}
+~~~
+
+- **Feature negotiation:** after `hello` the app sends `{"type":"ui_control_hello","enabled":<consent>}` and again whenever the owner flips Settings > Agent control. The bridge sends frames only to sockets that said hello with enabled true; old apps never receive one.
+- **Answers:** `done`, `skipped` (understood but not possible: unknown chat, screen did not open), `refused` (consent off or recently dismissed) come from the app. The bridge itself answers `disabled` (HTTP 403, every phone has it off), `no_phone` (503), `timeout` (504, no ack in 3 s), `busy` (429, over 20 commands per second) and `invalid` (400).
+- **Agent environment:** the bridge exports `DASH_NOTICE_PORT` to the agents it spawns, so `dash-ui`, `dash-notify` and `dash-sudo` find the loopback listener even when its port was chosen by the OS.
+- **Path syntax** (`parseUiControlPath`): `Chats`, `Chats > <title>`, `Chats > <title> > Annotate`, `Chats > id:<conversation id>`, `Chat`, `Settings`, `Trace`, `Lab`, `Orchestra`, `Hosts`.
+- **Speed:** one loopback HTTP request plus one WebSocket frame each way; the app performs the command in the same JS turn it arrives. The army measures bridge-receipt to app-ack (`ms`) under 1 s; typical web-army values are tens of milliseconds.
 
 ## Integration and versioning
 
@@ -95,4 +114,4 @@ bun run lint
 bun scripts/mutate.ts
 ~~~
 
-These commands are **not run** by the ChatGPT connector worker; no runtime, native overlay, device or consent evidence is claimed.
+The delivery path is proven by the tester army journeys in `e2e/mbp-army/ui-control.spec.ts` (feature `agent-ui-control`), driving the real `dash-ui` CLI, the real bridge and the real Expo web app. Native (S25) delivery uses the same code and still needs a device check.

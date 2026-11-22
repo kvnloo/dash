@@ -218,3 +218,13 @@ drafts separate from current native list/search results. Recovery selects the
 host-indexed native result explicitly. No address, host or draft is inferred or
 silently transferred. These focused journeys do not replace complete exact-head
 release qualification or actual MBP/Groot phone acceptance.
+
+## Agent UI control journeys (#368)
+
+`ui-control.spec.ts` runs the bridge's real `bridge/bin/dash-ui` CLI with the isolated bridge's HOME,
+credential directory and loopback port (parsed from its startup log), exactly as an agent on that
+computer would. Consent is switched on through the visible Settings > Agent control switch. The
+journey asserts the refusal while consent is off, `Chats > <chat> > Annotate` with bridge-to-ack
+latency under 1 s and no page interaction, unknown-chat and usage errors, and Stop on the receipt.
+A second journey sends `ARMY_UI_CONTROL ["open","Chats"]` to the fixture ACP agent, which runs the
+same CLI with the environment the bridge gave it (`DASH_NOTICE_PORT`).
