@@ -18,8 +18,9 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 // Codex runs through the pinned codex-acp adapter; whether it is ready depends only on that install in this checkout.
 const codexAdapter = existsSync(join(root, 'bridge', 'acp-adapters', 'node_modules', '.bin', 'codex-acp'));
 const ready = ['OMP', 'Hermes', 'Claude Code', ...(codexAdapter ? ['Codex'] : [])];
-const missing = ['Grok', 'Pi', 'fx', ...(codexAdapter ? [] : ['Codex'])];
-const readyLine = new RegExp(`^harnesses \\(${ready.length} of 7 ready\\)$`, 'm');
+// Cursor Cloud (DA-085) is listed with no local binary; it is ready only with CURSOR_API_KEY, which the journey never sets.
+const missing = ['Grok', 'Pi', 'fx', 'Cursor Cloud', ...(codexAdapter ? [] : ['Codex'])];
+const readyLine = new RegExp(`^harnesses \\(${ready.length} of 8 ready\\)$`, 'm');
 
 type Home = { dir: string; bin: string; env: Record<string, string>; bridgeEnv: string[] };
 

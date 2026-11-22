@@ -11,6 +11,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { HARNESSES } from "../bridge/src/harnesses";
 import { acpCommand } from "../bridge/src/acp/supervisor";
+import { CURSOR_CLOUD_ID, cursorConfigured } from "../bridge/src/cursor-cloud";
 
 type Platform = "darwin" | "linux";
 type Profile = "minimal" | "full";
@@ -174,6 +175,11 @@ interface HarnessReport {
 export function discoverHarnesses(path: string): HarnessReport[] {
   const which = (bin: string) => Bun.which(bin, { PATH: path });
   return HARNESSES.map((h) => {
+    // Cursor Cloud has no local binary: the bridge reaches the Cursor API with CURSOR_API_KEY.
+    if (h.id === CURSOR_CLOUD_ID) {
+      const ready = cursorConfigured();
+      return { id: h.id, name: h.name, ready, cli: null, command: ready ? "Cursor API (cloud)" : null, ...(ready ? {} : { hint: "cloud harness: set CURSOR_API_KEY for the bridge service" }) };
+    }
     const command = acpCommand(h.id, which);
     const cli = which(h.bin);
     const report: HarnessReport = { id: h.id, name: h.name, ready: command !== null, cli, command: command ? command.join(" ") : null };
