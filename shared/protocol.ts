@@ -344,7 +344,7 @@ export interface HandoffInfo {
 
 /** Events that belong to a turn. `seq` is per-turn and strictly increasing from 1. */
 export type TurnEvent =
-  | { type: "session"; id: string; seq: number; sessionId: string; hostId?: string; profileId?: string; harnessId?: string; transport?: string }
+  | { type: "session"; id: string; seq: number; sessionId: string; hostId?: string; profileId?: string; harnessId?: string; transport?: string; repoRoot?: string }
   /** What the bridge heard for a spoken turn. Precedes the reply's deltas. */
   | { type: "transcript"; id: string; seq: number; text: string }
   | { type: "delta"; id: string; seq: number; text: string }
@@ -643,8 +643,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     case "lost":
       return str(raw.id) ? { type: "lost", id: raw.id } : null;
     case "session":
-      return str(raw.id) && num(raw.seq) && str(raw.sessionId) && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.harnessId) && optStr(raw.transport)
-        ? { type: "session", id: raw.id, seq: raw.seq, sessionId: raw.sessionId, hostId: raw.hostId, profileId: raw.profileId, harnessId: raw.harnessId, transport: raw.transport }
+      return str(raw.id) && num(raw.seq) && str(raw.sessionId) && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.harnessId) && optStr(raw.transport) && optStr(raw.repoRoot)
+        ? { type: "session", id: raw.id, seq: raw.seq, sessionId: raw.sessionId, hostId: raw.hostId, profileId: raw.profileId, harnessId: raw.harnessId, transport: raw.transport, repoRoot: raw.repoRoot }
         : null;
     case "transcript":
       return str(raw.id) && num(raw.seq) && str(raw.text)

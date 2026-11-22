@@ -3,7 +3,8 @@
 import {test,expect,openChat,composer,send,chatRow} from './fixtures';
 import type {Page} from 'playwright/test';
 import {writeFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {basename,join} from 'node:path';
+import {execFileSync} from 'node:child_process';
 
 test.afterEach(async({page},info)=>{if(!page.isClosed())await page.screenshot({path:info.outputPath('final.png')});});
 
@@ -12,6 +13,7 @@ const reopen=async(page:Page)=>{await chatRow(page).click({noWaitAfter:true});aw
 const preview=(page:Page)=>chatRow(page).getByTestId('chat-work-summary');
 
 test('Chats list rows prioritize failures and keep a current task rather than the last reply',async({page,bridge},info)=>{
+ execFileSync('git', ['init', '-q', bridge.dir]);
  await openChat(page,bridge);
  // A chat nobody has written to says so; it does not repeat its title or folder.
  await toList(page);
@@ -41,6 +43,7 @@ test('Chats list rows prioritize failures and keep a current task rather than th
  await expect(preview(page)).toHaveText('Task · ARMY_HOLD preview in flight');
  await expect(preview(page)).not.toHaveText(lastMessage);
  await expect(chatRow(page)).not.toContainText('Failed');
+ await expect(chatRow(page).getByText('Repo · ' + basename(bridge.dir), { exact: true })).toBeVisible();
 
  await reopen(page);
  await send(page, 'Please review the keyboard layout.');

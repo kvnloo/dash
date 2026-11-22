@@ -76,7 +76,7 @@ function currentTask(raw: string | null | undefined): string | undefined {
   const prompts: unknown = JSON.parse(raw);
   if (!Array.isArray(prompts)) return undefined;
   for (const prompt of prompts) {
-    const task = typeof prompt === "string" ? taskFromPrompt(redact(prompt)) : undefined;
+    const task = typeof prompt === "string" ? taskFromPrompt(prompt) : undefined;
     if (task) return task;
   }
   return undefined;

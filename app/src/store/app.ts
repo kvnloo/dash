@@ -742,6 +742,7 @@ export function applyTurnEvent(
           event.harnessId === c.harness && (event.transport === "acp" || event.transport === "legacy") &&
           selfHost !== undefined && (isCatalogHarness(c.harness) || event.transport === "acp" && genericProfile !== undefined);
         return { ...c, sessionId: event.sessionId,
+          ...(event.repoRoot && selfHost && c.endpointAddress === settings?.address ? { repoRoot: event.repoRoot } : {}),
           ...(native ? { profileId: event.profileId ?? c.profileId, targetHostId: host ?? c.targetHostId, stale: false }
             : paired ? { targetHostId: host, ...(!isCatalogHarness(c.harness) ? { profileId: genericProfile!.id } : {}), stale: false } : {}) };
       });

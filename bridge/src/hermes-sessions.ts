@@ -271,13 +271,13 @@ export class HermesSessions {
         AND (coalesce(last_activity_at, started_at) > ?1 OR (coalesce(last_activity_at, started_at) = ?1 AND id > ?2))
       ORDER BY act ASC, id ASC LIMIT ?3`).all(since, afterId, limit);
       const cols = db.query<{ name: string }, []>("pragma table_info(messages)").all().map(c => c.name);
-      if (!cols.includes("content")) return rows;
+      if (!["session_id", "role", "content", "timestamp", "id"].every(column => cols.includes(column))) return rows;
       const prompts = db.query<{ content: string | null }, [string]>(`SELECT substr(content,1,${TASK_SOURCE_CHARS}) AS content
         FROM messages WHERE session_id=? AND role='user' ${cols.includes("active") ? "AND active=1" : ""} ORDER BY timestamp DESC, id DESC LIMIT 4`);
       for (const row of rows) {
         if (typeof row.id !== "string" || !visible(row)) continue;
         for (const { content } of prompts.all(row.id)) {
-          const task = content ? taskFromPrompt(redact(content)) : undefined;
+          const task = content ? taskFromPrompt(content) : undefined;
           if (task) { row.task = task; break; }
         }
       }
