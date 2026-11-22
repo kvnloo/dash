@@ -98,7 +98,7 @@ After integrating in a separate worktree, install its app dependencies and serve
 ```sh
 CI=false EXPO_PUBLIC_DASH_TURBO=1 \
   REACT_NATIVE_PACKAGER_HOSTNAME=<tailnet-ip> \
-  /home/kvn/.bun/bin/bun x expo start --dev-client --host lan --port 8098
+  bun x expo start --dev-client --host lan --port 8098
 ```
 
 The existing debug/QA flags (`EXPO_PUBLIC_DEBUG`, `EXPO_PUBLIC_DEBUG_AUTONAV`, `EXPO_PUBLIC_DEBUG_SCENARIO`, `EXPO_PUBLIC_DEBUG_BANNER`) still work. Leave debug seeding off for normal dogfooding. `CI=false` is required for the interactive preview's reload/watch loop. CI build/export jobs use CI mode separately. The installed package has its own Android data sandbox, so it does not inherit Expo Go's pairing or saved chats. Pair it normally; never put credentials in the development-client URL.
@@ -106,9 +106,10 @@ The existing debug/QA flags (`EXPO_PUBLIC_DEBUG`, `EXPO_PUBLIC_DEBUG_AUTONAV`, `
 Open the native development client, not Expo Go:
 
 ```sh
+TAILNET_IP=$(tailscale ip -4)
 adb -s <S25-serial> shell am start -W \
   -a android.intent.action.VIEW -p app.dash.mobile \
-  -d 'exp+dash://expo-development-client/?url=http%3A%2F%2F100.113.138.100%3A8098'
+  -d "exp+dash://expo-development-client/?url=http%3A%2F%2F${TAILNET_IP}%3A8098"
 ```
 
 The APK includes `expo-dev-client`, plus the `react-native-view-shot` native module. Existing bridge pairing and `:4747` are unchanged. No bridge token goes in the launch URL.

@@ -23,7 +23,6 @@
     <key>HOME</key><string>/Users/kvn</string>
     <key>EXPO_NO_TELEMETRY</key><string>1</string>
     <key>EXPO_PUBLIC_DASH_TURBO</key><string>1</string>
-    <key>REACT_NATIVE_PACKAGER_HOSTNAME</key><string>100.100.77.46</string>
   </dict>
   <key>StandardInPath</key><string>/dev/null</string>
   <key>RunAtLoad</key><true/>
