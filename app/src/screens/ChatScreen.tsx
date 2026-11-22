@@ -493,6 +493,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       inspect: index => { const mode = DETAIL_MODES[index]; if (mode) setDetailMode((conversation ?? createConversation(harnessId)).id, mode); },
     });
     if (conversation) rows.push({ id: "summaries", label: "Thinking summaries", value: conversation.summariesEnabled ? "On · next turn" : "Off", run: () => setThinkingSummaries(conversation.id, !conversation.summariesEnabled) });
+    // The context window, by name: the same grid card the composer gauge opens on a tap.
+    const reading = context.snapshot?.maximum ? `~${Math.round(Math.min(1, context.snapshot.used / context.snapshot.maximum) * 100)}%` : "Unknown";
+    rows.push({ id: "context", label: "Context", value: `${reading} · grid`, run: () => { if (!context.open) context.toggle(); } });
     rows.push({ id: "annotate", label: "Annotate", value: "S Pen or finger", run: () => enterAnnotation() });
     if (approvalCount > 0) rows.push({ id: "approvals", label: "Approvals", value: `${approvalCount} pending${approvalDryRun ? " · preview" : ""} ›`, run: () => navigation.navigate("Approvals") });
     rows.push({
@@ -501,7 +504,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       options: connection.harnesses.filter(h => h.available).map(h => ({ id: h.id, label: h.name, selected: h.id === harnessId, run: () => onSelectHarness(h.id) })),
     });
     return rows;
-  }, [harnessId, conversation, liveOn, toggleLive, detailMode, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible, connection.harnesses, onSelectHarness]);
+  }, [harnessId, conversation, liveOn, toggleLive, detailMode, context, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible, connection.harnesses, onSelectHarness]);
 
   const dockBody = <>
     <WorkersStrip workers={workers} />

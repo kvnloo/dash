@@ -195,6 +195,34 @@ test('context card shows the grid instead of the bar',async({page,bridge},info)=
  await closeContextCard(page,gauge);
 });
 
+test('Options Context opens the omp-style context grid by name',async({page,bridge},info)=>{
+ await page.setViewportSize({width:390,height:780});
+ await openChat(page,bridge);await send(page,'ARMY_USAGE context by name');
+ await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible();
+ const options=page.getByRole('button',{name:'Options. Current surface: Chat',exact:true});
+ await options.click({noWaitAfter:true});
+ // A named Context control, not only the unlabelled ring beside Send.
+ const row=page.getByRole('button',{name:/^Context, (~\d+%|Unknown) · grid$/});
+ await expect(row).toBeVisible();
+ await row.click({noWaitAfter:true});
+ const card=page.getByLabel('Context window details',{exact:true});
+ await expect(card).toBeVisible();await expect(card).toBeInViewport({ratio:1});
+ // omp's context view: a 20 x 10 cell grid filled by category, then Free space and the Autocompact buffer.
+ await expect(card.getByText('Context ~43%',{exact:true})).toBeVisible({timeout:20000});
+ const grid=card.getByLabel('Context grid',{exact:true});
+ await expect(grid.locator('rect')).toHaveCount(200);
+ await expect(grid.locator('rect[fill="none"]')).toHaveCount(115);
+ await expect(card.getByLabel('Used, estimated 85.0k tokens, 43%',{exact:true})).toBeVisible();
+ await expect(card.getByLabel('Free space, 115.0k tokens, 57%',{exact:true})).toBeVisible();
+ await expect(card.getByLabel('Autocompact buffer, unknown',{exact:true})).toBeVisible();
+ await page.screenshot({path:info.outputPath('context-by-name-grid-390.png')});
+ const gauge=page.getByRole('button',{name:/^Context window,/});
+ await closeContextCard(page,gauge);
+ // The row then reads the same reading as the gauge.
+ await options.click({noWaitAfter:true});
+ await expect(page.getByRole('button',{name:'Context, ~43% · grid',exact:true})).toBeVisible();
+});
+
 // RC3 defect: the card's "Dismiss usage details" backdrop covered the gauge, so the gauge could not be pressed again.
 test('context gauge stays pressable while its card is open: pressing it closes the card',async({page,bridge})=>{
  await openChat(page,bridge);await send(page,'context gauge pressable journey');
