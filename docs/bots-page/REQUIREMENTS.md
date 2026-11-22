@@ -45,8 +45,8 @@ not quoted.
 | Id | Requirement | From | Prototype |
 |----|-------------|------|-----------|
 | R1 | A Bots page that lists every bot the hosts report, and only those | Q1, Q5 | Done. `botGems` reads `HostInfo.bots`; phones skipped; empty and "does not report" hosts say so |
-| R2 | Simple per-bot page (grok-bot-simple): face, name, where it runs, channels, one action | Q1 | Done. Tap a gem: face, symbol, family · host, channel rows with state words |
-| R3 | Start a chat with a bot from its page, Hermes and Grok alike | Q2, Q4 | Done when the host lists the bot's harness (`agentId`); otherwise an honest note, no dead button |
+| R2 | Simple per-bot page (grok-bot-simple): face, name, where it runs, channels, its chats, one action | Q1 | Done. Tap a gem: the same face as in the Hosts tree, symbol, family · host, channel rows with state words, the bot's chats |
+| R3 | Chat with a bot from its page, Hermes and Grok alike | Q2, Q4 | Done where the bridge allows it. "Chat with <bot>" shows only when the app's own target check passes; otherwise the page shows the bridge's reason (for example, this bridge starts new chats on the default Hermes profile only). The bot's existing chats always open |
 | R4 | Host > harness > profile tree on the same page | Q1, DF-110, DF-112 | Done. **Tree** view reuses `hostsTree` + `Tree`; #638 (DA-045, one level per kind) will flow in unchanged |
 | R5 | "Table gem" look: bots as element tiles (number, two-letter symbol, name, state) | Q1 | Done. Unique element symbols (`gemSymbol`), identity colour as a facet edge, semantic status dot |
 | R6 | "Orrery" look: bots orbiting their host | Q1 | Done, static. Host is the sun, bots sit on one or two rings |

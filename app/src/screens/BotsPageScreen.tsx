@@ -9,7 +9,7 @@ import { ScreenHeader } from "../components/ScreenHeader";
 import { Tree } from "../components/Tree";
 import { haptic } from "../haptics";
 import { botTarget } from "../lib/bots";
-import { FAMILY_LABEL, botGems, gemChannels, gemsSummary, orbitSlots, orreryHosts, type BotGem, type GemTone, type OrreryHost } from "../lib/bots-page";
+import { FAMILY_LABEL, botGems, gemChannels, gemFaceKey, gemSessions, gemsSummary, orbitSlots, orreryHosts, type BotGem, type GemTone, type OrreryHost } from "../lib/bots-page";
 import { hostsTree } from "../lib/hosts-tree";
 import { botFaceIdentity } from "../lib/moodie-identity";
 import { profileFromAgent } from "../lib/roster";
@@ -18,9 +18,10 @@ import { toMain } from "../lib/main-nav";
 import { PRESS_SCALE } from "../motion";
 import type { ScreenProps } from "../navigation";
 import { shallowArrayEqual } from "../store/createStore";
-import { openAgentConversation, store } from "../store/app";
+import { conversationTargetError, openAgentConversation, store } from "../store/app";
 import { colors, controlMin, glass, radius, space, type } from "../theme";
 import type { AgentInfo, HostInfo } from "../../../shared/protocol";
+import type { AgentTarget } from "../mock/agents";
 
 type View3 = "table" | "orrery" | "tree";
 const VIEWS: { id: View3; label: string }[] = [{ id: "table", label: "Table" }, { id: "orrery", label: "Orrery" }, { id: "tree", label: "Tree" }];
@@ -39,10 +40,18 @@ export function BotsPageScreen({ navigation }: ScreenProps<"BotsPage">) {
   const [view, setView] = useState<View3>("table");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = gems.find(g => g.id === selectedId) ?? null;
-  const pick = useCallback((gem: BotGem) => { haptic.select(); setSelectedId(gem.id); }, []);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const pick = useCallback((gem: BotGem) => { haptic.select(); setChatError(null); setSelectedId(gem.id); }, []);
   const back = () => {
-    if (selected) { setSelectedId(null); return; }
+    if (selected) { setSelectedId(null); setChatError(null); return; }
     if (navigation.canGoBack()) navigation.goBack(); else toMain(navigation);
+  };
+  const openTarget = (target: AgentTarget) => {
+    const result = openAgentConversation(target);
+    // Inline, not an Alert: web has no Alert, and the reason belongs next to the action.
+    if ("error" in result) { setChatError(result.error); return; }
+    setChatError(null);
+    navigation.navigate("Chat");
   };
   const openAgent = useCallback((host: HostInfo, agent: AgentInfo) => {
     const result = openAgentConversation(profileFromAgent(host, agent));
@@ -55,18 +64,17 @@ export function BotsPageScreen({ navigation }: ScreenProps<"BotsPage">) {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]} testID="bots-page">
       <ScreenHeader compact title={selected ? selected.name : "Bots"} onBack={back} />
-      {selected ? <BotPage gem={selected} onChat={() => {
-        const target = botTarget(selected.host, selected.bot);
-        if (!target) return;
-        const result = openAgentConversation(target);
-        if ("error" in result) { Alert.alert("Chat unavailable", result.error); return; }
-        navigation.navigate("Chat");
-      }} bottom={insets.bottom} /> : <>
+      {selected ? <BotPage gem={selected} error={chatError} bottom={insets.bottom}
+        onChat={() => {
+          const target = botTarget(selected.host, selected.bot);
+          if (target) openTarget(target);
+        }}
+        onSession={agent => openTarget(profileFromAgent(selected.host, agent))} /> : <>
         <Text style={styles.summary} testID="bots-page-summary">{gemsSummary(gems, hosts)}</Text>
         <View style={styles.switcher} accessibilityRole="tablist">
           {VIEWS.map(v => {
             const on = v.id === view;
-            return <PressScale key={v.id} scaleTo={PRESS_SCALE.control} accessibilityRole="tab" accessibilityLabel={`${v.label} view`} accessibilityState={{ selected: on }}
+            return <PressScale key={v.id} scaleTo={PRESS_SCALE.control} accessibilityRole="tab" accessibilityLabel={`${v.label} view`} accessibilityState={{ selected: on }} aria-selected={on}
               onPress={() => { haptic.select(); setView(v.id); }} style={[styles.switch, on && styles.switchOn]}>
               <Text style={[styles.switchText, on && styles.switchTextOn]}>{v.label}</Text>
             </PressScale>;
@@ -93,7 +101,7 @@ function GemTable({ gems, onPick }: { gems: BotGem[]; onPick(gem: BotGem): void 
 }
 
 function Gem({ gem, size, onPick }: { gem: BotGem; size: number; onPick(gem: BotGem): void }) {
-  const identity = botFaceIdentity(gem.id, gem.bot.runtime);
+  const identity = botFaceIdentity(gemFaceKey(gem), gem.bot.runtime);
   return (
     <PressScale testID={`bot-gem-${gem.id}`} accessibilityRole="button" accessibilityLabel={`${gem.name} on ${gem.hostName}, ${gem.stateWord}`}
       onPress={() => onPick(gem)} style={[styles.gem, { width: size, height: size }, !gem.hostOnline && styles.dim]}>
@@ -132,7 +140,7 @@ function Orrery({ host, onPick }: { host: OrreryHost; onPick(gem: BotGem): void 
           const slot = slots[i] ?? { x: 0, y: 0 };
           return <PressScale key={gem.id} testID={`bot-planet-${gem.id}`} accessibilityRole="button" accessibilityLabel={`${gem.name} on ${gem.hostName}, ${gem.stateWord}`}
             onPress={() => onPick(gem)} style={[styles.planet, { left: box / 2 + slot.x * orbit - planet / 2, top: box / 2 + slot.y * orbit - planet / 2, width: planet, height: planet }, !gem.hostOnline && styles.dim]}>
-            <BotFace identity={botFaceIdentity(gem.id, gem.bot.runtime)} size={30} />
+            <BotFace identity={botFaceIdentity(gemFaceKey(gem), gem.bot.runtime)} size={30} />
             <View style={[styles.planetDot, { backgroundColor: TONE[gem.tone] }]} />
           </PressScale>;
         })}
@@ -146,11 +154,18 @@ function ringBox(box: number, r: number) {
   return { left: box / 2 - r, top: box / 2 - r, width: r * 2, height: r * 2, borderRadius: r };
 }
 
-/** The simple bot page: who it is, where it runs, which channels are live, and one action. */
-function BotPage({ gem, onChat, bottom }: { gem: BotGem; onChat(): void; bottom: number }) {
-  const identity = botFaceIdentity(gem.id, gem.bot.runtime);
+/** Why Dash cannot start a new chat on this target right now, from the same check the open uses. */
+function startBlock(target: AgentTarget): string | undefined {
+  return target.online ? conversationTargetError(target) : "This agent is offline.";
+}
+
+/** The simple bot page: who it is, where it runs, which channels are live, its chats, one action. */
+function BotPage({ gem, onChat, onSession, bottom, error }: { gem: BotGem; onChat(): void; onSession(agent: AgentInfo): void; bottom: number; error: string | null }) {
+  const identity = botFaceIdentity(gemFaceKey(gem), gem.bot.runtime);
   const target = botTarget(gem.host, gem.bot);
+  const blocked = target ? startBlock(target) : undefined;
   const channels = gemChannels(gem);
+  const sessions = gemSessions(gem);
   return (
     <ScrollView contentContainerStyle={[styles.page, { paddingBottom: bottom + space.xl }]} testID="bot-page">
       <View style={styles.hero}>
@@ -158,6 +173,11 @@ function BotPage({ gem, onChat, bottom }: { gem: BotGem; onChat(): void; bottom:
         <Text style={styles.heroSymbol}>{gem.symbol}</Text>
         <Text style={styles.heroMeta}>{`${FAMILY_LABEL[gem.family]} · ${gem.hostName}`}</Text>
         {gem.bot.detail ? <Text style={styles.heroDetail}>{gem.bot.detail}</Text> : null}
+      </View>
+      <View style={styles.action}>
+        {target && !blocked ? <PrimaryButton label={`Chat with ${gem.name}`} onPress={onChat} />
+          : <Text style={styles.note} testID="bot-start-note">{target ? blocked : `${gem.hostName} does not list a harness for this bot, so Dash cannot start a new chat with it.`}</Text>}
+        {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
       </View>
       <Text style={styles.label}>Channels</Text>
       {channels.length === 0 ? <Text style={styles.note}>{`No chat platforms reported. ${gem.stateWord}.`}</Text> : channels.map(c => (
@@ -167,10 +187,14 @@ function BotPage({ gem, onChat, bottom }: { gem: BotGem; onChat(): void; bottom:
           <Text style={styles.channelState}>{c.word}</Text>
         </View>
       ))}
-      <View style={styles.action}>
-        {target ? <PrimaryButton label={`Chat with ${gem.name}`} disabled={!gem.hostOnline} onPress={onChat} />
-          : <Text style={styles.note}>{`${gem.hostName} does not list a harness for this bot, so Dash cannot open a chat with it yet.`}</Text>}
-      </View>
+      <Text style={styles.label}>Chats</Text>
+      {sessions.length === 0 ? <Text style={styles.note}>No chats with this bot on its host.</Text> : sessions.map(agent => (
+        <PressScale key={agent.id} testID={`bot-session-${agent.id}`} accessibilityRole="button" accessibilityLabel={`Open chat ${agent.name}`}
+          disabled={!gem.hostOnline} onPress={() => onSession(agent)} style={styles.channel}>
+          <Text style={styles.channelName} numberOfLines={1}>{agent.name}</Text>
+          <Text style={styles.channelState}>Open</Text>
+        </PressScale>
+      ))}
     </ScrollView>
   );
 }
@@ -214,5 +238,6 @@ const styles = StyleSheet.create({
   channelName: { ...type.body, color: colors.text, flex: 1 },
   channelState: { ...type.small, color: colors.textMuted },
   note: { ...type.small, color: colors.textMuted, paddingVertical: space.sm },
-  action: { paddingTop: space.xl },
+  error: { ...type.small, color: colors.danger, paddingTop: space.sm },
+  action: { paddingBottom: space.md },
 });

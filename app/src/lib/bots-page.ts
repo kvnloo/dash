@@ -1,9 +1,10 @@
 // Bots page prototype model (DA-073). Bots are deployed messaging identities reported in
 // `HostInfo.bots` (docs/design/language.md#glossary). This file only arranges them for the
 // gem table, the orrery and the simple bot page; it never invents a bot or a channel.
-import type { BotChannel, BotInfo, HostInfo } from "../../../shared/protocol";
+import type { AgentInfo, BotChannel, BotInfo, HostInfo } from "../../../shared/protocol";
 import { platformName } from "./bots";
 import { hostLabel } from "./hosts-tree";
+import { hermesProfileKey } from "./moodie-identity";
 
 export type GemFamily = "hermes" | "grok" | "service" | "other";
 /** Semantic status only: ok/warn/danger/idle map to theme status colours, never gold. */
@@ -86,6 +87,28 @@ export interface GemChannelRow { id: string; label: string; word: string; tone: 
 
 export function gemChannels(gem: BotGem): GemChannelRow[] {
   return gem.bot.channels.map(c => ({ id: c.platform, label: platformName(c.platform), word: gem.hostOnline ? CHANNEL_WORD[c.state] : "Host offline", tone: gem.hostOnline ? CHANNEL_TONE[c.state] : "offline" }));
+}
+
+/**
+ * The bot's existing chats on its host: sessions of the agent behind it, or of its Hermes
+ * profile when the host lists sessions but not the profile itself. Newest first.
+ */
+export function gemSessions(gem: BotGem): AgentInfo[] {
+  const { host, bot } = gem;
+  const anchor = bot.agentId ? host.agents.find(a => a.id === bot.agentId) : undefined;
+  const hermesBot = bot.runtime === "hermes" && bot.id.startsWith("hermes-bot:") ? bot.id.slice("hermes-bot:".length) : undefined;
+  const profile = anchor?.profileId ?? (anchor?.kind === "hermes" && anchor.id.startsWith("hermes:") ? anchor.id.slice("hermes:".length) : undefined) ?? hermesBot;
+  const kind = anchor?.kind ?? (hermesBot !== undefined ? "hermes" : undefined);
+  return host.agents
+    .filter(a => a.sessionId && (a.id === anchor?.id || (kind !== undefined && profile !== undefined && a.kind === kind && a.profileId === profile)))
+    .sort((a, b) => (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0));
+}
+
+/** Same face key as the Hosts tree (lib/hosts-tree.ts): the Hermes profile, else the bot id. */
+export function gemFaceKey(gem: BotGem): string {
+  const anchor = gem.bot.agentId ? gem.host.agents.find(a => a.id === gem.bot.agentId) : undefined;
+  const profile = anchor ? hermesProfileKey(anchor) : undefined;
+  return profile ?? (gem.bot.runtime === "hermes" && gem.bot.id.startsWith("hermes-bot:") ? gem.bot.id.slice("hermes-bot:".length) : gem.bot.id);
 }
 
 export interface OrreryHost { id: string; label: string; online: boolean; gems: BotGem[] }
