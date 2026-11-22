@@ -68,7 +68,7 @@ class DexDetector(private val app: Application, private val changed: (Map<String
     var mode = "off"
     var source = "none"
     // Priority is deliberate: public window/display APIs precede Samsung hooks.
-    if (mainId != Display.DEFAULT_DISPLAY) {
+    if (hasTvWorkspace()) {
       tvId = mainId; mode = "dual"; source = "activity-display"
     } else {
       val desk = displays.displays.firstOrNull {
@@ -103,9 +103,14 @@ class DexDetector(private val app: Application, private val changed: (Map<String
       "tvDisplayId" to tvId, "mainDisplayId" to mainId, "padOpen" to DashPadActivity.isOpen)
   }
 
+  fun hasTvWorkspace(): Boolean {
+    val id = mainActivity()?.let { displayId(it) } ?: return false
+    return id != Display.DEFAULT_DISPLAY && displays.getDisplay(id) != null
+  }
+
   fun publish() {
+    if (!hasTvWorkspace()) DashPadActivity.close()
     val next = state()
-    if (next["mode"] == "off") DashPadActivity.close()
     if (previous != next) { previous = next; changed(next) }
   }
 

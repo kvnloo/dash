@@ -27,8 +27,8 @@ class DashDexModule : Module() {
     OnStartObserving { appContext.currentActivity?.runOnUiThread { detection().publish() } }
     AsyncFunction("openPad") {
       val d = detection()
-      check(d.state()["mode"] != "off") { "Desktop mode is not active" }
       val activity = requireNotNull(d.mainActivity()) { "Main activity unavailable" }
+      check(d.hasTvWorkspace()) { "Open Dash on the desktop display first" }
       val intent = Intent(activity, DashPadActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
       activity.startActivity(intent, ActivityOptions.makeBasic().apply {
         launchDisplayId = Display.DEFAULT_DISPLAY
