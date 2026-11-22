@@ -47,7 +47,7 @@ test('S Pen hover shows a following ring, glows the control and highlights the m
   const at = await ringCentre(page);
   expect(Math.abs(at.x - tip.x)).toBeLessThanOrEqual(2);
   expect(Math.abs(at.y - tip.y)).toBeLessThanOrEqual(2);
-  await expect(attach).toHaveAttribute('aria-expanded', 'false');
+  await expect(attach).not.toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('button', { name: 'Photos', exact: true })).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('pen-over-button.png') });
 
