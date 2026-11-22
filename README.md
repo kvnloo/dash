@@ -17,7 +17,8 @@ lists which harnesses (OMP, Codex, Grok, Claude Code, Hermes, Pi, fx) the bridge
 bridge and Metro as launchd agents (macOS: `dev.kvnloo.dash-bridge`, `dev.kvnloo.dash-metro`) or systemd
 user services (Linux: `dash-bridge`, `dash-metro`), waits until both are healthy and prints a pairing
 code, links and a QR code. The services keep the PATH of the shell you ran it from, so the harnesses it
-listed are the ones the bridge finds. A hand-written service file is kept as `<file>.before-onboard`.
+listed are the ones the bridge finds. Settings in an existing service file (for example the Studio's
+hand-written plists) are carried over, and the old file is kept as `<file>.before-onboard`.
 `scripts/onboard.sh --pair` prints a fresh code; `scripts/onboard.sh --uninstall` removes the services
 (keeps `~/.dash` and `node_modules`). Rerun it after installing another harness.
 
