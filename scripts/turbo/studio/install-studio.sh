@@ -21,6 +21,20 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   exit 0
 fi
 
+# Resolve the address locally before replacing the installed launch agent.
+TAILNET_IP="${TURBO_PREVIEW_TAILNET_IP:-}"
+if [[ -z "$TAILNET_IP" ]]; then
+  if command -v tailscale >/dev/null 2>&1; then
+    TAILNET_IP="$(tailscale ip -4 2>/dev/null)" || true
+  else
+    TAILNET_IP="$(/Applications/Tailscale.app/Contents/MacOS/Tailscale ip -4 2>/dev/null)" || true
+  fi
+fi
+if ! python3 -c 'import ipaddress, sys; sys.exit(ipaddress.ip_address(sys.argv[1]) not in ipaddress.ip_network("100.64.0.0/10"))' "$TAILNET_IP" 2>/dev/null; then
+  echo "No Tailscale IPv4 address found; connect Tailscale or set TURBO_PREVIEW_TAILNET_IP." >&2
+  exit 1
+fi
+
 BASE="${TURBO_PREVIEW_BASE:-$(git -C "$here" rev-parse HEAD)}"
 if [[ ! -d "$PREVIEW" ]]; then
   git -C "$STABLE" worktree add -B turbo/preview "$PREVIEW" "$BASE"
@@ -38,9 +52,10 @@ install -m 0644 "$here/agent-home/.claude/settings.json" "$TH/.claude/settings.j
 # matched only after hasTrustDialogAccepted). Trust exactly ~/dash-turbo; a backup of ~/.claude.json is kept.
 python3 -I "$here/trust-agent-home.py" "$HOME/.claude.json" "$TH"
 install -m 0644 "$here/dev.kvnloo.dash-metro-preview.plist" "$PLIST"
+/usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:REACT_NATIVE_PACKAGER_HOSTNAME string $TAILNET_IP" "$PLIST"
 plutil -lint "$PLIST" >/dev/null
 launchctl bootout "gui/$(id -u)/dev.kvnloo.dash-metro-preview" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 for _ in $(seq 1 90); do [[ "$(curl -s -m 2 http://127.0.0.1:8098/status)" == *running* ]] && break; sleep 1; done
 echo "preview :8098 $(curl -s -m 3 http://127.0.0.1:8098/status || echo down) serving $(git -C "$PREVIEW" log -1 --format=%h)"
-echo "phone: exp+dash://expo-development-client/?url=http%3A%2F%2F100.100.77.46%3A8098"
+echo "phone: exp+dash://expo-development-client/?url=http%3A%2F%2F$TAILNET_IP%3A8098"
