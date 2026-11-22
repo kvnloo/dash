@@ -1,7 +1,7 @@
 import { readFile, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Page } from 'playwright/test';
-import { test, expect, pair, openChat, composer, send, createBridge, type Bridge } from './fixtures';
+import { test, expect, pair, openChat, composer, send as sendNow, createBridge, type Bridge } from './fixtures';
 
 test.use({ viewport: { width: 390, height: 844 }, persistSession: false, bridgeOptions: { archiveClaude: true } });
 test.afterEach(async ({ page }, info) => {
@@ -11,11 +11,25 @@ test.afterEach(async ({ page }, info) => {
 const card = (page: Page) => page.getByTestId('next-action-card');
 const visibleText = (page: Page, text: string) => page.getByText(text, { exact: false }).filter({ visible: true }).first();
 
+// The chat window opens and closes with a morph and reports aria-busy until it settles. Under
+// page.clock the morph's frames are coarse, so Playwright's stability check can pass mid-flight
+// and a tap lands where Close or Send used to be (next-action:99 baseline flake). Act on the
+// window only once it has settled, as a person would.
+async function settled(page: Page) {
+  await expect(page.locator('[data-testid="chat-window"][aria-busy="true"]')).toHaveCount(0);
+}
+
+async function send(page: Page, text: string) {
+  await settled(page);
+  await sendNow(page, text);
+}
+
 async function expectReadReplyFor(page: Page, chatTitle: string) {
   await expect(page.getByTestId('next-action-title')).toContainText(chatTitle);
 }
 
 async function toChats(page: Page) {
+  await settled(page);
   const close = page.getByRole('button', { name: /^(Back|Close chat window)$/ }).first();
   if (await close.isVisible()) await close.click({ noWaitAfter: true });
   await page.getByRole('tab').nth(1).click({ noWaitAfter: true });
