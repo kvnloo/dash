@@ -41,6 +41,6 @@ export const OrchestraPane = memo(function OrchestraPane({ navigation, focused }
       if ("conversation" in result) navigation.navigate("Chat");
     }
   }} actions={<WorkspaceActions navigation={navigation} />}>
-    <AodlCatalogNetwork />
+    <AodlCatalogNetwork hosts={hosts} snapshot={fixtureOn ? null : snapshot} />
   </OrchestraGraph>;
 });
