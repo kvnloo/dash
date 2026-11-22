@@ -21,7 +21,6 @@ jobs:
     timeout-minutes: 100
     env:
       ARMY_WORKERS: '2'
-      DASH_ARMY_RECEIPTS: ${{ runner.temp }}/dash-device-army-${{ github.run_id }}-${{ github.run_attempt }}/web
       DEVICE_ARMY_SERIAL: ${{ vars.DASH_DEVICE_ARMY_SERIAL }}
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +38,12 @@ jobs:
           bun install --frozen-lockfile --cwd bridge
           node node_modules/playwright/cli.js install chromium
       - name: Produce canonical web army evidence before any native build
-        run: bash scripts/army.sh
+        env:
+          DASH_ARMY_RECEIPTS: ${{ runner.temp }}/dash-device-army-${{ github.run_id }}-${{ github.run_attempt }}/web
+        run: |
+          # The native build's release checker reads the same receipt store.
+          printf 'DASH_ARMY_RECEIPTS=%s\n' "$DASH_ARMY_RECEIPTS" >> "$GITHUB_ENV"
+          bash scripts/army.sh
       - name: Build the isolated standalone ARM64 APK
         env:
           DASH_APP_VARIANT: e2e
