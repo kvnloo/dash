@@ -179,8 +179,13 @@ createInterface({input:process.stdin}).on('line', line => {
   const markerTick = Number(/\bARMY_TICK=(\d+)\b/.exec(text)?.[1]);
   const waitMs = Number.isSafeInteger(markerMs) && markerMs >= 0 ? markerMs : text.includes('ARMY_SLOW') ? 9000 : 350;
   const tickMs = Number.isSafeInteger(markerTick) && markerTick > 0 ? markerTick : 0;
+  // ARMY_TEXT_TICK=<n>: a long streaming reply, one numbered text delta every n ms until completion.
+  const markerTextTick = Number(/\bARMY_TEXT_TICK=(\d+)\b/.exec(text)?.[1]);
+  const textTickMs = Number.isSafeInteger(markerTextTick) && markerTextTick > 0 ? markerTextTick : 0;
+  let textDeltas = 0;
   const finish = () => {
    if (tickMs > 0) ticker = setInterval(() => think('ARMY_TICK progress'), tickMs);
+   else if (textTickMs > 0) ticker = setInterval(() => update(`ARMY_DELTA_${++textDeltas} streamed words for a long reply. ${textDeltas % 12 === 0 ? '\n\n' : ''}`), textTickMs);
    if (text.includes('ARMY_RATE_STREAM')) {
    // Real ACP streaming deltas separated in time; no direct app/network fixture injection.
    timer = setTimeout(() => { update('ARMY_RATE_FIRST ' + 'first '.repeat(24));

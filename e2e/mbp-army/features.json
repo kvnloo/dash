@@ -272,6 +272,8 @@
     {"id": "orchestra-poll-lifecycle", "title": "Orchestra and selected Triage suspend polling offscreen and refresh on return",
      "tests": ["Orchestra polls only while visible and resumes the selected Triage view",
                "Returning to Orchestra waits for fresh evidence before claiming current priorities"]},
+    {"id": "chat-memory-measure-buffer", "title": "A streaming chat window keeps the performance measure buffer bounded (dev-client native memory growth)",
+     "tests": ["streaming chat window keeps the performance measure buffer bounded"]},
     {"id": "orchestra-aodl-live-nodes", "title": "Orchestra AODL network nodes show live state from the paired bridge; absent optional sources raise no unavailable warnings",
      "tests": ["Orchestra AODL network shows live nodes from the bridge, with no unavailable source warnings",
                "Orchestra reports an unreadable fleet registry instead of hiding it"]},
