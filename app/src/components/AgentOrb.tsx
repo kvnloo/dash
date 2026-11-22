@@ -36,7 +36,7 @@ export const AgentOrb = memo(function AgentOrb({ thinking, size = 64, caption = 
     return { transform: [{ perspective: 1000 }, { rotate: `${p * spin}deg` }, { scale: base + amp * w }] };
   });
   return <View accessibilityRole="image" accessibilityLabel={label ?? thinking.phase} testID="agent-orb" style={{ alignItems: "center", gap: 4, opacity: m.opacity }}>
-    <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={[{ width: px, height: px, borderRadius: px, borderWidth: thinking.phase === "waiting-approval" ? 1 : 0, borderColor: color }, motion]}>
+    <Animated.View testID="agent-orb-motion" renderToHardwareTextureAndroid shouldRasterizeIOS style={[{ width: px, height: px, borderRadius: px, borderWidth: thinking.phase === "waiting-approval" ? 1 : 0, borderColor: color }, motion]}>
       <Svg width="100%" height="100%" viewBox="0 0 64 64">{paths.map((d, i) => <Path key={i} d={d} opacity={(i + 0.5) / 4} fill={color} />)}</Svg>
     </Animated.View>
     {caption ? <Text style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.textMuted }}>{thinking.tool ?? thinking.phase}</Text> : null}

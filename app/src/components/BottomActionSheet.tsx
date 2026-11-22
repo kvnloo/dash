@@ -12,7 +12,8 @@ import {
   SHEET_HEADER_HEIGHT, SHEET_ROW_HEIGHT, createSheetInteraction, sheetA11y, sheetLayout,
   type BottomActionOption,
 } from "../lib/bottom-action-sheet";
-import { colors, easing, glass, radius, space, timing, type } from "../theme";
+import { colors, easing, glass, radius, space, type } from "../theme";
+import { surfaceMotionMs } from "../motion";
 import { GlassSurface } from "./GlassSurface";
 
 export interface BottomActionSheetProps {
@@ -51,7 +52,7 @@ export function BottomActionSheet({ open, title, options, onSelect, onClose }: B
     }
     progress.value = 0;
     progress.value = withTiming(1, {
-      duration: timing.state,
+      duration: surfaceMotionMs.sheetEnter,
       easing: Easing.bezier(...easing.sheet),
       reduceMotion: ReduceMotion.System,
     });
@@ -98,7 +99,7 @@ export function BottomActionSheet({ open, title, options, onSelect, onClose }: B
         importantForAccessibility="no-hide-descendants"
         onPress={dismiss}
       />
-      <Animated.View style={[styles.animatedSheet, { height: layout.height }, slideStyle]}>
+      <Animated.View testID="bottom-action-sheet-motion" style={[styles.animatedSheet, { height: layout.height }, slideStyle]}>
         <GlassSurface
           testID="bottom-action-sheet"
           variant="raised"
