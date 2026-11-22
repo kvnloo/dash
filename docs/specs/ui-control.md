@@ -1,6 +1,6 @@
 # Agent → app UI control (v1)
 
-Status: wired. Agents send commands with `bridge/bin/dash-ui`; the bridge delivers them to consenting phones; the app navigates directly and acks (see "Delivery path" below). Overlay rendering (point/draw/highlight) is a separate layer.
+Status: wired. Agents send commands with `bridge/bin/dash-ui`; the bridge delivers them to consenting phones; the app navigates directly and acks (see "Delivery path" below). Point (pointer, circle, arrow), draw and highlight render in `app/src/components/AgentControlLayer.tsx`.
 
 ## Purpose and trust boundary
 
@@ -28,7 +28,7 @@ The command is a discriminated union by its inner "type" field. The outer "type"
 
 | Inner type | Fields | Meaning |
 | --- | --- | --- |
-| "point" | required "id", "target", "ttlMs"; optional "label" | Point to a visible element by testID, or one position in the visible window. |
+| "point" | required "id", "target", "ttlMs"; optional "label", "shape" | Point to a visible element by testID, or one position in the visible window. "shape" is "pointer" (default), "circle" (ring around the element) or "arrow" (arrow ending at its edge). |
 | "draw" | required "id", "strokes", "ttlMs"; optional "color" | Render one or more temporary polyline strokes, each with "points": [[x,y], ...]. |
 | "navigate" | required "id", "route"; optional "conversationId", "chatTitle", "annotate" | Request navigation to an allowlisted in-app screen. A conversationId identifies a Chat thread only; it is not a URL or host path. "chatTitle" (1–128) names a phone chat by title, exact and case-insensitive. "annotate": true enters annotation mode once the chat shows. All three need route "Chat"; conversationId and chatTitle are exclusive. |
 | "highlight" | required "id", "testID", "ttlMs" | Temporarily emphasize one registered visible testID target. |
@@ -61,6 +61,7 @@ Draw color is optional and restricted to "gold" or "cream" to match the existing
 | Stroke "points" | array of 1–512 coordinate tuples per stroke |
 | "ttlMs" for point, draw, highlight | required integer milliseconds, inclusive 250–30,000 |
 | Optional "color" | exactly "gold" or "cream" |
+| Optional point "shape" | exactly "pointer", "circle" or "arrow" |
 | Navigate "route" | exactly Lab, Trace, Orchestra, Settings, Bots, Hosts, Chats or Chat |
 | Optional navigate "chatTitle" | same 1–128 nonblank limit; route Chat only; not with conversationId |
 | Optional navigate "annotate" | exactly true; route Chat only |
@@ -91,6 +92,7 @@ agent: dash-ui open "Chats > Release notes > Annotate"
 - **Feature negotiation:** after `hello` the app sends `{"type":"ui_control_hello","enabled":<consent>}` and again whenever the owner flips Settings > Agent control. The bridge sends frames only to sockets that said hello with enabled true; old apps never receive one.
 - **Answers:** `done`, `skipped` (understood but not possible: unknown chat, screen did not open), `refused` (consent off or recently dismissed) come from the app. The bridge itself answers `disabled` (HTTP 403, every phone has it off), `no_phone` (503), `timeout` (504, no ack in 3 s), `busy` (429, over 20 commands per second) and `invalid` (400).
 - **Agent environment:** the bridge exports `DASH_NOTICE_PORT` to the agents it spawns, so `dash-ui`, `dash-notify` and `dash-sudo` find the loopback listener even when its port was chosen by the OS.
+- **Marks:** `dash-ui circle|arrow|point <testID or x,y> ["label"]`, `dash-ui highlight <testID>`, `dash-ui draw "x,y x,y …"`, `dash-ui clear [id]`; options `--ttl`, `--id`, `--color`. An element target must be on screen when the command arrives, or the app answers `skipped` and draws nothing. Marks follow their element (re-measured every 200 ms), expire on the phone's clock, never take touches, and the receipt's ✕ clears them with the 10 s cooldown. On web any rendered `data-testid` is a target; on native only views registered with `agentTarget(testID)` (`app/src/lib/agent-targets*.ts`; today `chat-annotate` and `chat-window-close`) resolve, because React Native cannot find a view by testID.
 - **Path syntax** (`parseUiControlPath`): `Chats`, `Chats > <title>`, `Chats > <title> > Annotate`, `Chats > id:<conversation id>`, `Chat`, `Settings`, `Trace`, `Lab`, `Orchestra`, `Hosts`.
 - **Speed:** one loopback HTTP request plus one WebSocket frame each way; the app performs the command in the same JS turn it arrives. The army measures bridge-receipt to app-ack (`ms`) under 1 s; typical web-army values are tens of milliseconds.
 
