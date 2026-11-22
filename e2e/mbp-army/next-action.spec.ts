@@ -141,9 +141,14 @@ test('Next up Later survives reload, Skip dismisses only one completion, and a n
   await expect(card(page)).toHaveCount(0);
 
   await rows.filter({ hasText: firstChatTitle }).click({ noWaitAfter: true });
+  // Wait for the reopened transcript to hydrate before editing its composer.
+  // Old completed replies also include ARMY_STREAM_BEGIN, so match the live
+  // marker exactly and require the third ACP turn before leaving the chat.
+  await expect(visibleText(page, 'ARMY_CLAUDE_REPLY: ARMY_HOLD first background completion')).toBeInViewport();
   await unlink(join(bridge.dir, 'army-release'));
   await send(page, 'ARMY_HOLD newer completion in the same chat');
-  await expect(visibleText(page, 'ARMY_STREAM_BEGIN')).toBeVisible();
+  await expect.poll(() => turnEvents(bridge.dir)).toBe(startsBeforeLater + 1);
+  await expect(page.getByText('ARMY_STREAM_BEGIN', { exact: true }).filter({ visible: true })).toBeVisible();
   await toChats(page);
   await writeFile(join(bridge.dir, 'army-release'), '');
   await expectReadReplyFor(page, firstChatTitle);
