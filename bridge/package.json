@@ -9,12 +9,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "qrcode-terminal": "^0.12.0",
     "sherpa-onnx-node": "^1.13.7"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/qrcode-terminal": "^0.12.2",
     "typescript": "^5.9.0"
   }
 }

@@ -19,6 +19,8 @@ import { VoiceOrbOverlay } from "./VoiceOrbOverlay";
 import { debugUi } from "../debug/ui-store";
 import { attachedHermes, voiceTarget } from "../lib/voice-target";
 import { voicePhase } from "../lib/voice-phase";
+import { voiceCaption } from "../store/voice-captions";
+import { VoiceCaptionStrip, VoiceCaptionsToggle } from "./VoiceCaptionStrip";
 
 /** One logcat line per failed voice stage (phone-watch turns these into incidents). Notes never carry secrets. */
 function voiceTrace(stage: string, note: string | undefined, quiet = false): void {
@@ -145,6 +147,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       starting.current = false;
       return;
     }
+    voiceCaption.set(null);
     const releaseWhenStopped = micRelease.current.hold(release);
     releaseMic.current = releaseWhenStopped;
     call.current = null;
@@ -224,6 +227,12 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
           successfulAnnotation.current = true;
           maybeEndAutoRef.current();
         },
+        caption: (role, text, final) => {
+          if (generation !== epoch.current) return;
+          // An empty final drops a noise partial without erasing what Dash said last.
+          if (!text.trim()) voiceCaption.set(previous => previous?.role === role && !previous.final ? null : previous);
+          else voiceCaption.set({ role, text, final });
+        },
         cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
         transcript: (id, text, start, end) => { if (annotate.get().active) addSegment({ id, text, start, end, source: "voice" }); } });
       call.current = controller;
@@ -247,6 +256,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const controller = call.current;
     call.current = null;
     attached.current = null;
+    voiceCaption.set(null);
     const cleanup = controller?.stop(undefined, { cancelWork: options?.preserveWork !== true });
     if (!controller) { releaseMic.current?.(); releaseMic.current = undefined; }
     setState(initial); await cleanup;
@@ -348,7 +358,8 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     </DeviceInsets.Provider>
     {active ? <VoiceOrbOverlay state={shown} onMute={mute} /> : null}
     {home === "bar" ? <View testID="voice-mic-bar" style={[styles.bar, { paddingTop: insets.top }]}>
-      <View style={styles.row} onLayout={e => setBarRow(e.nativeEvent.layout.height)}>
+      <View onLayout={e => setBarRow(e.nativeEvent.layout.height)}>
+      <View style={styles.row}>
         <View accessible={false} style={[styles.dot, { backgroundColor: pill.phase === "error" ? colors.danger : pill.phase === "connecting" || pill.phase === "muted" ? colors.warn : pill.phase === "live" ? colors.ok : colors.textFaint }]} />
         <View style={styles.status}>
           {pill.phase === "error"
@@ -356,6 +367,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
             : <Text testID="voice-phase" accessible accessibilityLabel={voiceStatusAccessibilityLabel(shown)} accessibilityLiveRegion="polite" style={styles.label} numberOfLines={1}>{pill.label}</Text>}
         </View>
         <View style={styles.actions}>
+          {pill.action === "end" ? <VoiceCaptionsToggle /> : null}
           {pill.action === "end" ? <Pressable
             testID="voice-mute"
             accessibilityRole="button"
@@ -379,6 +391,8 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
             style={styles.button}
           ><Text style={styles.endText}>End</Text></Pressable> : null}
         </View>
+      </View>
+      <VoiceCaptionStrip state={shown} />
       </View>
     </View> : null}
   </Context.Provider>;

@@ -154,6 +154,24 @@
       "law_false_here": true
     },
     {
+      "law": "S7 local_session_routes",
+      "mutation": "pre-b0ca65e3 bridge refuses the Hosts tree's local-store id",
+      "counterexample": "continue a finished Claude Code chat from the Hosts tree -> bridge: 'Profile routing unavailable on this bridge.'",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.local_session_routes",
+      "law_false_here": true
+    },
+    {
+      "law": "S8 local_profile_own_harness",
+      "mutation": "local-store id admitted for any harness and session",
+      "counterexample": "profileId claude:session:9 sent with harness codex -> admitted",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.local_session_routes",
+      "law_false_here": true
+    },
+    {
       "law": "S9 no_silent_refusal",
       "mutation": "pre-#457 rejectTurn without the turn.rejected log line",
       "counterexample": "phone sends to a host id that is not this bridge -> refused, nothing in the bridge log",
@@ -289,6 +307,6 @@
       "law_false_here": true
     }
   ],
-  "rejected": 31,
-  "total": 31
+  "rejected": 33,
+  "total": 33
 }

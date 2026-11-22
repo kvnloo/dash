@@ -13,7 +13,7 @@ export const PROTOCOL_VERSION = 1;
 
 export const NOTICE_TITLE_MAX = 80;
 export const NOTICE_BODY_MAX = 600;
-export interface NoticeInput { title: string; body: string; url?: string; class?: "critical" | "decision" | "report" | "digest"; not_before?: string }
+export interface NoticeInput { title: string; body: string; url?: string; class?: "critical" | "decision" | "report" | "digest"; not_before?: string; chat?: string; postedAt?: number }
 
 function isNoticeTime(value: unknown): value is string {
   if (typeof value !== "string") return false;
@@ -23,6 +23,7 @@ function isNoticeTime(value: unknown): value is string {
   return Number.isFinite(Date.parse(value)) && Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === match[1];
 }
 export type NoticeMessage = NoticeInput & { type: "notice"; id: string };
+export interface ChatPost { type: "chat_post"; id: string; chat: string; body: string; postedAt: number }
 
 /** Reports are additive v1 events, never approvals or turn events. */
 export function parseNoticeInput(raw: unknown): NoticeInput | null {
@@ -33,10 +34,13 @@ export function parseNoticeInput(raw: unknown): NoticeInput | null {
     try { const url = new URL(raw.url); if (url.protocol !== "dash:" || !url.hostname || url.username || url.password) return null; }
     catch { return null; }
   }
+  if (raw.chat !== undefined && (!str(raw.chat) || !raw.chat.trim() || raw.chat.length > 512)) return null;
+  if (raw.postedAt !== undefined && (typeof raw.postedAt !== "number" || !Number.isSafeInteger(raw.postedAt) || raw.postedAt <= 0)) return null;
   const cls = raw.class;
   if (cls !== undefined && cls !== "critical" && cls !== "decision" && cls !== "report" && cls !== "digest") return null;
   if (raw.not_before !== undefined && !isNoticeTime(raw.not_before)) return null;
-  return { title: raw.title, body: raw.body, ...(str(raw.url) ? { url: raw.url } : {}),
+  return { title: raw.title, body: raw.body, ...(str(raw.chat) ? { chat: raw.chat } : {}),
+    ...(typeof raw.postedAt === "number" ? { postedAt: raw.postedAt } : {}), ...(str(raw.url) ? { url: raw.url } : {}),
     ...(cls !== undefined ? { class: cls } : {}), ...(isNoticeTime(raw.not_before) ? { not_before: raw.not_before } : {}) };
 }
 
@@ -93,6 +97,9 @@ export interface ChatSummary {
   /** ≤ 200 chars, single line, redacted. */
   title: string;
   cwd?: string;
+  /** Redacted, bounded task label derived from recent user requests. */
+  task?: string;
+  repoRoot?: string;
   startedAt: number;
   /** Sort key. */
   lastActivityAt: number;
@@ -341,7 +348,7 @@ export interface HandoffInfo {
 
 /** Events that belong to a turn. `seq` is per-turn and strictly increasing from 1. */
 export type TurnEvent =
-  | { type: "session"; id: string; seq: number; sessionId: string; hostId?: string; profileId?: string; harnessId?: string; transport?: string }
+  | { type: "session"; id: string; seq: number; sessionId: string; hostId?: string; profileId?: string; harnessId?: string; transport?: string; repoRoot?: string }
   /** What the bridge heard for a spoken turn. Precedes the reply's deltas. */
   | { type: "transcript"; id: string; seq: number; text: string }
   | { type: "delta"; id: string; seq: number; text: string }
@@ -351,6 +358,7 @@ export type TurnEvent =
 
 export type ServerMessage =
   | NoticeMessage
+  | ChatPost
   | SecretRequest
   | SecretResolved
   | GateServerMessage
@@ -598,6 +606,11 @@ function isHostInfo(value: unknown): value is HostInfo {
 export function parseServerMessage(raw: unknown): ServerMessage | null {
   if (!isRecord(raw)) return null;
   switch (raw.type) {
+    case "chat_post": {
+      const post = parseNoticeInput({ ...raw, title: "Agent message" });
+      return post?.chat && post.postedAt && str(raw.id) && raw.id.length > 0 && raw.id.length <= 128
+        ? { type: "chat_post", id: raw.id, chat: post.chat, body: post.body, postedAt: post.postedAt } : null;
+    }
     case "notice": {
       const notice = parseNoticeInput(raw);
       return notice && str(raw.id) && raw.id.length > 0 && raw.id.length <= 128 ? { type: "notice", id: raw.id, ...notice } : null;
@@ -640,8 +653,8 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     case "lost":
       return str(raw.id) ? { type: "lost", id: raw.id } : null;
     case "session":
-      return str(raw.id) && num(raw.seq) && str(raw.sessionId) && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.harnessId) && optStr(raw.transport)
-        ? { type: "session", id: raw.id, seq: raw.seq, sessionId: raw.sessionId, hostId: raw.hostId, profileId: raw.profileId, harnessId: raw.harnessId, transport: raw.transport }
+      return str(raw.id) && num(raw.seq) && str(raw.sessionId) && optStr(raw.hostId) && optStr(raw.profileId) && optStr(raw.harnessId) && optStr(raw.transport) && optStr(raw.repoRoot)
+        ? { type: "session", id: raw.id, seq: raw.seq, sessionId: raw.sessionId, hostId: raw.hostId, profileId: raw.profileId, harnessId: raw.harnessId, transport: raw.transport, repoRoot: raw.repoRoot }
         : null;
     case "transcript":
       return str(raw.id) && num(raw.seq) && str(raw.text)
@@ -876,12 +889,13 @@ export function parseChatSummary(value: unknown): ChatSummary | null {
   if (!str(v.key) || !str(v.kind) || !str(v.sessionId) || !str(v.hostId) || !str(v.hostName) || !str(v.title)) return null;
   if (!num(v.startedAt) || !num(v.lastActivityAt) || !num(v.messageCount) || typeof v.chatable !== "boolean") return null;
   const origin = ORIGINS.find(o => o === v.origin);
-  if (!origin || !optStr(v.profileId) || !optStr(v.agentId) || !optStr(v.cwd) || !optStr(v.openIn) || !optStr(v.model)) return null;
+  if (!origin || !optStr(v.profileId) || !optStr(v.agentId) || !optStr(v.cwd) || !optStr(v.task) || !optStr(v.repoRoot) || !optStr(v.openIn) || !optStr(v.model)) return null;
   if (v.running !== undefined && typeof v.running !== "boolean") return null;
   return {
     key: v.key, kind: v.kind, sessionId: v.sessionId, hostId: v.hostId, hostName: v.hostName,
     ...(str(v.profileId) ? { profileId: v.profileId } : {}), ...(str(v.agentId) ? { agentId: v.agentId } : {}),
-    title: v.title, ...(str(v.cwd) ? { cwd: v.cwd } : {}), startedAt: v.startedAt, lastActivityAt: v.lastActivityAt,
+    title: v.title, ...(str(v.cwd) ? { cwd: v.cwd } : {}),
+    ...(str(v.task) ? { task: v.task.slice(0, 88) } : {}), ...(str(v.repoRoot) ? { repoRoot: v.repoRoot } : {}), startedAt: v.startedAt, lastActivityAt: v.lastActivityAt,
     messageCount: v.messageCount, origin, chatable: v.chatable,
     ...(str(v.model) ? { model: v.model } : {}),
     ...(typeof v.running === "boolean" ? { running: v.running } : {}), ...(str(v.openIn) ? { openIn: v.openIn } : {}),

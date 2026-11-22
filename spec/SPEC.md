@@ -93,10 +93,6 @@ Sources: owner task brief 2026-10-25, hermes-telegram 2026-10-25T17:22, H-014, C
 Code: `app/src/lib/global-search.ts:62`, `app/src/lib/global-search.ts:214`, `app/src/components/GlobalSearchBar.tsx:43`
 
 Note: Search is an in-memory scan of locally cached conversations and the current roster; there is no host-side index or transcript search route in the bridge.
-
-The main-screen `/live` search projects running agents from the online paired host. It reuses a saved conversation only when harness/session and every supplied host/profile match exactly and the remaining candidate is unique. Unknown ownership never satisfies an explicit owner; omitted lookup fields do not justify choosing the first of several candidates. Otherwise search opens the roster-derived conversation, not a saved chat from another or unknown owner.
-
-`e2e/mbp-army/live-search-ownership.spec.ts` exercises an unscoped saved OMP chat colliding with the same native session on two isolated bridges. Ordinary roster reconciliation also adopts an exact scoped row, so the journey explicitly deletes that row from the phone through its chat menu before searching. The running roster remains authoritative; `/live` must reopen its paired-host conversation rather than the unrelated saved thread. The journey then continues and reopens that exact scoped conversation. This is implemented coverage, pending an army run. Native Hermes roster rows report `available`, not `running`; the two-Hermes-profile helper case remains source-only, not demonstrated mobile `/live` behavior. Web army coverage does not establish physical-device or voice acceptance.
 Sources: owner task brief 2026-10-25
 
 #### DF-003 Current live Hermes and OMP sessions shown; stale ones flagged
@@ -690,7 +686,7 @@ implemented · P0 · recurring · journey `J-voice-dictation` · claimed regress
 
 Code: `app/src/lib/recorded-speech.ts:3`, `app/src/lib/useRecordedSpeech.ts:9`, `app/src/components/Composer.tsx:104`, `bridge/src/files-http.ts:44`
 
-Note: Requires bridge speech deployment (/transcribe 503 otherwise). RECOGNIZE_SPEECH constant is exported but unused.
+Note: Requires bridge speech deployment (/transcribe 503 otherwise).
 Sources: H-092, H-099, R-8985, owner-turns 2026-10-22
 
 #### DF-059 Telegram-style mic pill for Dictate vs Live
@@ -699,7 +695,7 @@ Sources: H-092, H-099, R-8985, owner-turns 2026-10-22
 
 **Acceptance.** Holding the mic grows a pill with the other mode; sliding picks; release only switches the mode; tap uses it; settings help matches.
 
-Code: `app/src/components/MicButton.tsx:24`, `app/src/lib/mic-gesture.ts:51`, `app/src/screens/SettingsScreen.tsx:158`
+Code: `app/src/components/MicButton.tsx:24`, `app/src/lib/mic-gesture.ts:4`, `app/src/screens/SettingsScreen.tsx:158`
 
 Note: Gesture implemented; Settings help text still describes long-press as a handedness switch.
 Sources: H-100, R-8983, findings help-mic
@@ -1406,8 +1402,6 @@ Code paths that no owner requirement covers. Keep, justify with an owner ask, or
 | `app/src/mock/seed.ts:1` | Mock agents/orchestra/resources seed data | Demo data; must never appear as live work. |
 | `bridge/gate-preview.ts:1` | Gate preview/seed scripts and DASH_GATE_* rehearsal split | Supports approvals but the rehearsal/live split has no owner ask. |
 | `app/src/screens/OrchestraDetailScreen.tsx:20` | Project detail opened from a product search hit | Partly covered by the /live and project-detail entries; no direct owner ask for product search. |
-| `app/src/lib/bots.ts:88` | COLLAPSED_KEY constant for Bots tree | Declared, never read or written; dead code. |
-| `app/src/lib/mic-gesture.ts:73` | RECOGNIZE_SPEECH intent helpers | Exported but unused; the owner rule forbids the system recognizer popup. |
 | `app/src/components/ContextCard.tsx:104` | Context compaction pulse animation | Ungated loop (no reduced-motion/background guard). |
 | `app/src/components/trace/ActionChip.tsx:89` | Trace action chips Do/Not now with local-only decisions | Decisions never reach the host; the owner's approval asks are served by Approvals instead. |
 

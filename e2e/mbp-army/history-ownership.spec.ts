@@ -393,13 +393,17 @@ test('reopening native chat rejects its closed visit full-message response and e
       const { Database } = require('bun:sqlite');
       const [path, text] = process.argv.slice(1);
       const db = new Database(path);
+      // The bridge can briefly hold a read transaction against this fixture.
+      db.exec('PRAGMA busy_timeout = 5000');
       const changed = db.query("UPDATE messages SET content=? WHERE id=(SELECT MIN(id) FROM messages WHERE session_id=? AND role='user')")
         .run(text,'army-long-hermes').changes;
       db.close();
       process.exit(changed === 1 ? 0 : 1);
-    `, join(bridge.dir, '.hermes', 'state.db'), text], { stdio: 'ignore' });
-    const [code] = await once(writer, 'exit');
-    expect(code).toBe(0);
+    `, join(bridge.dir, '.hermes', 'state.db'), text], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    writer.stderr?.on('data', chunk => { stderr += String(chunk); });
+    const [code] = await once(writer, 'close');
+    expect(code, stderr || 'expected one native fixture row to change').toBe(0);
   };
   try {
     await writeNative(oldText);

@@ -180,6 +180,7 @@ export function adoptSummary(summary: ChatSummary, now: number, selfHostId?: str
     harness: summary.kind, title: summary.title || liveSessionTitle({ name: summary.kind, cwd: summary.cwd, kind: summary.kind }),
     ...(summary.model ? { sessionModel: { sessionId: summary.sessionId, model: summary.model } } : {}),
     createdAt: summary.startedAt, updatedAt: summary.lastActivityAt, sessionId: summary.sessionId,
+    ...(summary.task ? { task: summary.task } : {}), ...(summary.repoRoot ? { repoRoot: summary.repoRoot } : {}),
     ...(summary.cwd ? { cwd: summary.cwd } : {}), targetHostId: summary.hostId,
     ...(summary.agentId ? { profileId: summary.agentId } : {}), ...(summary.profileId ? { profileName: summary.profileId } : {}),
     messageCount: summary.messageCount, stale: false, ...(summary.openIn ? { openIn: summary.openIn } : {}),
