@@ -8,7 +8,10 @@ export const INFORMATION_DETAIL_CHOICES: readonly InformationDetailChoice[] = [
   "auto", "essential", "standard", "rich",
 ];
 
-let choice: InformationDetailChoice = "auto";
+// Standard, not Auto: out of the box the Layout dial changes only geometry. Auto (follow the
+// layout preset) stays available as an explicit choice. Standard equals Auto at the default layout.
+export const DEFAULT_INFORMATION_DETAIL: InformationDetailChoice = "standard";
+let choice: InformationDetailChoice = DEFAULT_INFORMATION_DETAIL;
 const listeners = new Set<() => void>();
 
 export function getInformationDetailChoice(): InformationDetailChoice {

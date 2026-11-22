@@ -1,3 +1,8 @@
+import { MAX_CAPTURE_TEXT_LENGTH } from "../../../shared/overnight-captures";
+import { captureGate, createCaptureOverride } from "../lib/capture-gate";
+import { bedtimeSchedule, captureModeNow, useBedtime } from "../store/bedtime";
+import { captureForTomorrow } from "../store/overnight-captures";
+import { OvernightNotes } from "./OvernightNotes";
 import { isUsageCommand } from "../lib/composer-command";
 import { MODEL_ID } from "../../../shared/protocol";
 import { ComposerStatChips } from "./ComposerStatChips";
@@ -69,6 +74,7 @@ interface Props {
   sharedDraft?: IncomingShare;
   onSharedDraftConsumed?(id: string): void;
   onSend(text: string, attachments: ChatAttachment[], mode?: SendMode): void;
+  onCaptureSaved?(): void;
   onStop(): void;
   onVoice(): void;
   /** A live z0live call's orb state: the mic shows a small live orb instead of the glyph. */
@@ -77,7 +83,7 @@ interface Props {
 
 let draftSeq = 0;
 
-export const Composer = memo(function Composer({ draftKey, context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, model, modelOverride, rateLabel, rateRecent = false, onChooseHarness, onChangeModel, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onStop, onVoice, voiceCall }: Props) {
+export const Composer = memo(function Composer({ draftKey, context, disabled, streaming, steerBusy = false, placeholder, initialText, queuePreview, onQueuePreviewChange, onSaveQueuePreview, harness, model, modelOverride, rateLabel, rateRecent = false, onChooseHarness, onChangeModel, cwd, blurTarget, initialAttachments, sharedDraft, onSharedDraftConsumed, onSend, onCaptureSaved, onStop, onVoice, voiceCall }: Props) {
   const thumb = useHandedness();
   const [modelOpen, setModelOpen] = useState(false);
   const [modelDraft, setModelDraft] = useState("");
@@ -274,18 +280,62 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
 
   const remove = useCallback((key: string) => setDrafts(list => list.filter(d => d.key !== key)), []);
 
-  const submit = useCallback(() => {
+  const bedtime = useBedtime();
+  const scheduleReady = bedtimeSchedule.use(s => s !== null);
+  const captureOnly = bedtime && !editingQueue && !localUsage;
+  const [savingCapture, setSavingCapture] = useState(false);
+  const capturePending = useRef(false);
+  const [captureError, setCaptureError] = useState("");
+  const tooLong = text.trim().length > MAX_CAPTURE_TEXT_LENGTH;
+  const canCapture = !!text.trim() && !drafts.length && !tooLong && !savingCapture;
+  const latest = useRef({ text, drafts });
+  latest.current = { text, drafts };
+
+  const submit = async (explicitSend = false) => {
+    if (capturePending.current) return;
     if (localUsage && context) { setText(""); Keyboard.dismiss(); context.showUsage(); return; }
+    if (editingQueue) { if (canSend) onSaveQueuePreview?.(); return; }
+    const schedule = bedtimeSchedule.get();
+    if (!schedule) return;
+    const now = Date.now();
+    const quiet = captureModeNow(new Date(now));
+    const gate = captureGate({ captureMode: quiet, captureEnforced: quiet, text, attachments: drafts, isStopAction: false,
+      override: explicitSend ? createCaptureOverride(now) : null }, now);
+    if (gate.action === "capture") {
+      if (!canCapture) return;
+      capturePending.current = true;
+      setSavingCapture(true);
+      setCaptureError("");
+      try {
+        if (!await captureForTomorrow(text, draftKey, 0, now)) {
+          setCaptureError("Couldn't save the thought. Your draft is still here.");
+          return;
+        }
+        // Don't overwrite edits made while storage was pending.
+        changeDraft(draft => draft.text === text && draft.attachments === drafts ? { ...draft, text: "" } : draft);
+        if (latest.current.text === text && latest.current.drafts === drafts) onCaptureSaved?.();
+      } finally {
+        capturePending.current = false;
+        setSavingCapture(false);
+      }
+      return;
+    }
+    // A stale "Save for tomorrow" tap at wake time must never send silently.
+    if (!explicitSend && captureOnly) return;
     if (!canSend) return;
-    if (queuePreview !== undefined) { onSaveQueuePreview?.(); return; }
     const refs = readyRefs(drafts);
     const value = text.trim();
     setText("");
     setDrafts([]);
     onSend(value, refs, sendMode.mode);
-  }, [localUsage, context, canSend, drafts, text, onSend, sendMode.mode, queuePreview, onSaveQueuePreview]);
+  };
 
-  return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} onUsage={context ? () => { if (isUsageCommand(draftText)) changeText(""); Keyboard.dismiss(); context.showUsage(); } : undefined} /><GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
+  return <View style={styles.wrap}>{context ? <ContextCard control={context} /> : null}<ComposerSuggestions text={draftText} harness={harness} cwd={cwd} onChange={changeText} onUsage={context ? () => { if (isUsageCommand(draftText)) changeText(""); Keyboard.dismiss(); context.showUsage(); } : undefined} />{!editingQueue ? <OvernightNotes conversationId={draftKey} onUse={note => setText(current => current ? `${current}\n${note}` : note)} /> : null}<GlassSurface blur blurTarget={blurTarget} variant="raised" borderRadius={18} contentStyle={styles.sheet}>
+    {captureOnly ? <View style={styles.modeRow}>
+      <Text style={[styles.chipMeta, { flex: 1 }]}>{drafts.length ? "Bedtime saves text only. Remove files to save this thought." : tooLong ? `Shorten your thought to ${MAX_CAPTURE_TEXT_LENGTH} characters to save it.` : "Bedtime · Save for tomorrow"}</Text>
+      {canSend ? <PressScale accessibilityRole="button" accessibilityLabel="Send anyway" onPress={() => void submit(true)} disabled={savingCapture} style={styles.modeToggle}><Text style={styles.chipName}>Send anyway</Text></PressScale> : null}
+    </View> : null}
+    {captureError ? <Text accessibilityRole="alert" style={styles.chipMeta}>{captureError}</Text> : null}
     {drafts.length > 0 ? (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips} accessibilityLabel="Attachments">
         {drafts.map(d => <AttachmentChip key={d.key} draft={d} onRemove={remove} />)}
@@ -293,7 +343,7 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
     ) : null}
     {drafts.some(d => d.state === "local") ? <PressScale accessibilityRole="button" accessibilityLabel="Upload shared files" disabled={disabled || editingQueue} onPress={uploadShared} style={styles.modeToggle}><Text style={styles.chipName}>Upload shared files to paired computer</Text></PressScale> : null}
     {clipboardHasImage && !editingQueue ? <PressScale accessibilityRole="button" accessibilityLabel="Paste image" disabled={disabled || pastingImage} onPress={() => { void pasteImage(); }} style={styles.modeToggle}><Text style={styles.chipName}>{pastingImage ? "Pasting image…" : "Paste image"}</Text></PressScale> : null}
-    {steerBusy && !editingQueue ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
+    {steerBusy && !editingQueue && !captureOnly ? <View style={[styles.modeRow, thumb.row]}><Text accessibilityLiveRegion="polite" style={styles.chipMeta}>{sendMode.label}</Text><PressScale accessibilityRole="button" accessibilityLabel={choice === "steer" ? "Choose Queue for next turn" : "Choose Steer the running turn"} onPress={switchMode} style={styles.modeToggle}><Text style={styles.chipName}>{choice === "steer" ? "Queue instead" : "Steer instead"}</Text></PressScale></View> : null}
     {speech.state.note ? <View style={styles.modeRow}>
       <Text accessibilityLiveRegion="polite" accessibilityRole={speech.state.phase === "error" ? "alert" : "text"} style={styles.chipMeta}>{speech.state.note}</Text>
       {speechBusy ? <PressScale accessibilityRole="button" accessibilityLabel="Stop dictation" onPress={() => void speech.end()} style={styles.modeToggle}><Text style={styles.chipName}>Stop</Text></PressScale> : null}
@@ -318,12 +368,12 @@ export const Composer = memo(function Composer({ draftKey, context, disabled, st
       <ComposerStatChips rateLabel={rateLabel} streaming={streaming} recent={rateRecent} />
     </View> : null}
     <View testID="composer-field" style={[styles.field, editingQueue && styles.previewField]}>
-      <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={onTextChange} onFocus={() => setFieldFocused(true)} onBlur={() => setFieldFocused(false)} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
+      <TextInput ref={inputRef} style={[styles.input, editingQueue && styles.previewInput]} value={draftText} onChangeText={onTextChange} onFocus={() => setFieldFocused(true)} onBlur={() => setFieldFocused(false)} selection={cursor} onSelectionChange={e => { selection.current = e.nativeEvent.selection; if (cursor) setCursor(undefined); }} showSoftInputOnFocus={!dictating} onPressIn={() => { if (dictating) setDictating(false); }} placeholder={captureOnly ? "Capture a thought for tomorrow" : placeholder} placeholderTextColor={colors.textFaint} multiline scrollEnabled keyboardAppearance="dark" autoCapitalize="sentences" textAlignVertical="top" accessibilityLabel={editingQueue ? "Merged queue preview" : "Message"} />
       <View testID="composer-controls" style={[styles.controls, { flexDirection: "row", justifyContent: "flex-start" }, editingQueue && thumb.align]}>
         {/* One primary button at the text's leading edge: Send/Steer/Queue when there is a draft, Stop while a turn runs with an empty draft. */}
-        {editingQueue ? <PressScale accessibilityRole="button" accessibilityLabel="Save queued merge" accessibilityHint="Keep this merged message queued for the next turn" onPress={submit} disabled={!canSend} style={[styles.hit, styles.previewSave]}><Text style={styles.chipName}>Save queued</Text></PressScale>
-          : (streaming || steerBusy) && !canSend ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale>
-          : <PressScale accessibilityRole="button" accessibilityLabel={streaming && !steerBusy ? "Queue" : sendMode.action} accessibilityHint={sendMode.label} onPress={submit} disabled={!canSend} style={styles.hit}><View style={[styles.send, !canSend && styles.disabled]}><Feather name={sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View></PressScale>}
+        {editingQueue ? <PressScale accessibilityRole="button" accessibilityLabel="Save queued merge" accessibilityHint="Keep this merged message queued for the next turn" onPress={() => void submit()} disabled={!canSend} style={[styles.hit, styles.previewSave]}><Text style={styles.chipName}>Save queued</Text></PressScale>
+          : (streaming || steerBusy) && (captureOnly ? !text.trim() && !drafts.length : !canSend) ? <PressScale accessibilityRole="button" accessibilityLabel="Stop" onPress={onStop} style={styles.hit}><View style={[styles.send, styles.stop]}><View style={styles.square} /></View></PressScale>
+          : <PressScale accessibilityRole="button" accessibilityLabel={captureOnly ? "Save for tomorrow" : streaming && !steerBusy ? "Queue" : sendMode.action} accessibilityHint={captureOnly ? "Saves locally without sending" : sendMode.label} onPress={() => void submit()} disabled={!scheduleReady || (captureOnly ? !canCapture : !canSend || savingCapture)} style={styles.hit}><View style={[styles.send, (captureOnly ? !canCapture : !canSend) && styles.disabled]}><Feather name={captureOnly ? "bookmark" : sendMode.mode === "steer" ? "corner-up-right" : "arrow-up"} size={20} color={colors.onAccent} /></View></PressScale>}
         {context ? <ContextGauge control={context} /> : null}
         <View ref={attachRef} collapsable={false}><PressScale accessibilityRole="button" accessibilityLabel="Attach file" accessibilityState={{ expanded: attachAnchor !== null }} onPress={onAttach} disabled={disabled || editingQueue} style={styles.hit}><Feather name="paperclip" size={18} color={drafts.length ? colors.gold : colors.textMuted} /></PressScale></View>
         <MicButton side={thumb.side} onDictate={onDictate} onLive={onVoice} onTap={speechBusy ? onDictate : voiceCall ? onVoice : undefined} accessibilityLabel={speechBusy ? "Stop dictation" : voiceCall ? `Live call, ${voiceCall.phase}. Show voice orb` : undefined}>{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>

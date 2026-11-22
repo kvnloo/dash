@@ -86,7 +86,7 @@ function appScheme(): string {
 }
 
 /** Where this bundle was fetched from: the origin a reload will fetch from again. */
-function bundleOrigin(): string | null {
+export function bundleOrigin(): string | null {
   const source: unknown = NativeModules.SourceCode;
   if (typeof source !== "object" || source === null) return null;
   if ("scriptURL" in source) return scriptUrlOrigin(source.scriptURL);

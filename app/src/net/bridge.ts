@@ -1,3 +1,4 @@
+import { receiveChatPost } from "../store/chat-posts";
 import { receiveSecretRequest, receiveSecretResolved } from "../store/secrets";
 import { applyGateMessage } from "../store/approvals";
 import { createPermissionsStore } from "../store/permissions";
@@ -294,6 +295,7 @@ class Bridge {
     if ("turnId" in message && typeof message.turnId === "string" && !this.ownsTurn(message.turnId)) return;
     switch (message.type) {
       case "notice": void agentNoticeInbox.receive(message).catch(noticeFailure); return;
+      case "chat_post": if (this.settings) receiveChatPost(message, this.settings.address); return;
       case "gate_snapshot":
       case "gate_status":
       case "gate_error": applyGateMessage(message); return;
