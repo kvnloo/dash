@@ -884,7 +884,7 @@ const handleSuggestions = createSuggestionsHttpHandler({ token: TOKEN, cwd: DEFA
 const gate = process.env.DASH_GATE_ENABLED === "1" ? new GateService(new GateStore(process.env.DASH_GATE_DIR), process.env.DASH_GATE_LIVE !== "1", undefined, process.env.DASH_GATE_OWNER_DECISIONS === "1") : null;
 const liveSurface = new LiveSurface({ log });
 const handleSupervision = createSupervisionHttpHandler({ token: TOKEN, directory: process.env.DASH_SUPERVISION_DIR });
-const handlePosture = createPostureHttpHandler({ token: TOKEN, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG });
+const handlePosture = createPostureHttpHandler({ authorize, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG });
 const gatePoll = gate ? setInterval(() => { try { gate.refresh(); } catch { /* Explicit next request returns corruption error. */ } }, 2000) : null;
 
 const server = Bun.serve<SocketData>({

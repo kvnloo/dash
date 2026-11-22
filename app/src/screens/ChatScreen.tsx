@@ -575,6 +575,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onSend(text, attachments, mode);
         }
       }}
+      onCaptureSaved={() => { if (composerDraft !== undefined) navigation.setParams({ draft: undefined }); }}
       onStop={onStop}
       onVoice={onVoice}
       voiceCall={voiceCall}

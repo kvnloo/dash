@@ -260,6 +260,10 @@ export function setConnection(patch: Partial<Connection>): void {
 export async function forgetEverything(send: (message: ClientMessage) => boolean = () => false): Promise<void> {
   const { agentNoticeInbox }: typeof import("./notices") = require("./notices");
   await agentNoticeInbox.forget(send);
+  const { clearOvernightCaptures }: typeof import("./overnight-captures") = require("./overnight-captures");
+  const { clearBedtimeSchedule }: typeof import("./bedtime") = require("./bedtime");
+  await clearBedtimeSchedule();
+  await clearOvernightCaptures();
   const enrollment = store.get().settings?.identity;
   if (enrollment) {
     const { setSecret }: typeof import("../lib/secure") = require("../lib/secure");
