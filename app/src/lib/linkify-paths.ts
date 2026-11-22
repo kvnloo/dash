@@ -370,8 +370,9 @@ function linkifyLine(line: string, state: ScanState): string {
 /**
  * Linkify complete prose, preserving code/HTML/links and incomplete final
  * streaming lines. Re-running this function does not alter generated links.
+ * Set finalLineComplete only once a reply has finished streaming.
  */
-export function linkifyMarkdown(markdown: string): string {
+export function linkifyMarkdown(markdown: string, finalLineComplete = false): string {
   if (markdown.length > MAX_MARKDOWN_LENGTH) return markdown;
   const lines = markdown.split("\n");
   const state: ScanState = {
@@ -400,7 +401,7 @@ export function linkifyMarkdown(markdown: string): string {
       }
     }
     // A streaming tail can still grow into a longer path or URL.
-    const complete = index < lines.length - 1 || /\s$/.test(rawLine);
+    const complete = finalLineComplete || index < lines.length - 1 || /\s$/.test(rawLine);
     result.push(complete ? linkifyLine(rawLine, state) : rawLine);
   }
   return result.join("\n");

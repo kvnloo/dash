@@ -78,9 +78,9 @@ function Disclosure({ lines }: { lines: string[] }) {
     {open ? <Text testID="reply-activity-lines" selectable style={styles.detailText}>{collapseActivity(lines).join("\n")}</Text> : null}
   </View>;
 }
-function Answer({ text, turnId, detailMode, streaming = false }: { text: string; turnId: string; detailMode: DetailMode; streaming?: boolean }) {
+function Answer({ text, messageId, turnId, detailMode, streaming = false }: { text: string; messageId: string; turnId: string; detailMode: DetailMode; streaming?: boolean }) {
   const parts = splitThinking(text);
-  return <>{parts.thinking ? <ReplyBlocks turnId={turnId} parts={[{ kind: "reasoning", text: parts.thinking }]} mode={detailMode} /> : null}{parts.text ? <Markdown text={parts.text} streaming={streaming} onIntent={intent => sendInlineIntent(turnId, intent)} /> : null}</>;
+  return <>{parts.thinking ? <ReplyBlocks turnId={turnId} parts={[{ kind: "reasoning", text: parts.thinking }]} mode={detailMode} /> : null}{parts.text ? <Markdown messageId={messageId} text={parts.text} streaming={streaming} onIntent={intent => sendInlineIntent(turnId, intent)} /> : null}</>;
 }
 
 function ThinkingMarker({ turnState, waiting = false }: { harnessId?: string; turnState: AssistantState; waiting?: boolean }) {
@@ -99,7 +99,7 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
     case "streaming":
       return (
         <>
-          {liveText || message.text ? <Answer streaming turnId={message.turnId} detailMode={detailMode} text={liveText || message.text} /> : null}
+          {liveText || message.text ? <Answer messageId={message.id} streaming turnId={message.turnId} detailMode={detailMode} text={liveText || message.text} /> : null}
           <View style={styles.statusRow}>
             <AgentOrb size={20} thinking={messageThinking(message, { liveText, connection })} label={message.handoff === "queued" ? "queued" : "streaming"} />
             <Text style={styles.statusText} numberOfLines={1}>
@@ -109,11 +109,11 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
         </>
       );
     case "done":
-      return <><Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /><HostFiles text={message.text} /><StageLinks text={message.text} /></>;
+      return <><Answer messageId={message.id} turnId={message.turnId} detailMode={detailMode} text={message.text} /><HostFiles text={message.text} /><StageLinks text={message.text} /></>;
     case "interrupted":
       return (
         <>
-          {message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
+          {message.text ? <Answer messageId={message.id} turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text style={styles.noteText}>{message.status ?? "Connection to the bridge was lost mid-reply."}</Text>
@@ -123,7 +123,7 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
     case "error":
       return (
         <>
-          {message.text ? <Answer turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
+          {message.text ? <Answer messageId={message.id} turnId={message.turnId} detailMode={detailMode} text={message.text} /> : null}
           <View style={styles.statusRow}>
             <ThinkingMarker harnessId={harnessId} turnState={message.state} />
             <Text selectable style={styles.errorText}>

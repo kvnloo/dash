@@ -14,7 +14,12 @@ import { readableReplyText, replyToSelection, selectedReplyText, type SelectionR
 import { prepareGenerativeMarkdown } from "../lib/generative-stream";
 import { flowMode } from "../lib/flow-trace";
 
+import { linkifyMarkdown } from "../lib/linkify-paths";
+import { classifyLink, linkAccessibilityHint } from "../lib/link-target";
+import { FileLinkPreview, type FileLinkTarget } from "./FileLinkPreview";
+
 class TranscriptRenderer extends Renderer {
+  onFileLink?: (target: FileLinkTarget) => void;
   onIntent?: (intent: LiveIntent) => boolean;
   streaming = false;
   override code(code: string, language = ""): ReactNode {
@@ -22,9 +27,15 @@ class TranscriptRenderer extends Renderer {
   }
   override link(children: string | ReactNode[], href: string, style?: TextStyle): ReactNode {
     if (isImageRef(href)) return <InlineImage key={this.getKey()} href={href} label="Image" />;
-    return <Text key={this.getKey()} selectable={Platform.OS === "ios"} accessibilityRole="link" style={style} onPress={() => {
-      if (/^https?:\/\//i.test(href)) void Linking.openURL(href);
-    }}>{children}</Text>;
+    const target = classifyLink(href);
+    if (target.kind !== "web" && (target.kind !== "file" || !this.onFileLink)) {
+      return <Text key={this.getKey()}>{children}</Text>;
+    }
+    return <Text key={this.getKey()} selectable={Platform.OS === "ios"} accessibilityRole="link"
+      accessibilityHint={linkAccessibilityHint(target)} style={style} onPress={() => {
+        if (target.kind === "web") void Linking.openURL(target.url).catch(() => {});
+        else this.onFileLink?.(target);
+      }}>{children}</Text>;
   }
   override image(uri: string, alt?: string): ReactNode {
     return /^https?:\/\//i.test(uri) || isImageRef(uri) ? <InlineImage key={this.getKey()} href={uri} label={alt || "Image"} /> : null;
@@ -85,14 +96,15 @@ function ReplySelectionSheet({ source, selection, onSelection, onCancel, onReply
   </Modal>;
 }
 
-export const Markdown = memo(function Markdown({ text, onIntent, streaming = false }: { text: string; onIntent?: (intent: LiveIntent) => boolean; streaming?: boolean }) {
+export const Markdown = memo(function Markdown({ text, messageId, onIntent, streaming = false }: { text: string; messageId?: string; onIntent?: (intent: LiveIntent) => boolean; streaming?: boolean }) {
   const [pendingSelection, setPendingSelection] = useState<PendingReplySelection | null>(null);
   const [range, setRange] = useState<SelectionRange | null>(null);
+  const [filePreview, setFilePreview] = useState<FileLinkTarget | null>(null);
   // Unfinished UI fences are buffered before Markdown can expose model source.
-  const prepared = useMemo(() => prepareGenerativeMarkdown(text, flowMode), [text]);
+  const prepared = useMemo(() => linkifyMarkdown(prepareGenerativeMarkdown(text, flowMode), !streaming), [text, streaming]);
   // Android and web use the quote-selection sheet; iOS keeps native text selection.
   // Browser-native selection can cancel the Pressable long press before the sheet opens.
-  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: Platform.OS === "ios" }); renderer.onIntent = onIntent; renderer.streaming = streaming; return renderer; }, [prepared, onIntent, streaming]);
+  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: Platform.OS === "ios" }); renderer.onIntent = onIntent; renderer.onFileLink = messageId ? setFilePreview : undefined; renderer.streaming = streaming; return renderer; }, [prepared, messageId, onIntent, streaming]);
   const nodes = useMarkdown(prepared, { renderer, styles, colorScheme: "dark" });
   const onLongPress = () => {
     if (Platform.OS === "ios" || annotate.get().active) return;
@@ -118,6 +130,7 @@ export const Markdown = memo(function Markdown({ text, onIntent, streaming = fal
   // Hook only, not the library's nested FlatList. FlashList owns vertical scroll.
   return <View>
     <Pressable testID="reply-selection-trigger" accessible={false} delayLongPress={350} onLongPress={onLongPress}><View>{nodes}</View></Pressable>
+    {filePreview && messageId ? <FileLinkPreview target={filePreview} messageId={messageId} onClose={() => setFilePreview(null)} /> : null}
     {pendingSelection ? <ReplySelectionSheet source={pendingSelection.source} selection={range} onSelection={setRange} onCancel={cancelSelection} onReply={onReply} /> : null}
   </View>;
 });
