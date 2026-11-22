@@ -26,7 +26,6 @@ import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
 import { screenBack } from "../lib/screen-back";
 import { endpointsOf, withEditedEndpoint } from "../lib/bridge-failover";
-
 import { wallpaperAvailable } from "../lib/wallpaper-window";
 import { appearanceTheme, setAppearanceTheme } from "../store/appearance";
 

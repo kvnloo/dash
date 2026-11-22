@@ -25,7 +25,7 @@ test("Wallpaper glass stays selected and reveals the backdrop behind a usable ch
   await composer(page).fill("Wallpaper glass fixture chat");
   await page.getByRole("button", { name: "Send", exact: true }).click({ noWaitAfter: true });
   await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
-  expect(bridge.logs()).toContain("turn.start");
+  expect(bridge.logs()).toMatch(/ws\.chat .*harness=omp/);
   await page.screenshot({ path: info.outputPath("wallpaper-glass-web-preview.png") });
 
   await closeChat.click({ noWaitAfter: true });
