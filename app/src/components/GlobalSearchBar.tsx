@@ -1,3 +1,7 @@
+import { MAX_CAPTURE_TEXT_LENGTH } from "../../../shared/overnight-captures";
+import { bedtimeSchedule, captureModeNow, useBedtime } from "../store/bedtime";
+import { captureForTomorrow } from "../store/overnight-captures";
+import { OvernightNotes } from "./OvernightNotes";
 import { toggleHandedness, useHandedness } from "../lib/useHandedness";
 import { Feather } from "@expo/vector-icons";
 import { type RefObject, memo, useRef, useState } from "react";
@@ -48,6 +52,40 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
   const [dictating, setDictating] = useState(false);
   const activeCursor = selection?.value === value ? selection.range.start : value.length;
   const canSend = value.trim().length > 0;
+  const bedtime = useBedtime();
+  const captureOnly = !!onSend && bedtime;
+  const ready = bedtimeSchedule.use(s => s !== null);
+  const [saving, setSaving] = useState(false);
+  const pending = useRef(false);
+  const [saveError, setSaveError] = useState(false);
+  const latest = useRef(value);
+  latest.current = value;
+  const tooLong = value.trim().length > MAX_CAPTURE_TEXT_LENGTH;
+  const submit = async (explicitSend = false) => {
+    const next = value.trim();
+    if (!next || pending.current) return;
+    if (onSend) {
+      const schedule = bedtimeSchedule.get();
+      if (!schedule) return;
+      if (captureModeNow() && !explicitSend) {
+        if (tooLong) return;
+        setSaveError(false);
+        pending.current = true;
+        setSaving(true);
+        try {
+          if (await captureForTomorrow(next, undefined)) {
+            if (latest.current === value) onChange("");
+          } else setSaveError(true);
+        } finally {
+          pending.current = false;
+          setSaving(false);
+        }
+        return;
+      }
+      if (!captureOnly || explicitSend) onSend(next);
+    } else if (onClear) onClear();
+    else onChange("");
+  };
 
   const speech = useRecordedSpeech("dictation", transcript => {
     const next = insertAtCursor(value, selection?.value === value ? selection.range : null, transcript);
@@ -88,6 +126,12 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
 
   return (
     <View style={[styles.wrap, dock === "bottom" && styles.wrapBottom]}>
+      {onSend ? <OvernightNotes onUse={note => changeValue(value ? `${value}\n${note}` : note)} /> : null}
+      {captureOnly ? <View style={styles.speechRow}>
+        <Text style={styles.speechNote}>{tooLong ? `Shorten your thought to ${MAX_CAPTURE_TEXT_LENGTH} characters to save it.` : "Bedtime · Save for tomorrow"}</Text>
+        {canSend ? <PressScale accessibilityRole="button" disabled={saving} onPress={() => void submit(true)} style={styles.speechAction}><Text style={styles.speechActionText}>Send anyway</Text></PressScale> : null}
+      </View> : null}
+      {saveError ? <Text accessibilityRole="alert" style={styles.speechNote}>Couldn't save the thought. Your draft is still here.</Text> : null}
       <ComposerSuggestions text={value} cursor={activeCursor} onChange={changeValue} />
 
       {speech.state.note ? (
@@ -139,7 +183,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
             onBlur={() => setFocused(false)}
             onPressIn={() => { if (dictating) setDictating(false); }}
             showSoftInputOnFocus={!dictating}
-            placeholder={placeholder}
+            placeholder={captureOnly ? "Capture a thought for tomorrow" : placeholder}
             placeholderTextColor={colors.textFaint}
             style={styles.input}
             autoCapitalize="none"
@@ -152,19 +196,14 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
           {canSend ? (
             <Animated.View entering={popIn} exiting={popOut}>
               <PressScale
-                onPress={() => {
-                  const next = value.trim();
-                  if (!next) return;
-                  if (onSend) onSend(next);
-                  else if (onClear) onClear();
-                  else onChange("");
-                }}
+                onPress={() => void submit()}
+                disabled={!!onSend && (!ready || saving || (captureOnly && tooLong))}
                 scaleTo={PRESS_SCALE.control}
                 style={styles.sendHit}
                 accessibilityRole="button"
-                accessibilityLabel="Send"
+                accessibilityLabel={captureOnly ? "Save for tomorrow" : "Send"}
               >
-                <View style={styles.send}><Feather name="arrow-up" size={18} color={colors.onAccent} /></View>
+                <View style={styles.send}><Feather name={captureOnly ? "bookmark" : "arrow-up"} size={18} color={colors.onAccent} /></View>
               </PressScale>
             </Animated.View>
           ) : null}

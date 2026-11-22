@@ -51,6 +51,10 @@ export const MessageRow = memo(function MessageRow({
       </View>
     );
   }
+  if (message.agentPost) return <View style={styles.assistantRow} testID="agent-chat-post">
+    <Text style={styles.statusText}>Agent message</Text>
+    <Text selectable style={styles.detailText}>{message.text}</Text>
+  </View>;
   if (message.delivery === "steered" && message.state !== "error") return null;
   if (message.delivery === "queued" && message.state === "streaming") return null;
   return (

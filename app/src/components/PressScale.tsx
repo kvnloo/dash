@@ -84,8 +84,12 @@ export const PressScale = memo(function PressScale({
 });
 
 const styles = StyleSheet.create({
+  // Grow into a sized slot, but keep basis auto. `flex: 1` is basis 0 on native (Yoga), so in a
+  // content-sized row (a chip in a horizontal ScrollView) the wrapper collapsed to 0 wide and Android
+  // clipped the label away: empty outlines. Web never showed it: CSS sizes that row from its content.
   fill: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     alignItems: "center",
     justifyContent: "center",
   },

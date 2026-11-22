@@ -13,8 +13,8 @@ export function InlineHTML({ source, artifact }: { source?: string; artifact?: L
   const html = source ?? artifact?.html ?? "";
   return <View style={{ gap: 6, marginVertical: 8 }}>
     <LiveArtifactFrame html={sandboxHTML(html)} version={artifact?.version ?? 1} height={260} onIntent={ignore} staticOnly />
-    <PressScale accessibilityRole="button" accessibilityLabel="Open HTML in stage" onPress={() => nav.navigate("ArtifactStage", { html, title: artifact?.title ?? "HTML preview · unverified" })} style={{ minHeight: 44, justifyContent: "center" }}>
-      <Text style={{ ...type.small, color: colors.gold }}>Open in stage ↗ · sandboxed preview</Text>
+    <PressScale accessibilityRole="button" accessibilityLabel="Open interactive prototype" onPress={() => nav.navigate("ArtifactStage", { html, title: artifact?.title ?? "HTML prototype" })} style={{ minHeight: 44, justifyContent: "center" }}>
+      <Text style={{ ...type.small, color: colors.gold }}>Open interactive prototype ↗</Text>
     </PressScale>
   </View>;
 }

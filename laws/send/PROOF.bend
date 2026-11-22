@@ -235,6 +235,18 @@ def Laws.av_profile_own_session(k, s, h, hermes, q, w):
 def Laws.av_profile_needs_session(k, s, h, hermes, w):
   w
 
+def Laws.local_session_routes(kind, sid):
+  routes(kind, sid)
+
+def Laws.local_profile_own_harness(k, s, h, hermes, q, w):
+  av_harness(k, s, h, q, w)
+
+def Laws.local_profile_own_session(k, s, h, hermes, q, w):
+  av_session(k, s, h, q, w)
+
+def Laws.local_profile_needs_session(k, s, h, hermes, w):
+  w
+
 # S9
 def tail_accounted(k: S.AKind, speech: Bool, known: Bool, avail: Bool, cwd: Bool, att: Bool) -> Laws.T(S.a_accounted(S.a_tail(k, speech, known, avail, cwd, att))):
   match k:
