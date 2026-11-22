@@ -1,0 +1,60 @@
+name: S25 APK tester army
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dash-s25-device-army
+  cancel-in-progress: false
+
+jobs:
+  s25:
+    # Never execute PR code on the physical test runner. Manual runs are allowed
+    # only from the repository default branch, and test the staging checkout.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: [self-hosted, Linux, dash-s25-lab]
+    timeout-minutes: 100
+    env:
+      ARMY_WORKERS: '2'
+      DASH_ARMY_RECEIPTS: ${{ runner.temp }}/dash-device-army-${{ github.run_id }}-${{ github.run_attempt }}/web
+      DEVICE_ARMY_SERIAL: ${{ vars.DASH_DEVICE_ARMY_SERIAL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: staging
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - name: Install dependencies (lab runner has read access to the private renderer)
+        run: |
+          bun install --frozen-lockfile
+          bun install --frozen-lockfile --cwd app
+          bun install --frozen-lockfile --cwd bridge
+          node node_modules/playwright/cli.js install chromium
+      - name: Produce canonical web army evidence before any native build
+        run: bash scripts/army.sh
+      - name: Build the isolated standalone ARM64 APK
+        env:
+          DASH_APP_VARIANT: e2e
+          DASH_VARIANT: release
+        run: DASH_PROOF_REVISION="$(git rev-parse HEAD)" bash scripts/build-native-android.sh
+      - name: Exercise the APK on the dedicated S25
+        run: |
+          mkdir -p "$(dirname "$DASH_ARMY_RECEIPTS")"
+          scripts/device-army.sh .native-receipts "$(dirname "$DASH_ARMY_RECEIPTS")/device"
+      - name: Native tester army receipt and journey report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s25-device-army-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/dash-device-army-${{ github.run_id }}-${{ github.run_attempt }}/device/
+          if-no-files-found: warn
+          retention-days: 30

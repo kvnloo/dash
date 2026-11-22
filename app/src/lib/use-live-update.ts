@@ -23,6 +23,7 @@ import {
 import { idleMs, markTouch } from "./touch-idle";
 import { reloadApp } from "./reload-app";
 import { installReloadGuards } from "./reload-guards";
+import { flushTurboNavigation } from "./turbo-navigation";
 import { flushDrafts } from "../store/composer-drafts";
 
 const AUTO_KEY = "dash.liveUpdate.auto";
@@ -86,7 +87,7 @@ function appScheme(): string {
 }
 
 /** Where this bundle was fetched from: the origin a reload will fetch from again. */
-function bundleOrigin(): string | null {
+export function bundleOrigin(): string | null {
   const source: unknown = NativeModules.SourceCode;
   if (typeof source !== "object" || source === null) return null;
   if ("scriptURL" in source) return scriptUrlOrigin(source.scriptURL);
@@ -298,6 +299,7 @@ export function useLiveUpdate(): LiveUpdate {
           attemptMarked = true;
         }
         // Persist edits made during every earlier await, including the launch probe.
+        await flushTurboNavigation();
         await flushDrafts();
         // No await between validating the target/activity and invoking the reload.
         if (!permitted()) return;

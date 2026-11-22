@@ -54,7 +54,6 @@ test(`endpoint switch ${harness} parks A stream and queue, B receives neither, A
     if (!rowId) throw Error('The actual streamed chat must have a persistent rendered row identity');
     const ownedRow = page.getByTestId(rowId);
     await composer(page).fill(queued);
-    if (harness === 'Hermes') await page.getByRole('button', { name: 'Choose Queue for next turn', exact: true }).click();
     await page.getByRole('button', { name: 'Queue', exact: true }).click();
     await selectEndpoint(page, b, ownedRow);
     await expect.poll(() => wire.some(f => f.endpoint === `127.0.0.1:${b.port}` && f.type === 'hello')).toBe(true);

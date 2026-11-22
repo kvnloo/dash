@@ -27,6 +27,17 @@ sway_alive() { [ -S "$RUNTIME/wayland-1" ] && pgrep -u "$(id -u)" -f "sway -c $A
 pid_is() { # pid, required substring of its command line
   [ -n "$1" ] && [ -r "/proc/$1/cmdline" ] && tr '\0' ' ' <"/proc/$1/cmdline" | grep -qF -- "$2"; }
 
+down_stack() {
+  if pid_is "$SERVE_PID" "serve.py $ARMY_BASE/stack-$run/web-export $PORT"; then
+    kill "$SERVE_PID" || true
+    echo "down: stopped serve.py pid $SERVE_PID"
+  else
+    echo "down: serve.py pid $SERVE_PID is not running (or is not ours); nothing killed"
+  fi
+  rm -rf "$ARMY_BASE/stack-$run/web-export"
+  echo "down: removed the web export; kept $ARMY_BASE/stack-$run/{state.env,serve.log,web-export.log} and any retained evidence"
+}
+
 cmd=${1:-}; shift || true
 case "$cmd" in
 sway-up)
@@ -81,9 +92,13 @@ drive)
   run=${1:-}; need_run "$run"; workers=${2:-}; [ -n "$workers" ] || die "missing <workers>"; shift 2; load "$run"
   [ ! -e "$ARMY_BASE/$run.json" ] || die "result '$run' already exists; never overwrite a run"
   sway_alive || die "virtual display missing; run: sway-up (never fall back to the physical display)"
+  # Claim this stack before installing cleanup. A competing drive must not
+  # stop the server or erase the export while its owner is still testing.
+  mkdir "$ARMY_BASE/stack-$run/drive-claim" || die "stack '$run' was already driven"
+  trap down_stack EXIT
   cd "$REPO"
   set +e
-  ARMY_BASE=$ARMY_BASE ARMY_WEB=$WEB ARMY_BRIDGE_ROOT=$REPO python3 e2e/mbp-army/run.py "$run" "$workers" "$@"
+  ARMY_BASE=$ARMY_BASE ARMY_WEB=$WEB ARMY_BRIDGE_ROOT=$REPO python3 -B e2e/mbp-army/run.py "$run" "$workers" "$@"
   rc=$?
   set -e
   python3 - "$ARMY_BASE" "$run" "$SHA" "$DIRTY" "$rc" "$@" <<'PY'
@@ -117,10 +132,7 @@ evidence)
   ;;
 down)
   run=${1:-}; need_run "$run"; load "$run"
-  if pid_is "$SERVE_PID" "serve.py $ARMY_BASE/stack-$run/web-export"; then kill "$SERVE_PID"; echo "down: stopped serve.py pid $SERVE_PID"
-  else echo "down: serve.py pid $SERVE_PID is not running (or is not ours); nothing killed"; fi
-  rm -rf "$ARMY_BASE/stack-$run/web-export"
-  echo "down: removed the web export; kept $ARMY_BASE/stack-$run/{state.env,serve.log,web-export.log} and every $ARMY_BASE/$run* evidence file"
+  down_stack
   ;;
 *) sed -n '2,13p' "$0"; exit 2 ;;
 esac
