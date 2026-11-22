@@ -257,6 +257,22 @@ auto-deleted; inspect them before removing their artifacts manually.
 export when it exits. Use `army-stack.sh down <run>` if the stack never reached
 `drive` or if the process was killed before cleanup could run.
 
+## Agent UI control journeys (#368)
+
+`ui-control.spec.ts` runs the bridge's real `bridge/bin/dash-ui` CLI with the isolated bridge's HOME,
+credential directory and loopback port (parsed from its startup log), exactly as an agent on that
+computer would. Consent is switched on through the visible Settings > Agent control switch. The
+journey asserts the refusal while consent is off, `Chats > <chat> > Annotate` with bridge-to-ack
+latency under 1 s and no page interaction, unknown-chat and usage errors, and Stop on the receipt.
+A second journey sends `ARMY_UI_CONTROL ["open","Chats"]` to the fixture ACP agent, which runs the
+same CLI with the environment the bridge gave it (`DASH_NOTICE_PORT`).
+
+`ui-overlay.spec.ts` covers agent screen marks: the fixture ACP agent runs
+`dash-ui circle chat-annotate "Annotate here"` and the journey checks the ring encloses the
+element's box and that the owner's tap still reaches the button under it; a second journey drives
+arrow (tip at the element edge), pointer at normalized 0.5,0.5, highlight, a drawn stroke, unknown
+targets, clear, TTL expiry and the receipt's Dismiss cooldown.
+
 
 ## S25 APK target (supplementary, not O15)
 

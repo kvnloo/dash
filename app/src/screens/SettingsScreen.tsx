@@ -24,6 +24,7 @@ import { normalizeAddress } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
 import { forgetEverything, saveSettings, store } from "../store/app";
+import { setAgentControl } from "../store/agent-control";
 import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
 import { screenBack } from "../lib/screen-back";
@@ -336,6 +337,25 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
               </GlassSurface>
               <Text style={styles.help}>
                 Voice, typed notes on Main, and long-press on rows go to the Dash secondmate until you turn this off.
+              </Text>
+              <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+                <Pressable
+                  onPress={() => {
+                    setAgentControl(settings.agentControl !== true);
+                    haptic.tap();
+                  }}
+                  style={({ pressed }) => [styles.harnessRow, pressed && styles.pressed]}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: settings.agentControl === true }}
+                  accessibilityLabel="Agent control"
+                  accessibilityHint="Let agents on your computer open screens and point at things in Dash"
+                >
+                  <Text style={styles.harnessName}>Agent control</Text>
+                  <Text style={styles.statusText}>{settings.agentControl === true ? "On" : "Off"}</Text>
+                </Pressable>
+              </GlassSurface>
+              <Text style={styles.help}>
+                Agents on your computer can open chats and screens (dash-ui) and point at things. Each action shows at the top with Stop.
               </Text>
             </>
           ) : null}

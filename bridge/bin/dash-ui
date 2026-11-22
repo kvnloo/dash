@@ -1,0 +1,4 @@
+#!/usr/bin/env bun
+import { uiCli } from "../src/ui-cli";
+// Agent -> app UI control over the local bridge (docs/specs/ui-control.md).
+process.exitCode = await uiCli(process.argv.slice(2));

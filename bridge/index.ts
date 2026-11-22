@@ -14,6 +14,7 @@ import { repositoryRoot } from "./src/chat-index/workspace";
 
 import { ToolDetails } from "./src/tool-details";
 import { NoticeService, tryStartNoticeServer } from "./src/notices";
+import { UiControlHub, createUiControlHttpHandler, type UiControlPeer } from "./src/ui-control-http";
 import { redact, statusUpdate } from "./src/reply-parts";
 import type { ReplyPart } from "../shared/protocol";
 import { GateService } from "./src/gate/service";
@@ -127,6 +128,8 @@ interface SocketData {
   /** Turn ids this socket is subscribed to. */
   turns: Set<string>;
   gateSend?: (message: GateServerMessage) => void;
+  /** Set once this phone advertises agent UI control (ui_control_hello). */
+  uiControl?: UiControlPeer;
 }
 
 /** Batches text deltas so a fast model doesn't turn into hundreds of tiny frames per second. */
@@ -812,8 +815,15 @@ if (!Number.isInteger(noticePort) || noticePort < 0 || noticePort > 65535) throw
 if (notices.quarantined) log("notices.quarantined", { file: basename(notices.quarantined) });
 // Secure sudo (#559): `dash-sudo` reaches it only on the loopback listener; the phone answers over /ws.
 const secretBroker = new SecretBroker({ sudo: () => Bun.which("sudo"), account: `${(() => { try { return userInfo().username; } catch { return "user"; } })()}@${HOST_NAME}`, log });
+// Agent UI control (docs/specs/ui-control.md): `dash-ui` posts here; consenting phones get the frame over /ws.
+const uiControl = new UiControlHub();
+const handleUiControl = createUiControlHttpHandler({ token: TOKEN, hub: uiControl, onEvent: log });
+const handleSudo = createSudoHttpHandler({ token: TOKEN, broker: secretBroker });
 const noticeServer = tryStartNoticeServer({ token: TOKEN, notices, port: noticePort, file: process.env.DASH_POSTURE_FILE, configFile: process.env.DASH_POSTURE_CONFIG,
-  postToChat, extra: createSudoHttpHandler({ token: TOKEN, broker: secretBroker }) }, reason => log("notices.disabled", { reason }));
+  postToChat, extra: async (request, peer, holdOpen) => (await handleUiControl(request, peer)) ?? handleSudo(request, peer, holdOpen) }, reason => log("notices.disabled", { reason }));
+// Agents this bridge spawns inherit the real loopback port, so dash-notify, dash-sudo and dash-ui
+// reach it even when it was chosen by the OS (DASH_PORT=0) or set apart from DASH_PORT+1.
+if (noticeServer?.port) process.env.DASH_NOTICE_PORT = String(noticeServer.port);
 const attachments = new AttachmentStore(process.env.DASH_ATTACHMENT_DIR?.trim() || join(CREDENTIAL_DIR, "attachments"));
 const handleFiles = createFilesHttpHandler({
   token: TOKEN,
@@ -1216,6 +1226,16 @@ const server = Bun.serve<SocketData>({
           secretBroker.cancel(message.id);
           break;
         }
+        case "ui_control_hello": {
+          ws.data.uiControl ??= { send: frame => { if (ws.readyState !== WebSocket.OPEN) return false; sendTo(ws, frame); return true; } };
+          uiControl.hello(ws.data.uiControl, message.enabled);
+          log("ui_control.hello", { enabled: message.enabled });
+          break;
+        }
+        case "ui_control_ack": {
+          if (ws.data.uiControl) uiControl.ack(ws.data.uiControl, message);
+          break;
+        }
         case "permission_decision": {
           // Only a socket that owns or attached to the turn may answer its permission requests.
           if (!ws.data.turns.has(message.turnId)) break;
@@ -1289,6 +1309,7 @@ const server = Bun.serve<SocketData>({
       ws.data.stopNotices?.();
       ws.data.stopChatPosts?.();
       ws.data.stopSecrets?.();
+      if (ws.data.uiControl) uiControl.leave(ws.data.uiControl);
       if (ws.data.gateSend) gate?.unsubscribe(ws.data.gateSend);
       detachSocket(ws.data.turns, (id) => turns.get(id), ws);
       for (const id of pruneStaleUtterances(utterances, Date.now())) {
