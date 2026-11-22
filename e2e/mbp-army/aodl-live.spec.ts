@@ -9,8 +9,11 @@ const bun = () => execFileSync('sh', ['-c', 'command -v bun'], { encoding: 'utf8
 
 // The native Hermes fixture session becomes a live session working in a checkout named `dash`,
 // written to the isolated state.db exactly as Hermes records cwd and its activity projection.
+// The checkout is its own Git repository, as a real one is: the bridge resolves the session's
+// repository with `git rev-parse --show-toplevel`, and the army's temp dir may sit inside another repo.
 function liveHermesIn(dir: string, repo: string) {
   mkdirSync(repo, { recursive: true });
+  execFileSync('git', ['init', '-q', repo]);
   execFileSync(bun(), [join(__dirname, 'seed-trace-live.ts'), join(dir, '.hermes/state.db')]);
   execFileSync('python3', ['-c', 'import sqlite3,sys\ndb=sqlite3.connect(sys.argv[1])\ndb.execute("UPDATE sessions SET cwd=? WHERE id=?",(sys.argv[2],"army-fixture-session"))\ndb.commit()', join(dir, '.hermes/state.db'), repo]);
 }
