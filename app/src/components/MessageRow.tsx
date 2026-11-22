@@ -60,7 +60,7 @@ export const MessageRow = memo(function MessageRow({
         bridge.send({ type: "tool_detail", id: message.turnId, callId, ...(history ? { messageId: message.id, sessionId: chat?.sessionId, profileId: chat?.profileId, hostId: chat?.targetHostId } : {}) });
       }} />
       <AssistantBody key={message.id} message={message} harnessId={harnessId} detailMode={detailMode} />
-      {thinking && thinking.phase !== "idle" ? <View style={styles.statusRow}><AgentOrb size={20} thinking={thinking} /><Text style={styles.statusText}>working · {thinking.tool ?? "terminal"}</Text></View> : null}
+      {message.state !== "streaming" && thinking && thinking.phase !== "idle" ? <View testID="reply-working" style={styles.statusRow}><AgentOrb size={20} thinking={thinking} /><Text style={styles.statusText}>working · {thinking.tool ?? "terminal"}</Text></View> : null}
       {!message.parts?.length && detailMode !== "Hide" && (message.activity?.length || (message.state === "done" && message.status)) ? <Disclosure key={`${message.id}:activity`} lines={message.activity ?? [message.status ?? ""]} /> : null}
     </View>
   );
@@ -100,7 +100,7 @@ function AssistantBody({ message, harnessId, detailMode }: { message: AssistantM
       return (
         <>
           {liveText || message.text ? <Answer streaming turnId={message.turnId} detailMode={detailMode} text={liveText || message.text} /> : null}
-          <View style={styles.statusRow}>
+          <View testID="reply-working" style={styles.statusRow}>
             <AgentOrb size={20} thinking={messageThinking(message, { liveText, connection })} label={message.handoff === "queued" ? "queued" : "streaming"} />
             <Text style={styles.statusText} numberOfLines={1}>
               {message.status ?? "Working"}
