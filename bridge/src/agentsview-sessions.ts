@@ -32,9 +32,13 @@ export function agentsviewMachineId(path: string | undefined = agentsviewPath())
   } catch { return undefined; }
 }
 
-/** An archived (AgentsView) chat on this host is addressed as `av:<harness>:<sessionId>`. */
+/**
+ * A finished chat on this host: `av:<harness>:<sessionId>` (AgentsView archive) or the hello roster's
+ * local-store id `<harness>:session:<sessionId>` (finished-sessions.ts), which the Hosts tree sends.
+ */
 export function isSelfArchiveProfile(profileId: string | undefined, harness: string, sessionId: string | undefined): boolean {
-  return Boolean(profileId && sessionId && profileId === `${AGENTSVIEW_PREFIX}${harness}:${sessionId}`);
+  return Boolean(profileId && sessionId &&
+    (profileId === `${AGENTSVIEW_PREFIX}${harness}:${sessionId}` || profileId === `${harness}:session:${sessionId}`));
 }
 
 /**

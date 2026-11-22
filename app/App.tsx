@@ -1,3 +1,4 @@
+import { useHostSleepPosture } from "./src/hooks/useHostSleepPosture";
 import { TileDetailProvider } from "./src/components/InteractiveTile";
 import { DensityProvider } from "./src/components/Density";
 import { TileGestureProvider } from "./src/components/TileGestures";
@@ -96,6 +97,7 @@ export default function App() {
   if (fontError) throw fontError;
   const hydrated = store.use((s) => s.hydrated);
   const hasSettings = store.use((s) => s.settings !== null);
+  useHostSleepPosture();
 
   useEffect(() => {
     void hydrate().then(async () => {

@@ -206,11 +206,15 @@ def x_chatable(catalog: Bool, +machine: Nat, host: Nat, inst: Maybe<&2, Nat>, ex
 # The profileId the phone sends for a chat (Conversation.profileId).
 #   AvProfile{k, s}  `av:<k>:<s>`: adoptSummary sets profileId = agentId,
 #                    and avChatRow sets agent_id = `av:<agent>:<sessionId>`.
+#   XLocalSession{k, s}  `<k>:session:<s>`: the hello roster's local-store id
+#                    (finished-sessions.ts) that the Hosts tree sends when a
+#                    finished chat on this host is continued.
 type XProfile is Data:
   XNoProfile{}
   XDefault{}
   XHarnessP{h: Nat}
   XAvProfile{k: Nat, s: Nat}
+  XLocalSession{k: Nat, s: Nat}
   XHermesDefault{}
   XOther{}
 
@@ -218,6 +222,7 @@ type XProfile is Data:
 # the branch after hermes-session and omp-live routing):
 #   !profileId || profileId === DASH_PROFILE_ID || profileId === `harness:${harness}`
 #   || isSelfArchiveProfile(profileId, harness, sessionId)
+#        (av:<harness>:<sessionId> or <harness>:session:<sessionId>)
 #   || (harness === "hermes" && profileId === "hermes:default")
 # hermes: whether harness is "hermes". sid: the message's sessionId.
 def x_self_archive(k: Nat, s: Nat, h: Nat, sid: Maybe<&2, Nat>) -> Bool:
@@ -237,6 +242,8 @@ def x_profile_ok(p: XProfile, h: Nat, hermes: Bool, sid: Maybe<&2, Nat>) -> Bool
       Nat.is_eq(ph, h)
     case XAvProfile{k, s}:
       x_self_archive(k, s, h, sid)
+    case XLocalSession{k, s}:
+      x_self_archive(k, s, h, sid)
     case XHermesDefault{}:
       hermes
     case XOther{}:
@@ -248,6 +255,11 @@ def x_profile_ok(p: XProfile, h: Nat, hermes: Bool, sid: Maybe<&2, Nat>) -> Bool
 # profileId never starts with "omp:", so they reach the profile gate.
 def x_row_routes(+kind: Nat, +sid: Nat) -> Bool:
   x_profile_ok(XAvProfile{kind, sid}, kind, False{}, Some{sid})
+
+# The message a finished local session in the Hosts tree becomes on the phone:
+# harness = kind, sessionId = session id, profileId = <kind>:session:<session id>.
+def x_local_routes(+kind: Nat, +sid: Nat) -> Bool:
+  x_profile_ok(XLocalSession{kind, sid}, kind, False{}, Some{sid})
 
 # ---------------------------------------------------------------------------
 # A. Bridge admission of one turn: bridge/index.ts message(), case "chat"

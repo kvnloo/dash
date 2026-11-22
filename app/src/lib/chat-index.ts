@@ -39,7 +39,7 @@ export function sameSummary(a: ChatSummary, b: ChatSummary): boolean {
   return a.key === b.key && a.kind === b.kind && a.sessionId === b.sessionId && a.hostId === b.hostId && a.hostName === b.hostName &&
     a.profileId === b.profileId && a.agentId === b.agentId && a.title === b.title && a.cwd === b.cwd && a.startedAt === b.startedAt &&
     a.lastActivityAt === b.lastActivityAt && a.messageCount === b.messageCount && a.origin === b.origin && a.chatable === b.chatable &&
-    a.running === b.running && a.openIn === b.openIn;
+    a.running === b.running && a.openIn === b.openIn && a.task === b.task && a.repoRoot === b.repoRoot && a.model === b.model;
 }
 
 function byActivity(a: ChatSummary, b: ChatSummary): number {

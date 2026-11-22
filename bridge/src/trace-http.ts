@@ -104,13 +104,13 @@ export function validateChecks(checks: TraceCheck[], _report: string, receipts: 
     return { ...check, status: receipt.status, evidence: receipt.evidence.filter((p: unknown): p is string => typeof p === "string") };
   });
 }
-export function discoverArtifacts(report: string): TraceArtifact[] {
-  const matches = report.match(/https?:\/\/[^\s<>"'`]+|dash:\/\/[A-Za-z]+|\/(?:mnt|home|workspace)\/[^\s<>"'`),]+/g) ?? [];
+export function discoverArtifacts(report: string, roots?: string[]): TraceArtifact[] {
+  const matches = report.match(/https?:\/\/[^\s<>"'`]+|dash:\/\/[A-Za-z]+|\/(?:mnt|home|workspace|Users|tmp|private|var)\/[^\s<>"'`),]+/g) ?? [];
   const artifacts: TraceArtifact[] = [];
   for (const raw of matches) {
     const target = raw.replace(/[.,;]+$/, "");
     const secretPath = target.replace(/^(\/home\/[^/]+)\/\.dash\/attachments(?=\/)/, "$1/attachments");
-    if (!safeTraceTarget(target) || secret.test(secretPath) || artifacts.some(a => a.target === target)) continue;
+    if (!safeTraceTarget(target) || (target.startsWith("/") && roots ? !tracePath(target, roots) : secret.test(secretPath)) || artifacts.some(a => a.target === target)) continue;
     const kind = target.startsWith("dash:") ? "dash" : /github\.com\/[^/]+\/[^/]+\/pull\/\d+$/.test(target) ? "pr" : /github\.com\/[^/]+\/[^/]+\/commit\/[a-f0-9]+$/.test(target) ? "commit" : /^http/.test(target) ? "page" : /\.(png|jpe?g|webp)$/i.test(target) ? /story|sheet/i.test(target) ? "storyboard" : "image" : "file";
     artifacts.push({ kind, target, title: target.split("/").at(-1) || target });
     if (artifacts.length >= 64) break;

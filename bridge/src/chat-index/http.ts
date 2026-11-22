@@ -161,7 +161,9 @@ export function createChatsHttpHandler(options: ChatsHttpOptions) {
     const archiveBefore = query.before && !decodeCursor(query.before)?.remote ? query.before : undefined;
     const value = live ?? await client.history({ ...target, limit: query.limit, ...(archiveBefore ? { before: archiveBefore } : {}), self: { id: self.id, name: self.name } }, request.signal);
     const page: HistoryPage = { messages: value.messages, before: value.before };
-    return json(page, 200, query.before ? { "Cache-Control": "private, max-age=300" } : {});
+    // A keyset cursor identifies a boundary, not an immutable transcript revision.
+    // Older messages can be edited at the source between visits without changing it.
+    return json(page, 200, { "Cache-Control": "private, no-store" });
   }
 
   async function message(request: Request, url: URL): Promise<Response> {

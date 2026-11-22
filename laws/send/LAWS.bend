@@ -111,6 +111,40 @@ law av_profile_needs_session:
   for w: T(S.x_profile_ok(S.XAvProfile{k, s}, h, hermes, None{}))
   Empty
 
+# S7-S8 for the hello roster's local-store id <kind>:session:<session> that the
+# Hosts tree sends when a finished chat on this host is continued: it passes
+# the profile gate, and only for its own harness and session id.
+law local_session_routes:
+  for kind: Nat
+  for sid: Nat
+  T(S.x_local_routes(kind, sid))
+
+law local_profile_own_harness:
+  for k: Nat
+  for s: Nat
+  for h: Nat
+  for hermes: Bool
+  for q: Nat
+  for w: T(S.x_profile_ok(S.XLocalSession{k, s}, h, hermes, Some{q}))
+  {k == h : Nat}
+
+law local_profile_own_session:
+  for k: Nat
+  for s: Nat
+  for h: Nat
+  for hermes: Bool
+  for q: Nat
+  for w: T(S.x_profile_ok(S.XLocalSession{k, s}, h, hermes, Some{q}))
+  {s == q : Nat}
+
+law local_profile_needs_session:
+  for k: Nat
+  for s: Nat
+  for h: Nat
+  for hermes: Bool
+  for w: T(S.x_profile_ok(S.XLocalSession{k, s}, h, hermes, None{}))
+  Empty
+
 # ---------------------------------------------------------------------------
 # S9-S12. No turn is refused in silence (the RC3 bug: a refused turn left no
 # trace on the host, so "the phone can't send" was undiagnosable).

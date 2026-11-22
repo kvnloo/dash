@@ -6,7 +6,7 @@ import { extractIntent, discoverArtifacts, readTraceText, tracePath, validateChe
 import { readSessionPhase } from "./hermes-phase";
 import { redact } from "./reply-parts";
 import type { HostInfo } from "../../shared/protocol";
-import type { TraceRow, TraceWorker } from "../../app/src/trace/model";
+import { TRACE_TURN_LIMIT, type TraceRow, type TraceTurn, type TraceWorker } from "../../app/src/trace/model";
 
 export const TRACE_RUNS = process.env.DASH_TRACE_RUNS || join(homedir(), ".local/state/dash/runs");
 export function traceRoots(): string[] {
@@ -18,6 +18,34 @@ function dirs(path: string): string[] { try { return readdirSync(path).map(n => 
 function json(path: string, roots: string[]): unknown { try { return JSON.parse(readTraceText(path, roots)); } catch { return null; } }
 function worker(id: string, model: string, start: number, end: number, status: TraceWorker["status"], calls = 0): TraceWorker {
   return { id, model, s: start, e: Math.max(start + 1, end), status, calls, errors: 0, asks: [], resumed: false, isResume: false, density: [], fails: [], stalls: [] };
+}
+/** Partition visible history in message order; never borrow output from another request. */
+function sessionTurns(db: Database, id: string, source: string, start: number, roots: string[], active: boolean): TraceTurn[] {
+  const messages = db.query<{ id: number; role: string; content: string | null; timestamp: number }, [string]>(`
+    SELECT rowid AS id, role, CASE WHEN length(content) <= 16384 THEN content ELSE NULL END AS content, timestamp
+    FROM messages WHERE session_id = ? AND role IN ('user', 'assistant') ${active ? "AND coalesce(active, 1) = 1" : ""}
+    ORDER BY timestamp DESC, rowid DESC LIMIT 32
+  `).all(id);
+  const turns: TraceTurn[] = [];
+  let artifacts: ReturnType<typeof discoverArtifacts> = [];
+  for (const message of messages) {
+    if (message.role === "assistant") {
+      for (const a of discoverArtifacts(message.content ?? "", roots)) {
+        if (artifacts.length < 64 && !artifacts.some(item => item.target === a.target)) artifacts.push(a);
+      }
+      continue;
+    }
+    const messageSource = `${source}/messages/${message.id}`;
+    const prompt = message.content ?? "";
+    const embedded = extractIntent(prompt, messageSource);
+    const evidence = embedded.quote || !prompt ? embedded : extractIntent(prompt, messageSource, prompt);
+    if (message.content === null) evidence.warnings.push("Request not available in the bounded history read.");
+    evidence.artifacts = artifacts;
+    turns.push({ id: String(message.id), at: Math.max(0, num(message.timestamp) - start / 1000), evidence });
+    artifacts = [];
+    if (turns.length >= TRACE_TURN_LIMIT) break;
+  }
+  return turns;
 }
 /** Read-only, bounded native collection. Never runs commands, probes fleet or writes sibling runs. */
 export async function collectTrace(options: { runs?: string; profiles?: string[]; roots?: string[]; fleet?: string; now?: number; hosts?: HostInfo[] } = {}) {
@@ -32,7 +60,7 @@ export async function collectTrace(options: { runs?: string; profiles?: string[]
     if (!prompt) continue;
     const report = readTraceText(join(dir, "REPORT.md"), roots);
     const evidence = extractIntent(prompt, promptPath);
-    evidence.artifacts = discoverArtifacts(report).filter(a => !a.target.startsWith("/") || Boolean(tracePath(a.target, roots)));
+    evidence.artifacts = discoverArtifacts(report, roots);
     // Only exact check-bound structured observations can pass/fail. Prose is not a verifier.
     evidence.checks = validateChecks(evidence.checks, report, json(join(dir, "VALIDATION.json"), roots), path => Boolean(tracePath(path, roots)) && Boolean(readTraceText(path, roots)), evidence.intent.provenance.sourceHash);
     if (report) evidence.artifacts.unshift({ kind: "file", title: "Worker report (claims, not automatic acceptance)", target: join(dir, "REPORT.md"), preview: redact(report.slice(0, 1200)) });
@@ -43,7 +71,7 @@ export async function collectTrace(options: { runs?: string; profiles?: string[]
     evidence.artifacts = evidence.artifacts.slice(0, 64);
     evidence.warnings.push("Run liveness and tool counts are unavailable without a correlated session; no phone verification inferred.");
     const stamp = statSync(promptPath).mtimeMs, end = statSync(dir).mtimeMs;
-    rows.push({ key: `run:${basename(dir)}`, project: /dash|trace|composer|mic|orchestra|voice|context|annotate/.test(basename(dir)) ? "Dash" : basename(dir).replace(/^\d{8}-/, "").split("-")[0] || "Runs", goal: basename(dir).replace(/^\d{8}-/, ""), group: "earlier", workers: [worker(basename(dir), "Run · liveness unknown", Math.max(0, (stamp - start) / 1000), Math.max(1, (Math.min(now, end) - start) / 1000), "unknown")], evidence });
+    rows.push({ key: `run:${basename(dir)}`, project: /dash|trace|composer|mic|orchestra|voice|context|annotate/.test(basename(dir)) ? "Dash" : basename(dir).replace(/^\d{8}-/, "").split("-")[0] || "Runs", goal: basename(dir).replace(/^\d{8}-/, ""), group: now - end < 10800000 ? "recent" : "earlier", workers: [worker(basename(dir), "Run · liveness unknown", Math.max(0, (stamp - start) / 1000), Math.max(1, (Math.min(now, end) - start) / 1000), "unknown")], evidence });
     if (rows.length >= 60) break;
   }
   const base = process.env.HERMES_HOME || join(homedir(), ".hermes");
@@ -58,28 +86,21 @@ export async function collectTrace(options: { runs?: string; profiles?: string[]
       const fields = ["id", "title", "model", "started_at", "ended_at", "end_reason", "last_activity_at", "parent_session_id", "git_repo_root", "cwd"].map(c => columns.has(c) ? c : `NULL AS ${c}`).join(",");
       const activity = columns.has("last_activity_at") ? "coalesce(last_activity_at,started_at)" : "started_at";
       const sessions = db.query<Record<string, unknown>, [number]>(`SELECT ${fields} FROM sessions WHERE ${activity}>=? ORDER BY ${activity} DESC LIMIT 30`).all(start / 1000);
+      const activeMessages = db.query<{ name: string }, []>("PRAGMA table_info(messages)").all().some(c => c.name === "active");
       for (const s of sessions) {
         const id = text(s.id), phase = readSessionPhase(home, [id], true, now);
         const status = /interrupt|error|fail/i.test(text(s.end_reason)) ? "interrupted" : s.ended_at ? "completed" : phase.observed && phase.phase !== "idle" ? "running" : "unknown";
         const source = `${home}/state.db#sessions/${id}`;
-        let evidence;
-        try {
-          const first = db.query<{ content: string; contentLength: number }, [string]>("SELECT CASE WHEN length(content)<=65000 THEN content ELSE '' END AS content, length(content) AS contentLength FROM messages WHERE session_id=? AND role='user' ORDER BY timestamp LIMIT 1").get(id);
-          if (first?.content) {
-            const embedded = extractIntent(first.content, source);
-            evidence = embedded.quote ? embedded : extractIntent(first.content, source, first.content);
-          } else if (first && first.contentLength > 65000) {
-            evidence = extractIntent("", source);
-            evidence.warnings.push("Original request exceeds bounded read; no truncated quote is presented as verbatim.");
-          }
-        } catch { warnings.push("Original session request unavailable"); }
+        let turns: TraceTurn[] = [];
+        try { turns = sessionTurns(db, id, source, start, roots, activeMessages); }
+        catch { warnings.push("Original session request unavailable"); }
         let calls = 0;
         try {
           const events = db.query<{ tool_calls: string }, [string]>("SELECT tool_calls FROM messages WHERE session_id=? AND tool_calls IS NOT NULL ORDER BY timestamp DESC LIMIT 100").all(id);
           for (const e of events) { try { const parsed: unknown = JSON.parse(e.tool_calls); if (Array.isArray(parsed)) calls += parsed.length; } catch { /* malformed tool metadata */ } }
         } catch { warnings.push("Tool metadata unavailable"); }
         const updated = num(s.ended_at) || num(s.last_activity_at) || num(s.started_at);
-        rows.push({ key: `hermes:${basename(home)}:${id}`, project: basename(text(s.git_repo_root) || text(s.cwd)) || "Hermes", goal: redact(text(s.title)).slice(0, 100) || "Session · original request not loaded", group: status === "running" ? "live" : now / 1000 - updated < 10800 ? "recent" : "earlier", workers: [worker(id, text(s.model) || "Hermes", Math.max(0, num(s.started_at) - start / 1000), Math.min(now / 1000, updated) - start / 1000, status, calls)], ...(evidence ? { evidence } : {}), provenance: { parentSessionId: text(s.parent_session_id), source } });
+        rows.push({ key: `hermes:${basename(home)}:${id}`, project: basename(text(s.git_repo_root) || text(s.cwd)) || "Hermes", goal: redact(text(s.title)).slice(0, 100) || "Session · original request not loaded", group: status === "running" ? "live" : now / 1000 - updated < 10800 ? "recent" : "earlier", workers: [worker(id, text(s.model) || "Hermes", Math.max(0, num(s.started_at) - start / 1000), Math.min(now / 1000, updated) - start / 1000, status, calls)], ...(turns[0] ? { turns, evidence: turns[0].evidence } : {}), provenance: { parentSessionId: text(s.parent_session_id), source } });
       }
     } catch { warnings.push(`${basename(home)} session metadata unavailable`); } finally { db?.close(); }
   }

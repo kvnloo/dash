@@ -61,6 +61,7 @@ test.describe('remote Claude native history catchup',()=>{
   await send(page,prompt);
   await expect(transcript.getByText(reply,{exact:true})).toHaveCount(1);
   await expect(page.getByRole('button',{name:'Stop',exact:true})).toHaveCount(0);
+  await page.getByTestId('reply-tools-toggle').click();
   await expect(page.getByTestId('reply-tool-row')).toHaveCount(1);
   const owner=wire.find(message=>message.type==='chat')?.id;
   expect(owner).toBeTruthy();
