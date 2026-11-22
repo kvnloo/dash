@@ -7,6 +7,8 @@
      "tests": ["composer harness chooser is attached to the input and never sends a turn",
                "composer model edit applies ACP set_model before prompting and rejects unsupported models",
                "composer shows only estimated live token speed and expires after the turn"]},
+    {"id": "chat-badge-routes", "title": "The chat badge traces host > harness > profile > session > model, picks the next turn's model (applied by the host before the prompt) and warps the window to another session or host (DA-062)",
+     "tests": ["chat badge traces host harness profile session model, switches the next turn model and warps to another session"]},
     {"id": "bedtime-capture", "title": "After opted-in bedtime, save composer thoughts locally and recover them without auto-send",
      "tests": ["bedtime saves the chat draft locally across reload until the owner sends it after wake", "bedtime saves an unassigned main composer thought without opening a chat", "opted-in host sleep posture activates capture outside the device schedule"]},
     {"id": "restored-omp-session-identity", "title": "Two restored OMP panes remain one addressable native chat while either pane is live",

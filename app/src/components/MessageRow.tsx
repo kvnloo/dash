@@ -61,6 +61,11 @@ export const MessageRow = memo(function MessageRow({
       }} />
       <AssistantBody key={message.id} message={message} harnessId={harnessId} detailMode={detailMode} />
       {thinking && thinking.phase !== "idle" ? <View style={styles.statusRow}><AgentOrb size={20} thinking={thinking} /><Text style={styles.statusText}>working · {thinking.tool ?? "terminal"}</Text></View> : null}
+      {/* A turn that asked for a model: the bridge applies it with ACP session/set_model before the prompt and
+          fails the turn otherwise, so a finished reply ran on it. */}
+      {message.requestedModel && message.state === "done" ? <Text testID="reply-model" style={styles.statusText} numberOfLines={1}
+        accessibilityLabel={`Ran with model ${message.requestedModel}, set by the host before the prompt`}>Model · {message.requestedModel}</Text>
+        : message.requestedModel && message.state !== "error" ? <Text testID="reply-model" style={styles.statusText} numberOfLines={1}>Requested · {message.requestedModel}</Text> : null}
       {!message.parts?.length && detailMode !== "Hide" && (message.activity?.length || (message.state === "done" && message.status)) ? <Disclosure key={`${message.id}:activity`} lines={message.activity ?? [message.status ?? ""]} /> : null}
     </View>
   );
