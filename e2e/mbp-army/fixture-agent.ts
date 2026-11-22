@@ -53,6 +53,7 @@ const toolTurn = (done: () => void, many: boolean) => {
 // Fenced payloads travel over real ACP and the real bridge, never through app debug state.
 function generatedReply(prompt: string): string | null {
  if (process.env.ARMY_GENERATED_UI !== '1') return null;
+ if (prompt.includes('ARMY_CODE_MORE')) return '```go\nfunc main() { // entry\n}\n```\n\n```rust\nfn main() { // entry\n}\n```\n\n```sql\nSELECT id FROM chats; -- entry\n```\n\n```yml\nname: dash # entry\n```';
  if (prompt.includes('ARMY_CODE_TSX')) return '```tsx\nconst card = <Panel title="Dash" />;\n```\n\n```jsx\nconst badge = <Badge label="Ready" />;\n```';
  // kvnloo/ephemeral-ui card.v0 kinds through the openui-lang catalog (#ephemeral-ui cards).
  const eui = /ARMY_EPHEMERAL_BATCH_(\d)/.exec(prompt);

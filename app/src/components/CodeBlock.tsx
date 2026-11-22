@@ -8,23 +8,51 @@ import "prismjs/components/prism-tsx";
 import "prismjs/components/prism-bash";
 import "prismjs/components/prism-json";
 import "prismjs/components/prism-python";
+import "prismjs/components/prism-yaml";
+import "prismjs/components/prism-go";
+import "prismjs/components/prism-rust";
+import "prismjs/components/prism-sql";
+import "prismjs/components/prism-swift";
+import "prismjs/components/prism-kotlin";
+import "prismjs/components/prism-toml";
+import "prismjs/components/prism-markdown";
+import "prismjs/components/prism-docker";
 import { colors, fonts, type } from "../theme";
 import { PressScale } from "./PressScale";
 
-const grammars = new Map(["javascript", "typescript", "jsx", "tsx", "bash", "json", "python", "css", "markup"].map(name => [name, Prism.languages[name]]));
+const grammars = new Map(["javascript", "typescript", "jsx", "tsx", "bash", "json", "python", "css", "markup",
+  "yaml", "go", "rust", "sql", "swift", "kotlin", "toml", "markdown", "docker"].map(name => [name, Prism.languages[name]]));
+const ALIASES: Record<string, string> = { ts: "typescript", js: "javascript", sh: "bash", shell: "bash", zsh: "bash", console: "bash", py: "python",
+  yml: "yaml", golang: "go", rs: "rust", kt: "kotlin", md: "markdown", dockerfile: "docker", html: "markup", xml: "markup", svg: "markup" };
+
+// #518: hierarchy inside DESIGN.md's palette (gold is the only accent; status colours only for diffs).
+// Shade and weight carry the difference: keywords gold, names semibold ink, strings ink, comments dim
+// italic, punctuation dim.
+const GOLD = new Set(["keyword", "boolean", "number", "constant", "important", "atrule", "symbol"]);
+const NAME = new Set(["function", "class-name", "tag", "builtin", "property", "selector", "key", "macro", "attr-name"]);
+const INK = new Set(["string", "char", "attr-value", "regex", "url", "template-string"]);
+const DIM = new Set(["comment", "prolog", "doctype", "cdata"]);
+const QUIET = new Set(["punctuation", "operator"]);
+function tokenStyle(kind: string): { color: string; fontStyle?: "italic"; fontWeight?: "600" } {
+  if (kind.startsWith("deleted")) return { color: colors.danger };
+  if (kind.startsWith("inserted")) return { color: colors.ok };
+  if (GOLD.has(kind)) return { color: colors.gold };
+  if (NAME.has(kind)) return { color: colors.text, fontWeight: "600" };
+  if (INK.has(kind)) return { color: colors.text };
+  if (DIM.has(kind)) return { color: colors.textTertiary, fontStyle: "italic" };
+  if (QUIET.has(kind)) return { color: colors.textTertiary };
+  return { color: colors.textMuted };
+}
 
 function tokenText(token: string | Prism.Token, key: string): React.ReactNode {
   if (typeof token === "string") return token;
   const content = typeof token.content === "string" ? token.content : Array.isArray(token.content)
     ? token.content.map((t, i) => tokenText(t, `${key}-${i}`)) : tokenText(token.content, `${key}-nested`);
-  const color = token.type.startsWith("deleted") ? colors.danger : token.type.startsWith("inserted") ? colors.ok
-    : ["keyword", "boolean", "number"].includes(token.type) ? colors.gold
-    : ["string", "function"].includes(token.type) ? colors.text : colors.textMuted;
-  return <Text key={key} style={{ color }}>{content}</Text>;
+  return <Text key={key} style={tokenStyle(token.type)}>{content}</Text>;
 }
 export const CodeBlock = memo(function CodeBlock({ code, language }: { code: string; language: string }) {
   const [copyState, setCopyState] = useState({ code: "", label: "Copy" });
-  const lang = ({ ts: "typescript", js: "javascript", sh: "bash", py: "python" })[language] ?? language;
+  const lang = ALIASES[language.toLowerCase()] ?? language.toLowerCase();
   const tokens = useMemo(() => {
     if (lang === "diff") return code.split("\n").map((line, index, lines) => <Text key={index} style={{ color: line.startsWith("+") ? colors.ok : line.startsWith("-") ? colors.danger : colors.textMuted }}>{line}{index < lines.length - 1 ? "\n" : ""}</Text>);
     const grammar = code.length <= 50_000 ? grammars.get(lang) : undefined;
