@@ -479,7 +479,7 @@ export async function migrateArchive(options: { legacy: boolean; pause?: () => P
   scheduleSave();
 }
 
-export function createConversation(harness: string, opts?: { id?: string; title?: string; targetHostId?: string; profileId?: string; sessionId?: string; cwd?: string }): Conversation {
+export function createConversation(harness: string, opts?: { id?: string; title?: string; targetHostId?: string; profileId?: string; profileName?: string; sessionId?: string; cwd?: string }): Conversation {
   const endpointAddress = store.get().settings?.address;
   const scopedId = opts?.id ? `${opts.id}:endpoint:${encodeURIComponent(endpointAddress ?? "")}` : undefined;
   if (opts?.id) {
@@ -500,6 +500,7 @@ export function createConversation(harness: string, opts?: { id?: string; title?
     messages: [],
     targetHostId: opts?.targetHostId,
     profileId: opts?.profileId,
+    ...(opts?.profileName ? { profileName: opts.profileName } : {}),
     sessionId: opts?.sessionId,
     cwd: opts?.cwd,
   };
@@ -531,7 +532,8 @@ export function conversationTargetError(target: Pick<Conversation, "targetHostId
   if (chatKind(agent) !== target.harness || (agent.sessionId && target.sessionId && agent.sessionId !== target.sessionId)) return "This agent session has changed. Select it again from the roster.";
   if (!connection.harnesses.some((h) => h.id === target.harness && h.available)) return "This harness is unavailable on the paired computer.";
   if (agent.kind === "a2a" && !target.sessionId) return "This bridge cannot target an individual A2A profile. Open a live session instead.";
-  if (agent.id.startsWith("hermes:") && agent.id !== "hermes:default" && !target.sessionId) return "This bridge cannot target this Hermes profile. Open a live session instead.";
+  // A Hermes profile bot the bridge offers as a spawn target starts a new chat in that profile.
+  if (agent.id.startsWith("hermes:") && agent.id !== "hermes:default" && !target.sessionId && !host.bots?.some(bot => bot.spawn?.available && bot.spawn.harness === "hermes" && bot.spawn.profileId === agent.id)) return "This bridge cannot target this Hermes profile. Open a live session instead.";
   return undefined;
 }
 
@@ -739,7 +741,8 @@ export function applyTurnEvent(
       updateConversation(where.conversationId, c => {
         const { connection, settings } = store.get();
         const host = rosterHostId(event.hostId, connection);
-        const native = event.transport === "api" || event.profileId?.startsWith("hermes:session:");
+        // Cursor cloud agents name their own route (`cursor-cloud:<agent id>`), like a native Hermes session.
+        const native = event.transport === "api" || event.profileId?.startsWith("hermes:session:") || (event.transport === "cloud" && event.profileId === `cursor-cloud:${event.sessionId}`);
         // The unscoped ACP request ran on the paired bridge. Its confirmed self host,
         // not a live process lease, owns continuation after the executor exits.
         const selfHost = connection.hosts.find(candidate => candidate.self && candidate.id === host);

@@ -9,6 +9,7 @@ export function workspaceHeadingLabel(tab: number): string {
 export const WORKSPACE_ACTION_LABELS = {
   roadmap: "Open roadmap",
   trace: "Open event trace",
+  newAgent: "New agent",
   newChat: "Create new chat",
   settings: "Open settings",
 };

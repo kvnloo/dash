@@ -68,6 +68,8 @@ function sessionAgents(hosts: HostInfo[]) {
 export function resumableWithoutRoster(c: Pick<Conversation, "harness" | "sessionId" | "targetHostId" | "profileId" | "stale" | "viewOnly">, hosts: readonly HostInfo[], routes: readonly string[] = []): boolean {
   if (!c.sessionId?.trim() || c.viewOnly || c.profileId?.startsWith("omp:")) return false;
   const self = hosts.some(host => host.self && host.id === c.targetHostId);
+  // A Cursor cloud agent chat resumes by agent id; the roster lists only recent agents.
+  if (c.harness === "cursor-cloud") return self && c.profileId === `cursor-cloud:${c.sessionId}`;
   if (!isCatalogHarness(c.harness)) return self && c.profileId === `harness:${c.harness}`;
   return self || (c.targetHostId !== undefined && routes.includes(c.targetHostId));
 }
