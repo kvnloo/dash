@@ -73,6 +73,7 @@ The status counts were taken at the commit this map was written on. Maintain the
 ### Composer
 
 - [Composer: type and Send](./composer-send.md): COVERED
+- [Composer rim motion](./composer-aura.md): COVERED
 - [Stop a running turn](./stop.md): COVERED
 - [Queue and the queued stack](./queue.md): COVERED
 - [Steer a running Hermes turn](./steer.md): COVERED
