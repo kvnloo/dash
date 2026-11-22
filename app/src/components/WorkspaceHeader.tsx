@@ -59,8 +59,10 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
   header: { flexDirection: "row", alignItems: "center", minHeight: WORKSPACE_HEADER_HEIGHT, paddingVertical: 4, paddingLeft: 16, paddingRight: 8, gap: 2 },
   title: { ...type.title, color: colors.text, flex: 1 },
-  approvals: { minHeight: 44, paddingHorizontal: 8, justifyContent: "center" },
-  approvalsRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  // Tight on purpose: with approvals pending, dogfood on and the New agent button, the row must
+  // still fit a 390 px phone without pushing the page wider than the screen.
+  approvals: { minHeight: 44, paddingHorizontal: 4, justifyContent: "center" },
+  approvalsRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   approvalsLabel: { fontFamily: fonts.semibold, fontSize: 15, color: colors.textMuted },
   badge: { minWidth: 18, minHeight: 18, borderRadius: 9, paddingHorizontal: 5, paddingVertical: 2, backgroundColor: colors.gold, alignItems: "center", justifyContent: "center" },
   badgeText: { fontFamily: fonts.semibold, fontSize: 11, lineHeight: 14, color: colors.bg, fontVariant: ["tabular-nums"] },
