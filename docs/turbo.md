@@ -22,3 +22,30 @@ Install with `scripts/turbo/studio/install-studio.sh` (reversible: `--uninstall`
 - `turbo-new <name>` makes an agent worktree; `turbo-promote <wt> "<note>"` gates it (no native files, `tsc -p app`, `tsc -p bridge`, bridge tests when touched, a throwaway Metro builds the Android bundle) and only then fast-forwards the preview, stamps `build-info.json` and re-checks :8098 (rolling back if it does not build). Every attempt lands in `~/.local/state/dash/preview-history.jsonl`; `preview.json` is the current good preview.
 - `turbo-status` shows both Metros; `turbo-off` / `turbo-on` stop and restart the preview Metro and block promotions. None of them touch :8097 or the bridge.
 - Phone: `exp+dash://expo-development-client/?url=http%3A%2F%2F100.100.77.46%3A8098` (preview) or `…8097` (stable).
+
+### Speak and mark a change request
+
+1. On the preview build, pair with the bridge that owns the Studio Claude Code session and has
+   the reviewed z0live voice grant. Open the intended attached Claude session in the
+   `dash-turbo` workspace so Dash knows its session ID. If there is more than one matching
+   session, the selected chat disambiguates. Also open an attached Hermes conversation on
+   this bridge once: z0live bootstrap currently requires a Hermes profile/session. In Turbo
+   it is only the authorized transcription carrier; it never receives a work request.
+2. Go to the screen you want changed. End any existing call. Long-press the served-build
+   chip and choose **New Turbo request**. Speak after the tray says **Live mic** and use the
+   S Pen (or finger) to mark the screen. Check that the tray counts the spoken segment before
+   tapping **Send Turbo request**. If live voice is unavailable, use **Hold to talk** (requires
+   bridge STT) or type a note.
+3. With ink, one turn goes to the pinned Claude session with the marked screenshot and
+   strokes JSON attached. Without ink, the spoken/typed request is sent as text. The tray
+   stays put on capture or delivery failure. The agent should open the attached PNG before
+   deciding what to change; use the JSON for stroke coordinates and the timed transcript.
+4. After promotion, watch the served-build chip and long-press to see **Now testing**
+   (the *running* SHA, not an update that is only available). The preview remembers the
+   current workspace tab and safe route across JS reloads. It does not restore an active
+   microphone, pairing fields, or ephemeral inline artifact content.
+
+The local phone/bridge error watcher already lives in
+[`scripts/logwatch`](../scripts/logwatch/README.md). Install it separately on the Studio if
+needed; it files local triage tasks, without sending those tasks to the agent or triggering
+promotions.

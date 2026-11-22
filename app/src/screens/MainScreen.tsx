@@ -33,6 +33,7 @@ import {
 } from "../lib/global-search";
 import { FEEDBACK_CONVERSATION_ID, inAppFeedbackEnabled, type FeedbackAction } from "../lib/feedback";
 import { submitInAppFeedback } from "../lib/feedback-submit";
+import { noteTurboTab } from "../lib/turbo-navigation";
 import { DEFAULT_MAIN_TAB } from "../lib/home";
 import { composerTrigger } from "../lib/composer-suggestions";
 import type { AgentTarget } from "../mock/agents";
@@ -155,13 +156,13 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const blurTarget = useRef<View>(null);
   const pagerRef = useRef<MainPagerRef>(null);
   const navRef = useRef<AppNavHandle>(null);
-  const pagerProgress = useSharedValue(DEFAULT_MAIN_TAB);
+  const pagerProgress = useSharedValue(route.params?.tab ?? DEFAULT_MAIN_TAB);
   const routeTab = route.params?.tab;
 
   const debugSearch = debugUi.use((s) => s.mainSearchQuery);
   const debugTab = debugUi.use((s) => s.mainTabIndex);
   const [localQuery, setLocalQuery] = useState("");
-  const [localTab, setLocalTab] = useState(DEFAULT_MAIN_TAB);
+  const [localTab, setLocalTab] = useState(routeTab ?? DEFAULT_MAIN_TAB);
   const query = debugSearch !== null ? debugSearch : localQuery;
   const index = debugTab !== null ? debugTab : localTab;
 
@@ -180,6 +181,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const setIndex = useCallback(
     (next: number) => {
       setLocalTab(next);
+      noteTurboTab(next);
       if (isDebugActive()) debugUi.set((s) => ({ ...s, mainTabIndex: next }));
     },
     [],

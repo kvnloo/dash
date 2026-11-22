@@ -38,6 +38,8 @@ export interface VoiceIO {
   transcript(id: string, text: string, start: number, end: number): void;
   cursor?: { read(): Promise<number | null>; write(value: number): Promise<void> };
   holdIntent?(): boolean;
+  /** A Turbo request uses the broker for transcription, not Hermes execution. */
+  transcriptionOnly?: boolean;
   /** The queued final turn has finished Realtime audio output, not merely been accepted. */
   finalDrained?(turnId: string): void;
   /** Injected in tests; on device this uses the actual Dash conversation store. */
@@ -150,22 +152,24 @@ export class ContinuousVoice {
     try {
       const typedTurns = this.io.typedTurns ?? lazyAppStore();
       if (!this.live(generation)) return;
-      this.watchTyped(typedTurns, target, generation);
+      if (!this.io.transcriptionOnly) this.watchTyped(typedTurns, target, generation);
       const mint = await this.io.request("/v1/realtime/session", { client: "dash", transports: ["realtime"], model: REALTIME_VOICE_MODEL.preferred, fallback_model: REALTIME_VOICE_MODEL.fallback, context: { app: "app.dash.mobile", hermes_target: { profile: target.brokerProfile ?? target.profile, session: target.session } }, tools: [] });
       if (!object(mint) || typeof mint.session_id !== "string" || typeof mint.value !== "string" || mint.transport !== "realtime") throw new Error("Unsupported voice session; no transport/model fallback was attempted.");
       const sid = mint.session_id;
       if (!this.live(generation)) { await this.io.request(`/v1/sessions/${encodeURIComponent(sid)}/end`, {}); return; }
       this.sid = sid;
-      const saved = await this.io.cursor?.read();
-      if (typeof saved === "number" && Number.isSafeInteger(saved) && saved >= 0) this.cursor = saved;
-      // Skip existing inbox pages at start. Never turn a historical backlog into speech.
-      let page: unknown;
-      do {
-        page = await this.io.request(`/v1/inbox?after=${this.cursor}`);
-        if (!object(page) || !Number.isInteger(page.after) || typeof page.after !== "number") throw new Error("Invalid voice inbox");
-        this.cursor = page.after;
-      } while (object(page) && page.has_more === true && this.live(generation));
-      await this.io.cursor?.write(this.cursor);
+      if (!this.io.transcriptionOnly) {
+        const saved = await this.io.cursor?.read();
+        if (typeof saved === "number" && Number.isSafeInteger(saved) && saved >= 0) this.cursor = saved;
+        // Skip existing inbox pages at start. Never turn a historical backlog into speech.
+        let page: unknown;
+        do {
+          page = await this.io.request(`/v1/inbox?after=${this.cursor}`);
+          if (!object(page) || !Number.isInteger(page.after) || typeof page.after !== "number") throw new Error("Invalid voice inbox");
+          this.cursor = page.after;
+        } while (object(page) && page.has_more === true && this.live(generation));
+        await this.io.cursor?.write(this.cursor);
+      }
       if (!this.live(generation)) return;
       const acquiring = this.io.peer(raw => { if (this.live(generation)) void this.event(raw, generation).catch(error => {
         if (this.live(generation)) void this.stop(error instanceof VoiceAskFailed
@@ -192,7 +196,7 @@ export class ContinuousVoice {
       if (typeof answer !== "string" || !answer.startsWith("v=0")) throw new Error("Invalid WebRTC answer");
       await peer.answer(answer);
       if (!this.live(generation)) return;
-      this.timer = setInterval(() => void this.poll(generation), 1000);
+      if (!this.io.transcriptionOnly) this.timer = setInterval(() => void this.poll(generation), 1000);
     } catch (error) { if (this.live(generation)) await this.stop(error instanceof VoiceAccessDenied ? error.message : "Voice unavailable. Check the reviewed voice grant, bridge/broker deployment, native microphone permission and Tailscale. Tap Start to retry."); }
     })();
     await Promise.race([connecting, deadline]);
@@ -280,9 +284,9 @@ export class ContinuousVoice {
       this.io.caption?.("user", text, true);
       this.update({ phase: "thinking", lines: this.line("user", text) });
       this.io.transcript(typeof event.item_id === "string" ? event.item_id : `voice-${Date.now()}`, text, this.spokenAt, Date.now());
-      this.transcriptObservation("user_transcript", text, { event_id: id });
+      if (!this.io.transcriptionOnly) this.transcriptObservation("user_transcript", text, { event_id: id });
       if (!this.live(generation)) return;
-      if (this.io.holdIntent?.()) { this.update({ phase: "listening", delivery: "draft", note: "Spoken intent kept with the annotation. Send when ready." }); this.floor("quiet"); return; }
+      if (this.io.transcriptionOnly || this.io.holdIntent?.()) { this.update({ phase: "listening", delivery: "draft", note: "Spoken intent kept with the annotation. Send when ready." }); this.floor("quiet"); return; }
       if (/\b(never mind|cancel that)\b/i.test(text)) { await this.io.request("/v1/tools/cancel_work", { session_id: this.sid, arguments: {} }); this.update({ phase: "listening" }); return; }
       // This voice is an attached Hermes conversation, not a second fake chat.
       // Every real utterance is dispatched once through Luna; only the final inbox result speaks.
@@ -318,7 +322,7 @@ export class ContinuousVoice {
         this.transcriptObservation("assistant_transcript", event.transcript);
       }
     }
-    if (event.type === "response.function_call_arguments.done" && typeof event.name === "string" && typeof event.call_id === "string") {
+    if (!this.io.transcriptionOnly && event.type === "response.function_call_arguments.done" && typeof event.name === "string" && typeof event.call_id === "string") {
       this.toolPending++;
       try {
         const args: unknown = JSON.parse(typeof event.arguments === "string" ? event.arguments : "{}");
@@ -409,7 +413,7 @@ export class ContinuousVoice {
     }
     this.io.captureReleased?.();
     if (sid) {
-      if (options.cancelWork !== false) {
+      if (!this.io.transcriptionOnly && options.cancelWork !== false) {
         try { await this.io.request("/v1/tools/cancel_work", { session_id: sid, arguments: {} }); } catch { /* Not confirmed. Never claim worker cancellation. */ }
       }
       try { await this.io.request(`/v1/sessions/${encodeURIComponent(sid)}/end`, {}); } catch { /* Broker idle expiry is independent. */ }

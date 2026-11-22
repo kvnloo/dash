@@ -12,7 +12,7 @@ import { annotationReceipt } from "./voice-annotation-receipt";
 export async function sendVoiceAnnotation(conversation: Conversation, text: string, attachments: ChatAttachment[], final: (id: string, text: string) => void, mode: "steer" | "queue" = "queue", submitted?: (id: string) => void): Promise<void> {
   const pending = annotate.get().pendingTurn;
   const draft = annotate.get();
-  const fingerprint = JSON.stringify([draft.drawing.strokes, draft.segments]);
+  const fingerprint = JSON.stringify([draft.drawing.strokes, draft.segments, draft.typed]);
   if (pending && pending.conversationId !== conversation.id) throw new Error("An annotation is awaiting its original conversation receipt. Check it before sending elsewhere.");
   if (pending && pending.fingerprint !== fingerprint) throw new Error("The drawing changed while the original delivery was unconfirmed. Both are kept; check the original conversation before sending again.");
   let turnId = pending?.id;

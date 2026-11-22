@@ -123,6 +123,15 @@ if (process.env.ARMY_CHAT_TASK === '1') {
    ['user', 'Thanks!'], ['assistant', 'Happy to help.'],
   ] });
 }
+if (process.env.ARMY_TURBO_CLAUDE === '1') {
+ const { mkdirSync } = await import('node:fs');
+ const { join } = await import('node:path');
+ const cwd = join(process.env.DASH_CWD || '', 'dash-turbo');
+ mkdirSync(cwd, { recursive: true });
+ const installId = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+ await seedAgentsview({ id: '11111111-2222-4333-8444-555555555557', machine: installId, installId,
+  title: 'ARMY dash-turbo Claude', cwd, transcript: [['user', 'ARMY dash-turbo Claude']] });
+}
 if(process.env.ARMY_ARCHIVE_CLAUDE==='1'){
  const installId='a1b2c3d4e5f60718293a4b5c6d7e8f90';
  await seedAgentsview({id:'11111111-2222-4333-8444-555555555555',machine:installId,installId,title:'ARMY archived Claude Code chat',cwd:process.env.DASH_CWD||'',transcript:[['user','ARMY archived Claude Code chat'],['assistant','ARMY older model answer'],['user','ARMY next question'],['assistant','ARMY earlier answer from '+installId],['user','ARMY pending follow-up']]});

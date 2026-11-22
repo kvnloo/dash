@@ -85,6 +85,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const fixture = debugUi.use(s => s.voiceStateFixture ?? null);
   const start = async (opts?: { auto?: boolean }) => {
     const automatic = opts?.auto === true;
+    const turboCapture = automatic ? annotate.get().turboTarget : undefined;
     if (starting.current) return;
     if (call.current && !["idle", "error"].includes(call.current.state.phase)) return;
     starting.current = true;
@@ -151,7 +152,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const releaseWhenStopped = micRelease.current.hold(release);
     releaseMic.current = releaseWhenStopped;
     call.current = null;
-    attached.current = conversation;
+    attached.current = turboCapture ? null : conversation;
     const generation = ++epoch.current;
     setBindingGeneration(generation);
     // Frozen for the call: navigating/switching chats never retargets spoken requests.
@@ -221,6 +222,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
         setState(next);
       },
         captureReleased: () => { releaseWhenStopped(); if (releaseMic.current === releaseWhenStopped) releaseMic.current = undefined; },
+        transcriptionOnly: turboCapture !== undefined,
         holdIntent: () => annotate.get().active,
         finalDrained: turnId => {
           if (!pendingFinals.current.delete(turnId)) return;
@@ -234,7 +236,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
           else voiceCaption.set({ role, text, final });
         },
         cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
-        transcript: (id, text, start, end) => { if (annotate.get().active) addSegment({ id, text, start, end, source: "voice" }); } });
+        transcript: (id, text, start, end) => { if (annotate.get().active && annotate.get().turboTarget === turboCapture) addSegment({ id, text, start, end, source: "voice" }); } });
       call.current = controller;
       // A Mute tap during authenticated bootstrap must also apply when the native peer arrives.
       const connecting = controller.start({ ...target, brokerProfile: bootstrap.canonicalProfile });
