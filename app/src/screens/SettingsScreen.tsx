@@ -1,3 +1,5 @@
+import { wallpaperAvailable } from "../lib/wallpaper-window";
+import { appearanceTheme, setAppearanceTheme } from "../store/appearance";
 import { ModelsPanel } from "../components/ModelsPanel";
 import { DensityPicker } from "../components/Density";
 import { InformationDensityPicker } from "../components/InformationDensityPicker";
@@ -208,6 +210,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             <InformationDensityPicker />
           </GlassSurface>
           <Text style={styles.help}>Layout sets spacing and tile size. Detail sets how much evidence each tile shows. Each dial changes only its own axis; Auto detail follows the layout.</Text>
+          {wallpaperAvailable ? <WallpaperThemePicker /> : null}
+
           <Text style={styles.label}>Bridge</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field
@@ -338,6 +342,24 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
       </KeyboardAvoidingView>
     </View>
   );
+}
+
+function WallpaperThemePicker() {
+  const selected = appearanceTheme.use(theme => theme === "wallpaper");
+  return <>
+    <Text style={styles.label}>Appearance</Text>
+    <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+      <Pressable accessibilityRole="switch" accessibilityLabel="Wallpaper glass" accessibilityState={{ checked: selected }}
+        onPress={() => setAppearanceTheme(selected ? "night" : "wallpaper")}
+        style={({ pressed }) => [styles.harnessRow, pressed && styles.pressed]}>
+        <Text style={styles.harnessName}>Wallpaper glass</Text>
+        <Text style={styles.statusText}>{selected ? "On" : "Off"}</Text>
+      </Pressable>
+    </GlassSurface>
+    <Text style={styles.help}>{Platform.OS === "web"
+      ? "Web preview uses a sample backdrop. On supported Android builds, this shows your system wallpaper behind chats."
+      : "Show your system wallpaper behind chats with a dark tint to keep text readable."}</Text>
+  </>;
 }
 
 function Field({

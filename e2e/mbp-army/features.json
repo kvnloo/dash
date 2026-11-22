@@ -372,6 +372,8 @@
      "tests": ["attached composer pops up the last exchange on demand and opens the chat from it"]},
     {"id": "interactive-prototypes", "title": "Open hosted and generated HTML prototypes in Dash and use their controls",
      "tests": ["opens a hosted prototype link and uses its control in Dash", "runs generated HTML controls only in the explicit prototype stage"]},
+    {"id": "wallpaper-glass", "title": "Wallpaper glass tints a visible backdrop behind chats and remembers the choice",
+     "tests": ["Wallpaper glass stays selected and reveals the backdrop behind a usable chat"]},
     {"id": "perf-no-accumulation", "title": "Measured perf gates (A29): Orchestra view switches do not slow down or accumulate heap/DOM/listeners (#530); prompt rail scrub never freezes a frame (#522)",
      "tests": ["perf: 40 Orchestra view switches do not slow down or accumulate heap, DOM nodes or listeners (#530)",
                "perf: prompt rail scrub over a 1000-message chat never freezes a frame (#522)"]}

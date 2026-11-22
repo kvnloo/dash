@@ -1,3 +1,4 @@
+import { useWallpaperGlass } from "../components/WallpaperTheme";
 import { useIsFocused } from "@react-navigation/native";
 import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
@@ -150,6 +151,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     return () => { for (const type of events) element.removeEventListener(type, mark, { capture: true }); };
   }, [setFollow]);
   const focused = useIsFocused();
+  const wallpaper = useWallpaperGlass();
   const [appActive, setAppActive] = useState(AppState.currentState === "active");
   const [viewedMessageIds, setViewedMessageIds] = useState<ReadonlySet<string>>(() => new Set());
   const onViewableMessages = useCallback(({ viewableItems }: { viewableItems: ViewToken<Message>[] }) => {
@@ -603,7 +605,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Keep them still in the chat; ShimmerText (Skia) still shows live activity.
   return (
     <OrbActivity active={false}>
-    <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
+    <Animated.View style={[styles.screen, wallpaper && { backgroundColor: "transparent" }, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}>{wallpaper ? null : <Canvas />}
       {windowed ? <>
         <WindowPill geometry={pill} title={conversation?.title || harnessName}
           status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
