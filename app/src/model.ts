@@ -70,6 +70,7 @@ export interface UserMessage {
 }
 
 export interface AssistantMessage {
+  agentPost?: true;
   delivery?: "steered" | "queued" | "started";
   summaries?: SummaryInfo[];
   id: string;

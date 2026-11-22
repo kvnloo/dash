@@ -1,3 +1,5 @@
+import { chatPosts } from "../store/chat-posts";
+import { conversationKey } from "../lib/chat-index";
 import { useIsFocused } from "@react-navigation/native";
 import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
@@ -6,8 +8,11 @@ import { replyObservationKey } from "../lib/next-action";
 import { useHandedness } from "../lib/useHandedness";
 import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
-import { setThinkingSummaries, setConversationModel } from "../store/app";
+import { openChat, setThinkingSummaries, setConversationModel } from "../store/app";
 import { useComposerStreamRate } from "../hooks/useComposerStreamRate";
+import { useHostModelRoles } from "../hooks/useHostModelRoles";
+import { modelChoices, sessionRoutes } from "../lib/chat-routes";
+import { chatIndexStore, DEFAULT_QUERY, summaryByKey } from "../store/chat-index-store";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef, type ViewToken } from "@shopify/flash-list";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -36,7 +41,7 @@ import { isDebugActive } from "../debug/expose";
 import { debugUi } from "../debug/ui-store";
 import { haptic } from "../haptics";
 import { canSteer, type SendMode } from "../lib/composer-mode";
-import type { ChatAttachment } from "../../../shared/protocol";
+import type { ChatAttachment, ChatSummary } from "../../../shared/protocol";
 import type { AssistantMessage, Message } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge, openLiveSurface, permissionRequests, sendChat, sendLiveTurn } from "../net/bridge";
@@ -180,12 +185,24 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Older pages (scrolled up) live in memory beside the conversation's own newest window.
   const history = useHistoryPages(conversation);
   const older = history.older;
+  const posts = chatPosts.use(items => items);
   const visibleMessages = useMemo(() => {
     const queued = new Set(conversation ? queuedParts(conversation).flatMap(part => [part.user.id, part.assistant.id]) : []);
     const current = messages.filter(message => !queued.has(message.id));
-    if (!older.length) return current;
-    return mergeOlderHistory(current, older);
-  }, [messages, conversation, older]);
+    const transcript = older.length ? mergeOlderHistory(current, older) : current;
+    if (!conversation?.endpointAddress || conversation.endpointAddress !== settings?.address) return transcript;
+    const key = conversationKey(conversation);
+    const targeted = posts.filter(post => post.endpoint === conversation.endpointAddress && post.chat === key);
+    if (!targeted.length) return transcript;
+    const display = [...transcript];
+    // Insert against the visible timeline, without reordering existing native rows.
+    for (const post of targeted) {
+      const after = display.findLastIndex(row => row.at <= post.postedAt);
+      const id = "chat-post:" + post.id;
+      display.splice(after + 1, 0, { id, turnId: id, seq: 0, at: post.postedAt, role: "assistant", state: "done", text: post.body, agentPost: true });
+    }
+    return display;
+  }, [messages, conversation, older, posts, settings?.address]);
   const visibleRows = useRef(visibleMessages);
   useLayoutEffect(() => { visibleRows.current = visibleMessages; }, [visibleMessages]);
   // A view-only chat is transient: closing it drops it from the phone.
@@ -477,6 +494,28 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     // Never a default name: unknown unless the host reported it for this exact session.
     ...hostIdentity(hostReading ?? undefined, conversation?.sessionId, observedAt),
   }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, conversation?.sessionModel, connection.hosts, connection.host, selfHost?.id, selfHost?.name, harnessName, hostReading, observedAt]);
+  // The badge's tree: other chats to warp to (any host this pairing reaches) and models for the next turn.
+  const allConversations = store.use(s => s.conversations);
+  const indexList = chatIndexStore.use(s => s.lists[DEFAULT_QUERY]?.list);
+  const routes = useMemo(() => treeOpen ? sessionRoutes({
+    conversations: allConversations, currentId: conversation?.id, address: settings?.address, hosts: connection.hosts, harnesses: connection.harnesses,
+    summaries: indexList ? [...indexList.head, ...indexList.rows.filter((row): row is ChatSummary => row !== null)] : [],
+  }) : [], [treeOpen, allConversations, conversation?.id, settings?.address, connection.hosts, connection.harnesses, indexList]);
+  const hostRoles = useHostModelRoles(settings, windowed && treeOpen);
+  const models = useMemo(() => modelChoices({ reported: identity.model, requested: conversation?.modelOverride, roles: hostRoles }), [identity.model, conversation?.modelOverride, hostRoles]);
+  // The bridge applies a model only over ACP: a Hermes chat already attached to a gateway session on this
+  // host refuses overrides, so the badge says so instead of offering a choice that would fail the turn.
+  const modelSwitchable = !(harnessId === "hermes" && conversation?.sessionId && (!conversation.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)));
+  const warp = useCallback((id: string) => {
+    if (id === conversation?.id) return;
+    // A host-index row becomes a phone chat only now, exactly as opening it from Chats does.
+    const summary = id.startsWith("remote:") ? summaryByKey(id.slice(7)) : undefined;
+    if (summary) openChat(summary); else setActive(id);
+    // The window now shows the other chat; its badge starts closed.
+    setTreeOpen(false);
+    // A route draft seeded the chat it was opened for, not the one the owner warped to.
+    if (route.params?.draft !== undefined) navigation.setParams({ draft: undefined });
+  }, [conversation?.id, navigation, route.params?.draft]);
   const queuedCount = conversation ? queuedParts(conversation).length : 0;
   const detailMode = conversation?.detailMode ?? "Compact";
   const menuRows = useMemo((): ComposerMenuRow[] => {
@@ -491,6 +530,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       inspect: index => { const mode = DETAIL_MODES[index]; if (mode) setDetailMode((conversation ?? createConversation(harnessId)).id, mode); },
     });
     if (conversation) rows.push({ id: "summaries", label: "Thinking summaries", value: conversation.summariesEnabled ? "On · next turn" : "Off", run: () => setThinkingSummaries(conversation.id, !conversation.summariesEnabled) });
+    // The context window, by name: the same grid card the composer gauge opens on a tap.
+    const reading = context.snapshot?.maximum ? `~${Math.round(Math.min(1, context.snapshot.used / context.snapshot.maximum) * 100)}%` : "Unknown";
+    rows.push({ id: "context", label: "Context", value: `${reading} · grid`, run: () => { if (!context.open) context.toggle(); } });
     rows.push({ id: "annotate", label: "Annotate", value: "S Pen or finger", run: () => enterAnnotation() });
     if (approvalCount > 0) rows.push({ id: "approvals", label: "Approvals", value: `${approvalCount} pending${approvalDryRun ? " · preview" : ""} ›`, run: () => navigation.navigate("Approvals") });
     rows.push({
@@ -499,7 +541,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       options: connection.harnesses.filter(h => h.available).map(h => ({ id: h.id, label: h.name, selected: h.id === harnessId, run: () => onSelectHarness(h.id) })),
     });
     return rows;
-  }, [harnessId, conversation, liveOn, toggleLive, detailMode, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible, connection.harnesses, onSelectHarness]);
+  }, [harnessId, conversation, liveOn, toggleLive, detailMode, context, approvalCount, approvalDryRun, navigation, harnessName, setPickerVisible, connection.harnesses, onSelectHarness]);
 
   const dockBody = <>
     <WorkersStrip workers={workers} />
@@ -596,7 +638,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Keep them still in the chat; ShimmerText (Skia) still shows live activity.
   return (
     <OrbActivity active={false}>
-    <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
+    <Animated.View style={[styles.screen, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} aria-busy={windowed && morph.settling} testID={windowed ? "chat-window" : undefined}><Canvas />
       {windowed ? <>
         <WindowPill geometry={pill} title={conversation?.title || harnessName}
           status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}
@@ -686,6 +728,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onAnnotate={enterAnnotation}
           treeOpen={treeOpen}
           onTree={setTreeOpen}
+          requestedModel={conversation?.modelOverride}
+          models={models}
+          onModel={modelSwitchable ? model => setConversationModel((conversation ?? createConversation(harnessId)).id, model) : undefined}
+          routes={routes}
+          onWarp={warp}
           onClose={closeWindow}
           notice={targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text>
             : conversation?.openIn ? <Text accessibilityRole="text" style={styles.handoffNote}>{sessionViewerLabel(conversation.openIn, conversation.targetHostId, connection)}</Text> : null}

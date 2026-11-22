@@ -3,6 +3,10 @@ import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, controlMin, glass, radius, space, type } from "../theme";
 import { METRO_ENDPOINTS, liveChipLabel, originPort, shortSha } from "../lib/live-update";
+import { annotate, enterAnnotation } from "../store/annotate";
+import { store } from "../store/app";
+import { voicePhase } from "../lib/voice-phase";
+import { findTurboTarget, turboRequests } from "../lib/turbo-request";
 import { useLiveUpdate } from "../lib/use-live-update";
 import {
   SERVED_BUILD,
@@ -52,8 +56,25 @@ export function ServedBuildChip() {
       ? servedBuildLabel(SERVED_BUILD, now)
       : liveChipLabel(runningWithAge, displayedServed, now, servedAgeLabel);
 
+  const startTurbo = () => {
+    const draft = annotate.get();
+    const state = store.get();
+    const target = findTurboTarget(state.conversations, state.settings?.address, state.activeId);
+    const error = !target ? "Open the intended Claude session in the dash-turbo workspace first." :
+      draft.active || draft.pendingTurn || draft.status === "sending" || draft.status === "capturing" ? "Finish the current annotation first." :
+      (draft.drawing.strokes.length || draft.typed.trim() || draft.segments.length) && draft.turboTarget !== target.id
+        ? "Finish the previous annotation draft before changing its destination." :
+      !["idle", "error"].includes(voicePhase.get()) ? "End the current voice call first." : null;
+    if (error || !target) {
+      if (Platform.OS === "web") window.alert(error ?? "No Turbo session.");
+      else Alert.alert("Turbo request", error ?? "No Turbo session.");
+      return;
+    }
+    enterAnnotation(target.id);
+  };
+
   const openMenu = () => {
-    if (Platform.OS === "web") {
+    if (Platform.OS === "web" || turboRequests) {
       setServersOpen(false);
       setMenuOpen(true);
       return;
@@ -97,12 +118,13 @@ export function ServedBuildChip() {
           "Served bundle " + (live.running?.sha ?? SERVED_BUILD.sha ?? "unknown SHA") + ", " +
           servedAgeLabel(runningWithAge?.builtAtMs ?? SERVED_BUILD.servedAtMs, now) + "." +
           (failed ? " " + shortSha(live.served) + " failed to build (" + failureReason + "). Reload disabled." :
-            update ? " Newer build " + shortSha(live.served) + " is served." + (heldBy ? " Held: " + heldBy + "." : "") + " Tap to reload." : " Tap to hide.")
+            update ? " Newer build " + shortSha(live.served) + " is served." + (heldBy ? " Held: " + heldBy + "." : "") + " Tap to reload." : turboRequests ? " Tap for Turbo requests." : " Tap to hide.")
         }
         accessibilityHint="Long press for reload and server options"
         onPress={() => {
           if (failed) return;
           if (update) live.reloadNow();
+          else if (turboRequests) openMenu();
           else setHiddenFor(key);
         }}
         onLongPress={openMenu}
@@ -112,9 +134,15 @@ export function ServedBuildChip() {
           <Text style={[styles.label, update && styles.labelUpdate, failed && styles.labelFailed]} numberOfLines={1}>{label}</Text>
         </View>
       </Pressable>
-      {Platform.OS === "web" && menuOpen && (
+      {menuOpen && (
         <View testID="live-build-menu" style={styles.webMenu}>
           <Text style={styles.menuHeading}>Live build</Text>
+          {turboRequests && <>
+            <Text testID="turbo-now-testing" style={styles.menuHeading}>Now testing: {(live.running?.sha ?? SERVED_BUILD.sha)?.slice(0, 7) ?? "unknown"}</Text>
+            <Pressable accessibilityRole="button" onPress={() => { setMenuOpen(false); startTurbo(); }} style={styles.menuAction}>
+              <Text style={styles.menuText}>New Turbo request</Text>
+            </Pressable>
+          </>}
           <Pressable accessibilityRole="button" onPress={() => { setMenuOpen(false); live.reloadNow(); }} style={styles.menuAction}>
             <Text style={styles.menuText}>Reload now</Text>
           </Pressable>

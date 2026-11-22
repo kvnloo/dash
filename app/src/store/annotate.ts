@@ -23,6 +23,7 @@ function defaultEngine(): AnnotateEngine {
 export interface AnnotateState {
   annotateEngine: AnnotateEngine;
   active: boolean;
+  turboTarget?: string;
   /** Current S Pen side-button latch, to ignore repeats until release. */
   buttonDown: boolean;
   /** Palm rejection: only the S Pen draws; fingers scroll. Persisted per app run. */
@@ -96,16 +97,18 @@ export function currentSink(): AnnotationSink | undefined {
 }
 
 /** All entry points reset transient feedback; palm rejection needs observed hardware. */
-export function enterAnnotation(): void {
-  annotate.set(s => (s.active ? s : {
-    ...s, active: true, penMode: stylusObserved,
+export function enterAnnotation(turboTarget?: string): void {
+  annotate.set(s => (s.active || (s.turboTarget && s.turboTarget !== turboTarget &&
+    (s.pendingTurn || s.drawing.strokes.length || s.typed.trim() || s.segments.length)) ? s : {
+    ...s, active: true, turboTarget, penMode: stylusObserved,
     status: "idle", error: undefined, voiceNote: undefined, preview: undefined,
   }));
 }
 
 /** Exit closes the overlay, not the draft. Clear is the explicit ink discard. */
 export function exitAnnotation(): void {
-  annotate.set(s => ({ ...s, active: false, recording: false, status: "idle", preview: undefined, error: undefined, voiceNote: undefined }));
+  annotate.set(s => s.turboTarget && (s.status === "capturing" || s.status === "sending") ? s :
+    ({ ...s, active: false, recording: false, status: "idle", preview: undefined, error: undefined, voiceNote: undefined }));
 }
 
 /** The nav pill and hardware button use exactly the same lifecycle as chat entry. */

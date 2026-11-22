@@ -28,7 +28,7 @@ test('host info sheet is compact: provenance inside the sheet, one indent level,
  // The three provenance lines are inside the sheet, below its rows, and are not clipped.
  const footer=page.getByTestId('chat-window-provenance');
  expect(inside(await box(page,footer),s),'provenance footer is inside the sheet').toBe(true);
- for(const line of [/^Lineage/,/^Model (reported|unknown)/,/^Model change unavailable/]){
+ for(const line of [/^Lineage/,/^Model (reported|unknown)/,/^Model change: /]){
   const t=footer.getByText(line);
   await expect(t).toHaveCount(1);
   expect(inside(await box(page,t),s),`${line} is inside the sheet`).toBe(true);

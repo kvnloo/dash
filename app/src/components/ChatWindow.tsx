@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
-import { PixelRatio, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import Animated, { ReduceMotion, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 import { haptic } from "../haptics";
@@ -31,6 +31,7 @@ import { crossfade, fade, morphDuration, snappy } from "../motion";
 import { colors, glass, radius, space, type } from "../theme";
 import { AgentOrb } from "./AgentOrb";
 import { HostStatsRow } from "./HostStatsRow";
+import { validModelId, type ModelChoice, type RouteGroup } from "../lib/chat-routes";
 
 /**
  * Open/close morph for the chat window. The window is laid out at its final size on the first
@@ -185,14 +186,29 @@ function IdRow({ icon, child, caption, id, chars, what, testID }: {
   </SheetRow>;
 }
 
+/** A sheet row's trailing text action (≥ 44 hit) that opens or closes the list under the row. */
+function PaneToggle({ testID, label, text, open, onPress }: { testID: string; label: string; text: string; open: boolean; onPress(): void }) {
+  return <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} onPress={onPress} style={styles.paneToggle}>
+    <Text style={styles.paneToggleText}>{open ? "Done" : text}</Text>
+  </Pressable>;
+}
+
 /**
  * The composer grown into the window's attached rectangle: badge row + the identity sheet (flat
  * rows, provenance footer inside it) + whatever the screen already docks (workers, queue, composer).
  * One surface; nothing is repeated up top.
  */
-export function WindowDock({ identity, title, options, onAnnotate, treeOpen, onTree, onClose, notice, children }: {
+export function WindowDock({ identity, title, options, onAnnotate, treeOpen, onTree, onClose, notice, children, requestedModel, models = [], onModel, routes = [], onWarp }: {
   identity: IdentityInput;
   title: string;
+  /** The model this chat asks the host to use from its next turn on (not proof the host applied it). */
+  requestedModel?: string;
+  /** Model ids the badge offers; picking one (or Host default = undefined) only changes the next turn. */
+  models?: ModelChoice[];
+  onModel?(model: string | undefined): void;
+  /** Other chats of this pairing, grouped host › harness › profile; picking one switches this window to it. */
+  routes?: RouteGroup[];
+  onWarp?(conversationId: string): void;
   options: ReactNode;
   onAnnotate(): void;
   treeOpen: boolean;
@@ -210,17 +226,41 @@ export function WindowDock({ identity, title, options, onAnnotate, treeOpen, onT
   // Same estimate for the sheet's mono rows: icon column, side paddings and gaps, plus the copy button on id rows.
   const sheetChars = Math.max(10, Math.floor((width - 2 * space.md - SHEET_ICON - space.sm) / (SHEET_FONT * 0.6 * PixelRatio.getFontScale())));
   const idChars = sheetChars - Math.ceil((CLOSE_HIT + space.sm) / (SHEET_FONT * 0.6 * PixelRatio.getFontScale()));
-  const crumbs = [identity.hostName ?? "host unknown", identity.profile && identity.profile !== identity.harnessName ? identity.profile : undefined, identity.harnessName].filter((c): c is string => Boolean(c));
+  // The trace from where the chat runs down to what answers it: host › harness › profile, then session, then model.
+  const profileCrumb = identity.profile && identity.profile !== identity.harnessName ? identity.profile : undefined;
+  const crumbs = [identity.hostName ?? "host unknown", identity.harnessName, profileCrumb].filter((c): c is string => Boolean(c));
+  const [pane, setPane] = useState<"none" | "models" | "sessions">("none");
+  const [modelDraft, setModelDraft] = useState("");
+  // A closed sheet, or a different session in this window, starts from the plain sheet again.
+  useEffect(() => { if (!treeOpen) setPane("none"); }, [treeOpen]);
+  useEffect(() => { setPane("none"); setModelDraft(""); }, [identity.sessionId, title]);
+  const togglePane = (next: "models" | "sessions") => { haptic.select(); setPane(current => current === next ? "none" : next); };
+  const pickModel = (model: string | undefined) => { haptic.select(); onModel?.(model); setModelDraft(""); setPane("none"); };
+  const typedModel = validModelId(modelDraft);
+  const otherSessions = routes.reduce((n, group) => n + group.sessions.length, 0);
   const modelText = identity.model ? `${identity.provider ? `${identity.provider} · ` : ""}${identity.model}` : MODEL_UNKNOWN;
   const parentFirst = Boolean(identity.parentSessionId && !identity.continuedAs);
   const sessionTitle = <View style={styles.sheetTitleLine}><Text style={styles.sheetTitle} numberOfLines={1}>{title}</Text><Text style={styles.sheetCurrent}>✓ Current</Text></View>;
   return <View testID="chat-window-dock">
     {treeOpen ? <View testID="chat-window-identity" style={styles.identity}>
-      <SheetRow icon="monitor">
-        <Text testID="chat-window-breadcrumb" style={styles.crumbs} numberOfLines={1} accessibilityLabel={`Host ${crumbs[0]}${crumbs.length > 2 ? `, profile ${crumbs[1]}` : ""}, harness ${identity.harnessName}`}>
+      <SheetRow icon="monitor" trailing={onWarp ? <PaneToggle testID="chat-window-switch-session" text="Switch" open={pane === "sessions"} onPress={() => togglePane("sessions")}
+        label={`Switch session or host. ${otherSessions ? `${otherSessions} other ${otherSessions === 1 ? "session" : "sessions"} on this pairing` : "No other sessions on this pairing"}`} /> : undefined}>
+        <Text testID="chat-window-breadcrumb" style={styles.crumbs} numberOfLines={1} accessibilityLabel={`Host ${crumbs[0]}, harness ${identity.harnessName}${profileCrumb ? `, profile ${profileCrumb}` : ""}`}>
           {crumbs.map((crumb, index) => <Text key={index}>{index > 0 ? <Text style={styles.crumbSep}>{"  ›  "}</Text> : null}{crumb}</Text>)}
         </Text>
       </SheetRow>
+      {pane === "sessions" ? <ScrollView testID="chat-window-sessions" style={styles.choices} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+        {!otherSessions ? <Text style={styles.groupLabel}>No other sessions on this pairing</Text> : null}
+        {routes.map(group => <View key={group.key} testID="chat-window-route-group">
+          <Text style={styles.groupLabel} numberOfLines={1}>{[group.host, group.harness, group.profile].filter(Boolean).join("  ›  ")}</Text>
+          {group.sessions.map(route => <Pressable key={route.id} testID={`chat-window-warp-${route.id}`} accessibilityRole="button"
+            accessibilityLabel={`Switch to ${route.title}, host ${group.host}, harness ${group.harness}${group.profile ? `, profile ${group.profile}` : ""}${route.sessionId ? `, session ${route.sessionId}` : ""}${route.viewOnly ? ", view only" : ""}`}
+            onPress={() => { haptic.select(); setPane("none"); onWarp?.(route.id); }} style={styles.choice}>
+            <Text style={styles.choiceText} numberOfLines={1}>{route.title}</Text>
+            {route.sessionId ? <Text style={styles.choiceMeta} numberOfLines={1}>{route.viewOnly ? "view only · " : ""}{sessionIdLabel(route.sessionId, 12)}</Text> : null}
+          </Pressable>)}
+        </View>)}
+      </ScrollView> : null}
       <HostStatsRow key={identity.hostId} hostId={identity.hostId} compact />
       {parentFirst && identity.parentSessionId ? <IdRow icon="corner-up-left" caption={<Text style={styles.sheetCaption}>Parent session · reported by host</Text>}
         id={identity.parentSessionId} chars={idChars} what="parent session id" testID="chat-window-parent-id" /> : null}
@@ -229,13 +269,34 @@ export function WindowDock({ identity, title, options, onAnnotate, treeOpen, onT
         : <SheetRow icon="message-circle" child={parentFirst}>{sessionTitle}<Text testID="chat-window-session-id" style={styles.sheetId}>session not attached yet</Text></SheetRow>}
       {identity.continuedAs ? <IdRow icon="corner-down-right" child caption={<Text style={styles.sheetCaption}>Continued as</Text>}
         id={identity.continuedAs} chars={idChars} what="continuation session id" testID="chat-window-continued-id" /> : null}
-      <SheetRow icon="cpu">
-        <Text testID="chat-window-model" style={[styles.sheetMono, !identity.model && styles.badgeUnknown]} numberOfLines={1} accessibilityLabel={`Model ${modelText}`}>{middleTruncate(modelText, sheetChars - 1)}</Text>
+      <SheetRow icon="cpu" trailing={onModel ? <PaneToggle testID="chat-window-change-model" label="Change model for the next turn" text="Change" open={pane === "models"} onPress={() => togglePane("models")} /> : undefined}>
+        <Text testID="chat-window-model" style={[styles.sheetMono, !identity.model && styles.badgeUnknown]} numberOfLines={1} accessibilityLabel={`Model ${modelText}`}>{middleTruncate(modelText, sheetChars - 8)}</Text>
+        {requestedModel ? <Text testID="chat-window-requested-model" style={styles.sheetCaption} numberOfLines={1} accessibilityLabel={`Next turn requests model ${requestedModel}`}>Next turn · {middleTruncate(requestedModel, sheetChars - 20)}</Text> : null}
       </SheetRow>
+      {pane === "models" ? <ScrollView testID="chat-window-models" style={styles.choices} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+        <Pressable testID="chat-window-model-default" accessibilityRole="button" accessibilityState={{ selected: !requestedModel }} accessibilityLabel={`Use the host default model${!requestedModel ? ", current choice" : ""}`} onPress={() => pickModel(undefined)} style={styles.choice}>
+          <Text style={[styles.choiceText, !requestedModel && styles.choiceOn]} numberOfLines={1}>{!requestedModel ? "✓ " : ""}Host default</Text>
+          <Text style={styles.choiceMeta} numberOfLines={1}>host decides</Text>
+        </Pressable>
+        {models.map(choice => <Pressable key={choice.id} testID={`chat-window-model-choice-${choice.id}`} accessibilityRole="button" accessibilityState={{ selected: requestedModel === choice.id }}
+          accessibilityLabel={`Use model ${choice.id}, ${choice.source}${requestedModel === choice.id ? ", current choice" : ""}`} onPress={() => pickModel(choice.id)} style={styles.choice}>
+          <Text style={[styles.choiceText, requestedModel === choice.id && styles.choiceOn]} numberOfLines={1}>{requestedModel === choice.id ? "✓ " : ""}{choice.id}</Text>
+          <Text style={styles.choiceMeta} numberOfLines={1}>{choice.source}</Text>
+        </Pressable>)}
+        <View style={styles.otherModel}>
+          <TextInput testID="chat-window-model-input" accessibilityLabel="Other model id" placeholder="Other model id" placeholderTextColor={colors.textFaint}
+            value={modelDraft} onChangeText={setModelDraft} autoCapitalize="none" autoCorrect={false} onSubmitEditing={() => { if (typedModel) pickModel(typedModel); }} style={styles.otherInput} />
+          <Pressable testID="chat-window-model-apply" accessibilityRole="button" accessibilityLabel="Use this model id" accessibilityState={{ disabled: !typedModel }} disabled={!typedModel} onPress={() => { if (typedModel) pickModel(typedModel); }} style={styles.paneToggle}>
+            <Text style={[styles.paneToggleText, !typedModel && styles.badgeUnknown]}>Use</Text>
+          </Pressable>
+        </View>
+      </ScrollView> : null}
       <View testID="chat-window-provenance" style={styles.provenance}>
         <Text style={styles.provenanceLine}>{identity.parentSessionId ? "Lineage: parent session reported by host" : identity.model ? "Lineage: no parent session recorded by host" : "Lineage unavailable: host has not reported it"}</Text>
         <Text testID="chat-window-model-source" style={styles.provenanceLine}>{identity.model && identity.observedAt ? `Model reported by host for this session · checked ${clock(identity.observedAt)}` : "Model unknown: host has not reported it for this session"}</Text>
-        <Text style={styles.provenanceLine}>Model change unavailable: no exact-session model route in this build</Text>
+        <Text testID="chat-window-model-change" style={styles.provenanceLine}>{!onModel ? "Model change unavailable for this session: the host switches models only over ACP"
+          : requestedModel ? "Model change: host sets it before the next prompt or fails the turn"
+          : "Model change: Change picks the next turn's model"}</Text>
       </View>
     </View> : null}
     <View testID="chat-window-badge-row" style={[styles.badgeRow, thumb.row]}>
@@ -253,14 +314,14 @@ export function WindowDock({ identity, title, options, onAnnotate, treeOpen, onT
       <Pressable
         testID="chat-window-badge"
         accessibilityRole="button"
-        accessibilityLabel={identityLabel(identity)}
+        accessibilityLabel={identityLabel(identity) + (requestedModel ? ` Next turn requests model ${requestedModel}.` : "")}
         accessibilityState={{ expanded: treeOpen }}
         onPress={() => { haptic.select(); onTree(!treeOpen); }}
         style={styles.badge}
       >
         <View style={styles.badgeLines}>
           <Text style={styles.badgeWho} numberOfLines={1} ellipsizeMode="middle">{lines.who}</Text>
-          <Text style={[styles.badgeModel, !identity.model && styles.badgeUnknown]} numberOfLines={1} ellipsizeMode="middle">{lines.model}</Text>
+          <Text style={[styles.badgeModel, !identity.model && !requestedModel && styles.badgeUnknown]} numberOfLines={1} ellipsizeMode="middle">{requestedModel && requestedModel !== identity.model ? middleTruncate(`→ ${requestedModel}`, budget) : lines.model}</Text>
         </View>
         <Feather name={treeOpen ? "chevron-down" : "chevron-up"} size={14} color={colors.textTertiary} />
       </Pressable>
@@ -302,6 +363,16 @@ const styles = StyleSheet.create({
   provenance: { marginTop: space.xs, paddingTop: space.sm, gap: 2, borderTopWidth: StyleSheet.hairlineWidth, borderColor: glass.hair },
   provenanceLine: { ...type.mono, fontSize: 11, lineHeight: 15, color: colors.textTertiary },
   badgeRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.sm, minHeight: CLOSE_HIT },
+  paneToggle: { minWidth: CLOSE_HIT, minHeight: CLOSE_HIT, marginRight: -space.sm, paddingHorizontal: space.sm, alignItems: "center", justifyContent: "center" },
+  paneToggleText: { ...type.label, color: colors.gold, letterSpacing: 0 },
+  choices: { maxHeight: 220, marginLeft: SHEET_ICON + space.sm },
+  groupLabel: { ...type.mono, fontSize: 11, lineHeight: 15, color: colors.textTertiary, paddingTop: space.xs },
+  choice: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: glass.hair },
+  choiceText: { ...type.small, color: colors.text, flex: 1, minWidth: 0 },
+  choiceOn: { color: colors.gold },
+  choiceMeta: { ...type.mono, fontSize: 11, lineHeight: 15, color: colors.textTertiary, flexShrink: 0, maxWidth: "45%" },
+  otherModel: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 44 },
+  otherInput: { ...type.mono, fontSize: SHEET_FONT, flex: 1, minWidth: 0, minHeight: 40, color: colors.text, paddingHorizontal: space.sm, borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: glass.hair2 },
   annotate: { minHeight: 44, minWidth: ANNOTATE_RESERVE, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, borderRadius: radius.sm },
   annotateText: { ...type.label, color: colors.textMuted, fontSize: 11, letterSpacing: 0 },
   badge: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: space.sm, borderRadius: radius.md },
