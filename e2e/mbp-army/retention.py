@@ -17,11 +17,14 @@ def reserve(base: Path, name: str) -> Path:
         raise ValueError(f"unsafe army run name: {name!r}")
     registry = base / ".run-retention"
     registry.mkdir(exist_ok=True)
+    if registry.is_symlink():
+        raise ValueError("army retention registry must not be a symlink")
     for path in (base / name, base / f"{name}-html", base / f"{name}.log", base / f"{name}.json"):
         if path.exists() or path.is_symlink():
             raise FileExistsError(f"army run already exists: {path}")
     scratch = registry / name / "tmp"
-    scratch.mkdir(parents=True, mode=0o700)
+    scratch.parent.mkdir(mode=0o700)
+    scratch.mkdir(mode=0o700)
     return scratch
 
 

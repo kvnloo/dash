@@ -230,6 +230,7 @@ same suite. Use a unique run name with letters, digits, hyphens or underscores.
 
 Compact JSON results, receipts, telemetry and logs are not pruned. Runs started
 before this policy and interrupted runs without a completion marker are not
-auto-deleted; inspect them before removing their artifacts manually. Run
-`army-stack.sh down <run>` after each drive (even if it fails) to stop its
-web server and remove its separate web export.
+auto-deleted; inspect them before removing their artifacts manually.
+`army-stack.sh drive` automatically stops its own web server and removes its
+export when it exits. Use `army-stack.sh down <run>` if the stack never reached
+`drive` or if the process was killed before cleanup could run.
