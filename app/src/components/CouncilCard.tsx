@@ -10,6 +10,8 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { demoCouncilRun, parseCouncilRunReply, type CouncilRun } from "../../../shared/council-run";
+import type { CouncilPosition, CouncilSession } from "../../../shared/council-session";
+import { councilPositionWriter, councilSessionApi, type CouncilTarget } from "../lib/council-session";
 import { executionToken } from "../lib/bridge-auth";
 import { briefSpeech, councilAt, councilSentences, councilTiming, reportSpeech, type SeatState } from "../lib/council";
 import { haptic } from "../haptics";
@@ -20,21 +22,76 @@ import { AgentOrb } from "./AgentOrb";
 
 const TICK_MS = 110;
 type Source = { run: CouncilRun; live: boolean; from: string; note?: string };
-type Reading = { kind: "brief" | "report"; sentences: string[]; index: number };
+type Reading = { kind: "brief" | "report"; sentences: string[]; index: number; passage?: string };
 
 /** Root-mounted: renders nothing until the live call or a chat opens the council. */
 export function CouncilHost(): React.JSX.Element | null {
   const open = council.use(s => s.open);
   const from = council.use(s => s.from);
   const opened = council.use(s => s.opened);
+  const target = council.use(s => s.target);
   if (!open) return null;
-  return <CouncilPanel key={opened} from={from} />;
+  return <CouncilPicker key={opened} from={from} target={target} />;
 }
 
-function useCouncilSource(): Source | null {
+function CouncilPicker({ from, target }: { from: CouncilOrigin; target?: CouncilTarget }) {
+  const settings = store.use(s => s.settings);
+  const api = useMemo(() => settings && target ? councilSessionApi(settings, target) : undefined, [settings, target]);
+  const [saved, setSaved] = useState<CouncilSession>();
+  const [rows, setRows] = useState<Awaited<ReturnType<NonNullable<typeof api>["list"]>>>();
+  const [problem, setProblem] = useState("");
+  const [loading, setLoading] = useState(false);
+  const active = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (!api) return;
+    const controller = new AbortController();
+    active.current = controller;
+    void api.list(controller.signal).then(
+      list => { if (!controller.signal.aborted) setRows(list); },
+      error => { if (!controller.signal.aborted) setProblem(error instanceof Error ? error.message : "Could not list saved councils."); },
+    );
+    return () => controller.abort();
+  }, [api]);
+  const load = async (id: string) => {
+    const controller = active.current;
+    if (!api || !controller || loading) return;
+    setLoading(true); setProblem("");
+    try {
+      const record = await api.load(id, controller.signal);
+      if (!controller.signal.aborted) setSaved(record);
+    } catch (error) {
+      if (!controller.signal.aborted) setProblem(error instanceof Error ? error.message : "Could not open this saved council.");
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  };
+  if (saved && api) return <CouncilPanel key={saved.council_id} from={from} saved={saved} api={api} />;
+  return <CouncilPanel from={from} picker={api ? <View style={styles.seats}>
+    <Text accessibilityRole="header" style={styles.micro}>SAVED COUNCILS IN THIS CHAT</Text>
+    {problem ? <Text accessibilityRole="alert" style={styles.small}>{problem}</Text> : null}
+    {!rows && !problem ? <Text style={styles.small}>Looking for saved councils…</Text> : null}
+    {rows?.length === 0 ? <Text style={styles.small}>No saved councils in this chat.</Text> : null}
+    {rows?.map(row => <Pressable key={row.id} testID={row.id} accessibilityRole="button" disabled={loading}
+      onPress={() => void load(row.id)} style={styles.secondary}>
+      <Text style={styles.secondaryText}>{row.live ? "" : "DEMO · "}{row.brief}</Text>
+    </Pressable>)}
+    {loading ? <Text style={styles.small}>Opening saved council…</Text> : null}
+  </View> : undefined} />;
+}
+
+function storedReading(saved: CouncilSession, key: string | null, index: number): Reading | null {
+  const passage = saved.passages.find(p => p.key === key);
+  if (!passage) return null;
+  // Match Glide’s sentence boundaries exactly: sentence indices are on the wire.
+  const sentences = passage.text.match(/[^.!?]+[.!?]+(?:["']|$)?|[^.!?]+$/g)?.map(s => s.trim()).filter(Boolean) ?? [];
+  return { kind: key === "brief" ? "brief" : "report", passage: passage.key, sentences, index };
+}
+
+function useCouncilSource(skip: boolean): Source | null {
   const settings = store.use(s => s.settings);
   const [source, setSource] = useState<Source | null>(null);
   useEffect(() => {
+    if (skip) return;
     let live = true;
     const demo = (note?: string): Source => ({ run: demoCouncilRun(), live: false, from: "synthetic seats and brief", ...(note ? { note } : {}) });
     if (!settings) { setSource(demo("Pair with your computer to read its council.")); return; }
@@ -51,30 +108,37 @@ function useCouncilSource(): Source | null {
       } finally { clearTimeout(timeout); }
     })();
     return () => { live = false; controller.abort(); clearTimeout(timeout); };
-  }, [settings?.address, settings?.token]);
+  }, [settings?.address, settings?.token, skip]);
   return source;
 }
 
-function CouncilPanel({ from }: { from: CouncilOrigin }): React.JSX.Element {
-  const source = useCouncilSource();
+function CouncilPanel({ from, saved, api, picker }: {
+  from: CouncilOrigin; saved?: CouncilSession; api?: ReturnType<typeof councilSessionApi>; picker?: React.ReactNode;
+}): React.JSX.Element {
+  const local = useCouncilSource(Boolean(saved));
+  const source = saved ?? local;
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
   const [now, setNow] = useState(() => Date.now());
-  const [start, setStart] = useState<number | null>(null);
+  const [start, setStart] = useState<number | null>(() => saved ? now - saved.position.elapsed_ms : null);
   // While a reading plays the exchange clock holds, so nothing moves on under the orb.
   const [held, setHeld] = useState<{ elapsed: number; since: number } | null>(null);
-  const [readAloud, setReadAloud] = useState(false);
-  const [muted, setMuted] = useState(false);
+  const [readAloud, setReadAloud] = useState(saved?.position.read_aloud ?? false);
+  const [muted, setMuted] = useState(saved?.position.muted ?? false);
   const [reading, setReading] = useState<Reading | null>(null);
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState<Reading | null>(null);
   const [status, setStatus] = useState("");
   const read = useRef({ brief: false, report: false });
   const generation = useRef(0);
+  const [syncProblem, setSyncProblem] = useState("");
+  const position = useRef<CouncilPosition | undefined>(saved?.position);
+  const [write] = useState(() => saved && api ? councilPositionWriter(api, saved, setSyncProblem) : undefined);
+  const initial = useRef(true);
   const run = source?.run;
-  const timing = useMemo(() => run ? councilTiming(run, reduce) : null, [run, reduce]);
+  const timing = useMemo(() => run ? councilTiming(run, reduce, Boolean(saved)) : null, [run, reduce, saved]);
   const elapsed = start === null ? null : held ? held.elapsed : Math.min(timing?.total ?? 0, now - start);
-  const view = run ? councilAt(run, elapsed, reduce) : null;
+  const view = run ? councilAt(run, elapsed, reduce, Boolean(saved)) : null;
   const playing = start !== null && view?.phase !== "done";
 
   useEffect(() => {
@@ -87,6 +151,14 @@ function CouncilPanel({ from }: { from: CouncilOrigin }): React.JSX.Element {
   const heldRef = useRef<{ elapsed: number; since: number } | null>(null);
   const elapsedRef = useRef(elapsed);
   elapsedRef.current = elapsed;
+  const publish = useCallback((patch: Partial<CouncilPosition> = {}) => {
+    if (!position.current) return;
+    const prior = position.current;
+    const elapsed = reduce ? prior.elapsed_ms : Math.max(prior.elapsed_ms, elapsedRef.current ?? 0);
+    const next = { ...prior, elapsed_ms: Math.round(elapsed), ...patch };
+    position.current = next;
+    void write?.(next);
+  }, [write, reduce]);
   const hold = useCallback(() => {
     if (heldRef.current) return;
     heldRef.current = { elapsed: elapsedRef.current ?? 0, since: Date.now() };
@@ -108,35 +180,64 @@ function CouncilPanel({ from }: { from: CouncilOrigin }): React.JSX.Element {
     setPaused(null);
     hold();
     const sentence = next.sentences[next.index];
-    if (sentence === undefined) { setReading(null); setSpeaking(false); release(); return; }
+    const advancePassage = () => {
+      if (!saved || !next.passage || next.passage === "brief") return false;
+      const at = saved.passages.findIndex(p => p.key === next.passage);
+      const after = storedReading(saved, saved.passages[at + 1]?.key ?? null, 0);
+      if (!after) return false;
+      speakFrom(after);
+      return true;
+    };
+    if (sentence === undefined) {
+      if (!advancePassage()) { setReading(null); setSpeaking(false); release(); }
+      return;
+    }
+    if (next.passage) publish({ passage: next.passage, sentence: next.index });
     setStatus(current => current || "Preparing speech…");
     Speech.speak(sentence, {
       onStart: () => { if (generation.current !== mine) return; setStatus(""); setSpeaking(true); },
       onDone: () => {
         if (generation.current !== mine) return;
-        if (next.index + 1 < next.sentences.length) speakFrom({ ...next, index: next.index + 1 });
-        else { generation.current += 1; setReading(null); setSpeaking(false); release(); }
+        if (next.passage) publish({ passage: next.passage, sentence: Math.min(999, next.index + 1) });
+        if (next.index + 1 < next.sentences.length && (!next.passage || next.index < 999)) speakFrom({ ...next, index: next.index + 1 });
+        else if (!advancePassage()) { generation.current += 1; setReading(null); setSpeaking(false); release(); }
       },
       onError: () => {
         if (generation.current !== mine) return;
         generation.current += 1;
-        setReading(null); setSpeaking(false); setReadAloud(false); release();
+        setReading(null); setSpeaking(false); setReadAloud(false); if (saved) setPaused(next); release();
+        publish({ read_aloud: false });
         setStatus("Read aloud failed on this device. The council stays available as text.");
       },
     });
-  }, [hold, release]);
+  }, [hold, release, saved, publish]);
 
   // Read aloud: the brief once it is written, the report once it is complete.
   useEffect(() => {
-    if (!run || !view || !readAloud || muted || reading || paused) return;
+    if (!run || !view) return;
+    if (saved && initial.current) {
+      initial.current = false;
+      const pos = saved.position;
+      const t = councilTiming(run, false, true);
+      read.current = { brief: pos.passage !== null || pos.elapsed_ms >= t.working, report: pos.passage !== null && pos.passage !== "brief" };
+      const next = storedReading(saved, pos.passage, pos.sentence);
+      if (next) {
+        if (readAloud && !muted) speakFrom(next);
+        else setPaused(next);
+        return;
+      }
+    }
+    if (!readAloud || muted || reading || paused) return;
     if (!read.current.brief && (view.phase === "sending" || (reduce && view.phase === "done"))) {
       read.current.brief = true;
-      speakFrom({ kind: "brief", sentences: councilSentences(briefSpeech(run)), index: 0 });
+      const next = saved ? storedReading(saved, "brief", 0) : { kind: "brief" as const, sentences: councilSentences(briefSpeech(run)), index: 0 };
+      if (next) speakFrom(next);
     } else if (read.current.brief && !read.current.report && view.phase === "done") {
       read.current.report = true;
-      speakFrom({ kind: "report", sentences: councilSentences(reportSpeech(run)), index: 0 });
+      const next = saved ? storedReading(saved, saved.passages[1]?.key ?? null, 0) : { kind: "report" as const, sentences: councilSentences(reportSpeech(run)), index: 0 };
+      if (next) speakFrom(next);
     }
-  }, [run, view?.phase, readAloud, muted, reading, paused, reduce, speakFrom]);
+  }, [run, view?.phase, readAloud, muted, reading, paused, reduce, speakFrom, saved]);
 
   useEffect(() => () => { generation.current += 1; Speech.stop(); }, []);
 
@@ -147,6 +248,7 @@ function CouncilPanel({ from }: { from: CouncilOrigin }): React.JSX.Element {
     if (reading) setPaused(reading);
     setReading(null);
     release();
+    publish();
   };
   const resume = () => { if (paused) { haptic.select(); speakFrom(paused); } };
   const convene = () => {
@@ -157,20 +259,24 @@ function CouncilPanel({ from }: { from: CouncilOrigin }): React.JSX.Element {
     read.current = { brief: false, report: false };
     const t = Date.now();
     setStart(t); setNow(t);
+    publish({ elapsed_ms: 0, passage: null, sentence: 0 });
   };
   const toggleRead = () => {
     haptic.select();
-    if (readAloud) { stopSpeech(); setReading(null); setPaused(null); release(); }
+    if (readAloud) { stopSpeech(); setReading(null); setPaused(saved ? reading ?? paused : null); release(); }
+    else if (saved && paused && !muted) speakFrom(paused);
     // Turning it on after the run finished reads the report now.
     else if (view?.phase === "done") read.current = { brief: true, report: false };
     setReadAloud(!readAloud);
+    publish({ read_aloud: !readAloud });
   };
   const toggleMute = () => {
     haptic.select();
     if (!muted) { stopSpeech(); if (reading) setPaused(reading); setReading(null); release(); }
     setMuted(!muted);
+    publish({ muted: !muted });
   };
-  const close = () => { stopSpeech(); closeCouncil(); };
+  const close = () => { publish(); stopSpeech(); closeCouncil(); };
 
   const orb = Boolean(reading && speaking);
   const caption = reading?.sentences[reading.index] ?? "";
@@ -182,7 +288,8 @@ function CouncilPanel({ from }: { from: CouncilOrigin }): React.JSX.Element {
         <Text testID="council-caption" accessibilityLiveRegion="polite" style={styles.caption} numberOfLines={3}>{caption}</Text>
         <Text style={styles.returnHint}>Tap anywhere to return to the card</Text>
       </Pressable> : <ScrollView testID="council-card" style={styles.card} contentContainerStyle={styles.cardBody} keyboardShouldPersistTaps="handled">
-        {!run || !view ? <Text style={styles.body}>Reading the council…</Text> : <>
+        {picker}
+        {!run || !view || !source ? <Text style={styles.body}>Reading the council…</Text> : <>
           <View style={styles.row}>
             <Text style={styles.micro}>COUNCIL · {from === "z0live" ? "FROM THE LIVE CALL" : "FROM THIS CHAT"}</Text>
             <Text testID="council-source" accessibilityLabel={source.live ? `Live council read from ${source.from}` : "Demo council run"} style={[styles.tag, source.live ? styles.tagLive : null]}>{source.live ? `LIVE · ${source.from.toUpperCase()}` : "DEMO"}</Text>
@@ -210,10 +317,11 @@ function CouncilPanel({ from }: { from: CouncilOrigin }): React.JSX.Element {
               <Text style={styles.secondaryText}>{muted ? "Unmute" : "Mute"}</Text>
             </Pressable>
           </View>
-          {paused && !muted ? <Pressable testID="council-resume" accessibilityRole="button" accessibilityLabel={`Back to the orb, resume reading the ${paused.kind}`} onPress={resume} style={styles.secondary}>
+          {paused && !muted && readAloud ? <Pressable testID="council-resume" accessibilityRole="button" accessibilityLabel={`Back to the orb, resume reading the ${paused.kind}`} onPress={resume} style={styles.secondary}>
             <Text style={styles.secondaryText}>Back to the orb · resume the {paused.kind} ({paused.index + 1}/{paused.sentences.length})</Text>
           </Pressable> : null}
-          {status || source.note ? <Text testID="council-status" accessibilityRole="alert" style={styles.small}>{status || source.note}</Text> : null}
+          {syncProblem ? <Text accessibilityRole="alert" style={styles.small}>{syncProblem}</Text> : null}
+          {status || local?.note ? <Text testID="council-status" accessibilityRole="alert" style={styles.small}>{status || local?.note}</Text> : null}
           <View testID="council-seats" style={styles.seats}>
             {run.seats.map((seat, i) => {
               const state = view.seats[i] ?? "waiting";
