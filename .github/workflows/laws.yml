@@ -8,7 +8,7 @@ name: Formal laws
 on:
   pull_request:
   push:
-    branches: [main, preview, nightly, dev, 'integrate/**', 'integ/**']
+    branches: [main, preview, nightly, dev, staging, 'integrate/**', 'integ/**']
 
 concurrency:
   group: laws-${{ github.workflow }}-${{ github.ref }}
@@ -84,3 +84,12 @@ jobs:
           exit $status
       - name: Anchors (the code still reads as laws/send models it)
         run: python3 laws/send/anchors.py
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - name: Install tester-army discovery dependencies
+        run: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 bun install --frozen-lockfile
+      - name: Owner requirement traceability (Bend gate + regression cases)
+        run: |
+          python3 -m unittest discover -s laws/requirements -v
+          python3 laws/requirements/check.py

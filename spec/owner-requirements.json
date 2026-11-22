@@ -1,0 +1,23 @@
+{
+  "source": "req/dash.jsonl, DA-071 excerpt supplied in the lane brief",
+  "requirements": [
+    {
+      "id": "DA-071",
+      "ask": "create Bend laws to ensure that the features map directly back to specs for the app. and you can keep iterating on the specs until it actually matches the surface of what the application does right now because I don't know if we actually have formalized specs for the repo of dash",
+      "spec": {
+        "id": "owner-spec-traceability",
+        "statement": "Every imported owner requirement names a spec item, tracked implementation, and at least one resolvable test. Formal laws CI rejects missing and stale links. Product behavior uses tester-army evidence; CI tooling uses law-checker regression tests.",
+        "code": [
+          ".github/workflows/laws.yml",
+          "laws/requirements/MODEL.bend",
+          "laws/requirements/check.py"
+        ],
+        "tests": [
+          {"kind": "law", "name": "test_missing_test_fails"},
+          {"kind": "law", "name": "test_stale_army_test_fails"},
+          {"kind": "law", "name": "test_live_links_pass"}
+        ]
+      }
+    }
+  ]
+}
