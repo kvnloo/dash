@@ -18,6 +18,19 @@ import { linkifyMarkdown } from "../lib/linkify-paths";
 import { classifyLink, linkAccessibilityHint } from "../lib/link-target";
 import { FileLinkPreview, type FileLinkTarget } from "./FileLinkPreview";
 
+// react-native-marked prepends "/" to relative hrefs. Keep generated source
+// paths opaque until the link renderer can distinguish them from absolute paths.
+const SOURCE_LINK = "dashsource:";
+const sourceHref = (path: string) => SOURCE_LINK + encodeURIComponent(path);
+function transcriptLink(href: string) {
+  if (!href.startsWith(SOURCE_LINK)) return classifyLink(href);
+  try {
+    const target = classifyLink(decodeURIComponent(href.slice(SOURCE_LINK.length)));
+    if (target.kind === "file") return target;
+  } catch { /* Malformed escaped source path. */ }
+  return classifyLink("");
+}
+
 class TranscriptRenderer extends Renderer {
   onFileLink?: (target: FileLinkTarget) => void;
   onIntent?: (intent: LiveIntent) => boolean;
@@ -27,7 +40,7 @@ class TranscriptRenderer extends Renderer {
   }
   override link(children: string | ReactNode[], href: string, style?: TextStyle): ReactNode {
     if (isImageRef(href)) return <InlineImage key={this.getKey()} href={href} label="Image" />;
-    const target = classifyLink(href);
+    const target = transcriptLink(href);
     if (target.kind !== "web" && (target.kind !== "file" || !this.onFileLink)) {
       return <Text key={this.getKey()}>{children}</Text>;
     }
@@ -101,7 +114,7 @@ export const Markdown = memo(function Markdown({ text, messageId, onIntent, stre
   const [range, setRange] = useState<SelectionRange | null>(null);
   const [filePreview, setFilePreview] = useState<FileLinkTarget | null>(null);
   // Unfinished UI fences are buffered before Markdown can expose model source.
-  const prepared = useMemo(() => linkifyMarkdown(prepareGenerativeMarkdown(text, flowMode), !streaming), [text, streaming]);
+  const prepared = useMemo(() => linkifyMarkdown(prepareGenerativeMarkdown(text, flowMode), !streaming, sourceHref), [text, streaming]);
   // Android and web use the quote-selection sheet; iOS keeps native text selection.
   // Browser-native selection can cancel the Pressable long press before the sheet opens.
   const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: Platform.OS === "ios" }); renderer.onIntent = onIntent; renderer.onFileLink = messageId ? setFilePreview : undefined; renderer.streaming = streaming; return renderer; }, [prepared, messageId, onIntent, streaming]);

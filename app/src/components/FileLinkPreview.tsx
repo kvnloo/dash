@@ -18,7 +18,7 @@ export function FileLinkPreview({ target, messageId, onClose }: { target: FileLi
   const bridgeCwd = store.use(s => s.connection.cwd);
   const owned = !!chat?.endpointAddress && chat.endpointAddress === settings?.address
     && (!chat.targetHostId || chat.targetHostId === localHost);
-  const cwd = chat?.cwd ?? settings?.cwd ?? bridgeCwd;
+  const cwd = chat?.cwd?.trim() || bridgeCwd;
   const path = target.path.startsWith("/") || target.path.startsWith("~/") ? target.path
     : cwd?.startsWith("/") ? cwd + "/" + target.path : undefined;
   const insets = useSafeAreaInsets();

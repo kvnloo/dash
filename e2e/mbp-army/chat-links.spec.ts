@@ -22,7 +22,7 @@ test('bare transcript URL and positioned source file open on tap', async ({ page
  await page.getByRole('button', { name: 'Close file preview', exact: true }).click();
  await expect(preview).toHaveCount(0);
  const link = page.getByRole('link', { name: destination, exact: true });
- const popup = page.waitForEvent('popup');
+ const popup = page.context().waitForEvent('page');
  await link.click();
  const external = await popup;
  await expect(external).toHaveURL(destination);
