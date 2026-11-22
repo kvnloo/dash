@@ -218,3 +218,37 @@ drafts separate from current native list/search results. Recovery selects the
 host-indexed native result explicitly. No address, host or draft is inferred or
 silently transferred. These focused journeys do not replace complete exact-head
 release qualification or actual MBP/Groot phone acceptance.
+
+## S25 APK target (supplementary, not O15)
+
+`scripts/device-army.sh <native-build-receipt-dir> <new-evidence-dir>` installs
+and drives the ARM64 standalone Dash E2E APK on a dedicated, unlocked USB
+Galaxy S25 lab device. It exercises real pairing, an in-progress OMP stream,
+the completed reply, and a follow-up in the same ACP session. The same isolated
+bridge and scripted ACP agent as the web army back the journey. No Expo Go,
+Metro, real agent, or live Dash package is used. The runner clears **only**
+`app.dash.mobile.e2e` before and after the journey. Do not use a personal phone.
+
+The nightly workflow needs a dedicated Linux runner labeled `dash-s25-lab`, with
+Java, the Android SDK/NDK (export `ANDROID_HOME`), adb, bubblewrap with working
+user namespaces, ffmpeg, Chromium system dependencies and read-only access to
+the private renderer dependency. Connect one whitelisted S25, authorize USB
+debugging, keep the screen awake and unlocked, and set repository variable
+`DASH_DEVICE_ARMY_SERIAL` to its USB serial. Schedule/dispatch becomes available
+once the workflow is on the default branch; it checks out trusted `staging`.
+
+From the staging checkout, after installing dependencies as in the workflow:
+
+```bash
+export DASH_ARMY_RECEIPTS="$(mktemp -d)"
+bash scripts/army.sh
+DASH_APP_VARIANT=e2e DASH_VARIANT=release DASH_PROOF_REVISION="$(git rev-parse HEAD)" \
+  bash scripts/build-native-android.sh
+DEVICE_ARMY_SERIAL=<lab-usb-serial> scripts/device-army.sh .native-receipts "$(mktemp -d)/device"
+```
+
+Inspect `receipt.json` and `playwright.json` in the evidence directory or workflow
+artifact. Require `stage: complete`, `exit_code: 0`, `passed: 1` and no failed or
+skipped journeys; correlate the full APK hash and source SHA with the build output.
+This is a fixture-backed native smoke journey, not proof of live harness behavior,
+full native coverage, an S22 run, or a substitute for the canonical web O15 gate.
