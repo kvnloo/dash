@@ -47,9 +47,9 @@ test('Chats list rows prioritize failures and keep a current task rather than th
 
  await reopen(page);
  await send(page, 'Please review the keyboard layout.');
- await expect(page.getByText('ARMY_REPLY: Please review the keyboard layout.', { exact: true }).filter({ visible: true })).toBeVisible();
+ await expect(page.getByText('ARMY_STREAM_BEGIN ARMY_REPLY: Please review the keyboard layout.', { exact: true }).filter({ visible: true })).toBeVisible();
  await send(page, 'Thanks!');
- await expect(page.getByText('ARMY_REPLY: Thanks!', { exact: true }).filter({ visible: true })).toBeVisible();
+ await expect(page.getByText('ARMY_STREAM_BEGIN ARMY_REPLY: Thanks!', { exact: true }).filter({ visible: true })).toBeVisible();
  await toList(page);
  await expect(preview(page)).toHaveText('Task · review the keyboard layout.');
 
