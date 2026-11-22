@@ -114,6 +114,8 @@
                "ephemeral-ui card.v0 kinds 41-50 all draw the repo card"]},
     {"id": "voice-orb-overlay", "title": "A live call shows an interactive, pass-through hero orb outside Voice and annotation",
      "tests": ["live hero orb follows each voice phase, mutes, passes through and hides for annotation"]},
+    {"id": "voice-live-captions", "title": "A live call shows a one-line streaming caption of user and agent text over Dash that CC turns off",
+     "tests": ["live caption strip shows streaming user and agent text in one line over Dash and CC turns it off"]},
     {"id": "host-stats", "title": "Local host hardware usage in the host info sheet, separate from roster updates",
      "tests": ["host info sheet shows local CPU, RAM, disk and load from the authenticated bridge",
                "chat host info sheet shows resources without replacing session identity"]},

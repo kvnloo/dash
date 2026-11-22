@@ -44,6 +44,8 @@ export interface VoiceIO {
   typedTurns?: VoiceTurnSource;
   /** Local tracks and any in-flight acquisition are closed; another capture may start. */
   captureReleased?(): void;
+  /** Newest user/agent text for the live caption strip, partial while it streams (DA-056). */
+  caption?(role: "user" | "assistant", text: string, final: boolean): void;
 }
 export function object(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 export const realWords = (text: string): boolean => /[\p{L}\p{N}]{2}/u.test(text) && !/^\s*(\[.*\]|\(.*\)|[.!?…]+)\s*$/.test(text);
@@ -85,6 +87,8 @@ export class ContinuousVoice {
   private seen = new Set<string>();
   private spokenAt = 0;
   private eventCounter = 0;
+  private userPartial = "";
+  private assistantPartial = "";
   private unwatchTyped?: () => void;
   constructor(private io: VoiceIO) {}
   private update(value: Partial<VoiceState>): void { this.state = { ...this.state, ...value }; this.io.changed(this.state); }
@@ -237,6 +241,7 @@ export class ContinuousVoice {
       console.info(`[voice] transcription ${input?.transcription == null ? "off" : "on"}`);
     }
     if (event.type === "input_audio_buffer.speech_started") {
+      this.userPartial = "";
       this.clearTranscriptWatchdog();
       this.speechTranscriptArrived = false;
       this.user = true; this.spokenAt = Date.now(); this.floor("user");
@@ -255,18 +260,24 @@ export class ContinuousVoice {
         }, 8_000);
       }
     }
-    if (event.type === "conversation.item.input_audio_transcription.delta" && typeof event.delta === "string" && realWords(event.delta)) this.interrupt();
+    if (event.type === "conversation.item.input_audio_transcription.delta" && typeof event.delta === "string") {
+      if (!this.state.muted) { this.userPartial += event.delta; this.io.caption?.("user", this.userPartial, false); }
+      if (realWords(event.delta)) this.interrupt();
+    }
     if (event.type === "conversation.item.input_audio_transcription.completed") {
       this.speechTranscriptArrived = true;
       this.clearTranscriptWatchdog();
       if (this.state.note === NO_TRANSCRIPT_NOTE) this.update({ note: undefined });
       const text = typeof event.transcript === "string" ? event.transcript.trim() : "";
       this.user = false;
+      this.userPartial = "";
       if (this.state.muted || !realWords(text)) {
+        this.io.caption?.("user", "", true); // Drops a noise partial; never shown as a turn.
         if (typeof event.item_id === "string") this.send({ type: "conversation.item.delete", item_id: event.item_id });
         this.floor(this.response ? "assistant" : "quiet"); return;
       }
       this.interrupt();
+      this.io.caption?.("user", text, true);
       this.update({ phase: "thinking", lines: this.line("user", text) });
       this.io.transcript(typeof event.item_id === "string" ? event.item_id : `voice-${Date.now()}`, text, this.spokenAt, Date.now());
       this.transcriptObservation("user_transcript", text, { event_id: id });
@@ -292,11 +303,17 @@ export class ContinuousVoice {
       }
       this.update({ delivery: "accepted" });
     }
-    if (event.type === "response.created") { this.response = true; this.creating = false; this.update({ phase: "speaking" }); this.floor("assistant"); }
+    if (event.type === "response.created") { this.assistantPartial = ""; this.response = true; this.creating = false; this.update({ phase: "speaking" }); this.floor("assistant"); }
     if (event.type === "output_audio_buffer.started") { this.playing = true; if (this.finalTurn) this.finalAudioStarted = true; this.floor("assistant"); }
     if (event.type === "output_audio_buffer.stopped" || event.type === "output_audio_buffer.cleared") { this.playing = false; this.completeFinal(); if (!this.response && !this.user) { this.floor("quiet"); this.drain(); } }
+    if ((event.type === "response.output_audio_transcript.delta" || event.type === "response.audio_transcript.delta") && typeof event.delta === "string") {
+      this.assistantPartial += event.delta;
+      this.io.caption?.("assistant", this.assistantPartial, false);
+    }
     if (event.type === "response.output_audio_transcript.done" || event.type === "response.audio_transcript.done") {
       if (typeof event.transcript === "string") {
+        this.assistantPartial = "";
+        this.io.caption?.("assistant", event.transcript, true);
         this.update({ lines: this.line("assistant", event.transcript) });
         this.transcriptObservation("assistant_transcript", event.transcript);
       }
@@ -383,6 +400,7 @@ export class ContinuousVoice {
     const acquiring = this.acquiring;
     const sid = this.sid; this.sid = undefined;
     this.response = this.creating = this.user = this.playing = this.continuation = false; this.toolPending = 0; this.inbox = []; this.seen.clear();
+    this.userPartial = this.assistantPartial = "";
     this.finalTurn = undefined; this.finalResponseDone = this.finalAudioStarted = false;
     this.update({ phase: note ? "error" : "idle", muted: false, note });
     if (acquiring) {
