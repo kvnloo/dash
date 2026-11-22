@@ -4,7 +4,8 @@ import { basename, dirname, join } from "node:path";
 import { isCatalogHarness } from "../../shared/catalog";
 import { hermesSessions } from "./hermes-sessions";
 import { listFinishedSessions, nodeFsPort } from "./finished-sessions";
-import { grokDesktopBot, hermesBots, hostBotSources, serviceBots } from "./bots";
+import { grokDesktopBot, hermesBots, hostBotSources, serviceBots, withSpawnTargets } from "./bots";
+import { cursorRosterAgents } from "./cursor-cloud";
 import { z0bridgeHermes } from "./z0bridge-hermes";
 import { agentsviewSessions } from "./agentsview-sessions";
 import { GatewayListSnapshot, isLocalRoute, localRoutingIds } from "./roster-reliability";
@@ -682,13 +683,13 @@ function gatewayAlive(pid: number): boolean {
   try { return readFileSync(`/proc/${pid}/cmdline`, "utf8").includes("gateway"); } catch { return true; }
 }
 
-function localBots() {
+function localBots(harnesses: readonly HarnessInfo[]) {
   const root = process.env.DASH_HERMES_ROOT ?? join(homedir(), ".hermes");
-  return [
+  return withSpawnTargets([
     ...hermesBots(hostBotSources(root, gatewayAlive)),
     ...serviceBots(spawnText(["systemctl", "--user", "list-units", "--type=service", "--state=running", "--no-legend", "--plain"])),
     ...(grokBotAlive() ? [grokDesktopBot()] : []),
-  ];
+  ], harnesses);
 }
 
 function listedHermesProfiles(profiles: HermesProfileInfo[]): HermesProfileInfo[] {
@@ -746,7 +747,14 @@ export async function collectRoster(harnesses: HarnessInfo[], self: { hostname: 
       listed.add(key);
       local.agents.push(agent);
     }
-    local.bots = localBots();
+    // Cursor cloud agents: one chat each, from Cursor's API (cached; never blocks the roster).
+    for (const agent of cursorRosterAgents()) {
+      const key = `${agent.kind}:${agent.sessionId}`;
+      if (listed.has(key)) continue;
+      listed.add(key);
+      local.agents.push(agent);
+    }
+    local.bots = localBots(harnesses);
   }
   if (remoteAgents === undefined) rosterCache = { at: now, key, hosts };
   return hosts;

@@ -6,6 +6,7 @@ import { PartEmitter, contentText } from "./reply-parts";
 import { hermesCliArgv } from "./hermes-session";
 import { approvalArgs, type ApprovalEnv } from "./argv-policy";
 import { parseHarnessJsonLine } from "./turn-safety";
+import { CURSOR_CLOUD_ID, CURSOR_CLOUD_NAME } from "./cursor-cloud";
 
 export interface TurnInput {
   mode?: "steer" | "queue";
@@ -407,6 +408,16 @@ const fx: Harness = {
   parser: fxAskParser,
 };
 
-export const HARNESSES: readonly Harness[] = [omp, codex, grok, claude, hermes, pi, fx];
+// Cursor cloud agents run on Cursor's machines through its HTTP API, not a local CLI. The bridge
+// runs those turns in src/cursor-cloud.ts; this entry only names the harness in the catalog.
+const cursorCloud: Harness = {
+  id: CURSOR_CLOUD_ID,
+  name: CURSOR_CLOUD_NAME,
+  bin: "",
+  argv() { throw new Error("Cursor cloud agents have no CLI argv."); },
+  parser() { return { line() {}, end() {} }; },
+};
+
+export const HARNESSES: readonly Harness[] = [omp, codex, grok, claude, hermes, pi, fx, cursorCloud];
 
 

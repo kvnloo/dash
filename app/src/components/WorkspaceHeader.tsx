@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { NewAgentSheet } from "./NewAgentSheet";
 import { PressScale } from "./PressScale";
 import { haptic } from "../haptics";
 import type { NavigationProp } from "@react-navigation/native";
@@ -29,6 +31,7 @@ export function WorkspaceActions({ navigation, dogfood = true }: { navigation: N
   const feedbackOn = store.use(s => inAppFeedbackEnabled(s.settings));
   const pending = approvals.use(s => s.items.filter(actionable).length);
   const upstreamAction = upstreamApprovalAction(pending);
+  const [newAgent, setNewAgent] = useState(false);
   return <View style={styles.actions}>
     {/* The pill is a column PressScale around a fixed row. A row-direction PressScale grows its
         flex: 1 inner view to the whole header width, which pushed the trace, new chat and settings
@@ -43,6 +46,8 @@ export function WorkspaceActions({ navigation, dogfood = true }: { navigation: N
     {dogfood && feedbackOn ? <IconButton icon="message-circle" label="Dogfood feedback" onPress={() => toDogfood(navigation)} /> : null}
     <IconButton icon="map" label={WORKSPACE_ACTION_LABELS.roadmap} onPress={() => navigation.navigate("Roadmap")} />
     <IconButton icon="activity" label={WORKSPACE_ACTION_LABELS.trace} onPress={() => navigation.navigate("Trace")} />
+    <IconButton icon="plus-circle" label={WORKSPACE_ACTION_LABELS.newAgent} onPress={() => setNewAgent(true)} />
+    <NewAgentSheet visible={newAgent} onClose={() => setNewAgent(false)} onStarted={() => navigation.navigate("Chat")} />
     <IconButton icon="edit-3" label={WORKSPACE_ACTION_LABELS.newChat} onPress={() => { createConversation(store.get().settings?.harness ?? "omp"); navigation.navigate("Chat"); }} />
     <IconButton icon="settings" label={WORKSPACE_ACTION_LABELS.settings} onPress={() => navigation.navigate("Settings")} />
   </View>;

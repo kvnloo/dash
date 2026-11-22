@@ -52,6 +52,10 @@ export interface HarnessInfo {
   id: string;
   name: string;
   available: boolean;
+  /** `cloud`: runs on a provider's machines through its API (Cursor cloud agents). Absent = a local CLI. */
+  where?: "local" | "cloud";
+  /** Why an unavailable harness can't start, e.g. which env var the host is missing. */
+  hint?: string;
 }
 
 /** One live or installed agent on a host. `kind` is a harness id when Dash can chat with it. */
@@ -178,6 +182,16 @@ export interface BotInfo {
   /** Roster agent id to open a chat with this bot's profile, when Dash can. */
   agentId?: string;
   detail?: string;
+  /** How Dash starts a new chat with this bot: the harness and the profile route the bridge accepts. */
+  spawn?: BotSpawn;
+}
+
+/** A New-agent target behind a bot. `available` is false when the host lacks the harness. */
+export interface BotSpawn {
+  harness: string;
+  profileId: string;
+  available: boolean;
+  hint?: string;
 }
 
 /** Live local-host evidence, served separately from the ETag-hashed roster. */
@@ -549,7 +563,9 @@ function isHarnessInfo(value: unknown): value is HarnessInfo {
     isRecord(value) &&
     str(value.id) &&
     str(value.name) &&
-    typeof value.available === "boolean"
+    typeof value.available === "boolean" &&
+    (value.where === undefined || value.where === "local" || value.where === "cloud") &&
+    optStr(value.hint)
   );
 }
 
@@ -595,8 +611,13 @@ export function isBotInfo(value: unknown): value is BotInfo {
     Array.isArray(value.channels) &&
     value.channels.every(isBotChannel) &&
     optStr(value.agentId) &&
-    optStr(value.detail)
+    optStr(value.detail) &&
+    (value.spawn === undefined || isBotSpawn(value.spawn))
   );
+}
+
+function isBotSpawn(value: unknown): value is BotSpawn {
+  return isRecord(value) && str(value.harness) && str(value.profileId) && typeof value.available === "boolean" && optStr(value.hint);
 }
 
 function isHostInfo(value: unknown): value is HostInfo {

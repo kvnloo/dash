@@ -14,7 +14,7 @@ let sessionId = agent === 'claude' ? 'army-claude-session' : agent === 'codex' ?
 const replyTag = agent === 'claude' ? 'ARMY_CLAUDE_REPLY: ' : agent === 'codex' ? 'ARMY_CODEX_REPLY: ' : 'ARMY_REPLY: ';
 const update = (text: string) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text}}}});
 // Evidence for specs: which session method ran, for which id, in which directory.
-const calls = (method: string, params: unknown) => {if(!isRecord(params))return;try{appendFileSync(join(process.env.HOME || '.', 'army-acp-calls.jsonl'),JSON.stringify({agent,method,sessionId:params.sessionId,modelId:params.modelId,cwd:params.cwd,pwd:process.cwd()})+'\n');}catch{/* evidence only */}};
+const calls = (method: string, params: unknown) => {if(!isRecord(params))return;try{appendFileSync(join(process.env.HOME || '.', 'army-acp-calls.jsonl'),JSON.stringify({agent,method,sessionId:params.sessionId,modelId:params.modelId,cwd:params.cwd,pwd:process.cwd(),hermesHome:process.env.HERMES_HOME})+'\n');}catch{/* evidence only */}};
 // Evidence for concurrency specs: when each prompt started and finished, in which fixture process.
 const turnLog = (event: string, text: string) => {try{appendFileSync(join(process.env.HOME || '.', 'army-acp-turns.jsonl'),JSON.stringify({agent,pid:process.pid,event,at:Date.now(),text:text.slice(0,80)})+'\n');}catch{/* evidence only */}};
 let timer: ReturnType<typeof setTimeout> | undefined;
