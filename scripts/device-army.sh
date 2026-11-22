@@ -25,7 +25,10 @@ import sys
 directory, sha, apk_hash, model, stage, code = sys.argv[1:]
 out = pathlib.Path(directory)
 report = out / "playwright.json"
-stats = json.loads(report.read_text())["stats"] if report.exists() else {}
+try:
+    stats = json.loads(report.read_text())["stats"]
+except (OSError, KeyError, ValueError):
+    stats = {}
 result = {
     "schema": "dash-device-army/v1",
     "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -67,4 +70,13 @@ adb -s "$DEVICE_ARMY_SERIAL" install -r "$apk"
 stage=journeys
 export DEVICE_ARMY_READY=1 DEVICE_ARMY_JSON="$out/playwright.json"
 node node_modules/playwright/cli.js test -c e2e/mbp-army/device.config.ts --output "$out/results"
+python3 - "$DEVICE_ARMY_JSON" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1]) as report:
+    stats = json.load(report)["stats"]
+if stats["expected"] < 1 or any(stats[key] for key in ("unexpected", "skipped", "flaky")):
+    raise SystemExit("Device army did not pass every discovered journey")
+PY
 stage=complete

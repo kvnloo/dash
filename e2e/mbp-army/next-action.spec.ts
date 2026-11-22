@@ -64,9 +64,8 @@ test('Next up opens the exact completed background reply without sending and pre
   // the virtual list has laid out any scrollable content can be dropped.
   const rail = page.getByRole('slider', { name: 'Prompt navigator', exact: true });
   await expect(rail.getByTestId('rail-tick')).toHaveCount(9);
-  const bounds = await rail.boundingBox();
-  if (!bounds) throw Error('No prompt navigator bounds');
-  await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + 1);
+  // Hover previews the turn; wait for the track to receive pointer events.
+  await rail.hover({ position: { x: 22, y: 6 } });
   await expect(page.getByLabel('Turn preview', { exact: true })).toContainText('Earlier attention history 0');
   await page.getByRole('button', { name: 'Jump', exact: true }).click();
   await page.getByRole('button', { name: 'Close turn preview', exact: true }).click();

@@ -229,7 +229,9 @@ bridge and scripted ACP agent as the web army back the journey. No Expo Go,
 Metro, real agent, or live Dash package is used. The runner clears **only**
 `app.dash.mobile.e2e` before and after the journey. Do not use a personal phone.
 
-The nightly workflow needs a dedicated Linux runner labeled `dash-s25-lab`, with
+Use a lab runner group restricted to this workflow on the default branch. Do not
+make the lab device or its host available to untrusted PR jobs. The nightly
+workflow needs a dedicated Linux runner labeled `dash-s25-lab`, with
 Java, the Android SDK/NDK (export `ANDROID_HOME`), adb, bubblewrap with working
 user namespaces, ffmpeg, Chromium system dependencies and read-only access to
 the private renderer dependency. Connect one whitelisted S25, authorize USB
