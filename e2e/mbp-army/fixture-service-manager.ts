@@ -3,7 +3,7 @@
 // environment, working directory and log paths, detached in its own process group. Nothing else.
 //   bun fixture-service-manager.ts launchctl bootstrap gui/<uid> <plist> | bootout gui/<uid>/<label> | print gui/<uid>/<label>
 //   bun fixture-service-manager.ts systemctl --user daemon-reload | enable <unit> | restart <unit> | disable --now <unit> | is-active <unit>
-//   bun fixture-service-manager.ts plutil -lint <plist>
+//   bun fixture-service-manager.ts plutil -lint <plist> | plutil -convert json -o - <plist>
 import { spawn, execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -85,7 +85,11 @@ async function stop(name: string): Promise<boolean> {
 
 const lastPart = (target: string) => target.split('/').pop() ?? '';
 async function main(): Promise<number> {
- if (tool === 'plutil') { if (args[0] !== '-lint' || !args[1]) return 64; plist(args[1]); return 0; }
+ if (tool === 'plutil') {
+  if (args[0] === '-lint' && args[1]) { plist(args[1]); return 0; }
+  if (args[0] === '-convert' && args[1] === 'json' && args[2] === '-o' && args[3] === '-' && args[4]) { process.stdout.write(JSON.stringify(plist(args[4]))); return 0; }
+  return 64;
+ }
  if (tool === 'launchctl') {
   const [verb, domain = '', file = ''] = args;
   if (verb === 'bootstrap') { const { label, program } = launchdProgram(file); if (alive(label)) return 5; start(label, program); return 0; }

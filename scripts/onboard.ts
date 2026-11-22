@@ -32,9 +32,11 @@ interface Options {
   profile?: Profile;
   dryRun: boolean;
   platform: Platform;
-  port: number;
+  /** Unset: the existing service file's DASH_PORT, else 4747. */
+  port?: number;
   metroPort: number;
-  cwd: string;
+  /** Unset: the existing service file's DASH_CWD, else the home folder. */
+  cwd?: string;
   skip: Set<Step>;
   bridgeEnv: Record<string, string>;
   metroEnv: Record<string, string>;
@@ -51,6 +53,8 @@ const USAGE = `usage: scripts/onboard.sh [--minimal|--full] [options]
   --skip a,b           skip steps: ${STEPS.join(", ")}
   --env K=V            extra bridge environment (repeatable), e.g. --env DASH_TURN_TIMEOUT_MS=900000
   --metro-env K=V      extra Metro environment (repeatable)
+                       Settings in an existing bridge/Metro service file (hand-written or from an earlier
+                       run) are kept unless a flag overrides them; --uninstall first to start clean.
   --platform P         render services for darwin or linux (default: this machine)`;
 
 function fail(message: string, code = 2): never {
@@ -76,7 +80,7 @@ function portArg(raw: string | undefined, flag: string): number {
 }
 
 export function parseArgs(argv: readonly string[]): Options {
-  const o: Options = { action: "install", dryRun: false, platform: hostPlatform(), port: 4747, metroPort: 8097, cwd: HOME, skip: new Set(), bridgeEnv: {}, metroEnv: {} };
+  const o: Options = { action: "install", dryRun: false, platform: hostPlatform(), metroPort: 8097, skip: new Set(), bridgeEnv: {}, metroEnv: {} };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const next = () => argv[++i];
@@ -212,7 +216,9 @@ function serviceFiles(platform: Platform): { dir: string; logs: string; name(id:
 function service(platform: Platform, id: Service["id"], args: string[], cwd: string, env: Record<string, string>): Service {
   const files = serviceFiles(platform);
   const name = files.name(id);
-  return { id, name, file: join(files.dir, platform === "darwin" ? `${name}.plist` : name), args, cwd, env, log: join(files.logs, `${id}.log`) };
+  // Sorted, so a rerun with the same settings writes the same file.
+  const sorted = Object.fromEntries(Object.entries(env).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  return { id, name, file: join(files.dir, platform === "darwin" ? `${name}.plist` : name), args, cwd, env: sorted, log: join(files.logs, `${id}.log`) };
 }
 
 const xml = (s: string) => s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
@@ -296,6 +302,35 @@ function manager(platform: Platform, path: string) {
   };
 }
 
+/** systemd's quoting for the subset written above: double-quoted words, backslash escapes, `%%`. */
+function unitWords(line: string): string[] {
+  return [...line.matchAll(/"((?:[^"\\]|\\.)*)"|(\S+)/g)].map((m) => (m[1] !== undefined ? m[1].replace(/\\(.)/g, "$1") : m[2] ?? "").replaceAll("%%", "%"));
+}
+
+/** The environment an existing service file (hand-written or from an earlier run) gives its program. */
+export function previousEnv(platform: Platform, file: string, path: string): Record<string, string> {
+  if (!existsSync(file)) return {};
+  const env: Record<string, string> = {};
+  if (platform === "darwin") {
+    const plutil = Bun.which("plutil", { PATH: path });
+    if (!plutil) return {};
+    const out = Bun.spawnSync([plutil, "-convert", "json", "-o", "-", file], { stdout: "pipe", stderr: "ignore" });
+    let parsed: unknown = null;
+    try { parsed = out.success ? JSON.parse(out.stdout.toString()) : null; } catch { parsed = null; }
+    const vars = isRecord(parsed) ? parsed.EnvironmentVariables : null;
+    if (isRecord(vars)) for (const [k, v] of Object.entries(vars)) if (typeof v === "string") env[k] = v;
+    return env;
+  }
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    if (!line.startsWith("Environment=")) continue;
+    for (const word of unitWords(line.slice("Environment=".length))) {
+      const at = word.indexOf("=");
+      if (at > 0) env[word.slice(0, at)] = word.slice(at + 1);
+    }
+  }
+  return env;
+}
+
 /** Keep one copy of a hand-written service file (e.g. the Studio's manual plists) before replacing it. */
 function writeServiceFile(s: Service, body: string): void {
   mkdirSync(dirname(s.file), { recursive: true });
@@ -365,7 +400,7 @@ async function portBusy(host: string, port: number): Promise<boolean> {
   }
   return true;
 }
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+function isRecord(v: unknown): v is Record<string, unknown> { return typeof v === "object" && v !== null; }
 
 async function waitFor(what: string, timeoutMs: number, probe: () => Promise<boolean>, log?: string): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -434,7 +469,12 @@ function stringEnv(env: Record<string, string | undefined>): Record<string, stri
 async function main(): Promise<void> {
   const o = parseArgs(process.argv.slice(2));
   if (o.action === "help") { console.log(USAGE); return; }
-  const path = servicePath(o.platform, o.bridgeEnv.PATH ?? process.env.PATH);
+  const shellPath = servicePath(o.platform, o.bridgeEnv.PATH ?? process.env.PATH);
+  const files = { bridge: service(o.platform, "bridge", [], BRIDGE_DIR, {}).file, metro: service(o.platform, "metro", [], APP_DIR, {}).file };
+  const prevBridge = o.action === "install" ? previousEnv(o.platform, files.bridge, shellPath) : {};
+  const prevMetro = o.action === "install" ? previousEnv(o.platform, files.metro, shellPath) : {};
+  // Folders an existing service already searched stay on PATH after this shell's own.
+  const path = [...new Set([...shellPath.split(delimiter), ...(prevBridge.PATH ?? "").split(delimiter).filter((d) => d.startsWith("/"))])].join(delimiter);
 
   if (o.action === "uninstall") {
     const m = manager(o.platform, path);
@@ -465,13 +505,21 @@ async function main(): Promise<void> {
   console.log(`profile    ${profile}${o.profile ? "" : ` (chosen for ${hw.memoryGiB} GiB RAM; --minimal or --full to override)`}`);
   if (Bun.which("ffmpeg", { PATH: path }) === null) console.log(`note       ffmpeg not found: sonic pairing and voice are off; code pairing works${o.platform === "darwin" ? " (brew install ffmpeg)" : ""}`);
 
-  const host = o.bridgeEnv.DASH_HOST ?? tailnetAddress(path);
+  const owned = new Set(["PATH", "HOME", "USER", "LANG", "DASH_PORT", "DASH_CWD"]);
+  const keptBridge = Object.fromEntries(Object.entries(prevBridge).filter(([k]) => !owned.has(k) && !(k in o.bridgeEnv)));
+  const keptMetro = Object.fromEntries(Object.entries(prevMetro).filter(([k]) => !owned.has(k) && !(k in o.metroEnv)));
+  const port = o.port ?? (Number(prevBridge.DASH_PORT) || 4747);
+  const cwd = o.cwd ?? prevBridge.DASH_CWD ?? HOME;
+  // Names only: a kept value may be a credential.
+  if (Object.keys(keptBridge).length) console.log(`kept       from the existing ${files.bridge}: ${Object.keys(keptBridge).join(", ")}`);
+  if (Object.keys(keptMetro).length) console.log(`kept       from the existing ${files.metro}: ${Object.keys(keptMetro).join(", ")}`);
+  const host = o.bridgeEnv.DASH_HOST ?? keptBridge.DASH_HOST ?? tailnetAddress(path);
   if (!host) {
     const how = o.platform === "darwin" ? "install Tailscale from https://tailscale.com/download/mac and sign in" : "install Tailscale (https://tailscale.com/download/linux) and run `sudo tailscale up`";
     if (!o.dryRun) fail(`no Tailscale address found; the bridge only listens on your tailnet. ${how}, then rerun.`);
     console.log(`warning    no Tailscale address found (${how})`);
   }
-  const address = `${host ?? "<tailscale-ip>"}:${o.port}`;
+  const address = `${host ?? "<tailscale-ip>"}:${port}`;
   console.log(`bridge     ws://${address}/ws`);
 
   const step = (s: Step) => !o.skip.has(s) && !o.dryRun;
@@ -487,8 +535,9 @@ async function main(): Promise<void> {
   const base = { PATH: path, HOME, ...(process.env.USER ? { USER: process.env.USER } : {}), ...(process.env.LANG ? { LANG: process.env.LANG } : {}) };
   const services: Service[] = [service(o.platform, "bridge", [process.execPath, "run", "index.ts"], BRIDGE_DIR, {
     ...base,
-    DASH_PORT: String(o.port),
-    DASH_CWD: o.cwd,
+    ...keptBridge,
+    DASH_PORT: String(port),
+    DASH_CWD: cwd,
     ...(profile === "full" && host ? { DASH_EXPO_GO_URL: `${host}:${o.metroPort}` } : {}),
     ...o.bridgeEnv,
     // Explicit PATH wins over any --env PATH: harness discovery above used exactly this one.
@@ -498,6 +547,7 @@ async function main(): Promise<void> {
     const workers = String(Math.min(8, Math.max(1, Math.floor(hw.cores / 2))));
     services.push(service(o.platform, "metro", [process.execPath, "node_modules/expo/bin/cli", "start", "--port", String(o.metroPort), "--host", "lan", "--max-workers", workers], APP_DIR, {
       ...base,
+      ...keptMetro,
       EXPO_NO_TELEMETRY: "1",
       ...(host ? { REACT_NATIVE_PACKAGER_HOSTNAME: host } : {}),
       ...o.metroEnv,
@@ -524,7 +574,7 @@ async function main(): Promise<void> {
   for (const s of services) {
     m.stop(s);
     // Health below must come from this service, not an older bridge or Metro still holding the port.
-    const [probeHost, probePort] = s.id === "bridge" ? [host ?? "127.0.0.1", o.port] : ["127.0.0.1", o.metroPort];
+    const [probeHost, probePort] = s.id === "bridge" ? [host ?? "127.0.0.1", port] : ["127.0.0.1", o.metroPort];
     if (await portBusy(probeHost, probePort)) fail(`${probeHost}:${probePort} is already in use by another process (an older ${s.id} started by hand?). Stop it, or pass ${s.id === "bridge" ? "--port" : "--metro-port"}.`);
     let started = m.start(s);
     // launchd can still be tearing down the old job right after bootout.

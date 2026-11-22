@@ -91,7 +91,8 @@ test('one command on a fresh Mac installs bridge and Metro launch agents, lists 
  // A hand-written Studio plist is kept, not silently lost.
  const agents = join(h.dir, 'Library', 'LaunchAgents');
  await mkdir(agents, { recursive: true });
- const manual = '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>Label</key><string>dev.kvnloo.dash-bridge</string></dict></plist>\n';
+ const manual = '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>Label</key><string>dev.kvnloo.dash-bridge</string>'
+  + '<key>EnvironmentVariables</key><dict><key>DASH_TURN_TIMEOUT_MS</key><string>900000</string><key>PATH</key><string>/opt/army-agents/bin:/usr/bin</string></dict></dict></plist>\n';
  await writeFile(join(agents, 'dev.kvnloo.dash-bridge.plist'), manual);
  try {
   // App deps and ACP adapters are already installed in the army checkout; their install paths need a network.
@@ -100,6 +101,7 @@ test('one command on a fresh Mac installs bridge and Metro launch agents, lists 
   expect(run.code, run.out).toBe(0);
   expect(run.out).toMatch(/^hardware\s+darwin \S+ · .+ · \d+ cores · [\d.]+ GiB/m);
   expect(run.out).toMatch(/^profile\s+full$/m);
+  expect(run.out).toContain('kept       from the existing ' + join(agents, 'dev.kvnloo.dash-bridge.plist') + ': DASH_TURN_TIMEOUT_MS');
   expect(run.out).toMatch(readyLine);
   for (const name of ready) expect(run.out).toMatch(new RegExp(`^  ready\\s+${name}\\s+/`, 'm'));
   for (const name of missing) expect(run.out).toMatch(new RegExp(`^  missing\\s+${name}\\s`, 'm'));
@@ -116,6 +118,8 @@ test('one command on a fresh Mac installs bridge and Metro launch agents, lists 
   expect(bridgePlist.KeepAlive).toBe(true); expect(bridgePlist.RunAtLoad).toBe(true);
   const benv = isRecord(bridgePlist.EnvironmentVariables) ? bridgePlist.EnvironmentVariables : {};
   expect(String(benv.PATH).split(':')).toContain(h.bin);
+  expect(String(benv.PATH).split(':')).toContain('/opt/army-agents/bin'); // the hand-written agent's PATH is not lost
+  expect(benv.DASH_TURN_TIMEOUT_MS).toBe('900000'); // nor its other settings
   expect(benv).toMatchObject({ DASH_PORT: String(port), DASH_CWD: join(h.dir, 'work'), DASH_EXPO_GO_URL: '127.0.0.1:' + metroPort, HOME: h.dir });
   const metroPlist = plist(join(agents, 'dev.kvnloo.dash-metro.plist'));
   expect(metroPlist.ProgramArguments).toEqual(expect.arrayContaining(['node_modules/expo/bin/cli', 'start', '--port', String(metroPort)]));
@@ -221,6 +225,13 @@ test('minimal onboarding on Linux refuses without a tailnet or on a busy port, t
   const code = /pair the phone \(code ([A-Z2-9]{6}), valid until/.exec(pair.out)?.[1];
   expect(code).toBeTruthy();
   expect(pair.out).toContain(`link       dash://connect?address=127.0.0.1%3A${port}&code=${code}`);
+
+  // A rerun with no flags keeps the earlier settings (loopback mode, port) and restarts the same bridge.
+  const again = await onboard(h, ['--minimal', '--platform', 'linux', '--skip', 'deps,adapters'], 90000);
+  expect(again.code, again.out).toBe(0);
+  expect(again.out).toMatch(/^kept {7}from the existing .*dash-bridge\.service: .*DASH_HOST/m);
+  expect(again.out).toContain('healthy    bridge ws://127.0.0.1:' + port + '/ws');
+  expect(await readFile(join(units, 'dash-bridge.service'), 'utf8')).toBe(unit);
 
   const off = await onboard(h, ['--uninstall', '--platform', 'linux'], 60000);
   expect(off.code, off.out).toBe(0);
