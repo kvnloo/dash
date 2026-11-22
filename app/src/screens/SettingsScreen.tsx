@@ -6,6 +6,7 @@ import { DeviceCheck } from "../components/DeviceCheck";
 import { NotificationSettings } from "../components/NotificationSettings";
 import { BedtimeSettings } from "../components/BedtimeSettings";
 import { setHandedness, useHandedness } from "../lib/useHandedness";
+import { DESK_CHOICES, deskPrefs, setDeskChoice } from "../lib/desk";
 import type { Handedness } from "../lib/handedness";
 import { Canvas } from "../components/Canvas";
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -30,6 +31,7 @@ import { endpointsOf, withEditedEndpoint } from "../lib/bridge-failover";
 
 export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const thumb = useHandedness();
+  const deskChoice = deskPrefs.use(s => s.choice);
   const insets = useSafeAreaInsets();
   const settings = store.use((s) => s.settings);
   const connection = store.use((s) => s.connection);
@@ -210,6 +212,23 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             <InformationDensityPicker />
           </GlassSurface>
           <Text style={styles.help}>Layout sets spacing and tile size. Detail sets how much evidence each tile shows. Each dial changes only its own axis; Auto detail follows the layout.</Text>
+          <Text style={styles.label}>Desk layout</Text>
+          <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+            <View style={styles.harnessRow}><Text style={styles.harnessName}>DeX and wide windows</Text></View>
+            <View style={{ flexDirection: "row", paddingHorizontal: space.md, gap: space.sm }}>
+              {DESK_CHOICES.map(value => <Pressable key={value}
+                accessibilityRole="radio"
+                accessibilityLabel={`Desk layout ${value}`}
+                accessibilityState={{ checked: deskChoice === value }}
+                aria-checked={deskChoice === value}
+                testID={`settings-desk-${value}`}
+                onPress={() => { setDeskChoice(value); haptic.select(); }}
+                style={{ flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, borderWidth: 1, borderColor: deskChoice === value ? colors.gold : colors.border }}>
+                <Text style={{ ...type.body, color: deskChoice === value ? colors.gold : colors.textMuted }}>{value[0]?.toUpperCase()}{value.slice(1)}</Text>
+              </Pressable>)}
+            </View>
+            <Text style={[styles.help, { padding: space.md }]}>Auto shows the multi-pane desk in Samsung DeX or any window at least 1100 wide (960 with a DeX display or a mouse). On and Off force it. The phone layout is unchanged.</Text>
+          </GlassSurface>
           <Text style={styles.label}>Bridge</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field
