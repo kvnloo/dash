@@ -15,6 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { microphone } from "../lib/recorded-speech";
 import { ensureMicPermission, permissionRequestInFlight } from "../lib/mic-permission";
 import { createStore } from "../store/createStore";
+import { hearLearnTopic } from "../store/ephemeral-mode";
 import { focusVoiceOrbOverlay, VoiceOrbOverlay } from "./VoiceOrbOverlay";
 import type { OrbState } from "../lib/orb-phase";
 import { debugUi } from "../debug/ui-store";
@@ -280,7 +281,10 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
           return { message: result.message, ...(response.ok && typeof result.answer === "string" ? { answer: result.answer } : {}) };
         },
         cursor: { read: async () => { const raw = await AsyncStorage.getItem(cursorKey); return raw !== null && /^\d+$/.test(raw) ? Number(raw) : null; }, write: value => AsyncStorage.setItem(cursorKey, String(value)) },
-        transcript: (id, text, start, end) => { if (annotate.get().active && annotate.get().turboTarget === turboCapture) addSegment({ id, text, start, end, source: "voice" }); } });
+        transcript: (id, text, start, end) => {
+          if (annotate.get().active) { if (annotate.get().turboTarget === turboCapture) addSegment({ id, text, start, end, source: "voice" }); }
+          else hearLearnTopic(id, text);
+        } });
       call.current = controller;
       // A Mute tap during authenticated bootstrap must also apply when the native peer arrives.
       const connecting = controller.start({ ...target, brokerProfile: bootstrap.canonicalProfile });

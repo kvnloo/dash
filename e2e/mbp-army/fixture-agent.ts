@@ -51,8 +51,23 @@ const toolTurn = (done: () => void, many: boolean) => {
  next();
 };
 // Fenced payloads travel over real ACP and the real bridge, never through app debug state.
-function generatedReply(prompt: string): string | null {
+// Learn surface (DA-010): the app's own Learn prompts get the answer shape a real model writes
+// for them, including the Mermaid a model really emits (shapes, subgraph, styles, -- text --> edges).
+function learnReply(prompt: string, links: string[]): string | null {
+ const learn = /^\[Dash · Learn mode · (explain|quiz|map|sketch)\] Topic: ([^\n]*)/.exec(prompt);
+ if (!learn) return null;
+ const [, intent, topic] = learn;
+ if (intent === 'map') return 'Here is the map.\n\n```mermaid\nflowchart TD\n  subgraph L[Light reactions]\n    S((Sunlight)) --> C([Chlorophyll])\n    W["Water (H2O)"] -- split by light --> O[Oxygen]\n  end\n  C -->|excites| E[ATP & NADPH]\n  E & K[CO2] --> V[[Calvin cycle]]\n  V --> G{{Glucose}}\n  classDef hot fill:#f5a524\n  class S hot\n  style G stroke:#22c55e\n```\n\n```genui\n{"version":1,"components":[{"type":"table","title":"ARMY map parts: ' + topic + '","columns":["Part","Role"],"rows":[["Chlorophyll","catches light"],["Calvin cycle","builds sugar"]]}]}\n```';
+ if (intent === 'sketch') {
+  const seen = links.length ? links.join(', ') : 'no attachments';
+  return '```genui\n{"version":1,"components":[{"type":"card","title":"ARMY saw your sketch","text":"ARMY sketch files: ' + seen + '"},{"type":"card","title":"ARMY sketch topic","text":"' + (topic ?? '') + '"}]}\n```';
+ }
+ return '```genui\n{"version":1,"components":[{"type":"card","title":"ARMY Learn card","text":"ARMY explains ' + (topic ?? '') + '"},{"type":"choices","id":"check","title":"Check yourself","items":[{"id":"a","label":"ARMY answer A"},{"id":"b","label":"ARMY answer B"}]}]}\n```';
+}
+function generatedReply(prompt: string, links: string[] = []): string | null {
  if (process.env.ARMY_GENERATED_UI !== '1') return null;
+ const learn = learnReply(prompt, links);
+ if (learn) return learn;
  const prototypePort = /ARMY_PROTOTYPE_LINK=(\d+)/.exec(prompt)?.[1];
  if (prototypePort) return `Try http://localhost:${prototypePort}/previews/counter#t=0123456789abcdef for review.`;
  if (prompt.includes('ARMY_HTML_PROTOTYPE')) return '```html\n<button onclick="this.nextElementSibling.textContent=\'Updated\'">Try control</button><p>Ready</p>\n```';
@@ -96,6 +111,10 @@ createInterface({input:process.stdin}).on('line', line => {
   active = r.id;
   const params=typeof r.params==='object'&&r.params!==null&&'prompt' in r.params?r.params.prompt:[];
   const text = Array.isArray(params)?params.map((p:unknown)=>typeof p==='object'&&p!==null&&'text' in p&&typeof p.text==='string'?p.text:'').join(''):'';
+  // What the agent was handed besides text (an annotation's PNG and strokes JSON arrive as links or images).
+  const blocks = Array.isArray(params)?params.flatMap((p:unknown)=>isRecord(p)&&(p.type==='resource_link'||p.type==='image')?[{type:String(p.type),name:String(p.name ?? ''),mimeType:String(p.mimeType ?? ''),uri:String(p.uri ?? '')}]:[]):[];
+  const links = blocks.map(b=>`${b.name || b.uri} (${b.mimeType})`);
+  if (blocks.length) {try{appendFileSync(join(process.env.HOME || '.', 'army-acp-prompts.jsonl'),JSON.stringify({agent,text:text.slice(0,400),blocks})+'\n');}catch{/* evidence only */}}
   turnLog('start', text);
   if (text.includes('ARMY Turbo make this label clearer') && Array.isArray(params)) {
    appendFileSync(join(process.env.HOME || '.', 'army-turbo-prompt.jsonl'), JSON.stringify({ agent, sessionId, text,
@@ -116,8 +135,8 @@ createInterface({input:process.stdin}).on('line', line => {
   if (text.includes('ARMY_USAGE')) send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'usage_update',used:85000,size:200000}}});
   const longReply = text.includes('ARMY_LONG_REPLY') ? 'ARMY_LONG_REPLY_BEGIN ' + 'x'.repeat(17000) + ' ARMY_LONG_REPLY_END' : null;
   const linkUrl = /^ARMY_CHAT_LINKS (https?:\/\/\S+)$/.exec(text)?.[1];
-  const links = linkUrl ? 'Visit ' + linkUrl + '.\n\nOpen Downloads/notes/army.md:2:3\n\n`Downloads/notes/army.md:1` stays code.' : null;
-  const generated = longReply ?? links ?? generatedReply(text);
+  const chatLinks = linkUrl ? 'Visit ' + linkUrl + '.\n\nOpen Downloads/notes/army.md:2:3\n\n`Downloads/notes/army.md:1` stays code.' : null;
+  const generated = longReply ?? chatLinks ?? generatedReply(text, links);
   const split = generated?.indexOf('\n');
   const prefix = longReply ? longReply.slice(0, 8500) : generated && split !== undefined ? generated.slice(0, split + 1) : 'ARMY_STREAM_BEGIN ';
   const answer = () => { clearInterval(ticker); ticker = undefined; turnLog('end', text); update(generated ? generated.slice(prefix.length) : replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); };

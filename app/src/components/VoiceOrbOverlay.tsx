@@ -5,6 +5,7 @@ import { debugNavigationRef } from "../debug/nav";
 import type { VoiceState } from "../lib/continuous-voice";
 import { voiceOrbPhase } from "../lib/voice-orb";
 import { annotate } from "../store/annotate";
+import { surfaceMode } from "../store/ephemeral-mode";
 import { createStore } from "../store/createStore";
 import { colors, glass, radius, type } from "../theme";
 import { AgentOrb } from "./AgentOrb";
@@ -20,11 +21,13 @@ const captions = {
 
 export function VoiceOrbOverlay({ state, onMute }: { state: VoiceState; onMute(): void }) {
   const annotating = annotate.use(s => s.active);
+  // Learn is a visual surface: its cards and panel stay readable; the header pill and dock keep the call's status and Mute.
+  const learning = surfaceMode.use(s => s === "learn");
   const [voiceScreen, setVoiceScreen] = useState(() => debugNavigationRef.getCurrentRoute()?.name === "Voice");
   const requested = attention.use(value => value);
   const [highlight, setHighlight] = useState(false);
   const live = state.phase !== "idle" && state.phase !== "error";
-  const visible = live && !annotating && !voiceScreen;
+  const visible = live && !annotating && !learning && !voiceScreen;
   useEffect(() => {
     const sync = () => setVoiceScreen(debugNavigationRef.getCurrentRoute()?.name === "Voice");
     const unsubscribe = debugNavigationRef.addListener("state", sync);
