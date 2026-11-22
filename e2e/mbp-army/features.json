@@ -1,6 +1,7 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id":"bots-page-prototype","title":"Bots page shows reported bots as a gem table and an orrery, opens a simple bot page, and keeps the host tree","tests":["bots page shows every reported bot as a gem, as an orrery and in the host tree","a bot gem opens its simple page with honest channels; only a bot with a harness offers chat"]},
     {"id":"dash-logwatch-triage","title":"File a local triage task on distinct phone JS or bridge errors","tests":["Dash log watcher files a local task for each distinct phone JS or bridge error"]},
     {"id":"reply-to-selected-message-text","title":"Quote selected agent message text into the unsent composer without sending","tests":["reply selection adds only highlighted assistant text to unsent draft, preserving attachments","cancel text selection leaves draft and bridge unchanged"]},
     {"id": "composer-model-harness-rate", "title": "Composer controls edit harness/model and show honest streaming token speed through the real authenticated bridge",

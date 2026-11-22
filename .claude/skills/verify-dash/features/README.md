@@ -89,6 +89,7 @@ The status counts were taken at the commit this map was written on. Maintain the
 - [Sending to every harness](./harness-send-matrix.md): UNCOVERED
 - [Persisted sessions](./persisted-sessions.md): UNCOVERED
 - [Bots pane](./bots-pane.md): UNCOVERED
+- [Bots page (prototype)](./bots-page.md): COVERED
 
 ### Delivery and errors
 
