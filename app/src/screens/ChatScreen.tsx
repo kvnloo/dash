@@ -8,8 +8,11 @@ import { replyObservationKey } from "../lib/next-action";
 import { useHandedness } from "../lib/useHandedness";
 import { BlurTargetView } from "expo-blur";
 import { Canvas } from "../components/Canvas";
-import { setThinkingSummaries, setConversationModel } from "../store/app";
+import { openChat, setThinkingSummaries, setConversationModel } from "../store/app";
 import { useComposerStreamRate } from "../hooks/useComposerStreamRate";
+import { useHostModelRoles } from "../hooks/useHostModelRoles";
+import { modelChoices, sessionRoutes } from "../lib/chat-routes";
+import { chatIndexStore, DEFAULT_QUERY, summaryByKey } from "../store/chat-index-store";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { FlashList, type FlashListRef, type ViewToken } from "@shopify/flash-list";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -38,7 +41,7 @@ import { isDebugActive } from "../debug/expose";
 import { debugUi } from "../debug/ui-store";
 import { haptic } from "../haptics";
 import { canSteer, type SendMode } from "../lib/composer-mode";
-import type { ChatAttachment } from "../../../shared/protocol";
+import type { ChatAttachment, ChatSummary } from "../../../shared/protocol";
 import type { AssistantMessage, Message } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge, openLiveSurface, permissionRequests, sendChat, sendLiveTurn } from "../net/bridge";
@@ -498,6 +501,28 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
     // Never a default name: unknown unless the host reported it for this exact session.
     ...hostIdentity(hostReading ?? undefined, conversation?.sessionId, observedAt),
   }), [conversation?.targetHostId, conversation?.profileName, conversation?.profileId, conversation?.sessionId, conversation?.sessionModel, connection.hosts, connection.host, selfHost?.id, selfHost?.name, harnessName, hostReading, observedAt]);
+  // The badge's tree: other chats to warp to (any host this pairing reaches) and models for the next turn.
+  const allConversations = store.use(s => s.conversations);
+  const indexList = chatIndexStore.use(s => s.lists[DEFAULT_QUERY]?.list);
+  const routes = useMemo(() => treeOpen ? sessionRoutes({
+    conversations: allConversations, currentId: conversation?.id, address: settings?.address, hosts: connection.hosts, harnesses: connection.harnesses,
+    summaries: indexList ? [...indexList.head, ...indexList.rows.filter((row): row is ChatSummary => row !== null)] : [],
+  }) : [], [treeOpen, allConversations, conversation?.id, settings?.address, connection.hosts, connection.harnesses, indexList]);
+  const hostRoles = useHostModelRoles(settings, windowed && treeOpen);
+  const models = useMemo(() => modelChoices({ reported: identity.model, requested: conversation?.modelOverride, roles: hostRoles }), [identity.model, conversation?.modelOverride, hostRoles]);
+  // The bridge applies a model only over ACP: a Hermes chat already attached to a gateway session on this
+  // host refuses overrides, so the badge says so instead of offering a choice that would fail the turn.
+  const modelSwitchable = !(harnessId === "hermes" && conversation?.sessionId && (!conversation.targetHostId || connection.hosts.some(host => host.self && host.id === conversation.targetHostId)));
+  const warp = useCallback((id: string) => {
+    if (id === conversation?.id) return;
+    // A host-index row becomes a phone chat only now, exactly as opening it from Chats does.
+    const summary = id.startsWith("remote:") ? summaryByKey(id.slice(7)) : undefined;
+    if (summary) openChat(summary); else setActive(id);
+    // The window now shows the other chat; its badge starts closed.
+    setTreeOpen(false);
+    // A route draft seeded the chat it was opened for, not the one the owner warped to.
+    if (route.params?.draft !== undefined) navigation.setParams({ draft: undefined });
+  }, [conversation?.id, navigation, route.params?.draft]);
   const queuedCount = conversation ? queuedParts(conversation).length : 0;
   const detailMode = conversation?.detailMode ?? "Compact";
   const menuRows = useMemo((): ComposerMenuRow[] => {
@@ -710,6 +735,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           onAnnotate={enterAnnotation}
           treeOpen={treeOpen}
           onTree={setTreeOpen}
+          requestedModel={conversation?.modelOverride}
+          models={models}
+          onModel={modelSwitchable ? model => setConversationModel((conversation ?? createConversation(harnessId)).id, model) : undefined}
+          routes={routes}
+          onWarp={warp}
           onClose={closeWindow}
           notice={targetError ? <Text accessibilityRole="alert" style={styles.targetError}>{targetError}</Text>
             : conversation?.openIn ? <Text accessibilityRole="text" style={styles.handoffNote}>{sessionViewerLabel(conversation.openIn, conversation.targetHostId, connection)}</Text> : null}
