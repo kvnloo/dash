@@ -9,7 +9,8 @@ test('Me mode makes live and replayed reports silent without muting other socket
   const token = (await readFile(join(bridge.dir, '.dash/token'), 'utf8')).trim();
   const ingress = /^\s*notices\s+(\S+\/notice)\s/m.exec(bridge.logs())?.[1];
   if (!ingress) throw new Error('Bridge report ingress missing');
-  const url = new URL(ingress);
+  const reportUrl = new URL(ingress);
+  const url = new URL(reportUrl);
   url.protocol = 'ws:';
   url.port = String(bridge.port);
   url.pathname = '/ws';
@@ -44,7 +45,7 @@ test('Me mode makes live and replayed reports silent without muting other socket
     };
   }
   async function report(title: string) {
-    const response = await fetch(ingress, {
+    const response = await fetch(reportUrl, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, body: 'ARMY report body' }),
