@@ -102,8 +102,10 @@ test('Next up opens the exact completed background reply without sending and pre
 });
 
 test('Next up Later survives reload, Skip dismisses only one completion, and a newer reply in that chat returns', async ({ page, bridge }) => {
-  // This journey never changes time; keep native browser input timing. Use the
-  // accessible Send button and prove the new prompt is running before navigation.
+  // Use the virtual clock for the final snooze expiry, and exercise Send
+  // through the keyboard so the tap gesture does not race the frozen timers.
+  await page.clock.install();
+  // Prove the new prompt is running before navigating away.
   const sendHeld = async (prompt: string, starts: number) => {
     await composer(page).fill(prompt);
     const button = page.getByRole('button', { name: 'Send', exact: true });
