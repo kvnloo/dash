@@ -1,4 +1,5 @@
 // Fixture-only discoverable OMP session, confined to the bridge PID namespace.
+import {execFileSync} from 'node:child_process';
 import {existsSync,mkdirSync,openSync,writeSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 const wait=process.env.ARMY_SESSION_HOLDER_WAIT;
@@ -12,6 +13,12 @@ writeSync(fd,JSON.stringify({type:'session',id:'army-fixture-session'})+'\n');
 const label=process.argv[2];
 if(label==='secondary'&&process.env.ARMY_SECONDARY_CWD==='1'){
  const cwd=join(root,'army-secondary-cwd');mkdirSync(cwd,{recursive:true});process.chdir(cwd);
+}
+// ARMY_HOLDER_REPO=<relative path>: the session works in its own Git repository under the
+// isolated OMP root, so its repository never depends on where the army checkout lives.
+const holderRepo=process.env.ARMY_HOLDER_REPO;
+if(!label&&holderRepo){
+ const cwd=join(root,holderRepo);mkdirSync(cwd,{recursive:true});execFileSync('git',['init','-q',cwd]);process.chdir(cwd);
 }
 const control=label?`army-holder-${label}`:'army-holder';
 writeFileSync(join(root,control+'.pid'),String(process.pid));

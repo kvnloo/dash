@@ -18,6 +18,11 @@ function liveHermesIn(dir: string, repo: string) {
   execFileSync('python3', ['-c', 'import sqlite3,sys\ndb=sqlite3.connect(sys.argv[1])\ndb.execute("UPDATE sessions SET cwd=? WHERE id=?",(sys.argv[2],"army-fixture-session"))\ndb.commit()', join(dir, '.hermes/state.db'), repo]);
 }
 
+// The fixture OMP session works in its own repository, nested under a plain folder named `dash`
+// (as a CI checkout at .../work/dash/dash nests everything). A folder is not a repository:
+// only the Hermes session whose repository is `dash` is a dash session, on every checkout path.
+test.use({ bridgeOptions: { env: { ARMY_HOLDER_REPO: join('dash', 'army-omp-scratch') } } });
+
 test('Orchestra AODL network shows live nodes from the bridge, with no unavailable source warnings', async ({ page, bridge }, info) => {
   liveHermesIn(bridge.dir, join(bridge.dir, 'work', 'dash'));
   await page.setViewportSize({ width: 390, height: 844 });
