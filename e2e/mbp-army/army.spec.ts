@@ -423,3 +423,82 @@ test.describe('ephemeral ACP regression',()=>{
   await expect(page.getByText('This chat has ended on the host. Its saved history is still on this phone.',{exact:true})).toHaveCount(0);
  });
 });
+
+test('Trace opens a readable timeline and shows the right evidence for each turn', async ({ page, bridge }, info) => {
+  const { createHash } = await import('node:crypto');
+  const { execFileSync } = await import('node:child_process');
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  const dir = join(bridge.dir, '.local/state/dash/runs', 'army-trace');
+  await mkdir(dir, { recursive: true });
+  const request = 'OWNER: Export the fixture report\n\n## Acceptance\n- Report renders\n- Owner reviews';
+  const receipt = join(dir, 'receipt.txt');
+  const output = join(dir, 'report.txt');
+  await writeFile(join(dir, 'PROMPT.txt'), request);
+  await writeFile(join(dir, 'REPORT.md'), `Generated ${output}`);
+  await writeFile(receipt, 'Fixture render check: passed');
+  await writeFile(output, 'Fixture output bytes');
+  await writeFile(join(dir, 'VALIDATION.json'), JSON.stringify([
+    { checkId: 'check-1', text: 'Report renders', status: 'pass', evidence: [receipt], sourceHash: createHash('sha256').update(request).digest('hex') },
+    { checkId: 'check-2', text: 'Owner reviews', status: 'pass', evidence: [receipt], sourceHash: 'wrong request' },
+  ]));
+  execFileSync('bun', [join(__dirname, 'seed-trace-turns.ts'), join(bridge.dir, '.hermes/state.db')]);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await pair(page, bridge);
+  await page.getByRole('tab').nth(2).click();
+  await page.getByTestId('trace-entry').click();
+  await expect(page.getByRole('heading', { name: 'Activity timeline' })).toBeVisible();
+  await expect(page.getByTestId('trace-timeline-plot')).toHaveCount(0);
+  const run = page.getByTestId('row-run:army-trace');
+  await expect(run).toContainText('Validation partly');
+  await run.scrollIntoViewIfNeeded();
+  await run.evaluate(element => {
+    element.addEventListener('click', () => {
+      const start = performance.now();
+      const frame = () => {
+        const heading = document.querySelector('[data-testid="trace-evidence"]');
+        if (heading?.getBoundingClientRect().height) {
+          requestAnimationFrame(() => performance.measure('trace-evidence-frame', { start, end: performance.now() }));
+        } else if (performance.now() - start < 5000) requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    }, { once: true, capture: true });
+  });
+  await run.click();
+  const evidence = page.getByTestId('trace-evidence');
+  await expect(evidence.getByText('INTENT CONTRACT', { exact: true })).toBeInViewport();
+  await expect.poll(() => page.evaluate(() => performance.getEntriesByName('trace-evidence-frame').length)).toBe(1);
+  const ms = await page.evaluate(() => performance.getEntriesByName('trace-evidence-frame', 'measure')[0]?.duration);
+  expect(typeof ms).toBe('number');
+  expect(ms).toBeLessThan(1000);
+  await info.attach('trace-open-ms', { body: String(ms), contentType: 'text/plain' });
+  await expect(evidence).toContainText('Export the fixture report');
+  await expect(evidence).toContainText('AODL / HOTL 0.2');
+  await expect(evidence).toContainText('Passed · 1 receipt');
+  await expect(evidence).toContainText('Unknown · no criterion-bound receipt');
+  await evidence.getByRole('button', { name: 'file: Receipt' }).click();
+  await expect(evidence).toContainText('Fixture render check: passed');
+  await evidence.getByRole('button', { name: 'file: report.txt' }).click();
+  await expect(evidence).toContainText('Fixture output bytes');
+  await page.screenshot({ path: info.outputPath('trace-receipt-and-artifact.png') });
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await page.getByTestId('row-hermes:.hermes:army-fixture-session').click();
+  await expect(evidence).toContainText('Second fixture turn');
+  await expect(evidence).toContainText('second-output');
+  await expect(evidence).not.toContainText('first-output');
+  await expect(evidence).not.toContainText('discarded-output');
+  await expect(evidence).toContainText('Unknown · no criterion-bound receipt');
+  await page.getByRole('button', { name: 'Older turn' }).click();
+  await expect(evidence).toContainText('First fixture turn');
+  await expect(evidence).toContainText('first-output');
+  await expect(evidence).not.toContainText('second-output');
+  await page.getByRole('button', { name: 'Newer turn' }).click();
+  await expect(evidence).toContainText('Second fixture turn');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Show time chart' }).click();
+  await expect(page.getByTestId('trace-timeline-plot')).toBeVisible();
+  await page.getByRole('button', { name: 'Show list' }).click();
+  await expect(page.getByTestId('trace-timeline-plot')).toHaveCount(0);
+});

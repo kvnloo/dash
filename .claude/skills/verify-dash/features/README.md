@@ -134,7 +134,7 @@ The status counts were taken at the commit this map was written on. Maintain the
 - [Orchestra detail (product)](./orchestra-detail.md): UNCOVERED
 - [Approvals](./approvals.md): COVERED
 - [Needs Kevin](./needs-kevin.md): UNCOVERED
-- [Trace screen](./trace-screen.md): UNCOVERED
+- [Trace screen](./trace-screen.md): activity, turn evidence and live/unavailable feed covered
 
 ### Voice, surfaces and lab
 

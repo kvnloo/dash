@@ -1,157 +1,99 @@
 import { useLayoutEffect, useState } from "react";
-import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  Extrapolation,
-  cancelAnimation,
-  ReduceMotion,
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import Animated, { FadeIn, ReduceMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { snappy, settleTiming, fade } from "../../motion";
 import { haptic } from "../../haptics";
 import { askWord, clock, dur, rowMeta, summarizeRow, type TraceRow, type TraceSnapshot } from "../../trace/model";
 import { fonts, radius, space, type } from "../../theme";
 import { LivePulse, tc } from "./tokens";
-import type { RowRect } from "./TraceTimeline";
 import { TraceEvidenceCards, type TraceRoute } from "./TraceEvidenceCards";
 
-const open = { ...fade, easing: snappy.easing, reduceMotion: ReduceMotion.System };
+const enter = FadeIn.duration(140).reduceMotion(ReduceMotion.System);
 
-/**
- * Shared-element-style expand: the sheet starts at the tapped row's window rect and springs
- * to the sheet rect; contents fade in once it is mostly open. Drag down, tap the scrim or press
- * back to close (reverse morph into the row). Reduced motion: a plain crossfade.
- */
-export function TraceDetail({ snapshot, row, stale = false, origin, onClose, onNavigate }: { snapshot: TraceSnapshot; row: TraceRow; stale?: boolean; origin: RowRect; onClose(): void; onNavigate?(route: TraceRoute): void }) {
-  const { width: W, height: H } = useWindowDimensions();
+/** Keep the evidence mounted from the first frame; only opacity animates. */
+export function TraceDetail({ snapshot, row, stale = false, onClose, onNavigate }: { snapshot: TraceSnapshot; row: TraceRow; stale?: boolean; onClose(): void; onNavigate?(route: TraceRoute): void }) {
   const insets = useSafeAreaInsets();
-  const reduced = useReducedMotion();
-  const p = useSharedValue(0);
-  const [ready, setReady] = useState(reduced);
   const [metricsOpen, setMetricsOpen] = useState(false);
-  const drag = useSharedValue(0);
-  const top = insets.top + 56;
-  const target = { x: 0, y: top, width: W, height: H - top + 24 }; // runs past the bottom edge: no gap, no bottom corners
-  const from = origin.width > 0 ? origin : { x: target.x, y: target.y + 40, width: target.width, height: 80 };
+  const [turnId, setTurnId] = useState<string>();
+  const turns = row.turns ?? [];
+  const turnIndex = Math.max(0, turns.findIndex(item => item.id === turnId));
+  const turn = turns[turnIndex];
+  const evidence = turn?.evidence ?? row.evidence;
+  const close = () => { haptic.tap(); onClose(); };
 
   useLayoutEffect(() => {
-    p.value = withTiming(1, open, finished => { if (finished) runOnJS(setReady)(true); });
-  }, [p, reduced]);
-
-  const close = () => {
-    haptic.tap();
-    p.value = reduced ? withTiming(0, { ...fade, reduceMotion: ReduceMotion.System }, (f) => { if (f) runOnJS(onClose)(); }) : withTiming(0, { ...open }, (f) => { if (f) runOnJS(onClose)(); });
-  };
-
-  useLayoutEffect(() => {
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => { close(); return true; });
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => { onClose(); return true; });
     return () => sub.remove();
-  });
-
-  const pan = Gesture.Pan()
-    .activeOffsetY(12)
-    .failOffsetX([-20, 20])
-    .onBegin(() => { cancelAnimation(drag); })
-    .onUpdate((e) => { drag.value = Math.max(0, e.translationY); })
-    .onEnd((e) => {
-      if (drag.value > 120 || e.velocityY > 900) { drag.value = withTiming(0, open); runOnJS(close)(); }
-      else drag.value = withTiming(0, { ...settleTiming(-drag.value, e.velocityY), reduceMotion: ReduceMotion.System });
-    });
-
-  // Transform-only morph: the sheet keeps its final size and is scaled/translated from the tapped row's rect.
-  // Animating left/top/width/height re-ran layout for the whole sheet every frame, which made opening lag.
-  const sx = from.width / target.width, sy = from.height / target.height;
-  const dx = from.x - target.x, dy = from.y - target.y;
-  const sheet = useAnimatedStyle(() => {
-    const k = reduced ? 1 : p.value;
-    const lerp = (a: number, b: number) => a + (b - a) * k;
-    const scaleX = lerp(sx, 1), scaleY = lerp(sy, 1);
-    const shrink = 1 - interpolate(drag.value, [0, 400], [0, 0.06], Extrapolation.CLAMP);
-    return {
-      opacity: reduced ? p.value : interpolate(k, [0, 0.15], [0.6, 1], Extrapolation.CLAMP),
-      transform: [
-        // scale about the top-left corner: shift by half the size change
-        { translateX: lerp(dx, 0) - (target.width * (1 - scaleX)) / 2 },
-        { translateY: lerp(dy, 0) - (target.height * (1 - scaleY)) / 2 + drag.value },
-        { scaleX: scaleX * shrink },
-        { scaleY: scaleY * shrink },
-      ],
-    };
-  });
-  const scrim = useAnimatedStyle(() => ({ opacity: p.value * 0.72 * (1 - Math.min(1, drag.value / 500)) }));
-  const body = useAnimatedStyle(() => ({ opacity: interpolate(p.value, [0.55, 1], [0, 1], Extrapolation.CLAMP), transform: [{ translateY: interpolate(p.value, [0.5, 1], [12, 0], Extrapolation.CLAMP) }] }));
+  }, [onClose]);
 
   const sum = summarizeRow(row);
   const live = row.workers.some((w) => w.status === "running");
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="trace-detail">
-      <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, scrim]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="Close detail" />
-      </Animated.View>
-      <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.sheet, { left: target.x, top: target.y, width: target.width, height: target.height }, sheet]} accessibilityViewIsModal renderToHardwareTextureAndroid>
-          <View style={styles.grab} />
-          <View style={styles.head}>
-            <View style={{ flex: 1 }}>
-              <View style={styles.titleRow}>
-                {live ? <LivePulse size={7} /> : null}
-                <Text style={styles.project} numberOfLines={1}>{row.project}</Text>
-              </View>
-              <Text style={styles.goal} numberOfLines={1}>{row.goal}</Text>
+      <Pressable style={[StyleSheet.absoluteFill, styles.scrim]} onPress={close} accessibilityLabel="Close detail" />
+      <Animated.View entering={enter} style={[styles.sheet, { paddingBottom: insets.bottom }]} accessibilityViewIsModal>
+        <View style={styles.head}>
+          <View style={{ flex: 1 }}>
+            <View style={styles.titleRow}>
+              {live ? <LivePulse size={7} /> : null}
+              <Text style={styles.project} numberOfLines={1}>{row.project}</Text>
             </View>
-            <Pressable onPress={close} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close" style={styles.close}><Text style={styles.closeText}>×</Text></Pressable>
+            <Text style={styles.goal} numberOfLines={2}>{row.goal}</Text>
           </View>
-          <Animated.View style={[styles.flex, body]}>
-            {ready ? <ScrollView contentContainerStyle={styles.scroll}>
-              <View style={styles.provenance} testID="trace-provenance">
-                <Text style={styles.provText} selectable>Event · {row.key}</Text>
-                <Text style={styles.provText} selectable numberOfLines={2}>Source · {row.provenance?.source ?? row.evidence?.intent.provenance.source ?? "unknown"}</Text>
-                {row.evidence ? <Text style={styles.provText} selectable>Request hash · {row.evidence.intent.provenance.sourceHash.slice(0, 12)}</Text> : null}
-                {stale ? <Text style={[styles.provText, { color: tc.cut }]}>No longer in the live feed · showing its last received copy</Text> : null}
+          <Pressable onPress={close} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close" style={styles.close}><Text style={styles.closeText}>×</Text></Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          {stale ? <Text style={[styles.provText, { color: tc.cut }]}>No longer in the live feed · showing its last received copy</Text> : null}
+          {turns.length > 1 ? <View style={styles.turnControls}>
+            <Pressable accessibilityRole="button" disabled={turnIndex === 0} onPress={() => setTurnId(turns[turnIndex - 1]?.id)}>
+              <Text style={[styles.turnButton, turnIndex === 0 && styles.disabled]}>Newer turn</Text>
+            </Pressable>
+            <Text style={styles.provText}>{turnIndex + 1} of {turns.length} recent turns</Text>
+            <Pressable accessibilityRole="button" disabled={turnIndex === turns.length - 1} onPress={() => setTurnId(turns[turnIndex + 1]?.id)}>
+              <Text style={[styles.turnButton, turnIndex === turns.length - 1 && styles.disabled]}>Older turn</Text>
+            </Pressable>
+          </View> : null}
+          <TraceEvidenceCards key={turn?.id} evidence={evidence} onNavigate={route => { onClose(); onNavigate?.(route); }} />
+          <View style={styles.provenance} testID="trace-provenance">
+            <Text style={styles.provText} selectable>Event · {row.key}</Text>
+            <Text style={styles.provText} selectable numberOfLines={2}>Source · {evidence?.intent.provenance.source ?? row.provenance?.source ?? "unknown"}</Text>
+            {evidence ? <Text style={styles.provText} selectable>Request hash · {evidence.intent.provenance.sourceHash.slice(0, 12)}</Text> : null}
+            {turn ? <Text style={styles.provText}>Turn time · {clock(snapshot.t0, turn.at)}</Text> : null}
+          </View>
+          <Pressable onPress={() => setMetricsOpen(v => !v)} accessibilityRole="button" accessibilityLabel="Worker metrics" accessibilityState={{ expanded: metricsOpen }} aria-expanded={metricsOpen}>
+            <Text style={styles.section}>{metricsOpen ? "−" : "+"} WORKERS & METRICS · {sum.workers}</Text>
+          </Pressable>
+          {metricsOpen ? <>
+          <View style={styles.metrics}>
+            <Metric k="workers" v={String(sum.workers)} />
+            <Metric k="calls" v={sum.calls.toLocaleString("en-US")} />
+            <Metric k="failed" v={String(sum.errors)} tone={sum.errors >= 10 ? tc.cut : undefined} />
+            <Metric k={sum.live ? "since" : "ended"} v={clock(snapshot.t0, sum.live ? sum.s : sum.e)} />
+          </View>
+          <Text style={styles.section}>{rowMeta(sum).toUpperCase()}</Text>
+          {row.workers.map((w) => {
+            const status = w.status === "unknown" ? "liveness unknown" : w.status === "running" ? `live ${dur(snapshot.now - w.s)}` : w.status === "interrupted" ? `cut ${clock(snapshot.t0, w.e)}${w.resumed ? ", resumed" : ""}` : `done ${clock(snapshot.t0, w.e)}`;
+            const color = w.status === "running" ? tc.live : w.status === "interrupted" ? tc.cut : tc.text2;
+            const stall = w.stalls.reduce((a, [s, e]) => a + e - s, 0);
+            return (
+              <View key={w.id} style={styles.worker}>
+                <View style={styles.wTop}>
+                  <Text style={styles.wId}>{w.id.replace("run-", "#")}</Text>
+                  <Text style={[styles.wStatus, { color }]}>{status}</Text>
+                </View>
+                {w.status === "unknown" ? null : <MiniBar w={w} t0={sum.s} t1={Math.max(sum.e, sum.s + 60)} />}
+                <Text style={styles.wMeta}>
+                  {w.status === "unknown" ? "Duration / error counts unavailable" : `${clock(snapshot.t0, w.s)} · ran ${dur(w.e - w.s)} · ${w.calls} calls · ${w.errors} failed${stall ? ` · stalled ${dur(stall)}` : ""}`}
+                </Text>
+                <Text style={styles.wModel} numberOfLines={1}>{w.model}</Text>
+                {w.asks.length ? <Text style={styles.wAsk}>needs your OK: {w.asks.map(askWord).join(", ")}</Text> : null}
               </View>
-              <TraceEvidenceCards evidence={row.evidence} onNavigate={route => { onClose(); onNavigate?.(route); }} />
-              <Pressable onPress={() => setMetricsOpen(v => !v)} accessibilityRole="button" accessibilityLabel="Worker metrics" accessibilityState={{ expanded: metricsOpen }} aria-expanded={metricsOpen}>
-                <Text style={styles.section}>{metricsOpen ? "−" : "+"} WORKERS & METRICS · {sum.workers}</Text>
-              </Pressable>
-              {metricsOpen ? <>
-              <View style={styles.metrics}>
-                <Metric k="workers" v={String(sum.workers)} />
-                <Metric k="calls" v={sum.calls.toLocaleString("en-US")} />
-                <Metric k="failed" v={String(sum.errors)} tone={sum.errors >= 10 ? tc.cut : undefined} />
-                <Metric k={sum.live ? "since" : "ended"} v={clock(snapshot.t0, sum.live ? sum.s : sum.e)} />
-              </View>
-              <Text style={styles.section}>{rowMeta(sum).toUpperCase()}</Text>
-              {row.workers.map((w) => {
-                const status = w.status === "unknown" ? "liveness unknown" : w.status === "running" ? `live ${dur(snapshot.now - w.s)}` : w.status === "interrupted" ? `cut ${clock(snapshot.t0, w.e)}${w.resumed ? ", resumed" : ""}` : `done ${clock(snapshot.t0, w.e)}`;
-                const color = w.status === "running" ? tc.live : w.status === "interrupted" ? tc.cut : tc.text2;
-                const stall = w.stalls.reduce((a, [s, e]) => a + e - s, 0);
-                return (
-                  <View key={w.id} style={styles.worker}>
-                    <View style={styles.wTop}>
-                      <Text style={styles.wId}>{w.id.replace("run-", "#")}</Text>
-                      <Text style={[styles.wStatus, { color }]}>{status}</Text>
-                    </View>
-                    {w.status === "unknown" ? null : <MiniBar w={w} t0={sum.s} t1={Math.max(sum.e, sum.s + 60)} />}
-                    <Text style={styles.wMeta}>
-                      {w.status === "unknown" ? "Duration / error counts unavailable" : `${clock(snapshot.t0, w.s)} · ran ${dur(w.e - w.s)} · ${w.calls} calls · ${w.errors} failed${stall ? ` · stalled ${dur(stall)}` : ""}`}
-                    </Text>
-                    <Text style={styles.wModel} numberOfLines={1}>{w.model}</Text>
-                    {w.asks.length ? <Text style={styles.wAsk}>needs your OK: {w.asks.map(askWord).join(", ")}</Text> : null}
-                  </View>
-                );
-              })}
-              </> : null}
-              <Text style={styles.foot}>{row.evidence ? "Private authenticated evidence · unknown is not acceptance" : "No original request or validation recorded for this event"}</Text>
-            </ScrollView> : <View accessibilityLabel="Loading detail" style={styles.flex} />}
-          </Animated.View>
-        </Animated.View>
-      </GestureDetector>
+            );
+          })}
+          </> : null}
+          <Text style={styles.foot}>{evidence ? "Private authenticated evidence · unknown is not acceptance" : "No original request or validation recorded for this event"}</Text>
+        </ScrollView>
+      </Animated.View>
     </View>
   );
 }
@@ -178,16 +120,17 @@ function MiniBar({ w, t0, t1 }: { w: TraceRow["workers"][number]; t0: number; t1
 }
 
 const styles = StyleSheet.create({
-  scrim: { backgroundColor: "#000" },
-  sheet: { position: "absolute", backgroundColor: "#121310", borderWidth: 1, borderColor: tc.rule, overflow: "hidden", borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
-  grab: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: "rgba(236,232,223,.22)", marginTop: 8 },
+  scrim: { backgroundColor: "rgba(0,0,0,.72)" },
+  sheet: { position: "absolute", top: 56, bottom: 0, left: 0, right: 0, backgroundColor: "#121310", borderWidth: 1, borderColor: tc.rule, overflow: "hidden", borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+  turnControls: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" },
+  disabled: { opacity: 0.45 },
+  turnButton: { color: tc.live, paddingVertical: space.sm },
   head: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.md, borderBottomWidth: 1, borderBottomColor: tc.rule },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   project: { ...type.heading, color: tc.text, fontSize: 18 },
   goal: { fontFamily: fonts.body, fontSize: 14, color: tc.text2 },
   close: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(236,232,223,.06)" },
   closeText: { color: tc.text2, fontSize: 22, lineHeight: 24 },
-  flex: { flex: 1 },
   scroll: { padding: space.lg, gap: space.md, paddingBottom: 48 },
   metrics: { flexDirection: "row", gap: space.sm },
   metric: { flex: 1, backgroundColor: tc.raised, borderRadius: radius.sm, padding: space.sm, borderWidth: 1, borderColor: tc.rule },

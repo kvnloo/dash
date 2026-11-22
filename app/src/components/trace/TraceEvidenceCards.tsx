@@ -23,9 +23,9 @@ export function TraceEvidenceCards({ evidence, onNavigate }: { evidence?: TraceE
       <Text style={s.body} testID="trace-goal">{goalLine(evidence)}</Text>
       {evidence.intent.constraints.rules.map((r, i) => <Text key={i} style={s.muted}>Constraint · {r}</Text>)}
       <Text style={s.muted}>AODL / HOTL {evidence.intent.specVersion} · extracted intent, not an observed plan</Text>
-    </> : <Text style={s.muted}>No original contract in this snapshot. Pair with a bridge to load run evidence.</Text>}
+    </> : <Text style={s.muted}>No original contract was recorded for this event.</Text>}
     <Text style={s.heading}>VALIDATION</Text>
-    <Text style={s.label}>Acceptance · one receipt per check</Text>
+    <Text style={s.label}>Acceptance · receipts tied to individual checks</Text>
     {evidence?.checks.length ? evidence.checks.map(c => <View key={c.id} style={s.card}>
       <Text style={s.body}>{c.status === "pass" ? "✓" : c.status === "fail" ? "×" : "?"} {c.text}</Text>
       <Text style={[s.muted, c.status === "pass" ? { color: tc.ok } : c.status === "fail" ? { color: tc.cut } : null]}>{c.status === "unknown" ? "Unknown · no criterion-bound receipt" : `${c.status === "pass" ? "Passed" : "Failed"} · ${c.evidence.length} receipt${c.evidence.length === 1 ? "" : "s"}`}</Text>
