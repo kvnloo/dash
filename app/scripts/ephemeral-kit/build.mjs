@@ -12,7 +12,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { synthesize } from "./synthetic.mjs";
 
-export const KIT_REV = "d5e4a5b42b480d5d187533b1fe3e48db386478b0";
+export const KIT_REV = "7c5daca42108f6701c0e78f227a7db3b2f50d25d";
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = resolve(here, "../..");
 const outDir = join(appDir, "src/vendor/ephemeral-ui");
