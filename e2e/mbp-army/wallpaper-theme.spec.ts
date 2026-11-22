@@ -32,7 +32,7 @@ test("Wallpaper glass stays selected and reveals the backdrop behind a usable ch
   await page.reload({ waitUntil: "domcontentloaded" });
   await chats.click({ noWaitAfter: true });
   await expect(scrim).toBeVisible();
-  await settings.click({ noWaitAfter: true });
+  await settings.press("Enter");
   await expect(toggle).toBeChecked();
   await toggle.click({ noWaitAfter: true });
   await expect(toggle).not.toBeChecked();
