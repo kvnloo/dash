@@ -22,10 +22,11 @@ through its normal release procedure):
 
 Stage a signed APK of the same application ID with a strictly greater version
 code. The bridge account must have ADB in PATH and access to the release and
-its O15 receipt. Keep the directory and APK immutable; publish the next
+its local O15 receipt; this route does not download a missing receipt. Keep the directory and APK immutable; publish the next
 release by changing the symlink, not by editing a release in place.
 
-In Settings, **Check for Android update → Update available → Install via ADB**.
+Opening Settings on Android checks automatically. To recheck manually, use
+**Check for Android update → Update available → Install via ADB**.
 The bridge installs only the staged SHA the owner accepted, through
 `scripts/phone-install.sh` (including its O15 gate). **Not now** does not send
 an install request. Android may stop the running app when replacing it;

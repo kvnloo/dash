@@ -30,7 +30,7 @@ export function createAndroidUpdateHandler(directory: string | undefined, serial
     installing = true;
     try {
       const script = join(import.meta.dir, "../../scripts/phone-install.sh");
-      const child = Bun.spawn(["bash", script, "--serial", serial, "--apk", apk, "--sha", sha], {
+      const child = Bun.spawn(["bash", script, "--serial", serial, "--apk", apk, "--sha", sha, "--local-receipt"], {
         stdout: "ignore", stderr: "inherit", signal: AbortSignal.timeout(180_000),
       });
       if (await child.exited !== 0) return new Response("Install refused or failed. Check the bridge log.", { status: 503 });

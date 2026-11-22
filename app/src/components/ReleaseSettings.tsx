@@ -1,8 +1,9 @@
+import { nativeBuildVersion } from "expo-application";
 import Constants, { ExecutionEnvironment } from "expo-constants";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { authorizedBridgeFetch } from "../lib/bridge-request-auth";
-import { developmentClientLink, endpointOrigin, metroOrigin, originPort, probeLaunchAsset, reloadBlockedBy, STUDIO_CHANNELS } from "../lib/live-update";
+import { developmentClientLink, endpointOrigin, metroOrigin, originPort, reloadBlockedBy, STUDIO_CHANNELS } from "../lib/live-update";
 import { bundleOrigin } from "../lib/use-live-update";
 import { store } from "../store/app";
 import { flushDrafts } from "../store/composer-drafts";
@@ -29,7 +30,7 @@ function ReleaseControls() {
   const origin = Platform.OS === "android" && __DEV__ && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient ? bundleOrigin() ?? metroOrigin(Constants.expoConfig?.hostUri) : null;
   const port = origin ? originPort(origin) : null;
   const current = STUDIO_CHANNELS.find(channel => channel.port === port);
-  const run = async (work: () => Promise<void>) => {
+  const run = useCallback(async (work: () => Promise<void>) => {
     if (lock.current) return;
     lock.current = true;
     setBusy(true);
@@ -37,18 +38,18 @@ function ReleaseControls() {
     try { await work(); }
     catch { setMessage("Could not complete the request. Try again."); }
     finally { lock.current = false; setBusy(false); }
-  };
+  }, []);
   const switchChannel = (targetPort: number) => void run(async () => {
     const target = origin && endpointOrigin(origin, targetPort);
     if (!target) return;
-    const health = await probeLaunchAsset(target + "/status", fetch);
-    if (!health.ok) { setMessage("That Metro server is unavailable. Nothing changed."); return; }
+    const health = await fetch(target + "/status", { redirect: "error", signal: AbortSignal.timeout(6000) });
+    if (!health.ok || (await health.text()).trim() !== "packager-status:running") { setMessage("That Metro server is unavailable. Nothing changed."); return; }
     if (reloadBlockedBy()) { setMessage("Finish the active interaction before switching."); return; }
     await flushDrafts();
     if (reloadBlockedBy()) { setMessage("Finish the active interaction before switching."); return; }
     await Linking.openURL(developmentClientLink("exp+" + (Constants.expoConfig?.slug ?? "dash"), target));
   });
-  const request = (sha?: string) => void run(async () => {
+  const request = useCallback((sha?: string, quiet = false) => void run(async () => {
     if (!settings) return;
     if (!sha) setOffer(null);
     else {
@@ -57,7 +58,7 @@ function ReleaseControls() {
       if (store.get().settings?.address !== settings.address || reloadBlockedBy()) return;
     }
     const result = await authorizedBridgeFetch(settings, "http://" + settings.address + "/android/update" + (sha ? "?sha=" + sha : ""), {
-      method: sha ? "POST" : "GET", signal: AbortSignal.timeout(sha ? 200_000 : 8_000),
+      method: sha ? "POST" : "GET", redirect: "error", signal: AbortSignal.timeout(sha ? 200_000 : 8_000),
     });
     if (!result.ok) { setMessage("Could not authenticate with the bridge."); return; }
     const response = result.response;
@@ -65,14 +66,17 @@ function ReleaseControls() {
       setOffer(null);
       setMessage(response.status === 204 ? "Install finished. Reopen Dash if needed." :
         response.status === 409 ? "Update changed or an install is running. Check again." : "Install refused or failed. Check the bridge log.");
-    } else if (response.status === 404 || response.status === 204) setMessage("No Android update staged on this bridge.");
+    } else if (response.status === 404 || response.status === 204) { if (!quiet) setMessage("No Android update staged on this bridge."); }
     else if (response.ok) {
       const next = parseOffer(await response.json());
-      const installed = Number(Constants.nativeBuildVersion ?? "0");
-      if (!next || next.version <= installed) setMessage("No newer Android update.");
+      const installed = Number(nativeBuildVersion ?? "0");
+      if (!next || next.version <= installed) { if (!quiet) setMessage("No newer Android update."); }
       else setOffer(next);
     } else setMessage("Could not check for updates.");
-  });
+  }), [run, settings]);
+  useEffect(() => {
+    if (Platform.OS === "android" && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient) request(undefined, true);
+  }, [request]);
   return (
     <View style={styles.section}>
       <Text accessibilityRole="header" style={styles.heading}>Release channel</Text>
@@ -82,7 +86,7 @@ function ReleaseControls() {
         onPress={() => switchChannel(channel.port)} style={styles.action}>
         <Text style={styles.text}>{channel.label}{port === channel.port ? " (current)" : ""}</Text>
       </Pressable>)}
-      {settings && (Platform.OS === "android" || Platform.OS === "web") && <Pressable accessibilityRole="button" disabled={busy} onPress={() => request()} style={styles.action}>
+      {settings && ((Platform.OS === "android" && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient) || Platform.OS === "web") && <Pressable accessibilityRole="button" disabled={busy} onPress={() => request()} style={styles.action}>
         <Text style={styles.text}>Check for Android update</Text>
       </Pressable>}
       {offer && <View style={styles.section}>
