@@ -1,3 +1,4 @@
+import { OrbStylePicker } from "../components/OrbStylePicker";
 import { ModelsPanel } from "../components/ModelsPanel";
 import { DensityPicker } from "../components/Density";
 import { InformationDensityPicker } from "../components/InformationDensityPicker";
@@ -187,6 +188,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           </Pressable>
           {deviceCheckOpen ? <DeviceCheck /> : null}
           <Text style={styles.label}>Display</Text>
+          <Text style={styles.label}>Orb style</Text>
+          <OrbStylePicker />
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <View style={styles.harnessRow}><Text style={styles.harnessName}>Thumb side</Text></View>
             <View style={{ flexDirection: "row", paddingHorizontal: space.md, gap: space.sm }}>

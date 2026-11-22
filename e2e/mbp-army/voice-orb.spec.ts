@@ -116,3 +116,58 @@ test("live hero orb follows each voice phase, mutes, passes through and hides fo
   await expect.poll(() => voiceBroker.calls().filter(call =>
     call.method === "POST" && /^\/v1\/sessions\/[^/]+\/end$/.test(call.path)).length).toBe(1);
 });
+
+test("Settings orb style survives reload and appears on chat and the active mic", async ({ page, bridge, voiceBroker }, info) => {
+  const dash = bridge.identityToken();
+  const z0live = bridge.identityToken({ aud: "z0live", scope: "z0live:voice" });
+  voiceBroker.authorize(z0live);
+  await page.addInitScript((tokens: { dash: string; z0live: string }) => {
+    Object.defineProperty(window, "__dashVoiceArmy", {
+      value: { ...tokens, identity: { credentialId: "cred_armyorb0001" } }, configurable: true,
+    });
+  }, { dash, z0live });
+  await pair(page, bridge);
+  const settings = page.getByRole("button", { name: "Open settings", exact: true }).first();
+  await settings.click({ noWaitAfter: true });
+  const face = page.getByRole("radio", { name: "Bot face" });
+  const rings = page.getByRole("radio", { name: "Thinking rings" });
+  await expect(page.getByRole("radio", { name: "Thinking sphere" })).toBeChecked();
+  await rings.click({ noWaitAfter: true });
+  await expect(rings).toBeChecked();
+  await expect(rings.locator("ellipse")).toHaveCount(3);
+  await face.click({ noWaitAfter: true });
+  await expect(face).toBeChecked();
+  await page.screenshot({ path: info.outputPath("orb-style-picker.png") });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  if (!await face.isVisible()) {
+    await page.getByRole("tab").nth(1).click({ noWaitAfter: true });
+    await settings.click({ noWaitAfter: true });
+  }
+  await expect(face).toBeChecked();
+  await page.getByRole("button", { name: "Back", exact: true }).last().click({ noWaitAfter: true });
+
+  const chats = page.getByRole("tab").nth(1);
+  await chats.click({ noWaitAfter: true });
+  const hermes = page.getByTestId("chats-pane").locator('[data-testid^="chat-row-"]')
+    .filter({ hasText: "ARMY native fixture" });
+  await expect(hermes).toHaveCount(1, { timeout: 30000 });
+  await hermes.click({ noWaitAfter: true });
+  const window = page.getByTestId("chat-window");
+  await expect(window.getByTestId("orb-style-face").first()).toBeVisible();
+  await page.getByRole("button", { name: "Close chat window", exact: true }).click({ noWaitAfter: true });
+
+  await page.getByRole("tab").nth(0).click({ noWaitAfter: true });
+  await page.getByRole("button", { name: "Expand", exact: true }).click({ noWaitAfter: true });
+  await page.getByRole("button", { name: "Start voice in Dash", exact: true }).click({ noWaitAfter: true });
+  await page.getByRole("button", { name: "Back to chat · call keeps going" }).click({ noWaitAfter: true });
+  await expect(page.getByTestId("voice-orb-overlay").getByTestId("orb-style-face")).toBeVisible();
+
+  await chats.click({ noWaitAfter: true });
+  await page.getByRole("button", { name: /^(Create new chat|New chat)$/ }).first().click({ noWaitAfter: true });
+  const mic = page.getByRole("button", { name: /^Live call, .*\. Show voice orb$/ });
+  await expect(mic.getByTestId("moodie-body")).toBeVisible();
+  await page.screenshot({ path: info.outputPath("orb-style-chat-mic.png") });
+  await page.getByTestId("voice-end").click({ noWaitAfter: true });
+  await expect.poll(() => voiceBroker.calls().some(call =>
+    call.method === "POST" && /^\/v1\/sessions\/[^/]+\/end$/.test(call.path))).toBe(true);
+});

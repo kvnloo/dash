@@ -1,15 +1,36 @@
 import { memo, useMemo } from "react";
 import { Text, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import Svg, { Path } from "react-native-svg";
-import { orbDotCount, orbMotion, orbPixels, type OrbSize, type OrbState } from "../lib/orb-phase";
+import Svg, { Circle, Ellipse, Path } from "react-native-svg";
+import { orbDotCount, orbMotion, orbPixels, type OrbPhase, type OrbSize, type OrbState } from "../lib/orb-phase";
 import { colors, fonts } from "../theme";
+import { botFaceIdentity, type BotFaceState } from "../lib/moodie-identity";
+import { orbStyle, type OrbStyle } from "../store/orb-style";
+import { BotFace } from "./BotFace";
 import { useAmbientRunning, useOrbMotion } from "./OrbMotion";
 
-/** Static dot geometry, compositor transforms only: no picture recording or React frame loop. */
-export const AgentOrb = memo(function AgentOrb({ thinking, size = 64, caption = false, label, animated = true }: {
-  thinking: OrbState; size?: OrbSize; caption?: boolean; label?: string; animated?: boolean;
-}) {
+type Props = { thinking: OrbState; size?: OrbSize; caption?: boolean; label?: string; animated?: boolean; variant?: OrbStyle };
+const faceIdentity = botFaceIdentity("default");
+const faceStates: Record<OrbPhase, BotFaceState> = {
+  idle: "idle", listening: "idle", connecting: "thinking", thinking: "thinking",
+  speaking: "working", streaming: "working", tool: "working", "waiting-approval": "waiting-approval",
+};
+
+export const AgentOrb = memo(function AgentOrb({ thinking, size = 64, caption = false, label, animated = true, variant }: Props) {
+  const preferred = orbStyle.use(value => value);
+  const style = variant ?? preferred;
+  return <View accessibilityRole="image" accessibilityLabel={label ?? thinking.phase} testID="agent-orb" style={{ alignItems: "center", gap: 4 }}>
+    <View testID={`orb-style-${style}`}>
+      {style === "face"
+        ? <BotFace size={orbPixels(size)} identity={faceIdentity} state={faceStates[thinking.phase]} animated={animated} />
+        : <ThinkingOrb thinking={thinking} size={size} animated={animated} rings={style === "rings"} />}
+    </View>
+    {caption ? <Text style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.textMuted }}>{thinking.tool ?? thinking.phase}</Text> : null}
+  </View>;
+});
+
+/** Static dot/ring geometry; only compositor transforms change each frame. */
+function ThinkingOrb({ thinking, size, animated, rings }: { thinking: OrbState; size: OrbSize; animated: boolean; rings: boolean }) {
   const { clock } = useOrbMotion();
   // Root-mounted voice overlays have no screen navigation context; this hook is safe there.
   const ambientRunning = useAmbientRunning();
@@ -35,10 +56,13 @@ export const AgentOrb = memo(function AgentOrb({ thinking, size = 64, caption = 
     const w = wave === "abs" ? Math.abs(Math.sin(p * Math.PI * beats)) : Math.cos(p * Math.PI * 2 * beats);
     return { transform: [{ perspective: 1000 }, { rotate: `${p * spin}deg` }, { scale: base + amp * w }] };
   });
-  return <View accessibilityRole="image" accessibilityLabel={label ?? thinking.phase} testID="agent-orb" style={{ alignItems: "center", gap: 4, opacity: m.opacity }}>
-    <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={[{ width: px, height: px, borderRadius: px, borderWidth: thinking.phase === "waiting-approval" ? 1 : 0, borderColor: color }, motion]}>
-      <Svg width="100%" height="100%" viewBox="0 0 64 64">{paths.map((d, i) => <Path key={i} d={d} opacity={(i + 0.5) / 4} fill={color} />)}</Svg>
-    </Animated.View>
-    {caption ? <Text style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.textMuted }}>{thinking.tool ?? thinking.phase}</Text> : null}
-  </View>;
-});
+  return <Animated.View renderToHardwareTextureAndroid shouldRasterizeIOS style={[{ width: px, height: px, opacity: m.opacity, borderRadius: px, borderWidth: thinking.phase === "waiting-approval" ? 1 : 0, borderColor: color }, motion]}>
+    <Svg width="100%" height="100%" viewBox="0 0 64 64">
+      {rings ? <>
+        {[0, 60, 120].map(angle => <Ellipse key={angle} cx={32} cy={32} rx={m.radiusX} ry={m.radiusY * .43}
+          rotation={angle} origin="32,32" stroke={color} strokeWidth={1.6} fill="none" />)}
+        <Circle cx={32} cy={32} r={4} fill={color} />
+      </> : paths.map((d, i) => <Path key={i} d={d} opacity={(i + 0.5) / 4} fill={color} />)}
+    </Svg>
+  </Animated.View>;
+}
