@@ -4,18 +4,7 @@
 import { Run, quiet, rng } from "@eui/motion.js";
 import { loadThemes, setTheme } from "@eui/themes.js";
 import { loadApps, catalog } from "@eui/shell.js";
-import { KINDS_A } from "@eui/kinds-a.js";
-import { KINDS_B } from "@eui/kinds-b.js";
-import { KINDS_C } from "@eui/kinds-c.js";
-import { KINDS_3D } from "@eui/kinds-3d.js";
-import { KINDS_E } from "@eui/kinds-e.js";
-import { KINDS_P } from "@eui/kinds-p.js";
-import { KINDS_F } from "@eui/kinds-f.js";
-import { KINDS_T } from "@eui/kinds-t.js";
-import { KINDS_I } from "@eui/kinds-i.js";
-import { KINDS_INFRA } from "@eui/kinds-infra.js";
-
-const KINDS = { ...KINDS_A, ...KINDS_B, ...KINDS_3D, ...KINDS_C, ...KINDS_E, ...KINDS_P, ...KINDS_F, ...KINDS_T, ...KINDS_I, ...KINDS_INFRA };
+import { KINDS, HOST_APP_NAMES } from "./registry.js";
 
 function post(message) {
   try {
@@ -23,6 +12,8 @@ function post(message) {
     else if (window.parent && window.parent !== window) window.parent.postMessage(message, "*");
   } catch { /* host gone */ }
 }
+
+const appOf = (id) => catalog.byId[id] ?? (Object.hasOwn(HOST_APP_NAMES, id) ? { id, name: HOST_APP_NAMES[id], hex: null, cat: "agents", kinds: [] } : null);
 
 async function boot() {
   const spec = window.__EUI_SPEC || {};
@@ -32,11 +23,13 @@ async function boot() {
     await loadThemes();
     setTheme(spec.scheme === "light" ? "t3-light" : "t3-dark");
     await loadApps();
-    const kind = KINDS[spec.kind];
-    const app = catalog.byId[spec.app];
+    const kind = Object.hasOwn(KINDS, spec.kind) ? KINDS[spec.kind] : null;
+    const app = appOf(spec.app);
     if (!kind || !app || !kind.make) throw new Error("unknown card");
-    const card = kind.make(app, rng(spec.app + spec.kind), undefined, {});
+    // No input: every kind draws the kit's sample data. Fleet and intel-suite draw theirs only on demo.
+    const card = kind.make(app, rng(spec.app + spec.kind), undefined, { demo: true });
     root.replaceChildren(card.el);
+    await card.done;
     document.documentElement.dataset.euiReady = spec.kind;
     post({ type: "eui:ready", kind: spec.kind, app: spec.app });
     if (card.play) quiet(card.play(new Run()));

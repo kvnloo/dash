@@ -62,7 +62,7 @@ const Roadmap = defineComponent({
 const EphemeralCard = defineComponent({
   name: "EphemeralCard",
   props: z.object({ kind: z.enum(EPHEMERAL_KINDS), app: z.string().max(64).optional() }),
-  description: "One kvnloo/ephemeral-ui card (card.v0 kind plus optional catalog app id), drawn by the host from the pinned kit with synthetic demo data.",
+  description: "One kvnloo/ephemeral-ui card (any kit kind plus optional catalog app id), drawn by the host from the pinned kit with synthetic demo data.",
   component: null,
 });
 const schema = createLibrary({

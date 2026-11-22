@@ -1,9 +1,9 @@
 import type { LiveIntent } from "../../../shared/live";
-import { EPHEMERAL_APPS_BY_KIND, EPHEMERAL_KINDS, type EphemeralKind } from "../vendor/ephemeral-ui/kinds.generated";
+import { EPHEMERAL_APPS_BY_KIND, EPHEMERAL_DATA_BY_KIND, EPHEMERAL_KINDS, type EphemeralKind } from "../vendor/ephemeral-ui/kinds.generated";
 import { EPHEMERAL_KIT_PARTS as parts } from "../vendor/ephemeral-ui/kit-html.generated";
 
 /**
- * kvnloo/ephemeral-ui cards (card.v0). The model names a kind and a catalog app; the host draws the
+ * kvnloo/ephemeral-ui cards (every kind the kit exports). The model names a kind and a catalog app; the host draws the
  * repo's own card from the pinned, vendored kit with its synthetic public fixtures. No model input,
  * code or URL reaches the page.
  */
@@ -20,10 +20,10 @@ export function ephemeralCardSpec(kind: unknown, app?: unknown): EphemeralCardSp
   return typeof app === "string" && apps.includes(app) ? { kind, app } : null;
 }
 
-const dataFor = (kind: EphemeralKind): ("apps" | "themes" | "trace" | "intent")[] =>
-  kind.startsWith("trace") ? ["apps", "themes", "trace"]
-    : kind.startsWith("intent-") || kind.startsWith("intel-") ? ["apps", "themes", "intent"]
-      : ["apps", "themes"];
+const dataFor = (kind: EphemeralKind): ("apps" | "themes" | "trace" | "intent" | "ops")[] => {
+  const extra = EPHEMERAL_DATA_BY_KIND[kind];
+  return extra ? ["apps", "themes", extra] : ["apps", "themes"];
+};
 
 /** One self-contained card page: the kit plus only the fixtures its kind reads. */
 export function ephemeralCardDocument(spec: EphemeralCardSpec, scheme: "light" | "dark"): string {
