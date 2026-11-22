@@ -68,6 +68,7 @@ import type { LiveOwner } from "./src/hermes-owner";
 import { z0bridgeHermes } from "./src/z0bridge-hermes";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
 import { acpCommand, AcpSupervisor, type AcpHandle } from "./src/acp/supervisor";
+import { CURSOR_CANCELLED, CURSOR_CLOUD_ID, CursorCloud, cursorHarnessInfo, cursorProfileId, isCursorAgentId, runCursorTurn } from "./src/cursor-cloud";
 import { AcpPermissionRouter } from "./src/acp/permission-port";
 import { PermissionBroker, type PermissionNotice } from "./src/permission-broker";
 import { remoteClaudeHistory } from "./src/remote-history";
@@ -194,6 +195,9 @@ class Turn implements Sink {
   private hermesProfile?: string;
   private workspaceRepo?: string;
   private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
+  /** Set for Cursor cloud turns: the session is a cloud agent id, the profile is `cursor-cloud:<id>`. */
+  private cursorAgent = false;
+  private cursorSession?: string;
   /** Ends this turn's entry in the running-turn registry, so queued follow-ups go after it (#498). */
   private untrack?: () => void;
 
@@ -217,19 +221,30 @@ class Turn implements Sink {
       this.continueHermes(input);
       return;
     }
+    if (this.harness.id === CURSOR_CLOUD_ID) {
+      this.runCursor(input);
+      return;
+    }
     if (process.env.DASH_ENABLE_LEGACY_CLI !== "1") {
       const command = acpCommand(this.harness.id);
       if (!command) {
         this.endWithout(`${this.harness.name} ACP unavailable. Install its maintained ACP adapter on the host.`);
         return;
       }
+      let env: Record<string, string> | undefined;
       if (this.harness.id === "hermes") {
-        // A new Hermes chat lands in the bridge's own HERMES_HOME profile. Name it so the
+        // A new chat with a Hermes bot (`hermes:<profile>`) runs in that profile's home. Any other
+        // new Hermes chat lands in the bridge's own HERMES_HOME profile. Name the profile so the
         // phone keeps one conversation when the roster reports that session.
-        this.hermesProfile = hermesSessions.profileForHome(process.env.HERMES_HOME?.trim() || join(homedir(), ".hermes"));
+        const bot = hermesBotProfile(input.profileId);
+        const home = bot ? hermesSessions.homeOf(bot) : undefined;
+        if (bot && !home) { this.endWithout(`No Hermes profile "${bot}" on ${HOST_NAME}.`); return; }
+        if (bot && home) env = { HERMES_HOME: home };
+        this.hermesProfile = bot ?? hermesSessions.profileForHome(process.env.HERMES_HOME?.trim() || join(homedir(), ".hermes"));
         this.hermesTransport = "acp";
+        if (bot) log("hermes.bot", { id: this.id, profile: bot });
       }
-      this.runAcp(command, input, undefined, undefined, { timeoutMs: turnTimeoutMs() });
+      this.runAcp(command, input, env, undefined, { timeoutMs: turnTimeoutMs() });
       return;
     }
     if (this.harness.id === "hermes") {
@@ -237,6 +252,29 @@ class Turn implements Sink {
       return;
     }
     this.spawnCli(input);
+  }
+
+  /** A Cursor cloud agent turn: launch or follow up over Cursor's API, then poll (src/cursor-cloud.ts). */
+  private runCursor(input: TurnInput): void {
+    const abort = new AbortController();
+    this.abort = abort;
+    this.cursorAgent = true;
+    log("turn.start", { id: this.id, harness: CURSOR_CLOUD_ID, resume: Boolean(input.sessionId) });
+    void runCursorTurn({ client: new CursorCloud(), input, sink: this, signal: abort.signal, timeoutMs: turnTimeoutMs() }).then(
+      code => {
+        if (this.finished) return;
+        const exit = this.cancelled ? CANCELLED_EXIT_CODE : code === CURSOR_CANCELLED ? CANCELLED_EXIT_CODE : code;
+        this.finish(exit);
+        log("turn.end", { id: this.id, harness: CURSOR_CLOUD_ID, exitCode: exit });
+      },
+      error => {
+        if (this.finished) return;
+        if (this.cancelled) { this.finish(CANCELLED_EXIT_CODE); return; }
+        this.error(error instanceof Error ? error.message : "Cursor cloud turn failed");
+        this.finish(1);
+        log("turn.end", { id: this.id, harness: CURSOR_CLOUD_ID, exitCode: 1 });
+      },
+    );
   }
 
   private runAcp(command: string[], input: TurnInput, env?: Record<string, string>, release?: () => void, connection?: { spawnCwd?: string; timeoutMs: number }): void {
@@ -477,6 +515,7 @@ class Turn implements Sink {
   cancel(): void {
     if (this.cancelled || this.finished) return;
     this.cancelled = true;
+    if (this.cursorSession) void new CursorCloud().stop(this.cursorSession);
     if (this.acp) { void this.acp.cancel(); return; }
     this.abort?.abort();
     if (!this.proc) {
@@ -505,6 +544,11 @@ class Turn implements Sink {
   session(sessionId: string): void {
     if (this.harness.id === "hermes" && !this.finished) this.untrack ??= trackRunningTurn(sessionId);
     this.flush();
+    if (this.cursorAgent) {
+      this.cursorSession = sessionId;
+      this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: SELF.id(), harnessId: this.harness.id, profileId: cursorProfileId(sessionId), transport: "cloud" });
+      return;
+    }
     this.emit({ type: "session", id: this.id, seq: 0, sessionId, ...(this.workspaceRepo ? { repoRoot: this.workspaceRepo } : {}), hostId: SELF.id(), harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesTransport ?? (this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp") });
   }
 
@@ -683,8 +727,28 @@ function isDirectory(path: string): boolean {
   }
 }
 
+/** `hermes:<profile>` names a Hermes gateway profile bot (bridge/src/bots.ts); the default profile is the plain harness. */
+function hermesBotProfile(profileId: string | undefined): string | undefined {
+  const m = /^hermes:([A-Za-z0-9._-]{1,64})$/.exec(profileId ?? "");
+  return m?.[1] && m[1] !== "default" ? m[1] : undefined;
+}
+
+/**
+ * Profile routes the New-agent sheet starts: a new chat with a Hermes profile bot
+ * (`hermes:<profile>`, the profile must exist here), and a Cursor cloud agent's own chat
+ * (`cursor-cloud:<agent id>`, only with that same agent id as the session).
+ */
+function spawnProfileRoute(harness: string, profileId: string, sessionId: string | undefined): boolean {
+  if (harness === "hermes" && !sessionId) {
+    const bot = hermesBotProfile(profileId);
+    return bot !== undefined && hermesSessions.homeOf(bot) !== undefined;
+  }
+  if (harness === CURSOR_CLOUD_ID) return sessionId !== undefined && isCursorAgentId(sessionId) && profileId === cursorProfileId(sessionId);
+  return false;
+}
+
 function harnessList(): HarnessInfo[] {
-  return HARNESSES.map((h) => ({ id: h.id, name: h.name, available: process.env.DASH_ENABLE_LEGACY_CLI === "1" ? Bun.which(h.bin) !== null : acpCommand(h.id) !== null }));
+  return HARNESSES.map((h) => h.id === CURSOR_CLOUD_ID ? cursorHarnessInfo() : ({ id: h.id, name: h.name, available: process.env.DASH_ENABLE_LEGACY_CLI === "1" ? Bun.which(h.bin) !== null : acpCommand(h.id) !== null }));
 }
 
 function parseJson(raw: string | Buffer): unknown {
@@ -1087,15 +1151,16 @@ const server = Bun.serve<SocketData>({
           } else if (message.harness === "omp" && message.profileId?.startsWith("omp:")) {
             const hosts = await selfRoster(harnessList(), HOST);
             if (!hosts.some(h => h.self && h.agents.some(a => a.id === message.profileId && a.sessionId === message.sessionId && a.status === "running"))) return rejectTurn(ws, message.id, "This OMP session has ended on the host.");
-          } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !isSelfArchiveProfile(message.profileId, message.harness, message.sessionId) && !(message.harness === "hermes" && message.profileId === "hermes:default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
+          } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !isSelfArchiveProfile(message.profileId, message.harness, message.sessionId) && !(message.harness === "hermes" && message.profileId === "hermes:default") && !spawnProfileRoute(message.harness, message.profileId, message.sessionId)) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
           if (turns.has(message.id)) return;
           const harness = HARNESSES.find((h) => h.id === message.harness);
           if (!harness) return rejectTurn(ws, message.id, `Unknown agent "${message.harness}".`);
-          if (!harnessList().find(h => h.id === harness.id)?.available) {
+          const listed = harnessList().find(h => h.id === harness.id);
+          if (!listed?.available) {
             return rejectTurn(
               ws,
               message.id,
-              `${harness.name} isn't installed on ${HOST_NAME} ("${harness.bin}" not on PATH).`,
+              listed?.hint ?? `${harness.name} isn't installed on ${HOST_NAME} ("${harness.bin}" not on PATH).`,
             );
           }
           const cwd = message.cwd?.trim() || DEFAULT_CWD;
@@ -1125,7 +1190,7 @@ const server = Bun.serve<SocketData>({
           } else if (message.harness === "omp" && message.profileId?.startsWith("omp:")) {
             const hosts = await selfRoster(harnessList(), HOST);
             if (!hosts.some(h => h.self && h.agents.some(a => a.id === message.profileId && a.sessionId === message.sessionId && a.status === "running"))) return rejectTurn(ws, message.id, "This OMP session has ended on the host.");
-          } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !isSelfArchiveProfile(message.profileId, message.harness, message.sessionId) && !(message.harness === "hermes" && message.profileId === "hermes:default")) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
+          } else if (message.profileId && message.profileId !== (process.env.DASH_PROFILE_ID ?? "default") && message.profileId !== `harness:${message.harness}` && !isSelfArchiveProfile(message.profileId, message.harness, message.sessionId) && !(message.harness === "hermes" && message.profileId === "hermes:default") && !spawnProfileRoute(message.harness, message.profileId, message.sessionId)) return rejectTurn(ws, message.id, "Profile routing unavailable on this bridge.");
           if (turns.has(message.id) || utterances.has(message.id)) return;
           const ready = speechAvailable();
           if (!ready.ok) {
@@ -1133,11 +1198,12 @@ const server = Bun.serve<SocketData>({
           }
           const harness = HARNESSES.find((h) => h.id === message.harness);
           if (!harness) return rejectTurn(ws, message.id, `Unknown agent "${message.harness}".`);
-          if (!harnessList().find(h => h.id === harness.id)?.available) {
+          const listed = harnessList().find(h => h.id === harness.id);
+          if (!listed?.available) {
             return rejectTurn(
               ws,
               message.id,
-              `${harness.name} isn't installed on ${HOST_NAME} ("${harness.bin}" not on PATH).`,
+              listed?.hint ?? `${harness.name} isn't installed on ${HOST_NAME} ("${harness.bin}" not on PATH).`,
             );
           }
           const cwd = message.cwd?.trim() || DEFAULT_CWD;
