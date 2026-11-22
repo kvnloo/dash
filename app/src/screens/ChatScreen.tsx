@@ -70,6 +70,7 @@ import { colors, glass, radius, space, type } from "../theme";
 import { useLiveThinking } from "../lib/live-thinking";
 import type { OrbState } from "../lib/orb-phase";
 import { useContinuousVoice, useDeviceInsets, voiceWindowOpen } from "../components/ContinuousVoiceRoot";
+import { VoiceCaptionStrip, VoiceCaptionsToggle } from "../components/VoiceCaptionStrip";
 import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { useSessionActivity } from "../lib/session-activity";
 import { screenBack } from "../lib/screen-back";
@@ -509,7 +510,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       <Text accessibilityRole="alert" style={[styles.liveNote, { flex: 1 }]}>{voice.state.note}</Text>
       <PressScale accessibilityRole="button" accessibilityLabel="Retry Live voice" onPress={() => void voice.start()} style={styles.liveChip}><Text style={styles.liveChipText}>Retry voice</Text></PressScale>
     </View> : null}
+    {windowed && voiceActive ? <VoiceCaptionStrip state={voice.state} /> : null}
     {windowed && voiceActive ? <View testID="window-voice-controls" style={[styles.liveRow, thumb.row]}>
+      <VoiceCaptionsToggle style={styles.liveChip} />
       <PressScale testID="voice-mute" accessibilityRole="button" accessibilityLabel={voice.state.muted ? "Unmute voice microphone" : "Mute voice microphone"} onPress={voice.mute} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.muted ? "Unmute" : "Mute"}</Text></PressScale>
       <PressScale testID="voice-end" accessibilityRole="button" accessibilityLabel="End voice call" onPress={() => void voice.stop()} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.phase === "connecting" ? "Cancel connection" : "End voice"}</Text></PressScale>
     </View> : null}
