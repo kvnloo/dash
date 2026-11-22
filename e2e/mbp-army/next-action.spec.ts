@@ -79,8 +79,13 @@ test('Next up opens the exact completed background reply without sending and pre
   const viewport = await page.getByTestId('transcript-viewport').boundingBox();
   if (!viewport) throw Error('No transcript viewport');
   await page.mouse.move(viewport.x + viewport.width / 2, viewport.y + viewport.height / 2);
-  await page.mouse.wheel(0, -10000);
-  await expect(page.getByTestId('transcript-viewport').getByText('Earlier attention history 0', { exact: true })).toBeInViewport();
+  // The virtualized transcript renders older rows as they near the viewport, so one long flick can
+  // stop short of the first prompt. Flick again, as a person would, until it is on screen.
+  const firstPrompt = page.getByTestId('transcript-viewport').getByText('Earlier attention history 0', { exact: true });
+  await expect(async () => {
+    await page.mouse.wheel(0, -10000);
+    await expect(firstPrompt).toBeInViewport({ timeout: 1000 });
+  }).toPass({ timeout: 12_000 });
   await writeFile(join(bridge.dir, 'army-release'), '');
   await expect.poll(() => turnEvents(bridge.dir, 'end'), { timeout: 30_000 }).toBe(9);
   await toChats(page);
