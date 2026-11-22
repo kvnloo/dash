@@ -3,7 +3,7 @@
 // line by default so it never crowds the hero orb; tap the line for the rows, tap a handoff for
 // the full result.
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import type { Z0Lane } from "../../../shared/z0live-lanes";
 import { laneElapsed, laneNow, laneSummary } from "../lib/lane-timeline";
 import { colors, radius, space } from "../theme";
@@ -37,7 +37,7 @@ function LaneRow({ lane, now }: { lane: Z0Lane; now: number }): React.JSX.Elemen
       accessibilityLabel={`${lane.name} handed back: ${handoff.summary}. ${open ? "Hide full result" : "Show full result"}`}
       onPress={() => setOpen(value => !value)} style={styles.handoff}>
       {open
-        ? <ScrollView style={styles.result} nestedScrollEnabled><Text testID={`lane-result-${lane.id}`} selectable style={styles.resultText}>{handoff.result}</Text></ScrollView>
+        ? <Text testID={`lane-result-${lane.id}`} selectable style={styles.resultText}>{handoff.result}</Text>
         : <Text testID={`lane-handoff-line-${lane.id}`} numberOfLines={1} style={styles.handoffText}><Text style={styles.arrow}>↳ </Text>{handoff.summary}</Text>}
     </Pressable> : null}
   </View>;
@@ -46,6 +46,9 @@ function LaneRow({ lane, now }: { lane: Z0Lane; now: number }): React.JSX.Elemen
 export function LaneTimeline({ lanes, offset }: { lanes: readonly Z0Lane[]; offset: number }): React.JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   const now = useBridgeNow(offset, expanded && lanes.length > 0);
+  // The Voice screen centres the orb in what is left; a tall panel would push the title into the
+  // header. Rows (and any opened result) scroll inside a band sized to the window instead.
+  const rowsMax = Math.round(Math.min(280, Math.max(120, useWindowDimensions().height * 0.18)));
   if (!lanes.length) return null;
   const summary = laneSummary(lanes);
   return <View testID="lane-timeline" style={styles.panel}>
@@ -56,7 +59,7 @@ export function LaneTimeline({ lanes, offset }: { lanes: readonly Z0Lane[]; offs
       <Text testID="lane-timeline-summary-text" numberOfLines={1} style={styles.summaryText}>{summary}</Text>
       <Text style={styles.chevron}>{expanded ? "▾" : "▸"}</Text>
     </Pressable>
-    {expanded ? <ScrollView testID="lane-timeline-rows" style={styles.rows} nestedScrollEnabled>
+    {expanded ? <ScrollView testID="lane-timeline-rows" style={[styles.rows, { maxHeight: rowsMax }]} nestedScrollEnabled>
       {lanes.map(lane => <LaneRow key={lane.id} lane={lane} now={now} />)}
     </ScrollView> : null}
   </View>;
@@ -67,7 +70,7 @@ const styles = StyleSheet.create({
   summary: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md },
   summaryText: { flex: 1, color: colors.textMuted, fontSize: 13, lineHeight: 18 },
   chevron: { color: colors.textFaint, fontSize: 12 },
-  rows: { maxHeight: 280, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hair },
+  rows: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hair },
   row: { paddingHorizontal: space.md, paddingVertical: space.sm, gap: 2, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hair },
   head: { flexDirection: "row", alignItems: "center", gap: space.sm },
   dot: { width: 6, height: 6, borderRadius: 3 },
@@ -82,6 +85,5 @@ const styles = StyleSheet.create({
   handoff: { minHeight: 28, justifyContent: "center", paddingLeft: 14 },
   handoffText: { color: colors.textTertiary, fontSize: 12, lineHeight: 16 },
   arrow: { color: colors.textFaint },
-  result: { maxHeight: 160, marginTop: 2 },
-  resultText: { color: colors.text, fontSize: 12, lineHeight: 17 },
+  resultText: { color: colors.text, fontSize: 12, lineHeight: 17, marginTop: 2 },
 });

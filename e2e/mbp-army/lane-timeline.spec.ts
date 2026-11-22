@@ -39,7 +39,7 @@ test('z0live lane timeline shows each lane live step, elapsed time and expandabl
   await expect(page.getByTestId('lane-timeline-rows')).toHaveCount(0);
   const collapsed = await panel.boundingBox();
   expect(collapsed?.height, 'collapsed panel is a single line').toBeLessThanOrEqual(48);
-  const orb = await page.getByTestId('agent-orb').first().boundingBox();
+  const orb = await page.getByRole('img', { name: /^Dash voice / }).boundingBox();
   expect(orb && collapsed && collapsed.y >= orb.y + orb.height, 'panel sits below the orb, never over it').toBe(true);
   await page.screenshot({ path: info.outputPath('lanes-collapsed.png') });
 
@@ -73,6 +73,13 @@ test('z0live lane timeline shows each lane live step, elapsed time and expandabl
   await expect(page.getByTestId('lane-result-fast')).toHaveText(result, { useInnerText: true });
   await expect(page.getByTestId('lane-handoff-fast')).toHaveAttribute('aria-label', /Hide full result$/);
   await page.screenshot({ path: info.outputPath('lanes-expanded.png') });
+  // Expanded with a full result open, the panel still leaves the title clear of the header and ends above Start voice.
+  const back = await page.getByRole('button', { name: 'Back', exact: true }).boundingBox();
+  const title = await page.getByText('Dash voice', { exact: true }).boundingBox();
+  expect(back && title && title.y >= back.y + back.height, 'title stays below the header').toBe(true);
+  const open = await panel.boundingBox();
+  const start = await page.getByRole('button', { name: 'Start voice in Dash', exact: true }).boundingBox();
+  expect(open && start && open.y + open.height <= start.y, 'panel ends above the controls').toBe(true);
   await page.getByTestId('lane-handoff-fast').click({ noWaitAfter: true });
   await expect(page.getByTestId('lane-result-fast')).toHaveCount(0);
 
