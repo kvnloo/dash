@@ -60,10 +60,12 @@ test('dogfood home: cold launch lands on the self-development loop and typed fee
   // The feedback thread is not a normal chat row, and the Main composer stays the Main composer.
   await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Open the feedback thread', exact: true }).click({ noWaitAfter: true });
-  await expect(page.getByTestId('chat-window')).toBeVisible();
-  await expect(page.getByTestId('chat-window').getByText('ARMY dogfood: the chip covers the composer', { exact: true }).first()).toBeVisible();
   await page.screenshot({ path: info.outputPath('feedback-list.png') });
+  await page.getByRole('button', { name: 'Open the feedback thread', exact: true }).click({ noWaitAfter: true });
+  // The thread is the Dash feedback chat, titled by the first note.
+  await expect(page.getByRole('heading', { name: 'ARMY dogfood: the chip covers the composer', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back', exact: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath('feedback-thread.png') });
   expect(errors.filter(error => error.startsWith('PAGEERROR'))).toEqual([]);
 });
 
@@ -88,7 +90,8 @@ test('dogfood home: dictated feedback is sent as voice, tabs leave the home and 
   await expect(home(page)).toHaveCount(0);
   await expect(page.getByRole('tab', { name: 'Chats', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('chats-pane')).toBeVisible();
-  await page.getByRole('button', { name: 'Dogfood feedback', exact: true }).click({ noWaitAfter: true });
+  // The Chats header carries the way back (the Orchestra pane's own copy sits offscreen in the pager).
+  await page.getByRole('button', { name: 'Dogfood feedback', exact: true }).first().click({ noWaitAfter: true });
   await expect(home(page)).toBeVisible();
   await page.getByRole('button', { name: 'Open Orchestra', exact: true }).click({ noWaitAfter: true });
   await expect(home(page)).toHaveCount(0);
@@ -102,7 +105,7 @@ test('dogfood home: with in-app feedback off, cold launch opens the plain Orches
   const toggle = page.getByRole('switch', { name: 'In-app feedback', exact: true });
   await expect(toggle).toBeVisible();
   await toggle.click({ noWaitAfter: true });
-  await expect(toggle).toHaveAttribute('aria-checked', 'false');
+  await expect(toggle).toContainText('Off');
   await expect.poll(() => page.evaluate(() => Object.keys(localStorage).some(k => (localStorage.getItem(k) ?? '').includes('"inAppFeedback":false')))).toBe(true);
   await coldLaunch(page);
   await expect(heading(page, 'Orchestra')).toBeVisible();
