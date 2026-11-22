@@ -74,6 +74,8 @@ test('Next up opens the exact completed background reply without sending and pre
   const aRow = page.getByTestId('chats-pane').locator('[data-testid^="chat-row-"]').filter({ hasText: 'Earlier attention history 0' });
   await aRow.click({ noWaitAfter: true });
   await expect(page.getByTestId('chat-window')).toBeVisible();
+  // A wheel mid-morph can be overridden by the window's own settle, leaving it following the tail.
+  await settled(page);
   const viewport = await page.getByTestId('transcript-viewport').boundingBox();
   if (!viewport) throw Error('No transcript viewport');
   await page.mouse.move(viewport.x + viewport.width / 2, viewport.y + viewport.height / 2);
