@@ -101,3 +101,32 @@ test('themed mode: the pairing screen uses the stone primary button and pairs', 
   await expect(page.getByTestId('chats-pane')).toBeVisible();
   await expect.poll(() => opaqueAncestors(page)).toEqual([]);
 });
+
+test('themed mode: Blueprint in desk mode keeps the wallpaper behind the desk shell and the desk working', async ({ page, bridge }, info) => {
+  // DA-094 desk shell wraps the whole navigator: in themed mode it must not paint over the wallpaper.
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const url = `${web}?theme=blueprint&wallpaper=poster&desk=on`;
+  await pair(page, bridge, url);
+  await expect(page.getByTestId('desk-shell')).toBeVisible({ timeout: 60000 });
+  await expect(page.getByTestId('desk-rail').getByRole('tab')).toHaveCount(9);
+  await expect(page.getByTestId('themed-backdrop')).toBeAttached();
+  await expect(page.getByTestId('blueprint-wallpaper-host')).toHaveAttribute('data-tier', 'poster', { timeout: 20000 });
+  await expect(page.getByTestId('chats-pane')).toBeVisible();
+  await expect.poll(() => opaqueAncestors(page)).toEqual([]);
+  const shell = await page.getByTestId('desk-shell').evaluate(el => getComputedStyle(el).backgroundColor);
+  expect(shell).toMatch(/^(transparent|rgba\(0, 0, 0, 0\))$/);
+  await page.screenshot({ path: info.outputPath('blueprint-desk.png') });
+  // The desk still chats in its centre pane, and Settings keeps both the desk and the theme choices.
+  await page.getByRole('button', { name: /^(Create new chat|New chat)$/ }).first().click({ noWaitAfter: true });
+  await expect(composer(page)).toBeVisible();
+  await send(page, 'hello from the blueprint desk');
+  await expect(page.getByText('ARMY_REPLY: hello from the blueprint desk').first()).toBeVisible();
+  await page.getByTestId('desk-rail').getByRole('button', { name: 'Settings', exact: true }).click({ noWaitAfter: true });
+  await page.getByTestId('settings-desk-on').scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('settings-desk-on')).toBeVisible();
+  await page.getByTestId('settings-theme-blueprint').scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('settings-theme-blueprint')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('settings-theme-elemental').getByTestId('elemental-stone').first()).toBeAttached();
+  await expect(page.getByTestId('desk-shell')).toBeVisible();
+  await page.screenshot({ path: info.outputPath('blueprint-desk-settings.png') });
+});
