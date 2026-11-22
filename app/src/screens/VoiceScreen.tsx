@@ -62,11 +62,15 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
         <View style={styles.transcript} testID="voice-transcript">
           {lines.map((line, i) => (
             <Text key={`${i}:${line.role}`} numberOfLines={2} style={[styles.line, line.role === "user" ? styles.user : styles.assistant, i < lines.length - 1 && styles.older]}>
-              <Text style={styles.who}>{line.role === "user" ? "you  " : "agent  "}</Text>{line.text}
+              <Text style={styles.who}>{line.role === "user" ? "you  " : line.lane ? `${line.lane}  ` : "agent  "}</Text>{line.text}
             </Text>
           ))}
         </View>
-
+        {state.routes?.length ? (
+          <Text testID="voice-route" numberOfLines={1} accessibilityLabel={`Answered by: ${state.routes.map(route => `${route.lane} lane in ${voiceRouteTime(route.ms)}`).join(", ")}`} style={styles.route}>
+            {state.routes.map((route, i) => <Text key={i} testID={`voice-route-${i}`}>{i ? "  ·  " : ""}{route.lane} {voiceRouteTime(route.ms)}</Text>)}
+          </Text>
+        ) : null}
       </View>
       {laneSample?.lanes.lanes.length ? <View style={styles.lanes}><LaneTimeline lanes={laneSample.lanes.lanes} offset={laneSample.offset} /></View> : null}
       <View style={styles.controls}>
@@ -94,6 +98,11 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   );
 }
 
+/** "412 ms" under a second, "2.6 s" above. */
+function voiceRouteTime(ms: number): string {
+  return ms < 1000 ? `${Math.max(0, Math.round(ms))} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: space.xl, gap: space.md },
@@ -105,6 +114,7 @@ const styles = StyleSheet.create({
   assistant: { color: colors.text, textAlign: "left" },
   older: { opacity: 0.55 },
   who: { ...type.small, color: colors.textFaint },
+  route: { ...type.small, color: colors.textFaint, alignSelf: "stretch", textAlign: "center" },
   message: { ...type.body, color: colors.text, textAlign: "center" },
   error: { color: colors.danger },
   lanes: { paddingHorizontal: space.xl, paddingBottom: space.sm },
