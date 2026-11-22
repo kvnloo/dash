@@ -9,6 +9,7 @@ import { parseTriage, triageAge, type TriageSnapshot } from "../../../shared/tri
 import { learnPrompt, quickItems, unblockPrompt, type LearnIntent } from "../lib/ephemeral-modes";
 import { haptic } from "../haptics";
 import { executionToken } from "../lib/bridge-auth";
+import { devToolsGutterNow } from "../lib/dev-tools-gutter";
 import { annotate, currentSink } from "../store/annotate";
 import { store } from "../store/app";
 import { setPillMode, surfaceMode } from "../store/ephemeral-mode";
@@ -63,7 +64,7 @@ function useSend(): { label: string | undefined; send(text: string): Promise<boo
 function Shell({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }): React.JSX.Element {
   const insets = useSafeAreaInsets();
   return (
-    <View pointerEvents="box-none" style={[styles.viewport, { top: insets.top + PANEL_TOP_CLEARANCE, left: insets.left + space.sm, right: insets.right + space.sm }]}>
+    <View pointerEvents="box-none" style={[styles.viewport, { top: insets.top + PANEL_TOP_CLEARANCE, left: insets.left + space.sm, right: insets.right + space.sm + devToolsGutterNow() }]}>
       <View testID={`mode-surface-${title.toLowerCase()}`} style={styles.panel} accessibilityLabel={`${title} mode`}>
         <View style={styles.head}>
           <Text accessibilityRole="header" style={styles.title}>{title}</Text>
