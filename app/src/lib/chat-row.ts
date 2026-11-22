@@ -1,6 +1,6 @@
 import type { ConnectionStatus, Conversation } from "../model";
 import { chatAttention } from "./chat-attention";
-import { chatPreview } from "./chat-preview";
+import { chatPreview, currentChatTask } from "./chat-preview";
 import { conversationThinking } from "./thinking";
 
 function rowActivity(chat: Conversation, connection: ConnectionStatus): string {
@@ -24,20 +24,30 @@ function rowActivity(chat: Conversation, connection: ConnectionStatus): string {
   return chat.openIn ? `Open in ${chat.openIn}` : "No active turn";
 }
 
-/** Uses only the conversation fields already supplied to the phone. cwd is not a git root. */
+/** Prefer a verified repo root; never relabel an unverified folder as a repository. */
+export function rowWorkspace(cwd?: string, repoRoot?: string) {
+  const path = repoRoot?.trim() || cwd?.trim();
+  const name = path?.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+  return {
+    folder: name ? `${repoRoot ? "Repo" : "Folder"} · ${name}` : "Folder unknown",
+    folderPath: path || undefined,
+    isRepo: Boolean(repoRoot),
+  };
+}
+
 export function chatRow(chat: Conversation, harnessName: string, connection: ConnectionStatus) {
   const preview = chatPreview(chat);
-  // Nothing said yet and no bridge excerpt: the preview would only repeat the title or folder.
-  const blank = preview.kind === "empty" && !chat.preview?.trim();
-  const cwd = chat.cwd?.trim();
-  const folderName = cwd?.split(/[\\/]/).filter(Boolean).at(-1) ?? cwd;
+  const task = currentChatTask(chat);
   const activity = rowActivity(chat, connection);
+  // Do not bury delivery failures or input requests beneath an older task.
+  const urgent = preview.kind === "failed" || preview.kind === "needs-you";
+  const outcome = urgent ? preview.text : task || (preview.kind === "working" ? preview.text :
+    chat.messageCount || chat.messages.length ? "No task summary available" : "No summary yet");
   return {
     title: chat.title.trim() || harnessName,
-    folder: folderName ? `Folder · ${folderName}` : "Folder unknown",
-    folderPath: cwd || undefined,
-    outcome: blank ? "No summary yet" : preview.text,
-    outcomeLabel: preview.kind === "reply" ? "Last reply" : null,
+    ...rowWorkspace(chat.cwd, chat.repoRoot),
+    outcome,
+    outcomeLabel: !urgent && task ? "Task" : null,
     activity,
     needsAttention: activity === "Needs attention",
   };

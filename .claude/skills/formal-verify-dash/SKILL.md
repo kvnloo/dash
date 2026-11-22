@@ -42,8 +42,8 @@ Do not duplicate O15 in `laws/send/`.
 | S4 `feedback_pick_sends` | When feedback is on, picking "feedback" sends (this keeps S1-S3 from being vacuous). | The feedback feature is dead. |
 | S5 `own_install_is_self` | A session that this computer's AgentsView recorded belongs to this host. | Local Claude Code chats show as "Other machine" and are view only (RC3). |
 | S6 `chatable_is_self_or_routed` | The index marks a chat chatable only when it belongs to this host, or is a Claude Code or Codex chat on a computer this bridge routes to (`DASH_REMOTE_HOSTS`). | The phone sends to chats on machines the bridge cannot reach, or to harnesses that cannot resume there. |
-| S7 `archived_chat_routes` | Every archived chat (`av:<kind>:<session>`) passes the bridge's profile gate. | "Profile routing unavailable" for chats that the index lists as sendable (RC3). |
-| S8 `av_profile_own_*`, `av_profile_needs_session` | The bridge admits an `av:` profile only for its own harness and session id. | A turn resumes the wrong session or harness. |
+| S7 `archived_chat_routes`, `local_session_routes` | Every archived chat (`av:<kind>:<session>`) and every finished local session the Hosts tree continues (`<kind>:session:<session>`) passes the bridge's profile gate. | "Profile routing unavailable" for chats that the index lists as sendable (RC3). |
+| S8 `av_profile_own_*`, `av_profile_needs_session`, `local_profile_own_*`, `local_profile_needs_session` | The bridge admits an `av:` or `<kind>:session:` profile only for its own harness and session id. | A turn resumes the wrong session or harness. |
 | S9 `no_silent_refusal` | Every chat or voice turn starts, is a duplicate of a live turn, or is refused with a `turn.rejected` log line and an error + done answer. | "The phone can't send" leaves no trace on the host (RC3), or the turn spins forever. |
 | S10 `dup_only_for_live_turn` | A turn is dropped as a duplicate only when its id is already live. | Refusals hide behind the duplicate path. |
 | S11 `start_only_through_every_gate` | A turn starts only after the host, route, duplicate, speech (voice), harness, availability, cwd and attachment (chat) gates all pass. | An agent starts on a bad cwd, on a duplicate id, or without speech set up. |
@@ -65,7 +65,7 @@ Each model def in `laws/send/send.bend` names the code that it mirrors. In
 | `bridge/index.ts` chat-index `selfMachines`; `bridge/src/agentsview-sessions.ts` `agentsviewMachineId` | `x_self`, `x_install` | S5 |
 | `bridge/src/chat-index/agentsview-src.ts` `machineHost`, `avChatRow` (`routed`, `chatable`); `bridge/src/remote-hosts.ts` `REMOTE_HARNESSES` | `x_self`, `x_routed`, `x_chatable`, `x_row_routes` | S5-S7 |
 | `bridge/src/chat-index/sidecar.ts` `toSummary`; `app/src/lib/live-sessions.ts` `adoptSummary`; `app/src/net/bridge.ts` `targetForTurn` | `x_row_routes` | S7 |
-| `bridge/src/agentsview-sessions.ts` `isSelfArchiveProfile`; `bridge/index.ts` profile gate in `case "chat"` and `case "voice_begin"` | `x_self_archive`, `x_profile_ok` | S7-S8 |
+| `bridge/src/agentsview-sessions.ts` `isSelfArchiveProfile`; `bridge/index.ts` profile gate in `case "chat"` and `case "voice_begin"` | `x_self_archive`, `x_profile_ok`, `x_local_routes` | S7-S8 |
 | `bridge/index.ts` `rejectTurn`, `case "chat"`, `case "voice_begin"` | `a_reject`, `a_admit`, `a_tail` | S9-S12 |
 | `bridge/index.ts` `case "chat"` `if (remote)` branch; `bridge/src/remote-hosts.ts` `remoteTurnProblem` | `a_remote`, `a_remote_gates` | S13-S15 |
 
@@ -73,8 +73,9 @@ Each model def in `laws/send/send.bend` names the code that it mirrors. In
 `bridge/index.ts`. Every `return` there must be `return rejectTurn(...)` or the
 duplicate-id line.
 
-**Sync commit: `7fa808a`** (the rc3 integration line with remote resume and the
-owner's chat fixes). The model was confirmed against the code at this commit. It
+**Sync commit: `b0ca65e`** (`isSelfArchiveProfile` also accepts the Hosts tree's
+local-store id `<harness>:session:<id>`; before that, `7fa808a`, the rc3
+integration line with remote resume and the owner's chat fixes). The model was confirmed against the code at this commit. It
 builds on `0e145ec` (PR #457, `fix/rc3-send-longpress`, the code that fixed the
 three RC3 send bugs). On a base that predates #457, `anchors.py` fails on
 purpose: that code breaks S1, S5, S7 and S9. On a base that predates remote
@@ -98,7 +99,7 @@ Locally, for a quick loop. You need Bend 2.0.34 at `~/.bend/bin/bend` and, for
 `--verdict`, Lean `leanprover/lean4:v4.34.0` through elan. `laws.yml` pins both.
 
 ```bash
-laws/send/run.sh        # anchors, then PROOF.bend --verdict, then 31 mutants; writes laws/send/mutations.json
+laws/send/run.sh        # anchors, then PROOF.bend --verdict, then 33 mutants; writes laws/send/mutations.json
 ```
 
 On the heavy build host, which is the canonical place: Bend is fast there and the
@@ -118,7 +119,7 @@ Green looks like this:
 ```
 anchors: 34 + 2 handler scans, all in place
 ALL PROOFS CHECK
-reference passes: True; mutations rejected: 31/31
+reference passes: True; mutations rejected: 33/33
 ```
 
 ## Read a failure

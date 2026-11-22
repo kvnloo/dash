@@ -2,7 +2,7 @@
 // "Turn details > Tool calls > vision_analyze x2" boxes inside a box with 56 px rows, a 90 px thinking
 // preview, and a raw "Activity" list repeating "Thinking / Running terminal". Real Expo web UI at phone
 // width -> isolated real bridge -> ACP fixture that streams thinking and tool calls (ARMY_TOOLS).
-import {test,expect,openChat,send} from './fixtures';
+import {test,expect,openChat,pair,composer,send} from './fixtures';
 import type {Locator} from 'playwright/test';
 
 test.use({viewport:{width:390,height:780}});
@@ -24,6 +24,11 @@ test('tool and thinking cards stay compact and un-nested at phone width',async({
  // Two unlike runs read at a glance: one header row and one dense row per run.
  const stack=page.getByTestId('reply-tools');
  const rows=stack.getByTestId('reply-tool-row');
+ await expect(rows).toHaveCount(0);
+ await expect(page.getByTestId('reply-tools-toggle')).toHaveAttribute('aria-expanded','false');
+ await expect(page.getByTestId('transcript-viewport').getByRole('img', {name:'streaming',exact:true})).toHaveCount(1);
+ await expect(page.getByTestId('chat-window-pill-status')).toHaveCount(0);
+ await page.getByTestId('reply-tools-toggle').click({noWaitAfter:true});
  await expect(rows).toHaveCount(2);
  await expect(rows.nth(0)).toContainText('vision_analyze');
  await expect(rows.nth(0)).toContainText('×2');
@@ -69,7 +74,7 @@ test('tool and thinking cards stay compact and un-nested at phone width',async({
 
  // A coalesced row lists its calls; one call opens the existing full-detail inspector.
  await rows.nth(1).click({noWaitAfter:true});
- const calls=stack.getByTestId('reply-tool-call');
+ const calls=stack.getByTestId('reply-tool-call-branch').getByTestId('reply-tool-call');
  await expect(calls).toHaveCount(3);
  for(let i=0;i<3;i++)expect((await box(calls.nth(i))).height).toBeLessThanOrEqual(ONE_ROW);
  await calls.nth(2).click({noWaitAfter:true});
@@ -99,7 +104,7 @@ test('a long tool stack folds to its header and opens to every row',async({page,
  await send(page,'ARMY_TOOLS_MANY render a longer tool turn');
  await expect(page.getByText(/ARMY_REPLY:/).first()).toBeVisible({timeout:18000});
 
- // Seven calls make four unlike runs: past the open-by-default length, so one folded header row.
+ // Compact mode begins with a one-line summary and no expanded tool details.
  const stack=page.getByTestId('reply-tools');
  const rows=stack.getByTestId('reply-tool-row');
  await expect(stack).toContainText('7 tools');
@@ -109,7 +114,24 @@ test('a long tool stack folds to its header and opens to every row',async({page,
 
  await page.getByTestId('reply-tools-toggle').click({noWaitAfter:true});
  await expect(rows).toHaveCount(4);
- await expect(rows.nth(2)).toContainText('Read');
+ const directory=stack.getByTestId('reply-tool-tree').getByTestId('reply-tool-directory');
+ await expect(directory).toContainText('/shots');
+ await expect(directory.getByTestId('reply-tool-row')).toContainText('Read');
+ await expect(directory.getByTestId('reply-tool-row')).toContainText('notes.txt');
  for(let i=0;i<4;i++)expect((await box(rows.nth(i))).height).toBeLessThanOrEqual(ONE_ROW);
  await page.screenshot({path:info.outputPath('cards-390-many-open.png')});
+});
+
+
+test('full-screen chat shows one working indicator until Stop',async({page,bridge})=>{
+ await pair(page,bridge);
+ await page.getByRole('button',{name:/^(Create new chat|New chat)$/}).first().click();
+ await expect(composer(page)).toBeVisible();
+ await expect(page.getByTestId('chat-window')).toHaveCount(0);
+ await send(page,'ARMY_HANG single working indicator');
+ await expect(page.getByText(/ARMY_STREAM_BEGIN/).first()).toBeVisible();
+ await expect(page.getByTestId('transcript-viewport').getByRole('img', {name:'streaming',exact:true})).toHaveCount(1);
+ await expect(page.getByTestId('chat-fullscreen-pill-status')).toHaveCount(0);
+ await page.getByRole('button',{name:'Stop',exact:true}).click();
+ await expect(page.getByTestId('transcript-viewport').getByRole('img', {name:'streaming',exact:true})).toHaveCount(0);
 });

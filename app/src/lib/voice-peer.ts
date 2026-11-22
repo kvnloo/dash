@@ -47,6 +47,12 @@ export async function createVoicePeer(
           performance.mark("dash-voice-speech-stopped");
           emit({ type: "input_audio_buffer.speech_stopped" });
         });
+        // Streaming transcription: a partial of the first words before the completed utterance.
+        if (!window.__dashVoiceNoTranscript) later(1900, () => emit({
+          type: "conversation.item.input_audio_transcription.delta",
+          item_id: "army-voice-item-1",
+          delta: (window.__dashVoiceSay ?? "ARMY voice hello").split(" ").slice(0, 2).join(" "),
+        }));
         if (!window.__dashVoiceNoTranscript) later(2300, () => emit({
           type: "conversation.item.input_audio_transcription.completed",
           item_id: "army-voice-item-1",
@@ -68,6 +74,7 @@ export async function createVoicePeer(
       if (message.type !== "response.create") return;
       later(180, () => emit({ type: "response.created" }));
       later(280, () => emit({ type: "output_audio_buffer.started" }));
+      later(400, () => emit({ type: "response.output_audio_transcript.delta", delta: "ARMY voice" }));
       later(520, () => emit({ type: "response.output_audio_transcript.done", transcript: "ARMY voice reply" }));
       later(930, () => emit({ type: "output_audio_buffer.stopped" }));
       later(1100, () => emit({ type: "response.done" }));

@@ -13,7 +13,7 @@ import { CHAT_ROW_HEIGHT, SECTION_ROW_HEIGHT, SkeletonRow } from "../../componen
 import { conversationThinking, type Thinking } from "../../lib/thinking";
 import { PressScale } from "../../components/PressScale";
 import { haptic } from "../../haptics";
-import { chatRow } from "../../lib/chat-row";
+import { chatRow, rowWorkspace } from "../../lib/chat-row";
 import { chatRowActions, chatRowMenu, pressRow, runChatRowMenu } from "../../lib/chat-row-actions";
 import { BottomActionSheet } from "../../components/BottomActionSheet";
 import { NextActionCard } from "../../components/NextActionCard";
@@ -74,17 +74,14 @@ const remoteModels = new WeakMap<ChatSummary, { harnessName: string; selfId: str
 function remoteModel(summary: ChatSummary, harnessName: string, selfId: string | undefined): ChatRowModel {
   const cached = remoteModels.get(summary);
   if (cached && cached.harnessName === harnessName && cached.selfId === selfId) return cached.model;
-  const cwd = summary.cwd?.trim();
-  const folderName = cwd?.split(/[\\/]/).filter(Boolean).at(-1) ?? cwd;
   const foreign = summary.hostId !== selfId;
   const model: ChatRowModel = {
     id: `remote:${summary.key}`, harnessName,
     content: {
       title: summary.title.trim() || harnessName,
-      folder: folderName ? `Folder · ${folderName}` : "Folder unknown",
-      folderPath: cwd || undefined,
-      outcome: `${summary.messageCount} message${summary.messageCount === 1 ? "" : "s"} · ${harnessName}${foreign ? ` · ${summary.hostName}` : ""}`,
-      outcomeLabel: null,
+      ...rowWorkspace(summary.cwd, summary.repoRoot),
+      outcome: summary.task || `${summary.messageCount} message${summary.messageCount === 1 ? "" : "s"} · ${harnessName}${foreign ? ` · ${summary.hostName}` : ""}`,
+      outcomeLabel: summary.task ? "Task" : null,
       activity: summary.running ? "Running on host" : summary.openIn ? `Open in ${summary.openIn}` : "Not opened yet",
       needsAttention: false,
     },
@@ -164,7 +161,7 @@ const Row = memo(function Row({
           <Text style={styles.rowTime} numberOfLines={1}>{stale ? "ended" : item.openIn ? `${item.openIn} · ${timeAgo(item.updatedAt)}` : timeAgo(item.updatedAt)}</Text>
         </View>
         <View style={styles.rowMeta}>
-          <Text style={styles.rowFolder} numberOfLines={1} accessibilityLabel={content.folderPath ? `Working folder: ${content.folderPath}` : content.folder}>
+          <Text style={styles.rowFolder} numberOfLines={1} accessibilityLabel={content.folderPath ? `${content.isRepo ? "Repository" : "Working folder"}: ${content.folderPath}` : content.folder}>
             {content.folder}
           </Text>
           {activityShimmer ? <View style={styles.rowActivityHighlight}>
@@ -173,7 +170,7 @@ const Row = memo(function Row({
             {content.activity}
           </Text>}
         </View>
-        <Text style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
+        <Text testID="chat-work-summary" style={[styles.rowPreview, stale && styles.stale]} numberOfLines={1}>
           {content.outcomeLabel ? `${content.outcomeLabel} · ` : ""}{content.outcome}
         </Text>
       </View>

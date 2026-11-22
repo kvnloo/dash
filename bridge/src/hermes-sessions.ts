@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { ToolDetails } from "./tool-details";
 import type { ReplyPart } from "../../shared/protocol";
 import { PartEmitter, hermesParts, redact, record as partRecord } from "./reply-parts";
+import { TASK_SOURCE_CHARS, taskFromPrompt } from "../../shared/chat-task";
 import { MESSAGE_TEXT_MAX, type AgentInfo, type HistoryMessage } from "../../shared/protocol";
 import { parseHermesEnvFile, type EnvMap, type HermesFetch } from "./hermes-session";
 import { hostProcesses, ownerOf, readLiveOwners, surfaceLabel, type LiveOwner } from "./hermes-owner";
@@ -31,7 +32,7 @@ const PROFILE_OK = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 export type HermesApi = { url: string; key: string };
 export type Profile = { id: string; home: string; api?: HermesApi };
 /** One native session row for the chat index. `agent` is absent when the row is not visible. */
-export type HermesListRow = { id: string; activity: number; startedAt: number; agent?: AgentInfo };
+export type HermesListRow = { id: string; activity: number; startedAt: number; agent?: AgentInfo; task?: string };
 /** Keyset position in a Hermes transcript: native (timestamp seconds, message id). */
 export type HermesHistoryCursor = { t: number; i: number };
 type Row = Record<string, unknown>;
@@ -262,12 +263,26 @@ export class HermesSessions {
     const toRow = (row: Row): HermesListRow[] => {
       if (typeof row.id !== "string") return [];
       const activity = typeof row.act === "number" ? row.act : typeof row.last_activity_at === "number" ? row.last_activity_at : typeof row.started_at === "number" ? row.started_at : 0;
-      return [{ id: row.id, activity, startedAt: stamp(row.started_at), agent: toAgent(row, profile) }];
+      return [{ id: row.id, activity, startedAt: stamp(row.started_at), agent: toAgent(row, profile), task: typeof row.task === "string" ? row.task : undefined }];
     };
-    const local = withDb(profile, db => db.query<Row, [number, string, number]>(`SELECT ${SESSION_FIELDS}, coalesce(last_activity_at, started_at) AS act FROM sessions
+    const local = withDb(profile, db => {
+      const rows = db.query<Row, [number, string, number]>(`SELECT ${SESSION_FIELDS}, coalesce(last_activity_at, started_at) AS act FROM sessions
       WHERE coalesce(archived,0)=0 AND coalesce(hidden,0)=0 AND source IN (${HERMES_CHAT_SOURCES.map(s => `'${s}'`).join(",")})
         AND (coalesce(last_activity_at, started_at) > ?1 OR (coalesce(last_activity_at, started_at) = ?1 AND id > ?2))
-      ORDER BY act ASC, id ASC LIMIT ?3`).all(since, afterId, limit));
+      ORDER BY act ASC, id ASC LIMIT ?3`).all(since, afterId, limit);
+      const cols = db.query<{ name: string }, []>("pragma table_info(messages)").all().map(c => c.name);
+      if (!["session_id", "role", "content", "timestamp", "id"].every(column => cols.includes(column))) return rows;
+      const prompts = db.query<{ content: string | null }, [string]>(`SELECT substr(content,1,${TASK_SOURCE_CHARS}) AS content
+        FROM messages WHERE session_id=? AND role='user' ${cols.includes("active") ? "AND active=1" : ""} ORDER BY timestamp DESC, id DESC LIMIT 4`);
+      for (const row of rows) {
+        if (typeof row.id !== "string" || !visible(row)) continue;
+        for (const { content } of prompts.all(row.id)) {
+          const task = content ? taskFromPrompt(content) : undefined;
+          if (task) { row.task = task; break; }
+        }
+      }
+      return rows;
+    });
     if (local) return local.flatMap(toRow);
     if (!profile.api || profile.id !== "default") return [];
     const rows: Row[] = [];
