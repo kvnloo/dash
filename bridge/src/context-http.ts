@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { hermesSourceDir, withHermesSource } from "./hermes-source";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { parseContext, record, type ContextSnapshot, type PlanUsage, type PlanWindow } from "../../shared/context";
@@ -64,7 +65,7 @@ export function planCache(read = providerUsage, now = Date.now) {
 }
 
 export async function nativeContext(home: string, session: string): Promise<ContextSnapshot | undefined> {
-  const source = process.env.DASH_HERMES_SOURCE ?? join(homedir(), ".hermes", "hermes-agent");
+  const source = hermesSourceDir() ?? join(homedir(), ".hermes", "hermes-agent");
   const python = process.env.DASH_HERMES_PYTHON ?? join(source, "venv", "bin", "python");
   const child = Bun.spawn([python, fileURLToPath(new URL("./context-snapshot.py", import.meta.url)), session], {
     env: { ...process.env, HERMES_HOME: home, DASH_HERMES_SOURCE: source, PYTHONDONTWRITEBYTECODE: "1" }, stdout: "pipe", stderr: "ignore",
@@ -79,7 +80,7 @@ export async function nativeContext(home: string, session: string): Promise<Cont
 }
 
 export async function nativeCompact(home: string, session: string): Promise<{ ok: boolean; code: string }> {
-  const env: Record<string, string | undefined> = { ...process.env, HERMES_HOME: home };
+  const env: Record<string, string | undefined> = withHermesSource({ ...process.env, HERMES_HOME: home });
   delete env.HERMES_TUI_GATEWAY_URL;
   const child = Bun.spawn(["python3", fileURLToPath(new URL("./context-compact.py", import.meta.url))], { env, stdin: "pipe", stdout: "pipe", stderr: "ignore" });
   child.stdin.write(JSON.stringify({ session_id: session }));

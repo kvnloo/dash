@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# turbo-done <name>: remove an agent worktree made by turbo-new (its branch stays, so nothing is lost).
+set -Eeuo pipefail
+NAME="${1:?usage: turbo-done <name>}"
+PREVIEW="${DASH_PREVIEW_DIR:-$HOME/dash-studio-preview}"
+WT="${DASH_TURBO_HOME:-$HOME/dash-turbo}/wt/$NAME"
+[[ -d "$WT" ]] || { echo "no worktree $WT" >&2; exit 1; }
+git -C "$PREVIEW" worktree remove --force "$WT"
+echo "removed $WT (branch turbo/wt/$NAME kept)"

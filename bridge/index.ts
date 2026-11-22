@@ -61,7 +61,7 @@ const handleFlowTrace = flowTraceHttp(process.env.DASH_DEBUG_FLOW_TRACE === "1")
 import { activityHttp } from "./src/hermes-activity";
 const nativeActivityHttp = activityHttp((profile, session) => hermesSessions.nativeActivity(profile, session));
 import { hermesSessions, hermesSessionAgentId } from "./src/hermes-sessions";
-import { awaitHandoff, chooseHermesRoute, claimContinuation, HandoffAborted, handoffText, liveText, planContinuation, type HandoffState } from "./src/hermes-continue";
+import { awaitHandoff, awaitRunningTurn, chooseHermesRoute, claimContinuation, queueContinuation, HandoffAborted, handoffText, liveText, planContinuation, dashReplyBusy, steerFallsBackToQueue, trackRunningTurn, type HandoffState } from "./src/hermes-continue";
 import type { LiveOwner } from "./src/hermes-owner";
 import { z0bridgeHermes } from "./src/z0bridge-hermes";
 import { HARNESSES, type Harness, type Sink, type TurnInput } from "./src/harnesses";
@@ -188,6 +188,8 @@ class Turn implements Sink {
   /** Host profile that owns this Hermes turn's session, once known. */
   private hermesProfile?: string;
   private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
+  /** Ends this turn's entry in the running-turn registry, so queued follow-ups go after it (#498). */
+  private untrack?: () => void;
 
   start(input: TurnInput, remote?: RemoteHost): void {
     if (input.model && !remote && ((this.harness.id === "hermes" && input.sessionId) || process.env.DASH_ENABLE_LEGACY_CLI === "1")) {
@@ -266,17 +268,34 @@ class Turn implements Sink {
     if (!sessionId || !target) { this.endWithout("Unknown or ambiguous Hermes profile/session."); return; }
     this.hermesProfile = target.profile;
     // Steering is a control message into the current turn, not a second continuation.
-    const release = input.mode === "steer" ? () => {} : claimContinuation(target.profile, sessionId);
-    if (!release) { this.endWithout("A Dash reply is already queued or running in this Hermes session. Wait for it, or stop it first."); return; }
+    let release: (() => void) | undefined = input.mode === "steer" ? () => {} : claimContinuation(target.profile, sessionId);
     const abort = new AbortController();
     this.abort = abort;
     log("turn.start", { id: this.id, harness: "hermes", cwd: input.cwd, resume: true });
     void (async () => {
       let handedOff = false;
       try {
+        if (!release) {
+          // An earlier Dash message in this session is still queued or running: wait in line (#498).
+          this.flush();
+          this.emit({ type: "status", id: this.id, seq: 0, text: "Queued behind your earlier message.", delivery: "queued", deliveryAt: Date.now() });
+          log("hermes.queue", { id: this.id, waited: "dash-reply" });
+          release = await queueContinuation(target.profile, sessionId, abort.signal);
+          if (this.cancelled || this.finished) return;
+        }
         const hosting = (owner: LiveOwner) => hermesSessions.ownerHosting(target.profile, sessionId, owner);
         const plan = planContinuation(hermesSessions.liveOwner(target.profile, sessionId), hosting, hermesSessions.gatewayHosted(target.profile, sessionId));
-        if (input.mode === "steer" && plan.kind !== "live") throw new Error("This session is not gateway-hosted; steering was not sent.");
+        if (steerFallsBackToQueue(input.mode, plan.kind, input.mode === "steer" && dashReplyBusy(target.profile, sessionId))) {
+          // No gateway hosts this session (often Dash's own turn is running it): send it as the next turn.
+          release = await queueContinuation(target.profile, sessionId, abort.signal);
+          input = { ...input, mode: "queue" };
+          this.flush();
+          this.emit({ type: "status", id: this.id, seq: 0, text: "This session can't be steered here; queued for the next turn.", delivery: "queued", deliveryAt: Date.now() });
+          log("hermes.steer", { id: this.id, fallback: "queue" });
+        }
+        if (plan.kind !== "live" && await awaitRunningTurn(sessionId, abort.signal)) log("hermes.queue", { id: this.id, waited: "dash-turn" });
+        if (this.cancelled || this.finished) return;
+        this.untrack ??= trackRunningTurn(sessionId);
         if (plan.kind === "live") {
           if (plan.owner) this.status(liveText(plan.owner.surface, HOST_NAME));
           log("hermes.live", { id: this.id, surface: plan.owner?.surface ?? "none", hosting: "gateway" });
@@ -346,7 +365,7 @@ class Turn implements Sink {
         this.error(error instanceof HandoffAborted ? error.message : String(error));
         this.finish(1);
       } finally {
-        if (!handedOff) release();
+        if (!handedOff) release?.();
       }
     })();
   }
@@ -477,6 +496,7 @@ class Turn implements Sink {
   // Sink -------------------------------------------------------------------
 
   session(sessionId: string): void {
+    if (this.harness.id === "hermes" && !this.finished) this.untrack ??= trackRunningTurn(sessionId);
     this.flush();
     this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: SELF.id(), harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesTransport ?? (this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp") });
   }
@@ -522,6 +542,7 @@ class Turn implements Sink {
     if (this.finished) return;
     this.flush();
     this.finished = true;
+    this.untrack?.();
     const done = () => {
       this.emit({ type: "done", id: this.id, seq: 0, exitCode });
       this.settled = true;
