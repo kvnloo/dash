@@ -2,6 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isTailnetIPv4 } from "./bridge-security";
+import { configuredPeerIdentity, type PeerIdentity } from "./peer-identity";
 import { collectRemoteAgents, type RemoteRosterCache } from "./remote-roster";
 import { dnsLabel, isPhoneOs, parseTailscaleStatus, readTailscaleStatus } from "./roster";
 
@@ -20,20 +21,32 @@ function credentials(): Record<string, unknown> {
   } catch { return {}; }
 }
 
-export function peerRosterCollector() {
+/**
+ * Peers come from Tailscale discovery. Each one is reached with its explicit entry in
+ * peer-roster-tokens.json or, failing that, a z0bridge `dash:chat` access token
+ * (DASH_PEER_IDENTITY_FILE, see peer-identity.ts) that any bridge trusting the same
+ * z0bridge accepts: a new host needs no second pairing.
+ */
+export function peerRosterCollector(identity: PeerIdentity | undefined = configuredPeerIdentity()) {
   let cache: RemoteRosterCache = {};
   let pending: ReturnType<typeof collectRemoteAgents> | undefined;
   return async () => {
     if (pending) return pending;
     const tokens = credentials();
     const nodes = parseTailscaleStatus(readTailscaleStatus()).filter(node => !node.self && !isPhoneOs(node.os));
+    let minted: string | undefined;
+    if (identity && nodes.some(node => Object.getOwnPropertyDescriptor(tokens, dnsLabel(node.dnsName, node.hostName)) === undefined)) {
+      // A refused or unreachable z0bridge leaves those peers undiscovered, as a missing token does.
+      try { minted = await identity.token(); } catch { minted = undefined; }
+    }
     const peers = nodes.flatMap(node => {
       const hostId = dnsLabel(node.dnsName, node.hostName);
       // Ambiguous discovery identities cannot be entrusted with a credential.
       if (nodes.filter(other => dnsLabel(other.dnsName, other.hostName) === hostId).length !== 1) return [];
-      const raw: unknown = Object.getOwnPropertyDescriptor(tokens, hostId)?.value;
+      const explicit = Object.getOwnPropertyDescriptor(tokens, hostId);
+      const raw: unknown = explicit ? explicit.value : minted;
       const token = typeof raw === "string" ? raw : record(raw) ? raw.token : undefined;
-      const port = record(raw) && raw.port !== undefined ? raw.port : 4747;
+      const port = record(raw) && raw.port !== undefined ? raw.port : explicit || !identity ? 4747 : identity.port;
       const address = node.ips.find(ip => isTailnetIPv4(ip) || (process.env.DASH_ALLOW_LOOPBACK === "1" && ip === "127.0.0.1"));
       if (!address || typeof token !== "string" || token.length < 16 || typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535) return [];
       return [{ hostId, address, token, port, online: node.online }];
