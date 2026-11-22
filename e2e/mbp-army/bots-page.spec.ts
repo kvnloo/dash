@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { hostname } from 'node:os';
 import { test, expect, pair, type Bridge } from './fixtures';
 import type { Page } from 'playwright/test';
 
@@ -61,10 +62,14 @@ test('bots page shows every reported bot as a gem, as an orrery and in the host 
  const tree = page.getByRole('tab', { name: 'Tree view', exact: true });
  await tree.click();
  await expect(tree).toHaveAttribute('aria-selected', 'true');
+ // Staging's Hosts tree is Host → Harness → Profile/Bot → Chat (12dc5dbd): both bots sit under Hermes.
  const host = page.getByTestId(/^tree-row-host:/).first();
- await expect(host).toContainText('2 bots');
+ await expect(host).toContainText('harnesses');
  await host.click({ noWaitAfter: true });
- await expect(page.getByTestId(/^tree-row-.+:bot:hermes-bot:courier$/)).toContainText('Slack not running');
+ const hermes = page.getByTestId(/^tree-row-[^:]+:harness:hermes$/);
+ await hermes.click({ noWaitAfter: true });
+ await expect(page.getByTestId(/^tree-row-[^:]+:hermes:profile:courier$/)).toContainText('Slack not running');
+ await expect(page.getByTestId(/^tree-row-[^:]+:hermes:profile:default$/)).toBeVisible();
  await page.screenshot({ path: info.outputPath('bots-tree.png') });
 });
 
@@ -100,7 +105,7 @@ test('a bot gem opens its simple page with honest channels and chats; it offers 
  await session.click();
  // The full Chat screen on that Hermes session: its title, the host and a ready composer.
  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
- await expect(page.getByText('on runnervm', { exact: true })).toBeVisible();
+ await expect(page.getByText(`on ${hostname()}`, { exact: true })).toBeVisible();
  await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();
  await expect(botPage).toBeHidden();
 });
