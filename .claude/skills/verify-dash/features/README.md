@@ -88,6 +88,7 @@ The status counts were taken at the commit this map was written on. Maintain the
 - [Harness picker](./harness-picker.md): COVERED
 - [Sending to every harness](./harness-send-matrix.md): UNCOVERED
 - [Persisted sessions](./persisted-sessions.md): UNCOVERED
+- [Saved Glide council handoff](./council-handoff.md): COVERED
 - [Bots pane](./bots-pane.md): UNCOVERED
 
 ### Delivery and errors
