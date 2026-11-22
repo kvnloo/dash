@@ -5,8 +5,7 @@ import type { PhoneQueueDevice, PhoneQueueJob, PhoneQueueSnapshot } from "../../
  * app never talks to the queue directly. The queue's schema is owned elsewhere, so fields are read
  * tolerantly and normalized; an unreachable or malformed queue is reported as `reachable: false`.
  */
-// groot :8790 is taken (garden_room); the k3s phone-queue API listens on :8792 (ledger 2026-10-29T01:45Z).
-export const DEFAULT_PHONE_QUEUE_URL = "http://100.113.138.100:8792";
+// The queue's host is deployment config, not code: set DASH_PHONE_QUEUE_URL (the k3s phone-queue API, port 8792).
 const CACHE_MS = 5000;
 const TIMEOUT_MS = 4000;
 const MAX_ROWS = 200;
@@ -105,7 +104,7 @@ export function normalizeJobs(body: unknown): PhoneQueueJob[] | null {
 }
 
 export function createPhoneQueueHttpHandler(options: { authorize(request: Request): Promise<boolean>; baseUrl?: string; fetcher?: typeof fetch }) {
-  const base = (options.baseUrl ?? process.env.DASH_PHONE_QUEUE_URL ?? DEFAULT_PHONE_QUEUE_URL).replace(/\/+$/, "");
+  const base = (options.baseUrl ?? process.env.DASH_PHONE_QUEUE_URL ?? "").replace(/\/+$/, "");
   const fetcher = options.fetcher ?? fetch;
   let cache: PhoneQueueSnapshot | undefined;
   let pending: Promise<PhoneQueueSnapshot> | undefined;
@@ -118,6 +117,7 @@ export function createPhoneQueueHttpHandler(options: { authorize(request: Reques
 
   async function load(): Promise<PhoneQueueSnapshot> {
     const fetchedAt = Date.now();
+    if (!base) return { reachable: false, source: "unset", fetchedAt, devices: [], jobs: [], error: "Phone queue not configured: set DASH_PHONE_QUEUE_URL on the bridge" };
     const [devices, jobs] = await Promise.allSettled([read("/v1/devices"), read("/v1/jobs")]);
     const deviceRows = devices.status === "fulfilled" ? normalizeDevices(devices.value) : null;
     const jobRows = jobs.status === "fulfilled" ? normalizeJobs(jobs.value) : null;
