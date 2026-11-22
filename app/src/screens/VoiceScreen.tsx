@@ -6,6 +6,9 @@ import { Canvas } from "../components/Canvas";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { useContinuousVoice } from "../components/ContinuousVoiceRoot";
+import { LaneTimeline } from "../components/LaneTimeline";
+import { useZ0LiveLanes } from "../lib/z0live-lanes";
+import { store } from "../store/app";
 import { screenBack } from "../lib/screen-back";
 import { openCouncil } from "../store/council";
 import { firstFailingVoiceProbe, runDeviceCheck } from "../lib/device-check";
@@ -44,6 +47,8 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   const lines = state.lines;
   const orb: OrbState = { phase: state.phase === "hearing" ? "listening" : state.phase === "error" ? "idle" : state.phase };
   const autostart = props.route.params?.autostart === true;
+  const settings = store.use(s => s.settings);
+  const laneSample = useZ0LiveLanes(settings, true);
   useEffect(() => { if (autostart && !live) void start(); }, [autostart]);
 
   return (
@@ -65,6 +70,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
         </View>
 
       </View>
+      {laneSample?.lanes.lanes.length ? <View style={styles.lanes}><LaneTimeline lanes={laneSample.lanes.lanes} offset={laneSample.offset} /></View> : null}
       <View style={styles.controls}>
         <PrimaryButton accessibilityLabel={live ? "Stop voice in Dash" : "Start voice in Dash"} onPress={() => void (live ? stop() : start())} label={opening ? "Cancel connection" : live ? "Stop voice" : "Start voice"} />
         <Pressable testID="voice-open-council" accessibilityRole="button" accessibilityLabel="Open the council card" accessibilityHint="Brief, agent reports, read aloud through the orb" onPress={() => openCouncil("z0live")} style={styles.secondary}>
@@ -106,6 +112,7 @@ const styles = StyleSheet.create({
   who: { ...type.small, color: colors.textFaint },
   message: { ...type.body, color: colors.text, textAlign: "center" },
   error: { color: colors.danger },
+  lanes: { paddingHorizontal: space.xl, paddingBottom: space.sm },
   controls: { paddingHorizontal: space.xl, alignItems: "stretch", gap: space.xs },
   secondary: { minHeight: 44, justifyContent: "center", alignItems: "center", paddingHorizontal: space.lg },
   secondaryText: { ...type.body, color: colors.textMuted },
