@@ -1,6 +1,9 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "live-surface-fx0", "title": "A Hermes chat switches to the Live surface; the libfx worker's fx0 control renders in under 2 s, the tap lands in the owning Hermes session as a receipt (bridge log live.intent), and versions, stage, receipts and Ask Hermes work",
+     "tests": ["Live surface: a Hermes chat asks for a control, the fx0 control renders under 2 s and the pick lands in Hermes",
+               "Live surface: versions, stage, Receipts in Hermes and Ask Hermes route through the owning session"]},
     {"id":"dash-logwatch-triage","title":"File a local triage task on distinct phone JS or bridge errors","tests":["Dash log watcher files a local task for each distinct phone JS or bridge error"]},
     {"id":"reply-to-selected-message-text","title":"Quote selected agent message text into the unsent composer without sending","tests":["reply selection adds only highlighted assistant text to unsent draft, preserving attachments","cancel text selection leaves draft and bridge unchanged"]},
     {"id": "composer-model-harness-rate", "title": "Composer controls edit harness/model and show honest streaming token speed through the real authenticated bridge",
