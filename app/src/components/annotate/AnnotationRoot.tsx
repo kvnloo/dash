@@ -16,6 +16,7 @@ import { debugNavigationRef } from "../../debug/nav";
 import { haptic } from "../../haptics";
 import { annotationDoc, annotationSendMode, attachmentNames, composeMessage } from "../../lib/annotate/compose";
 import { uploadBytes } from "../../lib/annotate/io";
+import { learnSketchPrompt } from "../../lib/ephemeral-modes";
 import { useRecordedSpeech } from "../../lib/useRecordedSpeech";
 import { appendInkSample, pointerKind, pressureOf, routePointer } from "../../lib/annotate/pointer";
 import { subscribeStylusButton, type StylusButtonSource } from "../../lib/stylus-mode";
@@ -265,7 +266,8 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   const send = useCallback((keep: boolean) => {
     const draft = annotate.get();
     if (draft.status === "capturing" || draft.status === "sending") return;
-    if (draft.drawing.strokes.length > 0 && !draft.typed.trim() && !draft.segments.some(segment => segment.text.trim())) {
+    // A Learn sketch already says what it wants (its Learn header), so it never asks "marks only?".
+    if (draft.drawing.strokes.length > 0 && !draft.learn && !draft.typed.trim() && !draft.segments.some(segment => segment.text.trim())) {
       setPendingEmptySend(keep);
       return;
     }
@@ -519,7 +521,8 @@ async function sendAnnotation(keep: boolean, target: React.RefObject<View | null
       return;
     }
     const { bytes, dataUri } = captured;
-    const text = composeMessage({ strokes, segments: s.segments, screen, typed: s.typed });
+    const annotation = composeMessage({ strokes, segments: s.segments, screen, typed: s.typed });
+    const text = s.learn ? learnSketchPrompt(s.learn.topic, annotation) : annotation;
     setAnnotationStatus("sending", { preview: { image: dataUri, text, strokes: strokes.length } });
     const names = attachmentNames(createdAt);
     const doc = annotationDoc({ strokes, segments: s.segments, screen, createdAt, typed: s.typed });
@@ -644,7 +647,7 @@ function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, onUndoPe
           <Chip label="Add note" a11y="Add note" onPress={addNote} />
         </View>
       </View> : null}
-      <Text style={styles.hint} numberOfLines={1}>{s.sink ? `→ ${s.sink}` : "Open a chat to send"} · {s.segments.length ? `${s.segments.length} spoken` : s.typed.trim() ? "typed note ready" : "hold Talk or type a note"}{s.penMode ? " · fingers scroll" : ""}</Text>
+      <Text style={styles.hint} numberOfLines={1}>{s.learn ? `Learn sketch${s.learn.topic ? `: ${s.learn.topic}` : ""} · ` : ""}{s.sink ? `→ ${s.sink}` : "Open a chat to send"} · {s.segments.length ? `${s.segments.length} spoken` : s.typed.trim() ? "typed note ready" : "hold Talk or type a note"}{s.penMode ? " · fingers scroll" : ""}</Text>
     </TrayViewport>
   );
 }
