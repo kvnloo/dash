@@ -13,8 +13,8 @@ const profileName = /^[a-zA-Z0-9_-]{1,64}$/;
 function configuredLanes(): Lane[] {
   const lanes: Lane[] = [];
   for (const entry of (process.env.DASH_TURBO_FREE_LANES ?? "").split(",")) {
-    const [provider, profile, extra] = entry.trim().split(":");
-    if (extra !== undefined || !["groq", "cerebras", "opencode"].includes(provider) || !profileName.test(profile ?? "")) continue;
+    const [provider = "", profile = "", extra] = entry.trim().split(":");
+    if (extra !== undefined || !["groq", "cerebras", "opencode"].includes(provider) || !profileName.test(profile)) continue;
     if (!lanes.some(lane => lane.provider === provider || lane.profile === profile)) lanes.push({ provider, profile });
   }
   return lanes;
@@ -23,6 +23,14 @@ function configuredLanes(): Lane[] {
 function canReplace(error: unknown): boolean {
   return error instanceof Z0BridgeError && (error.status === 429 ||
     ["unknown_profile", "harness_unavailable", "queue_full"].includes(error.code));
+}
+
+function z0Fetch(deadline?: AbortSignal): typeof fetch {
+  const request = (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => fetch(input, {
+    ...init, redirect: "error",
+    signal: deadline && init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline ?? init?.signal,
+  });
+  return Object.assign(request, { preconnect: fetch.preconnect });
 }
 
 /** One bounded host-side run. Only explicitly configured free workers and an optional fixed meta profile. */
@@ -50,9 +58,7 @@ export function createVoiceTurbo(log: Log) {
     try {
       const baseUrl = process.env.DASH_Z0BRIDGE_URL ?? "http://127.0.0.1:4787";
       const token = (await readFile(process.env.DASH_Z0BRIDGE_TOKEN_FILE ?? join(homedir(), ".config", "z0bridge", "token"), "utf8")).trim();
-      const client = new Z0BridgeClient({ baseUrl, token, fetch: (input, init) => fetch(input, {
-        ...init, redirect: "error", signal: init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline,
-      }) });
+      const client = new Z0BridgeClient({ baseUrl, token, fetch: z0Fetch(deadline) });
       const runLane = async (lane: Lane, text: string, role: "worker" | "meta"): Promise<Result | null> => {
         let turnId: string | undefined;
         let settled = false;
@@ -83,7 +89,7 @@ export function createVoiceTurbo(log: Log) {
           if (turnId && !settled) {
             // Cleanup uses its own short timeout after the run deadline (no replay).
             const cleanup = new Z0BridgeClient({ baseUrl, token, timeoutMs: 3000,
-              fetch: (input, init) => fetch(input, { ...init, redirect: "error" }) });
+              fetch: z0Fetch() });
             await cleanup.cancelTurn(turnId).catch(() => undefined);
           }
         }
