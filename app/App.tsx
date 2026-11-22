@@ -27,6 +27,8 @@ import { NoticesScreen } from "./src/screens/NoticesScreen";
 import { ArtifactStageScreen } from "./src/screens/ArtifactStageScreen";
 import { createStageLinkRouter } from "./src/lib/stage-router";
 import { createAppRouteRouter } from "./src/lib/app-route-link";
+import { openAppRoute } from "./src/lib/app-route-open";
+import { NowTestingCard } from "./src/components/NowTestingCard";
 import { MainScreen } from "./src/screens/MainScreen";
 import { OrchestraDetailScreen } from "./src/screens/OrchestraDetailScreen";
 import { PairScreen } from "./src/screens/PairScreen";
@@ -95,12 +97,7 @@ const stageLinks = createStageLinkRouter({
 // Lab / Trace: exp://<metro>/--/lab, exp://<metro>/--/trace (dash://lab, dash://trace in dev builds).
 const appRoutes = createAppRouteRouter({
   isReady: () => debugNavigationRef.isReady(),
-  open: (route) => {
-    if (route === "Orchestra") debugNavigationRef.navigate("Main", { tab: 2 });
-    else if (route === "Bots" || route === "Hosts") debugNavigationRef.navigate("Main", { tab: 0 });
-    else if (route === "Chats") debugNavigationRef.navigate("Main", { tab: 1 });
-    else debugNavigationRef.navigate(route);
-  },
+  open: openAppRoute,
 });
 
 export default function App() {
@@ -193,6 +190,7 @@ export default function App() {
               <CouncilHost />
               <NativeEvents />
               <SecretEntry />
+              <NowTestingCard />
             </AnnotationRoot></ContinuousVoiceRoot>
             </NavigationContainer>
           </BridgePullProvider>

@@ -1,6 +1,10 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id": "now-testing-card", "title": "After a turbo promotion the build-info.json stamped by now_testing.py shows a Now testing card whose button deep-links to the changed screen, once per commit",
+     "tests": ["now testing: a promoted feature with a Dash-Screen trailer shows its card and opens that screen once",
+               "now testing: the screen is inferred from the changed files and the deep link opens the Hosts pane",
+               "now testing: Dismiss hides the card without navigating, and a promote without a screen offers no deep link"]},
     {"id":"shared-glide-theme","title":"DA-080: Dash uses the pinned Glide theme and shows all shared catalog fixtures","tests":["Shared Glide tokens change the preview and every catalog fixture is represented"]},
     {"id":"council-card","title":"Council card opens from a chat and the live call: brief sent to each seat, agent reports, and read aloud through the thinking orb with switching back to the card (DA-075)","tests":["Council card from chat sends the brief to every seat, shows their reports and reads both aloud through the orb, switching back and forth","Council card from the live-call Voice screen shows the labelled demo run, reads the report aloud on request and mute stops it"]},
     {"id":"turbo-spoken-markup-request","title":"Preview sends spoken markup only to its attached Turbo Claude session","tests":["Turbo speaks and sends one marked request to the paired Claude session from another screen"]},
