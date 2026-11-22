@@ -1,5 +1,6 @@
 import { BlurTargetView } from "expo-blur";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused, useNavigationState } from "@react-navigation/native";
+import { useThemedSurface } from "../lib/theme-mode";
 import { Canvas } from "../components/Canvas";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
@@ -146,6 +147,9 @@ function chatDraftForResult(item: SearchResult): string | undefined {
 export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
   const screenFocused = useIsFocused();
+  // Themed mode: transparent over the wallpaper; still painted under a floating chat window.
+  const underWindow = useNavigationState(s => { const top = s?.routes[s.index]; return top?.name === "Chat" && Boolean(top.params && "window" in top.params && top.params.window); });
+  const themedSurface = useThemedSurface(underWindow);
   const [foreground, setForeground] = useState(AppState.currentState === "active");
   useEffect(() => {
     const listener = AppState.addEventListener("change", state => setForeground(state === "active"));
@@ -448,7 +452,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   ], [navigation, index, searchActive, screenFocused, foreground, width]);
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
+    <View style={[styles.screen, { paddingTop: insets.top }, themedSurface]}>{themedSurface ? null : <Canvas />}
       <AppNav
         ref={navRef}
         navigation={navigation}

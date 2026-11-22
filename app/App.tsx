@@ -34,6 +34,8 @@ import { TraceScreen } from "./src/screens/TraceScreen";
 import { LabScreen } from "./src/screens/LabScreen";
 import { RoadmapProjectScreen, RoadmapScreen, RoadmapTaskScreen } from "./src/screens/RoadmapScreen";
 import { DebugHost } from "./src/debug/DebugHost";
+import { ThemedBackdrop } from "./src/components/themed/ThemedBackdrop";
+import { loadThemeMode, useThemed } from "./src/lib/theme-mode";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
 import { EphemeralModes } from "./src/components/EphemeralModes";
 import { SecretEntry } from "./src/components/SecretEntry";
@@ -57,6 +59,8 @@ const theme: Theme = {
   ...DarkTheme,
   colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bg, text: colors.text, border: colors.border },
 };
+/** Themed mode: screens are transparent over the root blueprint wallpaper. */
+const themedTheme: Theme = { ...theme, colors: { ...theme.colors, background: "transparent", card: "transparent" } };
 
 const linking = {
   prefixes: ["dash://"],
@@ -101,6 +105,8 @@ export default function App() {
   const hasSettings = store.use((s) => s.settings !== null);
   const [navigation, setNavigation] = useState<{ initial?: InitialState } | null>(turboRequests ? null : {});
   useHostSleepPosture();
+  const themed = useThemed();
+  useEffect(() => { void loadThemeMode(); }, []);
   useEffect(() => {
     if (!turboRequests || !hydrated) return;
     let mounted = true;
@@ -137,7 +143,8 @@ export default function App() {
   if (!hydrated || !fontsLoaded || !navigation) return <View style={styles.splash} />;
 
   return (
-    <GestureHandlerRootView style={styles.root}><DensityProvider><OrbMotionProvider><TileGestureProvider><TileDetailProvider>
+    <GestureHandlerRootView style={themed ? styles.clear : styles.root}><DensityProvider><OrbMotionProvider><TileGestureProvider><TileDetailProvider>
+      {themed ? <ThemedBackdrop /> : null}
       {Platform.OS === "web" ? <style>{"input:focus,textarea:focus{outline:none!important}"}</style> : null}
       <SafeAreaProvider>
         <View style={styles.touchRoot} onStartShouldSetResponderCapture={observeTouch}>
@@ -145,7 +152,7 @@ export default function App() {
           <BridgePullProvider>
             <NavigationContainer
               ref={debugNavigationRef}
-              theme={theme}
+              theme={themed ? themedTheme : theme}
               initialState={navigation.initial}
               onStateChange={saveTurboNavigation}
               linking={Platform.OS === "web" ? linking : undefined}
@@ -156,7 +163,7 @@ export default function App() {
                 initialRouteName={isDebugActive() || hasSettings ? "Main" : "Pair"}
                 // Native-stack duration is iOS-only (and ignored for modal presentations).
                 // Disable platform-owned transitions; bounded motion lives inside each screen.
-                screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "none" }}
+                screenOptions={{ headerShown: false, contentStyle: themed ? styles.clear : styles.splash, animation: "none" }}
               >
                 <Stack.Screen name="Main" component={MainScreen} />
                 <Stack.Screen name="Approvals" component={ApprovalsScreen} />

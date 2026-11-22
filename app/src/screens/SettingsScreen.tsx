@@ -8,6 +8,8 @@ import { BedtimeSettings } from "../components/BedtimeSettings";
 import { setHandedness, useHandedness } from "../lib/useHandedness";
 import type { Handedness } from "../lib/handedness";
 import { Canvas } from "../components/Canvas";
+import { ThemeSettings } from "../components/themed/ThemeSettings";
+import { useThemedSurface } from "../lib/theme-mode";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -30,6 +32,7 @@ import { endpointsOf, withEditedEndpoint } from "../lib/bridge-failover";
 
 export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const thumb = useHandedness();
+  const themedSurface = useThemedSurface();
   const insets = useSafeAreaInsets();
   const settings = store.use((s) => s.settings);
   const connection = store.use((s) => s.connection);
@@ -145,7 +148,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   })();
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
+    <View style={[styles.screen, { paddingTop: insets.top }, themedSurface]}>{themedSurface ? null : <Canvas />}
       <AppNav navigation={navigation} tab={1} />
       <ScreenHeader title="Settings" onBack={() => screenBack(navigation)} />
       <KeyboardAvoidingView style={styles.body} behavior="padding">
@@ -203,6 +206,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             </View>
             <Text style={[styles.help, { padding: space.md }]}>{settings ? "Auto follows a system preference when available; otherwise Right. This platform exposes no handedness signal. Long-press the composer mic to switch hands." : "Pair a bridge to save display preferences."}</Text>
           </GlassSurface>
+          <ThemeSettings />
           <Text style={styles.label}>Trace and Lab</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card} testID="settings-density">
             <DensityPicker />
