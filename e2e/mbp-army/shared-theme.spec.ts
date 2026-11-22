@@ -30,10 +30,13 @@ test('Shared Glide tokens change the preview and every catalog fixture is repres
       if (key && value) seen.set(key, value);
     }
     if (seen.size < fixtures.length) {
-      const el = list.locator('[data-testid^="catalog-fixture:"]').last();
-      const last = await el.getAttribute('data-testid');
-      await el.scrollIntoViewIfNeeded();
-      await expect.poll(() => el.getAttribute('data-testid')).not.toBe(last);
+      // Advance the stable viewport, not the last mounted row: virtualization
+      // can recycle that row between a locator's lookup and the scroll action.
+      await list.evaluate(node => {
+        node.scrollTop += Math.max(1, Math.floor(node.clientHeight * 0.75));
+      });
+      await list.evaluate(() => new Promise<void>(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     }
   }
   expect([...seen.keys()].sort()).toEqual(fixtures.map(f => `catalog-fixture:${f.id}`).sort());
