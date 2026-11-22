@@ -22,7 +22,10 @@ function isNoticeTime(value: unknown): value is string {
   const day = new Date(`${match[1]}T00:00:00Z`);
   return Number.isFinite(Date.parse(value)) && Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === match[1];
 }
-export type NoticeMessage = NoticeInput & { type: "notice"; id: string };
+export type NoticeMode = "worker" | "me";
+/** Silent notices still reach the inbox, but must never produce a device alert. */
+export type NoticeMessage = NoticeInput & { type: "notice"; id: string; silent?: true };
+export const NOTICE_MODE_FEATURE = "notice-mode.v1";
 export interface ChatPost { type: "chat_post"; id: string; chat: string; body: string; postedAt: number }
 
 /** Reports are additive v1 events, never approvals or turn events. */
@@ -267,6 +270,7 @@ export type ClientMessage =
   | SecretCancel
   /** Phone "forget everything": clear the bridge's notice replay ring. Old bridges ignore it. */
   | { type: "notices_clear" }
+  | { type: "notice_mode"; mode: NoticeMode }
   | {
       type: "chat";
       /** Omitted by older clients: queue for the next turn. */
@@ -445,6 +449,8 @@ export function parseClientMessage(raw: unknown): ClientMessage | null {
   if (!isRecord(raw)) return null;
   switch (raw.type) {
     case "notices_clear": return { type: "notices_clear" };
+    case "notice_mode":
+      return raw.mode === "worker" || raw.mode === "me" ? { type: "notice_mode", mode: raw.mode } : null;
     case "gate_list": return { type: "gate_list" };
     case "gate_decide": {
       const decision = parseGateDecision(raw.decision);
@@ -613,7 +619,7 @@ export function parseServerMessage(raw: unknown): ServerMessage | null {
     }
     case "notice": {
       const notice = parseNoticeInput(raw);
-      return notice && str(raw.id) && raw.id.length > 0 && raw.id.length <= 128 ? { type: "notice", id: raw.id, ...notice } : null;
+      return notice && str(raw.id) && raw.id.length > 0 && raw.id.length <= 128 ? { type: "notice", id: raw.id, ...notice, ...(raw.silent === true ? { silent: true } : {}) } : null;
     }
     case "live_opened":
     case "live_event":
