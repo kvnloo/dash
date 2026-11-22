@@ -10,7 +10,7 @@ test('opens a hosted prototype link and uses its control in Dash', async ({ page
   res.writeHead(200, { 'Content-Type': 'text/html' });
   res.end('<button onclick="this.nextElementSibling.textContent=location.hash">Try hosted control</button><p>Ready</p>');
  });
- await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+ await new Promise<void>(resolve => server.listen(0, 'localhost', resolve));
  try {
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Prototype server has no port');
