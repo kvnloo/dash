@@ -11,14 +11,14 @@ type Preview = { status: "loading" | "ready" | "error"; content: string };
 const ROW_HEIGHT = 22;
 
 /** Preview a classified source link on the paired host without leaving Dash. */
-export function FileLinkPreview({ target, messageId, onClose }: { target: FileLinkTarget; messageId: string; onClose(): void }) {
+export function FileLinkPreview({ target, conversationId, onClose }: { target: FileLinkTarget; conversationId: string; onClose(): void }) {
   const settings = store.use(s => s.settings);
-  const chat = store.use(s => s.conversations.find(c => c.messages.some(m => m.id === messageId)));
+  const chat = store.use(s => s.conversations.find(c => c.id === conversationId));
   const localHost = store.use(s => s.connection.hosts.find(host => host.self)?.id);
   const bridgeCwd = store.use(s => s.connection.cwd);
   const owned = !!chat?.endpointAddress && chat.endpointAddress === settings?.address
     && (!chat.targetHostId || chat.targetHostId === localHost);
-  const cwd = chat?.cwd?.trim() || bridgeCwd;
+  const cwd = (chat?.cwd ?? settings?.cwd)?.trim() || bridgeCwd;
   const path = target.path.startsWith("/") || target.path.startsWith("~/") ? target.path
     : cwd?.startsWith("/") ? cwd + "/" + target.path : undefined;
   const insets = useSafeAreaInsets();

@@ -109,7 +109,7 @@ function ReplySelectionSheet({ source, selection, onSelection, onCancel, onReply
   </Modal>;
 }
 
-export const Markdown = memo(function Markdown({ text, messageId, onIntent, streaming = false }: { text: string; messageId?: string; onIntent?: (intent: LiveIntent) => boolean; streaming?: boolean }) {
+export const Markdown = memo(function Markdown({ text, conversationId, onIntent, streaming = false }: { text: string; conversationId?: string; onIntent?: (intent: LiveIntent) => boolean; streaming?: boolean }) {
   const [pendingSelection, setPendingSelection] = useState<PendingReplySelection | null>(null);
   const [range, setRange] = useState<SelectionRange | null>(null);
   const [filePreview, setFilePreview] = useState<FileLinkTarget | null>(null);
@@ -117,7 +117,7 @@ export const Markdown = memo(function Markdown({ text, messageId, onIntent, stre
   const prepared = useMemo(() => linkifyMarkdown(prepareGenerativeMarkdown(text, flowMode), !streaming, sourceHref), [text, streaming]);
   // Android and web use the quote-selection sheet; iOS keeps native text selection.
   // Browser-native selection can cancel the Pressable long press before the sheet opens.
-  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: Platform.OS === "ios" }); renderer.onIntent = onIntent; renderer.onFileLink = messageId ? setFilePreview : undefined; renderer.streaming = streaming; return renderer; }, [prepared, messageId, onIntent, streaming]);
+  const renderer = useMemo(() => { const renderer = new TranscriptRenderer({ selectable: Platform.OS === "ios" }); renderer.onIntent = onIntent; renderer.onFileLink = conversationId ? setFilePreview : undefined; renderer.streaming = streaming; return renderer; }, [prepared, conversationId, onIntent, streaming]);
   const nodes = useMarkdown(prepared, { renderer, styles, colorScheme: "dark" });
   const onLongPress = () => {
     if (Platform.OS === "ios" || annotate.get().active) return;
@@ -143,7 +143,7 @@ export const Markdown = memo(function Markdown({ text, messageId, onIntent, stre
   // Hook only, not the library's nested FlatList. FlashList owns vertical scroll.
   return <View>
     <Pressable testID="reply-selection-trigger" accessible={false} delayLongPress={350} onLongPress={onLongPress}><View>{nodes}</View></Pressable>
-    {filePreview && messageId ? <FileLinkPreview target={filePreview} messageId={messageId} onClose={() => setFilePreview(null)} /> : null}
+    {filePreview && conversationId ? <FileLinkPreview target={filePreview} conversationId={conversationId} onClose={() => setFilePreview(null)} /> : null}
     {pendingSelection ? <ReplySelectionSheet source={pendingSelection.source} selection={range} onSelection={setRange} onCancel={cancelSelection} onReply={onReply} /> : null}
   </View>;
 });

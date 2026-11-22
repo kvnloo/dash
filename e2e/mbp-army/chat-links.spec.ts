@@ -7,14 +7,14 @@ test.afterEach(async ({ page }, info) => {
 });
 
 test('bare transcript URL and positioned source file open on tap', async ({ page, bridge }) => {
- await mkdir(join(bridge.dir, 'notes'));
- await writeFile(join(bridge.dir, 'notes', 'army.md'), 'first line\nARMY_POSITIONED_SOURCE\nthird line\n');
+ await mkdir(join(bridge.dir, 'Downloads', 'notes'), { recursive: true });
+ await writeFile(join(bridge.dir, 'Downloads', 'notes', 'army.md'), 'first line\nARMY_POSITIONED_SOURCE\nthird line\n');
  const destination = new URL('/#army-link-target', web).href;
  await openChat(page, bridge);
  await send(page, 'ARMY_CHAT_LINKS ' + destination);
- const file = page.getByRole('link', { name: 'notes/army.md:2:3', exact: true });
+ const file = page.getByRole('link', { name: 'Downloads/notes/army.md:2:3', exact: true });
  await expect(file).toBeVisible();
- await expect(page.getByRole('link', { name: 'notes/army.md:1', exact: true })).toHaveCount(0);
+ await expect(page.getByRole('link', { name: 'Downloads/notes/army.md:1', exact: true })).toHaveCount(0);
  await file.click();
  const preview = page.getByTestId('file-link-preview');
  await expect(preview).toContainText('line 2:3');

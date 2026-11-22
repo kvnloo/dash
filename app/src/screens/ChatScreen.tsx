@@ -634,9 +634,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
           data={visibleMessages}
           extraData={external}
           renderItem={({ item }) => item.truncated ? <View>
-            <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />
+            <MessageRow conversationId={conversation?.id} message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />
             <PressScale accessibilityRole="button" accessibilityLabel="Show full message" onPress={() => showFull(item.id)} style={styles.showFull}><Text style={styles.showFullText}>Show full message</Text></PressScale>
-          </View> : <MessageRow message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
+          </View> : <MessageRow conversationId={conversation?.id} message={item} detailMode={conversation?.detailMode ?? "Compact"} harnessId={harnessId} thinking={item.id === latestAssistant?.id ? external : undefined} />}
           keyExtractor={keyExtractor}
           getItemType={getItemType}
           onViewableItemsChanged={onViewableMessages}
