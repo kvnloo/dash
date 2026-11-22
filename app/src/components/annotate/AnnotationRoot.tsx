@@ -7,6 +7,8 @@
 
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { BackHandler, Image, PixelRatio, Platform, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from "react-native";
+import Svg, { Polyline } from "react-native-svg";
+import { useDexPad } from "../dex/useDexPad";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withTiming } from "react-native-reanimated";
@@ -312,11 +314,27 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     if (__DEV__) console.log("[dash-ink] raw-down", { pointer: kind, touches });
   }, []);
 
+  const dex = useDexPad(active, annotationStatus !== "capturing" && annotationStatus !== "sending", points => {
+    const s = annotate.get();
+    if (!s.active || s.status === "capturing" || s.status === "sending" || !size.width || !size.height) return;
+    const screen = points.map(point => ({ x: point.x * size.width, y: point.y * size.height }));
+    const xs = screen.map(p => p.x), ys = screen.map(p => p.y);
+    if (Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) < MIN_EXTENT) return;
+    const end = Date.now();
+    const started = end - points.length + 1;
+    if (engine === "tldraw") {
+      tldraw.current?.addPadInk(screen.map((point, i) => [point.x, point.y, started + i]));
+    } else {
+      commitStroke({ tool: "pen", color: s.color, pointer: "touch",
+        points: points.map((point, i) => ({ ...point, p: 0.5, t: started + i })), targets: targetsAt(screen) });
+    }
+  });
+  const padZoomed = dex.camera.scale !== 1;
   const gesture = useMemo(() => {
     // A Pan may finalize when a *different* contact lifts on web, dropping the pen.
     // A Manual gesture ends only after the tracked pointer lifts or is cancelled.
     const draw = Gesture.Manual()
-      .enabled(engine === "skia" && active && !!ink && !inkError && (Platform.OS !== "web" || !penMode))
+      .enabled(!padZoomed && engine === "skia" && active && !!ink && !inkError && (Platform.OS !== "web" || !penMode))
       .onTouchesDown((e, manager) => {
         // A palm/second finger must never fail an already ACTIVE pen handler.
         if (pointerSv.value >= 0) return;
@@ -366,16 +384,16 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
         }
         live.value = []; pointerSv.value = -1;
       });
-    const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(engine === "skia" && active)
+    const penDoubleTap = Gesture.Tap().numberOfTaps(2).maxDelay(280).enabled(!padZoomed && engine === "skia" && active)
       .onEnd((e, success) => { if (success && e.y < size.height - Math.max(0, -keyboardHeight.value) && pointerKind(e.pointerType) === "stylus") runOnJS(queuePenSend)(); });
     return Gesture.Simultaneous(draw, penDoubleTap);
-  }, [engine, active, penMode, ink, inkError, finish, queuePenSend, live, activeSv, penSv, kindSv, pointerSv, lastStylusUpSv, shieldPalm, tracePointer, size.height, keyboardHeight]);
+  }, [padZoomed, engine, active, penMode, ink, inkError, finish, queuePenSend, live, activeSv, penSv, kindSv, pointerSv, lastStylusUpSv, shieldPalm, tracePointer, size.height, keyboardHeight]);
 
   // RNGH 2.32 web can cancel its pen handler on a new touch/lost pointer capture.
   // Pen mode uses the original DOM pen stream instead; native stays on Manual.
   // The capture listener works even while the overlay passes fingers to scrolling.
   useEffect(() => {
-    if (Platform.OS !== "web" || engine !== "skia" || !active || !penMode || !ink || inkError ||
+    if (Platform.OS !== "web" || padZoomed || engine !== "skia" || !active || !penMode || !ink || inkError ||
         !size.width || !size.height) return;
     const surface = webPenSurface.current;
     if (!(surface instanceof HTMLElement)) return;
@@ -425,7 +443,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
       document.removeEventListener("pointerup", up, true);
       if (tracking) { live.value = []; pointerSv.value = -1; }
     };
-  }, [engine, active, penMode, ink, inkError, size.width, size.height, keyboardHeight,
+  }, [padZoomed, engine, active, penMode, ink, inkError, size.width, size.height, keyboardHeight,
       live, pointerSv, kindSv, lastStylusUpSv, shieldPalm, tracePointer, finish]);
 
   const onLayout = useCallback((e: LayoutChangeEvent) => {
@@ -447,23 +465,34 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   return (
     <View style={styles.root}>
       <GestureDetector gesture={gesture}>
-        <View ref={webPenSurface} style={styles.root} collapsable={false} onLayout={onLayout}>
+        <View ref={webPenSurface} style={[styles.root, padZoomed && styles.clip]} collapsable={false} onLayout={onLayout}>
+          <View style={[styles.root, padZoomed && {
+            transformOrigin: "top left",
+            transform: [{ translateX: dex.camera.x * size.width }, { translateY: dex.camera.y * size.height }, { scale: dex.camera.scale }],
+          }]} testID={padZoomed ? "dex-zoomed-chat" : undefined}>
           <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
           {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
           {engine === "skia" && active && !inkError ? <Animated.View pointerEvents={penMode && !palmShield ? "none" : "auto"} style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
           {engine === "skia" && active && Ink ? <InkBoundary key={inkAttempt} onError={error => inkFailed(error, "ink-render")}><Animated.View style={[StyleSheet.absoluteFill, frameStyle, { overflow: "hidden" }]} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></Animated.View></InkBoundary> : null}
-          {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active ? "auto" : "none"} {...overlayProps}>
-            <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} tool={tool} color={color} penMode={penMode} mode="screen"
+          {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active && !padZoomed ? "auto" : "none"} {...overlayProps}>
+            <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} tool={tool} color={color} penMode={penMode} padZoomed={padZoomed}
               onStylusObserved={async () => { observeStylusPointer(); }}
               onReady={async ms => { console.info("[annotate-tldraw] host-ready", { ms }); }}
               onDrawing={async drawing => { syncTldrawStrokes(drawing.map(stroke => ({ ...stroke, targets: targetsAt(stroke.points.map(point => ({ x: point.x * size.width, y: point.y * size.height }))) }))); }}
               onExportDone={async () => { /* WP3 connects the ink export to compositing. */ }}
               dom={{ style: { flex: 1 }, scrollEnabled: false }} />
           </Animated.View> : null}
+          </View>
+          {dex.preview.length > 1 ? <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <Svg width={size.width} height={size.height}>
+              <Polyline points={dex.preview.map(p => `${p.x * size.width},${p.y * size.height}`).join(" ")}
+                fill="none" stroke={INK[color]} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          </View> : null}
         </View>
       </GestureDetector>
       {active ? <Animated.View pointerEvents="none" style={[styles.frame, frameStyle]} accessibilityLabel="Annotation mode on" {...overlayProps} /> : null}
-      {active ? <Tray onSend={send} onSendAnyway={sendAnyway} onDismissEmpty={() => setPendingEmptySend(null)} pendingEmptySend={pendingEmptySend} onUndoPenSend={undoPendingSend} penSendPending={penSendPending} screenHeight={size.height} tldraw={engine === "tldraw" ? tldraw : undefined} /> : <Toast screenHeight={size.height} />}
+      {active ? <Tray onOpenPad={dex.showOpen ? dex.launch : undefined} padError={dex.error} onSend={send} onSendAnyway={sendAnyway} onDismissEmpty={() => setPendingEmptySend(null)} pendingEmptySend={pendingEmptySend} onUndoPenSend={undoPendingSend} penSendPending={penSendPending} screenHeight={size.height} tldraw={engine === "tldraw" ? tldraw : undefined} /> : <Toast screenHeight={size.height} />}
       {active && inkError ? <View style={styles.inkError}>
         <Text accessibilityRole="alert" style={styles.error}>{"Ink paused (" + inkError.stage + "): " + inkError.detail}</Text>
         <View style={styles.row}>
@@ -575,7 +604,9 @@ function TrayViewport({ children, atTop, screenHeight }: { children: ReactNode; 
   );
 }
 
-function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, onUndoPenSend, penSendPending, screenHeight, tldraw }: {
+function Tray({ onOpenPad, padError, onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, onUndoPenSend, penSendPending, screenHeight, tldraw }: {
+  onOpenPad?: () => void;
+  padError: boolean;
   onSend(keep: boolean): void;
   onSendAnyway(): void;
   onDismissEmpty(): void;
@@ -628,6 +659,8 @@ function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, onUndoPe
         <Chip label="Keep" a11y="Send and keep drawing" disabled={busy || count === 0} onPress={() => onSend(true)} />
         <Chip label={busy ? "…" : "Send"} a11y="Send annotation" primary disabled={busy || count === 0} onPress={() => onSend(false)} />
       </View>
+      {onOpenPad ? <Chip label="Open Dash Pad" a11y="Open Dash Pad on phone" onPress={onOpenPad} /> : null}
+      {onOpenPad && padError ? <Text accessibilityRole="alert" style={styles.error}>Could not open Dash Pad on the phone.</Text> : null}
       {noteOpen ? <TextInput
         ref={noteInput} testID="annotation-note" accessibilityLabel="Type a note"
         multiline maxLength={2000} value={s.typed} onChangeText={text => {
@@ -710,6 +743,7 @@ function HoldToTalk(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  clip: { overflow: "hidden" },
   inkError: { position: "absolute", top: 80, left: 12, right: 12, padding: 8, backgroundColor: colors.surfaceRaised, borderRadius: radius.sm },
   penSendToast: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 44, paddingHorizontal: space.sm, borderRadius: radius.sm, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.hair },
   penSendLabel: { ...type.mono, color: colors.text },

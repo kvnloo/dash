@@ -2,7 +2,7 @@
 // Based on the measured Expo DOM spike; kept mounted while idle to avoid cold opens.
 import { useCallback, useEffect, useRef, useState, type Ref } from "react";
 import { useDOMImperativeHandle, type DOMProps, type DOMImperativeFactory } from "expo/dom";
-import { AssetRecordType, Box, DefaultColorStyle, GeoShapeGeoStyle, Tldraw, createShapeId, type Editor, type TLShapeId } from "tldraw";
+import { AssetRecordType, b64Vecs, Box, DefaultColorStyle, GeoShapeGeoStyle, Tldraw, createShapeId, type Editor, type TLShapeId } from "tldraw";
 import "tldraw/tldraw.css";
 import { annotationShapeToStroke, isAnnotationShape, type TimedInk } from "../../lib/annotate/tldraw-adapter";
 import { appendInkSample, pressureOf } from "../../lib/annotate/pointer";
@@ -10,6 +10,7 @@ import type { InkColor, PointerKind, Stroke, Tool } from "../../lib/annotate/str
 import { annotationAssetUrls } from "./tldraw-assets";
 
 export interface TldrawAnnotateHandle extends DOMImperativeFactory {
+  addPadInk(...args: Parameters<DOMImperativeFactory[string]>): void;
   undo(): void;
   redo(): void;
   clear(...args: Parameters<DOMImperativeFactory[string]>): void;
@@ -25,7 +26,7 @@ interface Props {
   tool: Tool;
   color: InkColor;
   penMode: boolean;
-  mode: "screen" | "dex";
+  padZoomed: boolean;
   onReady(ms: number): Promise<void>;
   onStylusObserved(): Promise<void>;
   onDrawing(strokes: Stroke[]): Promise<void>;
@@ -56,6 +57,27 @@ export default function TldrawAnnotateDOM(props: Props) {
   }, [editor]);
 
   useDOMImperativeHandle<TldrawAnnotateHandle>(props.ref ?? null, () => ({
+    addPadInk(...args: Parameters<DOMImperativeFactory[string]>) {
+      if (!editor || !latest.current.active || !Array.isArray(args[0])) return;
+      const camera = editor.getCamera();
+      const points = args[0].flatMap(sample => {
+        if (!Array.isArray(sample)) return [];
+        const [x, y, t] = sample;
+        return typeof x === "number" && typeof y === "number" && typeof t === "number"
+          ? [{ x: x / camera.z - camera.x, y: y / camera.z - camera.y, p: 0.5, t }] : [];
+      });
+      const start = points[0];
+      if (!start || points.length < 2) return;
+      const local = points.map(point => ({ ...point, x: point.x - start.x, y: point.y - start.y }));
+      const id = createShapeId();
+      const color = latest.current.color;
+      editor.markHistoryStoppingPoint("Dash Pad stroke");
+      inks.current.set(id, { id: nextId.current++, color, pointer: "touch", points: local, targets: [] });
+      editor.createShape({ id, type: "draw", x: start.x, y: start.y, props: {
+        color: color === "red" ? "red" : "yellow", isComplete: true,
+        segments: [{ type: "free", path: b64Vecs.encodePoints(local.map(p => ({ x: p.x, y: p.y, z: p.p }))) }],
+      } });
+    },
     undo() { editor?.undo(); publish(); },
     redo() { editor?.redo(); publish(); },
     retain(...args: Parameters<DOMImperativeFactory[string]>) {
@@ -137,7 +159,7 @@ export default function TldrawAnnotateDOM(props: Props) {
     }
   }
   return <div data-testid="annotate-tldraw" data-ready={editor ? "true" : "false"}
-    style={{ position: "absolute", inset: 0, visibility: props.active ? "visible" : "hidden", pointerEvents: props.active ? "auto" : "none" }}
+    style={{ position: "absolute", inset: 0, visibility: props.active ? "visible" : "hidden", pointerEvents: props.active && !props.padZoomed ? "auto" : "none" }}
     onPointerDownCapture={event => {
       if (props.active && event.pointerType === "pen") void latest.current.onStylusObserved();
       if (!editor || !props.active || event.button !== 0 || (props.penMode && event.pointerType !== "pen")) return;
