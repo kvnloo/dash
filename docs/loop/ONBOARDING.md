@@ -16,6 +16,7 @@ This page helps you decide how to engage with Dash based on your goals.
 
 1. Read the [README](../../README.md) for quick start instructions.
 2. Follow the setup:
+   - One command does all of it on macOS or Linux: `scripts/onboard.sh` (see the README). Or by hand:
    - Start the bridge on your laptop: `cd bridge && bun install && bun run index.ts`
    - Start the app: `cd app && bun install && bunx expo install && bunx expo start`
    - Pair your phone (Expo Go) with the bridge via Tailscale.
