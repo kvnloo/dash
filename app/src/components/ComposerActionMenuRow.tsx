@@ -115,16 +115,17 @@ export function ComposerActionMenuRow({
       </Animated.View>
     </GestureDetector>
     {expanded ? <View
+      accessibilityRole={row.id === "surface" ? "radiogroup" : undefined}
       accessibilityLabel={row.label + " options"}
       testID={"composer-menu-submenu-" + row.id}
       style={[styles.submenu, side === "left" ? styles.right : styles.left]}
     >
       {choices.map((choice, index) => <Pressable
         key={choice.id}
-        accessibilityRole="button"
+        accessibilityRole={row.id === "surface" ? "radio" : "button"}
         accessibilityLabel={choice.label}
-        accessibilityState={{ selected: choice.selected }}
-        aria-selected={choice.selected}
+        accessibilityState={row.id === "surface" ? { checked: choice.selected } : { selected: choice.selected }}
+        aria-checked={row.id === "surface" ? choice.selected : undefined}
         onPress={() => actions.choose(index)}
         testID={"composer-menu-choice-" + row.id + "-" + index}
         style={[styles.choice, (hoverChoice === index || choice.selected) && styles.highlight]}
