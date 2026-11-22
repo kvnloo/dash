@@ -124,11 +124,12 @@ export function ComposerActionMenuRow({
         accessibilityRole="button"
         accessibilityLabel={choice.label}
         accessibilityState={{ selected: choice.selected }}
+        aria-selected={choice.selected}
         onPress={() => actions.choose(index)}
         testID={"composer-menu-choice-" + row.id + "-" + index}
         style={[styles.choice, (hoverChoice === index || choice.selected) && styles.highlight]}
       >
-        <Text numberOfLines={2} style={styles.choiceText}>{choice.label}</Text>
+        <Text numberOfLines={2} style={styles.choiceText}>{row.id === "surface" && choice.selected ? "✓ " : ""}{choice.label}</Text>
       </Pressable>)}
     </View> : null}
   </View>;
