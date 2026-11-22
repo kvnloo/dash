@@ -23,6 +23,8 @@ export const UI_CONTROL_ROUTES: readonly UiControlRoute[] = [
 ];
 
 export type UiControlTarget = { testID: string } | { x: number; y: number };
+export type UiControlShape = "pointer" | "circle" | "arrow";
+export const UI_CONTROL_SHAPES: readonly UiControlShape[] = ["pointer", "circle", "arrow"];
 export type UiControlPoint = [x: number, y: number];
 export interface UiControlStroke {
   points: UiControlPoint[];
@@ -30,7 +32,8 @@ export interface UiControlStroke {
 
 /** Commands describe presentation intent; they cannot perform arbitrary taps or URL navigation. */
 export type UiControlCommand =
-  | { type: "point"; id: string; target: UiControlTarget; label?: string; ttlMs: number }
+  /** shape (additive v1): how the pointer looks. Absent = "pointer"; an older app ignores it. */
+  | { type: "point"; id: string; target: UiControlTarget; label?: string; shape?: UiControlShape; ttlMs: number }
   | { type: "draw"; id: string; strokes: UiControlStroke[]; color?: "gold" | "cream"; ttlMs: number }
   /**
    * chatTitle (Chat only): open the phone's chat with this title (exact, case-insensitive) when the
@@ -138,11 +141,14 @@ export function parseUiControl(raw: unknown): UiControlParseResult {
       if (target === null) return reject("invalid point.target");
       if (!isTtl(command.ttlMs)) return reject("invalid point.ttlMs");
       if (command.label !== undefined && !isLabel(command.label)) return reject("invalid point.label");
+      const shape = command.shape;
+      if (shape !== undefined && !UI_CONTROL_SHAPES.some(known => known === shape)) return reject("invalid point.shape");
       return {
         ok: true,
         command: {
           type: "point", id, target, ttlMs: command.ttlMs,
           ...(command.label !== undefined ? { label: command.label } : {}),
+          ...(shape === "pointer" || shape === "circle" || shape === "arrow" ? { shape } : {}),
         },
       };
     }

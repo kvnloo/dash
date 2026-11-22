@@ -5,7 +5,9 @@
 import { CommonActions } from "@react-navigation/native";
 import type { ChatSummary } from "../../../shared/protocol";
 import type { UiControlAckStatus, UiControlClientMessage, UiControlCommand, UiControlFrame } from "../../../shared/ui-control";
+import { Dimensions } from "react-native";
 import { debugNavigationRef } from "../debug/nav";
+import { measureAgentTarget } from "../lib/agent-targets";
 import { createOverlayState, reduceOverlay, type OverlayEvent, type OverlayState } from "../lib/ui-control-overlay";
 import type { Conversation } from "../model";
 import type { RootStackParamList } from "../navigation";
@@ -49,6 +51,17 @@ function dispatch(event: OverlayEvent): OverlayState {
 function record(text: string, status: UiControlAckStatus): void {
   activitySeq += 1;
   agentControl.set(s => ({ ...s, activity: { seq: activitySeq, text: text.slice(0, 120), status, at: Date.now() } }));
+}
+
+/** Called by the layer's timer at the next expiry; the reducer removes marks whose TTL ran out. */
+export function expireAgentMarks(): void {
+  dispatch({ type: "tick", at: Date.now() });
+}
+
+/** The receipt's ✕: hide it and, when marks are up, clear them with the spec's 10 s cooldown. */
+export function dismissAgentMarks(): void {
+  dismissActivity();
+  if (agentControl.get().overlay.items.length > 0) dispatch({ type: "user-dismiss", at: Date.now() });
 }
 
 export function dismissActivity(): void {
@@ -142,24 +155,34 @@ async function navigate(command: Extract<UiControlCommand, { type: "navigate" }>
 
 function describe(command: UiControlCommand): string {
   switch (command.type) {
-    case "point": return "Pointer";
+    case "point": {
+      const verb = command.shape === "circle" ? "Circled" : command.shape === "arrow" ? "Arrow at" : "Pointing at";
+      return `${verb} ${"testID" in command.target ? command.target.testID : "a spot"}${command.label ? `: ${command.label}` : ""}`;
+    }
     case "draw": return "Drawing";
-    case "highlight": return "Highlight";
+    case "highlight": return `Highlighted ${command.testID}`;
     case "clear": return "Cleared agent marks";
     case "navigate": return `Open ${command.route}`;
   }
 }
 
-/** Overlay commands render in a later layer; this build acknowledges them honestly. */
+/** Marks render in AgentControlLayer; an element target must be on screen now, or the mark is withdrawn. */
 async function perform(command: UiControlCommand): Promise<{ status: UiControlAckStatus; detail: string }> {
   switch (command.type) {
     case "navigate":
       try { return await navigate(command); }
       finally { dispatch({ type: "navigated", id: command.id, at: Date.now() }); }
     case "clear": return { status: "done", detail: describe(command) };
+    case "draw": return { status: "done", detail: describe(command) };
     case "point":
-    case "draw":
-    case "highlight": return { status: "skipped", detail: "This Dash build cannot draw agent overlays yet" };
+    case "highlight": {
+      const testID = command.type === "highlight" ? command.testID : "testID" in command.target ? command.target.testID : undefined;
+      if (testID === undefined) return { status: "done", detail: describe(command) };
+      const rect = await measureAgentTarget(testID, Dimensions.get("window"));
+      if (rect) return { status: "done", detail: describe(command) };
+      dispatch({ type: "command", command: { type: "clear", id: command.id }, at: Date.now() });
+      return { status: "skipped", detail: `${testID} is not on screen` };
+    }
   }
 }
 

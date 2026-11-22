@@ -10,13 +10,45 @@ The owner must switch on Dash > Settings > Agent control. Every command shows on
   dash-ui open "<path>"        Navigate: "Chats", "Chats > <chat title>", "Chats > <chat> > Annotate",
                                "Chats > id:<conversation id>", "Chat", "Settings", "Trace", "Lab",
                                "Orchestra", "Hosts"
+  dash-ui circle <target> ["label"]   Circle an element, e.g. dash-ui circle chat-annotate "Tap here"
+  dash-ui arrow <target> ["label"]    Arrow pointing at an element
+  dash-ui point <target> ["label"]    Pointer dot with an optional label
+  dash-ui highlight <testID>          Outline one element
+  dash-ui draw "x,y x,y ..." [...]    One stroke per argument, normalized 0..1 window coordinates
+  dash-ui clear [id]                  Remove agent marks (all, or the one with that id)
   dash-ui send '<json>'        Send one raw command object (docs/specs/ui-control.md)
+
+  <target> is an element testID (e.g. chat-annotate, chat-window-close, chat-row-<id>) or "x,y"
+  in normalized window coordinates. Marks options: --ttl <ms> (250-30000, default 6000),
+  --id <id> (to clear it later), --color gold|cream (draw).
 
 Prints the phone's answer as JSON. Exit 0 when the phone performed it, 1 otherwise, 2 on bad usage.
 `;
 
 function commandId(): string {
   return `cli-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+const DEFAULT_TTL_MS = 6000;
+
+function target(raw: string): { testID: string } | { x: number; y: number } {
+  const xy = /^\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/.exec(raw);
+  return xy ? { x: Number(xy[1]), y: Number(xy[2]) } : { testID: raw };
+}
+
+/** Splits --ttl/--id/--color from positional arguments. */
+function options(args: readonly string[]): { positional: string[]; ttlMs: number; id?: string; color?: string } | string {
+  const positional: string[] = [];
+  let ttlMs = DEFAULT_TTL_MS, id: string | undefined, color: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (arg === "--ttl" || arg === "--id" || arg === "--color") {
+      const value = args[++i];
+      if (value === undefined) return `${arg} needs a value`;
+      if (arg === "--ttl") ttlMs = Number(value); else if (arg === "--id") id = value; else color = value;
+    } else positional.push(arg);
+  }
+  return { positional, ttlMs, ...(id !== undefined ? { id } : {}), ...(color !== undefined ? { color } : {}) };
 }
 
 /** Builds the command for argv; separate from transport so callers can extend the verbs. */
@@ -33,7 +65,27 @@ export function uiCliCommand(args: readonly string[], id = commandId()): UiContr
     try { command = JSON.parse(rest[0]); } catch { return { ok: false, error: "send: invalid JSON" }; }
     return parseUiControl({ type: "ui_control", schema: UI_CONTROL_SCHEMA, command });
   }
-  return { ok: false, error: `unknown command "${verb}"` };
+  const marks = (command: Record<string, unknown>) => parseUiControl({ type: "ui_control", schema: UI_CONTROL_SCHEMA, command });
+  if (verb === "clear") {
+    if (rest.length > 1) return { ok: false, error: "clear takes at most one id" };
+    return marks({ type: "clear", ...(rest[0] !== undefined ? { id: rest[0] } : {}) });
+  }
+  if (verb !== "circle" && verb !== "arrow" && verb !== "point" && verb !== "highlight" && verb !== "draw") return { ok: false, error: `unknown command "${verb}"` };
+  const parsed = options(rest);
+  if (typeof parsed === "string") return { ok: false, error: parsed };
+  const markId = parsed.id ?? id;
+  if (verb === "draw") {
+    if (parsed.positional.length === 0) return { ok: false, error: 'draw takes one or more strokes like "0.1,0.2 0.4,0.5"' };
+    const strokes = parsed.positional.map(stroke => ({ points: stroke.trim().split(/\s+/).map(point => point.split(",").map(Number)) }));
+    return marks({ type: "draw", id: markId, strokes, ttlMs: parsed.ttlMs, ...(parsed.color !== undefined ? { color: parsed.color } : {}) });
+  }
+  const [where, label, extra] = parsed.positional;
+  if (where === undefined || extra !== undefined) return { ok: false, error: `${verb} takes a target and an optional label` };
+  if (verb === "highlight") {
+    if (label !== undefined) return { ok: false, error: "highlight takes only a testID" };
+    return marks({ type: "highlight", id: markId, testID: where, ttlMs: parsed.ttlMs });
+  }
+  return marks({ type: "point", id: markId, target: target(where), shape: verb === "point" ? "pointer" : verb, ttlMs: parsed.ttlMs, ...(label !== undefined ? { label } : {}) });
 }
 
 export async function uiCli(args: string[], env: NodeJS.ProcessEnv = process.env, build = uiCliCommand): Promise<number> {
