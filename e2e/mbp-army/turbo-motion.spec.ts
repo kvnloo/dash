@@ -1,5 +1,5 @@
 import type { Page } from 'playwright/test';
-import { test, expect, pair, send } from './fixtures';
+import { test, expect, pair } from './fixtures';
 
 // Run the same journey against both build-time flag values. Sample real rendered
 // transforms, not exported configuration. Allow a few display frames for sampling.
@@ -59,11 +59,23 @@ test('Turbo profile scales rendered pager, action sheet and orb timings', async 
   const sheet = await measuredSlide(page);
   await page.mouse.up();
   await page.getByTestId('bottom-action-sheet-close').click({ noWaitAfter: true });
-  await page.getByRole('button', { name: /^(Create new chat|New chat)$/ }).first().click({ noWaitAfter: true });
-  await send(page, 'ARMY_HOLD turbo timing');
-  const orb = page.getByTestId('transcript-viewport').getByTestId('agent-orb');
-  await expect(orb).toHaveAttribute('aria-label', 'streaming');
-  const cycle = await orb.getByTestId('agent-orb-motion').evaluate(node => new Promise<number>(resolve => {
+  // Chat deliberately pauses its inline orbs. Use the shipped component lab's
+  // visible streaming orb so we exercise an actively composited clock.
+  await page.goto(new URL('/lab', page.url()).href);
+  const lab = page.getByTestId('lab-scroll');
+  await lab.hover();
+  const orb = lab.getByRole('img', { name: 'streaming', exact: true }).first();
+  await expect.poll(async () => {
+    if (await orb.count()) return true;
+    await page.mouse.wheel(0, 500);
+    return false;
+  }).toBe(true);
+  await orb.scrollIntoViewIfNeeded();
+  const drawing = orb.getByTestId('agent-orb-motion');
+  const transform = () => drawing.evaluate(node => getComputedStyle(node).transform);
+  const initialTransform = await transform();
+  await expect.poll(transform).not.toBe(initialTransform);
+  const cycle = await drawing.evaluate(node => new Promise<number>(resolve => {
     const angle = () => {
       const matrix = new DOMMatrixReadOnly(getComputedStyle(node).transform);
       return Math.atan2(matrix.m12, matrix.m11);
