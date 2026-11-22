@@ -83,7 +83,7 @@ drive)
   sway_alive || die "virtual display missing; run: sway-up (never fall back to the physical display)"
   cd "$REPO"
   set +e
-  ARMY_BASE=$ARMY_BASE ARMY_WEB=$WEB ARMY_BRIDGE_ROOT=$REPO python3 e2e/mbp-army/run.py "$run" "$workers" "$@"
+  ARMY_BASE=$ARMY_BASE ARMY_WEB=$WEB ARMY_BRIDGE_ROOT=$REPO python3 -B e2e/mbp-army/run.py "$run" "$workers" "$@"
   rc=$?
   set -e
   python3 - "$ARMY_BASE" "$run" "$SHA" "$DIRTY" "$rc" "$@" <<'PY'

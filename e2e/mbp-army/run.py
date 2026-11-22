@@ -6,7 +6,8 @@ Scratch output lives under $ARMY_BASE (default ~/dash-e2e-army-20261025). When t
 run finishes, receipt.py writes the O15 receipt for this exact commit. Headless
 runs (CI, any host) use scripts/army.sh instead; both write the same receipt.
 """
-import subprocess, os, sys, time, json, threading
+import subprocess, os, sys, time, json, threading, hashlib
+from retention import reserve, finish
 from datetime import datetime, timezone
 from pathlib import Path
 here=Path(__file__).resolve().parent; repo=here.parents[1]
@@ -14,12 +15,15 @@ base=Path(os.environ.get('ARMY_BASE',str(Path.home()/'dash-e2e-army-20261025')))
 if not (base/'virtual-runtime/wayland-1').exists():raise SystemExit('Virtual display missing; never fall back to physical display')
 name=sys.argv[1]; workers=sys.argv[2]; extra=sys.argv[3:]
 if extra:print('note: extra Playwright args given; a filtered run cannot produce complete coverage',file=sys.stderr)
+suite=os.environ.get('ARMY_SUITE') or ('full' if not extra else
+    'filtered-' + hashlib.sha256(json.dumps(extra).encode()).hexdigest())
+scratch=reserve(base,name)
 started=datetime.now(timezone.utc).isoformat()
-env={**os.environ,'ARMY_HEADED':'1','TMPDIR':str(base/'tmp'),'ARMY_TMP':str(base/'tmp'),'WAYLAND_DISPLAY':'wayland-1','XDG_RUNTIME_DIR':str(base/'virtual-runtime'),'ARMY_OUTPUT':str(base/name),'ARMY_HTML':str(base/(name+'-html')),'ARMY_JSON':str(base/(name+'.json')),'ARMY_SLOWMO':'0','ARMY_COMMAND_STARTED':str(time.time()*1000),'ARMY_STARTUP':str(base/(name+'-startup.json'))}
+env={**os.environ,'ARMY_HEADED':'1','TMPDIR':str(scratch),'ARMY_TMP':str(scratch),'WAYLAND_DISPLAY':'wayland-1','XDG_RUNTIME_DIR':str(base/'virtual-runtime'),'ARMY_OUTPUT':str(base/name),'ARMY_HTML':str(base/(name+'-html')),'ARMY_JSON':str(base/(name+'.json')),'ARMY_SLOWMO':'0','ARMY_COMMAND_STARTED':str(time.time()*1000),'ARMY_STARTUP':str(base/(name+'-startup.json'))}
 cmd=['node','node_modules/playwright/cli.js','test','-c','e2e/mbp-army/playwright.config.ts','--workers='+workers,*extra]
 def sample():
  while not stopped.is_set():
-  row={'at':time.time(),'loadavg':os.getloadavg(),'meminfo':Path('/proc/meminfo').read_text(),'temp':{str(p):p.read_text().strip() for p in Path('/sys/class/thermal').glob('thermal_zone*/temp')},'throttle':{str(p):p.read_text().strip() for p in Path('/sys/devices/system/cpu').glob('cpu*/thermal_throttle/*throttle_count')}}
+  row={'at':time.time(),'loadavg':os.getloadavg(),'meminfo':Path('/proc/meminfo').read_text() if sys.platform == 'linux' else None,'temp':{str(p):p.read_text().strip() for p in Path('/sys/class/thermal').glob('thermal_zone*/temp')},'throttle':{str(p):p.read_text().strip() for p in Path('/sys/devices/system/cpu').glob('cpu*/thermal_throttle/*throttle_count')}}
   with (base/(name+'-telemetry.jsonl')).open('a') as f:f.write(json.dumps(row)+'\n')
   stopped.wait(10)
 stopped=threading.Event()
@@ -31,4 +35,5 @@ stopped.set();thread.join()
 (base/(name+'-wall.json')).write_text(json.dumps({'run':name,'workers':int(workers),'wall_ms':(time.perf_counter()-t)*1000,'exit_code':p.returncode,'command':cmd},indent=2))
 print(name,p.returncode)
 r=subprocess.run([sys.executable,str(here/'receipt.py'),str(base/(name+'.json')),str(base/name),'--started',started])
+finish(base,name,suite)
 sys.exit(p.returncode or r.returncode)
