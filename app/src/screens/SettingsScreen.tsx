@@ -349,7 +349,7 @@ function WallpaperThemePicker() {
   return <>
     <Text style={styles.label}>Appearance</Text>
     <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
-      <Pressable accessibilityRole="switch" accessibilityLabel="Wallpaper glass" accessibilityState={{ checked: selected }}
+      <Pressable accessibilityRole="switch" accessibilityLabel="Wallpaper glass" aria-checked={selected}
         onPress={() => setAppearanceTheme(selected ? "night" : "wallpaper")}
         style={({ pressed }) => [styles.harnessRow, pressed && styles.pressed]}>
         <Text style={styles.harnessName}>Wallpaper glass</Text>
