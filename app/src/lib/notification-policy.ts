@@ -3,7 +3,11 @@ import { messageThinking } from "./thinking";
 import type { NoticeClass } from "../../../shared/interaction-policy";
 
 export type NotificationTarget = { kind: "chat"; chatId: string } | { kind: "approvals" } | { kind: "notices" };
-export interface DashNotice { key: string; title: string; body: string; target: NotificationTarget; class?: NoticeClass; /** Agent report: posts even in the foreground. */ report?: boolean }
+export interface DashNotice { key: string; title: string; body: string; target: NotificationTarget; class?: NoticeClass; /** Agent report: posts even in the foreground. */ report?: boolean;
+  /** Pending ACP permission this notice can answer (notification-actions.ts); never carries an optionId. */
+  permission?: { conversationId: string; sessionId: string; turnId: string; requestId: string };
+  /** Buttons to offer; only meaningful with `permission`. */
+  actions?: readonly ("allow" | "deny")[] }
 /** Agent reports post even in the foreground: the app reconnects (and replays) only while open,
  * so suppressing foreground delivery meant replayed reports never reached the shade. */
 export function shouldNotify(input: { foreground: boolean; enabled: boolean; permission: string; report?: boolean }): boolean {
@@ -16,7 +20,8 @@ export function notificationLink(target: NotificationTarget): string {
 // One deep-link parser: the hardened checks live in notification-link.ts.
 export { parseChatLink, parseNotificationTarget } from "./notification-link";
 
-export function createReplyNoticeObserver(emit: (notice: DashNotice) => void) {
+/** skip: lets a richer notice own a turn (an actionable permission notice replaces "Action needed"). */
+export function createReplyNoticeObserver(emit: (notice: DashNotice) => void, skip?: (chatId: string, turnId: string, kind: "completed" | "error" | "action") => boolean) {
   let previous = new Map<string, { state: string; waiting: boolean }>();
   let initialized = false;
   const seen = new Set<string>();
@@ -31,6 +36,7 @@ export function createReplyNoticeObserver(emit: (notice: DashNotice) => void) {
       if (!initialized || !old || (old.state !== "streaming" && old.state !== "pending")) continue;
       const kind = message.state === "done" ? "completed" : message.state === "error" ? "error" : waiting && !old.waiting ? "action" : null;
       if (!kind) continue;
+      if (skip?.(chat.id, message.turnId, kind)) continue;
       const eventKey = `${key}:${kind}`;
       if (seen.has(eventKey)) continue;
       seen.add(eventKey);

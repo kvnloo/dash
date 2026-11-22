@@ -8,7 +8,10 @@ import { debugNavigationRef } from "../debug/nav";
 import { consumeNativeShare, discardNativeShare } from "../lib/native-share";
 import { isShareLink, type IncomingShare } from "../lib/incoming-share";
 import { createReplyNoticeObserver } from "../lib/notification-policy";
-import { startNativeNotifications, postNativeNotice, refreshNotificationPermission } from "../lib/native-notifications";
+import { startNativeNotifications, postNativeNotice, dismissNativeNotice, refreshNotificationPermission } from "../lib/native-notifications";
+import { permissionNotice, permissionNoticeKey, staleNoticeKeys } from "../lib/notification-actions";
+import { answerFromNotification } from "../lib/notification-action-runtime";
+import { permissionRequests } from "../net/bridge";
 import { openNotificationTarget } from "../lib/notification-routing";
 import { formatSize } from "../lib/attachments";
 import { colors, space, type } from "../theme";
@@ -38,8 +41,28 @@ export function NativeEvents() {
         });
       }).catch((error: unknown) => { if (!disposed) Alert.alert("Could not receive share", error instanceof Error ? error.message : "Share the content again from the source app."); });
     };
-    void startNativeNotifications(openNotificationTarget).then(stop => { if (disposed) stop(); else stopNotifications = stop; });
-    const observe = createReplyNoticeObserver(notice => { void postNativeNotice(notice); });
+    void startNativeNotifications(openNotificationTarget, answerFromNotification).then(stop => { if (disposed) stop(); else stopNotifications = stop; });
+    // #555: a pending permission gets one actionable notice (Allow once / Deny, tap opens the chat);
+    // it replaces the plain "Action needed" for that turn and is dismissed once the request settles.
+    const posted = new Set<string>();
+    const syncPermissions = () => {
+      const records = Object.values(permissionRequests.state.get().records);
+      const now = Date.now();
+      for (const key of staleNoticeKeys(posted, records, now)) { posted.delete(key); void dismissNativeNotice(key); }
+      for (const record of records) {
+        const key = permissionNoticeKey(record);
+        if (posted.has(key)) continue;
+        const notice = permissionNotice(record, store.get().conversations.find(c => c.id === record.conversationId)?.title, now);
+        if (!notice) continue;
+        posted.add(key);
+        void postNativeNotice(notice);
+      }
+    };
+    const unsubscribePermissions = permissionRequests.state.subscribe(syncPermissions);
+    syncPermissions();
+    const ownsTurn = (chatId: string, turnId: string, kind: string) => kind === "action" &&
+      Object.values(permissionRequests.state.get().records).some(r => r.conversationId === chatId && r.turnId === turnId);
+    const observe = createReplyNoticeObserver(notice => { void postNativeNotice(notice); }, ownsTurn);
     observe(store.get().conversations);
     const unsubscribe = store.subscribe(() => observe(store.get().conversations));
     let gateIds = new Set(approvals.get().items.filter(actionable).map(i => i.id));
@@ -53,7 +76,7 @@ export function NativeEvents() {
     const urls = Linking.addEventListener("url", ({ url }) => { if (isShareLink(url)) consume(); });
     const appState = AppState.addEventListener("change", state => { if (state === "active") { consume(); void refreshNotificationPermission(); } });
     consume();
-    return () => { disposed = true; stopNotifications(); unsubscribe(); unsubscribeGate(); urls.remove(); appState.remove(); };
+    return () => { disposed = true; stopNotifications(); unsubscribe(); unsubscribeGate(); unsubscribePermissions(); urls.remove(); appState.remove(); };
   }, []);
   const close = () => {
     if (share) void discardNativeShare(share.id);
