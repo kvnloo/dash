@@ -404,7 +404,12 @@ export function openChat(summary: ChatSummary): Conversation {
   const { conversations } = store.get();
   const existing = conversations.find(c => c.endpointAddress === store.get().settings?.address && conversationKey(c) === summary.key);
   if (existing) {
-    const updated = summary.model ? { ...existing, sessionModel: { sessionId: summary.sessionId, model: summary.model } } : existing;
+    const updated = summary.model || summary.repoRoot || summary.task ? {
+      ...existing,
+      ...(summary.model ? { sessionModel: { sessionId: summary.sessionId, model: summary.model } } : {}),
+      ...(summary.repoRoot ? { repoRoot: summary.repoRoot } : {}),
+      ...(summary.task ? { task: summary.task } : {}),
+    } : existing;
     if (updated !== existing) store.set(s => ({ ...s, conversations: s.conversations.map(c => c.id === existing.id ? updated : c) }));
     setActive(existing.id);
     return updated;
@@ -737,6 +742,7 @@ export function applyTurnEvent(
           event.harnessId === c.harness && (event.transport === "acp" || event.transport === "legacy") &&
           selfHost !== undefined && (isCatalogHarness(c.harness) || event.transport === "acp" && genericProfile !== undefined);
         return { ...c, sessionId: event.sessionId,
+          ...(event.repoRoot && selfHost && c.endpointAddress === settings?.address ? { repoRoot: event.repoRoot } : {}),
           ...(native ? { profileId: event.profileId ?? c.profileId, targetHostId: host ?? c.targetHostId, stale: false }
             : paired ? { targetHostId: host, ...(!isCatalogHarness(c.harness) ? { profileId: genericProfile!.id } : {}), stale: false } : {}) };
       });

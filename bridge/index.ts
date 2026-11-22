@@ -1,3 +1,4 @@
+import { repositoryRoot } from "./src/chat-index/workspace";
 // Dash bridge: a WebSocket server on your tailnet that runs agent CLIs on this
 // machine and streams their output to the phone.
 //
@@ -189,11 +190,13 @@ class Turn implements Sink {
 
   /** Host profile that owns this Hermes turn's session, once known. */
   private hermesProfile?: string;
+  private workspaceRepo?: string;
   private hermesTransport?: "api" | "acp" | "z0bridge" | "gateway";
   /** Ends this turn's entry in the running-turn registry, so queued follow-ups go after it (#498). */
   private untrack?: () => void;
 
   start(input: TurnInput, remote?: RemoteHost): void {
+    if (!remote && !input.sessionId) this.workspaceRepo = repositoryRoot(input.cwd);
     if (input.model && !remote && ((this.harness.id === "hermes" && input.sessionId) || process.env.DASH_ENABLE_LEGACY_CLI === "1")) {
       this.endWithout("Model switching requires an ACP-controlled session on this host; no prompt was submitted.");
       return;
@@ -500,7 +503,7 @@ class Turn implements Sink {
   session(sessionId: string): void {
     if (this.harness.id === "hermes" && !this.finished) this.untrack ??= trackRunningTurn(sessionId);
     this.flush();
-    this.emit({ type: "session", id: this.id, seq: 0, sessionId, hostId: SELF.id(), harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesTransport ?? (this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp") });
+    this.emit({ type: "session", id: this.id, seq: 0, sessionId, ...(this.workspaceRepo ? { repoRoot: this.workspaceRepo } : {}), hostId: SELF.id(), harnessId: this.harness.id, profileId: this.hermesProfile ? hermesSessionAgentId(this.hermesProfile, sessionId) : process.env.DASH_PROFILE_ID ?? "default", transport: this.hermesTransport ?? (this.hermesProfile ? "api" : process.env.DASH_ENABLE_LEGACY_CLI === "1" ? "legacy" : "acp") });
   }
 
   /** What we heard, for a turn the user spoke rather than typed. */
@@ -843,10 +846,12 @@ function liveChats(): ChatSummary[] {
     const key = chatKey({ hostId: host.id, kind: agent.kind, sessionId: agent.sessionId, ...(profileId ? { profileId } : {}) });
     if (!liveSince.has(key)) liveSince.set(key, now);
     const since = liveSince.get(key) ?? now;
+    const repoRoot = host.self ? repositoryRoot(agent.cwd) : undefined;
     out.push({
       key, kind: agent.kind, sessionId: agent.sessionId, hostId: host.id, hostName: host.name, ...(profileId ? { profileId } : {}), agentId: agent.id,
       title: agent.name, ...(agent.cwd ? { cwd: agent.cwd } : {}), startedAt: since, lastActivityAt: agent.lastActivityAt ?? since,
       ...(agent.model ? { model: agent.model } : {}),
+      ...(repoRoot ? { repoRoot } : {}),
       messageCount: agent.messageCount ?? 0, origin: "live", chatable: host.self && isCatalogHarness(agent.kind),
       ...(agent.status === "running" ? { running: true } : {}), ...(agent.openIn ? { openIn: agent.openIn } : {}),
     });
