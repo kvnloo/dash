@@ -339,6 +339,8 @@
                "gear-overlap: annotation tray and Learn panel use the full width without the gear at 1440x3120"]},
     {"id": "triage-actions", "title": "Triage is interactive (#541): counts needs-you/blocked/running and hands a blocker to an agent as a drafted prompt, or opens Quick mode",
      "tests": ["triage counts running and blocked work and hands a blocker to an agent as a drafted prompt (#541)"]},
+    {"id": "quick-bulk-approve", "title": "Quick mode approves several pending approvals at once: Needs OK requests allowed once and bulk-safe upstream items approved by exact body, each behind a confirm",
+     "tests": ["quick mode approves several pending approvals at once: two Needs OK requests and three bulk-safe upstream items"]},
     {"id": "annotation-voice-target", "title": "Annotated ink reaches the open chat; a bound voice call stays alive to speak a final reply before ending",
      "tests": ["annotation-voice-target: OMP chat beats a voice call bound to Hermes",
                "annotation-voice-target: accepted Hermes ink stays live until spoken reply without cancel"]},

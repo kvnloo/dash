@@ -10,6 +10,9 @@ import { learnPrompt, quickItems, unblockPrompt, type LearnIntent } from "../lib
 import { haptic } from "../haptics";
 import { executionToken } from "../lib/bridge-auth";
 import { devToolsGutterNow } from "../lib/dev-tools-gutter";
+import { bulkGateDecision, bulkPermissionChoices, bulkSafeGateItems } from "../lib/bulk-approve";
+import { bridge, permissionRequests } from "../net/bridge";
+import { approvals } from "../store/approvals";
 import { annotate, currentSink } from "../store/annotate";
 import { store } from "../store/app";
 import { setPillMode, surfaceMode } from "../store/ephemeral-mode";
@@ -139,6 +142,7 @@ function QuickSurface(): React.JSX.Element {
         <Chip label="↻" a11y="Refresh blockers" onPress={() => setRefresh(n => n + 1)} />
       </View>
       <ScrollView style={styles.list} contentContainerStyle={{ gap: space.xs }} keyboardShouldPersistTaps="always">
+        <ApprovalsBlock />
         {feed.phase === "live" && items.length === 0 ? <Text style={styles.note}>Nothing is waiting on you.</Text> : null}
         {items.map(item => (
           <View key={item.id} testID={`quick-item-${item.id}`} style={styles.card}>
@@ -154,6 +158,55 @@ function QuickSurface(): React.JSX.Element {
       </ScrollView>
       {note ? <Text testID="quick-note" style={styles.note}>{note}</Text> : null}
     </Shell>
+  );
+}
+
+/** A12: approve several pending approvals at once. Both kinds keep a confirm step and exact scope. */
+function ApprovalsBlock(): React.JSX.Element {
+  const online = store.use(s => s.connection.status === "online");
+  const conversations = store.use(s => s.conversations);
+  const gate = approvals.use(s => s);
+  const records = permissionRequests.state.use(s => s.records);
+  const [confirm, setConfirm] = useState<"permissions" | "gate" | null>(null);
+  const [note, setNote] = useState("");
+  useEffect(() => { if (online) bridge.send({ type: "gate_list" }); }, [online]);
+  const choices = bulkPermissionChoices(Object.values(records), Date.now());
+  const safe = bulkSafeGateItems(gate.items);
+  const title = (id: string) => conversations.find(c => c.id === id)?.title || "chat";
+  const allowAll = () => {
+    setConfirm(null);
+    void Promise.all(choices.map(choice => permissionRequests.decide(choice.scope, choice.optionId))).then(results => {
+      setNote(`Allowed once: ${results.filter(Boolean).length} of ${choices.length}. Each chat shows the host's answer.`);
+    });
+  };
+  const approveAll = () => {
+    setConfirm(null);
+    const decision = bulkGateDecision(gate.items);
+    if (!decision) return;
+    setNote(bridge.send({ type: "gate_decide", decision }) ? `Approved ${decision.action === "approve" ? decision.ids.length : 0} upstream items (posting is separate).` : "Disconnected. Reconnect before deciding.");
+  };
+  return (
+    <View testID="quick-approvals" style={styles.card}>
+      <Text style={styles.cardTitle}>Approvals</Text>
+      <Text testID="quick-approvals-count" style={styles.meta}>{choices.length} need OK · {safe.length} upstream bulk-safe{gate.dryRun ? " (dry run)" : ""}</Text>
+      {confirm === "permissions" ? <>
+        <Text style={styles.cardBody}>Allow once, in {choices.length} {choices.length === 1 ? "chat" : "chats"}: {choices.map(c => title(c.scope.conversationId)).join(", ")}. Only these requests, only this time.</Text>
+        <View style={styles.row}>
+          <Chip label={`Confirm allow ${choices.length}`} a11y={`Confirm allow ${choices.length} once`} primary onPress={allowAll} />
+          <Chip label="Cancel" a11y="Cancel bulk allow" onPress={() => setConfirm(null)} />
+        </View>
+      </> : confirm === "gate" ? <>
+        <Text style={styles.cardBody}>Approve exactly these {safe.length} bodies and targets for 24 hours. Posting is separate.</Text>
+        <View style={styles.row}>
+          <Chip label={`Confirm approve ${safe.length}`} a11y={`Confirm approve ${safe.length} upstream items`} primary onPress={approveAll} />
+          <Chip label="Cancel" a11y="Cancel bulk approve" onPress={() => setConfirm(null)} />
+        </View>
+      </> : <View style={styles.row}>
+        {choices.length ? <Chip label={`Allow all once (${choices.length})`} a11y={`Allow all ${choices.length} pending requests once`} onPress={() => setConfirm("permissions")} /> : null}
+        {safe.length ? <Chip label={`Approve ${safe.length} bulk-safe`} a11y={`Approve ${safe.length} bulk-safe upstream items`} onPress={() => setConfirm("gate")} /> : null}
+      </View>}
+      {note ? <Text testID="quick-approvals-note" style={styles.note}>{note}</Text> : null}
+    </View>
   );
 }
 
