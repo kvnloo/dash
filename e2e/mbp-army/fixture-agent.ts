@@ -7,9 +7,10 @@ process.on('uncaughtException',e=>{appendFileSync(join(process.env.HOME || '.', 
 function isRecord(v:unknown):v is Record<string,unknown>{return typeof v==='object'&&v!==null&&!Array.isArray(v);}
 const send = (v: unknown) => process.stdout.write(JSON.stringify(v) + '\n');
 // `claude`: the Claude Code ACP adapter's shape (session/resume without history replay, its own reply tag).
+// `codex`: the Codex ACP adapter (codex-acp), with its own session id and reply tag.
 const agent = process.argv[2] || 'fixture';
-let sessionId = agent === 'claude' ? 'army-claude-session' : 'army-fixture-session';
-const replyTag = agent === 'claude' ? 'ARMY_CLAUDE_REPLY: ' : 'ARMY_REPLY: ';
+let sessionId = agent === 'claude' ? 'army-claude-session' : agent === 'codex' ? 'army-codex-session' : 'army-fixture-session';
+const replyTag = agent === 'claude' ? 'ARMY_CLAUDE_REPLY: ' : agent === 'codex' ? 'ARMY_CODEX_REPLY: ' : 'ARMY_REPLY: ';
 const update = (text: string) => send({jsonrpc:'2.0',method:'session/update',params:{sessionId,update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text}}}});
 // Evidence for specs: which session method ran, for which id, in which directory.
 const calls = (method: string, params: unknown) => {if(!isRecord(params))return;try{appendFileSync(join(process.env.HOME || '.', 'army-acp-calls.jsonl'),JSON.stringify({agent,method,sessionId:params.sessionId,modelId:params.modelId,cwd:params.cwd,pwd:process.cwd()})+'\n');}catch{/* evidence only */}};
@@ -118,7 +119,7 @@ createInterface({input:process.stdin}).on('line', line => {
   const generated = longReply ?? generatedReply(text);
   const split = generated?.indexOf('\n');
   const prefix = longReply ? longReply.slice(0, 8500) : generated && split !== undefined ? generated.slice(0, split + 1) : 'ARMY_STREAM_BEGIN ';
-  const answer = () => { clearInterval(ticker); ticker = undefined; turnLog('end', text); update(generated ? generated.slice(prefix.length) : replyTag + text.slice(0,220)); reply({stopReason:'end_turn'}); };
+  const answer = () => { clearInterval(ticker); ticker = undefined; turnLog('end', text); update((generated ? generated.slice(prefix.length) : replyTag + text.slice(0,220)) + (text.includes('ARMY_LEADING_BREAK') ? '\n' : '')); reply({stopReason:'end_turn'}); };
   if (text.includes('ARMY_PERMISSION')) {
    const rpcId = `army-permission-${process.pid}-${Date.now()}`;
    pendingPermission = {rpcId, settle: outcome => {
@@ -133,7 +134,9 @@ createInterface({input:process.stdin}).on('line', line => {
    ]}});
    return;
   }
-  update(prefix);
+  // ARMY_LEADING_BREAK: a model's first delta often opens with blank lines and its last ends with one;
+  // the agent's own transcript keeps the stripped text (Hermes strips its final response).
+  update(text.includes('ARMY_LEADING_BREAK') ? '\n\n' + prefix : prefix);
   if (text.includes('ARMY_HANG')) return;
   // ARMY_HOLD: no answer until the spec creates $HOME/army-release, so overlap never races a clock.
   const hold = () => { if (existsSync(join(process.env.HOME || '.', 'army-release'))) answer(); else timer = setTimeout(hold, 100); };
