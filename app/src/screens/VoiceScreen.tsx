@@ -55,6 +55,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
         <Text accessibilityLiveRegion="polite" style={styles.caption} testID="voice-caption">
           {caption}
         </Text>
+        {state.turbo ? <Text accessibilityLiveRegion="polite" style={styles.caption} testID="voice-turbo-status">{state.turbo}</Text> : null}
         <View style={styles.transcript} testID="voice-transcript">
           {lines.map((line, i) => (
             <Text key={`${i}:${line.role}`} numberOfLines={2} style={[styles.line, line.role === "user" ? styles.user : styles.assistant, i < lines.length - 1 && styles.older]}>

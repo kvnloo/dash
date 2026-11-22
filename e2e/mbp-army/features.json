@@ -137,6 +137,8 @@
                "ephemeral-ui kit kinds 61-70 all draw the repo card",
                "ephemeral-ui kit kinds 71-80 all draw the repo card",
                "ephemeral-ui kit kinds 81-89 all draw the repo card"]},
+    {"id": "voice-turbo-run", "title": "A spoken Turbo command dispatches parallel free provider lanes and reports completion",
+     "tests": ["z0live Turbo replaces a throttled lane with a free provider", "z0live Turbo scales up to three parallel provider lanes"]},
     {"id": "orb-style-picker", "title": "Choose a thinking orb or bot face for chat and voice, including after reload",
      "tests": ["Settings orb style survives reload and appears on chat and the active mic"]},
     {"id": "voice-orb-overlay", "title": "A live call shows an interactive, pass-through hero orb outside Voice and annotation",

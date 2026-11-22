@@ -1,3 +1,4 @@
+import { createVoiceTurbo } from "./src/voice-turbo";
 import { createAndroidUpdateHandler } from "./src/android-update";
 import { repositoryRoot } from "./src/chat-index/workspace";
 // Dash bridge: a WebSocket server on your tailnet that runs agent CLIs on this
@@ -895,6 +896,7 @@ const handleOrchestra = createOrchestraHttpHandler({ authorize, roster: () => se
 const handleHosts = createHostsHttpHandler({ authorize, hostId: () => SELF.id() });
 const handleRoadmap = createRoadmapHttpHandler({ authorize });
 const handlePm = createPmHttpHandler({ authorize });
+const handleVoiceTurbo = createVoiceTurbo(log);
 const handleVoiceStatus = createVoiceStatusHttpHandler({ authorize });
 const handleHealth = createBridgeHealthHttpHandler({ authorize, running: runningTurns, voiceSessions: activeVoiceSessions, onDrain: beginDrain });
 const handleTrace = createTraceRoute({ authorize, roster: () => selfRoster(harnessList(), HOST) });
@@ -946,6 +948,11 @@ const server = Bun.serve<SocketData>({
       if (url.pathname === "/debug/trace") {
         const trace = await handleFlowTrace(request, await authorize(request));
         if (trace) return cors(trace);
+      }
+      if (url.pathname === "/voice/turbo") {
+        const principal = await bridgeAuth.authenticate(request, false, true);
+        server.timeout(request, 100);
+        return cors(await handleVoiceTurbo(request, principal?.kind === "identity" && !handleHealth.draining));
       }
       if (url.pathname === "/voice/bootstrap") {
         const principal = await bridgeAuth.authenticate(request, false, true);
