@@ -34,8 +34,10 @@ export async function councilSessionHttp(
   delete env.HERMES_TUI_GATEWAY_URL;
   try {
     const process = Bun.spawn(["python3", fileURLToPath(new URL("./council-session.py", import.meta.url))], {
-      env, stdin: new Blob([JSON.stringify({ session, verb, params })]), stdout: "pipe", stderr: "ignore", timeout: 20_000,
+      env, stdin: "pipe", stdout: "pipe", stderr: "ignore", timeout: 20_000,
     });
+    process.stdin.write(JSON.stringify({ session, verb, params }));
+    process.stdin.end();
     const raw: unknown = await new Response(process.stdout).json();
     if (await process.exited !== 0 || !record(raw)) throw new Error("Unavailable");
     if (raw.code === 4090) return json({ error: "Council continued on another device. Reopen it to sync again." }, 409);

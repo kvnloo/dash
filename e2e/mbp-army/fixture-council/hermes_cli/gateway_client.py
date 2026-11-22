@@ -14,14 +14,14 @@ class Gateway:
         self.home = Path(home)
         self.record = self.home / "army-council.json"
 
-    async def rpc(self, name, **params):
-        if name == "session.resume":
+    async def rpc(self, method, **params):
+        if method == "session.resume":
             assert params["session_id"] == "army-fixture-session"
             return {"session_id": "army-attached", "stored_session_id": "army-root"}
         assert params["session_id"] == "army-attached"
-        if name.startswith("glide.council."):
+        if method.startswith("glide.council."):
             raise GatewayClientError(-32601)
-        assert name == "command.dispatch" and params["name"] == "glide"
+        assert method == "command.dispatch" and params["name"] == "glide"
         command, verb, body = params["arg"].split(" ", 2)
         assert command == "json"
         args = json.loads(body)
