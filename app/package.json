@@ -25,7 +25,6 @@
     "@shopify/react-native-skia": "2.6.2",
     "@xyflow/react": "^12.12.0",
     "expo": "~57.0.21",
-    "expo-application": "~57.0.3",
     "expo-audio": "~57.0.4",
     "expo-blur": "^57.0.2",
     "expo-clipboard": "~57.0.2",

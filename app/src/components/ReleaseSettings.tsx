@@ -1,4 +1,4 @@
-import { nativeBuildVersion } from "expo-application";
+import { requireOptionalNativeModule } from "expo";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -8,6 +8,12 @@ import { bundleOrigin } from "../lib/use-live-update";
 import { store } from "../store/app";
 import { flushDrafts } from "../store/composer-drafts";
 import { colors, space, type } from "../theme";
+
+// Expo Notifications already links ExpoApplication. Read the installed binary's
+// version, not the Metro manifest's version, without adding a native dependency.
+const application = Platform.OS === "android"
+  ? requireOptionalNativeModule<{ nativeBuildVersion: string }>("ExpoApplication")
+  : null;
 
 function parseOffer(value: unknown) {
   if (typeof value !== "object" || value === null || !("sha" in value) || !("version" in value)) return null;
@@ -69,7 +75,8 @@ function ReleaseControls() {
     } else if (response.status === 404 || response.status === 204) { if (!quiet) setMessage("No Android update staged on this bridge."); }
     else if (response.ok) {
       const next = parseOffer(await response.json());
-      const installed = Number(nativeBuildVersion ?? "0");
+      const installed = Platform.OS === "web" ? 0 : Number(application?.nativeBuildVersion);
+      if (!Number.isSafeInteger(installed)) { setMessage("Could not read the installed Android version."); return; }
       if (!next || next.version <= installed) { if (!quiet) setMessage("No newer Android update."); }
       else setOffer(next);
     } else setMessage("Could not check for updates.");
