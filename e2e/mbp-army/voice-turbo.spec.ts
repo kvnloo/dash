@@ -122,8 +122,8 @@ for (const wide of [false, true]) {
       expect(lanes.prompts.at(-1)).toContain("Fixture answer from deepseek-free");
       expect(voiceBroker.calls().filter(call => call.path === "/v1/tools/ask_z0")).toHaveLength(0);
       const trace = bridge.logs().split("\n").filter(line => line.includes("turbo."));
-      for (const provider of providers.split(", ")) expect(trace.some(line => line.includes("turbo.lane.completed") && line.includes(`"${provider}"`))).toBe(true);
-      if (!wide) expect(trace.some(line => line.includes("turbo.lane.failed") && line.includes('"cerebras"'))).toBe(true);
+      for (const provider of providers.split(", ")) expect(trace.some(line => line.includes("turbo.lane.completed") && line.includes(`provider=${provider} role=worker`))).toBe(true);
+      if (!wide) expect(trace.some(line => line.includes("turbo.lane.failed") && line.includes("provider=cerebras role=worker"))).toBe(true);
       await info.attach("turbo-trace", { body: trace.join("\n"), contentType: "text/plain" });
       await page.screenshot({ path: info.outputPath("final.png") });
     });

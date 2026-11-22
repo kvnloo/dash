@@ -305,7 +305,7 @@ export class ContinuousVoice {
       const turboTask = /^turbo(?:[,:]\s*|\s+|$)(.*)$/is.exec(text);
       if (turboTask && this.io.turbo) {
         if (typeof event.item_id === "string") this.send({ type: "conversation.item.delete", item_id: event.item_id });
-        await this.runTurbo(turboTask[1].trim(), typeof event.item_id === "string" ? event.item_id : id, generation);
+        await this.runTurbo((turboTask[1] ?? "").trim(), typeof event.item_id === "string" ? event.item_id : id, generation);
         return;
       }
       if (/\b(never mind|cancel that)\b/i.test(text)) { await this.io.request("/v1/tools/cancel_work", { session_id: this.sid, arguments: {} }); this.update({ phase: "listening" }); return; }
