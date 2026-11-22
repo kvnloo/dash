@@ -86,7 +86,7 @@ export function DashPad() {
       {error ? <Text accessibilityRole="alert" style={styles.text}>Could not close Dash Pad.</Text> : null}
     </SafeAreaView></SafeAreaProvider>;
 }
-const webSurface = { touchAction: "none", userSelect: "none" } satisfies ViewStyle & { touchAction: "none"; userSelect: "none" };
+const webSurface: ViewStyle & { touchAction: "none"; userSelect: "none" } = { touchAction: "none", userSelect: "none" };
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
   pad: { flex: 1, backgroundColor: "#000", padding: 16, gap: 12 },
