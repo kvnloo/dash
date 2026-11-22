@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AgentOrb } from "../components/AgentOrb";
 import { Canvas } from "../components/Canvas";
@@ -54,7 +54,9 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
       <Canvas /><ScreenHeader title={live ? "Live call" : "Voice"} onBack={() => screenBack(props.navigation)} />
-      <View style={styles.content}>
+      {/* Centred while it fits; when the lane panel and the controls leave too little room it scrolls
+          from the top, so the title never rides up under the header. */}
+      <ScrollView style={styles.stage} contentContainerStyle={styles.content} bounces={false} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Dash voice</Text>
         <AgentOrb size="hero" thinking={orb} label={`Dash voice ${caption}`} />
         <Text accessibilityLiveRegion="polite" style={styles.caption} testID="voice-caption">
@@ -69,7 +71,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
           ))}
         </View>
 
-      </View>
+      </ScrollView>
       {laneSample?.lanes.lanes.length ? <View style={styles.lanes}><LaneTimeline lanes={laneSample.lanes.lanes} offset={laneSample.offset} /></View> : null}
       <View style={styles.controls}>
         <PrimaryButton accessibilityLabel={live ? "Stop voice in Dash" : "Start voice in Dash"} onPress={() => void (live ? stop() : start())} label={opening ? "Cancel connection" : live ? "Stop voice" : "Start voice"} />
@@ -101,7 +103,8 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: space.xl, gap: space.md },
+  stage: { flex: 1 },
+  content: { flexGrow: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: space.xl, gap: space.md },
   title: { ...type.title, color: colors.text },
   caption: { ...type.body, color: colors.textMuted, textAlign: "center", minHeight: 22 },
   transcript: { alignSelf: "stretch", gap: space.sm, minHeight: 96, justifyContent: "flex-end", paddingHorizontal: space.sm, borderRadius: radius.md },
