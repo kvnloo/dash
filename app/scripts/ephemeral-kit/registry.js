@@ -26,8 +26,8 @@ export const GROUPS = {
 export const KINDS = Object.assign({}, ...Object.values(GROUPS).map(([kinds]) => kinds));
 /**
  * Kinds no catalog app lists draw with the kit's own default app (ops-section.js, fleet.html, intel.html).
- * The kit gives the three standalone modules none, so the host names one (their kit tests use cua and z0).
+ * The kit gives the three standalone modules none, so the host names the app the kit catalog mounts them with.
  */
-export const DEFAULT_APPS = { ...OPS_APPS, ...FLEET_APPS, ...INTEL_APPS, "cua-action": "cua", "work-dock": "z0", "gev-contacts": "gev" };
+export const DEFAULT_APPS = { ...OPS_APPS, ...FLEET_APPS, ...INTEL_APPS, "cua-action": "cua", "work-dock": "z0", "gev-contacts": "god-s-eye-view" };
 /** Default apps missing from apps.json, drawn the way the kit's pages draw them: `{ id, name, hex: null }`. */
-export const HOST_APP_NAMES = { glide: "Glide", k3s: "k3s", z0: "z0 work", gev: "GEV" };
+export const HOST_APP_NAMES = { glide: "Glide", k3s: "k3s", z0: "z0 work" };

@@ -22,6 +22,8 @@ export type RootStackParamList = {
   /** Bots page prototype (DA-073): gem table, orrery, simple bot page, host tree. */
   BotsPage: undefined;
   SharedTheme: undefined;
+  /** Every fixture of the shared kvnloo/ephemeral-ui card catalog; `page` is 1-based. */
+  Gallery: { page?: number } | undefined;
 };
 
 export type ScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

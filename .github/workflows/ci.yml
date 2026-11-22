@@ -120,6 +120,21 @@ jobs:
         if: matrix.gate == 'android-export'
         run: bash scripts/ci-android-export.sh
 
+  # Advisory: red when the vendored kvnloo/ephemeral-ui kit or its shared card catalog falls behind the kit's
+  # main or no longer regenerates from the pin. Not a required gate, so a kit release never blocks Dash merges;
+  # the offline half (catalog hash, every catalog kind drawn) is in the army's card-gallery journey.
+  ephemeral-ui-pin:
+    name: ephemeral-ui pin (kit + card catalog current)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Vendored kit and catalog match kvnloo/ephemeral-ui main
+        run: bash scripts/check-ephemeral-pin.sh
+
   required-gates:
     if: always()
     # The checks matrix succeeds only if typecheck, lint and android-export all pass.
