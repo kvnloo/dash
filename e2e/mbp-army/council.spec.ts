@@ -265,5 +265,6 @@ echo '["/usr/bin/python3"]'
     await info.attach('council-gateway-rpc', { path: join(home, 'army-council-rpc.jsonl'), contentType: 'application/jsonl' });
   } finally {
     await bridge.stop();
+    await writeFile(info.outputPath("bridge.log"), bridge.logs());
   }
 });
