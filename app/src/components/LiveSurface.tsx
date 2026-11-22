@@ -90,7 +90,7 @@ export const LiveSurface = memo(function LiveSurface({ conversationId }: { conve
 function Timing({ live }: { live: LiveState }) {
   const t = live.timing;
   if (!t) return null;
-  const parts = [t.firstCharAt ? `first char ${Math.round(t.firstCharAt - t.sentAt)} ms` : null, t.firstHtmlAt ? `html ${((t.firstHtmlAt - t.sentAt) / 1000).toFixed(1)} s` : null, t.doneAt ? `turn ${((t.doneAt - t.sentAt) / 1000).toFixed(1)} s` : null].filter(Boolean);
+  const parts = [t.firstCharAt ? `first char ${Math.round(t.firstCharAt - t.sentAt)} ms` : null, t.firstControlAt ? `control ${((t.firstControlAt - t.sentAt) / 1000).toFixed(1)} s` : null, t.firstHtmlAt ? `html ${((t.firstHtmlAt - t.sentAt) / 1000).toFixed(1)} s` : null, t.doneAt ? `turn ${((t.doneAt - t.sentAt) / 1000).toFixed(1)} s` : null].filter(Boolean);
   return <Text style={styles.mono} numberOfLines={1} testID="live-timing">{parts.join(" · ")}</Text>;
 }
 

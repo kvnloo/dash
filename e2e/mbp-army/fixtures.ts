@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { dirname } from 'node:path';
 import { once } from 'node:events';
 import { startFixtureZ0bridge, type IdentityTokenOptions } from './fixture-z0bridge';
+import { startFixtureFx } from './fixture-fx';
 export const web = process.env.ARMY_WEB || 'http://127.0.0.1:18400';
 const root = resolve(__dirname, '../..');
 const bridgeRoot = process.env.ARMY_BRIDGE_ROOT || root;
@@ -26,8 +27,9 @@ export type Bridge = { dir: string; port: number; bootstrap: string; stop(): Pro
  * subagents: delegated workers of the native Hermes fixture chat (state.db child rows): two live, one ended.
  * longHermes: a 1000-message native Hermes chat (LONG_HERMES_PROMPTS prompts, each with one answer):
  *   Hermes pages by (timestamp, id) keyset over user and assistant rows, not by AgentsView ordinal.
+ * liveFx: a loopback z0bridge `--fx` stand-in (fixture-fx.ts) for the Live surface; requests and Hermes receipts land in army-fx.jsonl.
  */
-export type BridgeOptions = { generatedUI?: boolean; archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; rosterHost?: string; rosterPeer?: Bridge; finishedSessions?: boolean; hermesProfiles?: string[]; env?: Record<string,string>; identity?: boolean };
+export type BridgeOptions = { generatedUI?: boolean; archiveClaude?: boolean; remoteClaude?: 'route' | 'off'; pm?: boolean; longClaude?: boolean; longHermes?: boolean; subagents?: boolean; phoneHosts?: boolean; rosterHost?: string; rosterPeer?: Bridge; finishedSessions?: boolean; hermesProfiles?: string[]; env?: Record<string,string>; identity?: boolean; liveFx?: boolean };
 export const LONG_CHAT_TITLE = 'ARMY long Claude Code chat';
 export const LONG_CHAT_PROMPTS = 125;
 export const LONG_HERMES_TITLE = 'ARMY long Hermes chat';
@@ -88,14 +90,16 @@ export async function createBridge(persistSession=true, options: BridgeOptions =
   pmEnv.DASH_PM_ROOTS='army='+join(dir,'pm-repo'); pmEnv.DASH_PM_KANBAN=join(bin,'army-kanban'); pmEnv.DASH_ROADMAP_FILE=join(dir,'roadmap.json');
  }
  const identity = options.identity ? await startFixtureZ0bridge(dir) : undefined;
+ // Live surface: a loopback z0bridge --fx stand-in (fixture-fx.ts); it writes army-fx.jsonl in the bridge dir.
+ const liveFx = options.liveFx ? await startFixtureFx(dir) : undefined;
  const env = {...process.env, HOME:dir, TMPDIR:join(dir,'tmp'), PATH:bin+':'+bunDir+':/usr/bin:/bin', DASH_HOST:'127.0.0.1', DASH_ALLOW_LOOPBACK:'1', DASH_PORT:'0', DASH_CWD:dir, HERMES_HOME:join(dir,'.hermes'), DASH_HERMES_ROOT:join(dir,'.hermes'), PI_CODING_AGENT_DIR:join(dir,'.omp','agent'), DASH_Z0LIVE_SESSIONS:join(dir,'z0live'), XDG_CONFIG_HOME:join(dir,'.config'), DASH_CREDENTIAL_DIR:join(dir,'.dash'), DASH_CONFIG_DIR:join(dir,'.dash'), DASH_GATE_DIR:join(dir,'gate'), DASH_GATE_ENABLED:'1', DASH_GATE_LIVE:'0', DASH_GATE_OWNER_DECISIONS:'0', ARMY_PERSIST_SESSION:persistSession?'1':'0', ARMY_ARCHIVE_CLAUDE:options.archiveClaude?'1':'0', ARMY_REMOTE_CLAUDE:options.remoteClaude?remoteCwd:'', ARMY_PM:options.pm?'1':'0', ARMY_LONG_CLAUDE:options.longClaude?String(LONG_CHAT_PROMPTS):'', ARMY_LONG_HERMES:options.longHermes?String(LONG_HERMES_PROMPTS):'', ARMY_SUBAGENTS:options.subagents?'1':'', ARMY_HERMES_PROFILES:(options.hermesProfiles??[]).join(','), ARMY_GENERATED_UI:options.generatedUI?'1':'', DASH_ENABLE_LEGACY_CLI:'0', DASH_ALLOWED_ORIGINS:web, DASH_STT_MODEL:join(dir,'no-model'), ARMY_BRIDGE_ROOT:bridgeRoot, DASH_KANBAN_DB:join(dir,'work.db'), DASH_SUPERVISION_DIR:join(dir,'.local/state/dash/supervision'), DASH_ORCHESTRA_PROFILES:join(dir,'.hermes'),
-  DASH_FLEET_REGISTRY:join(dir,'fleet.yaml'), ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv, ...(identity?.env ?? {}), ...(options.env ?? {})};
+  DASH_FLEET_REGISTRY:join(dir,'fleet.yaml'), ...(options.remoteClaude==='route'?{DASH_REMOTE_HOSTS:'army-remote', DASH_REMOTE_SHELL:join(bin,'army-ssh')}:{}), ...pmEnv, ...(identity?.env ?? {}), ...(liveFx?.env ?? {}), ...(options.env ?? {})};
  const seed = spawn(bun,[join(__dirname,'seed-gate.ts')],{env,stdio:['ignore','pipe','pipe']});
- let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) { await identity?.stop(); throw Error('gate seed: '+seedLog); }
+ let seedLog=''; seed.stderr.on('data',d=>seedLog+=d); const [seedCode]=await once(seed,'exit'); if(seedCode!==0) { await identity?.stop(); await liveFx?.stop(); throw Error('gate seed: '+seedLog); }
  let child: ChildProcess; let log=''; let port=0;
  const f: Bridge = {dir,port:0,bootstrap:'',logs:()=>log,exitCode:()=>child?.exitCode ?? null,
   identityToken: options => { if (!identity) throw Error('Bridge identity fixture is not enabled'); return identity.identityToken(options); },
-  async dispose() { await f.stop(); await identity?.stop(); },
+  async dispose() { await f.stop(); await identity?.stop(); await liveFx?.stop(); },
   async start() {
    const oldPort=port; if(oldPort) env.DASH_PORT=String(oldPort);
    let startup='';child=spawn('bwrap',['--bind','/','/','--unshare-pid','--proc','/proc','--dev','/dev','--die-with-parent','/bin/sh','-c','if [ "$ARMY_PERSIST_SESSION" = 1 ]; then if [ "$ARMY_DUPLICATE_SESSION" = 1 ]; then TERN_PANE=700001 "$1" "$2" primary & TERN_PANE=700002 "$1" "$2" secondary & else "$1" "$2" & fi; fi; exec "$1" "$3"','army-bridge',bun,join(__dirname,'session-holder.ts'),join(bridgeRoot,'bridge/index.ts')],{cwd:bridgeRoot,env,stdio:['ignore','pipe','pipe']});

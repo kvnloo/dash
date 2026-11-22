@@ -22,6 +22,8 @@ export interface LiveTiming {
   sentAt: number;
   firstCharAt?: number;
   firstHtmlAt?: number;
+  /** First fx0 control of the turn (a fast control the owner can tap). */
+  firstControlAt?: number;
   doneAt?: number;
 }
 
@@ -158,8 +160,10 @@ function applyEvent(state: LiveState, lineId: string | undefined, event: LiveEve
       const timing = state.timing && !state.timing.firstHtmlAt ? { ...state.timing, firstHtmlAt: now() } : state.timing;
       return { ...state, artifacts, shownVersion: event.artifact.version, timing };
     }
-    case "control":
-      return { ...state, controls: [...state.controls.filter(c => c.id !== event.control.id), event.control] };
+    case "control": {
+      const timing = state.timing && !state.timing.firstControlAt ? { ...state.timing, firstControlAt: now() } : state.timing;
+      return { ...state, controls: [...state.controls.filter(c => c.id !== event.control.id), event.control], timing };
+    }
     case "hermes": {
       const text = event.phase === "asking" ? `Asking Hermes: ${event.text ?? ""}` : event.phase === "answered" ? (event.text ?? "") : `Hermes is busy elsewhere: ${event.text ?? ""}`;
       return { ...state, lines: [...state.lines.filter(l => l.id !== `h_${lineId}_${event.phase}`), { id: `h_${lineId}_${event.phase}`, role: "hermes", text, state: event.phase === "refused" ? "error" : "done" }] };
