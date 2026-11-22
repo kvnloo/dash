@@ -88,7 +88,9 @@ jobs:
         with:
           bun-version: 1.4.3
       - name: Install tester-army discovery dependencies
-        run: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 bun install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: bun install --frozen-lockfile && bun scripts/install-public-ci.ts && bun install --frozen-lockfile --cwd bridge
       - name: Owner requirement traceability (Bend gate + regression cases)
         run: |
           python3 -m unittest discover -s laws/requirements -v
