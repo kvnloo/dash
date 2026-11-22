@@ -130,7 +130,7 @@ if (process.env.ARMY_TURBO_CLAUDE === '1') {
  mkdirSync(cwd, { recursive: true });
  const installId = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
  await seedAgentsview({ id: '11111111-2222-4333-8444-555555555557', machine: installId, installId,
-  title: 'ARMY dash-turbo Claude', cwd, transcript: [['user', 'ARMY dash-turbo Claude']] });
+  title: 'ARMY dash-turbo Claude', cwd, transcript: [['user', 'ARMY dash-turbo Claude'], ['assistant', 'Ready for preview requests'], ['user', 'Use the preview gate']] });
 }
 if(process.env.ARMY_ARCHIVE_CLAUDE==='1'){
  const installId='a1b2c3d4e5f60718293a4b5c6d7e8f90';
