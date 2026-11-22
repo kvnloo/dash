@@ -1,38 +1,43 @@
 ---
 version: alpha
 name: Dash
-description: Phone UI for laptop coding agents. OLED black, cream ink, gold as the only accent. Native 60px nav. Operate mode.
+description: Phone UI for laptop coding agents. Living Night near-black, cream ink, gold as the only accent. Native 60px nav. Operate mode.
 colors:
-  bg: "#000000"
-  surface: "#121212"
-  surfaceRaised: "#1c1c1c"
-  primary: "#e6cd96"
-  border: "#262626"
-  text: "#f2f2f2"
-  textMuted: "#8b8b8b"
-  textFaint: "#5a5a5a"
-  accent: "#ffffff"
-  onAccent: "#000000"
-  bubble: "#1f1f1f"
-  danger: "#ff6b6b"
-  ok: "#34c759"
-  warn: "#ffb020"
-  gold: "#e6cd96"
-  goldHi: "rgba(240, 212, 150, 0.95)"
-  goldLo: "rgba(206, 168, 96, 0.9)"
-  goldGlow: "rgba(220, 190, 120, 0.7)"
-  goldGlass: "rgba(230, 205, 150, 0.72)"
-  gold68: "rgba(230, 205, 150, 0.68)"
-  goldRim: "rgba(239, 223, 188, 0.95)"
+  bg: "#0c0c0a"
+  surfaceRaised: "#151611"
+  text: "#ECE8DF"
+  textMuted: "#B4AFA3"
+  textTertiary: "#837F74"
+  textFaint: "#5e5b52"
+  accent: "#d7b986"
+  actionStrong: "#eccd8c"
+  actionMuted: "#99835c"
+  ok: "#98cf8b"
+  information: "#81b9da"
+  warn: "#e7a875"
+  danger: "#e37f65"
+  provenance: "#b098cd"
+  orchestraSubagent: "#63bfae"
+  surface: "rgba(24,26,23,.46)"
+  border: "rgba(236,232,223,.10)"
+  onAccent: "#0c0c0a"
+  bubble: "rgba(20,22,19,.66)"
+  gold: "#d7b986"
+  goldHi: "#eccd8c"
+  goldLo: "#99835c"
+  goldGlow: "#99835c"
+  goldGlass: "#d7b986"
+  gold68: "#99835c"
+  goldRim: "#eccd8c"
   ink: "#ECE8DF"
   ink2: "#B4AFA3"
   ink3: "#837F74"
-  inkDark: "#211B10"
-  devNav: "rgba(12, 13, 11, 0.91)"
-  devNav96: "rgba(12, 13, 11, 0.874)"
-  navGlass: "rgba(24, 26, 23, 0.46)"
-  hair: "rgba(236, 232, 223, 0.10)"
-  hair2: "rgba(236, 232, 223, 0.16)"
+  inkDark: "#0c0c0a"
+  devNav: "rgba(20,22,19,.66)"
+  devNav96: "rgba(20,22,19,.66)"
+  navGlass: "rgba(24,26,23,.46)"
+  hair: "rgba(236,232,223,.10)"
+  hair2: "rgba(236,232,223,.16)"
 typography:
   title:
     fontSize: 22px
@@ -71,7 +76,7 @@ spacing:
 
 ## Overview
 
-Dash is a one-handed phone for talking to coding agents. The screen is OLED black. Cream ink carries reading. Gold is the only brand mark: the pager pill, and nowhere as a wash. Chrome recedes; the job is the list, the thread, and the composer.
+Dash is a one-handed phone for talking to coding agents. The canvas is Living Night near-black. Cream ink carries reading. Gold is the only brand mark: the pager pill, and nowhere as a wash. Chrome recedes; the job is the list, the thread, and the composer.
 
 ## Colors
 
