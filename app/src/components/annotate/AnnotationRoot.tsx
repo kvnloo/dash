@@ -41,6 +41,8 @@ import { executionToken } from "../../lib/bridge-auth";
 import { liveOf, nextGeneration } from "../../store/live";
 import { connectAnnotationDraft } from "../../store/annotation-draft";
 import { attachClosedPenLoop } from "../../lib/annotate/io-core";
+import { findTurboTarget } from "../../lib/turbo-request";
+import { sendVoiceAnnotation } from "../../lib/voice-annotation";
 import { updateComposerDraft } from "../../store/composer-drafts";
 
 export const INK: Record<InkColor, string> = { accent: colors.accent, red: "#f0503c" };
@@ -145,7 +147,8 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       // State can change before React removes the subscription.
       if (!annotate.get().active) return false;
-      exitAnnotation();
+      const s = annotate.get();
+      if (!s.turboTarget || (s.status !== "capturing" && s.status !== "sending")) exitAnnotation();
       return true;
     });
     return () => subscription.remove();
@@ -240,7 +243,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     const shaped = shape && first && last ? [{ ...first, ...shape.from }, { ...last, ...shape.to }] : points;
     commitStroke({ tool: shape?.tool ?? s.tool, color: s.color, pointer, points: shaped, targets: targetsAt(screenPoints) });
     if (__DEV__) console.log("[dash-ink] committed", { pointer, points: shaped.length, width, height });
-    if (flowMode) {
+    if (flowMode && !s.turboTarget) {
       flowTrace.mark("ink.submit", inkTraceId.current);
       const state = store.get();
       const conversationId = state.activeId;
@@ -264,7 +267,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
 
   const send = useCallback((keep: boolean) => {
     const draft = annotate.get();
-    if (draft.status === "capturing" || draft.status === "sending") return;
+    if (draft.recording || draft.status === "capturing" || draft.status === "sending") return;
     if (draft.drawing.strokes.length > 0 && !draft.typed.trim() && !draft.segments.some(segment => segment.text.trim())) {
       setPendingEmptySend(keep);
       return;
@@ -285,7 +288,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
   useEffect(() => { sendRef.current = send; }, [send]);
   const queuePenSend = useCallback(() => {
     const state = annotate.get();
-    if (!state.active || state.drawing.strokes.length === 0 || state.status === "capturing" ||
+    if (!state.active || state.turboTarget || state.drawing.strokes.length === 0 || state.status === "capturing" ||
         state.status === "sending" || penSendTimer.current !== null) return;
     setPenSendPending(true);
     penSendTimer.current = setTimeout(() => {
@@ -498,13 +501,31 @@ async function sendAnnotation(keep: boolean, target: React.RefObject<View | null
   const s = annotate.get();
   if (s.status === "capturing" || s.status === "sending") return;
   const strokes = s.drawing.strokes;
-  if (strokes.length === 0) { setAnnotationStatus("error", { error: "Draw something first." }); return; }
-  const sink = currentSink();
+  if (strokes.length === 0 && !s.turboTarget) { setAnnotationStatus("error", { error: "Draw something first." }); return; }
   const settings = store.get().settings;
+  const turbo = s.turboTarget;
+  const turboSink = turbo ? {
+    steerable: () => false,
+    send: (text: string, attachments: Parameters<typeof sendVoiceAnnotation>[2]) => {
+      const state = store.get();
+      const target = findTurboTarget(state.conversations, state.settings?.address, turbo);
+      if (target?.id !== turbo || state.settings !== settings) throw new Error("The selected Turbo session is no longer paired. No request sent.");
+      return sendVoiceAnnotation(target, text, attachments, () => {});
+    },
+  } : undefined;
+  const sink = turboSink ?? currentSink();
   if (!sink) { setAnnotationStatus("error", { error: "Open a chat or a voice session to send." }); return; }
   if (!settings) { setAnnotationStatus("error", { error: "Pair with your computer to send." }); return; }
+  const words = [s.typed.trim(), ...s.segments.map(segment => segment.text.trim())].filter(Boolean).join("\n");
+  if (strokes.length === 0 && !words) return;
   setAnnotationStatus("capturing");
   try {
+    if (strokes.length === 0) {
+      await sink.send(words, [], "queue");
+      haptic.success();
+      finishSend(keep, { strokes, segments: s.segments, typed: s.typed });
+      return;
+    }
     const route = debugNavigationRef.isReady() ? debugNavigationRef.getCurrentRoute() : undefined;
     const screen = { id: route?.key ?? "unknown", route: route?.name ?? "unknown", width: Math.round(size.width), height: Math.round(size.height) };
     const createdAt = Date.now();
@@ -589,6 +610,7 @@ function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, onUndoPe
   const s = annotate.use(x => x);
   const busy = s.status === "capturing" || s.status === "sending";
   const count = s.drawing.strokes.length;
+  const canSend = count > 0 || (!!s.turboTarget && (!!s.typed.trim() || s.segments.some(segment => !!segment.text.trim())));
   const [noteOpen, setNoteOpen] = useState(false);
   const noteInput = useRef<TextInput>(null);
   useEffect(() => { if (noteOpen) noteInput.current?.focus(); }, [noteOpen]);
@@ -618,7 +640,7 @@ function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, onUndoPe
         }} />
       </View>
       <View style={[styles.row, thumb.row]}>
-        <Chip label="Exit" a11y="Exit annotation" onPress={exitAnnotation} />
+        <Chip label="Exit" a11y="Exit annotation" disabled={!!s.turboTarget && busy} onPress={exitAnnotation} />
         <Chip label="Undo" a11y="Undo" disabled={tldraw ? count === 0 : s.drawing.past.length === 0} onPress={() => tldraw ? tldraw.current?.undo() : undoStroke()} />
         {tldraw ? <Chip label="Redo" a11y="Redo" onPress={() => tldraw.current?.redo()} /> : null}
         <Chip label="Clear" a11y="Clear" disabled={count === 0} onPress={() => tldraw ? tldraw.current?.clear() : clearStrokes()} />
@@ -626,7 +648,7 @@ function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, onUndoPe
         <HoldToTalk />
         <Chip label="⇅" a11y={top ? "Move tray to the bottom" : "Move tray to the top"} onPress={() => setTop(!top)} />
         <Chip label="Keep" a11y="Send and keep drawing" disabled={busy || count === 0} onPress={() => onSend(true)} />
-        <Chip label={busy ? "…" : "Send"} a11y="Send annotation" primary disabled={busy || count === 0} onPress={() => onSend(false)} />
+        <Chip label={busy ? "…" : "Send"} a11y={s.turboTarget ? "Send Turbo request" : "Send annotation"} primary disabled={busy || s.recording || !canSend} onPress={() => onSend(false)} />
       </View>
       {noteOpen ? <TextInput
         ref={noteInput} testID="annotation-note" accessibilityLabel="Type a note"
@@ -644,7 +666,7 @@ function Tray({ onSend, onSendAnyway, onDismissEmpty, pendingEmptySend, onUndoPe
           <Chip label="Add note" a11y="Add note" onPress={addNote} />
         </View>
       </View> : null}
-      <Text style={styles.hint} numberOfLines={1}>{s.sink ? `→ ${s.sink}` : "Open a chat to send"} · {s.segments.length ? `${s.segments.length} spoken` : s.typed.trim() ? "typed note ready" : "hold Talk or type a note"}{s.penMode ? " · fingers scroll" : ""}</Text>
+      <Text style={styles.hint} numberOfLines={1}>{s.turboTarget ? "→ dash-turbo" : s.sink ? `→ ${s.sink}` : "Open a chat to send"} · {s.segments.length ? `${s.segments.length} spoken` : s.typed.trim() ? "typed note ready" : "hold Talk or type a note"}{s.penMode ? " · fingers scroll" : ""}</Text>
     </TrayViewport>
   );
 }
@@ -692,7 +714,8 @@ function Swatch({ color, selected }: { color: InkColor; selected: boolean }): Re
 /** Hold to talk: the bridge transcribes the clip; the segment's time span aligns strokes. */
 function HoldToTalk(): React.JSX.Element {
   const voice = useContinuousVoice();
-  const liveVoice = !["idle", "error", "connecting"].includes(voice.state.phase);
+  const turbo = annotate.use(s => !!s.turboTarget);
+  const liveVoice = !(turbo ? ["idle", "error"] : ["idle", "error", "connecting"]).includes(voice.state.phase);
   const speech = useRecordedSpeech("annotation", (text, start, end) => addSegment({ id: `mic-${start}`, text, start, end, source: "mic" }));
   const recording = speech.state.phase === "recording";
   const busy = speech.state.phase === "transcribing";
@@ -701,7 +724,7 @@ function HoldToTalk(): React.JSX.Element {
     <View>
     <PressScale accessibilityRole="button" accessibilityLabel={liveVoice ? "Continuous voice is active" : "Hold to talk"} disabled={liveVoice} accessibilityState={{ selected: recording, disabled: liveVoice }}
       onPressIn={() => { if (!busy) void speech.begin(); }} onPressOut={() => void speech.end()} style={[styles.chip, recording && styles.recording]}>
-      <Text style={[styles.chipText, recording && styles.chipTextOn]}>{liveVoice ? "Live mic" : recording ? "● Talk" : busy ? "Transcribing…" : "Talk"}</Text>
+      <Text style={[styles.chipText, recording && styles.chipTextOn]}>{liveVoice ? (voice.state.phase === "connecting" ? "Connecting…" : "Live mic") : recording ? "● Talk" : busy ? "Transcribing…" : "Talk"}</Text>
     </PressScale>
     {speech.state.note && speech.state.phase === "error" ? <Text accessibilityRole="alert" style={styles.error}>{speech.state.note}</Text> : null}
     </View>

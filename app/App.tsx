@@ -3,14 +3,14 @@ import { TileDetailProvider } from "./src/components/InteractiveTile";
 import { DensityProvider } from "./src/components/Density";
 import { TileGestureProvider } from "./src/components/TileGestures";
 import { OrbMotionProvider } from "./src/components/OrbMotion";
-import { DarkTheme, NavigationContainer, type Theme } from "@react-navigation/native";
+import { DarkTheme, NavigationContainer, type Theme, type InitialState } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { CormorantGaramond_500Medium } from "@expo-google-fonts/cormorant-garamond";
 import { HankenGrotesk_400Regular, HankenGrotesk_600SemiBold } from "@expo-google-fonts/hanken-grotesk";
 import { IBMPlexMono_400Regular } from "@expo-google-fonts/ibm-plex-mono";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Linking, Platform, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -46,6 +46,8 @@ import { colors } from "./src/theme";
 import { NativeEvents } from "./src/components/NativeEvents";
 import { ContinuousVoiceRoot } from "./src/components/ContinuousVoiceRoot";
 import { ServedBuildChip } from "./src/components/ServedBuildChip";
+import { turboRequests } from "./src/lib/turbo-request";
+import { restoreTurboNavigation, saveTurboNavigation } from "./src/lib/turbo-navigation";
 import { observeTouch } from "./src/lib/touch-idle";
 import { flushNotificationTarget, handleChatLink } from "./src/lib/notification-routing";
 
@@ -97,7 +99,14 @@ export default function App() {
   if (fontError) throw fontError;
   const hydrated = store.use((s) => s.hydrated);
   const hasSettings = store.use((s) => s.settings !== null);
+  const [navigation, setNavigation] = useState<{ initial?: InitialState } | null>(turboRequests ? null : {});
   useHostSleepPosture();
+  useEffect(() => {
+    if (!turboRequests || !hydrated) return;
+    let mounted = true;
+    void restoreTurboNavigation().then(initial => { if (mounted) setNavigation({ initial }); });
+    return () => { mounted = false; };
+  }, [hydrated]);
 
   useEffect(() => {
     void hydrate().then(async () => {
@@ -125,7 +134,7 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  if (!hydrated || !fontsLoaded) return <View style={styles.splash} />;
+  if (!hydrated || !fontsLoaded || !navigation) return <View style={styles.splash} />;
 
   return (
     <GestureHandlerRootView style={styles.root}><DensityProvider><OrbMotionProvider><TileGestureProvider><TileDetailProvider>
@@ -137,8 +146,10 @@ export default function App() {
             <NavigationContainer
               ref={debugNavigationRef}
               theme={theme}
+              initialState={navigation.initial}
+              onStateChange={saveTurboNavigation}
               linking={Platform.OS === "web" ? linking : undefined}
-              onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); stageLinks.flush(); appRoutes.flush(); flushNotificationTarget(); }}
+              onReady={() => { flushPendingDebugNavigation(); deepLinks.flush(); stageLinks.flush(); appRoutes.flush(); flushNotificationTarget(); saveTurboNavigation(); }}
             >
             <ContinuousVoiceRoot><AnnotationRoot>
               <Stack.Navigator

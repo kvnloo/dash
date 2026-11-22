@@ -97,6 +97,11 @@ createInterface({input:process.stdin}).on('line', line => {
   const params=typeof r.params==='object'&&r.params!==null&&'prompt' in r.params?r.params.prompt:[];
   const text = Array.isArray(params)?params.map((p:unknown)=>typeof p==='object'&&p!==null&&'text' in p&&typeof p.text==='string'?p.text:'').join(''):'';
   turnLog('start', text);
+  if (text.includes('ARMY Turbo make this label clearer') && Array.isArray(params)) {
+   appendFileSync(join(process.env.HOME || '.', 'army-turbo-prompt.jsonl'), JSON.stringify({ agent, sessionId, text,
+    attachments: params.filter(p => isRecord(p) && p.type !== 'text').map(p => ({ type: p.type, name: p.name, mimeType: p.mimeType })),
+   }) + '\n');
+  }
   // Provider failures as a real agent reports them: an HTTP status in the error data, provider text in details.
   if (text.includes('ARMY_402')) { send({jsonrpc:'2.0',id:r.id,error:{code:-32000,message:'Internal error',data:{http_status:402,details:'ARMY_PROVIDER_DETAIL usage balance exhausted'}}}); return; }
   if (text.includes('ARMY_429')) { send({jsonrpc:'2.0',id:r.id,error:{code:-32000,message:'Internal error',data:{http_status:429,details:'ARMY_PROVIDER_DETAIL too many requests'}}}); return; }

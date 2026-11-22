@@ -1,3 +1,4 @@
+import { ReleaseSettings } from "../components/ReleaseSettings";
 import { ModelsPanel } from "../components/ModelsPanel";
 import { DensityPicker } from "../components/Density";
 import { InformationDensityPicker } from "../components/InformationDensityPicker";
@@ -175,6 +176,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           {modelsOpen ? <ModelsPanel /> : null}
           <NotificationSettings />
           <BedtimeSettings />
+          <ReleaseSettings />
           <Pressable accessibilityRole="button" onPress={() => navigation.navigate("Notices")} style={styles.secondary}><Text style={styles.secondaryText}>Notices · Agent reports</Text></Pressable>
           <Pressable
             accessibilityRole="button"

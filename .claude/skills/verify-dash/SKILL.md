@@ -99,7 +99,9 @@ Before you assign a failure to the app, read its `error-context.md`, `console.js
 
 ## Cleanup
 
-Run `army-stack.sh down <run>`. It kills only the `serve.py` pid that `up` recorded, after checking that the pid's command line is that stack's server. It then deletes the stack's web export. It keeps `stack-<run>/{state.env,serve.log,web-export.log}` and every `$ARMY_BASE/<run>*` evidence file.
+`drive` automatically takes down its stack on exit. If a stack never reached
+`drive` or was interrupted before cleanup, run `army-stack.sh down <run>`. It kills only the `serve.py` pid that `up` recorded, after checking that the pid's command line is that stack's server. It then deletes the stack's web export. It keeps `stack-<run>/{state.env,serve.log,web-export.log}` and all evidence retained by the headed runner (bulky output for the most
+recent three completed runs per suite, compact reports for every run).
 
 - Per-test bridges stop on their own, because the fixture calls `stop()` and bwrap uses `--die-with-parent`.
 - If a run was killed, find leftovers with `pgrep -af "army-bridge .*<checkout path>"` and kill only those pids.

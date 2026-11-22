@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { bridge } from "../net/bridge";
 import { SealError, sealSecret } from "../lib/secret-seal";
 import { dropSecretRequest, secretRequests } from "../store/secrets";
+import { voicePhase } from "../lib/voice-phase";
 import { haptic } from "../haptics";
 import { colors, radius, space, type } from "../theme";
 
@@ -16,6 +17,9 @@ const DOTS_SHOWN = 24;
 export function SecretEntry(): React.JSX.Element | null {
   const request = secretRequests.use(s => s.open[0]);
   const last = secretRequests.use(s => s.last);
+  const shownId = secretRequests.use(s => s.shown);
+  // During a live voice call the request waits in the caption strip (DA-058) until the owner opens it.
+  const inCall = voicePhase.use(phase => phase !== "idle" && phase !== "error");
   const insets = useSafeAreaInsets();
   const input = useRef<TextInput>(null);
   const [text, setText] = useState("");
@@ -33,7 +37,7 @@ export function SecretEntry(): React.JSX.Element | null {
     }, 1000);
     return () => clearInterval(timer);
   }, [request]);
-  if (!request) return null;
+  if (!request || (inCall && shownId !== request.id)) return null;
   const waiting = sentId === request.id;
   const left = Math.max(0, Math.ceil((request.expiresAt - now) / 1000));
   const submit = () => {

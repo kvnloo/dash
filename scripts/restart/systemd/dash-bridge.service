@@ -1,0 +1,27 @@
+# Dash bridge on a Linux host (groot): the systemd --user counterpart of the Studio's
+# launchd dev.kvnloo.dash-bridge (KeepAlive). Installed by scripts/restart/install-groot.sh.
+# managed-by: dash scripts/restart
+[Unit]
+Description=Dash bridge (phone <-> coding agents over Tailscale, :4747)
+# The bridge refuses to start until this computer has its Tailscale IPv4 (bridge-security.ts).
+# After a reboot tailscaled can come up after the user manager, so never stop retrying.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/lib/dash/bridge-current/bridge
+Environment=DASH_CWD=%h/.local/lib/dash/bridge-current
+Environment=PATH=%h/.bun/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Host data (DASH_HOST, DASH_IDENTITY*, DASH_PEER_IDENTITY_FILE, ...) lives only in this file.
+EnvironmentFile=-%h/.config/dash/bridge.env
+ExecStart=%h/.bun/bin/bun index.ts
+# Crash, kill -9, OOM or a clean exit after a drain: always come back. The token in
+# ~/.dash/token survives, so the paired phone reconnects with no user action.
+Restart=always
+RestartSec=3
+# A deploy drains first (docs/turbo.md, DASH_DRAIN_MAX_MS default 10 min); let it finish.
+TimeoutStopSec=660
+
+[Install]
+# With lingering enabled (install-groot.sh), default.target starts at boot, before any login.
+WantedBy=default.target
