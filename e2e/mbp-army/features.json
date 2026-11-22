@@ -364,6 +364,8 @@
                "restored saved-local chat keeps its own draft and Main chat search"]},
     {"id": "attached-last-exchange", "title": "Main bar attached to a chat pops up its last message or two on demand (#507); collapsed by default, tap opens the chat",
      "tests": ["attached composer pops up the last exchange on demand and opens the chat from it"]},
+    {"id": "interactive-prototypes", "title": "Open hosted and generated HTML prototypes in Dash and use their controls",
+     "tests": ["opens a hosted prototype link and uses its control in Dash", "runs generated HTML controls only in the explicit prototype stage"]},
     {"id": "perf-no-accumulation", "title": "Measured perf gates (A29): Orchestra view switches do not slow down or accumulate heap/DOM/listeners (#530); prompt rail scrub never freezes a frame (#522)",
      "tests": ["perf: 40 Orchestra view switches do not slow down or accumulate heap, DOM nodes or listeners (#530)",
                "perf: prompt rail scrub over a 1000-message chat never freezes a frame (#522)"]}

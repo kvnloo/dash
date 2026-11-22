@@ -105,7 +105,7 @@ The status counts were taken at the commit this map was written on. Maintain the
 - [Prompt rail](./prompt-rail.md): COVERED
 - [Transcript scroll and history](./transcript-scroll.md): UNCOVERED
 - [Long reply and selection](./long-reply-and-selection.md): UNCOVERED
-- [Inline media and artifact stage](./inline-media-artifact-stage.md): UNCOVERED
+- [Inline media and artifact stage](./inline-media-artifact-stage.md): PARTIALLY COVERED (prototype routes)
 - [Send file to phone](./send-file-to-phone.md): UNCOVERED
 - [Subagent workers strip](./subagent-workers-strip.md): UNCOVERED
 - [Generative UI blocks](./genui-blocks.md): UNCOVERED

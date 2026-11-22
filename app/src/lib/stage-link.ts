@@ -7,7 +7,7 @@
  * loopback, the tailnet (100.64.0.0/10) or https. `dash://stage?url=…` wraps
  * one for deep links.
  */
-const STAGE_RE = /\bhttps?:\/\/[\w.-]+(?::\d{2,5})?\/(?:\?[^\s#)]*)?#t=[a-f0-9]{16,64}\b/g;
+const STAGE_RE = /\bhttps?:\/\/[\w.-]+(?::\d{2,5})?\/[^\s#)<>"\x60]*#t=[a-f0-9]{16,64}\b/g;
 
 function tailnetOrLocal(host: string): boolean {
   if (host === "localhost" || host === "127.0.0.1") return true;
@@ -22,7 +22,7 @@ export function isStageUrl(raw: string): boolean {
   } catch {
     return false;
   }
-  if (!/^#t=[a-f0-9]{16,64}$/.test(u.hash)) return false;
+  if (u.username || u.password || !/^#t=[a-f0-9]{16,64}$/.test(u.hash)) return false;
   return u.protocol === "https:" || (u.protocol === "http:" && tailnetOrLocal(u.hostname));
 }
 
