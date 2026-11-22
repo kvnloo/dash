@@ -40,8 +40,9 @@ test('learn: Map it renders the topic as an interactive Mermaid concept map, not
   }
   await expect(diagram.getByText('split by light', { exact: true })).toBeVisible();
   await expect(diagram.getByText('excites', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('table: ARMY map parts: photosynthesis', { exact: true }).or(page.getByText('ARMY map parts: photosynthesis', { exact: true }))).toBeVisible();
-  await expect(page.getByText(/classDef|flowchart TD/)).toHaveCount(0);
+  await expect(page.getByLabel('table: ARMY map parts: photosynthesis', { exact: true })).toBeVisible();
+  // The reply's Mermaid source is drawn, never shown (the Learn prompt bubble itself names "flowchart TD").
+  await expect(page.getByText(/classDef hot|Calvin cycle\]\]/)).toHaveCount(0);
   await expect(page.getByRole('alert', { name: 'Interface could not be rendered', exact: true })).toHaveCount(0);
   // Close Learn so the screenshot shows the map the owner sees under it.
   await page.getByRole('button', { name: 'Close Learn mode', exact: true }).click({ noWaitAfter: true });
@@ -58,7 +59,8 @@ test('learn: Explain answers the topic as native cards with a check-yourself cho
   await expect(page.getByLabel('card: ARMY Learn card', { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('ARMY explains tidal locking', { exact: true })).toBeVisible();
   await expect(page.getByText('ARMY answer A', { exact: true })).toBeVisible();
-  await expect(page.getByText(/"version":1/)).toHaveCount(0);
+  // The reply's genui JSON is drawn, never shown (the Learn prompt bubble itself quotes the format).
+  await expect(page.getByText(/"label":"ARMY answer A"/)).toHaveCount(0);
 });
 
 /** A trusted Chromium stroke with pointerType=pen, the way the S Pen reaches the web view. */
@@ -109,7 +111,7 @@ for (const engine of ['skia', 'tldraw'] as const) {
     expect(bytes.subarray(1, 4).toString('latin1'), 'the agent can open a real PNG').toBe('PNG');
     const doc = JSON.parse(await readFile(fileURLToPath(json.uri), 'utf8'));
     expect(doc.strokes.length, 'both S Pen strokes reach the agent').toBe(2);
-    expect(doc.strokes.every((s: { pointer: string }) => s.pointer === 'pen'), 'strokes are pen strokes').toBe(true);
+    expect(doc.strokes.map((s: { pointer: string }) => s.pointer), 'both strokes are S Pen (stylus) strokes').toEqual(['stylus', 'stylus']);
 
     // And the agent's answer, which names the files it received, renders as cards in the chat.
     await page.getByRole('button', { name: 'Close Learn mode', exact: true }).click({ noWaitAfter: true });

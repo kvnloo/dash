@@ -49,6 +49,9 @@ test('learn: Talk turns a topic spoken on live z0live voice into Learn cards', a
     .toContain('[Dash · Learn mode · explain] Topic: ARMY spoken topic black holes');
   await expect(page.getByLabel('card: ARMY Learn card', { exact: true })).toBeVisible({ timeout: 30000 });
   await expect(page.getByText('ARMY explains ARMY spoken topic black holes', { exact: true })).toBeVisible();
+  // The hero orb stays out of Learn's way; the call's status lives in the header pill.
+  await expect(page.getByTestId('voice-orb-overlay')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Explain the topic as cards', exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath('learn-talk-cards.png') });
 
   // Stop listening ends the call Learn started.

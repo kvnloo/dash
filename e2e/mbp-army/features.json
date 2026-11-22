@@ -357,7 +357,7 @@
     {"id": "learn-spen-sketch", "title": "S Pen ink drawn from Learn reaches the agent as a Learn sketch (topic + PNG + pen strokes JSON) and returns to Learn",
      "tests": ["learn: skia S Pen sketch from Learn reaches the agent with its topic and returns to Learn",
                "learn: tldraw S Pen sketch from Learn reaches the agent with its topic and returns to Learn"]},
-    {"id": "learn-voice-topics", "title": "Learn Talk: a topic spoken on the live z0live call becomes the Learn topic and comes back as cards; without voice identity Learn says why",
+    {"id": "learn-voice-topics", "title": "Learn Talk: a topic spoken on the live z0live call becomes the Learn topic and comes back as cards with the voice orb kept off the Learn panel; without voice identity Learn says why",
      "tests": ["learn: Talk turns a topic spoken on live z0live voice into Learn cards",
                "learn: Talk without z0live identity says why in Learn and stops listening"]},
     {"id": "mode-pill-order", "title": "Mode pill cycles Normal → Learn → Quick → Annotate; Exit from Annotate (ink covers the pill) returns to Normal",
