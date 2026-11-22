@@ -1,7 +1,8 @@
 /** The phone and TV React surfaces share one ReactHost, not a network connection. */
 export type PadPoint = { x: number; y: number };
+export type PadSample = PadPoint & { t: number };
 type PadEvent =
-  | { type: "ink"; points: PadPoint[]; done: boolean }
+  | { type: "ink"; points: PadSample[]; done: boolean }
   | { type: "pinch"; from: PadPoint; to: PadPoint; scale: number }
   | { type: "cancel" | "reset" };
 const listeners = new Set<(event: PadEvent) => void>();
@@ -22,4 +23,19 @@ export function pinchPadCamera(camera: typeof PAD_CAMERA_HOME, from: PadPoint, t
     x: limit(to.x - (from.x - camera.x) * zoom / camera.scale),
     y: limit(to.y - (from.y - camera.y) * zoom / camera.scale),
   };
+}
+
+// Letterbox the phone surface to the real destination viewport, not the TV's
+// display mode: Dash may occupy only part of the desktop.
+let aspect = 16 / 9;
+const aspectListeners = new Set<() => void>();
+export const padAspect = () => aspect;
+export function subscribePadAspect(listener: () => void) {
+  aspectListeners.add(listener);
+  return () => { aspectListeners.delete(listener); };
+}
+export function setPadAspect(next: number) {
+  if (aspect === next) return;
+  aspect = next;
+  for (const listener of aspectListeners) listener();
 }

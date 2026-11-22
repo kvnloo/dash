@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { DEX_OFF, getState, openPad, subscribe } from "../../lib/dex";
-import { PAD_CAMERA_HOME, pinchPadCamera, subscribePad, type PadPoint } from "../../lib/dex-pad";
+import { PAD_CAMERA_HOME, pinchPadCamera, subscribePad, type PadSample } from "../../lib/dex-pad";
 
-export function useDexPad(active: boolean, allowed: boolean, commit: (points: PadPoint[]) => void) {
+export function useDexPad(active: boolean, allowed: boolean, commit: (points: PadSample[]) => void) {
   const [state, setState] = useState(DEX_OFF);
   const [error, setError] = useState(false);
   const [camera, setCamera] = useState(PAD_CAMERA_HOME);
-  const [preview, setPreview] = useState<PadPoint[]>([]);
+  const [preview, setPreview] = useState<PadSample[]>([]);
   const cameraRef = useRef(PAD_CAMERA_HOME);
   const commitRef = useRef(commit);
   commitRef.current = commit;
@@ -37,7 +37,7 @@ export function useDexPad(active: boolean, allowed: boolean, commit: (points: Pa
         if (!event.done) { setPreview(event.points); return; }
         setPreview([]);
         const { x, y, scale } = cameraRef.current;
-        commitRef.current(event.points.map(point => ({ x: (point.x - x) / scale, y: (point.y - y) / scale })));
+        commitRef.current(event.points.map(point => ({ x: (point.x - x) / scale, y: (point.y - y) / scale, t: point.t })));
       }
     });
   }, [enabled, allowed]);

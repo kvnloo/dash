@@ -8,6 +8,7 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { BackHandler, Image, PixelRatio, Platform, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Polyline } from "react-native-svg";
+import { setPadAspect } from "../../lib/dex-pad";
 import { useDexPad } from "../dex/useDexPad";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { requireOptionalNativeModule } from "expo-modules-core";
@@ -264,6 +265,7 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     haptic.select();
   }, [size]);
 
+  const padNeedsCaptureFrame = useRef(false);
   const send = useCallback((keep: boolean) => {
     const draft = annotate.get();
     if (draft.status === "capturing" || draft.status === "sending") return;
@@ -275,12 +277,12 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     if (penSendTimer.current !== null) clearTimeout(penSendTimer.current);
     penSendTimer.current = null;
     setPenSendPending(false);
-    void sendAnnotation(keep, captureTarget, size, error => inkFailed(error, "capture"));
+    void sendAnnotation(keep, captureTarget, size, error => inkFailed(error, "capture"), padNeedsCaptureFrame.current);
   }, [size, inkFailed]);
   const sendAnyway = useCallback(() => {
     if (pendingEmptySend === null) return;
     setPendingEmptySend(null);
-    void sendAnnotation(pendingEmptySend, captureTarget, size, error => inkFailed(error, "capture"));
+    void sendAnnotation(pendingEmptySend, captureTarget, size, error => inkFailed(error, "capture"), padNeedsCaptureFrame.current);
   }, [pendingEmptySend, size, inkFailed]);
   useEffect(() => { if (!active) setPendingEmptySend(null); }, [active]);
   const sendRef = useRef(send);
@@ -320,16 +322,18 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
     const screen = points.map(point => ({ x: point.x * size.width, y: point.y * size.height }));
     const xs = screen.map(p => p.x), ys = screen.map(p => p.y);
     if (Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) < MIN_EXTENT) return;
-    const end = Date.now();
-    const started = end - points.length + 1;
     if (engine === "tldraw") {
-      tldraw.current?.addPadInk(screen.map((point, i) => [point.x, point.y, started + i]));
+      tldraw.current?.addPadInk(points.map(point => [point.x * size.width, point.y * size.height, point.t]));
     } else {
       commitStroke({ tool: "pen", color: s.color, pointer: "touch",
-        points: points.map((point, i) => ({ ...point, p: 0.5, t: started + i })), targets: targetsAt(screen) });
+        points: points.map(point => ({ ...point, p: 0.5 })), targets: targetsAt(screen) });
     }
   });
-  const padZoomed = dex.camera.scale !== 1;
+  useEffect(() => {
+    if (size.width > 0 && size.height > 0) setPadAspect(size.width / size.height);
+  }, [size]);
+  const padZoomed = dex.camera.scale !== 1 && annotationStatus !== "capturing";
+  padNeedsCaptureFrame.current = padZoomed;
   const gesture = useMemo(() => {
     // A Pan may finalize when a *different* contact lifts on web, dropping the pen.
     // A Manual gesture ends only after the tracked pointer lifts or is cancelled.
@@ -470,18 +474,18 @@ export function AnnotationRoot({ children }: { children: ReactNode }): React.JSX
             transformOrigin: "top left",
             transform: [{ translateX: dex.camera.x * size.width }, { translateY: dex.camera.y * size.height }, { scale: dex.camera.scale }],
           }]} testID={padZoomed ? "dex-zoomed-chat" : undefined}>
-          <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
-          {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
-          {engine === "skia" && active && !inkError ? <Animated.View pointerEvents={penMode && !palmShield ? "none" : "auto"} style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
-          {engine === "skia" && active && Ink ? <InkBoundary key={inkAttempt} onError={error => inkFailed(error, "ink-render")}><Animated.View style={[StyleSheet.absoluteFill, frameStyle, { overflow: "hidden" }]} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></Animated.View></InkBoundary> : null}
-          {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active && !padZoomed ? "auto" : "none"} {...overlayProps}>
-            <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} tool={tool} color={color} penMode={penMode} padZoomed={padZoomed}
-              onStylusObserved={async () => { observeStylusPointer(); }}
-              onReady={async ms => { console.info("[annotate-tldraw] host-ready", { ms }); }}
-              onDrawing={async drawing => { syncTldrawStrokes(drawing.map(stroke => ({ ...stroke, targets: targetsAt(stroke.points.map(point => ({ x: point.x * size.width, y: point.y * size.height }))) }))); }}
-              onExportDone={async () => { /* WP3 connects the ink export to compositing. */ }}
-              dom={{ style: { flex: 1 }, scrollEnabled: false }} />
-          </Animated.View> : null}
+            <View ref={captureTarget} style={styles.root} collapsable={false}>{children}</View>
+            {/* Freeze the app while one finger draws; in pen mode fingers must reach it to scroll. */}
+            {engine === "skia" && active && !inkError ? <Animated.View pointerEvents={penMode && !palmShield ? "none" : "auto"} style={[StyleSheet.absoluteFill, frameStyle]} {...overlayProps} /> : null}
+            {engine === "skia" && active && Ink ? <InkBoundary key={inkAttempt} onError={error => inkFailed(error, "ink-render")}><Animated.View style={[StyleSheet.absoluteFill, frameStyle, { overflow: "hidden" }]} pointerEvents="none" {...overlayProps}><Ink strokes={strokes} width={size.width} height={size.height} ink={INK} live={live} tool={tool} color={color} /></Animated.View></InkBoundary> : null}
+            {engine === "tldraw" && size.width > 0 && size.height > 0 ? <Animated.View style={[StyleSheet.absoluteFill, frameStyle]} pointerEvents={active && !padZoomed ? "auto" : "none"} {...overlayProps}>
+              <TldrawAnnotateDOM ref={tldraw} active={active} width={size.width} height={size.height} tool={tool} color={color} penMode={penMode} padZoomed={padZoomed}
+                onStylusObserved={async () => { observeStylusPointer(); }}
+                onReady={async ms => { console.info("[annotate-tldraw] host-ready", { ms }); }}
+                onDrawing={async drawing => { syncTldrawStrokes(drawing.map(stroke => ({ ...stroke, targets: targetsAt(stroke.points.map(point => ({ x: point.x * size.width, y: point.y * size.height }))) }))); }}
+                onExportDone={async () => { /* WP3 connects the ink export to compositing. */ }}
+                dom={{ style: { flex: 1 }, scrollEnabled: false }} />
+            </Animated.View> : null}
           </View>
           {dex.preview.length > 1 ? <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <Svg width={size.width} height={size.height}>
@@ -523,7 +527,7 @@ if (__DEV__ && flowMode) Reflect.set(globalThis, "__dashFlowTrace", {
   },
 });
 
-async function sendAnnotation(keep: boolean, target: React.RefObject<View | null>, size: { width: number; height: number }, onCaptureFailure: (error: unknown) => void): Promise<void> {
+async function sendAnnotation(keep: boolean, target: React.RefObject<View | null>, size: { width: number; height: number }, onCaptureFailure: (error: unknown) => void, waitForUnzoom: boolean): Promise<void> {
   const s = annotate.get();
   if (s.status === "capturing" || s.status === "sending") return;
   const strokes = s.drawing.strokes;
@@ -541,6 +545,8 @@ async function sendAnnotation(keep: boolean, target: React.RefObject<View | null
     let captured: Awaited<ReturnType<InkModule["composite"]>>;
     try {
       const { composite } = await loadInk();
+      // Capture the full, untransformed chat behind page-space strokes.
+      if (waitForUnzoom) await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       captured = await composite(target, strokes, screen, INK, colors.bg);
     } catch (error) {
       onCaptureFailure(error);

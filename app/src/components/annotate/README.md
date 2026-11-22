@@ -34,8 +34,9 @@ the captured screen dimensions. IDs survive undo/redo. Existing `commitStroke`,
 `annotationDoc`, transcript markers, alignment, upload, and sink sending remain
 the contract boundary.
 
-WP3's ink-layer compositing, WP4's S Pen qualification/double-tap, WP5's DeX
-camera controls/lasso, and later native rollout are not included. Sending still
+Dash Pad adds a separate bounded viewport zoom and feeds completed phone
+strokes to the selected engine. The capture still uses original page coordinates.
+Lasso, DOM ink-layer compositing and native tldraw qualification are not included. Sending still
 uses the existing Skia compositor, intentionally; exporting from the DOM handle
 is not yet the send compositor.
 
