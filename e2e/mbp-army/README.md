@@ -219,6 +219,23 @@ host-indexed native result explicitly. No address, host or draft is inferred or
 silently transferred. These focused journeys do not replace complete exact-head
 release qualification or actual MBP/Groot phone acceptance.
 
+### Headed-run disk retention
+
+The headed runner keeps test output (including video, traces and screenshots),
+HTML and isolated fixture scratch for the latest **three completed runs per
+suite**, including failed runs. An unfiltered drive uses the `full` suite;
+filtered drives use the exact Playwright arguments as their suite key. Set
+`ARMY_SUITE` to a stable suite name when regularly changing filters within the
+same suite. Use a unique run name with letters, digits, hyphens or underscores.
+
+Compact JSON results, receipts, telemetry and logs are not pruned. Runs started
+before this policy and interrupted runs without a completion marker are not
+auto-deleted; inspect them before removing their artifacts manually.
+`army-stack.sh drive` automatically stops its own web server and removes its
+export when it exits. Use `army-stack.sh down <run>` if the stack never reached
+`drive` or if the process was killed before cleanup could run.
+
+
 ## S25 APK target (supplementary, not O15)
 
 `scripts/device-army.sh <native-build-receipt-dir> <new-evidence-dir>` installs
