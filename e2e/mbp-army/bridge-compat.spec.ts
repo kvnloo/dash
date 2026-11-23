@@ -33,6 +33,7 @@ test('a bridge without UI control still connects and streams a chat', async ({ p
   await send(page, 'ARMY legacy bridge chat');
   await expect(page.getByText('ARMY_REPLY: ARMY legacy bridge chat').first()).toBeVisible();
   await expect.poll(() => bridge.logs()).toContain('army_future_feature');
+  await page.getByRole('button', { name: 'Close chat window', exact: true }).click({ noWaitAfter: true });
 
   await page.getByRole('button', { name: 'Open settings', exact: true }).first().click();
   await expect(page.getByText(/^Connected to /)).toBeVisible();
