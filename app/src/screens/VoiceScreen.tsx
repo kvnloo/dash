@@ -95,38 +95,43 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
         </Pressable>
         <Text style={styles.liveTag}>{opening ? "CONNECTING" : "● LIVE"}</Text>
       </View>
-      <ScrollView testID="voice-content" contentContainerStyle={styles.focusBody}>
-        <Animated.View entering={ZoomIn.duration(180).reduceMotion(ReduceMotion.System)} style={styles.focusOrb}>
-          <View style={styles.focusOrbFace}>
-            <LinearGradient colors={[colors.goldLo, colors.bg]} style={[StyleSheet.absoluteFill, styles.orbTint]} />
-            <AgentOrb size={188} thinking={orb} label={`Dash voice ${caption}`} animated={!state.muted} />
-          </View>
-        </Animated.View>
-        <Text testID="voice-caption" style={styles.caption} accessibilityLiveRegion="polite">
-          <Text testID="voice-phase" accessible accessibilityLabel={voiceStatusAccessibilityLabel(state)}>
-            {state.muted ? "Muted" : state.phase[0]?.toUpperCase() + state.phase.slice(1)}
+      <View style={styles.focusScroll}>
+        <ScrollView testID="voice-content" contentContainerStyle={styles.focusBody}>
+          <Animated.View entering={ZoomIn.duration(180).reduceMotion(ReduceMotion.System)} style={styles.focusOrb}>
+            <View style={styles.focusOrbFace}>
+              <LinearGradient colors={[colors.goldLo, colors.bg]} style={[StyleSheet.absoluteFill, styles.orbTint]} />
+              <AgentOrb size={188} thinking={orb} label={`Dash voice ${caption}`} animated={!state.muted} />
+            </View>
+          </Animated.View>
+          <Text testID="voice-caption" style={styles.caption} accessibilityLiveRegion="polite">
+            <Text testID="voice-phase" accessible accessibilityLabel={voiceStatusAccessibilityLabel(state)}>
+              {state.muted ? "Muted" : state.phase[0]?.toUpperCase() + state.phase.slice(1)}
+            </Text>
           </Text>
-        </Text>
-        {state.note ? <Text style={styles.caption}>{state.note}</Text> : null}
-        {state.turbo ? <Text testID="voice-turbo-status" style={styles.caption}>{state.turbo}</Text> : null}
-        {captions ? <Text testID="voice-transcript" numberOfLines={4} style={styles.focusCaption} accessibilityLiveRegion="polite">
-          {lines.at(-2)?.role === "user" && lines.at(-1)?.role === "assistant" ? <Text style={styles.previousCaption}>{lines.at(-2)?.text}{"\n"}</Text> : null}
-          {captionText(latestCaption) || lines.at(-1)?.text || "Captions on"}
-        </Text> : null}
-        <View testID="voice-focus-cards" style={styles.stack}>
-          {approvals.map(approval => <ApprovalLine key={voiceApprovalKey(approval)} approval={approval} focus />)}
-          {cards.map(card => <CatalogEphemeralCard key={card.key} kind={card.kind} app={card.app} />)}
+          {state.note ? <Text style={styles.caption}>{state.note}</Text> : null}
+          {state.turbo ? <Text testID="voice-turbo-status" style={styles.caption}>{state.turbo}</Text> : null}
+          {captions ? <Text testID="voice-transcript" numberOfLines={4} style={styles.focusCaption} accessibilityLiveRegion="polite">
+            {lines.at(-2)?.role === "user" && lines.at(-1)?.role === "assistant" ? <Text style={styles.previousCaption}>{lines.at(-2)?.text}{"\n"}</Text> : null}
+            {captionText(latestCaption) || lines.at(-1)?.text || "Captions on"}
+          </Text> : null}
+          <View testID="voice-focus-cards" style={styles.stack}>
+            {approvals.map(approval => <ApprovalLine key={voiceApprovalKey(approval)} approval={approval} focus />)}
+            {cards.map(card => <CatalogEphemeralCard key={card.key} kind={card.kind} app={card.app} />)}
+          </View>
+          {state.routes?.length ? <Text testID="voice-route" numberOfLines={1} accessibilityLabel={`Answered by: ${state.routes.map(route => `${route.lane} lane in ${voiceRouteTime(route.ms)}`).join(", ")}`} style={styles.route}>
+            {state.routes.map((route, i) => <Text key={i} testID={`voice-route-${i}`}>{i ? "  ·  " : ""}{route.lane} {voiceRouteTime(route.ms)}</Text>)}
+          </Text> : null}
+          {laneSample?.lanes.lanes.length ? <LaneTimeline lanes={laneSample.lanes.lanes} offset={laneSample.offset} /> : null}
+          <Pressable testID="voice-open-council" accessibilityRole="button" accessibilityLabel="Open the council card"
+            onPress={() => openCouncil("z0live")} style={styles.secondary}>
+            <Text style={styles.secondaryText}>Council · brief and agent reports</Text>
+          </Pressable>
+        </ScrollView>
+        <View pointerEvents="none" style={styles.focusFade}>
+          <LinearGradient colors={["transparent", colors.bg]} style={StyleSheet.absoluteFill} />
         </View>
-        {state.routes?.length ? <Text testID="voice-route" numberOfLines={1} accessibilityLabel={`Answered by: ${state.routes.map(route => `${route.lane} lane in ${voiceRouteTime(route.ms)}`).join(", ")}`} style={styles.route}>
-          {state.routes.map((route, i) => <Text key={i} testID={`voice-route-${i}`}>{i ? "  ·  " : ""}{route.lane} {voiceRouteTime(route.ms)}</Text>)}
-        </Text> : null}
-        {laneSample?.lanes.lanes.length ? <LaneTimeline lanes={laneSample.lanes.lanes} offset={laneSample.offset} /> : null}
-        <Pressable testID="voice-open-council" accessibilityRole="button" accessibilityLabel="Open the council card"
-          onPress={() => openCouncil("z0live")} style={styles.secondary}>
-          <Text style={styles.secondaryText}>Council · brief and agent reports</Text>
-        </Pressable>
-      </ScrollView>
-      <View style={styles.focusControls}>
+      </View>
+      <View testID="voice-focus-controls" style={styles.focusControls}>
         <Pressable testID="voice-mute" accessibilityRole="button" onPress={mute} style={styles.focusControl}>
           <Text style={styles.secondaryText}>{state.muted ? "Unmute" : "Mute"}</Text>
         </Pressable>
@@ -187,7 +192,9 @@ const styles = StyleSheet.create({
   focusHeader: { paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   focusBack: { minHeight: 48, justifyContent: "center" },
   liveTag: { ...type.mono, color: colors.gold, fontSize: 11 },
-  focusBody: { paddingHorizontal: 14, paddingTop: 28, paddingBottom: 16, gap: 10 },
+  focusScroll: { flex: 1, minHeight: 0 },
+  focusFade: { position: "absolute", bottom: 0, left: 0, right: 0, height: 22 },
+  focusBody: { paddingHorizontal: 14, paddingTop: 24, paddingBottom: 28, gap: 10 },
   focusOrb: { alignSelf: "center", borderRadius: 94, backgroundColor: colors.bubble,
     shadowColor: colors.gold, shadowOpacity: 0.28, shadowRadius: 36, elevation: 3 },
   focusOrbFace: { borderRadius: 94, overflow: "hidden" },
@@ -195,7 +202,7 @@ const styles = StyleSheet.create({
   endControl: { backgroundColor: colors.surfaceRaised, borderColor: colors.danger },
   previousCaption: { color: colors.textMuted, fontSize: 13 },
   focusCaption: { ...type.body, color: colors.text, fontSize: 17, lineHeight: 24, textAlign: "center", paddingHorizontal: 14 },
-  stack: { gap: 10, paddingTop: 28 },
+  stack: { gap: 10, paddingTop: 16 },
   focusControls: { flexDirection: "row", justifyContent: "center", gap: 18, paddingTop: 10 },
   focusControl: { width: 58, height: 58, borderWidth: 1, borderColor: colors.hair, borderRadius: 29,
     alignItems: "center", justifyContent: "center" },

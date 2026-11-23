@@ -125,7 +125,7 @@ export function OpenUINative({ tree, onIntent }: { tree: OpenUINode; onIntent?: 
 }
 
 const styles = StyleSheet.create({
-  root: { backgroundColor: colors.bg, marginVertical: space.sm, gap: space.sm },
+  root: { marginVertical: space.sm, gap: space.sm },
   stack: { gap: space.sm },
   card: {
     padding: space.md,

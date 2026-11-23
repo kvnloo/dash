@@ -10,9 +10,11 @@ const test = base.extend<{ voiceBroker: FixtureZ0liveBroker }>({
     try { await use(broker); } finally { await broker.stop(); }
   },
   bridgeOptions: async ({ voiceBroker }, use) => {
-    await use({ identity: true, env: { DASH_NATIVE_VOICE: "1", DASH_Z0LIVE_BROKER: voiceBroker.origin, DASH_ARMY_VOICE_WEB: "1" } });
+    await use({ identity: true, env: { DASH_NATIVE_VOICE: "1", DASH_Z0LIVE_BROKER: voiceBroker.origin, DASH_ARMY_VOICE_WEB: "1", ARMY_PERSIST_SESSION: "1" } });
   },
 });
+
+if (process.platform === "darwin") test.use({ persistSession: false });
 
 test.afterEach(async ({ page }, info) => {
   if (!page.isClosed()) await page.screenshot({ path: info.outputPath("final.png") });
@@ -67,36 +69,36 @@ test("live caption strip shows streaming user and agent text in one line over Da
   await expect(page.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply");
   await expect(page.getByTestId("voice-live-caption")).toHaveAttribute("aria-label", "Dash said: ARMY voice reply");
 
-  // Minimal: one 12 pt line under the pill, never a panel.
   const box = await strip.boundingBox();
   expect(box?.height, "the strip is a single short line").toBeLessThanOrEqual(24);
-  const bar = await page.getByTestId("voice-mic-bar").boundingBox();
-  expect(bar?.height, "pill row plus caption line").toBeLessThanOrEqual(46 + 24 + 1);
+  await expect(page.getByTestId("voice-mic-bar")).toHaveCount(0);
   await page.screenshot({ path: info.outputPath("captions-on.png") });
 
-  // The CC control turns the strip off; the call keeps going and the choice persists on this device.
-  const pill = page.getByTestId("voice-phase");
-  await page.getByRole("button", { name: "Hide live captions", exact: true }).click({ noWaitAfter: true });
+  const bubble = page.getByTestId("voice-orb-overlay");
+  await bubble.click();
+  await page.getByRole("button", { name: "Hide live captions", exact: true }).click();
+  await page.getByTestId("voice-focus-back").click();
   await expect(strip).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Show live captions", exact: true })).toBeVisible();
-  await expect(pill).toHaveAttribute("aria-label", /^Voice status: (listening|hearing|thinking|speaking)/);
+  await expect(bubble).toHaveAttribute("aria-label", /^Open voice focus · (Listening|Hearing|Thinking|Speaking)/);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("dash.voice.captions"))).toBe("off");
   await page.screenshot({ path: info.outputPath("captions-off.png") });
-  await page.getByRole("button", { name: "Show live captions", exact: true }).click({ noWaitAfter: true });
+  await bubble.click();
+  await page.getByRole("button", { name: "Show live captions", exact: true }).click();
+  await page.getByTestId("voice-focus-back").click();
   await expect(page.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("dash.voice.captions"))).toBe("on");
 
-  // With a chat window open, the caption moves to the window's dock next to Mute/End.
-  await page.getByRole("tab").nth(1).click({ noWaitAfter: true });
-  // The hero orb covers the middle of the list; tap the row at its edge, outside the orb.
-  await hermes.click({ noWaitAfter: true, position: { x: 16, y: 12 } });
-  await expect(page.getByTestId("chat-window")).toBeVisible();
-  await expect(page.getByTestId("window-voice-controls")).toBeVisible();
-  await expect(page.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply");
-  await expect(page.getByTestId("voice-captions-toggle")).toHaveCount(1);
+  await page.getByRole("tab").nth(1).click();
+  await hermes.click();
+  const chat = page.getByTestId("chat-window");
+  await expect(chat).toBeVisible();
+  await expect(chat.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply");
+  await expect(page.getByTestId("voice-captions-toggle")).toHaveCount(0);
+  await expect(page.getByTestId("window-voice-controls")).toHaveCount(0);
   await page.screenshot({ path: info.outputPath("captions-window.png") });
 
-  await page.getByTestId("voice-end").click({ noWaitAfter: true });
+  await bubble.click({ delay: 650 });
+  await page.getByTestId("voice-bubble-menu").getByRole("button", { name: "End", exact: true }).click();
   await expect(strip).toHaveCount(0);
   await expect.poll(() => voiceBroker.calls().filter(call => call.method === "POST" && /^\/v1\/sessions\/[^/]+\/end$/.test(call.path)).length).toBe(1);
   expect(voiceBroker.calls().filter(call => call.method === "POST" && call.path === "/v1/tools/ask_z0")).toHaveLength(1);

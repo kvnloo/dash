@@ -84,7 +84,8 @@ test("saying allow once during a live call resolves the pending Needs OK without
   expect(ends(voiceBroker), "the call kept going").toHaveLength(0);
   await page.getByRole("button", { name: "Back to chat · call keeps going" }).click({ noWaitAfter: true });
   await expect(page.getByText(/ARMY_PERMISSION_SELECTED/).first()).toBeVisible({ timeout: 15000 });
-  await page.getByTestId("voice-end").click({ noWaitAfter: true });
+  await page.getByTestId("voice-orb-overlay").click({ delay: 650 });
+  await page.getByTestId("voice-bubble-menu").getByRole("button", { name: "End", exact: true }).click();
   await expect.poll(() => ends(voiceBroker).length).toBe(1);
 });
 
@@ -111,7 +112,9 @@ test("tapping Allow once in Voice focus resolves a Needs OK that arrives during 
   await expect(page.getByTestId("voice-orb-overlay")).toHaveAttribute("aria-label", /^Open voice focus · (Listening|Hearing|Thinking|Speaking)/);
   expect(asks(voiceBroker)).toHaveLength(1);
   expect(ends(voiceBroker)).toHaveLength(0);
-  await page.getByTestId("voice-end").click({ noWaitAfter: true });
+  await page.getByTestId("voice-orb-overlay").click({ delay: 650 });
+  await page.getByTestId("voice-bubble-menu").getByRole("button", { name: "End", exact: true }).click();
+  await expect.poll(() => ends(voiceBroker).length).toBe(1);
 });
 
 async function fakeSudo(bridge: Bridge) {

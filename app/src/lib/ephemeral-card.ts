@@ -40,7 +40,30 @@ export function ephemeralCardDocument(spec: EphemeralCardSpec, mode: ThemeMode, 
   const head = parts.head.replace("</head>", () => `<style>${theme.css}</style></head>`);
   const page = head + dataFor(spec.kind).map(key => key === "themes" ? hostedThemes : parts.data[key]).join(",") + parts.tail;
   const json = JSON.stringify({ kind: spec.kind, app: spec.app, scheme: "dark", fixture: spec.fixture }).replace(/</g, "\\u003c");
-  return page.replace("/*EUI_SPEC*/null", () => json);
+  const html = page.replace("/*EUI_SPEC*/null", () => json);
+  if (spec.kind !== "inbox" || spec.app !== "gmail") return html;
+  return html.replace(/<\/body><\/html>$/, () => `<script>
+    const root = document.getElementById("eui-root");
+    function decorateInbox() {
+      const results = root.querySelector(".inbox");
+      const query = root.querySelector(".eu-verb");
+      if (!results || !query) return false;
+      query.textContent = query.textContent.replace(/^Searched Gmail · "(.*)"$/, ${JSON.stringify(theme.gmailApp ? "$1" : "“$1”")});
+      if (${theme.gmailApp}) {
+        const heading = document.createElement("h2");
+        heading.className = "gmail-top-results";
+        heading.textContent = "Top results";
+        results.before(heading);
+      }
+      return true;
+    }
+    if (!decorateInbox()) {
+      const observer = new MutationObserver(() => {
+        if (decorateInbox()) observer.disconnect();
+      });
+      observer.observe(root, { childList: true });
+    }
+  </script></body></html>`);
 }
 
 export type EphemeralMessage =

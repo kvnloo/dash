@@ -1,5 +1,5 @@
 // DA-063 (#293, #108): Live voice is a native part of Dash. The main-bar mic starts the call in place (no Voice
-// screen, no other app or window), the call UI is Dash's own voice bar and orb, and leaving Dash and coming back
+// screen, no other app or window), the call starts in Dash's bubble, and leaving Dash and coming back
 // resumes talking to the same chat. Actual Expo web UI -> authenticated real bridge -> fixture z0live broker.
 // This proves browser state and transport only, never Android audio, native WebRTC or the S25 launcher.
 import { test as base, expect, pair } from './fixtures';
@@ -12,9 +12,10 @@ const test = base.extend<{ voiceBroker: FixtureZ0liveBroker }>({
     try { await use(broker); } finally { await broker.stop(); }
   },
   bridgeOptions: async ({ voiceBroker }, use) => {
-    await use({ identity: true, env: { DASH_NATIVE_VOICE: '1', DASH_Z0LIVE_BROKER: voiceBroker.origin, DASH_ARMY_VOICE_WEB: '1' } });
+    await use({ identity: true, env: { DASH_NATIVE_VOICE: '1', DASH_Z0LIVE_BROKER: voiceBroker.origin, DASH_ARMY_VOICE_WEB: '1', ARMY_PERSIST_SESSION: '1' } });
   },
 });
+if (process.platform === "darwin") test.use({ persistSession: false });
 test.use({ viewport: { width: 390, height: 844 } });
 
 /** What Android does to Dash when the owner leaves it or comes back: the document's visibility changes. */
@@ -60,13 +61,12 @@ test('main-bar mic starts Live voice inside Dash with no Voice screen and resume
   await page.mouse.up();
   const liveMic = page.getByRole('button', { name: 'Live voice', exact: true }).first();
   await expect(liveMic).toBeVisible();
-  if (await page.getByTestId('voice-mic-bar').count() === 0) await liveMic.click({ noWaitAfter: true });
+  const bubble = page.getByTestId('voice-orb-overlay');
+  if (await bubble.count() === 0) await liveMic.click({ noWaitAfter: true });
 
-  const pill = page.getByTestId('voice-phase');
-  await expect(pill).toHaveAttribute('aria-label', 'Voice status: listening', { timeout: 15000 });
-  // Dash's own call UI: the themed voice bar and orb. No Voice screen, no popup, no second window or tab.
-  await expect(page.getByTestId('voice-mic-bar')).toBeVisible();
-  await expect(page.getByTestId('voice-orb-overlay').first()).toBeVisible();
+  const expectListening = () => expect(bubble).toHaveAttribute('aria-label', 'Open voice focus · Listening', { timeout: 15000 });
+  await expectListening();
+  await expect(page.getByTestId('voice-mic-bar')).toHaveCount(0);
   await expect(page.getByTestId('voice-caption')).toHaveCount(0);
   await expect(page.getByText('Dash voice', { exact: true })).toHaveCount(0);
   expect(page.context().pages()).toHaveLength(1);
@@ -78,14 +78,14 @@ test('main-bar mic starts Live voice inside Dash with no Voice screen and resume
   expect(sessions(voiceBroker.calls())).toHaveLength(1);
   const target = targetOf(sessions(voiceBroker.calls())[0]);
   expect(target).toMatchObject({ session: 'army-fixture-session' });
-  await expect(pill).toHaveAttribute('aria-label', 'Voice status: listening', { timeout: 15000 });
+  await expectListening();
 
   // Leave Dash: the mic pauses (Android gives a backgrounded app none) and says it will resume.
   await setVisible(page, false);
   await expect(page.getByTestId('voice-error')).toHaveText(/^Mic paused while Dash was in the background/, { timeout: 10000 });
   // Come back: the call resumes by itself, bound to the same chat.
   await setVisible(page, true);
-  await expect(pill).toHaveAttribute('aria-label', 'Voice status: listening', { timeout: 15000 });
+  await expectListening();
   await expect.poll(() => sessions(voiceBroker.calls()).length, { message: 'a fresh realtime call after returning' }).toBe(2);
   expect(targetOf(sessions(voiceBroker.calls())[1])).toEqual(target);
   await expect.poll(() => asks().length, { message: 'the resumed call keeps talking to the chat' }).toBe(2);
@@ -93,22 +93,24 @@ test('main-bar mic starts Live voice inside Dash with no Voice screen and resume
   await expect(page.getByTestId('voice-caption')).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('resumed-after-return-390.png') });
 
-  // During the call the main mic shows the call and brings it forward; it never opens the Voice screen.
+  // During the call the main mic opens focus for the existing session.
   const callMic = page.getByRole('button', { name: /^Live call, (listening|hearing|thinking|speaking)\. Show voice orb$/ }).first();
   await expect(callMic).toBeVisible();
   await callMic.click({ noWaitAfter: true });
-  await expect(page.getByTestId('voice-caption')).toHaveCount(0);
+  await expect(page.getByTestId('voice-focus-back')).toBeVisible();
 
-  // End from the bar; the mic now taps straight into Live (its last mode), again in place.
+  // End from focus and return. The mic taps straight into Live (its last mode).
   await page.getByTestId('voice-end').click({ noWaitAfter: true });
-  await expect(pill).toHaveAttribute('aria-label', 'Voice status: idle');
+  await expect(bubble).toHaveCount(0);
   await expect.poll(() => voiceBroker.calls().filter(call => /^\/v1\/sessions\/[^/]+\/end$/.test(call.path) && call.method === 'POST').length).toBeGreaterThanOrEqual(1);
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.getByRole('button', { name: 'Live voice', exact: true }).first().click({ noWaitAfter: true });
-  await expect(pill).toHaveAttribute('aria-label', 'Voice status: listening', { timeout: 15000 });
+  await expectListening();
   expect(targetOf(sessions(voiceBroker.calls())[2])).toEqual(target);
   await expect(page.getByTestId('voice-caption')).toHaveCount(0);
-  await page.getByTestId('voice-end').click({ noWaitAfter: true });
-  await expect(pill).toHaveAttribute('aria-label', 'Voice status: idle');
+  await bubble.click({ delay: 650 });
+  await page.getByTestId('voice-bubble-menu').getByRole('button', { name: 'End', exact: true }).click();
+  await expect(bubble).toHaveCount(0);
 
   // Ending is final: returning to Dash after an ended call does not start a new one.
   const before = sessions(voiceBroker.calls()).length;

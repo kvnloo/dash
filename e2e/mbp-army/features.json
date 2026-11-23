@@ -1,7 +1,7 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
-    {"id":"ephemeral-card-style","title":"Ephemeral cards follow the Dash theme or use an app palette; Settings and Gallery share the saved style","tests":["Card style Dash draws phone-sized cards in chat on a light OS","Card style App draws phone-sized cards in chat on a light OS","Card gallery switches styles live, follows Blueprint and remembers the preference"]},
+    {"id":"ephemeral-card-style","title":"Ephemeral cards follow the Dash theme or use an app palette; Gmail adapts its inbox layout to the selected style and Settings and Gallery share the saved style","tests":["Card style Dash draws phone-sized cards in chat on a light OS","Card style App draws phone-sized cards in chat on a light OS","Card gallery switches styles live, follows Blueprint and remembers the preference"]},
     {"id":"legacy-bridge-connection","title":"Connect and chat with a bridge that does not advertise UI control","tests":["a bridge without UI control still connects and streams a chat"]},
     {"id":"t3code-threads","title":"Chats lists and opens read-only T3 Code threads (DA-082)","tests":["Chats lists T3 Code threads and opens their transcripts"]},
     {"id": "dogfood-home-default-view", "title": "Cold launch opens the dogfood home (self-development loop); typed and dictated notes there reach the agent as Dash secondmate feedback; feedback off restores Orchestra",
@@ -250,7 +250,7 @@
      "tests": ["z0live Turbo replaces a throttled lane with a free provider", "z0live Turbo scales up to three parallel provider lanes"]},
     {"id": "orb-style-picker", "title": "Choose a thinking orb or bot face for chat and voice, including after reload",
      "tests": ["Settings orb style survives reload and appears on chat and the active mic"]},
-    {"id": "voice-orb-overlay", "title": "A live call docks a small interactive voice bubble outside focus mode",
+    {"id": "voice-orb-overlay", "title": "A live call docks a small interactive voice bubble outside focus mode; approval peeks clear chat buttons and the focus cards scroll above the call controls",
      "tests": ["live voice bubble follows the call, opens focus and hides for annotation", "voice bubble docks clear of chat controls and opens focus to resolve a pending approval"]},
     {"id": "z0live-lane-timeline", "title": "The live call screen lists each attached z0live lane with its live step, elapsed time and expandable last handoff, collapsed to one line by default",
      "tests": ["z0live lane timeline shows each lane live step, elapsed time and expandable handoff, collapsed by default"]},

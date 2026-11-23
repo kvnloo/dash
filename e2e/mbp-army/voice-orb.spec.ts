@@ -52,22 +52,16 @@ test("live voice bubble follows the call, opens focus and hides for annotation",
   await expect(orb, "full-screen Voice owns its hero, not the overlay").toHaveCount(0);
   await page.getByRole("button", { name: "Back to chat · call keeps going" }).click({ noWaitAfter: true });
 
-  const pill = page.getByTestId("voice-phase");
-  const phases = [
-    ["connecting", "Connecting"], ["listening", "Listening"], ["hearing", "Hearing"],
-    ["thinking", "Thinking"], ["speaking", "Speaking"], ["listening", "Listening"],
-  ];
-  // Same-tick invariant, recorded in the page on every DOM change: whenever the real voice pill shows a
-  // phase, the orb's caption shows its label. The scripted phases last under a second each, so a recorder
-  // in the page sees every one; Playwright round trips on a loaded host can fall between two of them.
+  const focusPhase = page.getByTestId("voice-phase");
+  const phases = ["Connecting", "Listening", "Hearing", "Thinking", "Speaking", "Listening"];
+  // Record the bubble's accessible phase as it changes. Some scripted phases last under a second.
   await page.evaluate(() => {
     const seen: string[] = [];
     Object.defineProperty(window, "__armyOrbPhases", { value: seen, configurable: true });
     const record = () => {
-      const pillNode = document.querySelector('[data-testid="voice-phase"]');
       const overlay = document.querySelector('[data-testid="voice-orb-overlay"]');
-      if (!pillNode || !overlay) return;
-      const entry = (pillNode.getAttribute("aria-label") ?? "") + "|" + (overlay.getAttribute("aria-label") ?? "").replace("Open voice focus · ", "");
+      if (!overlay) return;
+      const entry = (overlay.getAttribute("aria-label") ?? "").replace("Open voice focus · ", "");
       if (seen[seen.length - 1] !== entry) seen.push(entry);
     };
     record();
@@ -77,19 +71,18 @@ test("live voice bubble follows the call, opens focus and hides for annotation",
     const value: unknown = Reflect.get(window, "__armyOrbPhases");
     return Array.isArray(value) ? value.map(String) : [];
   });
-  /** How many of `phases`, in order, the orb has shown with the pill (each pill phase with its caption label). */
   const shownInOrder = (seen: string[]) => {
     let next = 0;
     for (const entry of seen) {
       const want = phases[next];
-      if (want && entry === "Voice status: " + want[0] + "|" + want[1]) next++;
+      if (entry === want) next++;
     }
     return next;
   };
   await expect.poll(async () => shownInOrder(await recorded()), { timeout: 15000, message: "the orb shows Connecting while the call connects" }).toBeGreaterThanOrEqual(1);
   await expect(orb, "orb is on screen: connecting").toBeVisible();
   releaseAnswer();
-  await expect.poll(async () => shownInOrder(await recorded()), { timeout: 20000, message: "the orb follows every voice phase in order, in the same tick as the pill" }).toBe(phases.length);
+  await expect.poll(async () => shownInOrder(await recorded()), { timeout: 20000, message: "the orb follows every voice phase in order" }).toBe(phases.length);
   await expect(orb, "orb is on screen: listening").toBeVisible();
   const drawing = await orb.getByTestId("agent-orb").boundingBox();
   expect(drawing?.width).toBe(52);
@@ -101,9 +94,9 @@ test("live voice bubble follows the call, opens focus and hides for annotation",
   await expect(page.getByTestId("voice-focus-back")).toBeVisible();
   await expect(orb).toHaveCount(0);
   await page.getByTestId("voice-mute").click();
-  await expect(pill).toHaveAttribute("aria-label", "Voice status: muted");
+  await expect(focusPhase).toHaveAttribute("aria-label", "Voice status: muted");
   await page.getByTestId("voice-mute").click();
-  await expect(pill).toHaveAttribute("aria-label", "Voice status: listening");
+  await expect(focusPhase).toHaveAttribute("aria-label", "Voice status: listening");
   await page.getByTestId("voice-focus-back").click();
   await expect(orb).toBeVisible();
 
@@ -115,7 +108,8 @@ test("live voice bubble follows the call, opens focus and hides for annotation",
   await expect(orb).toHaveCount(0);
   await page.getByRole("button", { name: "Exit annotation" }).click({ noWaitAfter: true });
   await expect(orb).toBeVisible();
-  await page.getByTestId("voice-end").click({ noWaitAfter: true });
+  await orb.click({ delay: 650 });
+  await page.getByTestId("voice-bubble-menu").getByRole("button", { name: "End", exact: true }).click();
   await expect(orb).toHaveCount(0);
   await expect.poll(() => voiceBroker.calls().filter(call =>
     call.method === "POST" && /^\/v1\/sessions\/[^/]+\/end$/.test(call.path)).length).toBe(1);
@@ -167,7 +161,8 @@ test("Settings orb style survives reload and appears on chat and the active mic"
   const mic = page.getByRole("button", { name: /^Live call, .*\. Show voice orb$/ });
   await expect(mic.getByTestId("moodie-body")).toBeVisible();
   await page.screenshot({ path: info.outputPath("orb-style-chat-mic.png") });
-  await page.getByTestId("voice-end").click({ noWaitAfter: true });
+  await mic.click();
+  await page.getByTestId("voice-end").click();
   await expect.poll(() => voiceBroker.calls().some(call =>
     call.method === "POST" && /^\/v1\/sessions\/[^/]+\/end$/.test(call.path))).toBe(true);
 });

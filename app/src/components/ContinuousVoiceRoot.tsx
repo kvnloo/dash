@@ -21,7 +21,7 @@ import type { OrbState } from "../lib/orb-phase";
 import { debugUi } from "../debug/ui-store";
 import { attachedHermes, voiceTarget } from "../lib/voice-target";
 import { voicePhase } from "../lib/voice-phase";
-import { voiceCaption } from "../store/voice-captions";
+import { voiceCaption, voiceCaptionsEnabled } from "../store/voice-captions";
 import { interceptSpokenApproval } from "../lib/voice-approval-actions";
 import { KeyboardDock } from "./KeyboardDock";
 import { VoiceCaptionStrip, VoiceCaptionsToggle } from "./VoiceCaptionStrip";
@@ -53,7 +53,7 @@ const initial: VoiceState = { phase: "idle", muted: false, lines: [] };
 /** Android gives a backgrounded app no microphone. A call paused that way resumes, on the same chat, when Dash is back this soon. */
 export const VOICE_RESUME_MS = 10 * 60_000;
 const PAUSED_NOTE = "Mic paused while Dash was in the background. It resumes on this chat when you return.";
-/** True while a full-screen chat window is open: its dock row is then the single home of voice Mute/End. */
+/** True while the chat window owns the call caption and dock. */
 export const voiceWindowOpen = createStore(false);
 const DeviceInsets = createContext<EdgeInsets | null>(null);
 /** Real device safe-area insets (the window's cut-out pill must hug the status band, not the voice bar). */
@@ -61,6 +61,7 @@ export function useDeviceInsets(): EdgeInsets {
   const device = useContext(DeviceInsets); const app = useSafeAreaInsets(); return device ?? app;
 }
 interface VoiceContext {
+  bubbleVisible: boolean;
   binding: { id: string; startedAt: number } | null;
   brokerCardReplies: readonly { id: number; text: string }[];
   takeApprovalChat(): string | undefined;
@@ -410,8 +411,13 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const active = !["idle", "error"].includes(shown.phase);
   const visible = (route !== "Voice" || !active) && voiceBarVisible(shown.phase, attempted) && (fixture !== null || !suppressAutoBar.current);
   const pill = voiceBarPresentation(shown);
-  const fallback = active && !annotating && !learning && route && !["Main", "Chat", "Voice"].includes(route);
-  const screenInsets = appInsets(insets, visible, barRow);
+  const bubbleVisible = active && !annotating && !learning;
+  const fallback = bubbleVisible && route && !["Main", "Chat", "Voice"].includes(route);
+  const captions = voiceCaptionsEnabled.use(on => on);
+  const showControls = visible && !bubbleVisible;
+  const showCaption = active && route !== "Voice" && (captions || showControls);
+  const home = voiceControlHome(showControls || showCaption, windowOpen);
+  const screenInsets = appInsets(insets, home === "bar", barRow || (showControls ? VOICE_BAR_ROW : 20));
   useEffect(() => {
     const target = attached.current;
     if (!active || !target) return;
@@ -436,9 +442,6 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
       },
     });
   }, [active, bindingGeneration]);
-  // The bar owns a band under the status bar (screens inset below it); it never floats over AppNav or content.
-  // Space stays allocated while a chat window covers the app, so the list underneath never jumps on close.
-  const home = voiceControlHome(visible, windowOpen);
   // A permission may belong to a different chat than the call's frozen Hermes target.
   const takeApprovalChat = () => {
     const id = approvalChat.current;
@@ -446,16 +449,16 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const { conversations, settings } = store.get();
     return settings && conversations.some(chat => chat.id === id && chat.endpointAddress === settings.address) ? id : undefined;
   };
-  return <Context.Provider value={{ state: shown, start, stop, mute, takeApprovalChat, binding, brokerCardReplies }}>
+  return <Context.Provider value={{ state: shown, bubbleVisible, start, stop, mute, takeApprovalChat, binding, brokerCardReplies }}>
     <DeviceInsets.Provider value={insets}>
       <SafeAreaInsetsContext.Provider value={fallback ? { ...screenInsets, bottom: screenInsets.bottom + 70 } : screenInsets}>{children}</SafeAreaInsetsContext.Provider>
     </DeviceInsets.Provider>
     {fallback ? <KeyboardDock style={styles.fallback}>
       <VoiceOrbOverlay state={shown} onMute={mute} onEnd={() => void stop()} />
     </KeyboardDock> : null}
-    {home === "bar" ? <View testID="voice-mic-bar" style={[styles.bar, { paddingTop: insets.top }]}>
+    {home === "bar" ? <View testID={showControls ? "voice-mic-bar" : undefined} style={[styles.bar, { paddingTop: insets.top }]}>
       <View onLayout={e => setBarRow(e.nativeEvent.layout.height)}>
-      <View style={styles.row}>
+      {showControls ? <View style={styles.row}>
         <View accessible={false} style={[styles.dot, { backgroundColor: pill.phase === "error" ? colors.danger : pill.phase === "connecting" || pill.phase === "muted" ? colors.warn : pill.phase === "live" ? colors.ok : colors.textFaint }]} />
         <View style={styles.status}>
           {pill.phase === "error"
@@ -487,7 +490,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
             style={styles.button}
           ><Text style={styles.endText}>End</Text></Pressable> : null}
         </View>
-      </View>
+      </View> : null}
       <VoiceCaptionStrip state={shown} />
       </View>
     </View> : null}

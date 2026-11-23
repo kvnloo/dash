@@ -48,11 +48,14 @@ export function ephemeralCardTheme(app: string, mode: ThemeMode, style: CardStyl
     ? { card: "rgba(18, 24, 32, .78)", cardSolid: "rgba(18, 24, 32, .88)", border: "rgba(216, 225, 238, .20)" }
     : undefined;
   const palette = { ...dash, ...blueprint, ...brand };
+  const gmailApp = Boolean(brand && app === "gmail");
   return {
+    gmailApp,
     // Kit bootstraps with the OS scheme before the host selects t3-dark.
     data: { themes: ["t3-dark", "t3-light"].map(id => ({ ...palette, card: brand?.card ?? colors.surfaceRaised, id, scheme: "dark", host: glide.id, label: glide.name })) },
     css: `
       :root { color-scheme: dark; --h-card: ${palette.card} !important; --h-card-solid: ${palette.cardSolid} !important; }
+      html, body { background: transparent !important; }
       #eui-root { padding: 0; }
       #eui-root > .eu-card {
         --a: var(--h-primary) !important;
@@ -76,7 +79,10 @@ export function ephemeralCardTheme(app: string, mode: ThemeMode, style: CardStyl
       .eu-card .eu-btn:not(.hold) { touch-action: manipulation; }
       .eu-card .inbox li { gap: 12px; min-height: 68px; padding: 10px 0; margin: 0; border-radius: 0; }
       .eu-card[data-kind="inbox"] .eu-h { gap: 8px; }
-      .eu-card[data-kind="inbox"] .eu-verb { white-space: normal; line-height: 1.25; }
+      .eu-card[data-kind="inbox"] .eu-verb { white-space: nowrap; line-height: 1.25; }
+      @media (max-width: 480px) {
+        .eu-card[data-kind="inbox"] .eu-ttl { display: none; }
+      }
       .eu-card .inbox .eu-av { width: 34px; height: 34px; font-size: 12px; }
       .eu-card .inbox .row1 { align-items: baseline; gap: 8px; font-size: 15px; }
       .eu-card .inbox .row1 b, .eu-card .inbox .subj { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -85,7 +91,7 @@ export function ephemeralCardTheme(app: string, mode: ThemeMode, style: CardStyl
       .eu-card .inbox .snip { font-size: 13px; line-height: 18px; }
       .eu-card .inbox li.unread::before { left: -9px; top: 20px; width: 5px; height: 5px; }
       .eu-card .inbox li.hit { background: transparent; }
-      .eu-card .inbox mark { color: var(--a); background: transparent; font-weight: 650; }
+      .eu-card .inbox mark { color: var(--a); background: transparent; font-weight: 650; padding: 0; }
       @media (pointer: coarse) {
         .eu-card :is(kbd, .eu-hint) { display: none; }
       }
@@ -96,14 +102,45 @@ export function ephemeralCardTheme(app: string, mode: ThemeMode, style: CardStyl
         .eu-card .player .pp.on i { background: var(--a-ink); }
         .eu-card .player .pp:not(.on) i:first-child { border-left-color: var(--a-ink); }
       ` : ""}
-      ${brand && app === "gmail" ? `
+      ${gmailApp ? `
         .eu-card .eu-h .eu-ico { background: transparent; color: #ea4335; box-shadow: none; }
         .eu-card .eu-h .eu-ico .mark { width: 82%; height: 82%; }
-        .eu-card[data-kind="inbox"] .eu-h { background: var(--h-muted); margin: 10px 12px 6px; border-radius: 999px; }
+        .eu-card[data-kind="inbox"] .eu-h {
+          background: var(--h-muted); margin: 12px 12px 4px; padding: 0 14px;
+          min-height: 44px; border: 0; border-radius: 999px;
+        }
+        .eu-card[data-kind="inbox"] .eu-h .eu-ico {
+          position: relative; width: 16px; height: 16px; flex: none; color: var(--h-mutedFg);
+        }
+        .eu-card[data-kind="inbox"] .eu-h .eu-ico .mark,
+        .eu-card[data-kind="inbox"] .eu-h .eu-t b { display: none; }
+        .eu-card[data-kind="inbox"] .eu-h .eu-ico::before {
+          content: ""; position: absolute; width: 9px; height: 9px; top: 0; left: 0;
+          box-sizing: content-box; border: 1.6px solid currentColor; border-radius: 50%;
+        }
+        .eu-card[data-kind="inbox"] .eu-h .eu-ico::after {
+          content: ""; position: absolute; width: 6px; height: 1.6px; left: 9px; top: 11px;
+          background: currentColor; transform: rotate(45deg);
+        }
+        .eu-card[data-kind="inbox"] .eu-verb { color: var(--h-fg); font-size: 15px; }
+        .eu-card[data-kind="inbox"] .eu-status {
+          color: var(--h-mutedFg); background: transparent; padding: 0;
+        }
+        .gmail-top-results {
+          margin: 0; padding: 4px 0 2px; font-size: 12px; font-weight: 600; color: var(--h-mutedFg);
+        }
         .eu-card[data-kind="inbox"] .eu-f > button:first-child { background: var(--a); color: var(--a-ink); border-color: transparent; }
         .eu-card[data-kind="inbox"] .eu-f > button.ghost { background: var(--h-muted); color: var(--h-fg); }
         .eu-card .inbox .eu-av { width: 40px; height: 40px; font-size: 14px; }
-        .eu-card .inbox li { gap: 14px; }
+        .eu-card .inbox li { gap: 12px; color: var(--h-mutedFg); }
+        .eu-card .inbox li.unread { color: #fff; }
+        .eu-card .inbox li:not(.unread) .row1 b { font-weight: 400; }
+        .eu-card .inbox li.unread::before { display: none; }
+        .eu-card .inbox .snip { padding-right: 24px; }
+        .eu-card .inbox li::after {
+          content: "☆" / ""; position: absolute; right: 0; bottom: 10px; color: var(--h-mutedFg);
+          font-size: 20px; line-height: 20px; pointer-events: none;
+        }
         .eu-card .inbox mark { color: #ffe082; background: #5c4a00; border-radius: 3px; }
       ` : `
         .eu-card .eu-ico {
@@ -116,6 +153,13 @@ export function ephemeralCardTheme(app: string, mode: ThemeMode, style: CardStyl
           border: 1px solid var(--h-border);
           box-shadow: none;
         }
+        .eu-card[data-kind="inbox"][data-app="gmail"] .eu-t {
+          flex-direction: row; align-items: baseline; gap: 8px;
+        }
+        .eu-card[data-kind="inbox"][data-app="gmail"] .eu-status {
+          background: transparent; padding-inline: 0; text-transform: uppercase; font-family: var(--h-mono);
+        }
+        .eu-card[data-kind="inbox"] .eu-f > button.ghost { border-color: var(--h-border); }
         .eu-card .inbox li + li { border-top: 1px solid var(--h-border); }
         .eu-card[data-kind="inbox"] .eu-f > button:first-child { color: var(--a); background: color-mix(in srgb, var(--a) 8%, transparent); }
       `}

@@ -563,7 +563,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       <PressScale accessibilityRole="button" accessibilityLabel="Retry Live voice" onPress={() => void voice.start()} style={styles.liveChip}><Text style={styles.liveChipText}>Retry voice</Text></PressScale>
     </View> : null}
     {windowed && voiceActive ? <VoiceCaptionStrip state={voice.state} /> : null}
-    {windowed && voiceActive ? <View testID="window-voice-controls" style={[styles.liveRow, thumb.row]}>
+    {windowed && voiceActive && !voice.bubbleVisible ? <View testID="window-voice-controls" style={[styles.liveRow, thumb.row]}>
       <VoiceCaptionsToggle style={styles.liveChip} />
       <PressScale testID="voice-mute" accessibilityRole="button" accessibilityLabel={voice.state.muted ? "Unmute voice microphone" : "Mute voice microphone"} onPress={voice.mute} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.muted ? "Unmute" : "Mute"}</Text></PressScale>
       <PressScale testID="voice-end" accessibilityRole="button" accessibilityLabel="End voice call" onPress={() => void voice.stop()} style={styles.liveChip}><Text style={styles.liveChipText}>{voice.state.phase === "connecting" ? "Cancel connection" : "End voice"}</Text></PressScale>

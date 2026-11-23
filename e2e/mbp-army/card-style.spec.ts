@@ -65,6 +65,23 @@ for (const style of ['Dash', 'App']) {
       await assertFit(iframe, card);
       if (kind === 'inbox') {
         await expect(card.locator('.eu-hint')).toBeHidden();
+        await expect(card.getByRole('button', { name: 'Pin card' })).toBeHidden();
+        await expect(card.locator('xpath=ancestor::body')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+        const query = card.locator('.eu-verb');
+        await expect(query).toHaveText(style === 'Dash' ? '“invoice”' : 'invoice');
+        expect(await query.evaluate(el => el.scrollWidth === el.clientWidth && getComputedStyle(el).whiteSpace === 'nowrap')).toBe(true);
+        const highlight = card.locator('.subj mark').first();
+        await expect(highlight).toHaveCSS('padding-left', '0px');
+        expect(await highlight.evaluate(el => Math.abs(el.getBoundingClientRect().left - (el.parentElement?.getBoundingClientRect().left ?? 0)))).toBeLessThan(1);
+        if (style === 'App') {
+          await expect(card.getByRole('heading', { name: 'Top results' })).toBeVisible();
+          const unread = card.locator('.inbox li.unread').first();
+          const read = card.locator('.inbox li:not(.unread)').first();
+          await expect(unread.locator('b')).toHaveCSS('color', 'rgb(255, 255, 255)');
+          await expect(read.locator('b')).toHaveCSS('font-weight', '400');
+          expect(await card.locator('.inbox li').evaluateAll(rows =>
+            rows.every(row => getComputedStyle(row, '::after').content.includes('☆')))).toBe(true);
+        }
         await expect(card.locator('.inbox li').first()).toHaveCSS('font-size', '15px');
         await expect(card.getByRole('button', { name: 'Open in Gmail' })).toHaveCSS('min-height', '44px');
         await shot(page, `${app}-chat-${style.toLowerCase()}`, info);
