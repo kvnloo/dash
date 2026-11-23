@@ -27,7 +27,7 @@ async function openSettings(page: Page) {
   await page.getByTestId('settings-theme-night').or(page.getByTestId('settings-theme-elemental')).first().scrollIntoViewIfNeeded();
 }
 
-test('themed mode: Living Night stays the default with no wallpaper and no stone controls', async ({ page, bridge }, info) => {
+test('themed mode: Living Night stays the default with no wallpaper and no stone controls; Blueprint preserves Wallpaper glass', async ({ page, bridge }, info) => {
   await pair(page, bridge);
   await expect(page.getByTestId('themed-backdrop')).toHaveCount(0);
   await expect(page.getByTestId('blueprint-wallpaper')).toHaveCount(0);
@@ -37,6 +37,19 @@ test('themed mode: Living Night stays the default with no wallpaper and no stone
   await expect(page.getByTestId('settings-theme-blueprint')).toHaveAttribute('aria-checked', 'false');
   await expect(page.getByTestId('elemental-stone')).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('night-settings.png') });
+  // The independent system wallpaper setting is preserved, not layered over Blueprint.
+  const glass = page.getByRole('switch', { name: 'Wallpaper glass', exact: true });
+  const scrim = page.getByTestId('wallpaper-glass-scrim');
+  await glass.click({ noWaitAfter: true });
+  await expect(glass).toBeChecked();
+  await expect(scrim).toBeAttached();
+  await page.getByTestId('settings-theme-blueprint').click({ noWaitAfter: true });
+  await expect(page.getByTestId('themed-backdrop')).toBeAttached();
+  await expect(scrim).toHaveCount(0);
+  await page.getByTestId('settings-theme-night').click({ noWaitAfter: true });
+  await expect(page.getByTestId('themed-backdrop')).toHaveCount(0);
+  await expect(glass).toBeChecked();
+  await expect(scrim).toBeAttached();
 });
 
 test('themed mode: Settings turns on Blueprint, the living wallpaper runs behind the chats, stone buttons work and the choice persists', async ({ page, bridge }, info) => {

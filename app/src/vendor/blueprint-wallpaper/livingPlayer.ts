@@ -859,4 +859,3 @@ export class LivingPlayer {
     gl.disable(gl.BLEND);
   }
 }
-
