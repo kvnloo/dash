@@ -1,17 +1,19 @@
 # Shared Glide theme and catalog
 
-`shared-pin.json` records the immutable ephemeral-ui revision, versions and byte hashes.
-When adopting a new release, copy the three upstream files without editing them, update the
-pin, and run `node scripts/check-shared-ephemeral.mjs --upstream` from the Dash root.
-The same check without the flag works offline. The tester army verifies the gallery against
-the catalog so additions cannot silently vanish.
+Dash pins the kit, theme and catalog to one immutable ephemeral-ui revision.
+To re-pin, update `KIT_REV` in `app/scripts/ephemeral-kit/build.mjs`, then run
+`bash scripts/check-ephemeral-pin.sh --prepare <kit-checkout>` and
+`node app/scripts/ephemeral-kit/build.mjs --kit <kit-checkout>` from the Dash root.
+Copy `theme/glide.json` and `theme/tokens.schema.json` verbatim from that checkout;
+the build already copies `catalog/catalog.json`. Update `shared-pin.json` with the
+revision, versions and SHA-256 of the three files. Run
+`bash scripts/check-ephemeral-pin.sh <kit-checkout>` to verify the result offline
+and the tester army to exercise the gallery.
+
+CI fetches only the pinned commit for integrity checks. The separate scheduled
+and manual freshness workflow checks whether ephemeral-ui main has advanced.
 
 Dash uses dark for its shell, and both shared palettes for the card host and the theme
 preview. Native font families, the Proof Mono diagnostic palette and platform blur limits
 are Dash-owned; no wallpaper dependency is required. Expo takes the Glide display name
 from the theme without changing package IDs, update channels or the dash scheme.
-
-The shared catalog is a separate pin from Dash's existing sandboxed chat renderer. The
-gallery presents every fixture's reference props and state; supported sample cells can
-also open the current chat-style preview. The chat renderer does not accept arbitrary
-fixture input or agent-supplied code.

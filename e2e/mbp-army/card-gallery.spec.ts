@@ -42,10 +42,13 @@ test('card gallery opens from Settings, shows the pinned catalog version and lis
 
  // The index jumps to a kind's page; Next and Prev walk the pages.
  const last = catalog.kinds[catalog.kinds.length - 1]!;
+ const kindPage = Math.floor(fixtures.indexOf(last.fixtures[0]!) / PAGE) + 1;
  await page.getByTestId(`gallery-kind-${last.kind}`).click();
- await expect(page.getByText(`Page ${pages} of ${pages}`, { exact: true }).first()).toBeVisible();
+ await expect(page.getByText(`Page ${kindPage} of ${pages}`, { exact: true }).first()).toBeVisible();
  await expect(page.getByTestId(`gallery-cell-${last.fixtures[0]!.id}`)).toBeVisible();
- await expect(page.getByRole('button', { name: 'Next gallery page', exact: true }).first()).toBeDisabled();
+ const next = page.getByRole('button', { name: 'Next gallery page', exact: true }).first();
+ for (let p = kindPage; p < pages; p++) await next.click();
+ await expect(next).toBeDisabled();
  await page.getByRole('button', { name: 'Previous gallery page', exact: true }).first().click();
  await expect(page.getByText(`Page ${pages - 1} of ${pages}`, { exact: true }).first()).toBeVisible();
  await expect(page.getByTestId(`gallery-cell-${fixtures[(pages - 2) * PAGE]!.id}`)).toBeVisible();

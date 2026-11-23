@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Vendors one card host page from a pinned kvnloo/ephemeral-ui checkout (main, src/ layout).
 //   (cd <ephemeral-ui checkout> && npm ci)   # the kit's own tool pins: esbuild, linkedom
-//   node app/scripts/ephemeral-kit/build.mjs --kit <ephemeral-ui checkout> [--check] [--main]
+//   node app/scripts/ephemeral-kit/build.mjs --kit <ephemeral-ui checkout> [--check]
 // Writes app/src/vendor/ephemeral-ui/{kit-html,kinds}.generated.ts and catalog.json (the kit's shared card
-// catalog, copied verbatim). --check fails if any of them is stale; --main also fails when the pin is behind main.
+// catalog, copied verbatim). --check fails if any of them is stale.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -13,26 +13,21 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { synthesize } from "./synthetic.mjs";
 
-export const KIT_REV = "7c5daca42108f6701c0e78f227a7db3b2f50d25d";
+export const KIT_REV = "ce66b0ac3cd1e4a1ac9d22465c9abd0c6a6d26b2";
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = resolve(here, "../..");
 const outDir = join(appDir, "src/vendor/ephemeral-ui");
 const args = process.argv.slice(2);
 const kit = resolve(args[args.indexOf("--kit") + 1] || "");
 const check = args.includes("--check");
-// --main: also require the pin to be the checkout's origin/main (the kit's current release).
-if (args.includes("--main")) {
-  const main = execFileSync("git", ["-C", kit, "rev-parse", "origin/main"], { encoding: "utf8" }).trim();
-  if (main !== KIT_REV) { console.error(`pinned ${KIT_REV}, kvnloo/ephemeral-ui main is ${main}: re-pin and rebuild`); process.exit(1); }
-}
 const kitHead = execFileSync("git", ["-C", kit, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 if (kitHead !== KIT_REV) throw new Error(`ephemeral-ui checkout is at ${kitHead}, pinned ${KIT_REV}`);
-const dirty = execFileSync("git", ["-C", kit, "status", "--porcelain", "--", "src", "catalog"], { encoding: "utf8" }).trim();
+const dirty = execFileSync("git", ["-C", kit, "status", "--porcelain", "--", "src", "catalog", "package.json", "package-lock.json"], { encoding: "utf8" }).trim();
 if (dirty) throw new Error(`ephemeral-ui checkout has local edits:\n${dirty}`);
 const src = join(kit, "src");
 // The kit's own tool pins (its package.json), not Dash dependencies.
 const kitRequire = createRequire(join(kit, "package.json"));
-const { build, transform } = await import(process.env.ESBUILD || pathToFileURL(kitRequire.resolve("esbuild")).href);
+const { build, transform } = await import(pathToFileURL(kitRequire.resolve("esbuild")).href);
 const bundle = async (entry, options) => (await build({
   entryPoints: [join(here, entry)], bundle: true, write: false, minify: true, target: "es2020",
   alias: { "@eui": join(src, "js") }, legalComments: "none", logLevel: "error", ...options,
@@ -56,7 +51,7 @@ const reg = await registry();
 
 const js = await bundle("host-entry.js", { format: "iife" });
 // Every stylesheet a card kind reads (the site-only flow and reel sheets are left out).
-const CSS = ["styles.css", "studio.css", "trace.css", "intent.css", "stats.css", "ops.css", "fleet.css", "fleet-hosts.css", "fleet-pm.css", "fleet-factory.css", "intel.css", "dock.css", "cua.css", "gev.css"];
+const CSS = ["styles.css", "studio.css", "trace.css", "intent.css", "stats.css", "ops.css", "fleet.css", "fleet-hosts.css", "fleet-pm.css", "fleet-factory.css", "intel.css", "infra.css", "dock.css", "cua.css", "gev.css"];
 const css = (await transform(CSS.map(f => readFileSync(join(src, f), "utf8")).join("\n"), { loader: "css", minify: true })).code;
 // Data is split so a card page carries only what its kind reads (trace, intent and ops fixtures are large).
 const DATA = { apps: "apps.json", themes: "themes.json", trace: "trace-fixture.json", intent: "intent-snapshot.json", ops: "ops-fixture.json" };

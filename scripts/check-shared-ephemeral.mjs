@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -7,12 +8,18 @@ const read = (file) => readFile(new URL(file, directory));
 const json = async (file) => JSON.parse(await read(file));
 const pin = await json("shared-pin.json");
 assert.match(pin.revision, /^[a-f0-9]{40}$/);
+const kitArg = process.argv.indexOf("--kit");
+const kit = kitArg === -1 ? null : process.argv[kitArg + 1];
+if (kit) assert.equal(pin.revision, process.argv[kitArg + 2], "Shared theme and kit must use the same pin");
 const paths = ["theme/glide.json", "theme/tokens.schema.json", "catalog/catalog.json"];
 assert.deepEqual(Object.keys(pin.files).sort(), [...paths].sort());
 for (const path of paths) {
   const local = await read(path.split("/").at(-1));
   assert.equal(createHash("sha256").update(local).digest("hex"), pin.files[path], `${path}: stale vendored copy`);
-  if (process.argv.includes("--upstream")) {
+  if (kit) {
+    const upstream = execFileSync("git", ["-C", kit, "show", `${pin.revision}:${path}`]);
+    assert.deepEqual(local, upstream, `${path}: differs from the pinned revision`);
+  } else if (process.argv.includes("--upstream")) {
     const response = await fetch(`https://raw.githubusercontent.com/kvnloo/ephemeral-ui/${pin.revision}/${path}`, { signal: AbortSignal.timeout(30_000) });
     assert.ok(response.ok, `${path}: upstream HTTP ${response.status}`);
     assert.deepEqual(local, Buffer.from(await response.arrayBuffer()), `${path}: differs from the pinned revision`);
