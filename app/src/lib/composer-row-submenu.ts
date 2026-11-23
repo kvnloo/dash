@@ -51,8 +51,9 @@ export function submenuChoices(row: ComposerMenuRowShape): ComposerRowChoice[] {
 }
 
 /** The row occupies 0..48; its dropdown starts directly below at y=48. */
-export function submenuIndex(y: number, optionCount: number, rowHeight = MENU_ROW_HEIGHT): number {
+export function submenuIndex(y: number, optionCount: number, height?: number): number {
   "worklet";
+  const rowHeight = height ?? MENU_ROW_HEIGHT;
   if (!Number.isFinite(y) || !Number.isFinite(rowHeight) || rowHeight <= 0 || optionCount <= 0 || y < rowHeight) return -1;
   const index = Math.floor((y - rowHeight) / rowHeight);
   return index < optionCount ? index : -1;

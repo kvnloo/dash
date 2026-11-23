@@ -3,7 +3,7 @@ import { receiveSecretRequest, receiveSecretResolved } from "../store/secrets";
 import { applyGateMessage } from "../store/approvals";
 import { createPermissionsStore } from "../store/permissions";
 import { Platform, AppState as RNAppState, type AppStateStatus } from "react-native";
-import { CHATS_FEATURE, MODEL_SELECTION_FEATURE, NOTICE_MODE_FEATURE, parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
+import { CHATS_FEATURE, MODEL_SELECTION_FEATURE, NOTICE_MODE_FEATURE, UI_CONTROL_FEATURE, parseServerMessage, type ChatAttachment, type ClientMessage } from "../../../shared/protocol";
 import { agentNoticeInbox, noticeFailure } from "../store/notices";
 import { handleUiControlFrame, onAgentControlChange, uiControlHello } from "../store/agent-control";
 import type { LiveIntent } from "../../../shared/live";
@@ -77,11 +77,12 @@ class Bridge {
   private lastInboundAt = 0;
   private pongSeen = false;
   private supportsNoticeMode = false;
+  private supportsUiControl = false;
 
   constructor() {
     subscribeToWorkerMode(() => this.syncNoticeMode());
     // Consent is the phone's: tell the bridge the moment the owner flips Agent control.
-    onAgentControlChange(() => { if (this.admittedSocket && this.admittedSocket === this.ws) this.send(uiControlHello()); });
+    onAgentControlChange(() => this.syncUiControl());
     RNAppState.addEventListener("change", (next) => {
       const wasBackground = this.appState !== "active";
       this.appState = next;
@@ -90,6 +91,11 @@ class Bridge {
       if (next === "active" && wasBackground && this.settings && !this.isOpen()) this.connectNow();
       else if (next === "active" && wasBackground) void this.returnToPrimary();
     });
+  }
+
+  private syncUiControl(): void {
+    // Opt in only on a positive server advertisement. Older bridges need no probe or ack.
+    if (this.supportsUiControl) this.send(uiControlHello());
   }
 
   private syncNoticeMode(): void {
@@ -315,7 +321,7 @@ class Bridge {
       case "ui_control": {
         // Only the admitted socket's bridge may drive the app; acks go back on that same socket.
         const socket = this.ws;
-        if (!socket || socket !== this.admittedSocket) return;
+        if (!this.supportsUiControl || !socket || socket !== this.admittedSocket) return;
         void handleUiControlFrame(message, ack => { if (this.ws === socket) this.send(ack); });
         return;
       }
@@ -339,6 +345,7 @@ class Bridge {
       case "hello": {
         this.admittedSocket = this.ws;
         this.supportsNoticeMode = message.features?.includes(NOTICE_MODE_FEATURE) === true;
+        this.supportsUiControl = message.features?.includes(UI_CONTROL_FEATURE) === true;
         this.syncNoticeMode();
         clearTimeout(this.connectTimer);
         this.connectTimer = undefined;
@@ -363,7 +370,7 @@ class Bridge {
         this.rosterTimer = setInterval(() => { if (this.appState === "active") void this.refreshRoster(); }, 10000);
         if (this.ws) reattachStreamingTurns(this.ws, streamingTurns());
         this.send({ type: "gate_list" });
-        this.send(uiControlHello());
+        this.syncUiControl();
         flushPendingSends(sendChat);
         this.scheduleMigration();
         return;

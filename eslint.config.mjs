@@ -27,6 +27,10 @@ export default [
         {
           selector: "ImportExpression",
           message: "Dynamic import() can 404 in native Metro previews. Use a lazy require() inside the function instead."
+        },
+        {
+          selector: ":function[body.body.0.directive='worklet'] > AssignmentPattern.params[right.type='Identifier']",
+          message: "Resolve worklet defaults that reference bindings inside the function body so the value can be captured."
         }
       ]
     }

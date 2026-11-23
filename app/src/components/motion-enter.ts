@@ -30,9 +30,10 @@ export function spatial<T extends { duration: number }>(token: T) {
 }
 
 /** withTiming config for opacity: reduce motion still crossfades. */
-export function opacity(token: { duration: number } = crossfade) {
+export function opacity(token?: { duration: number }) {
   "worklet";
-  return { ...token, reduceMotion: ReduceMotion.Never };
+  // Worklets capture body references, not module bindings in parameter defaults.
+  return { ...(token ?? crossfade), reduceMotion: ReduceMotion.Never };
 }
 
 export function staggerUp(index: number) {
