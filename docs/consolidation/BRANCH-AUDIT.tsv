@@ -1,0 +1,564 @@
+branch	sha	last_commit	ahead	behind	verdict	evidence	open_pr	wave
+archive/wt-dash-z0bridge-79-20261107-b7a2d2fe	bb2ba723fe66	2026-11-07	1	1965	KEEP	protected name (staging/main/release/archive)		keep
+ayo/R23	3b2d43749311	2026-11-11	5	1741	SUPERSEDED-BY reaped/ayo/R23-20261115-a7b875	tip 3b2d43749311 is in the history of reaped/ayo/R23-20261115-a7b875, which stays (or is archived)		2: delete now
+backup/eui-cards-unsquashed-20261105	41c225fe822a	2026-11-05	10	350	STILL-UNIQUE	8 of 8 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+boat/dash-army-wf/device-army-validation	a788cc509fda	2026-11-22	0	193	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-artifact/da-067	e8015230e249	2026-11-22	0	220	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-badge-voice/da-062	9c82712b0abc	2026-11-22	0	249	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-badge-voice/da-063	3a91abc8497a	2026-11-22	0	191	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-bedtime-protos/da-047	b044bc4e9f01	2026-11-22	0	280	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-bedtime-protos/da-053	1d8d5a433b43	2026-11-22	0	278	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-bots-page/da-073	6dc53152290b	2026-11-22	0	247	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-channels/da-026	de1589ffeab0	2026-11-22	0	247	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-channels/da-070	352ed5d2e90d	2026-11-22	0	249	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-chat-fix/da-020	8cdffcd9adf5	2026-11-22	0	195	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-chatlist/da-061	1fd704c1e74e	2026-11-22	0	280	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-chatlist/da-064	45a8a0fbbb3b	2026-11-22	0	279	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-chatview/da-035	f9619609faf6	2026-11-22	0	280	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-chatview/da-036	3048e679dadb	2026-11-22	0	281	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-composer/da-014	695682f3955b	2026-11-22	0	278	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-composer/da-038	5c619172e0ee	2026-11-22	0	282	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-composer/da-042	beddbb6913dd	2026-11-22	0	282	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-council-handoff/da-079	1a8de21b9022	2026-11-22	0	186	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-council/da-075	81531d32a590	2026-11-22	0	191	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-deadcode/da-052	e01fc1932136	2026-11-22	0	249	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-design-tokens/da-084	f0344ab4a127	2026-11-22	0	184	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-device-army/da-028	d0120e215897	2026-11-22	0	245	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-dex-rebase/da-095	612bd5691e25	2026-11-22	0	165	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-dex-rebase2/da-095	302f4b89fc30	2026-11-23	0	1	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-dex-themed/da-094	688defaa34b7	2026-11-22	0	172	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-dex-themed/da-095	f8ca06c05636	2026-11-22	0	172	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-dex/da-009	c2dde64df335	2026-11-22	0	246	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-ephemeral/da-032	c918717dac10	2026-11-22	0	190	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-ephemeral/da-066	b122939359a6	2026-11-22	0	248	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-fastlane/da-024	7f87f017371a	2026-11-22	0	167	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-gallery/da-076	c5b7cf3193b4	2026-11-22	0	189	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-gallery/da-078	a6a6d7a62e55	2026-11-22	0	191	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-gl-audit/audit	49e4841f0e6e	2026-11-22	0	186	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-green/voice-approvals	c92f18908f3b	2026-11-22	0	197	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-hosts-chats/da-041	48937a77f2c6	2026-11-22	0	282	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-hosts-chats/da-045	12dc5dbd6a6f	2026-11-22	0	282	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-hosts-chats/da-046	9ffbb9417e0f	2026-11-22	0	282	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-int/ci-green	5798b254eeb7	2026-11-22	0	277	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-int/staging-next	5d6d5c598400	2026-11-22	0	283	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-int2/staging-next	e2a4bfef7837	2026-11-22	0	134	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-int3-fix/staging-next	9a16fba74355	2026-11-22	0	66	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-int3/staging-next	f07d11ca6ac9	2026-11-22	0	76	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-int4/staging-next	e7a9b12b3566	2026-11-22	0	56	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-int5/staging-next	c5da9dd2e669	2026-11-22	0	26	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-int6/staging-next	33ec48d8a772	2026-11-23	0	12	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-int7/staging-next	c6884c914e81	2026-11-23	0	11	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-lane-timeline/timeline	b1688ed7e3fe	2026-11-22	0	217	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-laws-spec/da-071	7934f7c45694	2026-11-22	0	249	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-learn/da-010	383c99c9c190	2026-11-22	0	217	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-logwatch/da-027	5201acfdda1d	2026-11-22	0	282	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-logwatch/da-074	79c13e16601d	2026-11-22	0	281	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-mem-orch/da-044	31aad580f1f4	2026-11-22	0	247	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-mem-orch/da-069	24b2110e95fb	2026-11-22	0	247	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-mem-orch/da-069-wip	451c9cf91aad	2026-11-22	2	194	MERGED-EQUIVALENT	git cherry: all 1 patches already in staging ('-'); merge-tree into staging is a no-op		1: delete now
+boat/dash-nowtesting/da-004	8bb92555eb33	2026-11-22	0	281	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-nowtesting/da-051	98a3a9ed9ef7	2026-11-22	0	281	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-onboard/da-050	c3be8cdc8b4d	2026-11-22	0	246	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-rebase/da-064	5a3ee3d2d5dd	2026-11-22	0	246	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-rebase2a/da-003	81cb30242826	2026-11-22	0	217	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-rebase2a/da-014	bf57fe359b2f	2026-11-22	0	215	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-rebase2a/da-035	7749b227333b	2026-11-22	0	217	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-rebase2a/da-074	81b5abdf48c9	2026-11-22	0	218	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-rebase2b/da-004	a2ff0b028ef3	2026-11-22	0	218	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-rebase2b/da-008	852dba96d643	2026-11-22	0	214	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-rebase2b/da-051	8c11067f6386	2026-11-22	0	218	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-rebase2b/da-068	e3b5cddfd0ff	2026-11-22	0	218	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-restart/da-022	d9540bb99ae0	2026-11-22	0	220	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-roadmap-links/da-092	94bd98587356	2026-11-22	0	184	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-secret-hygiene/da-083	90a2d95da182	2026-11-22	0	184	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-spawn-harness/da-085	3c150b568ce4	2026-11-22	0	181	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-spen-inputfx/da-057	a659412c828c	2026-11-22	0	249	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-spen-inputfx/da-065	2afb96c8b275	2026-11-22	0	248	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-t3code/da-082	29f77a5f1dd8	2026-11-22	0	183	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-theme-orb/da-030	d99e7f834685	2026-11-22	0	247	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-theme-orb/da-049	9c6350499ff5	2026-11-22	0	245	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-theme/da-080	30ed2b342239	2026-11-22	0	191	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-trace/da-043	9358b218eb3c	2026-11-22	0	249	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-turbo-modes/da-003	10ca7af06f30	2026-11-22	0	280	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-turbo-modes/da-018	2e2fdeb86d21	2026-11-22	0	280	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-turbo-run/da-002	981b4236476c	2026-11-22	0	195	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-turbo-voice/da-001	4fbecc8a7ca1	2026-11-22	0	219	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-ui-control/da-008	ee14884fd5ea	2026-11-22	0	279	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-ui-control/da-068	d3330e74188c	2026-11-22	0	281	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-voice-captions/da-056	29e2294e6536	2026-11-22	0	280	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash-voice-captions/da-058	e2b3cf31ec94	2026-11-22	0	277	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash/actionable-notifications	1b76a7aabdf7	2026-11-21	0	314	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash/blockers-pin	dab792a2407f	2026-11-21	0	302	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash/bulk-approve	a6b0dbaecdbd	2026-11-21	0	303	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash/code-highlighting	cb9b564692d9	2026-11-21	0	314	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash/composer-last-exchange	20b0dacf7741	2026-11-21	0	314	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash/gear-overlap	7fb96426573c	2026-11-21	0	303	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash/p3-into-staging	6a43ba23bcb2	2026-11-21	0	306	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash/perf-orchestra-bench	c6099869fa1d	2026-11-21	0	314	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash/pill-order	ff11d2de59a3	2026-11-21	0	304	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash/secret-entry	ad3233f7ad32	2026-11-21	0	313	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+boat/dash/triage-actions	3d982f9da7c9	2026-11-21	0	303	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+bridge/context-metadata-20261022	e5d37273fbab	2026-10-22	2	1849	SUPERSEDED-BY reaped/bridge/context-metadata-20261022-20261113-ca2fee	tip e5d37273fbab is in the history of reaped/bridge/context-metadata-20261022-20261113-ca2fee, which stays (or is archived)		2: delete now
+chatgpt/bug-army-closedvisit-1106	34af134ce4b7	2026-11-06	45	327	SUPERSEDED-BY integ/rc3-roadmap-resume-20261027	tip 34af134ce4b7 is in the history of integ/rc3-roadmap-resume-20261027, which stays (or is archived)		2: delete now
+chatgpt/bug-army-cwd-1105c	06492b55cff8	2026-11-05	7	1144	SUPERSEDED-BY reaped/dash-lane-pr641-1105-20261113-522f5d	tip 06492b55cff8 is in the history of reaped/dash-lane-pr641-1105-20261113-522f5d, which stays (or is archived)		2: delete now
+chatgpt/bug-army-flake-1105d	81514cd9d2f0	2026-11-05	36	327	SUPERSEDED-BY chatgpt/fix2-613-close-race	tip 81514cd9d2f0 is in the history of chatgpt/fix2-613-close-race, which stays (or is archived)		2: delete now
+chatgpt/bug-army-sqlite-1105c	44849d903ab1	2026-11-05	2	397	SUPERSEDED-BY fix/army-main-mic-wayland	tip 44849d903ab1 is in the history of fix/army-main-mic-wayland, which stays (or is archived)		2: delete now
+chatgpt/cov-05	cfcf3aa25e4b	2026-10-28	6	683	SUPERSEDED-BY integrate/coverage-20261028	tip cfcf3aa25e4b is in the history of integrate/coverage-20261028, which stays (or is archived)		2: delete now
+chatgpt/cov-07	6a5a016fa28e	2026-10-28	6	683	SUPERSEDED-BY integrate/coverage-20261028	tip 6a5a016fa28e is in the history of integrate/coverage-20261028, which stays (or is archived)		2: delete now
+chatgpt/cov-08	0bc8d389fe2e	2026-10-28	7	683	SUPERSEDED-BY integrate/coverage-20261028	tip 0bc8d389fe2e is in the history of integrate/coverage-20261028, which stays (or is archived)		2: delete now
+chatgpt/cov-09	8b820c3d4e0a	2026-10-28	7	683	SUPERSEDED-BY integrate/coverage-20261028	tip 8b820c3d4e0a is in the history of integrate/coverage-20261028, which stays (or is archived)		2: delete now
+chatgpt/cov-10	aeed8256e895	2026-11-02	9	683	KEEP	head of open PR #612 (STILL-UNIQUE; deleting it closes the PR)	612	keep
+chatgpt/cov-12	a09eaa0a5e65	2026-10-28	8	683	SUPERSEDED-BY integrate/coverage-20261028	tip a09eaa0a5e65 is in the history of integrate/coverage-20261028, which stays (or is archived)		2: delete now
+chatgpt/dash-120	389b2bea5e53	2026-10-25	7	1741	SUPERSEDED-BY 612582ac+d44713f8+a1c7db93	head of PR #210: #120 submenu feature is in staging (612582ac has the same subject as 2c35b61c; d44713f8, a1c7db93 wire it); only 3 Jest-mock test commits remain, and AGENTS.md no longer counts unit tests as the suite	210	2: delete now
+chatgpt/dash-20261027-flow-trace-dump-pairs	517da93342af	2026-11-03	1	1144	SUPERSEDED-BY integ/rc3-roadmap-resume-20261027	tip 517da93342af is in the history of integ/rc3-roadmap-resume-20261027, which stays (or is archived)		2: delete now
+chatgpt/dash-20261027-transcript-workers-r2	9598386fca61	2026-11-04	1	397	SUPERSEDED-BY chatgpt/fix-613-wheel	tip 9598386fca61 is in the history of chatgpt/fix-613-wheel, which stays (or is archived)		2: delete now
+chatgpt/dash-29-self-dev-feedback-r2	1b6f584b6016	2026-11-05	10	397	SUPERSEDED-BY chatgpt/fix-613-wheel	tip 1b6f584b6016 is in the history of chatgpt/fix-613-wheel, which stays (or is archived)		2: delete now
+chatgpt/dash-bug-s22-001-r2	31bb621080b6	2026-11-04	0	391	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/dash-fix-641-turbo	bf7e4b3e30a7	2026-11-05	35	327	SUPERSEDED-BY chatgpt/fix2-613-close-race	tip bf7e4b3e30a7 is in the history of chatgpt/fix2-613-close-race, which stays (or is archived)		2: delete now
+chatgpt/dash-h-074-r2	69cbe0355fce	2026-11-04	0	386	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/dash-h-108-r2	5d3c43766f21	2026-11-05	5	379	SUPERSEDED-BY chatgpt/fix-613-wheel	tip 5d3c43766f21 is in the history of chatgpt/fix-613-wheel, which stays (or is archived)		2: delete now
+chatgpt/dash-h-120-r2	904a5cff2fc4	2026-11-04	0	374	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/dash-h-149-r2	452449d87079	2026-11-04	0	391	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/dash3-bug-army-dexdesk-1106	0f6287d8cb47	2026-11-06	83	327	SUPERSEDED-BY integ/rc3-roadmap-resume-20261027	tip 0f6287d8cb47 is in the history of integ/rc3-roadmap-resume-20261027, which stays (or is archived)		2: delete now
+chatgpt/dash3-bug-army-winparam-1106	eb1ab830d19f	2026-11-06	99	327	SUPERSEDED-BY integ/rc3-roadmap-resume-20261027	tip eb1ab830d19f is in the history of integ/rc3-roadmap-resume-20261027, which stays (or is archived)		2: delete now
+chatgpt/fix-613-wheel	9607474878bc	2026-11-06	47	327	KEEP	head of open PR #645 (STILL-UNIQUE; deleting it closes the PR)	645	keep
+chatgpt/fix2-613-close-race	24ecb8b512ae	2026-11-06	64	327	KEEP	head of open PR #646 (STILL-UNIQUE; deleting it closes the PR)	646	keep
+chatgpt/turbo-01-army-identity-env	c3003bf855c7	2026-10-28	0	752	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-02-voice-bootstrap-ids	b38d0f4f20e9	2026-10-28	0	749	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-03-stt-worker	9e49b04e0691	2026-10-28	0	755	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-04-stt-recovery	e6bda57ff712	2026-10-28	0	750	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-05-mic-permission-first	7aae2cde7555	2026-10-28	0	738	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-06-annotation-voice-quiet	8a6242486e8e	2026-10-28	0	739	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-07-voice-status	bd5efecb1034	2026-10-28	0	732	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-08-voice-army-harness	22f790cada1a	2026-10-28	0	722	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-09-audio-route	9de608423e24	2026-10-28	1	745	SUPERSEDED-BY chatgpt/fix-613-wheel	tip 9de608423e24 is in the history of chatgpt/fix-613-wheel, which stays (or is archived)		2: delete now
+chatgpt/turbo-10-webrtc-build-guard	b1d9f53eba5a	2026-10-28	0	743	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-12-subagent-strip-green	4bca6e3ed159	2026-10-28	2	739	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+chatgpt/turbo-13-live-chip-army	cff9aa17554a	2026-10-28	10	735	STILL-UNIQUE	6 of 8 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+chatgpt/turbo-14-reload-guards	6860886a5e00	2026-10-28	0	728	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-15-bridge-drain	4c34348da310	2026-10-28	0	725	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-16-acp-stall-timeout	0c1bf22b1b91	2026-10-28	0	727	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-17-ink-launch-diagnostics	c6345232b2f9	2026-10-28	0	733	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-18-dash-stylus-native	3faa5d47c0f5	2026-10-28	4	735	SUPERSEDED-BY chatgpt/fix-613-wheel	tip 3faa5d47c0f5 is in the history of chatgpt/fix-613-wheel, which stays (or is archived)		2: delete now
+chatgpt/turbo-19-annotation-note	80ca00e6dfd6	2026-10-28	0	724	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-20-device-self-check	2ed291815696	2026-10-28	0	731	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-21-live-voice-resilience	2ce1e47f7700	2026-10-28	0	721	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-22-annotation-voice-target	042c9eb42b81	2026-10-28	0	726	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-23-annotation-fullscreen	5a23d00eb2f6	2026-10-28	0	731	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-24-annotation-receipt	a63a071cb2af	2026-10-28	0	719	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-25-voice-orb-overlay	59ef48e7e7c6	2026-10-28	0	723	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-26-main-bar-mic	759a4b3eefce	2026-10-28	0	716	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-27-live-health-check	8cb5a2df9f4b	2026-10-28	0	714	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-28-ci-android-export	59fcf34365b5	2026-10-28	0	722	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-29-annotation-entry	6b968f7d513e	2026-10-28	0	715	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-30-palm-rejection	78be0a5d2b94	2026-11-03	0	719	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chatgpt/turbo-30-palm-rejection-v2	3da8aceafd99	2026-11-03	0	412	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+chore/dead-code-20261107	8c666d964444	2026-11-09	2	317	SUPERSEDED-BY reaped/chore/dead-code-20261107-20261113-ffc57d	tip 8c666d964444 is in the history of reaped/chore/dead-code-20261107-20261113-ffc57d, which stays (or is archived)		2: delete now
+dash3/bug-s22-failover-1106	9be2239013bd	2026-11-06	89	327	SUPERSEDED-BY integ/rc3-roadmap-resume-20261027	tip 9be2239013bd is in the history of integ/rc3-roadmap-resume-20261027, which stays (or is archived)		2: delete now
+dependabot/github_actions/actions/cache-6	94faeecb16ec	2026-11-07	1	317	KEEP	head of open PR #650 (STILL-UNIQUE; deleting it closes the PR)	650	keep
+dependabot/github_actions/actions/labeler-7	abd562e3fc32	2026-11-07	1	951	KEEP	head of open PR #652 (STILL-UNIQUE; deleting it closes the PR)	652	keep
+dependabot/github_actions/actions/stale-11	d5d6e7c66e6a	2026-11-07	1	951	KEEP	head of open PR #654 (STILL-UNIQUE; deleting it closes the PR)	654	keep
+dependabot/github_actions/actions/upload-artifact-7	0b183fa74fd8	2026-11-07	1	317	KEEP	head of open PR #653 (STILL-UNIQUE; deleting it closes the PR)	653	keep
+dependabot/github_actions/ossf/scorecard-action-2.5.0	6b803b5a06fe	2026-11-07	1	951	KEEP	head of open PR #651 (STILL-UNIQUE; deleting it closes the PR)	651	keep
+feat/agent-notices	5c2e03f8060a	2026-10-26	0	1711	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+feat/approvals-gate	9827614107cb	2026-10-19	0	2015	MERGED-EQUIVALENT	head of PR #67: tip is an ancestor of staging (GitHub draft flag set)	67	1: delete now
+feat/dex-desk-20261028	ab1b4b245ccb	2026-11-02	7	491	SUPERSEDED-BY chatgpt/fix-613-wheel	tip ab1b4b245ccb is in the history of chatgpt/fix-613-wheel, which stays (or is archived)		2: delete now
+feat/ephemeral-ui-cards-20261105	c57aac877c30	2026-11-07	0	316	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+feat/flow-inbox-current-20261029	13d83aa58d46	2026-10-29	0	453	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+feat/spen-voice-20261025	f167589de808	2026-10-25	24	1741	SUPERSEDED-BY reaped/feat/spen-voice-20261025-20261113-5aa8d8	tip f167589de808 is in the history of reaped/feat/spen-voice-20261025-20261113-5aa8d8, which stays (or is archived)		2: delete now
+feat/turbo-studio	769c877eac3c	2026-11-20	0	309	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+feat/ux-polish-omp-tern-20261025	50935306ee6b	2026-11-13	2	1741	KEEP	head of open PR #188 (STILL-UNIQUE; deleting it closes the PR)	188	keep
+feat/voice-orb-live	86b74d2d6ad6	2026-10-21	0	1848	MERGED-EQUIVALENT	head of PR #108: tip is an ancestor of staging (GitHub draft flag set)	108	1: delete now
+feat/z0live-overlay-orb-20261102	1094de25d3ac	2026-11-02	15	422	KEEP	head of open PR #626 (KEEP; deleting it closes the PR)	626	keep
+fix/army-main-mic-wayland	9be0618de29d	2026-11-05	3	397	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+fix/army-wheel-reset-1106	9b5e350b33b1	2026-11-06	92	327	SUPERSEDED-BY integ/rc3-roadmap-resume-20261027	tip 9b5e350b33b1 is in the history of integ/rc3-roadmap-resume-20261027, which stays (or is archived)		2: delete now
+fix/bridge-gui-source-20261102	1e577218da34	2026-11-02	1	956	SUPERSEDED-BY reaped/fix/bridge-gui-source-20261102-20261113-293f31	tip 1e577218da34 is in the history of reaped/fix/bridge-gui-source-20261102-20261113-293f31, which stays (or is archived)		2: delete now
+fix/bridge-hermes-list-refresh	d0f4161216ad	2026-10-26	2	1428	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+fix/chat-information-density-20261022	a2dc84aedf12	2026-10-22	3	1792	KEEP	head of open PR #118 (STILL-UNIQUE; deleting it closes the PR)	118	keep
+fix/focus-channel-default-sound	c38609d2bde5	2026-11-03	0	410	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/hermes-gateway-live-send	77c95cdbf506	2026-10-21	0	1969	MERGED-EQUIVALENT	head of PR #80: tip is an ancestor of staging (GitHub draft flag set)	80	1: delete now
+fix/hide-status-bar-20261025	05e3bb506c84	2026-10-25	0	1741	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/history-fill-visit-20261029	cdb9334b7bb2	2026-10-29	0	457	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/history-fulltext-visit-20261029	9565d97faaf2	2026-10-29	0	423	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/hosts-tree-hierarchy-20261105	fe03bfbbed48	2026-11-05	9	397	SUPERSEDED-BY reaped/fix/hosts-tree-hierarchy-20261105-20261113-e45699	tip fe03bfbbed48 is in the history of reaped/fix/hosts-tree-hierarchy-20261105-20261113-e45699, which stays (or is archived)		2: delete now
+fix/hosts-tree-hierarchy-main-20261105	0b0b7ffe16fd	2026-11-07	6	317	KEEP	head of open PR #638 (KEEP; deleting it closes the PR)	638	keep
+fix/p0-talk-20261028	20d812692814	2026-10-28	0	753	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/p1-493-missing-chats	b0ca65e3320c	2026-11-20	0	313	MERGED-EQUIVALENT	head of PR #659: tip is an ancestor of staging	659	1: delete now
+fix/remote-steer-intent-20261029	bd40fd94061f	2026-10-29	0	463	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/restored-session-identity-20261029	8ff23fa617c8	2026-10-29	0	426	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/resumable-not-ended-20261028	d9bb25f83465	2026-10-28	0	755	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/roster-reconnect-generation-20261029	86144bd7cda1	2026-10-29	0	431	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/share-pattern-syntax	c792ba34c7c6	2026-11-02	10	1426	STILL-UNIQUE	9 of 9 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+fix/share-safename-regex-android15	eaa5c6dcb141	2026-11-02	0	421	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/triage-running-north-star-20261028	87d2aa3a09d9	2026-10-29	0	465	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/turbo-live-20261028	27769d9abcae	2026-10-28	0	748	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+fix/workers-strip-20261028	008685496bf1	2026-10-28	0	755	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/COV-G01-chat-row-menu	827e2dc58ae9	2026-10-28	6	683	SUPERSEDED-BY integrate/coverage-20261028	tip 827e2dc58ae9 is in the history of integrate/coverage-20261028, which stays (or is archived)		2: delete now
+hermes/COV-G02-themed-dialogs	85cf098c7123	2026-10-28	6	683	SUPERSEDED-BY integrate/coverage-20261028	tip 85cf098c7123 is in the history of integrate/coverage-20261028, which stays (or is archived)		2: delete now
+hermes/COV-G03-acp-stop	67a59cc1ac93	2026-10-28	6	683	SUPERSEDED-BY integrate/coverage-20261028	tip 67a59cc1ac93 is in the history of integrate/coverage-20261028, which stays (or is archived)		2: delete now
+hermes/COV-G04-delivery-outbox	45c729e3ec92	2026-10-28	7	683	SUPERSEDED-BY integrate/coverage-20261028	tip 45c729e3ec92 is in the history of integrate/coverage-20261028, which stays (or is archived)		2: delete now
+hermes/COV-G11-hermes-history	7b401f7c852c	2026-10-28	6	683	SUPERSEDED-BY integrate/coverage-20261028	tip 7b401f7c852c is in the history of integrate/coverage-20261028, which stays (or is archived)		2: delete now
+hermes/claude-model-label	1b6455c9ba6d	2026-10-28	0	755	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/cutout-pill	844b9efa18c2	2026-10-28	0	784	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/hosts-1-phones-rename	cf337119ee40	2026-10-28	0	783	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/hosts-2-stats	1d59c9370bf3	2026-10-28	0	784	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/hosts-3-utilization	d7ccc9f39fc0	2026-10-28	1	785	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+hermes/issue-505	2245a2f7e9d9	2026-10-28	0	731	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/issue-506	f699d5521ce0	2026-10-28	0	731	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/issue-514	a97f5c76cdbe	2026-10-28	0	731	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/issue-516	89802351eddb	2026-10-28	0	731	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/native-fp-local-modules	ceb967b503d7	2026-10-28	0	627	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/remote-claude-live-history	c89ce630b293	2026-10-28	0	755	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/wire-474-476-481	4ccb558d363a	2026-10-28	0	682	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+hermes/wire-484-488	475172d31373	2026-10-28	0	682	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+incomplete/cursor/aodl-ui-surface-e30f	ed74bd67aeaf	2026-09-13	17	2072	STILL-UNIQUE	15 of 15 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+incomplete/nightly-20261105	f1e4632a23ce	2026-09-12	0	2035	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+incomplete/preview-20261105	84d5f5f72057	2026-09-11	2	2071	MERGED-EQUIVALENT	git cherry: all 1 patches already in staging ('-'); merging back now conflicts with later staging edits		1: delete now
+integ/rc3-20261027	a2bb68de067c	2026-11-07	0	953	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+integ/rc3-roadmap-resume-20261027	5c88c6707d6d	2026-11-07	106	327	KEEP	base of open PR #626 (deleting it closes the PR; retarget first)		keep
+integ/sus100-trio-1103	9bf54bebfcb7	2026-11-03	0	398	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+integ/travel-turbo-20261027	46cd5986c80c	2026-10-27	0	1372	MERGED-EQUIVALENT	head of PR #356: tip is an ancestor of staging (GitHub draft flag set)	356	1: delete now
+integ/turbo-c30-c13-20261103	4e00e8273ab5	2026-11-03	1	417	STILL-UNIQUE	patches applied, but its merge commits carry content staging lacks		3: Kevin decides (archive ref, then delete)
+integ/turbo-c30fix-20261103	871d835ca4e0	2026-11-03	0	414	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+integrate/chatgpt-lane-20261025	2bb9edfc9034	2026-11-05	8	1144	SUPERSEDED-BY reaped/dash-lane-pr641-1105-20261113-522f5d	tip 2bb9edfc9034 is in the history of reaped/dash-lane-pr641-1105-20261113-522f5d, which stays (or is archived)		2: delete now
+integrate/coverage-20261028	430e6863a16d	2026-10-28	52	491	KEEP	base of open PR #612 (deleting it closes the PR; retarget first)		keep
+integrate/dash-20261020	10a51157c619	2026-10-21	0	1851	KEEP	base of open PR #113 (deleting it closes the PR; retarget first)		keep
+integrate/dash-v2	2fb3df011905	2026-10-19	0	2021	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+integrate/native-turbo	e29dd36fbe8b	2026-10-22	0	1792	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+integrate/turbo-lane-20261028	2f75642ef293	2026-11-06	101	327	KEEP	base of open PR #617 (deleting it closes the PR; retarget first)		keep
+land/compose-wave-635-637-20261107	404fc8e3a2a1	2026-11-07	0	318	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+lane/compose-584-593-on-be28f464-20261105	86ba2fda5b23	2026-11-05	30	327	SUPERSEDED-BY chatgpt/fix-613-wheel	tip 86ba2fda5b23 is in the history of chatgpt/fix-613-wheel, which stays (or is archived)		2: delete now
+lane/compose-613-20261105	944b6c442a19	2026-11-06	41	327	KEEP	base of open PR #645 (deleting it closes the PR; retarget first)		keep
+lane/compose-613-642-643-644fix-645-20261106	364682576e64	2026-11-06	68	327	SUPERSEDED-BY reaped/dash-lane-u642-644b-20261113-3b83b7	tip 364682576e64 is in the history of reaped/dash-lane-u642-644b-20261113-3b83b7, which stays (or is archived)		2: delete now
+lane/compose-613-642-643-645-20261106	c3a5e637056a	2026-11-06	58	327	SUPERSEDED-BY chatgpt/fix2-613-close-race	tip c3a5e637056a is in the history of chatgpt/fix2-613-close-race, which stays (or is archived)		2: delete now
+lane/compose-613-642-643-645-harness-20261106	5ac1d02ca143	2026-11-06	59	327	KEEP	base of open PR #646 (deleting it closes the PR; retarget first)		keep
+lane/compose-613-645-644fix2-20261106	67f95c930de3	2026-11-06	69	327	SUPERSEDED-BY reaped/dash-lane-u10-20261113-17cdf6	tip 67f95c930de3 is in the history of reaped/dash-lane-u10-20261113-17cdf6, which stays (or is archived)		2: delete now
+lane/compose-613-645-644fix2-harness-20261106	3839819a8955	2026-11-06	70	327	SUPERSEDED-BY reaped/dash-lane-u7-harness-20261113-c91736	tip 3839819a8955 is in the history of reaped/dash-lane-u7-harness-20261113-c91736, which stays (or is archived)		2: delete now
+lane/compose-613-645-644fix3-20261106	3f8fda3d2657	2026-11-06	71	327	SUPERSEDED-BY reaped/dash-lane-u10-20261113-17cdf6	tip 3f8fda3d2657 is in the history of reaped/dash-lane-u10-20261113-17cdf6, which stays (or is archived)		2: delete now
+lane/compose-613-645-644fix3-harness-20261106	53e4f63264e7	2026-11-06	73	327	SUPERSEDED-BY reaped/dash-lane-u10-20261113-17cdf6	tip 53e4f63264e7 is in the history of reaped/dash-lane-u10-20261113-17cdf6, which stays (or is archived)		2: delete now
+lane/compose-617-on-86ba2fda-20261105	17e9f6b17fbf	2026-11-05	33	327	SUPERSEDED-BY reaped/dash-lane-compose-617-20261105-20261113-b7ded1	tip 17e9f6b17fbf is in the history of reaped/dash-lane-compose-617-20261105-20261113-b7ded1, which stays (or is archived)		2: delete now
+lane/compose-630-on-36de7279-20261105	04122b3e63de	2026-11-05	18	350	SUPERSEDED-BY chatgpt/fix-613-wheel	tip 04122b3e63de is in the history of chatgpt/fix-613-wheel, which stays (or is archived)		2: delete now
+lane/compose-635-20261104-1530	8fa1c55e48a9	2026-11-04	0	371	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+lane/compose-637-on-04122b3e-20261105	da2e19f060e5	2026-11-05	19	327	SUPERSEDED-BY chatgpt/fix-613-wheel	tip da2e19f060e5 is in the history of chatgpt/fix-613-wheel, which stays (or is archived)		2: delete now
+lane/compose-642-643-20261106	98b44d6ff291	2026-11-06	41	327	SUPERSEDED-BY chatgpt/fix2-613-close-race	tip 98b44d6ff291 is in the history of chatgpt/fix2-613-close-race, which stays (or is archived)		2: delete now
+lane/compose-642-643-644-on-9ff03f81-20261106	45dd0d78d85c	2026-11-06	46	327	SUPERSEDED-BY reaped/dash-lane-u644-20261113-7f35d9	tip 45dd0d78d85c is in the history of reaped/dash-lane-u644-20261113-7f35d9, which stays (or is archived)		2: delete now
+lane/compose-642-643-644fix-on-9ff03f81-20261106	736a036fcd94	2026-11-06	51	327	SUPERSEDED-BY reaped/dash-lane-u642-644b-20261113-3b83b7	tip 736a036fcd94 is in the history of reaped/dash-lane-u642-644b-20261113-3b83b7, which stays (or is archived)		2: delete now
+lane/compose-644-on-9ff03f81-20261106	7019354e8c31	2026-11-06	46	327	SUPERSEDED-BY integ/rc3-roadmap-resume-20261027	tip 7019354e8c31 is in the history of integ/rc3-roadmap-resume-20261027, which stays (or is archived)		2: delete now
+lane/compose-644fix4-on-53e4f632-20261106	06951543aec7	2026-11-06	75	327	SUPERSEDED-BY reaped/dash-lane-u11-644fix4-20261113-87f62e	tip 06951543aec7 is in the history of reaped/dash-lane-u11-644fix4-20261113-87f62e, which stays (or is archived)		2: delete now
+lane/compose-644fix5-on-06951543-20261106	7ea51827ec20	2026-11-06	77	327	SUPERSEDED-BY reaped/dash-lane-u12-644fix5-20261113-b7ab67	tip 7ea51827ec20 is in the history of reaped/dash-lane-u12-644fix5-20261113-b7ab67, which stays (or is archived)		2: delete now
+lane/compose-646-on-7019354e-20261106	52a64e113852	2026-11-06	80	327	SUPERSEDED-BY integ/rc3-roadmap-resume-20261027	tip 52a64e113852 is in the history of integ/rc3-roadmap-resume-20261027, which stays (or is archived)		2: delete now
+lane/compose-702bf79c	7c11aa5aeb5c	2026-11-03	3	398	SUPERSEDED-BY integ/rc3-roadmap-resume-20261027	tip 7c11aa5aeb5c is in the history of integ/rc3-roadmap-resume-20261027, which stays (or is archived)		2: delete now
+lane/compose-75763627	75763627de01	2026-11-04	11	397	SUPERSEDED-BY reaped/lane/native-c09-c18-20261113-b6d5cf	tip 75763627de01 is in the history of reaped/lane/native-c09-c18-20261113-b6d5cf, which stays (or is archived)		2: delete now
+lane/compose-dash4r-0604	9e0928b6b234	2026-11-04	9	384	STILL-UNIQUE	5 of 5 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+lane/compose-dash4r-0610	4e8e371e844d	2026-11-04	12	348	STILL-UNIQUE	5 of 5 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+lane/compose-f52595bc	f52595bca832	2026-11-03	4	397	SUPERSEDED-BY integ/rc3-roadmap-resume-20261027	tip f52595bca832 is in the history of integ/rc3-roadmap-resume-20261027, which stays (or is archived)		2: delete now
+lane/compose-wave-630-636-637-20261104	9e5f2299e80b	2026-11-05	14	329	SUPERSEDED-BY reaped/dash-lane-630-afill-20261113-636b18	tip 9e5f2299e80b is in the history of reaped/dash-lane-630-afill-20261113-636b18, which stays (or is archived)		2: delete now
+lane/compose-wave-635-636-637-no630-20261105	0ae86005a9da	2026-11-05	0	325	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+lane/compose-wave-635-636-no637-20261105	ffc458913932	2026-11-05	1	350	MERGED-EQUIVALENT	only merge commits ahead; git cherry lists no unapplied patch; merge-tree into staging is a no-op		1: delete now
+lane/compose-wave-635-636fix3-20261105	878ba6a23ff0	2026-11-05	3	350	SUPERSEDED-BY reaped/dash-lane-compose-636fix3-20261113-ebc4d8	tip 878ba6a23ff0 is in the history of reaped/dash-lane-compose-636fix3-20261113-ebc4d8, which stays (or is archived)		2: delete now
+lane/compose-wave-635-636fix4-20261105	fd1a9290fa4f	2026-11-05	6	350	SUPERSEDED-BY backup/eui-cards-unsquashed-20261105	tip fd1a9290fa4f is in the history of backup/eui-cards-unsquashed-20261105, which stays (or is archived)		2: delete now
+lane/compose-wave-635-636fix5-20261105	36de72794112	2026-11-05	7	350	SUPERSEDED-BY chatgpt/fix-613-wheel	tip 36de72794112 is in the history of chatgpt/fix-613-wheel, which stays (or is archived)		2: delete now
+lane/fix-reply-selection-army-20261104	2e2d3786c0e4	2026-11-04	0	377	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+lane/wire-634-20261105	be28f4644d4c	2026-11-05	23	327	SUPERSEDED-BY chatgpt/fix-613-wheel	tip be28f4644d4c is in the history of chatgpt/fix-613-wheel, which stays (or is archived)		2: delete now
+law/o15-dash-release	a7465d7de237	2026-10-27	0	971	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+main	c277c77993b5	2026-11-07	0	315	KEEP	protected name (staging/main/release/archive)		keep
+notice/elemental-ui	e2442f2c8afe	2026-11-05	5	397	SUPERSEDED-BY reaped/notice/elemental-ui-20261113-79ac5e	tip e2442f2c8afe is in the history of reaped/notice/elemental-ui-20261113-79ac5e, which stays (or is archived)		2: delete now
+overnight/critical-path-20260910	8e96ec00ce8b	2026-10-27	6	2053	KEEP	head of open PR #16 (STILL-UNIQUE; deleting it closes the PR)	16	keep
+qualify/lane-20261025-w1	799717317290	2026-10-25	11	1717	MERGED-EQUIVALENT	git cherry: all 1 patches already in staging ('-'); merging back now conflicts with later staging edits		1: delete now
+qualify/turbo-20261025-bridge-usage	39f40abf1336	2026-10-25	2	1839	SUPERSEDED-BY reaped/qualify/turbo-20261025-bridge-usage-20261113-16119c	tip 39f40abf1336 is in the history of reaped/qualify/turbo-20261025-bridge-usage-20261113-16119c, which stays (or is archived)		2: delete now
+qualify/turbo-20261025-bridge-voice-contract	294fc82fef89	2026-10-25	3	1839	SUPERSEDED-BY reaped/qualify/turbo-20261025-bridge-voice-contract-20261113-76065b	tip 294fc82fef89 is in the history of reaped/qualify/turbo-20261025-bridge-voice-contract-20261113-76065b, which stays (or is archived)		2: delete now
+qualify/turbo-20261025-memory-context-lane	596beb43a7e8	2026-10-25	1	1601	STILL-UNIQUE	patches applied, but its merge commits carry content staging lacks		3: Kevin decides (archive ref, then delete)
+reaped/army-0787bd22-20261029-20261113-6accd2	ae93158b2c5e	2026-11-13	1	424	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/army-67d7a9cd-20261029-20261113-e9686c	bf4395548710	2026-11-13	1	475	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/army-83fcf7b6-20261029-20261113-0781c1	c6bd44e68011	2026-11-13	1	468	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/army-87d2aa3a-20261029-20261113-f35322	156999bb9c2b	2026-11-13	1	465	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/army-97d8e8d1-20261029-20261113-bdcdf0	c1cfddc508d5	2026-11-13	1	422	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/army-a91dbb91-20261029-20261113-b75ab1	d5c8e0be9f7b	2026-11-13	1	481	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/army-core-20261029-20261113-e77b95	2db2280cd802	2026-11-13	1	482	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/army-core-candidate-20261029-20261113-72efec	d0704ca998bb	2026-11-13	1	480	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/army-d120a432-20261029-20261113-17fb3e	55f82757bbbc	2026-11-13	1	464	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/army-e287c960-20261028-20261113-7ee40a	3fc7f7d6a478	2026-11-13	1	485	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/ayo/R23-20261115-a7b875	6dcd40722b96	2026-11-15	6	1741	STILL-UNIQUE	5 of 6 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/baseline-20261113-a1e5b8	1a48d98bc99a	2026-11-13	1	1881	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/bridge/context-metadata-20261022-20261113-ca2fee	0fecda59aa86	2026-11-13	3	1849	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/bridge/runtime-alignment-20261022-20261113-65b7a5	68013b18b36b	2026-11-13	1	1840	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/chatgpt/dash-120-20261113-36f94d	5f9bbb9ddb3d	2026-11-13	7	1741	STILL-UNIQUE	2 of 3 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/chatgpt/dash-20261025-boundary-tool-tree-20261113-c0e684	45a859a69ccd	2026-11-13	1	1559	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/chatgpt/dash-20261025-delivery-queue-policy-20261113-be8ff4	1a6fa6433edd	2026-11-13	1	1738	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/chore/dead-code-20261107-20261113-ffc57d	e32575c8d588	2026-11-13	3	317	STILL-UNIQUE	3 of 3 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/composer-before-20261021-20261113-b9d5e0	ffb4bfddbc57	2026-11-13	1	1969	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-e2e-test-20261113-87b86a	d64c81cf7cbf	2026-11-13	6	1426	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-0411-20261113-c2937d	99d345057969	2026-11-13	1	378	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/dash-lane-613-20261113-c31d4a	e67cda47d7f6	2026-11-13	42	327	STILL-UNIQUE	31 of 33 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-630-afill-20261113-636b18	44b53f9f6076	2026-11-13	15	329	STILL-UNIQUE	10 of 10 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-630-locfix-20261113-6089e6	245196033a0e	2026-11-13	11	397	STILL-UNIQUE	10 of 11 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-630-on-36de-20261113-50e1c7	033df24ea955	2026-11-13	19	350	STILL-UNIQUE	16 of 16 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-636fix5-20261113-ee0939	2ead041e1e0e	2026-11-13	8	350	STILL-UNIQUE	6 of 6 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-641-20261113-c3f2ae	468478fd34a9	2026-11-13	8	350	STILL-UNIQUE	6 of 6 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-642-20261113-6bd2c8	0725126c6569	2026-11-13	37	327	STILL-UNIQUE	30 of 30 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-643-20261113-ec6244	14c2812dfef9	2026-11-13	36	327	STILL-UNIQUE	29 of 29 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-644fix5-20261113-40241a	3a5918c14ed9	2026-11-13	46	327	STILL-UNIQUE	38 of 39 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-648-20261113-ab49f0	fb086a93bc9e	2026-11-13	92	327	STILL-UNIQUE	73 of 75 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-649-20261113-22caa0	e98b6790e862	2026-11-13	102	327	STILL-UNIQUE	81 of 83 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-702bf79c-20261113-9b9d1d	bd000deedc5e	2026-11-13	3	1144	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-apk-52a64e11-20261113-a9d817	0245ddbcab7c	2026-11-13	81	327	STILL-UNIQUE	63 of 66 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-apk-6acff6dd-20261113-3c883c	c10c2d53d8ef	2026-11-13	82	327	STILL-UNIQUE	64 of 67 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-apkcheck-20261113-7acece	49250f562fb6	2026-11-13	88	327	STILL-UNIQUE	69 of 72 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-base-2bedab2-20261113-429a93	29eb8e403148	2026-11-13	5	1426	STILL-UNIQUE	4 of 4 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-base-bae07a2-20261113-5fe484	aaa8dd7e0968	2026-11-13	1	1479	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-c634-20261113-77fd13	11ccdc4136f2	2026-11-13	4	391	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-cand10-20261113-98fac6	d0423d4b8384	2026-11-13	1	1549	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-cand12-20261113-2a53c1	8917b97b9255	2026-11-13	17	1473	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-cand13-20261113-a64820	50ba7656518d	2026-11-13	1	1483	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-cand14-20261113-31f764	437c7f8e49e9	2026-11-13	1	1479	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-cand5-20261113-5dd365	b9fa6650af47	2026-11-13	26	1571	STILL-UNIQUE	4 of 4 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-cand6-20261113-9a6f13	6de9c6f0bfe6	2026-11-13	1	1613	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-cand7-20261113-3ff038	d813cbf8d5bc	2026-11-13	12	1589	STILL-UNIQUE	4 of 4 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-cand8-20261113-877f85	0c2b03886fba	2026-11-13	1	1578	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-cand9-20261113-f97f2a	3ea254914921	2026-11-13	1	1562	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-ciapt-1105-20261113-87bba6	d4585ebce8a1	2026-11-13	33	327	STILL-UNIQUE	25 of 26 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-compose-1105-20261113-4e1c01	f1489d659d28	2026-11-13	13	329	STILL-UNIQUE	9 of 9 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-compose-20261113-84b91b	895bd18a02b6	2026-11-13	1	1362	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-compose-584-593-20261105-20261113-a540bb	8080c591f95a	2026-11-13	31	327	STILL-UNIQUE	24 of 24 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-compose-617-20261105-20261113-b7ded1	5ea010bf73c5	2026-11-13	34	327	STILL-UNIQUE	25 of 25 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-compose-636fix3-20261113-ebc4d8	adfc69c74db1	2026-11-13	4	350	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-compose-636fix4-20261113-75b30e	0ef3b8e0f7f6	2026-11-13	7	350	STILL-UNIQUE	4 of 5 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-compose-702bf-20261113-47b779	99c572b3742f	2026-11-13	5	397	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-compose-c029acf-630dd6e-20261113-6d9c6b	32d2d323f7df	2026-11-13	2	1235	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-compose-no630-1105-20261113-dd1652	899ebe9465b5	2026-11-13	1	327	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-compose-no630-20261113-e6c15a	88e2e8a1b654	2026-11-13	2	350	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-dexcycle-20261113-0b1830	6ee7d90defec	2026-11-13	87	327	STILL-UNIQUE	68 of 71 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-e2e-army-20261113-d64e3b	e7748665876a	2026-11-13	5	1741	STILL-UNIQUE	4 of 5 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-fix-223-20261113-a651b3	6d0b308755c0	2026-11-13	1	1734	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/dash-lane-fix-231-20261113-f98a56	ceee00d655fd	2026-11-13	1	1737	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/dash-lane-fix-5df7325-20261113-392b72	4dc44f8ab6cd	2026-11-13	1	1324	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-fix207-20261113-5e8897	eed90f90d06e	2026-11-13	1	1737	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/dash-lane-fix2c30-1103-20261113-5c7be1	1ddcb3449209	2026-11-13	1	413	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-fix630-1105-20261113-d11454	bcbe4202771a	2026-11-13	9	397	STILL-UNIQUE	8 of 9 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-fix79-20261113-c86734	6869869e7d00	2026-11-13	1	1559	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/dash-lane-fix81-20261113-fc8e0d	5e6b69a18e95	2026-11-13	1	1555	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/dash-lane-gates-5bef946-20261113-26a4d9	a227231dc0b4	2026-11-13	1	1308	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-integ-52a64e11-20261113-47bb79	40d9705466bb	2026-11-13	86	327	STILL-UNIQUE	65 of 67 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-p645-20261113-0a777f	83ea57248e75	2026-11-13	48	327	STILL-UNIQUE	37 of 39 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-pr351-20261113-c0e004	920669eeb680	2026-11-13	1	1317	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-pr641-1105-20261113-522f5d	59d6bb1c760a	2026-11-13	9	1144	STILL-UNIQUE	7 of 7 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-sttwarm-20261113-47a41a	d37751928793	2026-11-13	87	327	STILL-UNIQUE	69 of 71 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-tick-20261113-a2016c	507d13eca88c	2026-11-13	1	1171	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/dash-lane-turbo-bae07a2-20261113-ee7f9e	596266527cc3	2026-11-13	2	1466	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/dash-lane-turbo01-20261113-4d1eff	ce16c3dfc8d3	2026-11-13	1	1521	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/dash-lane-turbo01b-20261113-d1bc3e	0dd309009dec	2026-11-13	1	1498	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-turbocomp-20261113-609c2b	48e0bb1ab848	2026-11-13	2	1426	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u10-20261113-17cdf6	2fed2f0d7fdf	2026-11-13	74	327	STILL-UNIQUE	56 of 59 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u11-644fix4-20261113-87f62e	cd78c7eb2148	2026-11-13	76	327	STILL-UNIQUE	58 of 60 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u12-644fix5-20261113-b7ab67	d1cdf49a5fda	2026-11-13	78	327	STILL-UNIQUE	59 of 61 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u13-644-20261113-03a92d	8b70e75d71e2	2026-11-13	47	327	STILL-UNIQUE	39 of 39 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u14-646-20261113-7069b3	0f66e010f63b	2026-11-13	81	327	STILL-UNIQUE	64 of 66 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u4-no644-20261113-fb0920	c00ee679bbec	2026-11-13	59	327	STILL-UNIQUE	45 of 47 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u6-644fix2-20261113-abfc42	eb8ea18420b7	2026-11-13	70	327	STILL-UNIQUE	55 of 57 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u642-644b-20261113-3b83b7	8e334e23025d	2026-11-13	69	327	STILL-UNIQUE	54 of 56 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u644-20261113-7f35d9	88a0f9694129	2026-11-13	47	327	STILL-UNIQUE	37 of 37 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u7-harness-20261113-c91736	2b3a0ad6dfdf	2026-11-13	71	327	STILL-UNIQUE	56 of 58 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u8-harness-20261113-3c76af	6525e142e63e	2026-11-13	60	327	STILL-UNIQUE	46 of 48 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-u9-644fix3-20261113-f7477a	11e575755947	2026-11-13	72	327	STILL-UNIQUE	56 of 58 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-lane-w3-20261113-c2f382	17ed62d85541	2026-11-13	1	1159	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/dash-lane-wheel-20261113-6bcb80	1ced78f8722a	2026-11-13	94	327	STILL-UNIQUE	74 of 76 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-orch-leak-20261113-2563a4	fc32daba60fc	2026-11-13	1	1385	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-orch-leak-dev-20261113-80f4bb	c7a16d01202c	2026-11-13	1	1385	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-rc3-e2e-2c948dc-20261113-8dae7a	c30b069284f5	2026-11-13	1	978	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/dash-turbo-qualify-latest-gates-20261025T1135-20261113-37719d	f67e73e130cf	2026-11-13	1	1549	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/density-dial-20261113-cfcb53	7b588f007adc	2026-11-13	4	1805	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/e2e/mbp-army-20261025-20261113-87d629	7158e4a27c19	2026-11-13	4	1741	STILL-UNIQUE	3 of 4 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/explore/glass-wallpaper-20261113-87d77a	139052ef6fc4	2026-11-13	2	1426	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/feat/agent-surface-20261022-20261113-10a492	c62f72ea4ac4	2026-11-13	2	1792	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/feat/chat-window-20261022-20261113-791ce5	befa5d0b5c0f	2026-11-13	1	1784	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/feat/dash-channels-20261113-441f9a	bfe14fe09d89	2026-11-13	3	2071	MERGED-EQUIVALENT	each of 1 unapplied commits replays onto staging with no change		1: delete now
+reaped/feat/dash-native-notifications-share-20261113-5ee40c	08425ed049c6	2026-11-13	5	1851	MERGED-EQUIVALENT	each of 1 unapplied commits replays onto staging with no change		1: delete now
+reaped/feat/ephemeral-ui-cards-20261105-20261113-0c5f55	1c7c2f701f65	2026-11-13	1	316	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/feat/hermes-sessions-20261113-91b455	d875df6fc2db	2026-11-13	1	2012	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/feat/libfx-live-surface-20261113-2fd894	374093526236	2026-11-13	1	1985	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/feat/phone-overnight-20261113-c61327	bd6f8f69e793	2026-11-13	1	1997	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/feat/spen-voice-20261025-20261113-5aa8d8	32a5b2803ce1	2026-11-13	25	1741	STILL-UNIQUE	25 of 25 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/feat/trace-native-20261113-23ad92	63aad780af0e	2026-11-13	1	1918	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/feat/ux-polish-omp-tern-20261025-20261113-6cf426	f9af2ec893b5	2026-11-13	2	1741	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/feat/voice-orb-live-20261113-173b84	264f80408121	2026-11-13	1	1848	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/feat/zeros-ui-20261113-147217	4f4752932b35	2026-11-13	1	2008	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix-h108-local-20261113-868185	8269e7efbc72	2026-11-13	1	379	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/all-harness-chat-list-20261113-473c86	2593a9244638	2026-11-13	1	1837	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/army-main-mic-wayland-20261113-8a9392	d50ec8921569	2026-11-13	1	397	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/army-roster-304-20261113-6a6146	acc7bf7dee3e	2026-11-13	7	1741	STILL-UNIQUE	5 of 7 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/automatic-stylus-20261113-a02085	e403b0acc2c2	2026-11-13	1	1798	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/bridge-acp-error-detail-20261025-20261113-73d610	95bd4b248e60	2026-11-13	2	1839	MERGED-EQUIVALENT	each of 1 unapplied commits replays onto staging with no change		1: delete now
+reaped/fix/bridge-gui-source-20261102-20261113-293f31	37cadcd488f0	2026-11-13	2	956	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/bridge-voice-bootstrap-20261025-20261113-1085ca	e0477515481e	2026-11-13	1	1839	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/cache-directory-persistence-20261113-339ee5	2aec330e3e5d	2026-11-13	1	1545	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/cache-directory-stable-20261113-be984a	3b4bc3abcb12	2026-11-13	1	1736	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/chat-information-density-20261022-20261113-c3222c	820f8a9d9b21	2026-11-13	4	1792	STILL-UNIQUE	3 of 4 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/composer-voice-navigation-20261021-20261113-c03b2d	6045b9f849ec	2026-11-13	1	1962	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/core-history-refresh-20261029-20261113-719e66	381daf384261	2026-11-13	2	481	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/dex-gradle-deps-20261113-79991e	f8c72f85c406	2026-11-13	82	327	STILL-UNIQUE	64 of 67 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/endpoint-ownership-20261029-20261113-66d630	0b6b06f9c6c2	2026-11-13	1	480	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/focus-channel-default-sound-20261113-a130f9	1bfbf4d3ae95	2026-11-13	1	410	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/heavy-test-timeouts-2bedab2-20261113-4d2acc	11c6105ebf25	2026-11-13	7	1426	STILL-UNIQUE	5 of 6 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/hello-admission-watchdog-20261029-20261113-74cfe0	b40604764e26	2026-11-13	1	482	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/hide-status-bar-20261025-20261113-9bcc0d	3f4970a912df	2026-11-13	1	1741	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/hosts-tree-hierarchy-20261105-20261113-e45699	f19f7109b32f	2026-11-13	10	397	STILL-UNIQUE	6 of 7 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/hosts-tree-hierarchy-main-20261105-20261113-fecfd9	00ce21576565	2026-11-13	7	326	STILL-UNIQUE	5 of 6 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/interaction-repair-20261022-20261113-e7ee06	f9320217d2ca	2026-11-13	1	1780	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/legacy-recovery-20261029-20261113-32068a	15925797a986	2026-11-13	1	478	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/memory-leak-20261025-20261113-f9fe24	f277a40a1134	2026-11-13	1	1740	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/native-identity-onboarding-20261113-aab304	f97c8989e42f	2026-11-13	1	1799	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/native-middle-empty-20261022-20261113-42cdd2	5fef8f907264	2026-11-13	1	1792	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/omp-context-paste-20261025-20261113-a454fe	ed14b2784cd2	2026-11-13	1	1738	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/orb-smooth-20261113-f4f5ac	9ee92837e6f5	2026-11-13	1	1799	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/sessions-db-test-timeout-20261113-279045	0269896f38f5	2026-11-13	1	1324	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/subagent-indicator-20261025-20261113-d8469e	061bcaa3b84f	2026-11-13	3	1741	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/summary-transport-20261113-657a58	62a9cf9de23a	2026-11-13	2	1805	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/terminal-retention-w05-20261029-20261113-f0a46f	f5447c62faa4	2026-11-13	1	482	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/test-asyncstorage-getitem-20261025-20261113-e38b54	2c0d50132190	2026-11-13	1	1740	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/trace-needs-ok-label-20261113-890200	ba17222e45cc	2026-11-13	1	1497	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/fix/triage-running-north-star-20261028-20261113-1a9c83	edd77c0632f5	2026-11-13	1	465	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/voice-controls-20261022-20261113-205f32	8664b4f9955a	2026-11-13	3	1746	STILL-UNIQUE	2 of 3 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/worklet-easing-20261113-4875e5	c434a2696014	2026-11-13	1	1852	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/fix/workspace-navigation-recovery-20261113-3b003d	d574bc32bb7d	2026-11-13	1	1793	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/hermes/lane-fix-suggestions-239-20261113-e0e580	3d2dfce5b786	2026-11-13	1	1710	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/history-ownership-20261029-20261113-22a1b5	160d21b23814	2026-11-13	1	480	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/integ-v2-20261113-0778ab	fe07cdbad969	2026-11-13	2	453	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/integ/rc3-20261027-20261113-e2dcaf	4406dae9488e	2026-11-13	1	978	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/integ/sus100-trio-1103-20261113-45ba1c	8ea08c3e2e66	2026-11-13	1	398	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/integ/turbo-c30-c13-20261103-20261113-8c00dd	5c5bcbf60a44	2026-11-13	2	417	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/integ/turbo-c30fix-20261103-20261113-8ea173	b9c32e3b8f5e	2026-11-13	1	414	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/integrate/botface-fabric-hotfix-20261022-20261113-edd944	fb257d8648e5	2026-11-13	3	1746	STILL-UNIQUE	2 of 3 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/integrate/dash-20261020-work-20261113-4075e3	b550abd0d618	2026-11-13	1	1881	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/integrate/lab-press-ownership-20261021-20261113-490310	0bdd8aa30327	2026-11-13	1	1856	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/integrate/motion-speed-pass2-rollout-20261021-20261113-056183	e100dde4bb5c	2026-11-13	1	1853	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/integrate/native-acceptance-20261022-20261113-b3be29	6222fb8b5820	2026-11-13	1	1748	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/integrate/native-turbo-20261113-eb8e11	20ecde336364	2026-11-13	1	1792	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/integrate/omp-ui-20261022-20261113-670b09	51019f268c7b	2026-11-13	1	1779	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/integrate/ripple-native-20261113-5c23a6	a2c4dab1ac8d	2026-11-13	1	1798	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/k1055-compose-scrub-20261113-42cefb	b08b6e5a311b	2026-11-13	1	325	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/k1055-rc3-scrub-20261113-be7844	c17f9c67c112	2026-11-13	1	954	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/lab-polish-before-20261113-b029bb	03143b3e4cdb	2026-11-13	1	1871	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane-w4-1927-20261113-b92c0f	f614fca0e2a5	2026-11-13	1	1109	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane-w5-2130-20261113-59973f	6b6c19b3a2cd	2026-11-13	1	1030	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane/compose-635-20261104-1530-20261113-e9dda8	42c7fce66a09	2026-11-13	1	371	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/lane/compose-635-rsel-20261104-20261113-75b76c	92b1034062fc	2026-11-13	1	369	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/lane/compose-637-on-04122b3e-20261105-20261113-1605c0	35d2e34536ff	2026-11-13	20	327	STILL-UNIQUE	16 of 16 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane/compose-642-643-20261106-20261113-f2217c	8dca70d05be0	2026-11-13	42	327	STILL-UNIQUE	33 of 33 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane/compose-w2-1800-20261113-089e92	c750f01a0123	2026-11-13	1	1335	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane/compose-wave-630-636-637-20261104-20261113-97ccf7	b4e5cd465962	2026-11-13	11	329	STILL-UNIQUE	8 of 8 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane/fix-208-live-correlation-20261113-b8f467	aae4fabdad76	2026-11-13	1	1331	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane/fix-send-anchors-20261105-20261113-f50e3f	aee9075415fd	2026-11-13	32	327	STILL-UNIQUE	24 of 25 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane/gate-222b-20261113-473542	5abd8e68a460	2026-11-13	1	1325	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane/native-c09-c18-20261113-b6d5cf	4ea79d4e75b8	2026-11-13	12	397	STILL-UNIQUE	7 of 7 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane/pr634-test-20261113-237001	0d5f86cdda2c	2026-11-13	2	397	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/lane/wire-634-20261105-20261113-7668b2	fd1f1d227bc5	2026-11-13	24	327	STILL-UNIQUE	19 of 19 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/native-consumer-ownership-20261029-20261113-718542	a06a512a6a74	2026-11-13	1	478	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/notice/elemental-ui-20261113-79ac5e	39f6d02a75ff	2026-11-13	6	397	STILL-UNIQUE	2 of 3 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/omp/bridge-rollout-20261022-20261113-6c86ee	779c5a207f1f	2026-11-13	1	1849	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/omp/d10-chat-rows-20261113-e218d9	8b87775761e9	2026-11-13	1	1788	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/omp/d41-page-controls-20261113-ad36dd	e58a41313697	2026-11-13	5	1792	STILL-UNIQUE	4 of 5 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/omp/d51-moodie-faces-20261113-357dc8	0bb2784037f3	2026-11-13	1	1786	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/omp/fix-botface-ui-thread-20261113-f5c1ad	b550a7a7d6db	2026-11-13	2	1746	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/program/composer-20261022-20261113-0fdee4	1deb6c539277	2026-11-13	5	1793	STILL-UNIQUE	4 of 5 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/program/trace-20261022-20261113-2b3676	7f6843cb07a9	2026-11-13	9	1793	STILL-UNIQUE	8 of 9 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/proto/agent-trace-20261020-20261113-b289b6	552a202b8ee2	2026-11-13	5	1971	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/qualify/lane-20261025-w1-20261113-5d41e4	62246fbedecc	2026-11-13	12	1717	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/qualify/lane-20261025-w2-20261113-1f3d28	257a02edd8f6	2026-11-13	1	1713	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/qualify/turbo-20261025-bridge-usage-20261113-16119c	9f02c48a314c	2026-11-13	3	1839	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/qualify/turbo-20261025-bridge-voice-contract-20261113-76065b	cb80835ecf01	2026-11-13	4	1839	STILL-UNIQUE	2 of 3 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/qualify/turbo-20261025-context-20261113-2e58f0	8ce4942c1792	2026-11-13	1	1738	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/qualify/turbo-20261025-memory-20261113-e34b3f	24e06cbce370	2026-11-13	1	1740	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/qualify/turbo-20261025-memory-context-20261113-1a6cb6	07044d40312a	2026-11-13	1	1730	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/qualify/turbo-20261025-memory-context-fixture-20261113-024a60	b35c5c3e067a	2026-11-13	1	1729	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/qualify/turbo-20261025-memory-context-lane-20261113-d0ec32	be61273360c6	2026-11-13	2	1601	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/qualify/turbo-20261025-memory-context-latest-lane-20261113-dc2a06	38f6597d60e4	2026-11-13	1	1549	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/rc3-roadmap-resume-apk-20261113-a84706	d015c1d10950	2026-11-13	1	954	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/release/dash-main-squash-20261027-20261113-930765	dac7173e7210	2026-11-13	2	2071	STILL-UNIQUE	1 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/roadmap-resume-20261113-2b1961	dabb56177683	2026-11-13	1	954	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/roll/ready-20261021-20261113-df8058	8b64aa939744	2026-11-13	1	1805	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/roster-actionability-20261029-20261113-5962dd	d74f374e0d7d	2026-11-13	1	480	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/sol/agent-popup-20261021-20261113-0e9e72	23c1bc863343	2026-11-13	2	1805	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/sol/annotate-20261021-20261113-7fb0e0	a634f89b6743	2026-11-13	1	1844	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/sol/attached-dock-20261021-20261113-ae9420	00cf7f03ef9f	2026-11-13	4	1805	STILL-UNIQUE	4 of 4 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/sol/bot-faces-20261021-20261113-9d1709	710b68b0ff7c	2026-11-13	3	1805	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/sol/chip-complete-20261021-20261113-a8a6c2	5b077caefde8	2026-11-13	1	1873	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/sol/context-view-20261021-20261113-3a4211	dcd2ceb4efc7	2026-11-13	1	1858	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/sol/dash-steer-rollout-20261021-20261113-6a0114	76ee5313a6ac	2026-11-13	1	1878	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/sol/merge-queued-20261021-20261113-627cb3	ad2ece71ecf0	2026-11-13	1	1868	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/sol/mic-dictation-20261021-20261113-846425	ea52214d0566	2026-11-13	2	1805	STILL-UNIQUE	2 of 2 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/sol/model-roles-20261021-20261113-bf499f	0d5bdd14e4c6	2026-11-13	1	1913	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/sol/orchestra-meaning-20261021-20261113-2823bd	125953461f55	2026-11-13	1	1873	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/sol/tool-detail-rollout-20261021-20261113-4f0a43	faa54cb2a1c4	2026-11-13	1	1874	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/sol/trace-intent-20261021-20261113-4b1018	01bb48adfa80	2026-11-13	5	1805	STILL-UNIQUE	5 of 5 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/spec/formal-specs-20261025-20261113-aa8551	f1eb1dcb0c6a	2026-11-13	1	1741	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/tool-detail-before-20261113-8dfb4e	aec964543457	2026-11-13	1	1881	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/turbo-cand/apponly-5838ea2-20261113-4001e6	4e40395d2800	2026-11-13	1	1548	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/turbo/cand-turbo02-20261025-20261113-779b3e	8fcd08d322c0	2026-11-13	1	1465	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/turbo/cand-vnt2-20261025-20261113-10e91a	8a933d618262	2026-11-13	2	1494	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/turbo/candidate-2a7d17b-app-20261113-7bf620	713eb25861c8	2026-11-13	10	1426	STILL-UNIQUE	9 of 9 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/turbo/candidate-72672e4-app-20261113-119b19	d172664f4516	2026-11-13	1	1461	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/turbo/candidate-78a2fdb-20261113-7d8362	70e1bbd7cbb0	2026-11-13	4	1263	STILL-UNIQUE	3 of 3 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/turbo/candidate-78a2fdb-app-20261113-6b944b	8433991f5c2e	2026-11-13	1	1462	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/turbo/candidate-d711b34-app-20261113-1401ab	8ebd81e28328	2026-11-13	3	1426	STILL-UNIQUE	3 of 3 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/turbo/candidate-e0175a5-app-20261113-afe6b5	22f31174414d	2026-11-13	1	1460	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/turbo/dash-live-20261021-20261113-a3e1a9	306deef66f6c	2026-11-13	2	1805	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/turbo/dash-live-20261025-20261113-41dcf2	c5e41ce24993	2026-11-13	10	1426	STILL-UNIQUE	9 of 9 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/turbo/fix-tests-f21db40-20261113-51a302	21be4a658987	2026-11-13	5	1426	STILL-UNIQUE	4 of 4 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/wave-chatgpt-lane-w5-slice-20261113-e548df	14476aab6d62	2026-11-13	1	800	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/worker/dash-acp-20261113-882a26	25bf065f1d89	2026-11-13	1	2030	MERGED-EQUIVALENT	merge-tree into staging leaves staging's tree unchanged		1: delete now
+reaped/worker/dash-pages-20261113-89975d	033a5cfc4c63	2026-11-13	1	2032	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+reaped/wt/compose-1230-20261113-000f21	2276d246adcf	2026-11-13	1	1144	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+review/dash-20261020-pre-gateway-live	1a4ee2a023ae	2026-10-21	0	1970	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+sol/dash-thinking-tools-20261021	0c93fde7ba3f	2026-10-21	0	1916	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+sol/trace-intent-20261021	9fb1d7f1046d	2026-10-21	4	1805	KEEP	head of open PR #113 (STILL-UNIQUE; deleting it closes the PR)	113	keep
+spec/dash-feature-ledger	6b2908ed4c71	2026-11-15	5	1736	KEEP	head of open PR #384 (STILL-UNIQUE; deleting it closes the PR)	384	keep
+staging	597c0dd568d3	2026-11-23	0	0	KEEP	protected name (staging/main/release/archive)		keep
+sus100/sus100-dash-release-01	d1378f38ac8d	2026-11-02	0	488	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+sus100/sus100-dash-release-02	0375fa78f707	2026-11-02	0	489	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+sus100/sus100-dash-release-04	9f13155bd190	2026-11-02	2	491	KEEP	head of open PR #617 (STILL-UNIQUE; deleting it closes the PR)	617	keep
+sus100/sus100-dash-release-06	86106c2952f8	2026-11-02	0	489	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+test/army-coverage-20261028	dab113aa7191	2026-10-28	3	756	SUPERSEDED-BY chatgpt/cov-10	tip dab113aa7191 is in the history of chatgpt/cov-10, which stays (or is archived)		2: delete now
+turbo/candidate-52a64e11	6281b3a8b227	2026-11-06	85	327	SUPERSEDED-BY reaped/dash-lane-integ-52a64e11-20261113-47bb79	tip 6281b3a8b227 is in the history of reaped/dash-lane-integ-52a64e11-20261113-47bb79, which stays (or is archived)		2: delete now
+turbo/candidate-5c88c670	5c88c6707d6d	2026-11-07	106	327	SUPERSEDED-BY integ/rc3-roadmap-resume-20261027	identical tip 5c88c6707d6d is kept as integ/rc3-roadmap-resume-20261027		2: delete now
+turbo/candidate-e0175a5-app	259108696d27	2026-10-26	0	1460	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+turbo/dash-live-20261025	4bc128ed0fbe	2026-10-27	9	1426	SUPERSEDED-BY fix/share-pattern-syntax	tip 4bc128ed0fbe is in the history of fix/share-pattern-syntax, which stays (or is archived)		2: delete now
+turbo/merge-chats-notices-20261026	04cbbad784d4	2026-10-26	0	1429	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+turbo/preview	6414866f1f73	2026-11-21	0	307	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+wip/density-dial-20261105	dcd68365614b	2026-10-21	3	1805	SUPERSEDED-BY reaped/density-dial-20261113-cfcb53	tip dcd68365614b is in the history of reaped/density-dial-20261113-cfcb53, which stays (or is archived)		2: delete now
+wip/e2e/mbp-army-20261025-20261105	0beacde9fb14	2026-10-25	3	1741	SUPERSEDED-BY reaped/ayo/R23-20261115-a7b875	tip 0beacde9fb14 is in the history of reaped/ayo/R23-20261115-a7b875, which stays (or is archived)		2: delete now
+wip/explore/glass-wallpaper-20261105	cba49a25db98	2026-10-27	1	1426	SUPERSEDED-BY reaped/explore/glass-wallpaper-20261113-87d77a	tip cba49a25db98 is in the history of reaped/explore/glass-wallpaper-20261113-87d77a, which stays (or is archived)		2: delete now
+wip/feat/agent-surface-20261022-20261105	9b8e1de82134	2026-10-22	1	1792	SUPERSEDED-BY reaped/feat/agent-surface-20261022-20261113-10a492	tip 9b8e1de82134 is in the history of reaped/feat/agent-surface-20261022-20261113-10a492, which stays (or is archived)		2: delete now
+wip/feat/dash-native-notifications-share-20261105	1d1176547796	2026-10-21	4	1851	SUPERSEDED-BY 3a3b85b7	all 1 unapplied commits have a same-subject commit in staging		2: delete now
+wip/feat/native-continuous-voice-20261105	ecff5c5ba37b	2026-10-22	2	1798	MERGED-EQUIVALENT	git cherry: all 2 patches already in staging ('-'); merging back now conflicts with later staging edits		1: delete now
+wip/fix-h108-local-20261105	bcdc1dc8b9bd	2026-11-05	0	379	MERGED-EQUIVALENT	tip is an ancestor of staging		1: delete now
+wip/fix/active-session-filter-20261029-20261105	064b197d3e2c	2026-10-29	3	490	MERGED-EQUIVALENT	each of 1 unapplied commits replays onto staging with no change		1: delete now
+wip/fix/app-identity-token-deadline-20261105	c060a95291e4	2026-10-26	1	1460	MERGED-EQUIVALENT	git cherry: all 1 patches already in staging ('-'); merging back would only re-add 26 lines staging has since removed		1: delete now
+wip/fix/army-roster-304-20261105	de4437af5193	2026-10-27	6	1741	SUPERSEDED-BY reaped/fix/army-roster-304-20261113-6a6146	tip de4437af5193 is in the history of reaped/fix/army-roster-304-20261113-6a6146, which stays (or is archived)		2: delete now
+wip/fix/bridge-acp-error-detail-20261025-20261105	289cf0e38762	2026-10-25	1	1839	SUPERSEDED-BY 183edb10	all 1 unapplied commits have a same-subject commit in staging		2: delete now
+wip/fix/core-history-refresh-20261029-20261105	ec9f8482b055	2026-10-29	1	481	SUPERSEDED-BY reaped/fix/core-history-refresh-20261029-20261113-719e66	tip ec9f8482b055 is in the history of reaped/fix/core-history-refresh-20261029-20261113-719e66, which stays (or is archived)		2: delete now
+wip/fix/genui-mobile-loading-20261105	2deab10444bc	2026-10-22	1	1805	MERGED-EQUIVALENT	git cherry: all 1 patches already in staging ('-'); merging back now conflicts with later staging edits		1: delete now
+wip/fix/heavy-test-timeouts-2bedab2-20261105	1378be0db0be	2026-10-27	6	1426	SUPERSEDED-BY reaped/fix/heavy-test-timeouts-2bedab2-20261113-4d2acc	tip 1378be0db0be is in the history of reaped/fix/heavy-test-timeouts-2bedab2-20261113-4d2acc, which stays (or is archived)		2: delete now
+wip/fix/hosts-tree-hierarchy-20261105-20261105	b3e506fae530	2026-11-05	5	397	SUPERSEDED-BY reaped/fix/hosts-tree-hierarchy-20261105-20261113-e45699	tip b3e506fae530 is in the history of reaped/fix/hosts-tree-hierarchy-20261105-20261113-e45699, which stays (or is archived)		2: delete now
+wip/fix/keyboard-attach-20261105	587e9c2a9635	2026-10-22	1	1799	MERGED-EQUIVALENT	git cherry: all 1 patches already in staging ('-'); merging back now conflicts with later staging edits		1: delete now
+wip/fix/omp-session-detection-20261105	7151baad4062	2026-10-22	1	1851	MERGED-EQUIVALENT	git cherry: all 1 patches already in staging ('-'); merging back now conflicts with later staging edits		1: delete now
+wip/fix/summary-transport-20261105	34420f97fd19	2026-10-21	1	1805	SUPERSEDED-BY reaped/fix/summary-transport-20261113-657a58	tip 34420f97fd19 is in the history of reaped/fix/summary-transport-20261113-657a58, which stays (or is archived)		2: delete now
+wip/fix/voice-controls-20261022-20261105	e293a2f0895e	2026-10-23	2	1746	SUPERSEDED-BY reaped/fix/voice-controls-20261022-20261113-205f32	tip e293a2f0895e is in the history of reaped/fix/voice-controls-20261022-20261113-205f32, which stays (or is archived)		2: delete now
+wip/integ-local-20261105	33684e4692e0	2026-11-02	1	453	MERGED-EQUIVALENT	git cherry: all 1 patches already in staging ('-'); merge-tree into staging is a no-op		1: delete now
+wip/integ-v2-20261105	909a45ef9571	2026-11-02	1	453	MERGED-EQUIVALENT	git cherry: all 1 patches already in staging ('-'); merge-tree into staging is a no-op		1: delete now
+wip/lane/gate-222-20261105	9bc92a7b9246	2026-10-25	2	1330	MERGED-EQUIVALENT	only merge commits ahead; git cherry lists no unapplied patch; merge-tree into staging is a no-op		1: delete now
+wip/notice/elemental-ui-20261105	e2442f2c8afe	2026-11-05	5	397	SUPERSEDED-BY reaped/notice/elemental-ui-20261113-79ac5e	tip e2442f2c8afe is in the history of reaped/notice/elemental-ui-20261113-79ac5e, which stays (or is archived)		2: delete now
+wip/omp/d41-page-controls-20261105	4692e4e94bc2	2026-10-22	4	1792	SUPERSEDED-BY reaped/omp/d41-page-controls-20261113-ad36dd	tip 4692e4e94bc2 is in the history of reaped/omp/d41-page-controls-20261113-ad36dd, which stays (or is archived)		2: delete now
+wip/omp/fix-botface-ui-thread-20261105	eb114e4a8479	2026-10-22	1	1746	SUPERSEDED-BY reaped/fix/voice-controls-20261022-20261113-205f32	tip eb114e4a8479 is in the history of reaped/fix/voice-controls-20261022-20261113-205f32, which stays (or is archived)		2: delete now
+wip/program/composer-20261022-20261105	8a7790048c93	2026-10-22	4	1793	SUPERSEDED-BY reaped/program/composer-20261022-20261113-0fdee4	tip 8a7790048c93 is in the history of reaped/program/composer-20261022-20261113-0fdee4, which stays (or is archived)		2: delete now
+wip/salvage/20261027/dash-lane-compose-c029acf-630dd6e-20261105	72672e4f768b	2026-10-25	1	1235	STILL-UNIQUE	patches applied, but its merge commits carry content staging lacks		3: Kevin decides (archive ref, then delete)
+wip/salvage/20261027/dash-specs-20261105	97921a4edf66	2026-10-27	1	1741	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+wip/salvage/20261027/dash-turbo-cand-vnt2-20261105	c78149d2c421	2026-10-25	1	1494	MERGED-EQUIVALENT	only merge commits ahead; git cherry lists no unapplied patch; merge-tree into staging is a no-op		1: delete now
+wip/sol/agent-popup-20261021-20261105	f217dbefac76	2026-10-21	1	1805	SUPERSEDED-BY reaped/sol/agent-popup-20261021-20261113-0e9e72	tip f217dbefac76 is in the history of reaped/sol/agent-popup-20261021-20261113-0e9e72, which stays (or is archived)		2: delete now
+wip/sol/attached-dock-20261021-20261105	8b6beee49ecf	2026-10-21	3	1805	SUPERSEDED-BY reaped/sol/attached-dock-20261021-20261113-ae9420	tip 8b6beee49ecf is in the history of reaped/sol/attached-dock-20261021-20261113-ae9420, which stays (or is archived)		2: delete now
+wip/sol/bot-faces-20261021-20261105	67977815e10f	2026-10-21	2	1805	SUPERSEDED-BY reaped/sol/bot-faces-20261021-20261113-9d1709	tip 67977815e10f is in the history of reaped/sol/bot-faces-20261021-20261113-9d1709, which stays (or is archived)		2: delete now
+wip/sol/mic-dictation-20261021-20261105	ea22554f68de	2026-10-21	1	1805	SUPERSEDED-BY reaped/sol/mic-dictation-20261021-20261113-846425	tip ea22554f68de is in the history of reaped/sol/mic-dictation-20261021-20261113-846425, which stays (or is archived)		2: delete now
+wip/stt-bisect-allbridge-1105	a8b77dab0bd6	2026-11-05	1	325	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+wip/stt-bisect-client-1105	6232b8134b3a	2026-11-05	1	325	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+wip/stt-bisect-index-1105	69b29399e93b	2026-11-05	1	325	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+wip/stt-bisect-parse-1105	08176cc216d9	2026-11-05	1	325	STILL-UNIQUE	1 of 1 unapplied commits change staging		3: Kevin decides (archive ref, then delete)
+wip/turbo/candidate-78a2fdb-20261105	3d67cedba9fa	2026-10-25	3	1263	SUPERSEDED-BY 7c232856	every file it changes was deleted in staging (feat(release): O15 tester army is the test suite and the release gate)		2: delete now
