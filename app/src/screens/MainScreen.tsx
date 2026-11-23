@@ -1,6 +1,7 @@
 import { BlurTargetView } from "expo-blur";
 import { useWallpaperGlass } from "../components/WallpaperTheme";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused, useNavigationState } from "@react-navigation/native";
+import { useThemedSurface } from "../lib/theme-mode";
 import { Canvas } from "../components/Canvas";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
 import { FlashList, type ListRenderItemInfo } from "@shopify/flash-list";
@@ -155,6 +156,9 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
   const screenFocused = useIsFocused();
   const wallpaper = useWallpaperGlass();
+  // The workspace must stay painted under a floating chat in Blueprint mode.
+  const underWindow = useNavigationState(s => { const top = s?.routes[s.index]; return top?.name === "Chat" && Boolean(top.params && "window" in top.params && top.params.window); });
+  const themedSurface = useThemedSurface(underWindow);
   // The main-bar mic's Live mode runs the call here, in Dash's own voice bar and orb: no Voice screen, no other app.
   const liveVoice = useLiveVoiceAction();
   const [foreground, setForeground] = useState(AppState.currentState === "active");
@@ -481,7 +485,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   ], [navigation, index, showHome, searchActive, screenFocused, foreground, width]);
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }, wallpaper && { backgroundColor: "transparent", opacity: screenFocused ? 1 : 0 }]}>{wallpaper ? null : <Canvas />}
+    <View style={[styles.screen, { paddingTop: insets.top }, wallpaper && { backgroundColor: "transparent", opacity: screenFocused ? 1 : 0 }, themedSurface]}>{wallpaper || themedSurface ? null : <Canvas />}
       {desk ? null : <AppNav
         ref={navRef}
         navigation={navigation}

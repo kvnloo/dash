@@ -2,6 +2,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, StyleSheet, Text, type PressableProps } from "react-native";
 import { primaryButtonA11y } from "../lib/a11y-primary-button";
 import { colors, glass, radius, type } from "../theme";
+import { themeMode } from "../lib/theme-mode";
+import { ElementalButton } from "./themed/Elemental";
 
 type PrimaryButtonProps = PressableProps & { label: string; loading?: boolean };
 
@@ -23,6 +25,12 @@ export function PrimaryButton({
     accessibilityRole,
     accessibilityState,
   });
+  const stone = themeMode.use(s => s.mode === "blueprint" ? s.material : null);
+  // Themed mode: the same action as an elemental-ui stone button.
+  if (stone) {
+    return <ElementalButton label={label} material={stone} disabled={a11y.disabled} accessibilityLabel={a11y.accessibilityLabel}
+      onPress={rest.onPress} testID={rest.testID} style={styles.stone} />;
+  }
 
   return (
     <Pressable
@@ -53,4 +61,5 @@ const styles = StyleSheet.create({
   text: { ...type.heading, color: colors.onAccent },
   disabled: { opacity: .42 },
   pressed: { transform: [{ scale: .98 }] },
+  stone: { marginTop: 12 },
 });

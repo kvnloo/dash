@@ -8,6 +8,7 @@ import {
 } from "../../lib/desk";
 import { DEX_OFF, getState as getDexState, subscribe as subscribeDex, type DexState } from "../../lib/dex";
 import { PaneSizeProvider } from "../../lib/pane-size";
+import { useThemed } from "../../lib/theme-mode";
 import { toMain } from "../../lib/main-nav";
 import { approvals, actionable } from "../../store/approvals";
 import { setActive, store } from "../../store/app";
@@ -57,7 +58,9 @@ export function DeskShell({ children }: { children: ReactNode }) {
     setCenter(prev => prev && prev.width === w && prev.height === h ? prev : { width: w, height: h });
   }, []);
   const [quick, setQuick] = useState(false);
-  return <View style={styles.root} onLayout={onRoot} testID={on ? "desk-shell" : undefined}>
+  // Themed mode paints the blueprint wallpaper under the whole app; the shell must not cover it.
+  const themed = useThemed();
+  return <View style={[styles.root, themed && styles.rootThemed]} onLayout={onRoot} testID={on ? "desk-shell" : undefined}>
     {on ? <DeskRail onQuick={() => setQuick(true)} /> : null}
     {on ? <DeskChatsColumn /> : null}
     <View style={styles.center} onLayout={onCenter} testID={on ? "desk-center" : undefined}>
@@ -235,6 +238,7 @@ function QuickSwitch({ onClose }: { onClose(): void }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, flexDirection: "row", backgroundColor: colors.bg },
+  rootThemed: { backgroundColor: "transparent" },
   center: { flex: 1, minWidth: 0 },
   rail: { width: 68, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border, paddingVertical: space.sm, justifyContent: "space-between" },
   railTabs: { gap: 2 },
