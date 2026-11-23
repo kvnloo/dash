@@ -5,8 +5,9 @@
 #   ARMY_WORKERS=4 scripts/army.sh
 #   ARMY_SHARD=2/4 scripts/army.sh  # one CI shard: blob report only, no receipt
 #
-# A shard run writes $out/blob/report-<i>.zip (report events only) and stops; scripts/army-merge.sh merges
-# every shard's blob into one results.json and writes the receipt from that.
+# A shard run writes $out/blob/report-<i>.zip (report events only) and stops;
+# scripts/army-merge.sh merges every shard's blob into one results.json and writes
+# the receipt from that.
 #
 # Steps: web export of app/ at HEAD -> local static server -> headless Playwright army
 # against the real bridge + fixture ACP agent -> O15 receipt (e2e/mbp-army/receipt.py)

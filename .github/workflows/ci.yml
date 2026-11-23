@@ -75,6 +75,8 @@ jobs:
       - name: Tester army shard ${{ matrix.shard }}/${{ strategy.job-total }} on ${{ env.SHA }}
         env:
           ARMY_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          # 2 is the setting the single job was green with. 4 ran a shard 24% faster on 4
+          # pinned cores off CI, with one extra failure; switch only after a green CI run.
           ARMY_WORKERS: "2"
         run: bash scripts/army.sh
       - name: Shard blob report (merged by the test job)
