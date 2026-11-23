@@ -15,14 +15,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { microphone } from "../lib/recorded-speech";
 import { ensureMicPermission, permissionRequestInFlight } from "../lib/mic-permission";
 import { createStore } from "../store/createStore";
-import { hearLearnTopic } from "../store/ephemeral-mode";
-import { focusVoiceOrbOverlay, VoiceOrbOverlay } from "./VoiceOrbOverlay";
+import { hearLearnTopic, surfaceMode } from "../store/ephemeral-mode";
+import { focusVoiceOrbOverlay, useVoiceRoute, VoiceOrbOverlay } from "./VoiceOrbOverlay";
 import type { OrbState } from "../lib/orb-phase";
 import { debugUi } from "../debug/ui-store";
 import { attachedHermes, voiceTarget } from "../lib/voice-target";
 import { voicePhase } from "../lib/voice-phase";
 import { voiceCaption } from "../store/voice-captions";
 import { interceptSpokenApproval } from "../lib/voice-approval-actions";
+import { KeyboardDock } from "./KeyboardDock";
 import { VoiceCaptionStrip, VoiceCaptionsToggle } from "./VoiceCaptionStrip";
 
 /** One logcat line per failed voice stage (phone-watch turns these into incidents). Notes never carry secrets. */
@@ -60,6 +61,8 @@ export function useDeviceInsets(): EdgeInsets {
   const device = useContext(DeviceInsets); const app = useSafeAreaInsets(); return device ?? app;
 }
 interface VoiceContext {
+  binding: { id: string; startedAt: number } | null;
+  brokerCardReplies: readonly { id: number; text: string }[];
   takeApprovalChat(): string | undefined;
   state: VoiceState;
   start(opts?: { auto?: boolean }): Promise<void>;
@@ -71,10 +74,14 @@ export function useContinuousVoice(): VoiceContext {
   const value = useContext(Context); if (!value) throw new Error("Voice root not mounted"); return value;
 }
 
+export function VoiceBubbleDock() {
+  const { state, mute, stop } = useContinuousVoice();
+  return <VoiceOrbOverlay state={state} onMute={mute} onEnd={() => void stop()} />;
+}
+
 /**
  * The mic's Live mode, wherever the mic is (main bar, attached composer, chat composer): start the call
- * inside Dash, or bring its orb forward when one is already running. It never navigates to another screen
- * or opens another app; the voice bar, hero orb and captions are Dash's own call UI.
+ * inside Dash or open Voice focus when one is already running.
  */
 export function useLiveVoiceAction(): { call: OrbState | undefined; live(): void } {
   const voice = useContinuousVoice();
@@ -104,6 +111,10 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   const autoStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maybeEndAutoRef = useRef<() => void>(() => {});
   const insets = useSafeAreaInsets();
+  const route = useVoiceRoute();
+  const learning = surfaceMode.use(mode => mode === "learn");
+  const [brokerCardReplies, setBrokerCardReplies] = useState<VoiceContext["brokerCardReplies"]>([]);
+  const [binding, setBinding] = useState<VoiceContext["binding"]>(null);
   const windowOpen = voiceWindowOpen.use(open => open);
   const [barRow, setBarRow] = useState(0);
   const [attempted, setAttempted] = useState(false);
@@ -182,6 +193,9 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     releaseMic.current = releaseWhenStopped;
     call.current = null;
     attached.current = turboCapture ? null : conversation;
+    setBinding({ id: conversation.id, startedAt: Date.now() });
+    setBrokerCardReplies([]);
+    let brokerReplyId = 0;
     const generation = ++epoch.current;
     setBindingGeneration(generation);
     // Frozen for the call: navigating/switching chats never retargets spoken requests.
@@ -264,6 +278,11 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
           if (!text.trim()) voiceCaption.set(previous => previous?.role === role && !previous.final ? null : previous);
           else voiceCaption.set({ role, text, final });
         },
+        brokerReply: text => {
+          if (generation !== epoch.current || !text.includes("```openui-lang")) return;
+          const id = ++brokerReplyId;
+          setBrokerCardReplies(replies => [...replies.slice(-19), { id, text }]);
+        },
         intercept: text => {
           if (generation !== epoch.current) return null;
           const approval = interceptSpokenApproval(text);
@@ -307,6 +326,8 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const controller = call.current;
     call.current = null;
     attached.current = null;
+    setBinding(null);
+    setBrokerCardReplies([]);
     approvalChat.current = undefined;
     voiceCaption.set(null);
     const cleanup = controller?.stop(undefined, { cancelWork: options?.preserveWork !== true });
@@ -387,8 +408,10 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   }, [annotating, pendingTurn]);
   const shown = fixture ?? state;
   const active = !["idle", "error"].includes(shown.phase);
-  const visible = voiceBarVisible(shown.phase, attempted) && (fixture !== null || !suppressAutoBar.current);
+  const visible = (route !== "Voice" || !active) && voiceBarVisible(shown.phase, attempted) && (fixture !== null || !suppressAutoBar.current);
   const pill = voiceBarPresentation(shown);
+  const fallback = active && !annotating && !learning && route && !["Main", "Chat", "Voice"].includes(route);
+  const screenInsets = appInsets(insets, visible, barRow);
   useEffect(() => {
     const target = attached.current;
     if (!active || !target) return;
@@ -423,11 +446,13 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
     const { conversations, settings } = store.get();
     return settings && conversations.some(chat => chat.id === id && chat.endpointAddress === settings.address) ? id : undefined;
   };
-  return <Context.Provider value={{ state: shown, start, stop, mute, takeApprovalChat }}>
+  return <Context.Provider value={{ state: shown, start, stop, mute, takeApprovalChat, binding, brokerCardReplies }}>
     <DeviceInsets.Provider value={insets}>
-      <SafeAreaInsetsContext.Provider value={appInsets(insets, visible, barRow)}>{children}</SafeAreaInsetsContext.Provider>
+      <SafeAreaInsetsContext.Provider value={fallback ? { ...screenInsets, bottom: screenInsets.bottom + 70 } : screenInsets}>{children}</SafeAreaInsetsContext.Provider>
     </DeviceInsets.Provider>
-    {active ? <VoiceOrbOverlay state={shown} onMute={mute} /> : null}
+    {fallback ? <KeyboardDock style={styles.fallback}>
+      <VoiceOrbOverlay state={shown} onMute={mute} onEnd={() => void stop()} />
+    </KeyboardDock> : null}
     {home === "bar" ? <View testID="voice-mic-bar" style={[styles.bar, { paddingTop: insets.top }]}>
       <View onLayout={e => setBarRow(e.nativeEvent.layout.height)}>
       <View style={styles.row}>
@@ -469,6 +494,7 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   </Context.Provider>;
 }
 const styles = StyleSheet.create({
+  fallback: { position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 950 },
   bar: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: colors.bg, zIndex: 1000 },
   row: {
     minHeight: VOICE_BAR_ROW, marginHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 8,

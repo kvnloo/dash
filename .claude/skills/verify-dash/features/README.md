@@ -143,6 +143,7 @@ The status counts were taken at the commit this map was written on. Maintain the
 ### Voice, surfaces and lab
 
 - [Voice screen](./voice-screen.md): UNCOVERED
+- [Voice bubble and focus](./voice-bubble.md): COVERED on the fixture web path
 - [Continuous voice pill and chat voice dock](./continuous-voice-pill.md): UNCOVERED
 - [Live surface (Hermes)](./live-surface.md): UNCOVERED
 - [Annotation mode](./annotation.md): UNCOVERED

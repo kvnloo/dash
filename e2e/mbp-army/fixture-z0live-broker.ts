@@ -210,7 +210,7 @@ export async function startFixtureZ0liveBroker(options: { lanes?: FixtureLanes }
       else response.end();
     }
   });
-  server.listen(0, '127.0.0.1');
+  server.listen(Number(process.env.ARMY_VOICE_PORT ?? 0), '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') { server.close(); throw Error('No z0live fixture TCP port'); }
