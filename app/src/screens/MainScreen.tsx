@@ -485,7 +485,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   ], [navigation, index, showHome, searchActive, screenFocused, foreground, width]);
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }, wallpaper && { backgroundColor: "transparent", opacity: screenFocused ? 1 : 0 }, themedSurface]}>{wallpaper || themedSurface ? null : <Canvas />}
+    // collapsable={false}: see useThemedSurface. Transparent + covered (opacity 0) must not flip Fabric flattening.
+    <View collapsable={false} style={[styles.screen, { paddingTop: insets.top }, wallpaper && { backgroundColor: "transparent", opacity: screenFocused ? 1 : 0 }, themedSurface]}>{wallpaper || themedSurface ? null : <Canvas />}
       {desk ? null : <AppNav
         ref={navRef}
         navigation={navigation}

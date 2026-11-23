@@ -154,7 +154,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   })();
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }, themedSurface]}>{themedSurface ? null : <Canvas />}
+    // collapsable={false}: see useThemedSurface.
+    <View collapsable={false} style={[styles.screen, { paddingTop: insets.top }, themedSurface]}>{themedSurface ? null : <Canvas />}
       <AppNav navigation={navigation} tab={1} />
       <ScreenHeader title="Settings" onBack={() => screenBack(navigation)} />
       <KeyboardAvoidingView style={styles.body} behavior="padding">
