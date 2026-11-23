@@ -10,7 +10,8 @@ export function EphemeralCard(props: EphemeralCardProps) {
     <WebView
       source={{ html: card.html, baseUrl: "about:blank" }}
       originWhitelist={["about:blank"]}
-      style={{ height: card.height, backgroundColor: "transparent" }}
+      containerStyle={{ flex: 0, height: card.height }}
+      style={{ backgroundColor: "transparent" }}
       javaScriptEnabled
       domStorageEnabled={false}
       allowFileAccess={false}

@@ -42,6 +42,7 @@ import { GalleryScreen } from "./src/screens/GalleryScreen";
 import { RoadmapProjectScreen, RoadmapScreen, RoadmapTaskScreen } from "./src/screens/RoadmapScreen";
 import { DebugHost } from "./src/debug/DebugHost";
 import { ThemedBackdrop } from "./src/components/themed/ThemedBackdrop";
+import { loadCardStyle } from "./src/store/card-style";
 import { loadThemeMode, useThemed } from "./src/lib/theme-mode";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
 import { AgentControlLayer } from "./src/components/AgentControlLayer";
@@ -116,7 +117,7 @@ export default function App() {
   const [navigation, setNavigation] = useState<{ initial?: InitialState } | null>(turboRequests ? null : {});
   useHostSleepPosture();
   const themed = useThemed();
-  useEffect(() => { void loadThemeMode(); }, []);
+  useEffect(() => { void loadThemeMode(); void loadCardStyle(); }, []);
   useEffect(() => {
     if (!turboRequests || !hydrated) return;
     let mounted = true;

@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, useColorScheme, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import type { LiveIntent } from "../../../../shared/live";
 import { ephemeralCardDocument, ephemeralIntent, parseEphemeralMessage, type EphemeralCardSpec, type EphemeralMessage } from "../../lib/ephemeral-card";
+import { cardStyle } from "../../store/card-style";
+import { themeMode } from "../../lib/theme-mode";
 import { colors, radius, space, type } from "../../theme";
 import { PressScale } from "../PressScale";
 
@@ -22,8 +24,9 @@ export type EphemeralCardProps = {
 export const cardTitle = (props: EphemeralCardProps) => props.title ?? `${props.spec.app} ${props.spec.kind} card`;
 
 export function useEphemeralCard(spec: EphemeralCardSpec, onIntent?: (intent: LiveIntent) => boolean, onDrawn?: EphemeralCardProps["onDrawn"]) {
-  const scheme = useColorScheme() === "light" ? "light" : "dark";
-  const html = useMemo(() => ephemeralCardDocument(spec, scheme), [spec, scheme]);
+  const mode = themeMode.use(theme => theme.mode);
+  const appearance = cardStyle.use(value => value);
+  const html = useMemo(() => ephemeralCardDocument(spec, mode, appearance), [spec, mode, appearance]);
   const [height, setHeight] = useState(360);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [last, setLast] = useState<Intent | null>(null);

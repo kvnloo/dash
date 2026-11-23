@@ -10,6 +10,7 @@ import { setHandedness, useHandedness } from "../lib/useHandedness";
 import { DESK_CHOICES, deskPrefs, setDeskChoice } from "../lib/desk";
 import type { Handedness } from "../lib/handedness";
 import { Canvas } from "../components/Canvas";
+import { CardStylePicker } from "../components/genui/CardStylePicker";
 import { ThemeSettings } from "../components/themed/ThemeSettings";
 import { useThemedSurface } from "../lib/theme-mode";
 import { ScreenHeader } from "../components/ScreenHeader";
@@ -216,6 +217,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             <Text style={[styles.help, { padding: space.md }]}>{settings ? "Auto follows a system preference when available; otherwise Right. This platform exposes no handedness signal. Long-press the composer mic to switch hands." : "Pair a bridge to save display preferences."}</Text>
           </GlassSurface>
           <ThemeSettings />
+          <View style={{ marginTop: space.md }}><CardStylePicker /></View>
           <Text style={styles.label}>Trace and Lab</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card} testID="settings-density">
             <DensityPicker />

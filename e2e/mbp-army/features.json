@@ -1,6 +1,7 @@
 {
   "about": "O15 feature inventory. Every feature listed here needs at least one passing tester-army test on the exact commit before Dash is installed, promoted, sent over a channel/OTA, or merged (laws/release). Add a feature together with its army test; never list a feature without one, never remove one to get a pass.",
   "features": [
+    {"id":"ephemeral-card-style","title":"Ephemeral cards follow the Dash theme or use an app palette; Settings and Gallery share the saved style","tests":["Card style Dash draws phone-sized cards in chat on a light OS","Card style App draws phone-sized cards in chat on a light OS","Card gallery switches styles live, follows Blueprint and remembers the preference"]},
     {"id":"legacy-bridge-connection","title":"Connect and chat with a bridge that does not advertise UI control","tests":["a bridge without UI control still connects and streams a chat"]},
     {"id":"t3code-threads","title":"Chats lists and opens read-only T3 Code threads (DA-082)","tests":["Chats lists T3 Code threads and opens their transcripts"]},
     {"id": "dogfood-home-default-view", "title": "Cold launch opens the dogfood home (self-development loop); typed and dictated notes there reach the agent as Dash secondmate feedback; feedback off restores Orchestra",

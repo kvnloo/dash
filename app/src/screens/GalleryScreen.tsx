@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ScrollView } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CardStylePicker } from "../components/genui/CardStylePicker";
 import { EphemeralCard } from "../components/genui/EphemeralCard";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { haptic } from "../haptics";
@@ -37,6 +38,7 @@ export function GalleryScreen({ navigation, route }: ScreenProps<"Gallery">) {
   return (
     <SafeAreaView style={styles.root} edges={["top"]}>
       <ScreenHeader title="Card gallery" compact onBack={() => navigation.goBack()} />
+      <View style={styles.picker}><CardStylePicker /></View>
       <ScrollView ref={scroll} contentContainerStyle={styles.scroll} testID="gallery-scroll">
         <Text style={styles.version} testID="gallery-version">{catalogLabel(catalog)} · {catalog.kinds.length} kinds · {catalog.fixtures.length} fixtures</Text>
         <Pager page={page} pages={pages} go={go} where="top" />
@@ -98,6 +100,7 @@ const GalleryCell = memo(function GalleryCell({ fixture, at, result, onResult }:
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  picker: { paddingHorizontal: space.lg, paddingBottom: space.sm },
   scroll: { paddingHorizontal: space.lg, paddingBottom: 120, gap: space.md },
   version: { fontFamily: fonts.mono, fontSize: 12, color: colors.textMuted },
   meta: { ...type.small, color: colors.textMuted },

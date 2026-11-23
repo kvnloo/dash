@@ -113,6 +113,7 @@ The status counts were taken at the commit this map was written on. Maintain the
 - [Send file to phone](./send-file-to-phone.md): UNCOVERED
 - [Subagent workers strip](./subagent-workers-strip.md): UNCOVERED
 - [Generative UI blocks](./genui-blocks.md): UNCOVERED
+- [Ephemeral card style](./ephemeral-card-style.md): card-style.spec.ts
 
 ### Dialogs, sheets and notices
 

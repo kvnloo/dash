@@ -4,7 +4,7 @@ import { TURBO } from "./turbo";
 const mono = process.env.EXPO_PUBLIC_ZEROS_THEME === "proof-mono";
 /** Proof Mono: meaning must survive without hue. */
 export const proofMono = mono;
-// The Dash shell remains dark; embedded cards and the gallery can use either shared scheme.
+// Dash uses the shared dark palette.
 const dark = glide.color.dark;
 // AODL pins ink-2, ink-3 and green (scripts/check-aodl-tokens); Glide's dark scheme supplies the rest.
 const aodl = { ink2: "#B4AFA3", ink3: "#837F74", green: "#98cf8b" } as const;
