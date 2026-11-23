@@ -36,12 +36,18 @@ jobs:
           "$RUNNER_TEMP/gitleaks" git --log-opts=--all --redact=100
 
   # The test suite IS the e2e tester army (O15, laws/release). It runs on the exact
-  # head commit, writes the army receipt, and the O15 gate then decides the merge.
-  test:
-    name: test (tester army + O15 gate)
+  # head commit in parallel shards; `test` merges their Playwright blob reports into
+  # one results.json, writes the army receipt, and the O15 gate then decides the merge.
+  army:
+    name: army shard ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest
-    # Green runs take 40-42 min (two army workers stay busy the whole run); 45 cancelled #762 at 45m02s.
-    timeout-minutes: 60
+    # A shard runs a quarter of the army; the unsharded job took 35-42 min.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Add or remove entries to change the shard count; the total follows.
+        shard: [1, 2, 3, 4]
     env:
       SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
@@ -57,8 +63,6 @@ jobs:
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'app/bun.lock', 'bridge/bun.lock') }}
-      - name: Check AODL and DESIGN.md token drift
-        run: scripts/check-aodl-tokens
       - name: Install locked root and bridge dependencies; public app without private renderer
         run: bun install --frozen-lockfile && bun scripts/install-public-ci.ts && bun install --frozen-lockfile --cwd bridge
       - name: Headless Chromium, bridge sandbox and audio decoder
@@ -68,13 +72,79 @@ jobs:
           # Ubuntu 24.04 restricts unprivileged user namespaces; the army isolates each bridge with bwrap.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 node node_modules/playwright/cli.js install --with-deps chromium
-      - name: O15 checker evidence rules (laws/release)
-        run: python3 -m unittest laws/release/test_check.py -v
-      - name: Tester army on ${{ env.SHA }}
+      - name: Tester army shard ${{ matrix.shard }}/${{ strategy.job-total }} on ${{ env.SHA }}
         env:
-          DASH_ARMY_RECEIPTS: ${{ runner.temp }}/army-receipts
+          ARMY_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          # 2 is the setting the single job was green with. 4 ran a shard 24% faster on 4
+          # pinned cores off CI, with one extra failure; switch only after a green CI run.
           ARMY_WORKERS: "2"
         run: bash scripts/army.sh
+      - name: Shard blob report (merged by the test job)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: army-blob-${{ env.SHA }}-${{ matrix.shard }}
+          path: artifacts/army/${{ env.SHA }}/blob/
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Compact Chats UI evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: chats-ui-${{ env.SHA }}-${{ matrix.shard }}
+          path: |
+            artifacts/army/${{ env.SHA }}/test-results/next-action-*/*.png
+            artifacts/army/${{ env.SHA }}/test-results/chat-filters-*/*.png
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Army evidence (traces, screenshots)
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: army-evidence-${{ env.SHA }}-${{ matrix.shard }}
+          path: |
+            artifacts/army/${{ env.SHA }}/test-results
+            artifacts/army/${{ env.SHA }}/web-export.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  test:
+    name: test (tester army + O15 gate)
+    # Runs after a red shard too, so the receipt and report show what failed; a shard
+    # that wrote no blob leaves its tests out, so coverage is incomplete and O15 denies.
+    if: ${{ !cancelled() }}
+    needs: [army]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'app/bun.lock', 'bridge/bun.lock') }}
+      - name: Check AODL and DESIGN.md token drift
+        run: scripts/check-aodl-tokens
+      - name: O15 checker evidence rules (laws/release)
+        run: python3 -m unittest laws/release/test_check.py -v
+      - name: Install locked root dependencies (Playwright merge-reports)
+        run: bun install --frozen-lockfile
+      - name: Shard blob reports
+        uses: actions/download-artifact@v7
+        with:
+          pattern: army-blob-${{ env.SHA }}-*
+          path: ${{ runner.temp }}/army-blobs
+          merge-multiple: true
+      - name: Merge army shards and write the receipt for ${{ env.SHA }}
+        env:
+          DASH_ARMY_RECEIPTS: ${{ runner.temp }}/army-receipts
+        run: bash scripts/army-merge.sh "$RUNNER_TEMP/army-blobs"
       - name: Army receipt (canonical O15 evidence for this commit)
         if: always()
         uses: actions/upload-artifact@v7
@@ -83,25 +153,14 @@ jobs:
           path: ${{ runner.temp }}/army-receipts/${{ env.SHA }}/
           if-no-files-found: ignore
           retention-days: 90
-      - name: Compact Chats UI evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: chats-ui-${{ env.SHA }}
-          path: |
-            artifacts/army/${{ env.SHA }}/test-results/next-action-*/*.png
-            artifacts/army/${{ env.SHA }}/test-results/chat-filters-*/*.png
-          if-no-files-found: ignore
-          retention-days: 14
-      - name: Army evidence (report, traces, screenshots)
+      - name: Army evidence (merged report)
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: army-evidence-${{ env.SHA }}
           path: |
             artifacts/army/${{ env.SHA }}/html
-            artifacts/army/${{ env.SHA }}/test-results
-            artifacts/army/${{ env.SHA }}/web-export.log
+            artifacts/army/${{ env.SHA }}/merge.log
           if-no-files-found: ignore
           retention-days: 14
       - name: O15 release gate (merge)

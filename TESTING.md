@@ -14,6 +14,11 @@ journeys also need HEAD's parent, so shallow CI checkouts use depth 2. Runs head
 on any host and in CI. The MBP headed variant on a private headless compositor
 is `python3 e2e/mbp-army/run.py <name> <workers>` (see `e2e/mbp-army/README.md`).
 
+CI runs the same army in parallel shards: each job runs `ARMY_SHARD=<i>/<n>
+scripts/army.sh`, which writes only a Playwright blob report. Then
+`scripts/army-merge.sh <blob-dir>` merges every shard into one `results.json` and
+writes the receipt with the unchanged `e2e/mbp-army/receipt.py`.
+
 ## Annotation coordinates
 
 The tldraw contract journeys keep the normal exact Skia parity check and exercise
@@ -73,7 +78,7 @@ acceptance or real OMP file resolution.
 `next-action.spec.ts` also covers current-connection attention, identity-based
 unread replies under clock rollback, exact-chat navigation without sending,
 draft preservation, defer/reload and explicit permission decisions. CI retains
-compact filter and attention screenshots in `chats-ui-<sha>` for visual inspection.
+compact filter and attention screenshots in `chats-ui-<sha>-<shard>` for visual inspection.
 
 Clock-controlled attention journeys install their advancing clock before the
 first navigation. They must not replace animation timing during an opening
