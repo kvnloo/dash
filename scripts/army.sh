@@ -5,7 +5,7 @@
 #   ARMY_WORKERS=4 scripts/army.sh
 #   ARMY_SHARD=2/4 scripts/army.sh  # one CI shard: blob report only, no receipt
 #
-# A shard run writes $out/blob/report-<i>.zip and stops; scripts/army-merge.sh merges
+# A shard run writes $out/blob/report-<i>.zip (report events only) and stops; scripts/army-merge.sh merges
 # every shard's blob into one results.json and writes the receipt from that.
 #
 # Steps: web export of app/ at HEAD -> local static server -> headless Playwright army
@@ -53,7 +53,19 @@ node node_modules/playwright/cli.js test -c e2e/mbp-army/playwright.config.ts --
 pw=${PIPESTATUS[0]}
 set -e
 if [ -n "${ARMY_SHARD:-}" ]; then
-  [ -f "$out/blob/$PLAYWRIGHT_BLOB_OUTPUT_NAME" ] || { echo "army: shard $ARMY_SHARD wrote no blob report (exit $pw)" >&2; exit 1; }
+  blob=$out/blob/$PLAYWRIGHT_BLOB_OUTPUT_NAME
+  [ -f "$blob" ] || { echo "army: shard $ARMY_SHARD wrote no blob report (exit $pw)" >&2; exit 1; }
+  # trace: 'on' makes each blob ~1 GB of copied traces and videos. The merge needs only
+  # the report events; the attachments stay in $out/test-results for failure evidence.
+  python3 -I - "$blob" <<'PY'
+import os, sys, zipfile
+src = sys.argv[1]
+with zipfile.ZipFile(src) as zi, zipfile.ZipFile(src + ".slim", "w", zipfile.ZIP_DEFLATED) as zo:
+    for info in zi.infolist():
+        if not info.filename.startswith("resources/"):
+            zo.writestr(info, zi.read(info))
+os.replace(src + ".slim", src)
+PY
   exit "$pw"
 fi
 [ -f "$out/results.json" ] || { echo "army: Playwright wrote no report (exit $pw)" >&2; exit 1; }
