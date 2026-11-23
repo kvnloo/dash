@@ -2,6 +2,7 @@ import { chatPosts } from "../store/chat-posts";
 import { conversationKey } from "../lib/chat-index";
 import { useWallpaperGlass } from "../components/WallpaperTheme";
 import { useIsFocused } from "@react-navigation/native";
+import { useThemedSurface } from "../lib/theme-mode";
 import { useContextView } from "../components/ContextCard";
 import { DETAIL_MODES } from "../lib/reply-details";
 import { mergeOlderHistory } from "../lib/live-sessions";
@@ -158,6 +159,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   }, [setFollow]);
   const focused = useIsFocused();
   const wallpaper = useWallpaperGlass();
+  // Blueprint keeps a painted card in a floating chat; system wallpaper glass stays transparent.
+  const themedFullscreen = useThemedSurface();
   const [appActive, setAppActive] = useState(AppState.currentState === "active");
   const [viewedMessageIds, setViewedMessageIds] = useState<ReadonlySet<string>>(() => new Set());
   const onViewableMessages = useCallback(({ viewableItems }: { viewableItems: ViewToken<Message>[] }) => {
@@ -446,6 +449,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Window presentation: opened from the Chats list over the retained workspace.
   const windowOrigin = route.params?.window;
   const windowed = windowOrigin !== undefined;
+  const themedSurface = windowed ? undefined : themedFullscreen;
   const morph = useWindowMorph(windowOrigin, windowed);
   const { width: windowWidth, height: windowHeight } = usePaneDimensions();
   const [navOpen, setNavOpen] = useState(false);
@@ -647,7 +651,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Keep them still in the chat; ShimmerText (Skia) still shows live activity.
   return (
     <OrbActivity active={false}>
-    <Animated.View style={[styles.screen, wallpaper && { backgroundColor: "transparent" }, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, morph.style]} renderToHardwareTextureAndroid={morph.settling} aria-busy={windowed && morph.settling} testID={windowed ? "chat-window" : undefined}>{wallpaper ? null : <Canvas />}
+    <Animated.View style={[styles.screen, wallpaper && { backgroundColor: "transparent" }, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, themedSurface, morph.style]} renderToHardwareTextureAndroid={morph.settling} aria-busy={windowed && morph.settling} testID={windowed ? "chat-window" : undefined}>{wallpaper || themedSurface ? null : <Canvas />}
       {windowed ? <>
         <WindowPill geometry={pill} title={conversation?.title || harnessName}
           status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}

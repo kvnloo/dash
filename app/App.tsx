@@ -41,6 +41,8 @@ import { SharedThemeScreen } from "./src/screens/SharedThemeScreen";
 import { GalleryScreen } from "./src/screens/GalleryScreen";
 import { RoadmapProjectScreen, RoadmapScreen, RoadmapTaskScreen } from "./src/screens/RoadmapScreen";
 import { DebugHost } from "./src/debug/DebugHost";
+import { ThemedBackdrop } from "./src/components/themed/ThemedBackdrop";
+import { loadThemeMode, useThemed } from "./src/lib/theme-mode";
 import { AnnotationRoot } from "./src/components/annotate/AnnotationRoot";
 import { AgentControlLayer } from "./src/components/AgentControlLayer";
 import { EphemeralModes } from "./src/components/EphemeralModes";
@@ -68,6 +70,8 @@ const theme: Theme = {
   ...DarkTheme,
   colors: { ...DarkTheme.colors, background: colors.bg, card: colors.bg, text: colors.text, border: colors.border },
 };
+/** Themed mode: screens are transparent over the root blueprint wallpaper. */
+const themedTheme: Theme = { ...theme, colors: { ...theme.colors, background: "transparent", card: "transparent" } };
 
 const wallpaperNavigationTheme: Theme = { ...theme, colors: { ...theme.colors, background: "transparent" } };
 
@@ -111,13 +115,15 @@ export default function App() {
   const hasSettings = store.use((s) => s.settings !== null);
   const [navigation, setNavigation] = useState<{ initial?: InitialState } | null>(turboRequests ? null : {});
   useHostSleepPosture();
+  const themed = useThemed();
+  useEffect(() => { void loadThemeMode(); }, []);
   useEffect(() => {
     if (!turboRequests || !hydrated) return;
     let mounted = true;
     void restoreTurboNavigation().then(initial => { if (mounted) setNavigation({ initial }); });
     return () => { mounted = false; };
   }, [hydrated]);
-  const wallpaper = useWallpaperWindow();
+  const wallpaper = useWallpaperWindow(!themed);
 
   useEffect(() => {
     void Promise.all([hydrateOrbStyle(), hydrate()]).then(async () => {
@@ -148,8 +154,8 @@ export default function App() {
   if (!hydrated || !fontsLoaded || !navigation) return <View style={styles.splash} />;
 
   return (
-    <GestureHandlerRootView style={wallpaper ? styles.clear : styles.root}><WallpaperTheme.Provider value={wallpaper}>
-      {wallpaper ? <WallpaperBackdrop /> : null}
+    <GestureHandlerRootView style={themed || wallpaper ? styles.clear : styles.root}><WallpaperTheme.Provider value={wallpaper}>
+      {themed ? <ThemedBackdrop /> : wallpaper ? <WallpaperBackdrop /> : null}
       <DensityProvider><OrbMotionProvider><TileGestureProvider><TileDetailProvider>
       {Platform.OS === "web" ? <style>{"input:focus,textarea:focus{outline:none!important}"}</style> : null}
       <SafeAreaProvider>
@@ -159,7 +165,7 @@ export default function App() {
           <BridgePullProvider>
             <NavigationContainer
               ref={debugNavigationRef}
-              theme={wallpaper ? wallpaperNavigationTheme : theme}
+              theme={themed ? themedTheme : wallpaper ? wallpaperNavigationTheme : theme}
               initialState={navigation.initial}
               onStateChange={saveTurboNavigation}
               linking={Platform.OS === "web" ? linking : undefined}
@@ -170,7 +176,7 @@ export default function App() {
                 initialRouteName={isDebugActive() || hasSettings ? "Main" : "Pair"}
                 // Native-stack duration is iOS-only (and ignored for modal presentations).
                 // Disable platform-owned transitions; bounded motion lives inside each screen.
-                screenOptions={{ headerShown: false, contentStyle: styles.splash, animation: "none" }}
+                screenOptions={{ headerShown: false, contentStyle: themed ? styles.clear : styles.splash, animation: "none" }}
               >
                 <Stack.Screen name="Main" component={MainScreen} options={wallpaper ? { contentStyle: styles.clear } : undefined} />
                 <Stack.Screen name="Approvals" component={ApprovalsScreen} />

@@ -8,8 +8,8 @@ import { wallpaperScrim } from "../theme";
 export const WallpaperTheme = createContext(false);
 export const useWallpaperGlass = () => useContext(WallpaperTheme);
 
-export function useWallpaperWindow() {
-  const enabled = appearanceTheme.use(theme => theme === "wallpaper");
+export function useWallpaperWindow(allowSystemWallpaper: boolean) {
+  const enabled = appearanceTheme.use(theme => theme === "wallpaper") && allowSystemWallpaper;
   const [ready, setReady] = useState(false);
   useEffect(() => { void hydrateAppearanceTheme(); }, []);
   useEffect(() => {
