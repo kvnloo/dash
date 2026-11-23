@@ -67,6 +67,8 @@ export interface VoiceIO {
   /** A spoken approval command for a pending Needs OK/sudo (DA-058). Returns the confirmation line
    * when it was consumed; the utterance is then never dispatched to the agent. */
   intercept?(text: string): string | null;
+  /** Final broker replies can carry OpenUI blocks alongside speech. */
+  brokerReply?(text: string): void;
   turbo?(task: string, signal: AbortSignal): Promise<{ message: string; answer?: string }>;
 }
 export function object(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
@@ -481,6 +483,7 @@ export class ContinuousVoice {
         if (typeof item.action === "string") {
           await this.observation("tool_result", "", { id: item.id, success: false, result: { error: "Dash did not declare this phone action" } });
         } else if (typeof item.say === "string" && item.say.trim() && !(typeof item.source === "string" && /progress|partial/.test(item.source))) {
+          this.io.brokerReply?.(item.say);
           const lane = this.route(item);
           this.inbox.push(lane ? { ...item, lane } : item); this.update({ delivery: "reply" });
         }

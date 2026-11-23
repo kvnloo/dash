@@ -76,7 +76,7 @@ import { queuedParts } from "../lib/pending-queue";
 import { QueuedStack } from "../components/QueuedStack";
 import { colors, glass, radius, space, type } from "../theme";
 import { useLiveThinking } from "../lib/live-thinking";
-import { useContinuousVoice, useDeviceInsets, useLiveVoiceAction, voiceWindowOpen } from "../components/ContinuousVoiceRoot";
+import { useContinuousVoice, useDeviceInsets, VoiceBubbleDock, useLiveVoiceAction, voiceWindowOpen } from "../components/ContinuousVoiceRoot";
 import { VoiceCaptionStrip, VoiceCaptionsToggle } from "../components/VoiceCaptionStrip";
 import { sendVoiceAnnotation } from "../lib/voice-annotation";
 import { useSessionActivity } from "../lib/session-activity";
@@ -472,7 +472,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   const layers = useRef({ menuOpen, treeOpen, navOpen });
   layers.current = { menuOpen, treeOpen, navOpen };
   useEffect(() => {
-    if (!windowed) return;
+    if (!windowed || !focused) return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       switch (backTarget(layers.current)) {
         case "menu": setMenuOpen(false); break;
@@ -483,7 +483,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       return true;
     });
     return () => sub.remove();
-  }, [windowed, closeWindow]);
+  }, [windowed, focused, closeWindow]);
   const selfHost = connection.hosts.find(host => host.self);
   // Authoritative per-session model/provider/lineage: the host's existing authenticated context
   // reading (Hermes state.db), bound to this exact session. Debug fixture is synthetic, web-only.
@@ -582,6 +582,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
       {DETAIL_MODES.map(mode => <PressScale key={mode} accessibilityRole="button" accessibilityLabel={`Details ${mode}`} accessibilityState={{ selected: (conversation?.detailMode ?? "Compact") === mode }} onPress={() => { const active = conversation ?? createConversation(harnessId); setDetailMode(active.id, mode); }} style={{ minHeight: 32, paddingHorizontal: 8, justifyContent: "center" }}><Text style={{ ...type.mono, fontSize: 11, color: (conversation?.detailMode ?? "Compact") === mode ? colors.gold : colors.textTertiary }}>{mode}</Text></PressScale>)}
     </View>
     </> : null}
+    {focused ? <VoiceBubbleDock /> : null}
     {permissionCards.map(record => <PermissionCard key={record.turnId + "/" + record.requestId} requestId={record.requestId} turnId={record.turnId}
       options={record.options} deadlineAt={record.deadlineAt} phase={record.phase} onChoose={optionId => permissionRequests.decide(record, optionId)} />)}
     {conversation && !liveOn ? <QueuedStack conversation={conversation} canSteer={online && !targetError && canSteer(harnessId, conversation.sessionId, thinking.phase, liveOn)} onSteer={() => { const payload = takeQueuedForSteer(conversation.id); if (payload) sendTurn(payload.text, payload.attachments, conversation, "steer"); }} /> : null}

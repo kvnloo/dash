@@ -15,12 +15,16 @@ const test = base.extend<{ voiceBroker: FixtureZ0liveBroker }>({
         DASH_NATIVE_VOICE: "1",
         DASH_Z0LIVE_BROKER: voiceBroker.origin,
         DASH_ARMY_VOICE_WEB: "1",
+        ARMY_PERSIST_SESSION: "1",
       },
     });
   },
 });
 
-test("live hero orb follows each voice phase, mutes, passes through and hides for annotation", async ({ page, bridge, voiceBroker }) => {
+// These journeys need the Hermes database seed. Only Linux also has the OMP process fixture.
+if (process.platform === "darwin") test.use({ persistSession: false });
+
+test("live voice bubble follows the call, opens focus and hides for annotation", async ({ page, bridge, voiceBroker }) => {
   const dash = bridge.identityToken();
   const z0live = bridge.identityToken({ aud: "z0live", scope: "z0live:voice" });
   voiceBroker.authorize(z0live);
@@ -61,10 +65,9 @@ test("live hero orb follows each voice phase, mutes, passes through and hides fo
     Object.defineProperty(window, "__armyOrbPhases", { value: seen, configurable: true });
     const record = () => {
       const pillNode = document.querySelector('[data-testid="voice-phase"]');
-      const captionNode = document.querySelector('[data-testid="voice-orb-caption"]');
       const overlay = document.querySelector('[data-testid="voice-orb-overlay"]');
-      if (!pillNode || !captionNode || !overlay) return;
-      const entry = (pillNode.getAttribute("aria-label") ?? "") + "|" + (captionNode.textContent ?? "");
+      if (!pillNode || !overlay) return;
+      const entry = (pillNode.getAttribute("aria-label") ?? "") + "|" + (overlay.getAttribute("aria-label") ?? "").replace("Open voice focus · ", "");
       if (seen[seen.length - 1] !== entry) seen.push(entry);
     };
     record();
@@ -89,19 +92,20 @@ test("live hero orb follows each voice phase, mutes, passes through and hides fo
   await expect.poll(async () => shownInOrder(await recorded()), { timeout: 20000, message: "the orb follows every voice phase in order, in the same tick as the pill" }).toBe(phases.length);
   await expect(orb, "orb is on screen: listening").toBeVisible();
   const drawing = await orb.getByTestId("agent-orb").boundingBox();
-  expect(drawing?.width).toBeGreaterThanOrEqual(220);
+  expect(drawing?.width).toBe(52);
 
   await page.getByRole("tab").nth(1).click({ noWaitAfter: true });
   await page.getByRole("button", { name: /^(Create new chat|New chat)$/ }).first().click({ noWaitAfter: true });
   await expect(page.getByRole("button", { name: "Chat options" })).toBeVisible();
   await page.getByRole("button", { name: /^Live call, .*\. Show voice orb$/ }).click({ noWaitAfter: true });
-  await expect(orb).toHaveCSS("border-color", "rgb(236, 232, 223)", { timeout: 300 });
-
-  await orb.click({ noWaitAfter: true });
-  await expect(orb).toHaveAttribute("aria-label", /Unmute voice/, { timeout: 300 });
+  await expect(page.getByTestId("voice-focus-back")).toBeVisible();
+  await expect(orb).toHaveCount(0);
+  await page.getByTestId("voice-mute").click();
   await expect(pill).toHaveAttribute("aria-label", "Voice status: muted");
-  await orb.click({ noWaitAfter: true });
+  await page.getByTestId("voice-mute").click();
   await expect(pill).toHaveAttribute("aria-label", "Voice status: listening");
+  await page.getByTestId("voice-focus-back").click();
+  await expect(orb).toBeVisible();
 
   // The actual Chat options button sits outside the centered orb. This click must reach it.
   await page.getByRole("button", { name: "Chat options" }).click({ noWaitAfter: true });

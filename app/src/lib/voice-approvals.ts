@@ -27,23 +27,33 @@ export type VoiceApproval<P extends PendingPermissionLike = PendingPermissionLik
 export type SpokenApproval = "allow" | "deny" | "open";
 
 /** The one approval the call surfaces: a sudo request first (it holds a shell command), then the oldest Needs OK. */
+export function pendingVoiceApprovals<P extends PendingPermissionLike, S extends PendingSudoLike>(
+  records: readonly P[], sudo: readonly S[], now: number, titleOf: (conversationId: string) => string | undefined,
+): VoiceApproval<P, S>[] {
+  const secrets = sudo.filter(item => now < item.expiresAt).map((request): VoiceApproval<P, S> => ({ kind: "sudo", request }));
+  const permissions = records
+    .filter(record => (record.phase === "pending" || record.phase === "deciding") && now < record.deadlineAt)
+    .sort((a, b) => a.deadlineAt - b.deadlineAt)
+    .map((record): VoiceApproval<P, S> => ({
+      kind: "permission",
+      record,
+      title: titleOf(record.conversationId)?.trim() || "an agent",
+      allowOptionId: record.options.find(option => option.kind === "allow_once")?.optionId ?? null,
+      denyOptionId: record.options.find(option => option.kind === "reject_once")?.optionId ?? null,
+      deciding: record.phase === "deciding",
+    }));
+  return [...secrets, ...permissions];
+}
+
 export function pickVoiceApproval<P extends PendingPermissionLike, S extends PendingSudoLike>(
   records: readonly P[], sudo: readonly S[], now: number, titleOf: (conversationId: string) => string | undefined,
 ): VoiceApproval<P, S> | null {
-  const request = sudo.find(item => now < item.expiresAt);
-  if (request) return { kind: "sudo", request };
-  const pending = records
-    .filter(record => (record.phase === "pending" || record.phase === "deciding") && now < record.deadlineAt)
-    .sort((a, b) => a.deadlineAt - b.deadlineAt)[0];
-  if (!pending) return null;
-  return {
-    kind: "permission",
-    record: pending,
-    title: titleOf(pending.conversationId)?.trim() || "an agent",
-    allowOptionId: pending.options.find(option => option.kind === "allow_once")?.optionId ?? null,
-    denyOptionId: pending.options.find(option => option.kind === "reject_once")?.optionId ?? null,
-    deciding: pending.phase === "deciding",
-  };
+  return pendingVoiceApprovals(records, sudo, now, titleOf)[0] ?? null;
+}
+
+export function voiceApprovalKey(approval: VoiceApproval): string {
+  return approval.kind === "sudo" ? `sudo:${approval.request.id}`
+    : `permission:${approval.record.turnId}/${approval.record.requestId}`;
 }
 
 const ALLOW = /^(?:(?:yes|yeah|ok|okay|sure)\s+)?(?:allow|approve)(?:\s+(?:it|that|this))?(?:\s+once)?(?:\s+please)?$/;

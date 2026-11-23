@@ -1,5 +1,4 @@
-// DA-058: approvals during a z0live call. A pending Needs OK or sudo request takes the live caption
-// line; saying "allow once" or tapping it resolves it, and sudo opens the #670 entry over the call.
+// DA-058: a live call surfaces Needs OK and sudo in Voice focus. Speech and tap share the bridge decision path.
 // Real Expo web app + real authenticated bridge + fixture ACP agent + loopback z0live fixture broker
 // + scripted web peer. Proves browser state and the bridge side effects only, never Android audio,
 // native WebRTC, a real model or real sudo (a fake `sudo` first on the bridge's PATH checks the line).
@@ -15,9 +14,12 @@ const test = base.extend<{ voiceBroker: FixtureZ0liveBroker }>({
     try { await use(broker); } finally { await broker.stop(); }
   },
   bridgeOptions: async ({ voiceBroker }, use) => {
-    await use({ identity: true, env: { DASH_NATIVE_VOICE: "1", DASH_Z0LIVE_BROKER: voiceBroker.origin, DASH_ARMY_VOICE_WEB: "1" } });
+    await use({ identity: true, env: { DASH_NATIVE_VOICE: "1", DASH_Z0LIVE_BROKER: voiceBroker.origin, DASH_ARMY_VOICE_WEB: "1", ARMY_PERSIST_SESSION: "1" } });
   },
 });
+
+// These journeys need the Hermes database seed. Only Linux also has the OMP process fixture.
+if (process.platform === "darwin") test.use({ persistSession: false });
 
 test.afterEach(async ({ page }, info) => {
   if (!page.isClosed()) await page.screenshot({ path: info.outputPath("final.png") });
@@ -61,14 +63,14 @@ async function permissionInNewChat(page: Page): Promise<void> {
   await expect(page.getByTestId("permission-choice-army-allow-once")).toBeVisible({ timeout: 15000 });
 }
 
-test("saying allow once during a live call resolves the pending Needs OK in the caption line without asking the agent", async ({ page, bridge, voiceBroker }, info) => {
+test("saying allow once during a live call resolves the pending Needs OK without asking the agent", async ({ page, bridge, voiceBroker }, info) => {
   await pairForVoice(page, bridge, voiceBroker, "allow once");
   await permissionInNewChat(page);
   // The scripted peer speaks once the provider answer arrives; hold it until the request is on screen.
   const releaseAnswer = voiceBroker.holdAnswer();
   await startCall(page);
   const approval = page.getByTestId("voice-approval");
-  await expect(approval, "full-screen Voice shows the request in the live caption line").toContainText("Needs OK");
+  await expect(approval, "Voice focus shows the pending request").toContainText("Needs OK");
   await expect(page.getByTestId("voice-approval-allow")).toBeVisible();
   await page.screenshot({ path: info.outputPath("needs-ok-on-voice.png") });
   releaseAnswer();
@@ -86,7 +88,7 @@ test("saying allow once during a live call resolves the pending Needs OK in the 
   await expect.poll(() => ends(voiceBroker).length).toBe(1);
 });
 
-test("tapping Allow once in the live caption line resolves a Needs OK that arrives during the call", async ({ page, bridge, voiceBroker }, info) => {
+test("tapping Allow once in Voice focus resolves a Needs OK that arrives during the call", async ({ page, bridge, voiceBroker }, info) => {
   await pairForVoice(page, bridge, voiceBroker, "ARMY voice hello");
   await startCall(page);
   await page.getByRole("button", { name: "Back to chat · call keeps going" }).click({ noWaitAfter: true });
@@ -94,17 +96,19 @@ test("tapping Allow once in the live caption line resolves a Needs OK that arriv
   await permissionInNewChat(page);
 
   const approval = page.getByTestId("voice-approval");
+  await expect(page.getByTestId("voice-orb-peek")).toContainText("Needs OK");
+  await expect(page.getByTestId("voice-orb-badge")).toHaveText("1");
+  await expect(page.getByTestId("voice-live-caption")).toBeVisible();
+  await page.getByTestId("voice-orb-peek").click();
   await expect(approval).toContainText("Needs OK");
-  await expect(page.getByTestId("voice-live-caption"), "the request takes the caption line").toHaveCount(0);
-  const box = await page.getByTestId("voice-caption-strip").boundingBox();
-  expect(box?.height, "still one short line").toBeLessThanOrEqual(40);
-  await page.screenshot({ path: info.outputPath("needs-ok-strip.png") });
+  await page.screenshot({ path: info.outputPath("needs-ok-focus.png") });
   await page.getByTestId("voice-approval-allow").click({ noWaitAfter: true });
   await expect.poll(() => selected(bridge), { timeout: 15000, message: "the agent received allow_once" }).toBe(1);
   await expect(approval).toHaveCount(0);
+  await page.getByTestId("voice-focus-back").click();
   await expect(page.getByText(/^Allowed/).first(), "the chat's own Needs OK card shows the bridge's grant").toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply");
-  await expect(page.getByTestId("voice-phase")).toHaveAttribute("aria-label", /^Voice status: (listening|hearing|thinking|speaking)/);
+  await expect(page.getByTestId("voice-orb-overlay")).toHaveAttribute("aria-label", /^Open voice focus · (Listening|Hearing|Thinking|Speaking)/);
   expect(asks(voiceBroker)).toHaveLength(1);
   expect(ends(voiceBroker)).toHaveLength(0);
   await page.getByTestId("voice-end").click({ noWaitAfter: true });
@@ -133,7 +137,7 @@ async function askSudo(bridge: Bridge, argv: string[]) {
   }).then(async r => ({ status: r.status, body: await r.json() as { outcome: string; exitCode: number | null; stdout: string } }));
 }
 
-test("a sudo request during a live call waits in the caption line and opens the sealed entry without leaving voice", async ({ page, bridge, voiceBroker }, info) => {
+test("a sudo request shows on the voice bubble and opens sealed entry from focus", async ({ page, bridge, voiceBroker }, info) => {
   await pairForVoice(page, bridge, voiceBroker, "ARMY voice hello");
   await fakeSudo(bridge);
   await startCall(page);
@@ -141,10 +145,12 @@ test("a sudo request during a live call waits in the caption line and opens the 
   await expect(page.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply", { timeout: 20000 });
 
   const answer = askSudo(bridge, ["echo", "army-sudo-ran"]);
+  await expect(page.getByTestId("voice-orb-peek")).toContainText("sudo");
+  await page.getByTestId("voice-orb-peek").click();
   const approval = page.getByTestId("voice-approval");
   await expect(approval).toContainText("sudo · $ sudo echo army-sudo-ran");
   await expect(page.getByTestId("secret-entry"), "the entry does not cover the call by itself").toHaveCount(0);
-  await page.screenshot({ path: info.outputPath("sudo-strip.png") });
+  await page.screenshot({ path: info.outputPath("sudo-focus.png") });
   await page.getByTestId("voice-approval-sudo").click({ noWaitAfter: true });
 
   const entry = page.getByTestId("secret-entry");
