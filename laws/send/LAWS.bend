@@ -145,6 +145,71 @@ law local_profile_needs_session:
   for w: T(S.x_profile_ok(S.XLocalSession{k, s}, h, hermes, None{}))
   Empty
 
+# S7-S8 for the New agent sheet's spawn routes (spawnProfileRoute): a Hermes
+# profile bot is admitted only as a new Hermes chat in a profile that exists
+# here, and a Cursor cloud agent only for the cursor harness, with a valid
+# agent id that is also the session id.
+law hermes_bot_needs_hermes:
+  for known: Bool
+  for h: Nat
+  for hermes: Bool
+  for w: T(S.x_profile_ok(S.XHermesBot{known}, h, hermes, None{}))
+  T(hermes)
+
+law hermes_bot_needs_profile:
+  for known: Bool
+  for h: Nat
+  for hermes: Bool
+  for w: T(S.x_profile_ok(S.XHermesBot{known}, h, hermes, None{}))
+  T(known)
+
+law hermes_bot_new_chat_only:
+  for known: Bool
+  for h: Nat
+  for hermes: Bool
+  for q: Nat
+  for w: T(S.x_profile_ok(S.XHermesBot{known}, h, hermes, Some{q}))
+  Empty
+
+law cursor_agent_own_harness:
+  for c: Nat
+  for a: Nat
+  for valid: Bool
+  for h: Nat
+  for hermes: Bool
+  for q: Nat
+  for w: T(S.x_profile_ok(S.XCursorAgent{c, a, valid}, h, hermes, Some{q}))
+  {c == h : Nat}
+
+law cursor_agent_own_session:
+  for c: Nat
+  for a: Nat
+  for valid: Bool
+  for h: Nat
+  for hermes: Bool
+  for q: Nat
+  for w: T(S.x_profile_ok(S.XCursorAgent{c, a, valid}, h, hermes, Some{q}))
+  {a == q : Nat}
+
+law cursor_agent_valid_id:
+  for c: Nat
+  for a: Nat
+  for valid: Bool
+  for h: Nat
+  for hermes: Bool
+  for q: Nat
+  for w: T(S.x_profile_ok(S.XCursorAgent{c, a, valid}, h, hermes, Some{q}))
+  T(valid)
+
+law cursor_agent_needs_session:
+  for c: Nat
+  for a: Nat
+  for valid: Bool
+  for h: Nat
+  for hermes: Bool
+  for w: T(S.x_profile_ok(S.XCursorAgent{c, a, valid}, h, hermes, None{}))
+  Empty
+
 # ---------------------------------------------------------------------------
 # S9-S12. No turn is refused in silence (the RC3 bug: a refused turn left no
 # trace on the host, so "the phone can't send" was undiagnosable).

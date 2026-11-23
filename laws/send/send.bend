@@ -209,6 +209,12 @@ def x_chatable(catalog: Bool, +machine: Nat, host: Nat, inst: Maybe<&2, Nat>, ex
 #   XLocalSession{k, s}  `<k>:session:<s>`: the hello roster's local-store id
 #                    (finished-sessions.ts) that the Hosts tree sends when a
 #                    finished chat on this host is continued.
+#   XHermesBot{known}  `hermes:<profile>` (not default) from the New agent sheet:
+#                    a Hermes gateway profile bot; known says the profile exists
+#                    on this host (hermesSessions.homeOf(profile) !== undefined).
+#   XCursorAgent{c, a, valid}  `cursor-cloud:<a>` from the New agent sheet: a
+#                    Cursor cloud agent's own chat; c is the harness the profile
+#                    names (CURSOR_CLOUD_ID), valid says isCursorAgentId(a).
 type XProfile is Data:
   XNoProfile{}
   XDefault{}
@@ -216,6 +222,8 @@ type XProfile is Data:
   XAvProfile{k: Nat, s: Nat}
   XLocalSession{k: Nat, s: Nat}
   XHermesDefault{}
+  XHermesBot{known: Bool}
+  XCursorAgent{c: Nat, a: Nat, valid: Bool}
   XOther{}
 
 # The bridge's profile gate (bridge/index.ts, case "chat" and "voice_begin",
@@ -224,6 +232,9 @@ type XProfile is Data:
 #   || isSelfArchiveProfile(profileId, harness, sessionId)
 #        (av:<harness>:<sessionId> or <harness>:session:<sessionId>)
 #   || (harness === "hermes" && profileId === "hermes:default")
+#   || spawnProfileRoute(harness, profileId, sessionId)
+#        (a new Hermes chat in an existing gateway profile bot, or a Cursor
+#        cloud agent's own chat with that agent id as the session)
 # hermes: whether harness is "hermes". sid: the message's sessionId.
 def x_self_archive(k: Nat, s: Nat, h: Nat, sid: Maybe<&2, Nat>) -> Bool:
   match sid:
@@ -231,6 +242,20 @@ def x_self_archive(k: Nat, s: Nat, h: Nat, sid: Maybe<&2, Nat>) -> Bool:
       False{}
     case Some{q}:
       Bool.and(Nat.is_eq(k, h), Nat.is_eq(s, q))
+
+# spawnProfileRoute, hermes branch: harness === "hermes" && !sessionId, and the
+# bot profile exists here.
+def x_hermes_bot(hermes: Bool, known: Bool, sid: Maybe<&2, Nat>) -> Bool:
+  match sid:
+    case None{}:
+      Bool.and(hermes, known)
+    case Some{q}:
+      False{}
+
+# spawnProfileRoute, cursor branch: harness === CURSOR_CLOUD_ID, sessionId is a
+# Cursor agent id, and profileId === `${CURSOR_CLOUD_ID}:${sessionId}`.
+def x_cursor_agent(c: Nat, a: Nat, valid: Bool, h: Nat, sid: Maybe<&2, Nat>) -> Bool:
+  Bool.and(valid, x_self_archive(c, a, h, sid))
 
 def x_profile_ok(p: XProfile, h: Nat, hermes: Bool, sid: Maybe<&2, Nat>) -> Bool:
   match p:
@@ -246,6 +271,10 @@ def x_profile_ok(p: XProfile, h: Nat, hermes: Bool, sid: Maybe<&2, Nat>) -> Bool
       x_self_archive(k, s, h, sid)
     case XHermesDefault{}:
       hermes
+    case XHermesBot{known}:
+      x_hermes_bot(hermes, known, sid)
+    case XCursorAgent{c, a, valid}:
+      x_cursor_agent(c, a, valid, h, sid)
     case XOther{}:
       False{}
 

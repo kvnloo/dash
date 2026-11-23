@@ -1,6 +1,6 @@
 # Provider out of usage or rate limited
 
-When the agent's provider refuses a prompt because the account is out of usage or credits (HTTP 402), the chat says so in fixed words: "the agent's provider account is out of usage or credits on this host". A 429 says the provider is rate limiting this host. Neither is reported as a host authentication problem, and the provider's own text never reaches the phone (issue #501). The composer stays usable.
+When the agent's provider refuses a prompt because the account is out of usage or credits (HTTP 402), the chat says so in fixed words: "the agent's provider account is out of usage or credits on this host; pick another model for the next turn". The composer's Model control applies another model before the next prompt. A 429 says the provider is rate limiting this host. Neither is reported as a host authentication problem, and the provider's own text never reaches the phone (issue #501). The composer stays usable.
 
 Status: COVERED by `e2e/mbp-army/concurrent-turns.spec.ts` › "a provider 402 says the agent's account is out of usage, and the chat stays usable" and › "a provider 429 says the host is being rate limited, and the chat stays usable"
 
@@ -8,6 +8,7 @@ Status: COVERED by `e2e/mbp-army/concurrent-turns.spec.ts` › "a provider 402 s
 
 - `provider-402` out-of-usage sentence shown [covered: "a provider 402 says the agent's account is out of usage, and the chat stays usable"]
 - `provider-429` rate-limit sentence shown [covered: "a provider 429 says the host is being rate limited, and the chat stays usable"]
+- `provider-402-next-model` the 402 sentence offers another model; picking one in the composer answers in the same chat [covered: "a provider out of usage offers another model and the chat answers with it" in `e2e/mbp-army/provider-fallback.spec.ts`]
 - `provider-text-hidden` the provider's own words never reach the chat or `bridge.log` [covered: both tests for the chat, the 402 test for bridge.log]
 - `provider-model-restore` "could not restore model" hint [UNCOVERED]
 

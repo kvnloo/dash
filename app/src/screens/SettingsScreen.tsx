@@ -1,4 +1,5 @@
 import { ReleaseSettings } from "../components/ReleaseSettings";
+import { OrbStylePicker } from "../components/OrbStylePicker";
 import { ModelsPanel } from "../components/ModelsPanel";
 import { DensityPicker } from "../components/Density";
 import { InformationDensityPicker } from "../components/InformationDensityPicker";
@@ -24,10 +25,13 @@ import { normalizeAddress } from "../model";
 import type { ScreenProps } from "../navigation";
 import { bridge } from "../net/bridge";
 import { forgetEverything, saveSettings, store } from "../store/app";
+import { setAgentControl } from "../store/agent-control";
 import { colors, radius, space, type } from "../theme";
 import { confirmDestructive } from "../util";
 import { screenBack } from "../lib/screen-back";
 import { endpointsOf, withEditedEndpoint } from "../lib/bridge-failover";
+import { wallpaperAvailable } from "../lib/wallpaper-window";
+import { appearanceTheme, setAppearanceTheme } from "../store/appearance";
 
 export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
   const thumb = useHandedness();
@@ -191,6 +195,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
           </Pressable>
           {deviceCheckOpen ? <DeviceCheck /> : null}
           <Text style={styles.label}>Display</Text>
+          <Text style={styles.label}>Orb style</Text>
+          <OrbStylePicker />
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <View style={styles.harnessRow}><Text style={styles.harnessName}>Thumb side</Text></View>
             <View style={{ flexDirection: "row", paddingHorizontal: space.md, gap: space.sm }}>
@@ -229,6 +235,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
             </View>
             <Text style={[styles.help, { padding: space.md }]}>Auto shows the multi-pane desk in Samsung DeX or any window at least 1100 wide (960 with a DeX display or a mouse). On and Off force it. The phone layout is unchanged.</Text>
           </GlassSurface>
+          {wallpaperAvailable ? <WallpaperThemePicker /> : null}
+
           <Text style={styles.label}>Bridge</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Field
@@ -313,6 +321,9 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
 
           <Pressable accessibilityRole="button" accessibilityLabel="Review approvals" onPress={() => navigation.navigate("Approvals")} style={styles.secondary}><Text style={styles.secondaryText}>Review approvals</Text></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Component lab" onPress={() => navigation.navigate("Lab")} style={styles.secondary}><Text style={styles.secondaryText}>Component lab</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Bots page prototype" onPress={() => navigation.navigate("BotsPage")} style={styles.secondary}><Text style={styles.secondaryText}>Bots page (prototype)</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => navigation.navigate("SharedTheme")} style={styles.secondary}><Text style={styles.secondaryText}>Shared theme and cards</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Card gallery" accessibilityHint="Every ephemeral-ui card kind from the shared catalog" onPress={() => navigation.navigate("Gallery")} style={styles.secondary}><Text style={styles.secondaryText}>Card gallery</Text></Pressable>
           <Text style={styles.label}>On your computer</Text>
           <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
             <Text style={styles.mono}>cd bridge && bun run start</Text>
@@ -347,6 +358,25 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
               <Text style={styles.help}>
                 Voice, typed notes on Main, and long-press on rows go to the Dash secondmate until you turn this off.
               </Text>
+              <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+                <Pressable
+                  onPress={() => {
+                    setAgentControl(settings.agentControl !== true);
+                    haptic.tap();
+                  }}
+                  style={({ pressed }) => [styles.harnessRow, pressed && styles.pressed]}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: settings.agentControl === true }}
+                  accessibilityLabel="Agent control"
+                  accessibilityHint="Let agents on your computer open screens and point at things in Dash"
+                >
+                  <Text style={styles.harnessName}>Agent control</Text>
+                  <Text style={styles.statusText}>{settings.agentControl === true ? "On" : "Off"}</Text>
+                </Pressable>
+              </GlassSurface>
+              <Text style={styles.help}>
+                Agents on your computer can open chats and screens (dash-ui) and point at things. Each action shows at the top with Stop.
+              </Text>
             </>
           ) : null}
 
@@ -359,6 +389,24 @@ export function SettingsScreen({ navigation, route }: ScreenProps<"Settings">) {
       </KeyboardAvoidingView>
     </View>
   );
+}
+
+function WallpaperThemePicker() {
+  const selected = appearanceTheme.use(theme => theme === "wallpaper");
+  return <>
+    <Text style={styles.label}>Appearance</Text>
+    <GlassSurface variant="surface" borderRadius={radius.md} style={styles.card}>
+      <Pressable accessibilityRole="switch" accessibilityLabel="Wallpaper glass" aria-checked={selected}
+        onPress={() => setAppearanceTheme(selected ? "night" : "wallpaper")}
+        style={({ pressed }) => [styles.harnessRow, pressed && styles.pressed]}>
+        <Text style={styles.harnessName}>Wallpaper glass</Text>
+        <Text style={styles.statusText}>{selected ? "On" : "Off"}</Text>
+      </Pressable>
+    </GlassSurface>
+    <Text style={styles.help}>{Platform.OS === "web"
+      ? "Web preview uses a sample backdrop. On supported Android builds, this shows your system wallpaper behind chats."
+      : "Show your system wallpaper behind chats with a dark tint to keep text readable."}</Text>
+  </>;
 }
 
 function Field({

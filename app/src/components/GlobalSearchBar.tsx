@@ -15,6 +15,8 @@ import { PRESS_SCALE } from "../motion";
 import { colors, radius, space, type } from "../theme";
 import { GlassSurface } from "./GlassSurface";
 import { MicButton } from "./MicButton";
+import { AgentOrb } from "./AgentOrb";
+import type { OrbState } from "../lib/orb-phase";
 import { popIn, popOut } from "./motion-enter";
 import { PressScale } from "./PressScale";
 import { ComposerSuggestions } from "./ComposerSuggestions";
@@ -26,6 +28,8 @@ interface Props {
   onScope(label: string): void;
   onClear?(): void;
   onVoice?(): void;
+  /** A running Live call: the mic shows its orb, and a tap brings the call forward. */
+  voiceCall?: OrbState;
   onSend?(text: string): void;
   placeholder?: string;
   /** Bottom dock on main screen — chips expand upward. */
@@ -39,6 +43,7 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
   onScope,
   onClear,
   onVoice,
+  voiceCall,
   onSend,
   placeholder = "Message Dash",
   dock = "top",
@@ -216,9 +221,9 @@ export const GlobalSearchBar = memo(function GlobalSearchBar({
             onDictate={onDictate}
             onLive={onLive}
             onSelectLive={onLive}
-            onTap={speechBusy ? onDictate : undefined}
-            accessibilityLabel={speechBusy ? "Stop dictation" : undefined}
-          />
+            onTap={speechBusy ? onDictate : voiceCall ? onLive : undefined}
+            accessibilityLabel={speechBusy ? "Stop dictation" : voiceCall ? `Live call, ${voiceCall.phase}. Show voice orb` : undefined}
+          >{voiceCall ? <AgentOrb size={22} thinking={voiceCall} label={`live call ${voiceCall.phase}`} /> : undefined}</MicButton>
         </View>
       </View>
     </View>

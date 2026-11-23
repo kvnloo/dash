@@ -3,6 +3,7 @@
 //   DASH_VARIANT=release (RC): no expo-dev-client, embedded JS bundle, cleartext ws:// to
 //   the tailnet bridge allowed (release builds block it by default on API 28+).
 // Same applicationId and debug keystore, so an RC installs over the dev client in place.
+const { brand, color } = require("./src/vendor/ephemeral-ui/glide.json");
 const fs = require("node:fs");
 const path = require("node:path");
 const { withAndroidManifest } = require("expo/config-plugins");
@@ -40,7 +41,13 @@ function withAppVariant(config) {
 }
 
 module.exports = ({ config: base }) => {
-  const config = withBuildInfo(require("./plugins/with-dex")(withAppVariant(base)));
+  const config = withBuildInfo(require("./plugins/with-dex")(withAppVariant({
+    ...base,
+    name: brand.name,
+    backgroundColor: color.dark.bg,
+    splash: { ...base.splash, backgroundColor: color.dark.bg },
+    android: { ...base.android, adaptiveIcon: { ...base.android?.adaptiveIcon, backgroundColor: color.dark.bg } },
+  })));
   if (process.env.DASH_VARIANT !== "release") return config;
   const plugins = (config.plugins ?? []).filter((plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) !== "expo-dev-client");
   return withCleartextTraffic({ ...config, plugins });

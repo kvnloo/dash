@@ -20,6 +20,12 @@ export function roadmapNeeds(doc: RoadmapDocument): KevinItem[] {
 const text = (v: unknown) => typeof v === "string" ? v : "";
 const number = (v: unknown) => typeof v === "number" ? v : 0;
 function json(path: string): unknown { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return undefined; } }
+const missing = (e: unknown) => e instanceof Error && "code" in e && (e.code === "ENOENT" || e.code === "ENOTDIR");
+/** Same sources as the roster and /triage. A host without the file has not configured it: no warning. */
+export const FLEET_REGISTRY = "/workspace/.files-k3s/config/fleet/nodes.yaml";
+export function orchestraSources(env: Record<string, string | undefined> = process.env) {
+  return { registry: env.DASH_FLEET_REGISTRY || FLEET_REGISTRY, supervision: env.DASH_SUPERVISION_DIR || DEFAULT_SUPERVISION_DIR };
+}
 function dirs(path: string): string[] { try { return readdirSync(path).map(name => join(path, name)).filter(p => statSync(p).isDirectory()); } catch { return []; } }
 function run(args: string[], cwd?: string): string { const result = spawnSync(args[0]!, args.slice(1), { cwd, encoding: "utf8", timeout: 1500, maxBuffer: 1024 * 1024, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } }); return result.status === 0 ? result.stdout.trim() : ""; }
 function profiles(): string[] {
@@ -55,6 +61,8 @@ export async function collectOrchestra(hosts: HostInfo[], hours = 24, now = Date
       const select = ["id", "source", "title", "model", "parent_session_id", "started_at", "ended_at", "end_reason", "last_activity_at", "cwd", "git_repo_root", "git_branch"].map(c => columns.has(c) ? c : `NULL AS ${c}`).join(",");
       const activity = columns.has("last_activity_at") ? "coalesce(last_activity_at,started_at)" : "started_at";
       const rows = db.query<Record<string, unknown>, [number]>(`SELECT ${select} FROM sessions WHERE ${activity}>=? ORDER BY ${activity} DESC LIMIT 200`).all((now - hours * 3600000) / 1000);
+      // A profile with no messages table has no tool evidence to read; that is not a failure.
+      const hasMessages = Boolean(db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='messages'").get());
       const seenParents = new Set(rows.map(r => text(r.id)));
       for (let i = 0; i < rows.length && i < 300; i++) {
         const row = rows[i];
@@ -75,14 +83,14 @@ export async function collectOrchestra(hosts: HostInfo[], hours = 24, now = Date
         const repo = text(row.git_repo_root) || (cwd ? repoFor(cwd) : "");
         if (repo) repoFor(repo);
         const touched = new Set<string>();
-        try {
+        if (hasMessages) try {
           const messages = db.query<{ tool_calls: string }, [string, number]>("SELECT tool_calls FROM messages WHERE session_id=? AND timestamp>=? AND tool_calls IS NOT NULL AND coalesce(active,1)=1 ORDER BY timestamp DESC LIMIT 100").all(rawId, (now - hours * 3600000) / 1000);
           for (const m of messages) for (const path of toolPaths(m.tool_calls, cwd)) { const root = repoFor(path); if (root) touched.add(root); }
         } catch { warnings.push(`${profile}: tool evidence unavailable`); }
         // Hermes records delegate_task children with parent_session_id; older builds also used source "subagent".
         const delegated = row.source === "subagent" || Boolean(text(row.parent_session_id));
         let title = text(row.title);
-        if (!title) {
+        if (!title && hasMessages) {
           const first = db.query<{ content: string }, [string]>("SELECT substr(content,1,500) AS content FROM messages WHERE session_id=? AND role='user' ORDER BY timestamp LIMIT 1").get(rawId);
           title = redact(text(first?.content)).replace(/\s+/g, " ").slice(0, 100);
         }
@@ -122,8 +130,9 @@ export async function collectOrchestra(hosts: HostInfo[], hours = 24, now = Date
   }
   const health: Record<string, string> = {};
   // Read cached fleet health only: never probe SSH/ADB or mutate cordon state.
+  const sources = orchestraSources();
   let registry: unknown;
-  try { registry = Bun.YAML.parse(readFileSync("/workspace/.files-k3s/config/fleet/nodes.yaml", "utf8")); } catch { warnings.push("Fleet registry unavailable"); }
+  try { registry = Bun.YAML.parse(readFileSync(sources.registry, "utf8")); } catch (e) { if (!missing(e)) warnings.push("Fleet registry unreadable"); }
   const fleetHosts = [...hosts];
   if (record(registry) && record(registry.nodes)) for (const name of Object.keys(registry.nodes)) {
     const path = join(homedir(), ".local/state/fleet/health", `${name}.json`), sample = json(path);
@@ -137,10 +146,11 @@ export async function collectOrchestra(hosts: HostInfo[], hours = 24, now = Date
       health[name] = `${fresh ? "" : "Stale · "}${p.error ? "Offline · probe failed" : `${load} · ${mem} · ${temp}`} · ${sample.healthy ? "healthy" : "degraded"}`;
     }
   }
-  const supervision = json(join(DEFAULT_SUPERVISION_DIR, "state.json"));
+  const supervision = json(join(sources.supervision, "state.json"));
   if (record(supervision) && Array.isArray(supervision.workers)) reconcileWorkerEvidence(sessions, supervision.workers);
-  const batch = parseKevinBatch(json(join(DEFAULT_SUPERVISION_DIR, "needs-kevin.json")));
-  if (!batch) warnings.push("Needs Kevin queue unavailable");
+  const queue = join(sources.supervision, "needs-kevin.json");
+  const batch = parseKevinBatch(json(queue));
+  if (!batch && existsSync(queue)) warnings.push("Needs Kevin queue unreadable");
   let roadmap: KevinItem[] = [];
   try { roadmap = roadmapNeeds(readRoadmap()); } catch { warnings.push("Dash roadmap unavailable"); }
   return buildOrchestra({ hosts: fleetHosts, sessions, repos: [...repos.values()], needs: [...roadmap, ...(batch?.items ?? [])], health, now, hours, warnings: [...new Set(warnings)] });

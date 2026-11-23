@@ -1,6 +1,6 @@
 import type { HistoryMessage } from "../../../shared/protocol";
 import { conversationKey } from "../lib/chat-index";
-import { historyToMessages } from "../lib/live-sessions";
+import { historyToMessages, nativeRowsShown } from "../lib/live-sessions";
 import type { Conversation, Message } from "../model";
 import { chatsApi, type ApiSettings, type ChatsApi } from "../net/chats-api";
 import { createStore } from "./createStore";
@@ -83,6 +83,15 @@ function capOlder(older: Message[], unlisted: Message[]): Pick<HistoryPagesState
   if (excess <= 0) return { older, unlisted };
   const fromUnlisted = Math.min(excess, unlisted.length);
   return { unlisted: unlisted.slice(fromUnlisted), older: older.slice(excess - fromUnlisted) };
+}
+
+/**
+ * Ids the chat already shows, for a page of its native history: its own rows, and the native copies
+ * of its phone turns (the agent records a phone turn under its own ids). Without the second, the
+ * prompt and reply a phone just sent are listed again above it once the agent has recorded them.
+ */
+function shownIds(messages: readonly Message[], page: readonly Message[]): Set<string> {
+  return new Set([...messages.map(m => m.id), ...nativeRowsShown(messages, page)]);
 }
 
 /** Fresh messages of a page: ids not already loaded or shown. */
@@ -176,8 +185,8 @@ async function fetchOlder(conversation: Conversation, limit: number, listed: boo
     return "failed";
   }
   const current = deps.conversation(conversation.id) ?? conversation;
-  const shown = new Set(current.messages.map(m => m.id));
   const page = historyToMessages(result.value.messages, conversation.id, conversation.harness === "hermes");
+  const shown = shownIds(current.messages, page);
   patch(conversation.id, s => s.before !== before ? (listed ? { ...s, loading: false } : s)
     : listed ? prependOlder(s, page, shown, result.value.before) : prependUnlisted(s, page, shown, result.value.before));
   return "landed";
@@ -283,7 +292,6 @@ export async function primeCursor(conversation: Conversation): Promise<void> {
   if (!settings || state.loading || state.before !== undefined || !conversation.sessionId || !conversation.targetHostId) return;
   if (!ownsHistoryRequest(conversation, settings)) return;
   const pending = beginLoading(conversation.id);
-  const shown = new Set(conversation.messages.map(m => m.id));
   // The cached window (up to 80) can be longer than one page: walk back until a page reaches past
   // it, so the stored cursor never points inside what is already on screen.
   let before: string | undefined;
@@ -300,7 +308,9 @@ export async function primeCursor(conversation: Conversation): Promise<void> {
       patch(conversation.id, s => ({ ...s, loading: false }));
       return;
     }
-    const page = historyToMessages(result.value.messages, conversation.id, conversation.harness === "hermes").filter(message => !shown.has(message.id));
+    const native = historyToMessages(result.value.messages, conversation.id, conversation.harness === "hermes");
+    const shown = shownIds(conversation.messages, native);
+    const page = native.filter(message => !shown.has(message.id));
     const next = result.value.before;
     if (page.length > 0 || next === null || n === PRIME_MAX_PAGES - 1) {
       releaseLoading(conversation.id, pending);

@@ -1,4 +1,5 @@
 import { BlurTargetView } from "expo-blur";
+import { useWallpaperGlass } from "../components/WallpaperTheme";
 import { useIsFocused } from "@react-navigation/native";
 import { Canvas } from "../components/Canvas";
 import { WorkspaceHeader } from "../components/WorkspaceHeader";
@@ -14,6 +15,7 @@ import { OrbActivity } from "../components/OrbMotion";
 import { applyScopeMention, GlobalSearchBar } from "../components/GlobalSearchBar";
 import { ConnectionPill } from "../components/ConnectionPill";
 import { AttachedComposer } from "../components/AttachedComposer";
+import { useLiveVoiceAction } from "../components/ContinuousVoiceRoot";
 import { QuickPin } from "../components/QuickPin";
 import { KeyboardDock } from "../components/KeyboardDock";
 import { AppNav, type AppNavHandle } from "../components/AppNav";
@@ -37,6 +39,8 @@ import { FEEDBACK_CONVERSATION_ID, inAppFeedbackEnabled, type FeedbackAction } f
 import { submitInAppFeedback } from "../lib/feedback-submit";
 import { noteTurboTab } from "../lib/turbo-navigation";
 import { DEFAULT_MAIN_TAB } from "../lib/home";
+import { feedbackConversation, opensOnDogfood } from "../lib/dogfood-home";
+import { DogfoodHome } from "../components/DogfoodHome";
 import { composerTrigger } from "../lib/composer-suggestions";
 import type { AgentTarget } from "../mock/agents";
 import type { ScreenProps } from "../navigation";
@@ -46,6 +50,8 @@ import { colors, space, type } from "../theme";
 import { HostsPane } from "./panes/HostsPane";
 import { ChatsPane } from "./panes/ChatsPane";
 import { OrchestraPane } from "./panes/OrchestraPane";
+import { ZeroCard } from "../components/ZeroCard";
+import { useTraceFeed } from "../trace/useTraceFeed";
 
 function feedbackFromSearch(item: SearchResult): FeedbackAction {
   switch (item.kind) {
@@ -148,6 +154,9 @@ function chatDraftForResult(item: SearchResult): string | undefined {
 export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const insets = useSafeAreaInsets();
   const screenFocused = useIsFocused();
+  const wallpaper = useWallpaperGlass();
+  // The main-bar mic's Live mode runs the call here, in Dash's own voice bar and orb: no Voice screen, no other app.
+  const liveVoice = useLiveVoiceAction();
   const [foreground, setForeground] = useState(AppState.currentState === "active");
   useEffect(() => {
     const listener = AppState.addEventListener("change", state => setForeground(state === "active"));
@@ -169,6 +178,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   const [localTab, setLocalTab] = useState(routeTab ?? DEFAULT_MAIN_TAB);
   const query = debugSearch !== null ? debugSearch : localQuery;
   const index = debugTab !== null ? debugTab : localTab;
+  // Cold open lands on the dogfood home (self-development loop) while in-app feedback is on.
+  const [home, setHome] = useState(() => opensOnDogfood(store.get().settings, { debug: isDebugActive(), routeTab }));
 
   const setQuery = useCallback(
     (next: string | ((prev: string) => string)) => {
@@ -195,10 +206,12 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   // the tab Main already recorded (after the user swiped away) still moves the pager.
   const routeParams = route.params;
   useEffect(() => {
+    if (route.params?.home === true) { setHome(true); return; }
     if (typeof routeTab !== "number") return;
+    setHome(false);
     setIndex(routeTab);
     pagerRef.current?.setPage(routeTab);
-  }, [routeParams, routeTab, setIndex]);
+  }, [route.params?.home, routeParams, routeTab, setIndex]);
 
   const onPage = useCallback(
     (e: { nativeEvent: { position: number } }) => {
@@ -339,6 +352,22 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
   );
 
   const feedbackOn = inAppFeedbackEnabled(settings);
+  // The Zero card above the main input loads its own authenticated trace, on every Main tab.
+  const zeroVisible = screenFocused && !searchMode && !attached;
+  useTraceFeed(settings, zeroVisible && foreground);
+  const showHome = home && feedbackOn && debugTab === null && !searchActive;
+  const openTab = useCallback((next: number) => {
+    setHome(false);
+    setIndex(next);
+    pagerRef.current?.setPage(next);
+  }, [setIndex]);
+  const openFeedbackThread = useCallback(() => {
+    const s = store.get();
+    const thread = feedbackConversation(s.conversations, s.settings?.address);
+    if (!thread) return;
+    setActive(thread.id);
+    navigation.navigate("Chat");
+  }, [navigation]);
   const harnessId = settings?.harness ?? harnesses[0]?.id ?? "omp";
   const harnessName = harnesses.find((h) => h.id === harnessId)?.name ?? harnessId;
 
@@ -447,22 +476,21 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
       <ChatsPane navigation={navigation} focused={index === 1 && !searchActive} />
     </View>,
     <View key="orchestra" style={{ width, flex: 1 }}>
-      <LazyPane focused={index === 2}><OrbActivity active={index === 2 && !searchActive && screenFocused && foreground}><OrchestraPane navigation={navigation} focused={index === 2 && !searchActive && screenFocused && foreground} /></OrbActivity></LazyPane>
+      <LazyPane focused={index === 2 && !showHome}><OrbActivity active={index === 2 && !showHome && !searchActive && screenFocused && foreground}><OrchestraPane navigation={navigation} focused={index === 2 && !showHome && !searchActive && screenFocused && foreground} /></OrbActivity></LazyPane>
     </View>,
-  ], [navigation, index, searchActive, screenFocused, foreground, width]);
+  ], [navigation, index, showHome, searchActive, screenFocused, foreground, width]);
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}><Canvas />
+    <View style={[styles.screen, { paddingTop: insets.top }, wallpaper && { backgroundColor: "transparent", opacity: screenFocused ? 1 : 0 }]}>{wallpaper ? null : <Canvas />}
       {desk ? null : <AppNav
         ref={navRef}
         navigation={navigation}
         tab={index}
+        home={showHome}
         progress={pagerProgress}
-        onTab={(next) => {
-          pagerRef.current?.setPage(next);
-        }}
+        onTab={openTab}
       />}
-      {desk ? null : <WorkspaceHeader navigation={navigation} tab={index} titleOnly={index === 2} />}
+      {desk ? null : <WorkspaceHeader navigation={navigation} tab={index} titleOnly={index === 2 && !showHome} title={showHome ? "Dogfood" : undefined} />}
       <ConnectionPill />
       <BlurTargetView ref={blurTarget} style={styles.body}>
         {searchActive ? (
@@ -505,6 +533,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
             >
               {pages}
             </MainPager>
+            {showHome ? <DogfoodHome onOpenThread={openFeedbackThread} onOpenTab={openTab} /> : null}
           </Animated.View>
         )}
       </BlurTargetView>
@@ -522,7 +551,8 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               if (searchQuery !== undefined) setQuery(searchQuery);
               setSearchMode(true);
             }}
-            onVoice={() => navigation.navigate("Voice", { autostart: true })}
+            onVoice={liveVoice.live}
+            voiceCall={liveVoice.call}
             onDetach={() => setActive(null)}
           />
         ) : (
@@ -533,6 +563,7 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
                 <Text numberOfLines={1} style={styles.resumeText}>Return to {attached.title || attached.harness}</Text>
               </Pressable>
             ) : null}
+            {zeroVisible ? <ZeroCard onOpenTrace={() => navigation.navigate("Trace")} /> : null}
             <GlobalSearchBar
               value={query}
               blurTarget={blurTarget}
@@ -540,10 +571,9 @@ export function MainScreen({ navigation, route }: ScreenProps<"Main">) {
               onScope={onScope}
               dock="bottom"
               placeholder={`Message ${harnessName}`}
-              onVoice={() => {
-                // Voice keeps the explicitly attached chat; never retarget via a new feedback chat.
-                navigation.navigate("Voice", { autostart: true });
-              }}
+              // Voice keeps the explicitly attached chat; never retarget via a new feedback chat.
+              onVoice={liveVoice.live}
+              voiceCall={liveVoice.call}
               onSend={(text) => {
                 if (feedbackOn) {
                   haptic.select();

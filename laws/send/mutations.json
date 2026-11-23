@@ -172,6 +172,60 @@
       "law_false_here": true
     },
     {
+      "law": "S8 hermes_bot_needs_hermes",
+      "mutation": "hermes:<profile> admitted for any harness",
+      "counterexample": "profileId hermes:tek sent with harness claude -> admitted, Claude runs under a Hermes bot profile",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.hermes_bot_needs_hermes",
+      "law_false_here": true
+    },
+    {
+      "law": "S8 hermes_bot_needs_profile",
+      "mutation": "hermes:<profile> admitted when the profile does not exist here",
+      "counterexample": "New agent -> Hermes bot nope (no such profile on this host) -> admitted, Hermes starts in a missing profile",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.hermes_bot_needs_hermes",
+      "law_false_here": true
+    },
+    {
+      "law": "S8 hermes_bot_new_chat_only",
+      "mutation": "hermes:<profile> admitted with a session id",
+      "counterexample": "profileId hermes:tek with sessionId 9 -> admitted, the bot route resumes an arbitrary session",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.hermes_bot_new_chat_only",
+      "law_false_here": true
+    },
+    {
+      "law": "S8 cursor_agent_valid_id",
+      "mutation": "cursor-cloud:<id> admitted without the agent id check",
+      "counterexample": "profileId cursor-cloud:../x with that sessionId -> admitted, a path-shaped id reaches the Cursor API URL",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.cursor_agent_own_harness",
+      "law_false_here": true
+    },
+    {
+      "law": "S8 cursor_agent_own_session",
+      "mutation": "cursor-cloud:<id> admitted for any session",
+      "counterexample": "profileId cursor-cloud:bc_9 with sessionId bc_8 -> admitted, the follow-up goes to the wrong agent",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.cursor_agent_own_harness",
+      "law_false_here": true
+    },
+    {
+      "law": "S8 cursor_agent_own_harness",
+      "mutation": "cursor-cloud:<id> admitted for any harness",
+      "counterexample": "profileId cursor-cloud:bc_9 sent with harness claude -> admitted",
+      "rejected": true,
+      "proofs_check": false,
+      "where": "Laws.cursor_agent_own_harness",
+      "law_false_here": true
+    },
+    {
       "law": "S9 no_silent_refusal",
       "mutation": "pre-#457 rejectTurn without the turn.rejected log line",
       "counterexample": "phone sends to a host id that is not this bridge -> refused, nothing in the bridge log",
@@ -307,6 +361,6 @@
       "law_false_here": true
     }
   ],
-  "rejected": 33,
-  "total": 33
+  "rejected": 39,
+  "total": 39
 }

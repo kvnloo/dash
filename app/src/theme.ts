@@ -1,19 +1,19 @@
-/** zerOS ui-foundation/tokens.json @ 5cf5101. OKLCH → linear sRGB → sRGB,
- * clamped to gamut and rounded to 8 bits once; no runtime colour conversion. */
+import { glide, glideDuration, glidePalette } from "./lib/glide-theme";
+import { TURBO } from "./turbo";
+
 const mono = process.env.EXPO_PUBLIC_ZEROS_THEME === "proof-mono";
 /** Proof Mono: meaning must survive without hue. */
 export const proofMono = mono;
+// The Dash shell remains dark; embedded cards and the gallery can use either shared scheme.
+const dark = glide.color.dark;
+// AODL pins ink-2, ink-3 and green (scripts/check-aodl-tokens); Glide's dark scheme supplies the rest.
+const aodl = { ink2: "#B4AFA3", ink3: "#837F74", green: "#98cf8b" } as const;
 const night = {
-  bg: "#0c0c0a", surfaceRaised: "#151611",
-  text: "#ECE8DF", textMuted: "#B4AFA3", textTertiary: "#837F74", textFaint: "#5e5b52",
-  accent: "#d7b986", // oklch(0.80 0.075 80)
-  actionStrong: "#eccd8c", // oklch(0.86 0.09 85)
-  actionMuted: "#99835c", // oklch(0.62 0.06 80)
-  ok: "#98cf8b", // oklch(0.80 0.11 140)
-  information: "#81b9da", // oklch(0.76 0.075 235)
-  warn: "#e7a875", // oklch(0.78 0.10 60)
-  danger: "#e37f65", // oklch(0.70 0.13 35)
-  provenance: "#b098cd", // oklch(0.72 0.08 305)
+  bg: dark.bg, surfaceRaised: dark.popover,
+  text: dark.fg, textMuted: aodl.ink2, textTertiary: aodl.ink3, textFaint: "#5e5b52",
+  accent: dark.primary, actionStrong: glide.brand.cta.rim, actionMuted: glide.brand.cta.shade,
+  ok: aodl.green, information: dark.info, warn: dark.warning,
+  danger: dark.dangerFg, provenance: dark.magenta,
 };
 const palette = mono ? { ...night, bg: "#050505", surfaceRaised: "#111111", text: "#f0f0ed", textMuted: "#c4c4c0", textTertiary: "#92928d", textFaint: "#74746f", accent: "#f0f0ed", actionStrong: "#ffffff", actionMuted: "#b0b0ac", ok: "#f0f0ed", information: "#d8d8d4", warn: "#c2c2bd", danger: "#ffffff", provenance: "#a6a6a1" } : night;
 export const glass = {
@@ -33,20 +33,24 @@ export const glass = {
   rim: mono ? "rgba(255,255,255,.26)" : "rgba(255,255,255,.30)",
   edge: mono ? "rgba(0,0,0,.28)" : "rgba(0,0,0,.18)",
   highlight: "rgba(255,255,255,.18)", // glass-rim at 60% opacity
-  sat: 1.7, bright: 1.08, blurIos: 32, blurAndroid: 22, blurWeb: 16, blurNav: 24, blurCircle: 18,
+  sat: glide.glass.card.saturate / 100, bright: 1.08,
+  blurIos: glide.glass.card.blur, blurAndroid: glide.glass.card.blur, blurWeb: glide.glass.bar.blur,
+  blurNav: glide.glass.bar.blur, blurCircle: glide.glass.composer.blur,
 } as const;
 export const colors = {
-  ...palette, orchestraSubagent: mono ? palette.textMuted : "#63bfae", surface: glass.fill, border: glass.hair, onAccent: palette.bg, bubble: glass.fillNavStrong,
+  ...palette, orchestraSubagent: mono ? palette.textMuted : "#63bfae", surface: glass.fill, border: glass.hair, onAccent: mono ? palette.bg : glidePalette("dark").onAccent, bubble: glass.fillNavStrong,
   gold: palette.accent, goldHi: palette.actionStrong, goldLo: palette.actionMuted,
   goldGlow: palette.actionMuted, goldGlass: palette.accent, gold68: palette.actionMuted,
   goldRim: palette.actionStrong, ink: palette.text, ink2: palette.textMuted,
   ink3: palette.textTertiary, inkDark: palette.bg, devNav: glass.fillNavStrong,
   devNav96: glass.fillNavStrong, navGlass: glass.fill, hair: glass.hair, hair2: glass.hair2,
 } as const;
-export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48, scene: 64 } as const;
-export const radius = { sm: 6, card: 8, md: 14, lg: 18, pill: 999 } as const;
+// One tint over the wallpaper keeps chat readable even against bright images.
+export const wallpaperScrim = "rgba(8,9,8,0.80)";
+export const space = { xs: glide.space["1"], sm: glide.space["2"], md: glide.space["3"], lg: glide.space["4"], xl: glide.space["6"], xxl: 32, xxxl: 48, scene: 64 } as const;
+export const radius = { sm: glide.radius.chip, card: glide.radius.tile, md: glide.radius.block, lg: glide.radius.card, pill: glide.radius.pill } as const;
 export const controlMin = 44;
-export const timing = { immediate: 140, state: 240, transition: 560 } as const;
+export const timing = { immediate: glideDuration("press", TURBO), state: glideDuration("base", TURBO), transition: glideDuration("reveal", TURBO) } as const;
 export const easing = { settle: [.2,.75,.2,1], press: [.2,.7,.2,1], sheet: [.32,.72,0,1], spring: [.3,.8,.3,1.5] } as const;
 export const fonts = { editorial: "CormorantGaramond_500Medium", body: "HankenGrotesk_400Regular", semibold: "HankenGrotesk_600SemiBold", mono: "IBMPlexMono_400Regular" } as const;
 export const type = {
@@ -55,8 +59,8 @@ export const type = {
   cardTitle: { fontFamily: fonts.editorial, fontSize: 22, lineHeight: 28, fontWeight: "500" as const },
   number: { fontFamily: fonts.editorial, fontSize: 34, lineHeight: 36, fontWeight: "500" as const, fontVariant: ["tabular-nums"] as ("tabular-nums")[] },
   heading: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 22, fontWeight: "600" as const },
-  body: { fontFamily: fonts.body, fontSize: 16, lineHeight: 24 },
-  small: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18 },
+  body: { fontFamily: fonts.body, fontSize: glide.type.base.size, lineHeight: Math.round(glide.type.base.size * glide.type.base.lineHeight) },
+  small: { fontFamily: fonts.body, fontSize: glide.type.size.body, lineHeight: 18 },
   label: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, fontWeight: "600" as const, letterSpacing: .4 },
   mono: { fontFamily: fonts.mono, fontSize: 12, lineHeight: 16, fontWeight: "400" as const },
 } as const;

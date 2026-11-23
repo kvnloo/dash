@@ -4,6 +4,7 @@ import { requireOptionalNativeModule } from "expo-modules-core";
 import { AppState, Platform } from "react-native";
 import { notificationState } from "../store/notifications";
 import { store } from "../store/app";
+import { nativeNoticeMode } from "./worker-mode";
 import { executionToken } from "./bridge-auth";
 import { createNoticePostureReader, nativeNoticeAllowed, notificationChannels } from "./notice-posture";
 import { route } from "../../../shared/interaction-policy";
@@ -55,7 +56,7 @@ export async function startNativeNotifications(open: (target: NotificationTarget
     await refreshNotificationPermission();
     notifications.setNotificationHandler({ handleNotification: async (notification: import("expo-notifications").Notification) => {
       const report = Reflect.get(notification.request.content.data ?? {}, "report") === true;
-      const show = shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get(), report });
+      const show = nativeNoticeMode() !== "me" && shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get(), report });
       return { shouldShowBanner: show, shouldShowList: show, shouldPlaySound: false, shouldSetBadge: false };
     } });
     let lastId: string | undefined;
@@ -97,13 +98,13 @@ export async function disableNativeNotifications(): Promise<void> {
   } catch (error) { failure(error); }
 }
 export async function postNativeNotice(notice: DashNotice): Promise<void> {
-  if (!shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get(), report: notice.report })) return;
+  if (nativeNoticeMode() === "me" || !shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get(), report: notice.report })) return;
   try {
     const decision = await readNoticePosture(store.get().settings);
     const routed = route(decision, { cls: notice.class ?? (notice.target.kind === "approvals" ? "decision" : "report"), producer: "dash-notify" }, new Date().toISOString());
     if (!nativeNoticeAllowed(decision, routed)) return;
     const notifications = await channel();
-    if (!notifications || !shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get(), report: notice.report })) return;
+    if (!notifications || nativeNoticeMode() === "me" || !shouldNotify({ foreground: AppState.currentState === "active", ...notificationState.get(), report: notice.report })) return;
     const channels = notificationChannels(notifications.AndroidImportance, notifications.AndroidNotificationVisibility.PRIVATE);
     await notifications.scheduleNotificationAsync({ identifier: notice.key,
       content: { title: notice.title, body: notice.body, sound: false, autoDismiss: true,

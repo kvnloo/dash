@@ -45,6 +45,9 @@ export interface AnnotateState {
   sink?: string;
   /** An unconfirmed voice annotation keeps its exact submission, never resends as a new turn. */
   pendingTurn?: { id: string; conversationId: string; fingerprint: string };
+  /** Set when the ink was started from the Learn surface: Send frames it as a Learn sketch and
+   * closing the overlay goes back to Learn. */
+  learn?: { topic: string };
 }
 
 /** Annotation is a volatile session: cold starts and module refreshes begin closed.
@@ -94,6 +97,18 @@ export function currentSink(): AnnotationSink | undefined {
   // Never let that call steal ink from the open chat.
   if (chat) return voice?.conversationId === chat.conversationId && !!chat.conversationId ? voice : chat;
   return voice;
+}
+
+/** Learn and Quick send typed prompts, not ink: they go to the open chat even while a voice call
+ * is bound to it (the voice sink's receipt tracking belongs to annotation drafts). */
+export function currentChatSink(): AnnotationSink | undefined {
+  return sinks.findLast(sink => !sink.live) ?? currentSink();
+}
+
+/** S Pen ink from Learn: the same overlay, with the Learn topic riding along to the agent. */
+export function enterLearnSketch(topic: string): void {
+  annotate.set(s => ({ ...s, learn: { topic: topic.trim().slice(0, 300) } }));
+  enterAnnotation();
 }
 
 /** All entry points reset transient feedback; palm rejection needs observed hardware. */

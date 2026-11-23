@@ -66,6 +66,7 @@ Each model def in `laws/send/send.bend` names the code that it mirrors. In
 | `bridge/src/chat-index/agentsview-src.ts` `machineHost`, `avChatRow` (`routed`, `chatable`); `bridge/src/remote-hosts.ts` `REMOTE_HARNESSES` | `x_self`, `x_routed`, `x_chatable`, `x_row_routes` | S5-S7 |
 | `bridge/src/chat-index/sidecar.ts` `toSummary`; `app/src/lib/live-sessions.ts` `adoptSummary`; `app/src/net/bridge.ts` `targetForTurn` | `x_row_routes` | S7 |
 | `bridge/src/agentsview-sessions.ts` `isSelfArchiveProfile`; `bridge/index.ts` profile gate in `case "chat"` and `case "voice_begin"` | `x_self_archive`, `x_profile_ok`, `x_local_routes` | S7-S8 |
+| `bridge/index.ts` `spawnProfileRoute` (New agent sheet: Hermes profile bot, Cursor cloud agent) | `x_hermes_bot`, `x_cursor_agent`, `x_profile_ok` | S7-S8 |
 | `bridge/index.ts` `rejectTurn`, `case "chat"`, `case "voice_begin"` | `a_reject`, `a_admit`, `a_tail` | S9-S12 |
 | `bridge/index.ts` `case "chat"` `if (remote)` branch; `bridge/src/remote-hosts.ts` `remoteTurnProblem` | `a_remote`, `a_remote_gates` | S13-S15 |
 
@@ -73,8 +74,10 @@ Each model def in `laws/send/send.bend` names the code that it mirrors. In
 `bridge/index.ts`. Every `return` there must be `return rejectTurn(...)` or the
 duplicate-id line.
 
-**Sync commit: `b0ca65e`** (`isSelfArchiveProfile` also accepts the Hosts tree's
-local-store id `<harness>:session:<id>`; before that, `7fa808a`, the rc3
+**Sync commit: the boat/dash-int5 merge of #750** (the profile gate also admits
+`spawnProfileRoute`: a new Hermes chat in an existing gateway profile bot, and a
+Cursor cloud agent's own chat; before that, `b0ca65e`, where `isSelfArchiveProfile`
+also accepts the Hosts tree's local-store id `<harness>:session:<id>`; before that, `7fa808a`, the rc3
 integration line with remote resume and the owner's chat fixes). The model was confirmed against the code at this commit. It
 builds on `0e145ec` (PR #457, `fix/rc3-send-longpress`, the code that fixed the
 three RC3 send bugs). On a base that predates #457, `anchors.py` fails on
@@ -117,9 +120,9 @@ ssh "$HEAVY_HOST" "cd $D && laws/send/run.sh --heavy"   # takes flock -w 7200 ~/
 Green looks like this:
 
 ```
-anchors: 34 + 2 handler scans, all in place
+anchors: 36 + 2 handler scans, all in place
 ALL PROOFS CHECK
-reference passes: True; mutations rejected: 33/33
+reference passes: True; mutations rejected: 39/39
 ```
 
 ## Read a failure

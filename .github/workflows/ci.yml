@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, preview, nightly, dev, 'integrate/**', 'integ/**']
+    branches: [main, preview, nightly, dev, staging, 'integrate/**', 'integ/**']
 
 concurrency:
   # Superseded PR updates may cancel; each integration push keeps its own O15 army receipt.
@@ -140,15 +140,33 @@ jobs:
         if: matrix.gate == 'android-export'
         run: bash scripts/ci-android-export.sh
 
+  # Verify only immutable inputs here; upstream main is checked in the freshness workflow.
+  ephemeral-ui-pin:
+    name: ephemeral-ui pin (vendored integrity)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Prepare pinned ephemeral-ui source and locked build tools
+        run: bash scripts/check-ephemeral-pin.sh --prepare
+      - name: Check vendored kit, theme and catalog offline
+        run: bash scripts/check-ephemeral-pin.sh
+      - name: Verify upstream drift cannot fail the offline check
+        run: bash scripts/test-ephemeral-pin.sh
+
   required-gates:
     if: always()
     # The checks matrix succeeds only if typecheck, lint and android-export all pass.
-    needs: [test, checks, gitleaks]
+    needs: [test, checks, gitleaks, ephemeral-ui-pin]
     runs-on: ubuntu-latest
     steps:
       - name: Reject failed, cancelled or skipped gates
         env:
           TEST_RESULT: ${{ needs.test.result }}
           GATE_RESULT: ${{ needs.checks.result }}
+          PIN_RESULT: ${{ needs.ephemeral-ui-pin.result }}
           SECRET_SCAN_RESULT: ${{ needs.gitleaks.result }}
-        run: test "$TEST_RESULT" = success && test "$GATE_RESULT" = success && test "$SECRET_SCAN_RESULT" = success
+        run: test "$TEST_RESULT" = success && test "$GATE_RESULT" = success && test "$SECRET_SCAN_RESULT" = success && test "$PIN_RESULT" = success

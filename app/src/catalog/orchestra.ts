@@ -199,6 +199,24 @@ function cwdMatches(cwd: string | undefined, nodeId: string): boolean {
   return parts.some((part) => part === nodeId);
 }
 
+/** True when a repository root (not just any ancestor folder) is the node's repository. */
+export function repoIs(root: string | undefined, nodeId: string): boolean {
+  if (!root) return false;
+  return root.replace(/\\/g, "/").split("/").filter((part) => part.length > 0).at(-1) === nodeId;
+}
+
+/**
+ * Repository root the bridge resolved for a roster agent (git rev-parse --show-toplevel),
+ * or undefined when it resolved none. A resolved root decides membership; only an
+ * unresolved agent falls back to the cwd path rule.
+ */
+export type AgentRepo = (host: HostInfo, agent: AgentInfo) => string | undefined;
+
+function agentIn(host: HostInfo, agent: AgentInfo, nodeId: string, repoOf?: AgentRepo): boolean {
+  const root = repoOf?.(host, agent);
+  return root ? repoIs(root, nodeId) : cwdMatches(agent.cwd, nodeId);
+}
+
 function nameMatches(agent: AgentInfo, nodeId: string): boolean {
   const needle = nodeId.toLowerCase();
   return agent.name.toLowerCase() === needle || agent.kind.toLowerCase() === needle || agent.id.toLowerCase() === needle;
@@ -227,10 +245,10 @@ function uniqueKinds(agents: AgentInfo[]): string[] {
   return kinds;
 }
 
-function dashAgents(hosts: HostInfo[]): string[] {
+function dashAgents(hosts: HostInfo[], repoOf?: AgentRepo): string[] {
   const self = hosts.find((row) => row.self);
   if (!self?.online) return [];
-  return uniqueKinds(self.agents.filter((agent) => isRunning(agent) && cwdMatches(agent.cwd, "dash")));
+  return uniqueKinds(self.agents.filter((agent) => isRunning(agent) && agentIn(self, agent, "dash", repoOf)));
 }
 
 function hermesAgents(hosts: HostInfo[]): string[] {
@@ -243,18 +261,18 @@ function hermesAgents(hosts: HostInfo[]): string[] {
   return uniqueKinds(matched);
 }
 
-function matchingAgents(hosts: HostInfo[], nodeId: AodlNetworkId): string[] {
+function matchingAgents(hosts: HostInfo[], nodeId: AodlNetworkId, repoOf?: AgentRepo): string[] {
   const matched: AgentInfo[] = [];
   for (const host of hosts) {
     for (const agent of host.agents) {
       if (!isRunning(agent)) continue;
-      if (cwdMatches(agent.cwd, nodeId) || nameMatches(agent, nodeId)) matched.push(agent);
+      if (agentIn(host, agent, nodeId, repoOf) || nameMatches(agent, nodeId)) matched.push(agent);
     }
   }
   return uniqueKinds(matched);
 }
 
-export function hydrateOrchestras(rows: OrchestraProject[], hosts: HostInfo[], now: number): OrchestraProject[] {
+export function hydrateOrchestras(rows: OrchestraProject[], hosts: HostInfo[], now: number, repoOf?: AgentRepo): OrchestraProject[] {
   const byId = new Map<string, OrchestraProject>();
   for (const row of rows) {
     if (!isNetworkId(row.id) || FORBIDDEN_GRAPH_IDS.has(row.id)) continue;
@@ -265,9 +283,9 @@ export function hydrateOrchestras(rows: OrchestraProject[], hosts: HostInfo[], n
     const row = byId.get(id);
     if (!row) continue;
     let agents: string[] = [];
-    if (id === "dash") agents = dashAgents(hosts);
+    if (id === "dash") agents = dashAgents(hosts, repoOf);
     else if (id === "hermes-agent") agents = hermesAgents(hosts);
-    else agents = matchingAgents(hosts, id);
+    else agents = matchingAgents(hosts, id, repoOf);
     const active = agents.length > 0;
     out.push({
       id: row.id,

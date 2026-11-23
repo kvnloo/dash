@@ -1,5 +1,6 @@
 // Skia's Web API captures global.CanvasKit at module evaluation. App imports
 // ShimmerText eagerly, so the WASM must precede *all* App imports, not just ink.
+import "./performance-trim";
 import { registerRootComponent } from "expo";
 import { useEffect, useState, type ComponentType } from "react";
 import { StyleSheet, Text, View } from "react-native";
