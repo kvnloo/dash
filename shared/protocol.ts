@@ -27,6 +27,8 @@ export type NoticeMode = "worker" | "me";
 /** Silent notices still reach the inbox, but must never produce a device alert. */
 export type NoticeMessage = NoticeInput & { type: "notice"; id: string; silent?: true };
 export const NOTICE_MODE_FEATURE = "notice-mode.v1";
+/** The server accepts ui_control_hello on the base connection. */
+export const UI_CONTROL_FEATURE = "ui-control.v1";
 export interface ChatPost { type: "chat_post"; id: string; chat: string; body: string; postedAt: number }
 
 /** Reports are additive v1 events, never approvals or turn events. */
