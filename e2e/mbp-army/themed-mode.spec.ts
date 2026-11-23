@@ -3,6 +3,7 @@
 // Living Night stays the default and draws neither.
 import type { Page } from 'playwright/test';
 import { test, expect, pair, composer, send, web } from './fixtures';
+import { flatteningOf } from './fabric-flattening';
 
 test.afterEach(async ({ page }, info) => {
   if (!page.isClosed()) await page.screenshot({ path: info.outputPath('final.png') });
@@ -142,4 +143,38 @@ test('themed mode: Blueprint in desk mode keeps the wallpaper behind the desk sh
   await expect(page.getByTestId('settings-theme-elemental').getByTestId('elemental-stone').first()).toBeAttached();
   await expect(page.getByTestId('desk-shell')).toBeVisible();
   await page.screenshot({ path: info.outputPath('blueprint-desk-settings.png') });
+});
+
+test('themed mode: with Blueprint on, the gear on Chats opens Settings without re-parenting a mounted screen root (S25 addViewAt crash)', async ({ page, bridge }, info) => {
+  // S25, Fabric: Blueprint on -> Chats -> gear crashed with `addViewAt: failed to insert view into parent at index 1`.
+  // A screen root that Fabric flattens while focused and must create once covered (or the reverse)
+  // gets its children re-parented in the navigation's mount batch. Each screen root must keep one
+  // flattening decision whether focused or covered; the wallpaper stays one root instance throughout.
+  await pair(page, bridge, `${web}?theme=blueprint&wallpaper=poster`);
+  await expect(page.getByTestId('chats-pane')).toBeVisible();
+  await expect(page.getByTestId('themed-backdrop')).toHaveCount(1);
+  await page.evaluate(() => { Reflect.set(window, '__armyBackdrop', document.querySelector('[data-testid="themed-backdrop"]')); });
+  const chatsFocused = await flatteningOf(page, 'Main', 'chats-pane');
+  await openSettings(page);
+  await expect(page.getByTestId('settings-theme-elemental')).toBeVisible();
+  await expect(page.getByTestId('settings-theme-blueprint')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('settings-theme-elemental').getByTestId('elemental-stone').first()).toBeAttached();
+  const chatsCovered = await flatteningOf(page, 'Main', 'chats-pane');
+  expect(chatsCovered.formsView, `Chats root: focused ${JSON.stringify(chatsFocused)}, under Settings ${JSON.stringify(chatsCovered)}`).toBe(chatsFocused.formsView);
+  await page.screenshot({ path: info.outputPath('blueprint-settings-from-chats.png') });
+  // Settings is a screen root too: covering it (Notices) must not flip it either.
+  const settingsFocused = await flatteningOf(page, 'Settings', 'settings-theme-elemental');
+  await page.getByRole('button', { name: 'Notices · Agent reports', exact: true }).click({ noWaitAfter: true });
+  await expect(page.getByText('Notices', { exact: true }).first()).toBeVisible();
+  const settingsCovered = await flatteningOf(page, 'Settings', 'settings-theme-elemental');
+  expect(settingsCovered.formsView, `Settings root: focused ${JSON.stringify(settingsFocused)}, under Notices ${JSON.stringify(settingsCovered)}`).toBe(settingsFocused.formsView);
+  // The wallpaper is the same single root layer before and after: never remounted, never a per-screen copy.
+  await expect(page.getByTestId('themed-backdrop')).toHaveCount(1);
+  await expect(page.getByTestId('blueprint-wallpaper')).toHaveCount(1);
+  expect(await page.evaluate(() => Reflect.get(window, '__armyBackdrop') === document.querySelector('[data-testid="themed-backdrop"]'))).toBe(true);
+  await page.getByRole('button', { name: 'Back', exact: true }).filter({ visible: true }).first().click({ noWaitAfter: true });
+  await expect(page.getByTestId('settings-theme-elemental')).toBeVisible();
+  await page.getByRole('button', { name: 'Back', exact: true }).filter({ visible: true }).first().click({ noWaitAfter: true });
+  await expect(page.getByTestId('chats-pane')).toBeVisible();
+  expect((await flatteningOf(page, 'Main', 'chats-pane')).formsView).toBe(chatsFocused.formsView);
 });

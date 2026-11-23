@@ -284,6 +284,8 @@
     {"id": "themed-mode-blueprint", "title": "Themed mode: blueprint Living Ruins wallpaper (WebGL over the poster) behind Dash, elemental-ui stone buttons, persisted choice and URL override (DA-095)",
      "tests": ["themed mode: Settings turns on Blueprint, the living wallpaper runs behind the chats, stone buttons work and the choice persists",
                "themed mode: the pairing screen uses the stone primary button and pairs"]},
+    {"id": "themed-mode-settings-mount", "title": "Blueprint: the gear on Chats opens Settings, and no screen root flips Fabric flattening when covered (S25 addViewAt crash, DA-095)",
+     "tests": ["themed mode: with Blueprint on, the gear on Chats opens Settings without re-parenting a mounted screen root (S25 addViewAt crash)"]},
     {"id": "themed-mode-desk", "title": "Themed mode with DeX desk mode: the blueprint wallpaper shows through the desk shell, the desk still chats, Settings keeps both choices (DA-094 + DA-095)",
      "tests": ["themed mode: Blueprint in desk mode keeps the wallpaper behind the desk shell and the desk working"]},
     {"id": "dex-simulation", "title": "Explicit web DeX TV and Pad simulation, with the wide desk layout at 1200x780",
