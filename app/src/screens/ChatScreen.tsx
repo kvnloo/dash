@@ -651,7 +651,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<"Chat">) {
   // Keep them still in the chat; ShimmerText (Skia) still shows live activity.
   return (
     <OrbActivity active={false}>
-    <Animated.View style={[styles.screen, wallpaper && { backgroundColor: "transparent" }, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, themedSurface, morph.style]} renderToHardwareTextureAndroid={morph.settling} aria-busy={windowed && morph.settling} testID={windowed ? "chat-window" : undefined}>{wallpaper || themedSurface ? null : <Canvas />}
+    {/* collapsable={false}: see useThemedSurface. */}
+    <Animated.View collapsable={false} style={[styles.screen, wallpaper && { backgroundColor: "transparent" }, { paddingTop: windowed ? pillReserve(pill, deviceTop) : insets.top }, themedSurface, morph.style]} renderToHardwareTextureAndroid={morph.settling} aria-busy={windowed && morph.settling} testID={windowed ? "chat-window" : undefined}>{wallpaper || themedSurface ? null : <Canvas />}
       {windowed ? <>
         <WindowPill geometry={pill} title={conversation?.title || harnessName}
           status={pillStatus({ online, phase: thinking.phase, tool: thinking.tool, voicePhase: voiceCall?.phase, queued: queuedCount })}

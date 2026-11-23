@@ -60,6 +60,12 @@ const CLEAR_HIDDEN: ViewStyle = { backgroundColor: "transparent", opacity: 0 };
  * Screen root style in themed mode: transparent so the root wallpaper shows through, and
  * hidden while another screen is on top (a transparent screen above would show it through).
  * `keepVisible` keeps it painted under a floating chat window. Living Night: no style at all.
+ *
+ * The root View that takes this style must set `collapsable={false}`. A transparent View with no
+ * other native-view prop is flattened away by Fabric, and `opacity: 0` makes it a real view again,
+ * so without the pin every navigation that covers the screen re-parents all of its children in the
+ * same mount batch. On Android that crashed opening Settings from Chats in Blueprint
+ * (`addViewAt: failed to insert view into parent at index 1`, S25).
  */
 export function useThemedSurface(keepVisible = false): ViewStyle | undefined {
   const themed = useThemed();
