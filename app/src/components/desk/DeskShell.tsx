@@ -124,8 +124,8 @@ function DeskChatsColumn() {
         <Pressable accessibilityRole="button" accessibilityLabel="Collapse Chats" accessibilityState={{ expanded: true }} onPress={() => setPanelCollapsed("chats", true)} style={styles.collapse}>
           <Text style={styles.chevron}>◂</Text>
         </Pressable>
-        <Text accessibilityRole="header" style={styles.columnTitle}>Chats</Text>
-        <WorkspaceActions navigation={navigation} />
+        <Text accessibilityRole="header" style={[styles.columnTitle, styles.chatsTitle]}>Chats</Text>
+        <WorkspaceActions navigation={navigation} wrap />
       </View>
       <ChatsPane navigation={navigation} focused />
     </View>
@@ -253,6 +253,8 @@ const styles = StyleSheet.create({
   collapse: { width: 32, minHeight: 44, alignItems: "center", justifyContent: "center" },
   chevron: { color: colors.textTertiary, fontSize: 14 },
   columnTitle: { ...type.section, color: colors.text, flex: 1 },
+  // The header actions take the rest of the row and wrap, so the title keeps its width.
+  chatsTitle: { flex: 0 },
   collapsedColumn: { width: 28, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border, alignItems: "center", paddingTop: space.lg },
   collapsedText: { ...type.label, color: colors.textMuted, transform: [{ rotate: "90deg" }], width: 80, textAlign: "center", marginTop: 40 },
   side: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border },

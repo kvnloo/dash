@@ -27,12 +27,14 @@ export function WorkspaceHeader({ navigation, tab, titleOnly = false, title: ove
 }
 
 /** `dogfood`: offer the way back to the dogfood home (only while in-app feedback is on). */
-export function WorkspaceActions({ navigation, dogfood = true }: { navigation: NavigationProp<RootStackParamList>; dogfood?: boolean }) {
+/** `wrap`: for a narrow column (the DeX desk Chats panel); the buttons wrap onto a second row
+ * instead of running under the next panel. */
+export function WorkspaceActions({ navigation, dogfood = true, wrap = false }: { navigation: NavigationProp<RootStackParamList>; dogfood?: boolean; wrap?: boolean }) {
   const feedbackOn = store.use(s => inAppFeedbackEnabled(s.settings));
   const pending = approvals.use(s => s.items.filter(actionable).length);
   const upstreamAction = upstreamApprovalAction(pending);
   const [newAgent, setNewAgent] = useState(false);
-  return <View style={styles.actions}>
+  return <View style={[styles.actions, wrap && styles.actionsWrap]}>
     {/* The pill is a column PressScale around a fixed row. A row-direction PressScale grows its
         flex: 1 inner view to the whole header width, which pushed the trace, new chat and settings
         buttons off screen (and out of the accessibility tree) whenever approvals were pending. */}
@@ -57,6 +59,7 @@ export const WORKSPACE_HEADER_HEIGHT = 52;
 
 const styles = StyleSheet.create({
   actions: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
+  actionsWrap: { flex: 1, flexWrap: "wrap", justifyContent: "flex-end" },
   header: { flexDirection: "row", alignItems: "center", minHeight: WORKSPACE_HEADER_HEIGHT, paddingVertical: 4, paddingLeft: 16, paddingRight: 8, gap: 2 },
   title: { ...type.title, color: colors.text, flex: 1 },
   // Tight on purpose: with approvals pending, dogfood on and the New agent button, the row must
