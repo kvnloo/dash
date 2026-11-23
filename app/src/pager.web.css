@@ -1,4 +1,0 @@
-/* The transform owns paging, not the browser's focus scrolling. */
-[data-testid="main-pager"] {
-  overflow: clip !important;
-}

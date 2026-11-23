@@ -1,1 +1,0 @@
-export { MainPager } from "./GesturePager";

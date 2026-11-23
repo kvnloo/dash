@@ -1,1 +1,0 @@
-Ripple native roadmap renderer, vendored unchanged from kvnloo/ripple branch feat/ephemeral-roadmap, commit 7159f6f. MIT; Kevin Rajan and Ripple contributors. No runtime dependency on the visual-review server.

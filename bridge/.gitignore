@@ -1,2 +1,0 @@
-# Ignore both dependency directories and local worktree dependency symlinks.
-node_modules
