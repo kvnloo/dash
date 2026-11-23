@@ -3,6 +3,10 @@
 #
 #   bun run test                    # = scripts/army.sh
 #   ARMY_WORKERS=4 scripts/army.sh
+#   ARMY_SHARD=2/4 scripts/army.sh  # one CI shard: blob report only, no receipt
+#
+# A shard run writes $out/blob/report-<i>.zip and stops; scripts/army-merge.sh merges
+# every shard's blob into one results.json and writes the receipt from that.
 #
 # Steps: web export of app/ at HEAD -> local static server -> headless Playwright army
 # against the real bridge + fixture ACP agent -> O15 receipt (e2e/mbp-army/receipt.py)
@@ -38,10 +42,20 @@ fi
 export ARMY_TMP=$out/tmp ARMY_OUTPUT=$out/test-results ARMY_HTML=$out/html ARMY_JSON=$out/results.json \
   ARMY_STARTUP=$out/startup.json ARMY_COMMAND_STARTED=$(date +%s%3N) ARMY_BRIDGE_ROOT=$root
 unset ARMY_HEADED
+shard=()
+if [ -n "${ARMY_SHARD:-}" ]; then
+  [[ $ARMY_SHARD =~ ^[1-9][0-9]*/[1-9][0-9]*$ ]] || { echo "army: ARMY_SHARD must be i/N, got $ARMY_SHARD" >&2; exit 2; }
+  export PLAYWRIGHT_BLOB_OUTPUT_DIR=$out/blob PLAYWRIGHT_BLOB_OUTPUT_NAME="report-${ARMY_SHARD%/*}.zip"
+  shard=(--shard="$ARMY_SHARD" --reporter=blob,list)
+fi
 set +e
-node node_modules/playwright/cli.js test -c e2e/mbp-army/playwright.config.ts --workers="$workers" 2>&1 | tee "$out/army.log"
+node node_modules/playwright/cli.js test -c e2e/mbp-army/playwright.config.ts --workers="$workers" "${shard[@]}" 2>&1 | tee "$out/army.log"
 pw=${PIPESTATUS[0]}
 set -e
+if [ -n "${ARMY_SHARD:-}" ]; then
+  [ -f "$out/blob/$PLAYWRIGHT_BLOB_OUTPUT_NAME" ] || { echo "army: shard $ARMY_SHARD wrote no blob report (exit $pw)" >&2; exit 1; }
+  exit "$pw"
+fi
 [ -f "$out/results.json" ] || { echo "army: Playwright wrote no report (exit $pw)" >&2; exit 1; }
 rc=0
 python3 e2e/mbp-army/receipt.py "$out/results.json" "$out" --started "$started" || rc=$?
