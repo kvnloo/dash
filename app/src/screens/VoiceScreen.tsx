@@ -111,11 +111,14 @@ function voiceRouteTime(ms: number): string {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   // Clipped: a long call's transcript never spills over the header, the lanes or the controls.
-  content: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: space.xl, gap: space.md, overflow: "hidden" },
-  title: { ...type.title, color: colors.text },
+  // Auto margins on the first and last child centre the stage while it fits; when the lanes, the
+  // Council link and the controls leave too little room they collapse to 0, so the stage stays
+  // anchored under the header and only its bottom (the shrinking transcript) gives way.
+  content: { flex: 1, justifyContent: "flex-start", alignItems: "center", paddingHorizontal: space.xl, gap: space.md, overflow: "hidden" },
+  title: { ...type.title, color: colors.text, marginTop: "auto" },
   caption: { ...type.body, color: colors.textMuted, textAlign: "center", minHeight: 22 },
   // Shrinks (oldest lines clip at the top) when a long call and open lanes leave little room.
-  transcript: { alignSelf: "stretch", gap: space.sm, minHeight: 0, flexShrink: 1, overflow: "hidden", justifyContent: "flex-end", paddingHorizontal: space.sm, borderRadius: radius.md },
+  transcript: { alignSelf: "stretch", gap: space.sm, minHeight: 0, flexShrink: 1, overflow: "hidden", justifyContent: "flex-end", paddingHorizontal: space.sm, borderRadius: radius.md, marginBottom: "auto" },
   line: { ...type.body },
   user: { color: colors.text, textAlign: "right" },
   assistant: { color: colors.text, textAlign: "left" },
