@@ -77,14 +77,15 @@ export function ephemeralCardTheme(app: string, mode: ThemeMode, style: CardStyl
       .eu-card .eu-f button { font-size: 14px; white-space: normal; }
       .eu-card :is(.eu-btn, .eu-chip) { border-radius: ${app === "github" && brand ? "6px" : "999px"}; }
       .eu-card .eu-btn:not(.hold) { touch-action: manipulation; }
-      .eu-card .inbox li { gap: 12px; min-height: 68px; padding: 10px 0; margin: 0; border-radius: 0; }
+      .eu-card .inbox li { gap: 12px; min-height: 64px; padding: 9px 0; margin: 0; border-radius: 0; }
       .eu-card[data-kind="inbox"] .eu-h { gap: 8px; }
+      .eu-card[data-kind="inbox"] .eu-b { padding-bottom: 4px; }
       .eu-card[data-kind="inbox"] .eu-verb { white-space: nowrap; line-height: 1.25; }
       @media (max-width: 480px) {
         .eu-card[data-kind="inbox"] .eu-ttl { display: none; }
       }
       .eu-card .inbox .eu-av { width: 34px; height: 34px; font-size: 12px; }
-      .eu-card .inbox .row1 { align-items: baseline; gap: 8px; font-size: 15px; }
+      .eu-card .inbox .row1 { align-items: baseline; gap: 8px; font-size: 15px; line-height: 20px; }
       .eu-card .inbox .row1 b, .eu-card .inbox .subj { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .eu-card .inbox time { flex: none; font-size: 11px; }
       .eu-card .inbox .subj { font-size: 15px; line-height: 21px; }
