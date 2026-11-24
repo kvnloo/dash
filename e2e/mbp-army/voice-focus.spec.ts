@@ -61,7 +61,7 @@ test("voice bubble docks clear of chat controls and opens focus to resolve a pen
   expect((await bubble.boundingBox())?.width).toBe(58);
   await disjoint(bubble, page.getByTestId("attached-composer"));
   await expect(page.getByTestId("voice-mic-bar")).toHaveCount(0);
-  await expect(page.getByTestId("voice-live-caption")).toBeVisible();
+  await expect(page.getByTestId("voice-live-caption"), "the bubble is the only call surface on Chats").toHaveCount(0);
   await shot("bubble-chats");
   await chat.click();
   await expect(page.getByTestId("chat-window")).toBeVisible();

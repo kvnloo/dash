@@ -123,7 +123,7 @@ export class ContinuousVoice {
   private unwatchTyped?: () => void;
   constructor(private io: VoiceIO) {}
   private update(value: Partial<VoiceState>): void { this.state = { ...this.state, ...value }; this.io.changed(this.state); }
-  private line(role: "user" | "assistant", text: string): VoiceState["lines"] { return [...this.state.lines, { role, text }].slice(-8); }
+  private line(role: "user" | "assistant", text: string): VoiceState["lines"] { return [...this.state.lines, { role, text }]; }
   private live(generation: number): boolean { return generation === this.generation && this.state.phase !== "idle" && this.state.phase !== "error"; }
   private watchTyped(source: VoiceTurnSource, target: VoiceTarget, generation: number): void {
     const snapshot = source.get();
@@ -315,7 +315,7 @@ export class ContinuousVoice {
       const handled = this.io.intercept?.(text);
       if (handled) {
         this.io.caption?.("assistant", handled, true);
-        this.update({ phase: "listening", lines: [...this.line("user", text), { role: "assistant" as const, text: handled }].slice(-8) });
+        this.update({ phase: "listening", lines: [...this.line("user", text), { role: "assistant" as const, text: handled }] });
         this.floor("quiet");
         return;
       }
@@ -365,7 +365,7 @@ export class ContinuousVoice {
       if (typeof event.transcript === "string") {
         this.assistantPartial = "";
         this.io.caption?.("assistant", event.transcript, true);
-        this.update({ lines: [...this.state.lines, { role: "assistant" as const, text: event.transcript, ...(this.speakingLane ? { lane: this.speakingLane } : {}) }].slice(-8) });
+        this.update({ lines: [...this.state.lines, { role: "assistant" as const, text: event.transcript, ...(this.speakingLane ? { lane: this.speakingLane } : {}) }] });
         this.transcriptObservation("assistant_transcript", event.transcript);
       }
     }

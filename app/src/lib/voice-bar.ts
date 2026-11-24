@@ -5,8 +5,8 @@ import type { VoiceState } from "./continuous-voice";
 export const VOICE_BAR_ROW = 46;
 
 /**
- * Insets the app below the voice root sees. While the pill is visible (including an error or
- * an idle call that can restart), it OWNS a band below the status bar. Every screen that already
+ * Insets the app below the voice root sees. While the pill is visible (an error, or a call while
+ * annotation or Learn hides the bubble), it OWNS a band below the status bar. Every screen that already
  * respects the top safe-area inset then lays out below it. The device insets are never mutated.
  */
 export function appInsets(device: EdgeInsets, visible: boolean, measuredRow = 0): EdgeInsets {
@@ -15,9 +15,9 @@ export function appInsets(device: EdgeInsets, visible: boolean, measuredRow = 0)
   return { ...device, top: device.top + row };
 }
 
-/** Only keep idle Start in the pill after the user has initiated voice at least once. */
-export function voiceBarVisible(phase: VoiceState["phase"], attempted: boolean): boolean {
-  return attempted || phase !== "idle";
+/** An idle call has no bar: the mic's Live mode or Voice starts one, and End leaves nothing behind (DA-096). */
+export function voiceBarVisible(phase: VoiceState["phase"]): boolean {
+  return phase !== "idle";
 }
 
 /** One home for controls: full-screen chat's dock, otherwise the app-wide pill. */

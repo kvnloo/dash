@@ -92,14 +92,14 @@ test("saying allow once during a live call resolves the pending Needs OK without
 test("tapping Allow once in Voice focus resolves a Needs OK that arrives during the call", async ({ page, bridge, voiceBroker }, info) => {
   await pairForVoice(page, bridge, voiceBroker, "ARMY voice hello");
   await startCall(page);
+  await expect(page.getByTestId("voice-transcript")).toContainText("ARMY voice reply", { timeout: 20000 });
   await page.getByRole("button", { name: "Back to chat · call keeps going" }).click({ noWaitAfter: true });
-  await expect(page.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply", { timeout: 20000 });
   await permissionInNewChat(page);
 
   const approval = page.getByTestId("voice-approval");
   await expect(page.getByTestId("voice-orb-peek")).toContainText("Needs OK");
   await expect(page.getByTestId("voice-orb-badge")).toHaveText("1");
-  await expect(page.getByTestId("voice-live-caption")).toBeVisible();
+  await expect(page.getByTestId("voice-live-caption"), "the bubble and its peek are the only call surface").toHaveCount(0);
   await page.getByTestId("voice-orb-peek").click();
   await expect(approval).toContainText("Needs OK");
   await page.screenshot({ path: info.outputPath("needs-ok-focus.png") });
@@ -108,7 +108,7 @@ test("tapping Allow once in Voice focus resolves a Needs OK that arrives during 
   await expect(approval).toHaveCount(0);
   await page.getByTestId("voice-focus-back").click();
   await expect(page.getByText(/^Allowed/).first(), "the chat's own Needs OK card shows the bridge's grant").toBeVisible({ timeout: 15000 });
-  await expect(page.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply");
+  await expect(page.getByTestId("voice-caption-strip")).toHaveCount(0);
   await expect(page.getByTestId("voice-orb-overlay")).toHaveAttribute("aria-label", /^Open voice focus · (Listening|Hearing|Thinking|Speaking)/);
   expect(asks(voiceBroker)).toHaveLength(1);
   expect(ends(voiceBroker)).toHaveLength(0);
@@ -144,8 +144,8 @@ test("a sudo request shows on the voice bubble and opens sealed entry from focus
   await pairForVoice(page, bridge, voiceBroker, "ARMY voice hello");
   await fakeSudo(bridge);
   await startCall(page);
+  await expect(page.getByTestId("voice-transcript")).toContainText("ARMY voice reply", { timeout: 20000 });
   await page.getByRole("button", { name: "Back to chat · call keeps going" }).click({ noWaitAfter: true });
-  await expect(page.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply", { timeout: 20000 });
 
   const answer = askSudo(bridge, ["echo", "army-sudo-ran"]);
   await expect(page.getByTestId("voice-orb-peek")).toContainText("sudo");

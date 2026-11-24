@@ -154,7 +154,7 @@ test('z0live fast lane answers three small-talk turns under 1 s, routes the task
     return found;
   };
   const layout = async (state: string) => {
-    const back = await box('back', page.getByRole('button', { name: 'Back', exact: true }));
+    const back = await box('back', page.getByRole('button', { name: 'Back to chat · call keeps going', exact: true }));
     const title = await box('title', page.getByText('Dash voice', { exact: true }));
     const lines = await box('voice-transcript');
     const content = await box('voice-content');

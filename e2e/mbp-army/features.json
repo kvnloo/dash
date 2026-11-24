@@ -250,6 +250,8 @@
      "tests": ["z0live Turbo replaces a throttled lane with a free provider", "z0live Turbo scales up to three parallel provider lanes"]},
     {"id": "orb-style-picker", "title": "Choose a thinking orb or bot face for chat and voice, including after reload",
      "tests": ["Settings orb style survives reload and appears on chat and the active mic"]},
+    {"id": "voice-bubble-only", "title": "Outside Voice focus a live call shows only the small voice bubble, with no legacy voice bar band, caption strip or bar controls; in focus the orb is large with the approval and Dash or App style Gmail card below it (DA-096)",
+     "tests": ["Chats list with a live call shows only the voice bubble and no legacy voice bar", "Voice focus shows the large orb with an approval card and a Dash style Gmail card below it", "Voice focus shows the large orb with an approval card and a App style Gmail card below it"]},
     {"id": "voice-orb-overlay", "title": "A live call docks a small interactive voice bubble outside focus mode; approval peeks clear chat buttons and the focus cards scroll above the call controls",
      "tests": ["live voice bubble follows the call, opens focus and hides for annotation", "voice bubble docks clear of chat controls and opens focus to resolve a pending approval"]},
     {"id": "z0live-lane-timeline", "title": "The live call screen lists each attached z0live lane with its live step, elapsed time and expandable last handoff, collapsed to one line by default",
