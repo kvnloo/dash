@@ -409,13 +409,16 @@ export function ContinuousVoiceRoot({ children }: { children: ReactNode }): Reac
   }, [annotating, pendingTurn]);
   const shown = fixture ?? state;
   const active = !["idle", "error"].includes(shown.phase);
-  const visible = (route !== "Voice" || !active) && voiceBarVisible(shown.phase, attempted) && (fixture !== null || !suppressAutoBar.current);
+  const visible = (route !== "Voice" || !active) && voiceBarVisible(shown.phase) && (fixture !== null || !suppressAutoBar.current);
   const pill = voiceBarPresentation(shown);
   const bubbleVisible = active && !annotating && !learning;
   const fallback = bubbleVisible && route && !["Main", "Chat", "Voice"].includes(route);
   const captions = voiceCaptionsEnabled.use(on => on);
+  // The bubble is the only live-call surface outside focus (DA-096): no app-wide bar, band or caption strip
+  // while it shows. The bar remains for what the bubble cannot carry: an error or idle Retry/Start, and
+  // annotation or Learn, which hide the bubble and need its Mute/End and the DA-058 approval line.
   const showControls = visible && !bubbleVisible;
-  const showCaption = active && route !== "Voice" && (captions || showControls);
+  const showCaption = active && route !== "Voice" && !bubbleVisible && (captions || showControls);
   const home = voiceControlHome(showControls || showCaption, windowOpen);
   const screenInsets = appInsets(insets, home === "bar", barRow || (showControls ? VOICE_BAR_ROW : 20));
   useEffect(() => {

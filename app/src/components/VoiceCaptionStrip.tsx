@@ -1,8 +1,8 @@
-// One-line live caption for a z0live call (DA-056): the newest thing you or Dash said, shown under
-// the voice controls without a panel. It reserves one short line while the call is live so the
-// screen does not jump on every turn, and the CC control turns it off for this device.
-// The strip keeps DA-058 actions available when Learn or annotation hides the bubble.
-// In focus, the same actions render as cards below the caption.
+// One-line live caption for a z0live call (DA-056): the newest thing you or Dash said. It shows in a
+// chat window's dock and, when Learn or annotation hides the bubble, under the voice bar's controls,
+// where it also keeps DA-058 actions available. Elsewhere the bubble is the only call surface (DA-096).
+// It reserves one short line while the call is live so the screen does not jump on every turn, and the
+// CC control turns it off for this device. In focus, the same actions render as cards below the caption.
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { VoiceState } from "../lib/continuous-voice";
 import { captionSpeaker, captionText } from "../lib/voice-captions";
