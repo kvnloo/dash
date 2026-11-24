@@ -28,3 +28,13 @@ reference. The loose parts were the 22.5 px sender line, the 10 px row padding a
 last row. They are now 20 px, 9 px and 4 px.
 
 Native Android WebView and iOS font rendering were not captured.
+
+## Voice (`voice/`)
+
+Captured by `e2e/mbp-army/voice-bubble-only.spec.ts` with `ARMY_VOICEBAR_RECEIPTS` pointed here.
+
+| File | What |
+| --- | --- |
+| `voice/chats-bubble-only.png` | Chats list during a live call: the 58 px bubble only, with no voice bar or caption band |
+| `voice/focus-dash.png` | Voice focus: 188 px orb, Needs OK card, then the Dash style Gmail card |
+| `voice/focus-app.png` | The same in the App style |
