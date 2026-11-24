@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -24,7 +24,7 @@ import { CatalogEphemeralCard } from "../components/genui/CatalogEphemeralCard";
 import { useVoiceApprovals } from "../lib/voice-approval-actions";
 import { voiceApprovalKey } from "../lib/voice-approvals";
 import { voiceStatusAccessibilityLabel } from "../lib/voice-bar";
-import { captionText } from "../lib/voice-captions";
+import type { VoiceState } from "../lib/continuous-voice";
 import { voiceCaption, voiceCaptionsEnabled } from "../store/voice-captions";
 import { parseOpenUI, type OpenUINode } from "../lib/openui-catalog";
 
@@ -75,6 +75,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   useEffect(() => { if (autostart && !live) void start(); }, [autostart]);
 
   const approvals = useVoiceApprovals();
+  const transcriptScroll = useRef<ScrollView>(null);
   const latestCaption = voiceCaption.use(value => value);
   const captions = voiceCaptionsEnabled.use(value => value);
   const messages = store.use(s => s.conversations.find(chat => chat.id === binding?.id)?.messages);
@@ -97,6 +98,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
       </View>
       <View style={styles.focusScroll}>
         <ScrollView testID="voice-content" contentContainerStyle={styles.focusBody}>
+          <Text accessibilityRole="header" style={styles.focusTitle}>Dash voice</Text>
           <Animated.View entering={ZoomIn.duration(180).reduceMotion(ReduceMotion.System)} style={styles.focusOrb}>
             <View style={styles.focusOrbFace}>
               <LinearGradient colors={[colors.goldLo, colors.bg]} style={[StyleSheet.absoluteFill, styles.orbTint]} />
@@ -110,10 +112,14 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
           </Text>
           {state.note ? <Text style={styles.caption}>{state.note}</Text> : null}
           {state.turbo ? <Text testID="voice-turbo-status" style={styles.caption}>{state.turbo}</Text> : null}
-          {captions ? <Text testID="voice-transcript" numberOfLines={4} style={styles.focusCaption} accessibilityLiveRegion="polite">
-            {lines.at(-2)?.role === "user" && lines.at(-1)?.role === "assistant" ? <Text style={styles.previousCaption}>{lines.at(-2)?.text}{"\n"}</Text> : null}
-            {captionText(latestCaption) || lines.at(-1)?.text || "Captions on"}
-          </Text> : null}
+          {captions ? <View testID="voice-transcript" style={styles.focusTranscript} accessibilityLiveRegion="polite">
+            <ScrollView ref={transcriptScroll} style={styles.focusHistory} nestedScrollEnabled
+              onContentSizeChange={() => transcriptScroll.current?.scrollToEnd({ animated: false })}>
+              <TranscriptLines lines={lines} />
+              {!latestCaption?.final && latestCaption?.text ? <Text style={styles.focusCaption}>{latestCaption.text}</Text> : null}
+              {!lines.length && !latestCaption?.text ? <Text style={styles.focusCaption}>Captions on</Text> : null}
+            </ScrollView>
+          </View> : null}
           <View testID="voice-focus-cards" style={styles.stack}>
             {approvals.map(approval => <ApprovalLine key={voiceApprovalKey(approval)} approval={approval} focus />)}
             {cards.map(card => <CatalogEphemeralCard key={card.key} kind={card.kind} app={card.app} />)}
@@ -154,11 +160,7 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
         </Text>
         {state.turbo ? <Text accessibilityLiveRegion="polite" style={styles.caption} testID="voice-turbo-status">{state.turbo}</Text> : null}
         <View style={styles.transcript} testID="voice-transcript">
-          {lines.map((line, i) => (
-            <Text key={`${i}:${line.role}`} numberOfLines={2} style={[styles.line, line.role === "user" ? styles.user : styles.assistant, i < lines.length - 1 && styles.older]}>
-              <Text style={styles.who}>{line.role === "user" ? "you  " : line.lane ? `${line.lane}  ` : "agent  "}</Text>{line.text}
-            </Text>
-          ))}
+          <TranscriptLines lines={lines} />
         </View>
       </View>
       {state.routes?.length ? (
@@ -183,6 +185,16 @@ export function VoiceScreen(props: ScreenProps<"Voice">): React.JSX.Element {
   );
 }
 
+function TranscriptLines({ lines }: { lines: VoiceState["lines"] }): React.JSX.Element {
+  return <>
+    {lines.map((line, i) => (
+      <Text key={`${i}:${line.role}`} numberOfLines={2} style={[styles.line, line.role === "user" ? styles.user : styles.assistant, i < lines.length - 1 && styles.older]}>
+        <Text style={styles.who}>{line.role === "user" ? "you  " : line.lane ? `${line.lane}  ` : "agent  "}</Text>{line.text}
+      </Text>
+    ))}
+  </>;
+}
+
 /** "412 ms" under a second, "2.6 s" above. */
 function voiceRouteTime(ms: number): string {
   return ms < 1000 ? `${Math.max(0, Math.round(ms))} ms` : `${(ms / 1000).toFixed(1)} s`;
@@ -200,7 +212,9 @@ const styles = StyleSheet.create({
   focusOrbFace: { borderRadius: 94, overflow: "hidden" },
   orbTint: { opacity: 0.42 },
   endControl: { backgroundColor: colors.surfaceRaised, borderColor: colors.danger },
-  previousCaption: { color: colors.textMuted, fontSize: 13 },
+  focusTitle: { ...type.body, color: colors.textMuted, textAlign: "center" },
+  focusTranscript: { paddingHorizontal: 14 },
+  focusHistory: { maxHeight: 96 },
   focusCaption: { ...type.body, color: colors.text, fontSize: 17, lineHeight: 24, textAlign: "center", paddingHorizontal: 14 },
   stack: { gap: 10, paddingTop: 16 },
   focusControls: { flexDirection: "row", justifyContent: "center", gap: 18, paddingTop: 10 },
