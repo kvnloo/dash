@@ -76,16 +76,18 @@ test("Chats list with a live call shows only the voice bubble and no legacy voic
   const pane = page.getByTestId("chats-pane");
   await expect(pane).toBeVisible();
   await onlyTheBubble(page);
-  // The list is not pushed down by a reserved voice band: its first row stays put when the call ends.
-  const rowTop = async () => (await pane.locator('[data-testid^="chat-row-"]').first().boundingBox())?.y ?? NaN;
-  const live = await rowTop();
+  // No reserved voice band pushes the list down, during the call or after it ends.
+  const paneTop = async () => (await pane.boundingBox())?.y ?? NaN;
+  const live = await paneTop();
   await shot(page, info, "chats-bubble-only");
   const bubble = page.getByTestId("voice-orb-overlay");
   await bubble.click({ delay: 650 });
   await page.getByTestId("voice-bubble-menu").getByRole("button", { name: "End", exact: true }).click();
   await expect(bubble).toHaveCount(0);
   await expect.poll(() => broker.calls().filter(call => call.method === "POST" && /\/sessions\/[^/]+\/end$/.test(call.path)).length).toBe(1);
-  await expect.poll(rowTop).toBe(live);
+  await expect(page.getByTestId("voice-mic-bar"), "End leaves no idle voice bar behind").toHaveCount(0);
+  await expect(page.getByTestId("voice-start")).toHaveCount(0);
+  await expect.poll(paneTop).toBe(live);
 });
 
 for (const style of ["Dash", "App"] as const) {

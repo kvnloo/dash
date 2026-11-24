@@ -1,4 +1,5 @@
-// DA-056: a one-line live caption of the z0live call over Dash, with a CC toggle.
+// DA-056: a one-line live caption of the z0live call in the chat window, with a CC toggle in focus.
+// DA-096: outside focus and chat windows the bubble is the only call surface, so no caption band.
 // Real Expo web app + real authenticated bridge + loopback z0live fixture broker + scripted web peer.
 // Proves browser state and layout only, never Android audio, native WebRTC or a real model.
 import { test as base, expect, pair } from "./fixtures";
@@ -44,7 +45,14 @@ test("live caption strip shows streaming user and agent text in one line over Da
   await expect(page.getByTestId("voice-caption-strip"), "full-screen Voice has its own transcript").toHaveCount(0);
   await page.getByRole("button", { name: "Back to chat · call keeps going" }).click({ noWaitAfter: true });
   const strip = page.getByTestId("voice-caption-strip");
-  await expect(strip).toBeVisible();
+  const bubble = page.getByTestId("voice-orb-overlay");
+  await expect(bubble).toBeVisible();
+  await expect(strip, "Main shows the bubble, not a caption band").toHaveCount(0);
+  await page.getByRole("tab").nth(1).click({ noWaitAfter: true });
+  await hermes.click({ noWaitAfter: true });
+  const chat = page.getByTestId("chat-window");
+  await expect(chat).toBeVisible();
+  await expect(chat.getByTestId("voice-caption-strip")).toBeVisible();
   await expect(page.getByTestId("voice-live-caption")).toHaveText("Captions on");
 
   // Record every caption text the page shows: scripted partials last a few hundred ms.
@@ -72,12 +80,16 @@ test("live caption strip shows streaming user and agent text in one line over Da
   const box = await strip.boundingBox();
   expect(box?.height, "the strip is a single short line").toBeLessThanOrEqual(24);
   await expect(page.getByTestId("voice-mic-bar")).toHaveCount(0);
-  await page.screenshot({ path: info.outputPath("captions-on.png") });
+  await expect(page.getByTestId("voice-captions-toggle")).toHaveCount(0);
+  await expect(page.getByTestId("window-voice-controls")).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath("captions-window.png") });
 
-  const bubble = page.getByTestId("voice-orb-overlay");
   await bubble.click();
+  await expect(page.getByTestId("voice-transcript")).toContainText("ARMY voice reply");
   await page.getByRole("button", { name: "Hide live captions", exact: true }).click();
+  await expect(page.getByTestId("voice-transcript")).toHaveCount(0);
   await page.getByTestId("voice-focus-back").click();
+  await expect(chat).toBeVisible();
   await expect(strip).toHaveCount(0);
   await expect(bubble).toHaveAttribute("aria-label", /^Open voice focus · (Listening|Hearing|Thinking|Speaking)/);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("dash.voice.captions"))).toBe("off");
@@ -85,17 +97,8 @@ test("live caption strip shows streaming user and agent text in one line over Da
   await bubble.click();
   await page.getByRole("button", { name: "Show live captions", exact: true }).click();
   await page.getByTestId("voice-focus-back").click();
-  await expect(page.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply");
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("dash.voice.captions"))).toBe("on");
-
-  await page.getByRole("tab").nth(1).click();
-  await hermes.click();
-  const chat = page.getByTestId("chat-window");
-  await expect(chat).toBeVisible();
   await expect(chat.getByTestId("voice-live-caption")).toHaveText("Dash · ARMY voice reply");
-  await expect(page.getByTestId("voice-captions-toggle")).toHaveCount(0);
-  await expect(page.getByTestId("window-voice-controls")).toHaveCount(0);
-  await page.screenshot({ path: info.outputPath("captions-window.png") });
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("dash.voice.captions"))).toBe("on");
 
   await bubble.click({ delay: 650 });
   await page.getByTestId("voice-bubble-menu").getByRole("button", { name: "End", exact: true }).click();
