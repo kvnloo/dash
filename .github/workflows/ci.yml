@@ -23,7 +23,7 @@ jobs:
     env:
       SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           # Channel denial journeys archive HEAD and its parent as distinct releases.
@@ -93,7 +93,7 @@ jobs:
       matrix:
         gate: [typecheck, lint, android-export]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The phone follows the head SHA, not GitHub's synthetic PR merge ref.
           # Preserve the existing PR merge-ref checks for lint and typecheck.
